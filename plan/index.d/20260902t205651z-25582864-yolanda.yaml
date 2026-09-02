@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: accel-probe-blind-to-wsl2-paravirtualised-gpu
+    field: status
+    value: ready
+    ts: "2026-09-02T20:56:51Z"
+    host: yolanda
+
+events:
+  - packet_id: accel-probe-blind-to-wsl2-paravirtualised-gpu
+    event:
+      type: note
+      ts: "2026-09-02T20:56:51Z"
+      host: yolanda
+      summary: >
+        REMAINING 2 landed; REMAINING 1 is operator-gated (Vulkan ICD), claim released

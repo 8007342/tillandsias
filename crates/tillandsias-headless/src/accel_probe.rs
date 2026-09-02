@@ -73,6 +73,33 @@ pub struct CapabilityDocument {
     /// themselves are not thereby the same hardware.
     #[serde(default)]
     pub hardware_fingerprint: Option<String>,
+    /// The container lane's DRM render nodes, each carrying how far the
+    /// evidence for it actually goes.
+    ///
+    /// ORDER 793-zumy REMAINING 2. The `Enumerated < Reachable < Placed` rungs
+    /// were modelled, pinned by nine tests, and INERT: nothing produced a rung
+    /// above `Enumerated` and nothing carried one off the probe. An honest model
+    /// that does no work is only half the fix, and this field is the half that
+    /// makes it observable.
+    ///
+    /// EMPTY IS NOT `none`. A host with no podman, no inference container, or no
+    /// render nodes all yield an empty vec, and so does a probe that could not
+    /// ask. Read it as "no container-lane placement is PROVEN here", never as
+    /// "this machine has no GPU" - `devices` answers that question and
+    /// `enumeration_gaps` records where nobody looked.
+    ///
+    /// APPENDED LAST ON PURPOSE. `scripts/dev-inference-ensure.sh` reads
+    /// `legacy_tier` out of this document with `grep -m1` on the RAW
+    /// `tillandsias --capabilities` output, so the FIRST `legacy_tier`-looking
+    /// line wins; a new block ahead of it would silently downgrade yoga's ROCm
+    /// host to cpu with no device flags and no warning. Nothing in here spells
+    /// `legacy_tier`, and it serialises after it either way.
+    ///
+    /// `#[serde(default)]` because every document written before this order has
+    /// no such field; an old cache reads as "nothing proven", which is the
+    /// pre-existing behaviour and no worse than it was.
+    #[serde(default)]
+    pub render_nodes: Vec<DrmRenderNode>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -389,6 +416,10 @@ pub fn run_probe(effective_tier: &str) -> CapabilityDocument {
         probe_identity: Some(probe_identity()),
         enumeration_gaps,
         hardware_fingerprint: None,
+        // 793-zumy REMAINING 2: PRODUCED, not modelled. Bounded and
+        // fail-quiet - a host with no podman, no container or no devices
+        // contributes an empty vec rather than a fabricated row.
+        render_nodes: probe_container_render_nodes(),
     };
     // Computed from the devices just enumerated, so the document carries its own
     // hardware identity and no consumer has to re-derive it. `checked` rather
@@ -980,7 +1011,8 @@ fn intel_compute_runtime_present() -> bool {
 /// evidence ABOUT THE HOST and must never be read as a container-lane claim —
 /// which is exactly the substitution this packet exists to end, one level up
 /// from the label.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Vantage {
     /// Observed from the host's own filesystem.
     Host,
@@ -1022,7 +1054,8 @@ impl Vantage {
 /// `engine-missing` while the GPU line reads `usable` — the two devices are in
 /// the IDENTICAL state. The GPU's verdict came from a label; the NPU's came
 /// from something closer to a check.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Proof {
     /// The hardware exists and identifies itself. Says nothing about any lane.
     Enumerated,
@@ -1064,7 +1097,7 @@ impl Proof {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DrmRenderNode {
     /// e.g. "renderD128"
     pub node: String,
@@ -1150,40 +1183,64 @@ pub fn enumerate_render_nodes_at(root: &std::path::Path, vantage: Vantage) -> Ve
     names.sort();
     for name in names {
         let dev = root.join(&name).join("device");
-        let vendor_id = std::fs::read_to_string(dev.join("vendor"))
-            .ok()
-            .as_deref()
-            .and_then(parse_pci_id);
-        let device_id = std::fs::read_to_string(dev.join("device"))
-            .ok()
-            .as_deref()
-            .and_then(parse_pci_id);
-        // A node whose identity cannot be read is SKIPPED, not defaulted to
-        // zero: a record claiming vendor 0x0000 is still a claim, and this
-        // packet is about not making claims the evidence does not support.
-        let (Some(vendor_id), Some(device_id)) = (vendor_id, device_id) else {
-            continue;
-        };
+        let vendor = std::fs::read_to_string(dev.join("vendor")).unwrap_or_default();
+        let device = std::fs::read_to_string(dev.join("device")).unwrap_or_default();
         let driver = std::fs::read_link(dev.join("driver"))
             .ok()
             .and_then(|p| p.file_name().and_then(|f| f.to_str()).map(str::to_string))
             .unwrap_or_else(|| "unknown".to_string());
-        out.push(DrmRenderNode {
-            node: name,
-            vendor_id,
-            device_id,
-            driver,
-            // This function reads a filesystem. Whose filesystem is the
-            // caller's business; what it can honestly say is "I saw this from
-            // where I ran". Production passes /sys/class/drm on the host.
-            vantage,
-            // A sysfs walk sees hardware. It cannot see a container's device
-            // list and it cannot see size_vram, so this is the ONLY rung it is
-            // entitled to claim.
-            proof: Proof::Enumerated,
-        });
+        // This function reads a filesystem. Whose filesystem is the caller's
+        // business; what it can honestly say is "I saw this from where I ran".
+        // Production passes /sys/class/drm.
+        if let Some(n) = assemble_render_node(&name, &vendor, &device, &driver, vantage) {
+            out.push(n);
+        }
     }
     out
+}
+
+/// Build ONE [`DrmRenderNode`] from the four raw sysfs reads that identify it.
+///
+/// 793-zumy REMAINING 2. Extracted so the two TRANSPORTS that can reach those
+/// four values — a direct `read_dir` walk on a filesystem this process can see,
+/// and a `podman exec` that cats them from inside the container — share ONE
+/// identity implementation. A second implementation of an identity function is
+/// the bug order 805-r98w spent a day removing: two hosts briefly had two
+/// hardware fingerprint functions, they disagreed on RAM source and rounding,
+/// and the strings they produced were incommensurable. The same trap is one
+/// copy-paste away here, so the assembly lives in one place and the transports
+/// only supply bytes.
+///
+/// A node whose identity cannot be read is SKIPPED, not defaulted to zero: a
+/// record claiming vendor 0x0000 is still a claim, and this packet is about not
+/// making claims the evidence does not support.
+///
+/// The rung is hardcoded to [`Proof::Enumerated`] and there is no parameter for
+/// it. Reading four files sees HARDWARE; it cannot see a container's device
+/// list and it cannot see `size_vram`, so this is the only rung either
+/// transport is entitled to claim, whichever vantage it ran from.
+pub fn assemble_render_node(
+    node: &str,
+    vendor_body: &str,
+    device_body: &str,
+    driver: &str,
+    vantage: Vantage,
+) -> Option<DrmRenderNode> {
+    let vendor_id = parse_pci_id(vendor_body)?;
+    let device_id = parse_pci_id(device_body)?;
+    let driver = driver.trim();
+    Some(DrmRenderNode {
+        node: node.to_string(),
+        vendor_id,
+        device_id,
+        driver: if driver.is_empty() {
+            "unknown".to_string()
+        } else {
+            driver.to_string()
+        },
+        vantage,
+        proof: Proof::Enumerated,
+    })
 }
 
 /// A stable identifier for the HARDWARE this document describes, so two hosts
@@ -1573,6 +1630,237 @@ pub fn upgrade_reachable_at(nodes: &mut [DrmRenderNode], dev_dri_root: &std::pat
         }
     }
     upgraded
+}
+
+/// The shell the container-vantage producer runs INSIDE the container.
+///
+/// 793-zumy REMAINING 2. The in-tree precedent this packet names is
+/// `images/inference/entrypoint.sh`, which refuses a cuda tier when
+/// `[ -e /dev/nvidia0 ]` fails THERE rather than on the host. This is that
+/// check generalised: one bounded, read-only `sh` that cats the four sysfs
+/// files identifying each render node and lists `/dev/dri`, emitting a
+/// line-oriented blob a pure function can parse.
+///
+/// WHY BOTH SECTIONS IN ONE EXEC. `/sys` is bind-mounted from the host into a
+/// podman container whether or not any device was passed, so a sysfs walk run
+/// inside the container still describes the HOST's silicon - it establishes
+/// identity, never access. `/dev/dri` is the half that answers the container's
+/// own question. Splitting them across two execs would let the two halves
+/// describe different moments; taking both in one round trip is also the
+/// cheaper thing to do.
+///
+/// It writes nothing and reads only sysfs and a device directory listing, so it
+/// is safe to run against a container serving live inference.
+const CONTAINER_PROOF_SH: &str = r#"
+for d in /sys/class/drm/renderD*; do
+  [ -d "$d/device" ] || continue
+  n=${d##*/}
+  v=$(cat "$d/device/vendor" 2>/dev/null)
+  p=$(cat "$d/device/device" 2>/dev/null)
+  dr=$(readlink "$d/device/driver" 2>/dev/null)
+  dr=${dr##*/}
+  printf 'DRM\t%s\t%s\t%s\t%s\n' "$n" "$v" "$p" "${dr:-unknown}"
+done
+for e in /dev/dri/*; do
+  [ -e "$e" ] || continue
+  printf 'DEV\t%s\n' "${e##*/}"
+done
+"#;
+
+/// Parse [`CONTAINER_PROOF_SH`]'s output into `(render nodes, /dev/dri entries)`.
+///
+/// Pure, so the whole container-vantage path is testable without podman, a
+/// container, or a GPU - which matters because the hosts that must REVIEW this
+/// code (a Windows host whose probe runs natively, a macOS host) can never run
+/// it. Identity assembly is delegated to [`assemble_render_node`]: this
+/// function transports bytes and does not decide what a render node is.
+///
+/// Unparseable and short lines are SKIPPED rather than defaulted. A blob that
+/// arrived truncated must yield fewer nodes, never a node with invented fields.
+pub fn parse_container_proof_output(
+    text: &str,
+    vantage: Vantage,
+) -> (Vec<DrmRenderNode>, Vec<String>) {
+    let mut nodes = Vec::new();
+    let mut dev_entries = Vec::new();
+    for line in text.lines() {
+        let f: Vec<&str> = line.trim_end().split('\t').collect();
+        match f.first().copied() {
+            Some("DRM") if f.len() == 5 => {
+                if let Some(n) = assemble_render_node(f[1], f[2], f[3], f[4], vantage) {
+                    nodes.push(n);
+                }
+            }
+            Some("DEV") if f.len() == 2 && !f[1].is_empty() => {
+                dev_entries.push(f[1].to_string());
+            }
+            _ => {}
+        }
+    }
+    nodes.sort_by(|a, b| a.node.cmp(&b.node));
+    (nodes, dev_entries)
+}
+
+/// Upgrade `Enumerated` nodes to [`Proof::Reachable`] from a LISTING of the
+/// device directory as seen from the work's vantage.
+///
+/// 793-zumy REMAINING 2, first half, for the vantage that cannot be reached by
+/// [`upgrade_reachable_at`]: the container's `/dev/dri` is not a path this
+/// process can stat, so the stat happens over there and this consumes its
+/// result. The RULES are identical - container vantage only, never downgrades,
+/// no rung claimed for a node the listing does not name.
+///
+/// A HOST-VANTAGE NODE IS SKIPPED even if the listing names it, exactly as in
+/// the filesystem sibling. A host stat is not weaker evidence for the container
+/// lane; it is evidence about a different question, and blurring the two is
+/// this packet's own failure class.
+///
+/// STILL NOT A LANE. Reachable is necessary and not sufficient: yoga's host sat
+/// exactly here, with `/dev/kfd` and `/dev/dri/renderD128` both stat-able
+/// inside the container and `size_vram` still 0.00GB because the image shipped
+/// no runtime that could drive them.
+pub fn upgrade_reachable_from_listing(nodes: &mut [DrmRenderNode], listing: &[String]) -> usize {
+    let mut upgraded = 0;
+    for n in nodes.iter_mut() {
+        if n.vantage != Vantage::Container {
+            continue;
+        }
+        if n.proof >= Proof::Reachable {
+            continue;
+        }
+        if listing.iter().any(|e| e == &n.node) {
+            n.proof = Proof::Reachable;
+            upgraded += 1;
+        }
+    }
+    upgraded
+}
+
+/// Total bytes a runtime reports RESIDENT on an accelerator, from one
+/// `ollama /api/ps` body.
+///
+/// 793-zumy REMAINING 2, second half. [`upgrade_placed`] deliberately takes the
+/// figure as a value rather than fetching it; this is the parser that turns a
+/// response into that value, kept pure for the same reason.
+///
+/// `None` MEANS UNKNOWN AND MUST NOT COLLAPSE INTO ZERO. A body that does not
+/// parse, or that carries no `models` array, is a runtime we could not ask -
+/// which is a different fact from a runtime that answered "nothing is
+/// resident", and [`upgrade_placed`] treats zero as a definite refusal.
+/// Reporting unknown as zero would be an affirmative denial derived from a
+/// failed question, the same shape as the `accel_npu=none` this family already
+/// corrected.
+///
+/// A model row missing `size_vram` contributes 0 rather than poisoning the sum:
+/// ollama omits the key for a CPU-resident model, and that genuinely is no
+/// accelerator residency.
+pub fn parse_ollama_resident_bytes(body: &str) -> Option<u64> {
+    let v: serde_json::Value = serde_json::from_str(body).ok()?;
+    let models = v.get("models")?.as_array()?;
+    let mut total: u64 = 0;
+    for m in models {
+        total = total.saturating_add(m.get("size_vram").and_then(|b| b.as_u64()).unwrap_or(0));
+    }
+    Some(total)
+}
+
+/// PRODUCE the container lane's proof rungs, with both IO edges injected.
+///
+/// 793-zumy REMAINING 2, the composition the packet was actually asking for:
+/// the rungs were modelled, pinned and inert, because NOTHING CALLED the
+/// upgraders outside their own tests. An honest model that does no work is only
+/// half the fix. This is the caller.
+///
+/// `probe` runs [`CONTAINER_PROOF_SH`] inside the container; `residency`
+/// fetches `/api/ps` from the runtime in it. Both return `None` when they could
+/// not ask. Injected rather than called directly so the composition - which is
+/// where the rung ordering actually gets enforced - is testable without podman,
+/// a container, a GPU, or a network, on every host in the fleet.
+///
+/// THE ORDERING IS THE POINT AND IT IS ENFORCED HERE, not documented here:
+/// residency is applied only to nodes that reached `Reachable`, and
+/// [`upgrade_placed`] refuses when the attribution is ambiguous. A `Placed` this
+/// function emits therefore rests on a device the container could stat AND a
+/// runtime that reported weights on exactly one candidate.
+///
+/// An unreachable container yields an EMPTY vec, never a fabricated row: no
+/// evidence is not evidence of absence.
+pub fn produce_container_proofs_with<P, R>(mut probe: P, mut residency: R) -> Vec<DrmRenderNode>
+where
+    P: FnMut() -> Option<String>,
+    R: FnMut() -> Option<String>,
+{
+    let Some(blob) = probe() else {
+        return Vec::new();
+    };
+    let (mut nodes, dev_entries) = parse_container_proof_output(&blob, Vantage::Container);
+    upgrade_reachable_from_listing(&mut nodes, &dev_entries);
+    // Asked ONLY when something could actually carry a placement. With no
+    // reachable node the answer cannot change any rung, and this keeps a probe
+    // on a CPU-only host from making a round trip to learn nothing.
+    if nodes.iter().any(|n| n.proof >= Proof::Reachable)
+        && let Some(bytes) = residency().as_deref().and_then(parse_ollama_resident_bytes)
+    {
+        upgrade_placed(&mut nodes, bytes);
+    }
+    nodes
+}
+
+/// The podman container the fleet's ollama runs in.
+const INFERENCE_CONTAINER: &str = "tillandsias-inference";
+
+/// Run one bounded, read-only command inside [`INFERENCE_CONTAINER`].
+///
+/// Never `--tty` and never attaching stdin: an exec that attaches stdin can
+/// wedge a one-shot launch forever absorbing SIGTERM, which `main.rs`'s
+/// readiness probe already learned. Any non-success exit reads as "could not
+/// ask" - `None`, not an empty answer.
+fn inference_container_exec(args: &[&str]) -> Option<String> {
+    let mut cmd = tillandsias_podman::podman_cmd_sync();
+    cmd.args(["exec", INFERENCE_CONTAINER]);
+    cmd.args(args);
+    let out = cmd
+        .output_bounded(tillandsias_podman::OperationKind::Inspect.default_budget())
+        .ok()
+        .filter(|o| o.status.success())?;
+    Some(String::from_utf8_lossy(&out.stdout).to_string())
+}
+
+/// PRODUCTION entry point for the container lane's proof rungs.
+///
+/// 793-zumy REMAINING 2. Wires [`produce_container_proofs_with`] to the two real
+/// IO edges: `podman exec ... sh -c CONTAINER_PROOF_SH` for identity and
+/// reachability, and `podman exec ... curl /api/ps` for residency. `127.0.0.1`
+/// deliberately - inside the inference container the runtime is local whatever
+/// the enclave's DNS is doing, which is the same reason `main.rs`'s readiness
+/// probe uses it.
+///
+/// DO NOT USE `podman inspect ... HostConfig.Devices` AS THE REACHABILITY CHECK.
+/// Measured by yoga 2026-09-02 on gfx1152: that field prints `[]` for a
+/// container whose `/dev/kfd` and `/dev/dri/*` nodes ARE present inside. It is a
+/// label that reads as evidence the wiring happened, which is this packet's
+/// entire failure class arriving from the tooling instead of from us. Exec and
+/// list the nodes.
+///
+/// THE DIRECTION MATTERS: it is a FALSE NEGATIVE. The field reads `[]` on a host
+/// where the devices WERE passed, so a verifier trusting it concludes "no
+/// devices passed" and goes off re-fixing a passthrough that already works -
+/// which is what 937-68n4 landed. This family's other four instances all failed
+/// the other way, toward an over-claim; this one is worth naming separately
+/// because the wasted work it causes looks like diligence.
+pub fn probe_container_render_nodes() -> Vec<DrmRenderNode> {
+    produce_container_proofs_with(
+        || inference_container_exec(&["sh", "-c", CONTAINER_PROOF_SH]),
+        || {
+            inference_container_exec(&[
+                "curl",
+                "-fsS",
+                "--max-time",
+                "2",
+                "http://127.0.0.1:11434/api/ps",
+            ])
+        },
+    )
 }
 
 /// Does ONE spec body name the NVIDIA kind AND a usable device node?
@@ -2454,9 +2742,27 @@ pub fn accel_envelope(doc: &CapabilityDocument) -> String {
         .map(|g| format!("{g:.0}"))
         .unwrap_or_else(|| "-".to_string());
 
+    // 793-zumy REMAINING 2. The HIGHEST rung any container-lane render node
+    // reached, appended LAST so every existing grep/sed consumer and
+    // `litmus:accel-envelope-reaches-the-forge` are unaffected by its arrival.
+    //
+    // `-` MEANS NOBODY ASKED OR NOTHING ANSWERED, and it is deliberately not
+    // `enumerated`: an absent producer and a producer that found a device are
+    // different facts, and collapsing them is the substitution this packet
+    // exists to end. Only `placed` may be read as a lane - `Proof::proves_a_lane`
+    // is the one comparison a consumer should make, and it is one keystroke away
+    // from `>= reachable`, which is the mistake this whole family is about.
+    let proof = doc
+        .render_nodes
+        .iter()
+        .map(|n| n.proof)
+        .max()
+        .map(|p| p.token())
+        .unwrap_or("-");
+
     format!(
         "accel_class={} accel_gpu={} accel_gpu_name={} accel_npu={} accel_npu_name={} \
-         accel_reason={} accel_cpu_cores={} accel_ram_gb={}",
+         accel_reason={} accel_cpu_cores={} accel_ram_gb={} accel_proof={}",
         class,
         gpu_state,
         gpu.map(|d| slug(&d.name))
@@ -2467,6 +2773,7 @@ pub fn accel_envelope(doc: &CapabilityDocument) -> String {
         slug(reason),
         cores,
         ram,
+        proof,
     )
 }
 
@@ -2656,6 +2963,256 @@ mod tests {
         assert_eq!(super::upgrade_placed(&mut e, 1), Some(1));
         assert_eq!(e[1].proof, Proof::Placed);
         assert_eq!(e[0].proof, Proof::Enumerated);
+    }
+
+    /// The container blob the producer parses, as one fixture the arms share.
+    ///
+    /// Shaped exactly like [`super::CONTAINER_PROOF_SH`]'s output: TAB-separated,
+    /// `DRM` rows carrying the four sysfs reads and `DEV` rows the `/dev/dri`
+    /// listing. Written out here rather than generated, so a change to the shell
+    /// that broke the contract would leave this fixture disagreeing with it
+    /// instead of silently following it.
+    /// Field values carry NO trailing newline, matching the shell: `$(cat ...)`
+    /// strips them, so a fixture that kept sysfs's newline would model a blob
+    /// the container never sends and split every row across two lines.
+    fn container_blob(drm: &[(&str, &str, &str, &str)], dev: &[&str]) -> String {
+        let mut out = String::new();
+        for (n, v, d, dr) in drm {
+            out.push_str(&format!("DRM\t{n}\t{v}\t{d}\t{dr}\n"));
+        }
+        for e in dev {
+            out.push_str(&format!("DEV\t{e}\n"));
+        }
+        out
+    }
+
+    /// 793-zumy REMAINING 2. The transport parses, and it claims the bottom rung
+    /// and nothing more - reading four files sees hardware, never access.
+    #[test]
+    fn the_container_transport_parses_and_claims_only_the_enumerated_rung() {
+        let blob = container_blob(
+            &[("renderD128", "0x1002", "0x1114", "amdgpu")],
+            &["card1", "renderD128"],
+        );
+        let (nodes, dev) = super::parse_container_proof_output(&blob, super::Vantage::Container);
+        assert_eq!(nodes.len(), 1);
+        assert_eq!(nodes[0].node, "renderD128");
+        assert_eq!(nodes[0].vendor_id, 0x1002);
+        assert_eq!(nodes[0].device_id, 0x1114);
+        assert_eq!(nodes[0].driver, "amdgpu");
+        assert_eq!(nodes[0].vantage, super::Vantage::Container);
+        assert_eq!(
+            nodes[0].proof,
+            super::Proof::Enumerated,
+            "catting sysfs from inside a container still only sees hardware"
+        );
+        assert_eq!(dev, vec!["card1".to_string(), "renderD128".to_string()]);
+    }
+
+    /// A TRUNCATED blob yields fewer nodes, never a node with invented fields.
+    /// The identity rule is [`super::assemble_render_node`]'s and this pins that
+    /// the transport did not quietly acquire its own.
+    #[test]
+    fn the_container_transport_skips_rows_it_cannot_identify() {
+        let blob = concat!(
+            "DRM\trenderD128\t0x1002\t0x1114\tamdgpu\n",
+            "DRM\trenderD129\t\t0x1114\tamdgpu\n", // unreadable vendor
+            "DRM\trenderD130\t0x1002\tnothex\tamdgpu\n", // unparseable device
+            "DRM\trenderD131\t0x1002\n",           // truncated mid-row
+            "garbage\n",
+            "DEV\t\n",
+        );
+        let (nodes, dev) = super::parse_container_proof_output(blob, super::Vantage::Container);
+        assert_eq!(
+            nodes.iter().map(|n| n.node.as_str()).collect::<Vec<_>>(),
+            vec!["renderD128"],
+            "a record claiming vendor 0x0000 is still a claim"
+        );
+        assert!(dev.is_empty());
+    }
+
+    /// The listing-based Reachable upgrade obeys the SAME rules as the
+    /// filesystem one: container vantage only, only nodes the listing names,
+    /// never a downgrade. Four arms, three negative.
+    #[test]
+    fn reachable_from_a_listing_obeys_the_same_rules_as_the_filesystem_stat() {
+        use super::{DrmRenderNode, Proof, Vantage};
+        let mk = |node: &str, vantage, proof| DrmRenderNode {
+            node: node.to_string(),
+            vendor_id: 0x1002,
+            device_id: 0x1114,
+            driver: "amdgpu".to_string(),
+            vantage,
+            proof,
+        };
+        let listing = vec!["card1".to_string(), "renderD128".to_string()];
+
+        // ARM 1 - container vantage, node listed: UPGRADES.
+        let mut a = vec![mk("renderD128", Vantage::Container, Proof::Enumerated)];
+        assert_eq!(super::upgrade_reachable_from_listing(&mut a, &listing), 1);
+        assert_eq!(a[0].proof, Proof::Reachable);
+
+        // ARM 2 - HOST vantage, same node listed: stays Enumerated.
+        let mut b = vec![mk("renderD128", Vantage::Host, Proof::Enumerated)];
+        assert_eq!(super::upgrade_reachable_from_listing(&mut b, &listing), 0);
+        assert_eq!(
+            b[0].proof,
+            Proof::Enumerated,
+            "a host-vantage record must never claim the container lane's rung"
+        );
+
+        // ARM 3 - container vantage, node NOT in the listing: stays Enumerated.
+        // This is the /dev/dri-not-passed case, which is the whole point.
+        let mut c = vec![mk("renderD129", Vantage::Container, Proof::Enumerated)];
+        assert_eq!(super::upgrade_reachable_from_listing(&mut c, &listing), 0);
+        assert_eq!(c[0].proof, Proof::Enumerated);
+
+        // ARM 4 - never downgrades.
+        let mut d = vec![mk("renderD128", Vantage::Container, Proof::Placed)];
+        assert_eq!(super::upgrade_reachable_from_listing(&mut d, &listing), 0);
+        assert_eq!(d[0].proof, Proof::Placed);
+    }
+
+    /// UNKNOWN AND ZERO ARE DIFFERENT FACTS. `upgrade_placed` treats zero as a
+    /// definite refusal, so a parser that reported an unanswerable question as
+    /// zero would be an affirmative denial derived from a failed question.
+    #[test]
+    fn residency_reports_unknown_and_zero_as_different_answers() {
+        // A real two-model /api/ps body, one offloaded and one not.
+        let body = r#"{"models":[
+            {"name":"qwen2.5:3b","size":2000000000,"size_vram":572228893},
+            {"name":"nomic-embed-text","size":300000000,"size_vram":0}]}"#;
+        assert_eq!(super::parse_ollama_resident_bytes(body), Some(572_228_893));
+
+        // Nothing resident on any accelerator: a definite ZERO. This is exactly
+        // where yoga's gfx1152 host sat with the device statted.
+        let zero = r#"{"models":[{"name":"qwen2.5:3b","size_vram":0}]}"#;
+        assert_eq!(super::parse_ollama_resident_bytes(zero), Some(0));
+
+        // No models loaded at all is still an ANSWER: zero.
+        assert_eq!(
+            super::parse_ollama_resident_bytes(r#"{"models":[]}"#),
+            Some(0)
+        );
+
+        // A CPU-resident model omits size_vram entirely; it contributes 0
+        // rather than poisoning the sum.
+        assert_eq!(
+            super::parse_ollama_resident_bytes(r#"{"models":[{"name":"x"}]}"#),
+            Some(0)
+        );
+
+        // UNKNOWN: not JSON, or no `models` key at all. Never Some(0).
+        assert_eq!(super::parse_ollama_resident_bytes("not json"), None);
+        assert_eq!(super::parse_ollama_resident_bytes("{}"), None);
+        assert_eq!(super::parse_ollama_resident_bytes(r#"{"models":{}}"#), None);
+    }
+
+    /// 793-zumy REMAINING 2, THE PACKET'S OWN CRITERION: the rungs are no longer
+    /// inert. Five arms over the composition, because "something produces
+    /// Reachable and Placed" is the claim being made and every way it could be
+    /// vacuously true is a way this test could pass while the fix does not
+    /// exist.
+    #[test]
+    fn the_producer_actually_emits_reachable_and_placed() {
+        use super::Proof;
+        let blob = container_blob(
+            &[("renderD128", "0x1002", "0x1114", "amdgpu")],
+            &["card1", "renderD128"],
+        );
+        let ps = r#"{"models":[{"name":"qwen2.5:3b","size_vram":572228893}]}"#;
+
+        // ARM 1 - device passed in AND a runtime with weights on it: PLACED.
+        // The rung that proves a lane, produced end to end.
+        let placed =
+            super::produce_container_proofs_with(|| Some(blob.clone()), || Some(ps.to_string()));
+        assert_eq!(placed.len(), 1);
+        assert_eq!(placed[0].proof, Proof::Placed);
+        assert!(placed[0].proof.proves_a_lane());
+
+        // ARM 2 - YOGA'S MEASURED STATE, and the one that must not inflate:
+        // device nodes stat-able inside the container, size_vram still 0 because
+        // the image ships no runtime that can drive them. REACHABLE, not Placed.
+        let reachable = super::produce_container_proofs_with(
+            || Some(blob.clone()),
+            || Some(r#"{"models":[{"name":"q","size_vram":0}]}"#.to_string()),
+        );
+        assert_eq!(reachable[0].proof, Proof::Reachable);
+        assert!(
+            !reachable[0].proof.proves_a_lane(),
+            "reachable is necessary and NOT sufficient"
+        );
+
+        // ARM 3 - hardware enumerates but /dev/dri was never passed in: the
+        // bottom rung, and the runtime is not even asked.
+        let mut asked = false;
+        let enumerated = super::produce_container_proofs_with(
+            || {
+                Some(container_blob(
+                    &[("renderD128", "0x1002", "0x1114", "amdgpu")],
+                    &[],
+                ))
+            },
+            || {
+                asked = true;
+                Some(ps.to_string())
+            },
+        );
+        assert_eq!(enumerated[0].proof, Proof::Enumerated);
+        assert!(
+            !asked,
+            "with no reachable node the residency answer cannot change a rung"
+        );
+
+        // ARM 4 - the runtime could not be asked at all. UNKNOWN residency must
+        // leave the node where it was, never inflate and never downgrade.
+        let unknown = super::produce_container_proofs_with(|| Some(blob.clone()), || None);
+        assert_eq!(unknown[0].proof, Proof::Reachable);
+
+        // ARM 5 - no container to ask: an EMPTY vec, never a fabricated row.
+        let none = super::produce_container_proofs_with(|| None, || Some(ps.to_string()));
+        assert!(none.is_empty());
+    }
+
+    /// The produced rung REACHES A CONSUMER. Without this the producers would be
+    /// as inert as the model was: something computes a rung and nothing can see
+    /// it. Also pins `-` for "nobody asked", which must stay distinct from
+    /// `enumerated`.
+    #[test]
+    fn the_envelope_carries_the_highest_produced_rung() {
+        use super::{DrmRenderNode, Proof, Vantage};
+        let mk = |node: &str, proof| DrmRenderNode {
+            node: node.to_string(),
+            vendor_id: 0x1002,
+            device_id: 0x1114,
+            driver: "amdgpu".to_string(),
+            vantage: Vantage::Container,
+            proof,
+        };
+        let mut doc = doc_with(Vec::new());
+
+        // Nobody asked, or nothing answered.
+        assert!(
+            super::accel_envelope(&doc).contains("accel_proof=-"),
+            "an absent producer and a producer that found a device are different facts"
+        );
+
+        // The HIGHEST rung wins, not the first node's.
+        doc.render_nodes = vec![
+            mk("renderD128", Proof::Enumerated),
+            mk("renderD129", Proof::Placed),
+        ];
+        assert!(super::accel_envelope(&doc).contains("accel_proof=placed"));
+
+        doc.render_nodes = vec![mk("renderD128", Proof::Reachable)];
+        let env = super::accel_envelope(&doc);
+        assert!(env.contains("accel_proof=reachable"));
+        // APPENDED, never inserted: every existing grep/sed consumer reads the
+        // keys before it at the offsets it has always read them at.
+        assert!(
+            env.find("accel_ram_gb=").unwrap() < env.find("accel_proof=").unwrap(),
+            "accel_proof must stay the last key"
+        );
     }
 
     /// A sysfs walk may claim ONLY the bottom rung. It cannot see a container's
@@ -2934,6 +3491,7 @@ mod tests {
             probe_identity: Some(probe_identity()),
             enumeration_gaps: Vec::new(),
             hardware_fingerprint: None,
+            render_nodes: Vec::new(),
             devices,
             engines: Vec::new(),
             measurements: Vec::new(),
@@ -3486,6 +4044,9 @@ mod tests {
                 "accel_reason",
                 "accel_cpu_cores",
                 "accel_ram_gb",
+                // 793-zumy REMAINING 2, appended last so every offset above it
+                // is the one existing consumers already read.
+                "accel_proof",
             ],
             "every field must survive a hostile name: {env}"
         );
@@ -3946,6 +4507,7 @@ mod tests {
             probe_identity: Some(probe_identity()),
             enumeration_gaps: Vec::new(),
             hardware_fingerprint: None,
+            render_nodes: Vec::new(),
             devices: Vec::new(),
             engines: Vec::new(),
             measurements: vec![MeasurementRecord {
