@@ -37,7 +37,10 @@ _digest() {
             printf '%s\n' "$f"; "${SHA[@]}" < "$f"
         done
         # The instrument: a changed checker must re-run.
-        for f in scripts/archive-plan-packets.sh scripts/archive-plan-packets.rb scripts/check-archive-answerability.sh; do
+        # 964-9yyp adds native-scratch-dir.sh: it decides WHERE the check's
+        # tree churn happens, so a change to it is a change to the instrument
+        # even though it cannot change the verdict.
+        for f in scripts/archive-plan-packets.sh scripts/archive-plan-packets.rb scripts/check-archive-answerability.sh scripts/native-scratch-dir.sh; do
             [ -f "$f" ] && { printf '%s\n' "$f"; "${SHA[@]}" < "$f"; }
         done
         # The plan binary's identity — resolved through the sanctioned probe
