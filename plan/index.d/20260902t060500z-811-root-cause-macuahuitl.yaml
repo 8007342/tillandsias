@@ -1,0 +1,46 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+
+events:
+  - packet_id: dev-inference-container-exits-2-mid-workload-with-no-error
+    event:
+      type: progress
+      ts: "2026-09-02T06:05:00Z"
+      host: macuahuitl
+      summary: >
+        ROOT CAUSE FOUND, read from the cgroup rather than inferred: the
+        dev-inference container is created with --pids-limit=128 (five sites:
+        container_profile.rs:554, headless main.rs:4637, dev-inference-ensure.sh
+        :271/:289, orchestrate-enclave.sh:271), and the ollama process tree is
+        THREADS, which the pids cgroup counts. Load rig (this host, 06:00Z,
+        RTX A5000, ollama container v0.4.260818.1 created 08-29): two clients
+        POSTing /v1/embeddings in the indexer's own shape (nomic-embed-text,
+        64 real chunk texts, ~29KB) — first four requests 200 at ~250-400ms,
+        then HTTP 400 whose body is the daemon relaying its RUNNER's connection
+        errors ("Post http://127.0.0.1:40839/tokenize: read tcp ... reset",
+        "health resp: Get .../health ..."), exactly the packet's detokenize
+        reset. At that moment: pids.current=129, pids.max=128, pids.peak=130,
+        pids.events "max 27" (41 two minutes later); host view: ollama serve 29
+        threads + two llama-server runners 31 + 67 = 131 > 128; container log:
+        "what(): Resource temporarily unavailable" x3 (C++ std::thread EAGAIN
+        -> uncaught -> runner aborts) and 15 runner 'terminated' lines since
+        boot; podman exec itself failed with "sh: fork: retry: Resource
+        temporarily unavailable". 400 rate 11/387 in the first 2m17s. This is
+        667-se87 / 959-fpc5's mechanism landing on the third container. The
+        packet's silent exit(2): consistent with — NOT yet directly observed —
+        the daemon (Go) itself failing to create an OS thread at the ceiling;
+        the Go runtime's fatal for that exits with status 2. The runners
+        absorbed every hit in this run so the daemon survived. Both
+        hypotheses the packet falsified (batch size, jq truncation) are
+        re-confirmed falsified: the 400 is the runner dying, not a size rule.
+        INTERIM FIX APPLIED to the live container at 06:01:56Z after 387
+        requests: `podman update --pids-limit 4096 tillandsias-dev-inference`
+        -> pids.max=4096, current 98. PREDICTION filed before the reading
+        (peer-falsification form): zero HTTP 400 for the remainder of the
+        40-minute run; if 400s continue, the mechanism above is wrong and the
+        raise must be reverted. Durable fix pending: raise the five sites with
+        the measured regime (unconstrained pids.peak under this rig is read
+        at run end and sets the number), update pids_limits_match_container_roles.
+        Secondary defect (caller discards the HTTP body) stands as filed.
+        evidence_refs: scratchpad 811-hammer.log / 811-inference.log /
+        811-sampler.log (session-local; the durable copy is this event and
+        the counters quoted).
