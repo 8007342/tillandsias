@@ -28,8 +28,9 @@
 #   4 — ok-with-clean-tree (no dirty paths at all — nothing to sync; distinct
 #       from ok so callers can skip the commit)
 #
-# The generated set is the exact 22-path opsx/openspec regeneration observed at
-# forge launch (see the order-540 issue). It is anchored to the repo root.
+# The generated set is the 22-path opsx/openspec regeneration observed at forge
+# launch, in EITHER harness locus (.opencode/ or .claude/ — see the order-540
+# and order-964-fwvh issues). It is anchored to the repo root.
 set -uo pipefail
 
 # ── generated opsx/openspec set (order 540) ─────────────────────────────────
@@ -64,9 +65,52 @@ OPSX_SKILLS=(
     .opencode/skills/openspec-verify-change/SKILL.md
 )
 
+# ── the SAME generated set, in the .claude/ locus ───────────────────────────
+# The openspec CLI writes its command/skill templates once per agent harness it
+# detects. A forge launched under OpenCode gets the `.opencode/` set above; a
+# forge launched under Claude Code gets the identical 22 artifacts under
+# `.claude/`, with the CLI's Claude layout: commands nest under a per-namespace
+# directory (`commands/opsx/<verb>.md`) instead of flattening to a
+# `opsx-<verb>.md` filename. Same CLI, same cadence, same order-540 operator
+# ruling ("INTENDED and committable; must NOT block a meta-orchestration
+# cycle") — so the same verdict must apply, or a Claude-launched forge refuses
+# its whole cycle on dirt an OpenCode-launched forge commits and moves past.
+# Measured on macuahuitl-tillandsias-forge 2026-09-02: 22 dirty paths, all in
+# this set, `non-opsx:` verdict, cycle refused (order 964-fwvh).
+
+CLAUDE_OPSX_COMMANDS=(
+    .claude/commands/opsx/apply.md
+    .claude/commands/opsx/archive.md
+    .claude/commands/opsx/bulk-archive.md
+    .claude/commands/opsx/continue.md
+    .claude/commands/opsx/explore.md
+    .claude/commands/opsx/ff.md
+    .claude/commands/opsx/new.md
+    .claude/commands/opsx/onboard.md
+    .claude/commands/opsx/propose.md
+    .claude/commands/opsx/sync.md
+    .claude/commands/opsx/verify.md
+)
+
+CLAUDE_OPSX_SKILLS=(
+    .claude/skills/openspec-apply-change/SKILL.md
+    .claude/skills/openspec-archive-change/SKILL.md
+    .claude/skills/openspec-bulk-archive-change/SKILL.md
+    .claude/skills/openspec-continue-change/SKILL.md
+    .claude/skills/openspec-explore/SKILL.md
+    .claude/skills/openspec-ff-change/SKILL.md
+    .claude/skills/openspec-new-change/SKILL.md
+    .claude/skills/openspec-onboard/SKILL.md
+    .claude/skills/openspec-propose/SKILL.md
+    .claude/skills/openspec-sync-specs/SKILL.md
+    .claude/skills/openspec-verify-change/SKILL.md
+)
+
 is_in_generated_set() {
     local path="$1"
-    for candidate in "${OPSX_COMMANDS[@]}" "${OPSX_SKILLS[@]}"; do
+    for candidate in \
+        "${OPSX_COMMANDS[@]}" "${OPSX_SKILLS[@]}" \
+        "${CLAUDE_OPSX_COMMANDS[@]}" "${CLAUDE_OPSX_SKILLS[@]}"; do
         if [[ "$path" == "$candidate" ]]; then
             return 0
         fi
