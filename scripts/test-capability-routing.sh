@@ -40,9 +40,15 @@ epic_of() { head -1 | sed -n 's/^batch: epic=\([^ ]*\).*/\1/p'; }
 epics=""
 hosts_n=8
 for h in hilaptop1 hilaptop2 hilaptop3 lowlap1 lowlap2 macuahuitl mstudio oldair; do
+    # No --seed here: since 949-uv5k an explicit --seed is the documented
+    # OVERRIDE that routes by seed instead of rank, and the selector then prints
+    # no `route=` field at all. This case asserts RANK routing by identity;
+    # determinism comes from TILLANDSIAS_ROUTE_ROT=0 and the identity itself.
+    # (The case passed `--seed fixture-$h` from before that fix and read
+    # "did not route by rank" on every host once the override became real.)
     out="$(TILLANDSIAS_CAP_HOSTS="$ROSTER" TILLANDSIAS_WORKSTATION="$h" \
            TILLANDSIAS_HOST_TIER=general TILLANDSIAS_ROUTE_ROT=0 \
-           bash "$SEL" linux --seed "fixture-$h")" || fail "case 1: selector refused for $h: $out"
+           bash "$SEL" linux)" || fail "case 1: selector refused for $h: $out"
     e="$(printf '%s\n' "$out" | epic_of)"
     [ -n "$e" ] || fail "case 1: no epic in header for $h: $(printf '%s\n' "$out" | head -1)"
     printf '%s\n' "$out" | head -1 | grep -q "route=rank:" \
