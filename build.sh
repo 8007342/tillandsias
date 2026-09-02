@@ -1921,6 +1921,21 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Live MCP server build fixture passed"
 
+    # Order 965-hz3f. The forge lifecycle warms the tier's SELECTED model
+    # before expert-serve reports ready, so a cold VRAM load is not charged
+    # against a tier budget that only ever promised inference latency
+    # (measured on an RTX A5000: 7b 23353ms cold vs 938ms warm, 14b 9996ms vs
+    # 1474ms — both warm figures inside Quick's 3000ms). The SELECTION is the
+    # part that can be wrong silently: warming a 14b on the CPU floor would
+    # recreate the very stall it removes on a GPU. Wired here so the policy
+    # cannot ship as a guard nobody invokes (the 865-n8vq shape).
+    _step "Checking the tier-model warm selection (965-hz3f)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-warm-tier-model.sh" 2>&1; then
+        _error "the tier-model warm selection regressed — the CPU floor could be handed a model it cannot serve in-budget"
+        exit 1
+    fi
+    _info "Tier-model warm selection fixture passed"
+
     # Order 748-tkjx. ./build.sh --check runs NO litmus (deliberate — the suite
     # is minutes and a gate that slow gets bypassed with --no-verify), so a
     # green gate plus the spec you happened to run can both pass over another
