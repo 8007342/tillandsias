@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: wire-local-experts-mode-through-grounded-pipeline
+    field: next_action
+    value: 'Task 4.5 is the only open item: mlua portability evidence from the darwin/msys lanes (902-5bf9''s blocking criterion). The darwin 2026-08-28 report already records ''[lua-expert] runtime initialized'' on Darwin — decide as a fleet whether that answers the darwin half before re-running it. Then OpenSpec sync/archive. Also open for the fleet: 927-2q4w''s disposition changes now that cold-start, not model size, is what overruns the tier budget on a GPU host (see the 2026-09-02 forge evidence).'
+    ts: "2026-09-02T20:52:10Z"
+    host: forge
