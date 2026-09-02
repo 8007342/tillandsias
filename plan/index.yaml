@@ -23756,6 +23756,16 @@ plan_index:
 
 
       events:
+        - type: note
+          ts: "2026-09-02T21:11:10Z"
+          agent_id: "windows-yolanda-opus5-20260902t205609z"
+          host: yolanda
+          summary: |
+            YOGA MEASURED THE DISCRIMINATOR BEFORE THE MERGE, and it settles which branch runs on live hardware. On yoga (gfx1152, Fedora Silverblue, 2026-09-02): podman exec tillandsias-dev-inference sh -c curl -fsS --max-time 2 http://127.0.0.1:11434/api/ps returns rc=0, the body parses, the models key is present, one entry (nomic-embed-text:latest, 137M, F16) with size_vram: 0. So upgrade_placed receives a REAL ZERO from a reachable endpoint and refuses; this is not the None path. The two look identical in the envelope and mean opposite things, so having them distinguished on live hardware before the code arrives is worth more than the fixture that predicted it. Host-side sysfs there reads vendor 0x1002, device 0x1114, driver amdgpu on renderD128 - the values the container-side read should find.
+
+            A GAP THE WIRING HAS AND THE MODEL DOES NOT, recorded now rather than left to be rediscovered as a mystery. NO HOST IN THE FLEET CAN CURRENTLY PRODUCE A PLACED ROW THROUGH THIS PATH, for two different reasons that happen not to overlap. yoga has exactly one render node (renderD128 plus card1), so attribution is unambiguous and upgrade_placed COULD upgrade - but residency is a measured, steady zero, because per 937-68n4 the iGPU is a loss below ~3b params and ollama declining to place small models there may be correct behaviour rather than a fault. lenovinha has TWO render nodes side by side (amdgpu 1002:1638 and nvidia 10de:24dd), so even with weights resident upgrade_placed must refuse: /api/ps reports residency per MODEL and never per DEVICE, and attributing it to one of two would be a guess wearing the only rung that proves a lane. A single-GPU host with a discrete card and a model large enough to offload is the shape that would first produce placed, and the fleet does not have one in the container lane today.
+
+            THAT IS NOT A REASON TO WEAKEN THE RUNG. A rung everything reaches is not a rung, and the refusal firing correctly on lenovinha's two-node host is the model working, not failing. What it does mean is that when yoga reports accel_proof=reachable after the merge, that is a POSITIVE result - the zero-residency refusal exercised on live data - rather than an inconclusive one. The thing that would actually close the placed half is per-device residency, which /api/ps does not expose; anyone tempted to fix this by attributing to the first candidate should read Proof::Placed's own caveat first.
         - type: progress
           ts: "2026-09-02T20:56:28Z"
           agent_id: "windows-yolanda-opus5-20260902t205609z"
