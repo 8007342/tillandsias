@@ -8555,6 +8555,26 @@ plan_index:
         codex-device-auth.sh:24-40, token to secret/claude/oauth-token,
         injected + refreshed transparently. Promoted to the index 2026-07-24.
       events:
+        - type: note
+          ts: "2026-09-02T03:00:14Z"
+          agent_id: "linux-lenovinha-claude-20260902t025309z"
+          host: lenovinha
+          summary: |
+            NOT CLAIMED — this packet is gated on an OPERATOR SIGN-OFF that has been open since 2026-07-28, and it is now blocking active-release batch work.
+
+            Recorded from lenovinha 2026-09-02 because the whole of this cycle's batch (epic harness-mcp-expert-validation) was unworkable from this host, and this is the only item whose blocker is a DECISION rather than a capability:
+
+              702-6jza  D1 verification needs a macOS window; D2's code is macOS-owned.
+              317       needs the macOS local-build e2e on a pristine aarch64 guest.
+              405       needs a LIVE paired forge run (codex + opencode on one prompt),
+                        i.e. a full enclave launch plus real provider budget.
+              468       THIS ONE: "OPERATOR SIGN-OFF REQUIRED before implementation".
+
+            The sign-off request has been open ~5 weeks. The packet's own slip record says it is "entirely unimplemented feature gated on Tlatoani sign-off" and that the defect it closes (the interactive Claude login TUI smearing the auth URL on a Vault credential miss) is a usability fallback rather than a crashloop/work-loss item — which is why v0.4 declined it. It now carries desired_release v0.5 and release_target harness-mcp-expert-validation, so under the active release it is in scope on merit and blocked only on the decision.
+
+            I did not implement it, and deliberately did not implement "just the harmless part": the packet's header makes sign-off a precondition for implementation, not for merge, and salami-slicing a gated feature past its gate would defeat the gate. Surfaced to the operator this cycle instead.
+
+            WHAT THE DECISION NEEDS TO BE, so it can be made cheaply: approve or decline transparent Claude OAuth capture -> Vault -> inject -> refresh, mirroring the Codex/GitHub path already in run_provider_login. If approved, it is ~5h of work with no cross-host dependency (pickup_role any). If declined, say so and the packet can be retired rather than re-offered every cycle to hosts that then cannot take it.
         - type: slipped
           ts: "2026-07-28T00:20:00Z"
           agent_id: "linux-mutable-metaorch-20260727"
@@ -17267,6 +17287,32 @@ plan_index:
         - an in-forge ./build.sh --check completes green in the repro environment after the fix
       events:
         - type: note
+          ts: "2026-09-02T01:01:22Z"
+          agent_id: "linux-lenovinha-claude-20260902t005315z"
+          host: lenovinha
+          summary: |
+            AN ALTERNATIVE HYPOTHESIS FOR THIS PACKET'S RESIDUAL, raised by the operator 2026-09-02 and worth recording because this packet's own verification already says the accepted mechanism was never proven.
+
+            WHAT THIS PACKET CURRENTLY CONCLUDES: the rustc panics (jobserver.rs:124 token acquisition, then back/write.rs:1871 lost codegen worker) were pids.max=512 exhaustion, fixed by raising to 4096. WHAT ITS OWN VERIFICATION SAYS: pids.peak read 199 after the green run -- BELOW the old 512 ceiling -- and the 2026-08-10 note states plainly that tonight's green run does NOT prove the exhaustion mechanism, naming a warm-cache confound and "a different mechanism entirely, with the 4096 raise merely coincident".
+
+            THE OPERATOR'S HYPOTHESIS: DISK THRASHING DURING THE BUILD, on macuahuitl's cheap NVMe. A lost codegen worker and a jobserver token failure are both consistent with severe I/O stall under heavy parallel compilation, not only with a pids ceiling. This would also explain why the mechanism could not be reproduced at pids.peak=199.
+
+            WHY LENOVINHA CANNOT SEE IT, measured here 2026-09-02 so the comparison is on the record rather than assumed:
+
+              disk                  WD_BLACK SN7100 2TB (nvme0n1)
+              /proc/pressure/io     some avg10=0.00 avg60=0.00 avg300=0.00
+              /proc/pressure/memory some avg10=0.00 avg60=0.00 avg300=0.00
+              /var/home             btrfs on nvme0n1p3, 681G of 1.9T used (37%), 1.2T free
+              kernel I/O errors, last 7 days: ZERO
+                (13 grep hits for nvme|i/o error|timeout, ALL benign boot-time init:
+                 queue allocation, host memory buffer, partition scan, btrfs async discard)
+
+            So this host has no I/O pressure and no disk errors, which is why the panics have never been seen here -- the fast NVMe hides the pressure rather than disproving it. The operator's point exactly.
+
+            THE DISCRIMINATING MEASUREMENT, for whoever takes the residual: /proc/pressure/io SAMPLED DURING A BUILD, not at idle. Thrashing is a load-time property and idle PSI proves nothing. If macuahuitl's `some avg300` climbs into the tens under ./build.sh while lenovinha's stays 0.00, the I/O hypothesis holds and this packet's recorded root cause needs revising from "pids ceiling" to "pids ceiling was raised, and the actual mechanism was something else". Also worth capturing there: dmesg for "hung task"/"blocked for more than", and whether pids.peak under a COLD cache differs from the warm 199.
+
+            This note does not change the packet's status. The 4096 raise stands on its own merits as an explicit resource policy regardless of which mechanism caused the panics. Cross-referenced to the host-reachability note above: the 94.1M coredump that would settle it is on macuahuitl, not here.
+        - type: note
           ts: "2026-09-01T22:53:53Z"
           agent_id: "linux-lenovinha-claude-20260901t225307z"
           host: lenovinha
@@ -19786,6 +19832,29 @@ plan_index:
         - 'D4: the backgrounded jobs in entrypoint-forge-claude.sh redirect stderr as well as stdout (>>log 2>&1), and a check refuses a backgrounded invocation in an agent entrypoint that redirects only fd 1.'
         - 'Each of D1-D4 is falsified by hand before closure: reverting the individual fix must reproduce its symptom or fail its test. A blanket ''terminal looks better'' observation does not close any of them.'
       events:
+        - type: progress
+          ts: "2026-09-02T01:00:31Z"
+          agent_id: "linux-lenovinha-claude-20260902t005315z"
+          host: lenovinha
+          summary: |
+            D1 IMPLEMENTED from the linux lane, NOT CLOSED. Its code is host-agnostic; only its verification is macOS-bound, so doing it here leaves macOS looking at a window rather than writing escape sequences. D2 remains untouched and macOS-owned (action_host.rs).
+
+            THE PACKET'S OWN D1 WORDING CONTAINS A TRAP, and taking it literally ships a regression. The criterion reads "ED+CUP added to the MODE_RESET write at attach_client.rs:224". The WRITE, not the constant — and that distinction is load-bearing, because MODE_RESET is written at BOTH boundaries. The second site is TEARDOWN, where it is followed by a newline precisely so the wrapper's end-of-session banner starts at column 0. Folding a clear into the shared constant would ERASE THE ENTIRE SESSION at the moment the operator finishes reading it, which is the exact opposite of what 828-h7kw holds the window open FOR. I nearly wrote the one-line version before checking the second call site.
+
+            SHIPPED: a separate SCREEN_HOME constant (ESC[2J ESC[H) written at the ATTACH site only, immediately after MODE_RESET. Two ordering decisions, both deliberate:
+              - AFTER MODE_RESET, because DECRST 1049 must leave the alternate screen first; clearing before that scrubs the buffer we are about to abandon.
+              - ED 2, NOT ED 3. ED 3 also deletes scrollback. The defect is row ALIGNMENT, so alignment is all this fixes; discarding the operator's history would be a second and worse bug wearing the first one's clothes.
+
+            FIVE TESTS, FIVE MUTATIONS, each mutation asserted to LAND before its verdict was trusted:
+              1. SCREEN_HOME clears and homes, CUP last.
+              2. REGRESSION GUARD: MODE_RESET must contain no ED/CUP at all. This is the arm that catches the naive fix -- mutation M1 folded the clear into MODE_RESET exactly as the criterion's literal reading suggests, and this test reddens.
+              3. Scrollback preserved (no ED 3). Mutation to ED 3 reddens.
+              4. WIRING: exactly ONE SCREEN_HOME write, AFTER the attach MODE_RESET and BEFORE the teardown one. Unwiring it reddens (a constant with no caller is the defect class this cycle keeps finding); adding a second write at the real teardown site also reddens.
+              5. Dropping CUP reddens.
+
+            TWO OF MY OWN ERRORS, recorded because both are reusable lessons. First, the wiring test scans this file with include_str! and its own assertions quote the literals they count, so the unscoped scan found its own test source and reported 2 writes where the program has 1 -- it is now scoped to the pre-`mod tests` region. Second, my first attempt at the teardown mutation matched the LAST occurrence of the write literal, which is inside the test source, and produced a compile error rather than a mutation. That is the "mutation that failed to apply" class: had I read it as a passing arm I would have concluded the guard had no teeth. I re-targeted the real production site (line 388) and it reddens correctly.
+
+            WHAT MACOS STILL HAS TO DO, and why I did not do it: criterion D1 says "Verify by launching a lane and confirming the session begins at row 1 with no banner above it", and the packet's fifth criterion requires falsifying by hand -- reverting the fix must reproduce the symptom. Both need a macOS window. I verified the BYTES, not the RENDERING, and those are not the same claim. D1 stays open pending that visual check.
         - type: progress
           ts: "2026-09-01T01:00:37Z"
           agent_id: "linux-lenovinha-claude-20260901t005316z"

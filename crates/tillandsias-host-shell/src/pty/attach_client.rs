@@ -97,6 +97,36 @@ pub fn decode_session_msg(buf: &[u8; SESSION_MSG_LEN]) -> Option<SessionMsg> {
 pub const MODE_RESET: &str =
     "\u{1b}[?1000l\u{1b}[?1002l\u{1b}[?1003l\u{1b}[?1006l\u{1b}[?1007l\u{1b}[?1049l\u{1b}[?25h";
 
+/// ORDER 702-6jza D1. Home the cursor and clear the visible screen, emitted at
+/// ATTACH ONLY — deliberately NOT part of [`MODE_RESET`].
+///
+/// THE DEFECT. Terminal.app's `do script` leaves its own login banner on the
+/// window before the attach client takes it over. The guest then believes it
+/// owns row 1, so every full-screen redraw lands one or more rows below where
+/// the guest thinks it is: the operator's "isn't fully clean … gets overwritten
+/// on render … scrolling up and down sometimes also messes up".
+///
+/// WHY THIS IS A SEPARATE CONSTANT, and the reason a one-line change here would
+/// have been a regression. `MODE_RESET` is written at BOTH boundaries: attach
+/// and TEARDOWN. The teardown site writes it and then a newline specifically so
+/// the wrapper's end-of-session banner starts at column 0. Folding ED+CUP into
+/// the shared constant would therefore ERASE THE WHOLE SESSION at the moment
+/// the operator finishes it — destroying the output they are trying to read,
+/// which is the exact opposite of what 828-h7kw is holding the window open FOR.
+/// The packet's own wording says "added to the MODE_RESET *write* at :224",
+/// i.e. the attach site, not the constant.
+///
+/// ORDER MATTERS: this goes AFTER `MODE_RESET`. DECRST 1049 returns from the
+/// alternate screen first, so the clear applies to the primary buffer the
+/// session will actually use; clearing before leaving alt-screen would scrub
+/// the buffer we are about to abandon.
+///
+/// ED 2, NOT ED 3. `\e[2J` clears the visible screen and leaves SCROLLBACK
+/// intact; `\e[3J` also deletes scrollback. Alignment is the defect, so
+/// alignment is all this fixes — throwing away the operator's history would be
+/// a second, worse bug wearing the first one's clothes.
+pub const SCREEN_HOME: &str = "\u{1b}[2J\u{1b}[H";
+
 // ─── engine (unix-only: termios/ioctl/SIGWINCH) ───────────────────────────
 
 #[cfg(unix)]
@@ -222,6 +252,11 @@ mod engine {
         // Boundary hygiene BEFORE raw mode: clear any leftover mouse/alt-
         // screen state from a previous occupant of this window.
         let _ = tty_out.write_all(MODE_RESET.as_bytes());
+        // ORDER 702-6jza D1: then home the cursor and clear, so the guest's
+        // row 1 IS the window's row 1. Terminal.app leaves a login banner
+        // above us otherwise and every redraw lands offset by its height.
+        // AFTER MODE_RESET, never folded into it — see SCREEN_HOME.
+        let _ = tty_out.write_all(SCREEN_HOME.as_bytes());
         let _ = tty_out.flush();
 
         // Raw mode on OUR tty — the transparent-conduit end. Ctrl+C is a
@@ -405,6 +440,110 @@ mod tests {
         // Scoped reset only: never permanently disable modes (no DECSET of
         // mouse modes, no termcap surgery).
         assert!(!MODE_RESET.contains("1049h"), "must not ENTER alt-screen");
+    }
+
+    /// ORDER 702-6jza D1. The attach boundary must home the cursor and clear,
+    /// or the guest's row 1 is not the window's row 1 and every full-screen
+    /// redraw lands below the host terminal's own banner.
+    #[test]
+    fn screen_home_clears_and_homes() {
+        assert!(
+            SCREEN_HOME.contains("\u{1b}[2J"),
+            "missing ED (clear screen)"
+        );
+        assert!(
+            SCREEN_HOME.contains("\u{1b}[H"),
+            "missing CUP (home cursor)"
+        );
+        // ED BEFORE CUP is not required by the terminal, but the cursor must
+        // end up home: a trailing CUP guarantees it regardless of where ED
+        // left the cursor on a given emulator.
+        assert!(
+            SCREEN_HOME.ends_with("\u{1b}[H"),
+            "CUP must come last so the cursor is home whatever ED did: {SCREEN_HOME:?}"
+        );
+    }
+
+    /// ORDER 702-6jza D1, THE REGRESSION GUARD — and the reason this fix is a
+    /// separate constant rather than two characters added to MODE_RESET.
+    ///
+    /// MODE_RESET is written at BOTH boundaries, and the second one is
+    /// TEARDOWN. A clear folded into it would wipe the window at the moment
+    /// the session ends, destroying the output the operator is reading — the
+    /// exact opposite of 828-h7kw's reason for holding the window open. The
+    /// obvious one-line reading of this packet's D1 produces that bug, so it
+    /// is pinned here rather than left to review.
+    #[test]
+    fn mode_reset_never_clears_the_screen() {
+        for destructive in ["\u{1b}[2J", "\u{1b}[3J", "\u{1b}[J", "\u{1b}[H"] {
+            assert!(
+                !MODE_RESET.contains(destructive),
+                "MODE_RESET must not contain {destructive:?}: it is also written at TEARDOWN, \
+                 where clearing erases the finished session's output"
+            );
+        }
+    }
+
+    /// ORDER 702-6jza D1. Scrollback is the operator's history, not ours to
+    /// discard. The defect is row ALIGNMENT; ED 3 would additionally delete
+    /// scrollback, which is a second and worse bug wearing the first's clothes.
+    #[test]
+    fn screen_home_preserves_scrollback() {
+        assert!(
+            !SCREEN_HOME.contains("\u{1b}[3J"),
+            "ED 3 deletes scrollback; alignment is the defect, so alignment is the fix"
+        );
+    }
+
+    /// ORDER 702-6jza D1, WIRING. The constant is worthless if nothing writes
+    /// it, and worse than worthless if TEARDOWN writes it.
+    ///
+    /// The pumps need a real tty and a live guest, so the write cannot be
+    /// observed from a unit test; the structure can. This asserts exactly one
+    /// SCREEN_HOME write, that it sits AFTER the attach-side MODE_RESET (DECRST
+    /// 1049 must leave the alternate screen before the clear lands), and that
+    /// it comes BEFORE the teardown write — which is the same regression
+    /// `mode_reset_never_clears_the_screen` guards from the other direction.
+    #[test]
+    fn screen_home_is_written_once_at_attach_and_never_at_teardown() {
+        // SCOPE THE SCAN TO PRODUCTION CODE. This file includes ITSELF, and the
+        // assertions below quote the very literals they count -- an unscoped
+        // scan finds its own test source and reports 2 writes where the
+        // program has 1. Measured: this test failed exactly that way when
+        // first written.
+        let src = include_str!("attach_client.rs");
+        let src = src.split("mod tests").next().unwrap_or(src);
+        let writes: Vec<usize> = src
+            .match_indices("write_all(SCREEN_HOME.as_bytes())")
+            .map(|(i, _)| i)
+            .collect();
+        assert_eq!(
+            writes.len(),
+            1,
+            "expected exactly one SCREEN_HOME write (attach only); found {}",
+            writes.len()
+        );
+
+        let resets: Vec<usize> = src
+            .match_indices("write_all(MODE_RESET.as_bytes())")
+            .map(|(i, _)| i)
+            .collect();
+        assert_eq!(
+            resets.len(),
+            2,
+            "expected MODE_RESET at attach AND teardown"
+        );
+
+        assert!(
+            writes[0] > resets[0],
+            "SCREEN_HOME must follow the attach MODE_RESET: the clear has to land \
+             on the primary buffer, after DECRST 1049 leaves the alternate one"
+        );
+        assert!(
+            writes[0] < resets[1],
+            "SCREEN_HOME must come BEFORE the teardown MODE_RESET — clearing at \
+             teardown erases the finished session the operator is reading"
+        );
     }
 
     /// Messages are fixed-size — both ends rely on it for framing.
