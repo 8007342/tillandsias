@@ -101,6 +101,14 @@ if reached_timeout "$out" && grep -q 'cpu.pressure some-stall 0us over [0-9]*s (
 else
     check FAIL "flat counter -> NOT contended"; printf '%s\n' "$out" | grep -E 'TIMEOUT|cpu.pressure|load1|SKIP|Error|error' | head -5 | sed 's/^/     /'
 fi
+# 956-llei second rung: a killed test's row in the slowest-tests table is
+# marked censored — its elapsed time is the budget, a lower bound, not a
+# measurement. The probe is killed at 2s, above the table's 0.5s floor.
+if grep -q 'killed at budget — censored' <<<"$out"; then
+    check ok "slowest-tests table marks the killed probe as censored"
+else
+    check FAIL "slowest-tests table marks the killed probe as censored"; grep -A3 'Slowest tests' <<<"$out" | head -4 | sed 's/^/     /'
+fi
 
 # --- Arm 3: no pressure file -> UNCLASSIFIED, and no fallback instrument
 write_probe "sleep 30"
