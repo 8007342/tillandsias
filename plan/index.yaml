@@ -24277,6 +24277,28 @@ plan_index:
 
 
       events:
+        - type: progress
+          ts: "2026-09-02T21:00:51Z"
+          agent_id: "linux-lenovinha-opus5-20260902t202900z"
+          host: lenovinha
+          summary: |
+            IMPLEMENTED AND CLOSED at 2ecac8fda. All four exit criteria have a test, and this host's own row is the worked example.
+
+            THE ENVELOPE NOW CARRIES, appended after the existing eight keys and never among them: accel_side, accel_gpu_path, accel_gpu_engine, accel_mem_model, accel_mem_budget_gb, plus 793-qc6q's accel_prefill_dev, accel_decode_dev, accel_decode_crossover_b. The hostile-name test asserts the key list IN ORDER, so it is also the pin that the extension stayed additive — a rename or a reorder wearing an addition's clothes fails there rather than at whichever consumer splits on position. litmus:accel-capability-probe, :forge-environment-discoverability and :meta-orchestration pass unchanged, as does a forced ./build.sh --check.
+
+            LENOVINHA AFTER THE CHANGE, from a HEAD-built probe:
+              accel_class=workstation-gpu accel_gpu=usable accel_gpu_name=NVIDIA_GeForce_RTX_3070_Laptop_GPU
+              accel_npu=none accel_npu_name=- accel_reason=- accel_cpu_cores=16 accel_ram_gb=13
+              accel_side=native-linux accel_gpu_path=cuda accel_gpu_engine=ollama accel_mem_model=discrete
+              accel_mem_budget_gb=13 accel_prefill_dev=gpu accel_decode_dev=cpu accel_decode_crossover_b=unmeasured
+
+            Four facts that were one boolean are now four answers, and the interesting one is accel_gpu_engine=ollama. It is NOT in the packet's proposed vocabulary, and forcing it into the nearest listed value would have been the confident half-answer this packet exists to remove. An unrecognised engine renders its own slug; a reader who does not recognise a slug can find out, whereas a reader handed a wrong one cannot.
+
+            THE THIRD ABSENT-STATE, and it is tlatoanis-macbook-air's correction landing rather than this packet's original two-value plan. none = looked and absent. unknown = the probe has no arm for this class here (the Darwin ANE: present, CoreML-drivable, on THIS side, invisible only because enumerate_npus reads /sys/class/accel). unobservable-from-this-side = looked from a guest or container, device is across that boundary. The discriminator is the SIDE, not the class, which is what keeps a native-Linux host with no NPU on none — the criterion that stops this being a blanket relabel. Both halves are asserted in ONE test, because either alone is satisfiable by a relabel.
+
+            WHAT I DID NOT RESOLVE, stated as a limitation rather than left to look finished. accel_mem_model answers unknown for every AMD and Intel DRM device in the fleet. DeviceRecord records no VRAM size and no integrated flag, so an iGPU sharing DRAM and a discrete Radeon are indistinguishable IN THE DOCUMENT; guessing either way is wrong for half the fleet. unified is asserted only where the architecture makes it true (Apple silicon, or a node with no GPU at all — one pool, nothing to sum) and discrete where the vendor does. A consumer reading unknown must not sum either, which is the safe reading, but the real fix is a per-device memory field. Filed as 964-r98h.
+
+            SCHEMA 2 -> 3 (HostInfo::side, MeasurementRecord::model/model_params_b, all Option+serde(default)). Heads-up sent to macuahuitl for relay to yolanda-windows and yoga-silverblue BEFORE implementing: DeviceRecord and EngineRecord are untouched, so vendor_id/device_id/driver/node/vantage/proof and the legacy_tier/hwfp-v2 surfaces are unaffected. The bump follows this field's own precedent — a v2 document has no side, so every device it reports is unqualified, and serving one from cache would republish the exact confusion this order ends.
         - type: note
           ts: "2026-08-26T16:13:22Z"
           agent_id: "macos-tlatoanis-macbook-air-opus5-20260826t161322z"
@@ -24702,6 +24724,28 @@ plan_index:
 
 
       events:
+        - type: progress
+          ts: "2026-09-02T21:01:20Z"
+          agent_id: "linux-lenovinha-opus5-20260902t202900z"
+          host: lenovinha
+          summary: |
+            THE POLICY IS IMPLEMENTED AND TESTED AT 2ecac8fda; I AM NOT CLOSING THIS, AND THE REASON IS THIS PROJECT'S OWN NAMED FAILURE CLASS.
+
+            WHAT LANDED. accel_probe::route_phase(doc, Phase, model_params_b) -> Placement{device, reason} implements the packet's policy exactly: prefill -> npu else gpu else cpu; decode -> gpu only when the GPU is schedulable AND the model is at or above a MEASURED crossover; embed -> npu only, never the gpu; rerank -> cpu. decode_crossover_b(doc) derives the threshold from doc.measurements and returns a three-valued answer — Unmeasured, AtOrAbove(b), CpuWinsThroughout. The envelope publishes accel_prefill_dev, accel_decode_dev and accel_decode_crossover_b so a consumer applies the same comparison route_phase would.
+
+            ALL FOUR EXIT CRITERIA HAVE A TEST. (1) with Yolanda's measured rows loaded, decode 0.5B routes to cpu and 3.0B to gpu, while prefill goes to the gpu at BOTH sizes — the same host and the same model wanting different devices for the two phases is the entire argument for routing per phase. (2) a doc with no accelerator, no engine and no measurement routes every phase to cpu, so 620-ca7g is preserved literally: there is no input that yields a device the host cannot run on. (3) the same test asserts every fallback reason is non-empty and not '-'. (4) a second test moves the measurements and watches the threshold move with them — a hard-coded 1.5 passes test (1) and fails this one, which is exactly why the two are separate.
+
+            THREE DECISIONS THAT ARE NOT IN THE PACKET, all conservative, all named so a reviewer can overrule them:
+
+            - AN UNMEASURED HOST KEEPS DECODE ON THE CPU. The criterion forbids a constant, so there is no threshold available on a host that has not measured; routing to the GPU anyway would be that constant's authority under another name, and on a 0.5B model it is the 1.23x regression this packet was written to prevent. Cost: every host in the fleet is Unmeasured today, so nothing routes decode to a GPU until someone runs the bench. That is the intended shape — the measurement is the enabling step, not a formality.
+            - A DEGRADED MeasurementRecord IS EXCLUDED. It is evidence the run went wrong, not evidence about the device, and 793-a8e7 records a real cold-load stall of >9 minutes at 40% prompt processing. Folding one in would move a threshold on the strength of a failure.
+            - EMBED'S GPU BAN IS UNCONDITIONAL, not conditioned on accel_mem_model==unified. mem_model answers unknown for every AMD and Intel DRM device (see 964-r98h), i.e. on exactly the host the CPU 8.7ms vs GPU 10.2ms measurement came from — so a guard written as 'unless unified' would open precisely where the evidence says it must not.
+
+            WHY IT STAYS ready. NOTHING CALLS route_phase EXCEPT THE ENVELOPE RENDERER. The decision function exists, is correct, and is unit-tested; no inference caller consults it, so no work is actually routed by it yet. That is order 480's shape verbatim — 'the module's own tests passed while the feature did not exist at runtime' — and litmus:accel-envelope-reaches-the-forge exists because someone closed a packet in that state. Marking this done would be the same claim.
+
+            RESIDUAL, in order: (a) wire route_phase into the inference call path so a phase's device is chosen by it rather than by the engine's own default; (b) teach scripts/bench-accel-lane.sh to send model and model_params_b through --record-measurement (the reader now accepts both; the writer does not send them, which is the same upstream/downstream split workload_suite had); (c) run the bench on at least one host so some machine has a real crossover instead of Unmeasured. (c) is the cheapest and unblocks the rest.
+
+            NOT AVAILABLE HERE: this host is native-linux with a discrete RTX 3070, so its crossover would say nothing about the unified-memory claim the policy rests on — that measurement wants Yolanda or the M5, and tlatoanis-macbook-air has already written down exactly what it would run if asked.
         - type: note
           ts: "2026-08-26T16:10:27Z"
           agent_id: "macos-tlatoanis-macbook-air-opus5-20260826t161027z"
