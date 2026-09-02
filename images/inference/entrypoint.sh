@@ -575,6 +575,42 @@ for _model in $PRELOAD_MODELS; do
     fi
 done
 
+# ── Embedding model pre-pull (order 919-vvyv exit criterion 1) ────
+# @trace spec:inference-container
+# The L1 spec-RAG tier needs an EMBEDDING model, and until now nothing pulled
+# one. `nomic-embed-text` reached working forges only because it happened to be
+# in the host-mounted model cache; on a genuinely cold volume the embed call
+# returned `model "nomic-embed-text" not found, try pulling it first` and the
+# whole retrieval tier was dead with no signal but a typed refusal (919-vvyv D1).
+#
+# DELIBERATELY NOT ADDED TO DEFAULT_MODELS. That literal is pinned by
+# litmus:zen-default-with-ollama-shape, and order 168 narrowed it to a single
+# ~400MB chat model to stop a real OOM container-death on constrained hosts.
+# This is a separate 274MB pull with its own name and its own report line, so
+# the chat envelope and the retrieval prerequisite can never be confused for
+# each other — and so a host that wants neither can turn this one off alone.
+#
+# Same rules as the default set: skipped when cached, non-fatal on failure
+# (classified through the same reporter, retried next launch), and overridable.
+# The NAME must match what the query path asks for — lib-common.sh and
+# lib-dev-env.sh both default TILLANDSIAS_EMBED_MODEL to `nomic-embed-text`, and
+# an index embedded with one model and queried with another 404s while looking
+# exactly like a missing index (760-hzi4 defect i).
+EMBED_MODEL_PULL="${TILLANDSIAS_EMBED_MODEL:-nomic-embed-text}"
+if [ "${TILLANDSIAS_INFERENCE_EMBED_PULL:-1}" = "0" ]; then
+    echo "[inference] embed model pull disabled (TILLANDSIAS_INFERENCE_EMBED_PULL=0) — L1 retrieval stays unavailable unless $EMBED_MODEL_PULL is already cached"
+elif ollama list 2>/dev/null | grep -q "$EMBED_MODEL_PULL"; then
+    echo "[inference] embed model $EMBED_MODEL_PULL ready (cached)"
+else
+    echo "[inference] pulling embed model $EMBED_MODEL_PULL (first run)..."
+    if _pull_out="$(ollama pull "$EMBED_MODEL_PULL" 2>&1)"; then
+        printf '%s\n' "$_pull_out"
+        echo "[inference] embed model $EMBED_MODEL_PULL ready"
+    else
+        tillandsias_report_pull_failure "embed model" "$EMBED_MODEL_PULL" "$_pull_out"
+    fi
+fi
+
 # ── Warm-model inventory + checkpoint (order 392a) ────────────────
 # The authoritative warm set is what `ollama list` reports, not what preload
 # intended — a failed pull must never be recorded as warm. The inventory is
