@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: macos-terminal-attach-renders-corrupt-from-launch
+    field: next_action
+    value: 'macOS lane: (a) VERIFY D1 visually — launch a lane, confirm the session begins at row 1 with no Terminal.app banner above it, and falsify by reverting the SCREEN_HOME write at attach_client.rs so the offset returns; the escape bytes are already in place and unit-pinned. (b) IMPLEMENT D2 (action_host.rs is macOS-owned): the 10s attach wait must stop birthing the PTY at 24x80 that a real window contradicts; negative control — a genuinely headless launch with no attach client must still succeed rather than hang.'
+    ts: "2026-09-02T01:00:47Z"
+    host: linux

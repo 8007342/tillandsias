@@ -19787,6 +19787,29 @@ plan_index:
         - 'Each of D1-D4 is falsified by hand before closure: reverting the individual fix must reproduce its symptom or fail its test. A blanket ''terminal looks better'' observation does not close any of them.'
       events:
         - type: progress
+          ts: "2026-09-02T01:00:31Z"
+          agent_id: "linux-lenovinha-claude-20260902t005315z"
+          host: lenovinha
+          summary: |
+            D1 IMPLEMENTED from the linux lane, NOT CLOSED. Its code is host-agnostic; only its verification is macOS-bound, so doing it here leaves macOS looking at a window rather than writing escape sequences. D2 remains untouched and macOS-owned (action_host.rs).
+
+            THE PACKET'S OWN D1 WORDING CONTAINS A TRAP, and taking it literally ships a regression. The criterion reads "ED+CUP added to the MODE_RESET write at attach_client.rs:224". The WRITE, not the constant — and that distinction is load-bearing, because MODE_RESET is written at BOTH boundaries. The second site is TEARDOWN, where it is followed by a newline precisely so the wrapper's end-of-session banner starts at column 0. Folding a clear into the shared constant would ERASE THE ENTIRE SESSION at the moment the operator finishes reading it, which is the exact opposite of what 828-h7kw holds the window open FOR. I nearly wrote the one-line version before checking the second call site.
+
+            SHIPPED: a separate SCREEN_HOME constant (ESC[2J ESC[H) written at the ATTACH site only, immediately after MODE_RESET. Two ordering decisions, both deliberate:
+              - AFTER MODE_RESET, because DECRST 1049 must leave the alternate screen first; clearing before that scrubs the buffer we are about to abandon.
+              - ED 2, NOT ED 3. ED 3 also deletes scrollback. The defect is row ALIGNMENT, so alignment is all this fixes; discarding the operator's history would be a second and worse bug wearing the first one's clothes.
+
+            FIVE TESTS, FIVE MUTATIONS, each mutation asserted to LAND before its verdict was trusted:
+              1. SCREEN_HOME clears and homes, CUP last.
+              2. REGRESSION GUARD: MODE_RESET must contain no ED/CUP at all. This is the arm that catches the naive fix -- mutation M1 folded the clear into MODE_RESET exactly as the criterion's literal reading suggests, and this test reddens.
+              3. Scrollback preserved (no ED 3). Mutation to ED 3 reddens.
+              4. WIRING: exactly ONE SCREEN_HOME write, AFTER the attach MODE_RESET and BEFORE the teardown one. Unwiring it reddens (a constant with no caller is the defect class this cycle keeps finding); adding a second write at the real teardown site also reddens.
+              5. Dropping CUP reddens.
+
+            TWO OF MY OWN ERRORS, recorded because both are reusable lessons. First, the wiring test scans this file with include_str! and its own assertions quote the literals they count, so the unscoped scan found its own test source and reported 2 writes where the program has 1 -- it is now scoped to the pre-`mod tests` region. Second, my first attempt at the teardown mutation matched the LAST occurrence of the write literal, which is inside the test source, and produced a compile error rather than a mutation. That is the "mutation that failed to apply" class: had I read it as a passing arm I would have concluded the guard had no teeth. I re-targeted the real production site (line 388) and it reddens correctly.
+
+            WHAT MACOS STILL HAS TO DO, and why I did not do it: criterion D1 says "Verify by launching a lane and confirming the session begins at row 1 with no banner above it", and the packet's fifth criterion requires falsifying by hand -- reverting the fix must reproduce the symptom. Both need a macOS window. I verified the BYTES, not the RENDERING, and those are not the same claim. D1 stays open pending that visual check.
+        - type: progress
           ts: "2026-09-01T01:00:37Z"
           agent_id: "linux-lenovinha-claude-20260901t005316z"
           host: lenovinha
