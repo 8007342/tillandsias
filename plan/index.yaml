@@ -17267,6 +17267,32 @@ plan_index:
         - an in-forge ./build.sh --check completes green in the repro environment after the fix
       events:
         - type: note
+          ts: "2026-09-02T01:01:22Z"
+          agent_id: "linux-lenovinha-claude-20260902t005315z"
+          host: lenovinha
+          summary: |
+            AN ALTERNATIVE HYPOTHESIS FOR THIS PACKET'S RESIDUAL, raised by the operator 2026-09-02 and worth recording because this packet's own verification already says the accepted mechanism was never proven.
+
+            WHAT THIS PACKET CURRENTLY CONCLUDES: the rustc panics (jobserver.rs:124 token acquisition, then back/write.rs:1871 lost codegen worker) were pids.max=512 exhaustion, fixed by raising to 4096. WHAT ITS OWN VERIFICATION SAYS: pids.peak read 199 after the green run -- BELOW the old 512 ceiling -- and the 2026-08-10 note states plainly that tonight's green run does NOT prove the exhaustion mechanism, naming a warm-cache confound and "a different mechanism entirely, with the 4096 raise merely coincident".
+
+            THE OPERATOR'S HYPOTHESIS: DISK THRASHING DURING THE BUILD, on macuahuitl's cheap NVMe. A lost codegen worker and a jobserver token failure are both consistent with severe I/O stall under heavy parallel compilation, not only with a pids ceiling. This would also explain why the mechanism could not be reproduced at pids.peak=199.
+
+            WHY LENOVINHA CANNOT SEE IT, measured here 2026-09-02 so the comparison is on the record rather than assumed:
+
+              disk                  WD_BLACK SN7100 2TB (nvme0n1)
+              /proc/pressure/io     some avg10=0.00 avg60=0.00 avg300=0.00
+              /proc/pressure/memory some avg10=0.00 avg60=0.00 avg300=0.00
+              /var/home             btrfs on nvme0n1p3, 681G of 1.9T used (37%), 1.2T free
+              kernel I/O errors, last 7 days: ZERO
+                (13 grep hits for nvme|i/o error|timeout, ALL benign boot-time init:
+                 queue allocation, host memory buffer, partition scan, btrfs async discard)
+
+            So this host has no I/O pressure and no disk errors, which is why the panics have never been seen here -- the fast NVMe hides the pressure rather than disproving it. The operator's point exactly.
+
+            THE DISCRIMINATING MEASUREMENT, for whoever takes the residual: /proc/pressure/io SAMPLED DURING A BUILD, not at idle. Thrashing is a load-time property and idle PSI proves nothing. If macuahuitl's `some avg300` climbs into the tens under ./build.sh while lenovinha's stays 0.00, the I/O hypothesis holds and this packet's recorded root cause needs revising from "pids ceiling" to "pids ceiling was raised, and the actual mechanism was something else". Also worth capturing there: dmesg for "hung task"/"blocked for more than", and whether pids.peak under a COLD cache differs from the warm 199.
+
+            This note does not change the packet's status. The 4096 raise stands on its own merits as an explicit resource policy regardless of which mechanism caused the panics. Cross-referenced to the host-reachability note above: the 94.1M coredump that would settle it is on macuahuitl, not here.
+        - type: note
           ts: "2026-09-01T22:53:53Z"
           agent_id: "linux-lenovinha-claude-20260901t225307z"
           host: lenovinha
