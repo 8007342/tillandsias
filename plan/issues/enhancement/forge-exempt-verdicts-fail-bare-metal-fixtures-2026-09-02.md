@@ -24,6 +24,33 @@ same structural reason and none for a defect in the thing under test:
    answers `skip:forge-exempt` on an ephemeral forge (its `target/` dies with
    the container, so there is nothing to sweep), and the litmus step expects
    the pinned bare-metal verdict grammar. OPEN — this issue.
+4. `litmus:plan-only-push-lane-shape` — eight of its arms drive a REAL
+   `git push` through a hook they install at `<fixture>/.git/hooks/pre-push`,
+   which the forge's global `core.hooksPath` replaces. The hook never ran, the
+   push SUCCEEDED unvalidated (`rc=0`), and the arm failed on its missing lane
+   markers. FIXED 2026-09-02 in the course of order 966-7umc, which needed the
+   spec green to close: `core.hooksPath` is now pinned per fixture repo in all
+   eleven of them. Note this is the SAME root cause as instance 1 — two
+   independent fixtures, same global setting, found a day apart.
+
+Independently, pirria hit the class twice more on the same day: `core.hooksPath`
+again, and an ambient `AUTOINSTALL=0` under which their fixture read 6/6
+standalone and 2/6 inside the gate.
+
+## The generalisation (pirria's, and it is the one to act on)
+
+**A fixture must pin every environment variable and git setting its subject
+branches on, because the ambient value is set by the very protocol the fixture
+exists to serve.**
+
+That is sharper than "fixtures should be hermetic". The dangerous variables are
+not random environment noise — they are precisely the ones this project sets on
+purpose, for the workflow under test. `core.hooksPath` is set by the forge image
+so hooks work; `AUTOINSTALL` is set by the install protocol; `TILLANDSIAS_HOST_KIND`
+marks a forge. A fixture author on a host where the protocol has not run sees
+the unset default and cannot discover the coupling, so the test passes for them
+and fails for everyone the protocol has touched — which is the population the
+test most needs to be correct for.
 
 ## Why it is one defect and not three
 
