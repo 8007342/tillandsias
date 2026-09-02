@@ -383,6 +383,25 @@ run_phase staleness_check
 run_phase cheatsheet_source_check
 run_phase cheatsheet_tier_check
 
+# ORDER 448. The tracked images/default/cheatsheets/ copy is DERIVED from the
+# authored tree, and an authoring commit that omits it leaves every other host
+# unable to push (the v5 pre-push hook refuses; three measured instances, the
+# latest 2026-09-02). The author is the one person who does not see it — their
+# own commit succeeds and the failure surfaces elsewhere, on a file they never
+# touched. Re-sync into THIS commit rather than warn about it: the tree is
+# purely derived, and the remedy the stager already prints is a command a human
+# would only retype. No-ops silently unless the commit touches cheatsheets/,
+# and never blocks — see the script for the full rationale.
+_cheatsheet_image_sync() {
+    local sync="${REPO_ROOT}/scripts/sync-image-cheatsheets-for-commit.sh"
+    [[ -r "$sync" ]] || return 0
+    # stdout is the machine verdict token and is not for the committer; stderr
+    # carries the loud human warning and MUST reach them — swallowing it would
+    # reproduce exactly the silence this guard exists to remove.
+    bash "$sync" >/dev/null || true
+}
+run_phase _cheatsheet_image_sync
+
 if [[ "$warnings" -gt 0 ]]; then
     echo "" >&2
     if [[ "$CI_MODE" == "true" ]]; then
