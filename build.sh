@@ -2550,6 +2550,17 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Litmus kill-time adjudicator check passed"
 
+    # 956-llei: a `phase: retired` litmus runs only under an explicit
+    # `--phase retired`; the "all" default (which --diff-scope fails closed
+    # into) must skip it with the retired reason. Two arms through the real
+    # runner in a temp root; the retired probe fails loudly if it ever runs.
+    _step "Checking retired-phase litmus tests run only when asked for (956-llei)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-retired-phase-skip.sh" 2>&1; then
+        _error "the litmus runner executes retired-phase tests under the default phase filter (956-llei) — see the verdict line above"
+        exit 1
+    fi
+    _info "Litmus retired-phase check passed"
+
     # Order 881-29me. A `plan/issues/` audit cites its evidence and nothing
     # checked those citations still resolved. Measured in one document: every
     # factual claim re-verified TRUE while every `file:line` citation

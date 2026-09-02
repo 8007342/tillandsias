@@ -4634,7 +4634,18 @@ fn build_inference_run_args(
         "--security-opt=no-new-privileges".into(),
         "--security-opt=label=disable".into(),
         "--userns=keep-id".into(),
-        "--pids-limit=128".into(),
+        // 811-28eh: the pids cgroup counts THREADS, and an ollama tree is
+        // threads — daemon 29 + one llama-server runner per resident model at
+        // 31-67 each (measured macuahuitl 2026-09-02, RTX A5000, two embedding
+        // clients: 131-139 with two runners). At 128 the runner's std::thread
+        // creation got EAGAIN and it aborted ("what(): Resource temporarily
+        // unavailable"), the daemon relayed the dead runner as HTTP 400
+        // (tokenize/detokenize "connection reset"), and a daemon that cannot
+        // spawn a thread exits 2 through Go's runtime fatal — the packet's
+        // silent exit(2). pids.events read "max 41" on the live cgroup. 1024 is
+        // ~8x the measured peak with headroom for five resident runners; the
+        // forge's 4096 (959-fpc5) is for a different tree shape.
+        "--pids-limit=1024".into(),
         "--env".into(),
         "OLLAMA_DEBUG=1".into(),
         "--env".into(),

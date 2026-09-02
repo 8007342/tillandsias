@@ -268,7 +268,7 @@ log_step "Starting inference container (non-blocking)..."
         --security-opt=no-new-privileges \
         --security-opt=label=disable \
         --userns=keep-id \
-        --pids-limit=128 \
+        --pids-limit=1024 \
         --env "OLLAMA_DEBUG=1" \
         --env "OLLAMA_KEEP_ALIVE=24h" \
         "${inference_env_args[@]}" \

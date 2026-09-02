@@ -551,7 +551,11 @@ pub fn inference_profile() -> ContainerProfile {
         ],
         secrets: vec![], // No credentials needed
         image_override: None,
-        pids_limit: 128, // Ollama server + model runners
+        // 811-28eh: pids cgroups count THREADS; an ollama tree measured 131-139
+        // with two runners on macuahuitl 2026-09-02 and aborted its runners at
+        // 128 (std::thread EAGAIN). 1024 = ~8x the measured peak; see the
+        // headless launch site for the full reading.
+        pids_limit: 1024, // Ollama server + model runners (threads count)
         // NOT read-only: ollama needs writable home dir for runtime state,
         // model downloads, and temporary files. Same --userns=keep-id
         // tmpfs ownership issue as squid (UID 1000 can't write root-owned tmpfs).
@@ -1087,8 +1091,8 @@ mod tests {
         );
         assert_eq!(
             inference_profile().pids_limit,
-            128,
-            "Inference: ollama + model runners"
+            1024,
+            "Inference: ollama + model runners — threads count, measured 131-139 at two runners (811-28eh)"
         );
         assert_eq!(web_profile().pids_limit, 32, "Web: httpd only");
     }

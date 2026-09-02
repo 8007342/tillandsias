@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+
+events:
+  - packet_id: litmus-low-end-instrument
+    event:
+      type: progress
+      ts: "2026-09-02T06:20:00Z"
+      host: macuahuitl
+      summary: >
+        TWO MORE RUNGS LANDED (4024af89a), both named as open in the 05:05Z
+        event: (1) a `phase: retired` litmus now executes ONLY under an explicit
+        `--phase retired` — the default filter is "all", and --diff-scope fails
+        CLOSED into that default, so an escalated scoped run had been executing
+        all 12 retired fixtures in the corpus; skipped now with the reason
+        "Phase retired: runs only under --phase retired". (2) a test killed at
+        its budget records rc 124 in the per-test duration log instead of a
+        pass/fail bit, and the slowest-tests table marks the row "(killed at
+        budget — censored; the true time is longer)"; the timing consumer
+        (cycle-metrics.sh --emit-timing-batch) receives 124 in its exit-code
+        column. evidence_refs: scripts/test-litmus-retired-phase-skip.sh —
+        "PASS: litmus retired phase runs only when asked for 3/3 (956-llei)"
+        (three arms through the real runner in a temp root: default filter
+        skips the retired probe whose step fails loudly if executed; the live
+        probe is proven to have executed; --phase retired executes the retired
+        probe and the suite fails); scripts/test-litmus-kill-adjudicator.sh
+        fifth arm — "PASS ... 5/5 arms" (the killed probe's table row carries
+        the censored marker); both wired into ./build.sh --check, gate green
+        (114s); instant pre-build sweep Status PASS with zero retired-reason
+        lines (retired tests were already phase-mismatched there — the change
+        bites only the "all" default). STILL OPEN on this packet, the four
+        verifiable_closure rungs: host-browser-lane skips (not fails) where its
+        socket is absent; the diagnostic guard's mutation pair (it greps the
+        comment documenting the 799-tb7q removal); every multi-arm fixture
+        failure names its arm (daily-maintenance-day-boundary emits a bare
+        fail); the top-five timing table shrinks or each survivor's budget
+        carries a low-end rationale.

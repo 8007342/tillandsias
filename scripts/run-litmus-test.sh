@@ -336,6 +336,10 @@ TESTS_PASSED=0
 # output, and ONE --emit-timing-batch spawn (per-test spawns would tax an
 # instant suite seconds to measure milliseconds — the empty-suite-floor lesson).
 _PER_TEST_LOG=""
+# 956-llei: set by the step runner when a step is killed at its budget, read
+# by the per-test record so a timeout's duration is stored as CENSORED (rc 124)
+# rather than as a measurement — the budget is a lower bound, not the time.
+LITMUS_LAST_TEST_TIMED_OUT=0
 TESTS_FAILED=0
 TESTS_SKIPPED=0
 TESTS_RUN=0
@@ -1341,6 +1345,7 @@ run_litmus_test_file() {
 
         if [[ $exit_code -eq 124 ]]; then
             printf ' %b[TIMEOUT]%b\n' "${RED}" "${NC}" >&2
+            LITMUS_LAST_TEST_TIMED_OUT=1
             log_warn "Test timeout after ${timeout_sec}s in step: ${step_name:-step-${step_index}}"
             # ORDER 820-c8q8. A TIMEOUT has two causes that read identically,
             # and both happened on macuahuitl on 2026-08-18 within one hour:
@@ -1534,6 +1539,18 @@ run_tests_for_spec() {
             test_count=$((test_count+1))
             continue
         fi
+        # 956-llei: a test whose phase is `retired` runs ONLY when that phase is
+        # asked for. The default phase filter is "all", and --diff-scope fails
+        # CLOSED into exactly that default, so an escalated scoped run executed
+        # every retired fixture in the corpus (12 on 2026-09-01) — none of which
+        # anyone had asked for. Retired means kept for the record, not for the
+        # verdict; `--phase retired` is the explicit way to run them.
+        if [[ "$test_phase" == "retired" && "$FILTER_PHASE" != "retired" ]]; then
+            log_test_result "$spec_id" "$test_name" "SKIP" "Phase retired: runs only under --phase retired"
+            spec_skipped=1
+            test_count=$((test_count+1))
+            continue
+        fi
 
         # Order 661-emqi. Host-kind gate, before size so a forge-only test on a
         # laptop reports WHY it did not run rather than looking like a size miss.
@@ -1590,6 +1607,7 @@ run_tests_for_spec() {
         # is dropped downstream, never poisoned.
         local _pt_t0 _pt_dur _pt_rc
         _pt_t0="$(timing_now_ms 2>/dev/null || echo 0)"
+        LITMUS_LAST_TEST_TIMED_OUT=0
         if run_litmus_test_file "$test_file" "$spec_id"; then
             _pt_rc=0
             log_test_result "$spec_id" "$test_name" "PASS" ""
@@ -1597,6 +1615,12 @@ run_tests_for_spec() {
             _pt_rc=1
             log_test_result "$spec_id" "$test_name" "FAIL" "Check implementation"
             spec_failed=1
+        fi
+        # 956-llei: a killed test's elapsed time is its budget — censored data.
+        # Record rc 124 so the slowest-tests table and the timing consumer can
+        # tell "took 30s" from "was stopped at 30s".
+        if [[ "$_pt_rc" -ne 0 && "$LITMUS_LAST_TEST_TIMED_OUT" -eq 1 ]]; then
+            _pt_rc=124
         fi
         if [[ "$_pt_t0" =~ ^[0-9]+$ && "$_pt_t0" -gt 0 ]]; then
             _pt_dur=$(( $(timing_now_ms 2>/dev/null || echo 0) - _pt_t0 ))
@@ -1692,7 +1716,7 @@ print_summary() {
         # reported "litmus failures detected" over a log reading 100%
         # (measured 2026-08-25: full pre-build quick sweep exit 141, single
         # -spec runs unaffected because head never closes early on them).
-        _slow_tests="$(printf '%s' "$_PER_TEST_LOG" | sort -rn | awk -F'\t' '$1 >= 500 {printf "  %7.1fs  %s\n", $1/1000, $2}' | head -10 || true)"
+        _slow_tests="$(printf '%s' "$_PER_TEST_LOG" | sort -rn | awk -F'\t' '$1 >= 500 {printf "  %7.1fs  %s%s\n", $1/1000, $2, ($3 == 124 ? "  (killed at budget — censored; the true time is longer)" : "")}' | head -10 || true)"
         if [[ -n "$_slow_tests" ]]; then
             printf '%bSlowest tests%b (>=0.5s, top 10; full ranking in the timing records):\n%s\n\n' "${BOLD}" "${NC}" "$_slow_tests" >&2
         fi

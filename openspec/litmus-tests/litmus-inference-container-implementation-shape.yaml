@@ -1,3 +1,7 @@
+# 811-28eh (2026-09-02): the inference pids ceiling moved 128 -> 1024 — the pids cgroup
+# counts THREADS and an ollama tree (daemon + one llama-server runner per resident
+# model) measured 131-139 with two runners; at 128 the runners aborted on
+# std::thread EAGAIN and the daemon relayed HTTP 400. This pin follows the value.
 # @trace spec:inference-container
 # freshness: auditor=linux-yoga-opus5-20260824T193300Z date=2026-08-24 verdict=updated scope=identity + security steps moved from fixed -A 60 window to enclosing-function extraction (fn body measured 202 lines); negative controls 2/2 and suite green on linux-next
 #
@@ -29,7 +33,7 @@ phase: pre-build
 description: >
   Pin the inference container's AS-LAUNCHED args + entrypoint
   surfaces: detached/rm flags, security flags (cap-drop=ALL,
-  no-new-privileges, userns=keep-id), pids-limit=128, OLLAMA_*
+  no-new-privileges, userns=keep-id), pids-limit=1024, OLLAMA_*
   env vars, model cache volume, CA cert mount, tier classification
   log line, T0/T1 pull-or-cached branches, pull-failure-non-fatal
   log shape, the orphan inference_profile() in container_profile.
@@ -67,12 +71,12 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "inference"
 
-  - step: "Req inference security: --cap-drop=ALL + --security-opt=no-new-privileges + --userns=keep-id + --pids-limit=128"
+  - step: "Req inference security: --cap-drop=ALL + --security-opt=no-new-privileges + --userns=keep-id + --pids-limit=1024"
     # Container security flags are non-negotiable per the work-loop
     # guardrails. Pin all 4 on the inference launch path.
     # Enclosing-function extraction (order 622-rmit class), same as
     # the identity step: a fixed -A window is a distance proxy.
-    command: "B=$(awk '/^fn build_inference_run_args/{f=1} f{print} f&&/^}/{exit}' crates/tillandsias-headless/src/main.rs); for p in 'cap-drop=ALL' 'security-opt=no-new-privileges' 'userns=keep-id' 'pids-limit=128'; do echo \"$B\" | grep -Fq \"$p\" || { echo \"FAIL: $p missing\"; exit 1; }; done && echo \"ok: 4 security flags pinned\""
+    command: "B=$(awk '/^fn build_inference_run_args/{f=1} f{print} f&&/^}/{exit}' crates/tillandsias-headless/src/main.rs); for p in 'cap-drop=ALL' 'security-opt=no-new-privileges' 'userns=keep-id' 'pids-limit=1024'; do echo \"$B\" | grep -Fq \"$p\" || { echo \"FAIL: $p missing\"; exit 1; }; done && echo \"ok: 4 security flags pinned\""
     timeout_ms: 3000
     expected_behavior: "ok:"
 
@@ -204,7 +208,7 @@ rollback:
     inference_run_args identity (name=tillandsias-inference,
     hostname=inference, network-alias=inference) + security flags
     (--cap-drop=ALL, --security-opt=no-new-privileges, --userns=
-    keep-id, --pids-limit=128); model cache volume mount + CA
+    keep-id, --pids-limit=1024); model cache volume mount + CA
     cert bind-mount; entrypoint `[inference] tier=` log line;
     4-tier ladder (T2/T3/T4/T5 branches with the spec § Req 5
     RAM/VRAM thresholds); >=2 pull-FAILED non-fatal sites (T0 +
