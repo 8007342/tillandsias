@@ -25,8 +25,8 @@
 # separately. That elision matters for the SKIP rung: the FAIL a consumer sees
 # carries almost none of the reason.
 
---- the build.rs precondition hole behind that FAIL (log 549-557; repeats at 1834, 2943)
-  thread 'main' (9496) panicked at crates/tillandsias-headless/build.rs:139:17:
+--- the build.rs precondition hole behind that FAIL (log 549-557; repeats at 1834, 2943) <!-- cite-ok: log line offsets into the author's own 3475-line capture, not source lines -->
+  thread 'main' (9496) panicked at crates/tillandsias-headless/build.rs:139:17: <!-- cite-ok: verbatim runner output; the line number is the evidence, not a citation the coordinator chose. The marker is the only text added to this quoted block. -->
   required runtime asset missing: /home/forge/src/tillandsias/images/router/tillandsias-router-sidecar
 
   This is a BUILD ARTIFACT, not a tracked file — it is built from crates/tillandsias-router-sidecar, never committed (order 710-w9kc). A fresh clone will not have it.
