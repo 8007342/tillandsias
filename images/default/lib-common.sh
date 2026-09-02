@@ -333,6 +333,105 @@ configure_git_identity() {
     _install_expert_refresh_hook
 }
 
+# install_project_guard_hooks — ORDER 969-nhh7. Give the PROJECT CHECKOUT the
+# pre-commit and pre-push guards every other host has.
+#
+# THE GAP. `_install_agent_trailer_hook` sets `core.hooksPath` GLOBALLY so the
+# forge's own two hooks reach every repo. A global hooksPath also REPLACES
+# `.git/hooks` for every repo, and nothing in the launch ran
+# `scripts/install-hooks.sh`, so a forge carried exactly two hooks:
+# prepare-commit-msg and post-commit. Neither is a guard. Measured on
+# macuahuitl-tillandsias-forge 2026-09-02 and confirmed by the coordinator on
+# both live forges plus the operator's own.
+#
+# WHY IT MATTERS MORE THAN IT SOUNDS: push CI no longer exists on any working
+# branch (litmus:github-actions-budget), so `pre-push-local-gate.sh` is the ONLY
+# automated trunk protection there is — and inside a forge it was wired to
+# nothing. Trunk protection was convention. That is not a property a system can
+# rely on, and it failed the same day it was found: a cycle on this host ran
+# `./build.sh --check`, got a REFUSAL, and pushed anyway because the commit and
+# push were chained unconditionally. No hook existed to stop it. The agent
+# mistake will recur on every host forever; the missing hook is why it reached
+# the trunk.
+#
+# THE GUARDS GO IN REPO-LOCAL, AND THAT IS THE WHOLE DESIGN. Installing them
+# into the global dir is the obvious move and it is KNOWN-BAD: a global guard
+# fires in every repo on the box, including each /tmp fixture repo a litmus
+# test creates. Measured in a forge guest on 2026-09-01 — `git commit` became
+# impossible outside the checkout, six litmus suites failed as collateral, and
+# `build.sh --check` died at the 877-mynm fixture; removing the global hook
+# alone took it from 6/5 to 11/0. So a repo-local `core.hooksPath` is set for
+# the project checkout ONLY, which overrides the global one for that repo and
+# for nothing else.
+#
+# The trailer hook is carried across because the repo-local path shadows the
+# global dir entirely: without copying it, commits in the project would lose
+# their agent attribution. install-hooks.sh's own post-commit supersedes the
+# forge's global one (both are the same order-396 expert-refresh concern, and
+# the installer's version also chains the dashboard refresh), so it is left to
+# the installer rather than copied.
+#
+# FAIL-SOFT on every rung, like every other lifecycle step here: a missing
+# checkout, a missing installer, or a failed install each log one line and
+# return 0. A forge without guards is worse than one with them, but it is not
+# a reason to refuse the launch.
+install_project_guard_hooks() {
+    local project_dir="${1:-}"
+    [ -n "$project_dir" ] && [ -d "$project_dir/.git" ] || {
+        trace_lifecycle "git-hook" "guards skipped (no checkout at ${project_dir:-<unset>})"
+        return 0
+    }
+    local installer="$project_dir/scripts/install-hooks.sh"
+    [ -r "$installer" ] || {
+        trace_lifecycle "git-hook" "guards skipped (no scripts/install-hooks.sh — not a Tillandsias checkout)"
+        return 0
+    }
+
+    local local_hooks="$project_dir/.git/hooks"
+    mkdir -p "$local_hooks" 2>/dev/null || return 0
+    # Repo-local beats global. Without this the global dir keeps winning and
+    # install-hooks.sh — which correctly resolves via `git rev-parse
+    # --git-path hooks` — would install into the GLOBAL dir, recreating the
+    # 2026-09-01 collateral this function exists to avoid.
+    git -C "$project_dir" config core.hooksPath "$local_hooks" 2>/dev/null || return 0
+
+    local global_hooks="$HOME/.cache/tillandsias/git-hooks"
+    if [ -r "$global_hooks/prepare-commit-msg" ]; then
+        cp "$global_hooks/prepare-commit-msg" "$local_hooks/prepare-commit-msg" 2>/dev/null || true
+        chmod 0755 "$local_hooks/prepare-commit-msg" 2>/dev/null || true
+    fi
+
+    if ( cd "$project_dir" && bash "$installer" ) >>/tmp/forge-lifecycle.log 2>&1; then
+        trace_lifecycle "git-hook" "project guards installed (core.hooksPath=${local_hooks})"
+    else
+        trace_lifecycle "git-hook" "project guard install FAILED — this checkout has no pre-push gate (969-nhh7)"
+        echo "[forge] WARNING: scripts/install-hooks.sh failed; this checkout has NO pre-push gate." >&2
+        echo "[forge] Push CI is gone, so nothing but your own discipline is checking the trunk." >&2
+    fi
+    return 0
+}
+
+# forge_hook_state_line — ORDER 969-nhh7. One machine-readable line for the
+# startup context, so "this forge has no pre-push gate" is a STATED FACT rather
+# than something an agent discovers by accident while checking something else.
+#
+# That is exactly how it was found: a cycle went looking for whether its push
+# had taken the plan-only lane and discovered there was no hook at all. An
+# unobservable guard is indistinguishable from a missing one — the same lesson
+# check-daily-maintenance.sh's marker learned (801-qasc).
+forge_hook_state_line() {
+    local project_dir="${1:-}" hooks_dir="" gate="absent" precommit="absent"
+    if [ -n "$project_dir" ] && [ -d "$project_dir/.git" ]; then
+        hooks_dir="$(git -C "$project_dir" rev-parse --path-format=absolute --git-path hooks 2>/dev/null)"
+    fi
+    if [ -n "$hooks_dir" ]; then
+        [ -x "$hooks_dir/pre-push" ] && gate="present"
+        [ -x "$hooks_dir/pre-commit" ] && precommit="present"
+    fi
+    printf 'hooks: pre_push=%s pre_commit=%s dir=%s\n' \
+        "$gate" "$precommit" "${hooks_dir:-unresolved}"
+}
+
 # @trace spec:forge-git-identity-anonymization
 # Install a prepare-commit-msg hook that appends agent attribution trailers
 # (Co-Authored-By, Generated-By) when TILLANDSIAS_AGENT_NAME is set at
@@ -1048,53 +1147,33 @@ export FORGE_EXPERTS_BIN_DIR FORGE_EXPERTS_STATE_DIR
 # return immediately, so a forge without inference pays no measurable launch
 # cost. An explicit TILLANDSIAS_EMBED_ENDPOINT is never probed and never
 # overridden.
-if [ -z "${TILLANDSIAS_EMBED_ENDPOINT:-}" ]; then
-    # ollama's OpenAI-compatible surface, for /v1/embeddings — the same
-    # derivation start_expert_serve_fail_soft applies per-invocation below.
-    if [ -n "${OLLAMA_HOST:-}" ]; then
-        _tec_embed_candidate="${OLLAMA_HOST%/}/v1"
-    else
-        _tec_embed_candidate="${TILLANDSIAS_INFERENCE_ENDPOINT:-http://inference:11434}"
-        _tec_embed_candidate="${_tec_embed_candidate%/}"
-        # TILLANDSIAS_INFERENCE_ENDPOINT is the ROOT url by convention
-        # (lib-experts-probe.sh: "root url, no /v1"), so add the /v1 base the
-        # embeddings path needs — unless an operator already spelled it that
-        # way, in which case appending again would 404 on /v1/v1/embeddings.
-        case "$_tec_embed_candidate" in
-            */v1) : ;;
-            *) _tec_embed_candidate="$_tec_embed_candidate/v1" ;;
-        esac
-    fi
-    if command -v curl >/dev/null 2>&1 \
-        && curl -fsS -m 3 -o /dev/null "$_tec_embed_candidate/models" 2>/dev/null; then
-        export TILLANDSIAS_EMBED_ENDPOINT="$_tec_embed_candidate"
-    fi
-    unset _tec_embed_candidate
-fi
-# FORGE FALLBACK (order 919-vvyv, MEASURED on lenovinha 2026-09-02).
-# The block above is inert in the very lane it was written for. OLLAMA_HOST is
-# DECLARED on the forge profiles (container_profile.rs:393 and :692, literal
-# `http://inference:11434`) yet it does not reach the container: a live forge on
-# v56.9.2.1 reported `embed_endpoint=unset` with TILLANDSIAS_EMBED_MODEL set,
-# the inference service answering, and nomic-embed-text already cached. Setting
-# the endpoint by hand moved `experts-probe` from l1=unset straight to
-# l1=no-index, so the endpoint was the ONLY missing piece — the fix for 919-vvyv
-# D1/D2 was present and could never fire.
+# ORDER 967-xq5e — ONE derivation, in images/default/lib-embed-endpoint.sh.
 #
-# So the forge does not depend on one variable arriving. It falls back to the
-# SAME canonical default lib-inference-state.sh already uses for the enclave
-# service, and — unlike the OLLAMA_HOST path — it PROBES first, because the
-# comment above promises that a forge with no inference service keeps
-# spec_answer's typed refusal. An unreachable endpoint left wired would convert
-# that honest `unset` into a misleading `unreachable`.
-if [ -z "${TILLANDSIAS_EMBED_ENDPOINT:-}" ] && [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ]; then
-    _tlc_infer_ep="${TILLANDSIAS_INFERENCE_ENDPOINT:-http://inference:11434}"
-    if command -v curl >/dev/null 2>&1 \
-        && curl -fsS -m 3 -o /dev/null "${_tlc_infer_ep%/}/v1/models" 2>/dev/null; then
-        export TILLANDSIAS_EMBED_ENDPOINT="${_tlc_infer_ep%/}/v1"
-    fi
-    unset _tlc_infer_ep
+# What used to live here was TWO blocks: the original probe-and-export, plus a
+# forge fallback (919-vvyv) added when the first turned out to be inert in the
+# very lane it was written for. Two blocks in one file, each knowing how to
+# spell the endpoint, is the drift this repo keeps paying for — and a THIRD copy
+# existed in config-overlay/mcp/lib-dev-env.sh while the host lane had none at
+# all, which is 967-xq5e: spec-index-ensure.sh inherited the variable and
+# refused when absent, so the host lane never refreshed an index anywhere.
+#
+# The helper preserves every property those blocks documented: an explicit
+# endpoint is never probed and never overridden; a derived candidate is PROBED
+# with the bounded OpenAI-shape liveness check (712-r5x8) so a lane with no
+# inference service wires nothing and keeps its typed refusal; a root url gains
+# /v1 and one already spelled /v1 does not gain a second. The forge/host split
+# moves INTO the helper as the default it picks (`inference` inside the enclave,
+# loopback on a host), which is what made the old fallback necessary.
+#
+# Pinned by scripts/test-embed-endpoint-derivation.sh, whose last arm fails if
+# any second `export TILLANDSIAS_EMBED_ENDPOINT=` reappears outside the helper.
+_tlc_embed_lib="${BASH_SOURCE[0]%/*}/lib-embed-endpoint.sh"
+if [ -r "$_tlc_embed_lib" ]; then
+    # shellcheck source=lib-embed-endpoint.sh
+    source "$_tlc_embed_lib"
+    resolve_embed_endpoint >/dev/null 2>&1 || true
 fi
+unset _tlc_embed_lib
 if [ -z "${TILLANDSIAS_EMBED_MODEL:-}" ]; then
     # The OLLAMA name — what the inference entrypoint pulls at startup
     # (919-vvyv D1) and what spec-index-ensure.sh embeds the corpus with.
@@ -1350,6 +1429,16 @@ start_forge_experts_async() {
     # the same FORGE_SPEC_INDEX_ROOT the backgrounded builder writes to. An
     # export from the forked subshell below would reach nobody.
     _forge_spec_index_root_for_session || true
+    # ORDER 969-nhh7: SYNCHRONOUS, and that is the point. The guards must exist
+    # before the agent can make its first commit; installing them in the
+    # background lane below would leave a race in which a fast agent commits
+    # and pushes through a checkout that has no gate yet — which is the exact
+    # condition being fixed. Cheap (a few file writes) and fail-soft.
+    _fgh_project_dir=""
+    [ -n "${TILLANDSIAS_PROJECT:-}" ] && _fgh_project_dir="/home/forge/src/${TILLANDSIAS_PROJECT}"
+    [ -n "$_fgh_project_dir" ] || _fgh_project_dir="$PWD"
+    install_project_guard_hooks "$_fgh_project_dir" || true
+    unset _fgh_project_dir
     _forge_experts_set_state building
     _generic_project_set_state building
     (
@@ -4070,6 +4159,11 @@ inject_startup_context() {
     fi
     [[ -n "${_model_warm_line:-}" ]] \
         || _model_warm_line="model_warm=- warm_state=pending warm_reason=lifecycle-not-reached load_ms=-"
+    # Order 969-nhh7: whether THIS checkout carries the guards, read live
+    # rather than assumed from the fact that the installer exists.
+    local _hook_line
+    _hook_line="$(forge_hook_state_line "$project_dir" 2>/dev/null)"
+    [[ -n "$_hook_line" ]] || _hook_line="hooks: pre_push=unknown pre_commit=unknown dir=unresolved"
     # Order 456 / 394 rung 1 EXTENSION (experts launch state): a PEER line to
     # the inference state above, under the same discipline — a closed token
     # vocabulary and never an ambiguous "may still be building". The experts
@@ -4327,6 +4421,8 @@ inject_startup_context() {
   - Local inference is OPTIONAL: a \`not-ready\` endpoint never blocks this session. Use cloud models, or pull one yourself (\`curl http://inference:11434/api/pull -d '{"name":"qwen2.5:0.5b"}'\`).
   - Machine-readable MODEL WARM-UP (order 965-hz3f — branch on this, do not parse the prose): \`${_model_warm_line}\`
   - This is a SEPARATE line from the tier verdicts on purpose. A tier budget is a promise about INFERENCE latency, and a cold model charges a VRAM load against it: measured on an RTX A5000, qwen2.5:7b took 23353ms cold and 938ms warm, 14b 9996ms then 1474ms — both warm figures inside the Quick tier's 3000ms, both cold ones far outside. Folding the load into a tier verdict makes "loading" and "slow" indistinguishable, which is exactly how a cold-start was once read as a model-size floor and nearly answered by raising the budget. \`warm_state\` is \`warm\` (loaded, and \`load_ms\` is what the load cost), \`failed\` (the request errored — the first real query pays the load), or \`skipped\` with a named \`warm_reason\`: \`no-curl\`, \`endpoint-unreachable\`, \`no-candidate-present\`. The budget is NOT raised to accommodate a cold model; \`TILLANDSIAS_SYNTH_BUDGET_MS\` remains the operator escape hatch for a genuinely slow lane.
+- **Git guards** — machine-readable (order 969-nhh7 — branch on this, do not parse the prose): \`${_hook_line}\`
+  - \`pre_push=present\` means this checkout has the composed pre-push gate, so a push with no \`./build.sh --check\` stamp is REFUSED. \`pre_push=absent\` means it is not: push CI no longer exists on any working branch, so the local gate is the ONLY automated trunk protection, and without it nothing but your own discipline is checking what reaches the trunk. Run \`scripts/install-hooks.sh\` if you see \`absent\`, and treat every push until then as unguarded. This line exists because a forge carried exactly two hooks — neither a guard — for long enough that a cycle ran the gate, got a REFUSAL, and pushed anyway with nothing to stop it; the gap was found by accident while checking something else, and an unobservable guard is indistinguishable from a missing one.
 - **Experts** — \`experts: ${_experts_status}\`. An expert is a CITED RETRIEVAL SURFACE behind an MCP tool, not a model; the plan expert runs NO inference. Query it through the \`forge-plan\` MCP server (\`plan_answer\`, \`plan_next\`, \`methodology_ask\`, \`spec_answer\`, \`plan_check\`, \`plan_status\`, \`plan_ready\`, \`plan_blocked_by\`, \`plan_closure\`, \`plan_burndown\`; \`expert_capability\` when any answer is \`unsupported\`) instead of grepping \`plan/index.yaml\`.
   - Machine-readable (branch on this, do not parse the prose): \`experts_state=${_experts_state} experts_reason=${_experts_reason} experts_elapsed=${_experts_elapsed}\`
   - Machine-readable CAPABILITY SKEW (order 569 — branch on this, do not parse the prose): \`${_cap_line}\`

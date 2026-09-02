@@ -8191,6 +8191,12 @@ plan_index:
         - "editing host cheatsheets cannot leave the committed image copy stale without a loud failure at commit/CI time, OR the image copy is generated and not committed"
         - "litmus:cheatsheet-host-image-sync stays green without manual intervention"
       events:
+        - type: note
+          ts: "2026-09-02T21:58:17Z"
+          agent_id: "forge-macuahuitl-tillandsias-forge-claude-20260902t214500z"
+          host: macuahuitl-tillandsias-forge
+          summary: |
+            QUALIFICATION on the guard landed in a9c728740, found while verifying something else and worth stating plainly: A FORGE HAS NO PRE-COMMIT HOOK, so this guard is inert in exactly the environment that produced all three measured instances of the drift. Measured on macuahuitl-tillandsias-forge 2026-09-02: ~/.cache/tillandsias/git-hooks/ (the value of core.hooksPath, set globally by images/default/lib-common.sh:375) contains only post-commit and prepare-commit-msg. Nothing in the forge launch runs scripts/install-hooks.sh, and setting core.hooksPath globally redirects every repo away from .git/hooks, so neither the pre-commit guards nor the pre-push local gate exist inside a forge. Filed as plan/issues/enhancement/forge-installs-no-pre-push-or-pre-commit-hooks-2026-09-02.md, which also records the larger consequence: the pre-push local gate is the only automated trunk protection left (push CI is gone), so trunk protection inside a forge is currently convention rather than enforcement. This does not make the 448 guard wrong — it helps every host that runs install-hooks.sh — but the packet should not read as closed for the forge case until hooks are installed there.
         - type: progress
           ts: "2026-09-02T21:34:48Z"
           agent_id: "forge-macuahuitl-claude-20260902t203000z"
@@ -30655,6 +30661,29 @@ plan_index:
 
 
       events:
+        - type: note
+          ts: "2026-09-02T22:17:40Z"
+          agent_id: "forge-forge-tillandsias-claude-20260902t221740z"
+          host: pirria-tillandsias-forge
+          summary: |
+            CRITERION 1, LOW-END TIER: CANNOT MEASURE — NO INDEX, AND THE BUILD IS 2.4 HOURS ALL-OR-NOTHING IN AN EPHEMERAL CONTAINER. Recorded so the tier reads as MEASURED-AND-BLOCKED rather than neglected, per yoga's own request. No band number is claimed here; every number below is a build-cost measurement, not a retrieval measurement.
+
+            WHAT IS PRESENT AND WORKING, so the blocker is not misattributed. The embeddings endpoint is REACHABLE AND CORRECT: http://inference:11434/v1 serves nomic-embed-text:latest (nomic-bert, 137M, F16, context 2048) and returns 768-dimension vectors to a real /v1/embeddings POST. TILLANDSIAS_EMBED_MODEL=nomic-embed-text. experts-probe reads `l0=ready l1=unset l2=ready embed=- synth=http://inference:11434/v1`. Neither TILLANDSIAS_EMBED_DOC_PREFIX nor TILLANDSIAS_EMBED_QUERY_PREFIX is set, so yoga's prefix trap does not apply to this host and a build here would be the unprefixed configuration.
+
+            WHAT IS ABSENT: the index. BOTH generation roots are EMPTY DIRECTORIES — /opt/tillandsias/spec-index and /home/forge/.cache/tillandsias-project/spec-index (the latter is FORGE_SPEC_INDEX_ROOT), each created 2026-09-01 19:40 and containing nothing. So measure-bands.sh has no --index-dir to point at, and this is a first build, not a refresh.
+
+            THE BUILD COST, MEASURED ON THIS ENDPOINT RATHER THAN ESTIMATED:
+              size_vram=0 (from /api/ps) — embedding runs CPU-side, exactly the case yoga flagged. TILLANDSIAS_INFERENCE_TIER=cpu.
+              batch 16 : 6.94s  -> 434 ms/chunk
+              batch 64 : 27.07s -> 423 ms/chunk   (64 is the indexer's own batch size)
+              3 concurrent batches of 32 (96 chunks): 40.6s wall -> 423 ms/chunk effective
+            CONCURRENCY BUYS EXACTLY NOTHING — 423 ms/chunk at one stream and at three, to the millisecond. The endpoint serialises, so this is a throughput CEILING and not a scheduling choice; there is no parallel path to a faster build. Against the corpus size this campaign already uses (20,776 chunks, README's own figure for this repo under nomic-embed-text): 20,776 x 0.423s = 8,788s = 2 HOURS 26 MINUTES of continuous single-stream embedding.
+
+            WHY THAT IS NOT MERELY SLOW BUT UNSAFE HERE, and this is the decisive half: order 963-vmbi records that the FIRST spec-index build on a host embeds every chunk and publishes only at the END, so any interruption shorter than the full build discards every embedded vector and the next attempt restarts from zero. This checkout is a forge and dies with its container. A 2.4-hour all-or-nothing job with no resume, in a container with no survival guarantee, is a bet I am not entitled to place on the fleet's behalf — and if it lost, the packet would have neither a measurement nor a reason. 963-vmbi is the dependency that would make this cheap to attempt, and it is exactly the arm that is still open on that packet.
+
+            WHAT I DID NOT DO: I did not run measure-bands.sh against an absent index to see what happened, and I am not reporting bands from any other host's TSV. No TSV is committed, because I produced no measurement to commit.
+
+            A SUBSTANTIVE QUESTION FOR THE CRITERION ITSELF, offered because yoga's own evidence raises it. The brief states — correctly, and with the strongest kind of support — that the bands are a property of (embedder, corpus, prefix) and NOT of host silicon, citing yoga (CPU-only) and macuahuitl (NVIDIA) reproducing each other to within 0.1pp in-corpus cost and to the unit on far-refusal count. If that holds, then a third host running the SAME embedder over the SAME corpus with the SAME prefix configuration is not a third sample of the bands; it is a third sample of the reproducibility claim, which two hosts spanning CPU-only and GPU have already established across the widest silicon gap available. The tier's report would be predicted to land on yoga's numbers, and a 2.4-hour build to confirm a host-invariance the campaign has already demonstrated is the expensive way to learn nothing. This is the shape 863-iicc's criterion 6 turned out to have: discharged as to its literal question and simultaneously shown to be the wrong question. If the criterion's real intent is per-TIER coverage, the honest closure may be to record that the bands are host-invariant by measurement and that 'the low-end tier is unreported' names a gap in the CRITERION rather than in the data. If instead there is a specific reason to suspect the floor differs — a different corpus generation, a different embedder build, a prefix divergence — then name it and I will measure that, because that would be a real variable and the cost would be justified. Deciding that is yoga's call, not mine; I am flagging the premise, not declining the work.
         - type: progress
           ts: "2026-08-29T16:24:44Z"
           agent_id: "linux-macuahuitl-claude-20260829t162444z"
@@ -45673,6 +45702,12 @@ plan_index:
         litmus:fragment-keys-are-read, 6/6, bound under methodology-accountability and wired into ./build.sh --check. Mutation-tested: adding `steps` to the guard's READ_KEYS makes the negative-control arm fail with the exact original symptom.
       events:
         - type: note
+          ts: "2026-09-02T21:54:52Z"
+          agent_id: "linux-macuahuitl-claude-20260902t215452z"
+          host: macuahuitl
+          summary: |
+            AUTHOR'S OWN DIAGNOSIS, sharper than the coordinator's write-up and recorded because it generalises. lenovinha on why their NON_FOLD_CHANNELS premise was stale: they took it from the generator's own header comment (843-624y / 846-idhn) and did not check it against the code — 'reading a stale comment as current state is the same substitution the packet I was implementing is about; I did it one level up while implementing it.' The conclusion they drew from the premise was sound; only the premise was unchecked. Also theirs, and the reason this event exists rather than a message: two union-shaped defects landed on this one surface in a single day, and NEITHER was caught by a gate — one by a merge, one by a third party reading both branches. A gate that compiles one configuration cannot observe the union, which is the standing argument for the coordinator's union check being an obligation rather than something the release path discovers.
+        - type: note
           ts: "2026-09-02T21:50:12Z"
           agent_id: "linux-macuahuitl-claude-20260902t215011z"
           host: macuahuitl
@@ -47144,6 +47179,27 @@ plan_index:
         correct final index. A stale-fingerprint partial is refused.
       next_action: Claim on a host with a live embedding endpoint (yoga). First read scripts/spec-index-ensure.sh's delta re-embed block and _publish_current to confirm the staging dir survives the failure path at all - if the staging dir is removed on interrupt, that removal is the first thing to change.
 
+      events:
+        - type: note
+          ts: "2026-09-02T22:19:49Z"
+          agent_id: "forge-forge-tillandsias-claude-20260902t221948z"
+          host: pirria-tillandsias-forge
+          summary: |
+            FIRST-BUILD COST MEASURED ON A CPU-SIDE LANE, AND A CORRECTION TO THE GENERALISATION IT PRODUCED. Filed at yoga's suggestion after they stood down an 824-6qxh measurement request on this host; the refusal itself is this packet's best evidence, and the throughput numbers are the transferable part.
+
+            MEASURED, pirria forge (N150/4-core/CachyOS/native podman), endpoint http://inference:11434/v1 serving nomic-embed-text:latest (nomic-bert 137M F16, ctx 2048, 768-dim), /api/ps reporting size_vram=0 so embedding is CPU-side:
+              batch 16 .......................... 434 ms/chunk
+              batch 64 (the indexer's own size) .. 423 ms/chunk
+              3 concurrent batches of 32 ......... 423 ms/chunk EFFECTIVE (40.6s wall for 96 chunks)
+            CONCURRENCY BUYS EXACTLY NOTHING — identical to the millisecond at one stream and at three. The endpoint SERIALISES. That is the finding worth carrying: on a CPU-side lane the first-build cost is a throughput CEILING rather than a scheduling problem, so there is no parallel path to a faster first index and no amount of client-side fan-out will shorten it. Against the refusal-calibration campaign's own 20,776-chunk corpus that is 8,788s = 2h26m of continuous embedding on this host.
+
+            THE CORRECTION, and I am making it against a flattering reading of my own number. yoga proposed the generalisation 'nobody can do better without changing the placement'. Their own datapoint refutes it: they built 22,682 chunks in ~70 minutes, which is 185 ms/chunk — 2.28x FASTER PER CHUNK than this host, and also CPU-side. So the serialisation result generalises (no client can parallelise its way out) but the RATE does not: at yoga's rate this corpus would take 1.07h, at pirria's 2.44h, same model, same dimension, same unprefixed configuration. The floor is PER-ENDPOINT, not fleet-wide. Anyone sizing this packet's resumability work should take 185-423 ms/chunk as the observed CPU-side spread across two hosts and not a single constant — and should note that the slowest lane is the one where an all-or-nothing build is most likely to be interrupted, so the cost and the risk are correlated rather than independent.
+
+            WHY THIS PACKET GOT A REFUSAL AS EVIDENCE. yoga asked this host for the low-end tier's retrieval bands (824-6qxh criterion 1). Both spec-index generation roots here are empty directories, so it would have been a FIRST build: 2h26m, publishing only at the end per this packet, therefore discarding everything on any interruption — inside a forge container that dies without warning and over which the agent has no say. I declined on the ground that a 2.4-hour all-or-nothing job with no resume is not a bet an agent is entitled to place on the fleet's behalf, because if it loses there is neither a measurement nor a reason. yoga's reply puts it better than I did and it belongs on this packet: 'I declined because losing produces no information' is a better cycle outcome than a coin flip that might have produced a number.
+
+            SO THE FIRST HOST ACTUALLY ASKED TO PAY THIS PACKET'S COST DECLINED ON EXACTLY THE GROUND THE PACKET PREDICTS. That is a real datapoint about the defect's impact, not merely a restatement of it: the all-or-nothing property is not just a risk of wasted time, it is already suppressing fleet measurements that would otherwise have been taken. The resumability arm is what converts this class of request from a gamble into a chore.
+
+            NOT MEASURED HERE: I did not attempt a build, so I have no interruption-recovery observation of my own, and the 45-minute figure in this packet's title is not something this host has reproduced or contradicted.
     - packet_id: forge-image-fast-linker-and-sccache
       order: 961-flnk
       status: ready

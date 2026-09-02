@@ -13,53 +13,92 @@ trace: spec:knowledge-source-of-truth, order:821-73es, order:824-6qxh
 # questioner's own vocabulary, that the thing is not used here. Then the honest
 # answer wins retrieval on its merits instead of losing to an unrelated one.
 #
-# Harness-measured on 824-6qxh: 2 of 5 near-miss questions converted to correct
-# answers, with zero in-corpus regression.
+# WHY EVERY ENTRY IS A COLUMN-0 KEY, and this is load-bearing rather than
+# stylistic (measured on yoga 2026-09-02, 821-73es). These records first landed
+# nested under a single `declined_alternatives:` key. `chunk_yaml` cuts at
+# COLUMN-0 keys and subdivides only above MAX_YAML_CHUNK_CHARS (4000), so the
+# whole block — Helm, Compose, Ansible, Terraform — became ONE 2,625-byte chunk
+# with ONE embedding. Cosine similarity is TOPICAL, so that chunk was topically
+# dominated by its longest, first entry: measured against the live 22,682-chunk
+# index, Helm converted and Compose, Ansible and Terraform all LOST, 1 of 4.
 #
-# ADDING AN ENTRY. Only for something genuinely NOT used, stated in the words a
-# newcomer would search with, naming what IS used instead. Verify against the
-# tree before writing — see the systemd note below for why that is not optional.
+# Splitting the same text into three separately-embedded chunks, with no
+# wording changed, took the same four questions to 4 of 4:
+#
+#   question                       nested-in-one-chunk        one chunk each
+#   Helm rollback                  0.6309 declined-alts       0.6309 declined-alts
+#   docker-compose.yml             0.6512 container-gpu.md    0.8390 declined-alts
+#   Ansible playbook               0.6279 host-shell spec     0.7898 declined-alts
+#   Terraform modules              0.6303 bootstrap/router    0.7796 declined-alts
+#   (control) systemd unit         0.7945 vz-framework        0.7945 vz-framework
+#   (control) sourdough            0.5824 a spec              0.5824 a spec
+#
+# So the binding constraint was never the CONTENT — it was landed and correct —
+# but the chunk granularity. A record only earns retrieval if it gets an
+# embedding of its own. This is the same lesson the harness README records for
+# the original Ansible miss ("one sentence inside a chunk about five other tools
+# does not move the chunk's embedding enough"), and it survives being written
+# down only if the file's SHAPE enforces it.
+#
+# ADDING AN ENTRY: one column-0 key per technology, never a nested group. Only
+# for something genuinely NOT used, stated in the words a newcomer would search
+# with, naming what IS used instead. Verify against the tree before writing —
+# see the systemd note below for why that is not optional.
 
-declined_alternatives:
+declined_helm_and_kubernetes: >
+  Helm, Helm charts, Helm values, chart rollback, Kubernetes manifests and
+  kubectl are NOT used by Tillandsias, and there is no Helm rollback
+  procedure. Tillandsias runs rootless podman containers on Linux, a
+  Virtualization.framework VM on macOS, and a WSL2 distro on Windows.
+  Deployment and rollback are handled by versioned container images and the
+  git mirror, not by a chart registry. If you are asking how to roll back a
+  Helm release here, the answer is that there is not enough information,
+  because this project does not use Helm.
 
-  helm_and_kubernetes: >
-    Helm, Helm charts, Helm values, chart rollback, Kubernetes manifests and
-    kubectl are NOT used by Tillandsias, and there is no Helm rollback
-    procedure. Tillandsias runs rootless podman containers on Linux, a
-    Virtualization.framework VM on macOS, and a WSL2 distro on Windows.
-    Deployment and rollback are handled by versioned container images and the
-    git mirror, not by a chart registry. If you are asking how to roll back a
-    Helm release here, the answer is that there is not enough information,
-    because this project does not use Helm.
+declined_docker_compose: >
+  Docker Compose and docker-compose.yml are NOT used by Tillandsias. There are
+  no compose files in the tree, there is no `docker compose up` entry point,
+  and container lifecycle is driven by the tray binary through the control
+  wire instead. If you are asking where the docker-compose.yml is, or how to
+  write or run one here, the answer is that there is not enough information,
+  because this project does not use Docker Compose.
 
-  compose_ansible_terraform: >
-    Docker Compose, docker-compose.yml, Ansible playbooks and Terraform modules
-    are NOT used by Tillandsias for orchestration. There are no compose files,
-    no playbooks and no HCL deployment modules to configure. Container lifecycle
-    is driven by the tray binary through the control wire. If you are asking how
-    to write or run one of these here, there is not enough information, because
-    this project does not use them.
+declined_ansible: >
+  Ansible and Ansible playbooks are NOT used by Tillandsias. There are no
+  playbooks, no inventory files and no roles in the tree. Host provisioning is
+  done by the tray binary and by the scripts under `scripts/`, not by an
+  Ansible run. If you are asking how to write or run a playbook here, the
+  answer is that there is not enough information, because this project does
+  not use Ansible.
 
-  # CORRECTED 2026-08-31 (821-73es). The measured source record for the entry
-  # above also listed "systemd unit files" among the things NOT used. That is
-  # FALSE: `packaging/systemd/user/tillandsias.service` exists, is referenced
-  # from build.sh, is documented in cheatsheets/runtime/, and its own
-  # Description reads "Tillandsias Headless Orchestrator" — it is precisely an
-  # orchestration unit. Landing the record verbatim would have written a
-  # falsehood into the corpus as authority, and an agent asking whether a unit
-  # exists would have been confidently refused.
-  #
-  # The harness measured that the record CONVERTED questions; it never checked
-  # that the record was TRUE. Those are different properties, and only one of
-  # them was tested.
-  systemd_is_used_not_declined: >
-    systemd IS used by Tillandsias on Linux and must not be listed as a declined
-    alternative. `packaging/systemd/user/tillandsias.service` is a systemd USER
-    unit that runs the headless orchestrator (`ExecStart=tillandsias --headless`,
-    `After=podman.socket`, `Restart=always`), and the dedicated-service-account
-    runtime cheatsheet documents installing it at
-    `~/.config/systemd/user/tillandsias.service`. What systemd does NOT do here
-    is drive per-container lifecycle: there is no unit per enclave container, and
-    containers are started and stopped by the tray binary through the control
-    wire. So the accurate answer to "is there a systemd unit for this?" is yes,
-    one, for the host-side orchestrator process.
+declined_terraform: >
+  Terraform and Terraform modules are NOT used by Tillandsias. There is no HCL
+  anywhere in the tree, and no deployment infrastructure is declared as
+  Terraform modules. Deployment is versioned container images plus the git
+  mirror. If you are asking which Terraform modules define the infrastructure
+  here, the answer is that there is not enough information, because this
+  project does not use Terraform.
+
+# CORRECTED 2026-08-31 (821-73es). The measured source record for the compose
+# entry above also listed "systemd unit files" among the things NOT used. That
+# is FALSE: `packaging/systemd/user/tillandsias.service` exists, is referenced
+# from build.sh, is documented in cheatsheets/runtime/, and its own Description
+# reads "Tillandsias Headless Orchestrator" — it is precisely an orchestration
+# unit. Landing the record verbatim would have written a falsehood into the
+# corpus as authority, and an agent asking whether a unit exists would have
+# been confidently refused.
+#
+# The harness measured that the record CONVERTED questions; it never checked
+# that the record was TRUE. Those are different properties, and only one of
+# them was tested.
+systemd_is_used_not_declined: >
+  systemd IS used by Tillandsias on Linux and must not be listed as a declined
+  alternative. `packaging/systemd/user/tillandsias.service` is a systemd USER
+  unit that runs the headless orchestrator (`ExecStart=tillandsias --headless`,
+  `After=podman.socket`, `Restart=always`), and the dedicated-service-account
+  runtime cheatsheet documents installing it at
+  `~/.config/systemd/user/tillandsias.service`. What systemd does NOT do here
+  is drive per-container lifecycle: there is no unit per enclave container, and
+  containers are started and stopped by the tray binary through the control
+  wire. So the accurate answer to "is there a systemd unit for this?" is yes,
+  one, for the host-side orchestrator process.

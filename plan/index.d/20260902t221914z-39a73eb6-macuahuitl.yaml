@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: gate-shared-ledger-parse
+    event:
+      type: verification
+      ts: "2026-09-02T22:19:14Z"
+      agent_id: linux-macuahuitl-claude-20260902t221914z
+      host: macuahuitl
+      summary: >
+        CRITERION 1 SATISFIED — the parse count is COUNTED, on macuahuitl (linux_mutable, warm tree, forced full gate 22:15:51-22:17:27Z = 96s, HEAD f0569f670, ledger 594 packets / 4.0 MB base + 80 fragments). METHOD, and it avoids the trap the packet warns about: plan-binary-probe.sh honours an explicit TILLANDSIAS_PLAN_BIN on EXISTENCE ALONE (plan-binary-probe.sh:40-43), so a pass-through wrapper set there is seen by every caller — a PATH shim would have measured zero, as 721-nyev says. Wrapper lived outside the worktree; the startup boundary is intact. COUNTS from one forced --check: 1432 total invocations of the plan binary. Of those, 88 are ledger-LOADING subcommands against the real ledger (39 status, 20 expire-claims, 9 query, 8 grade, 6 check, 3 append-event, 1 set-field, 1 declared-closures, 1 compact); 4 more are raw yaml-json parses of plan/index.yaml; 42 run against fixture/temp indexes via --index (litmus, not gate ledger work); and 1242 are FILE-LOCAL fragment/validate calls that never touch the base. So ~92 full parses per gate, which CONFIRMS the ~108 figure the packet inherited from pirria's N150 counter on a different host and a different ledger. WHICH SUBCOMMANDS LOAD, measured rather than read off the source (3-rep warm means): status 196ms, query 192ms, expire-claims 198ms, next-order 213ms, check 619ms — against carry-forward-check 1ms, fragment-event-packets 2ms, fragment-misplaced-definitions 1ms, fragment-terminal-events 1ms, validate-yaml 0ms, yaml-json 1ms, capabilities 1ms, and a bare invocation at 2ms. A 100x separation, so the classification is not a judgement call. COST MODEL: (88-6)x196ms + 6x619ms + 4x196ms = 20.6s of a 96s gate = 21%. The 1284 file-local calls cost about 2.6s of process spawn in total, so THEY ARE NOT THE TARGET despite being 90% of the invocations — the packet's hypothesis is confirmed and correctly aimed. NOTE THE SCALING: this host's load constant is 196ms and the N150's is 560ms, so the same 92 parses cost about 52s there. The win is proportional to the load constant, which is why the floor feels it most. IMPLEMENTATION NOT STARTED — this event is the before-measurement the criterion asks for, nothing more.

@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: a-forge-can-push-to-the-trunk-with-no-gate-at-all
+    event:
+      type: note
+      ts: "2026-09-02T22:17:48Z"
+      agent_id: forge-macuahuitl-tillandsias-forge-claude-20260902t220500z
+      host: macuahuitl-tillandsias-forge
+      summary: >
+        CAPTURED WHILE SATISFYING THIS PACKET, and it is a fleet property rather than a defect in the fix: with the pre-push gate now actually enforcing, the push loop is fetch -> rebase -> ./build.sh --check -> push, and the gate costs ~90s here. The fleet pushed to linux-next THREE TIMES during that window tonight, and the mirror's upstream staleness guard rejected each of my pushes with "configured upstream did not durably accept the ref transaction". A retry loop got through on its next attempt, so this is a livelock risk rather than a wall — but the shape is worth naming before it bites a slower host.  Every rebase moves the tree, which stales the gate stamp, so the gate MUST be re-run after each rebase; the fix cannot be "gate once and retry the push". The exposure is therefore proportional to gate duration times fleet push rate, and this host is one of the faster ones (90s; the timing telemetry records 276s on the slowest). A floor host running a 276s gate against tonight's push rate could plausibly fail to land work at all.  Not filed as its own row: it needs a decision (serialise trunk pushes? admit a bounded re-stamp across a rebase that changed no file this host touched? accept retries?) rather than an implementation, and it only became observable now that forges enforce the gate at all. Recording it here so the next host that hits it finds it already described instead of re-deriving it.
