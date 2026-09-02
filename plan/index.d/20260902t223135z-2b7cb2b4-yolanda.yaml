@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: gate-ledger-native-fs-staging-windows
+    field: next_action
+    value: 'All three exit criteria met. Criterion 1: archiver check re-measured, 62.3s -> 5.3s on its ledger-bound portion (78.4s -> 43.7s as a gate step). Criterion 2: the 1214s baseline is unreproducible here and has been RESTATED from six forced runs this cycle (500-615s, median ~520s) with the full regime recorded - gate locus, checkout fstype, ledger size, cache state, concurrent load - so it is falsifiable rather than a bare constant. Criterion 3: negative control on a deliberately broken tree, baseline rc=3 and new rc=3 with the same refusal reason. NOTHING IS OUTSTANDING. Do not generalise the staging to the other ledger-reading steps: a fold is CPU-bound in the YAML parse and staging loses, measurements on the progress event.'
+    ts: "2026-09-02T22:31:35Z"
+    host: yolanda
