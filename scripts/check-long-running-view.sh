@@ -93,10 +93,63 @@ live_orders() {
 # answer rather than failing the build. That asymmetry is deliberate — a gate
 # that goes RED when its optional reader is missing gets switched off.
 apply_fragment_status_overlay() {
-    local plan_bin order status kept=""
+    local plan_bin order status kept="" status_map="" jq_bin
     # shellcheck source=/dev/null
     . "$REPO_ROOT/scripts/plan-binary-probe.sh" 2>/dev/null || { cat; return 0; }
     plan_bin="$(resolve_plan_binary)" || { cat; return 0; }
+
+    # ── THE FOLD, READ ONCE (order 964-tzmp) ────────────────────────────
+    #
+    # This loop used to spawn `"$plan_bin" status "$order"` PER PACKET, and
+    # every one of those re-read and re-folded the entire base ledger plus all
+    # fragments. MEASURED on macuahuitl 2026-09-02, by wrapping the binary
+    # through TILLANDSIAS_PLAN_BIN and logging every invocation of one forced
+    # `./build.sh --check`: 27 consecutive `status` calls at 0.20s intervals,
+    # 5.3s, which is this entire gate step. The load constant scales with the
+    # host — 196ms here, 560ms on the N150 floor — so the same 27 packets cost
+    # the floor about 15s.
+    #
+    # THIS IS THE FIX 783-xyk5 ALREADY MADE, IN THE OTHER COPY.
+    # scripts/check-fragment-status-loss.sh carried the identical per-packet
+    # loop, was batched on 2026-08-17, and this file was never touched — the
+    # one-copy-fixed-one-copy-missed shape the fleet measured seven other
+    # times on 2026-09-02 alone. The remedy is the same reader: `query --json`
+    # is the SAME folded surface (582-26mm) that per-packet `status` goes
+    # through, so reading every (packet_id, status) pair in ONE invocation is a
+    # spawn-count change and not a semantics change.
+    #
+    # FAIL-SAFE, NOT FAIL-FAST, and copied deliberately from the sibling: if
+    # the batch cannot be built — a binary predating `query`, a jq-less host, a
+    # harness binary advertising a subcommand it does not implement — fall back
+    # to exactly the per-packet calls this replaces. Slower is acceptable.
+    # Judging NOTHING is not: an empty map would silently keep every row,
+    # which is the decoy failure this gate exists to end.
+    jq_bin="jq"
+    if command -v resolve_tool >/dev/null 2>&1; then
+        jq_bin="$(resolve_tool jq 2>/dev/null || printf 'jq')"
+    fi
+    if plan_binary_has "$plan_bin" query && command -v "$jq_bin" >/dev/null 2>&1; then
+        status_map="$("$plan_bin" query --json --limit 0 2>/dev/null \
+            | "$jq_bin" -r '.[] | select((.packet_id // "") != "" or (.order // "") != "") | [((.order // .packet_id)|tostring), (.status // "")] | @tsv' 2>/dev/null)"
+    fi
+
+    if [ -n "$status_map" ]; then
+        # One awk pass joins the map against the orders on stdin. A packet
+        # absent from the map is KEPT, exactly as an empty `status` result was.
+        awk -F'\t' -v map="$status_map" '
+            BEGIN { n = split(map, rows, "\n")
+                    for (i = 1; i <= n; i++) {
+                        if (split(rows[i], kv, "\t") == 2) st[kv[1]] = kv[2]
+                    } }
+            { order = $1
+              if (order == "") next
+              s = (order in st) ? st[order] : ""
+              if (s == "done" || s == "obsoleted" || s == "superseded" \
+                  || s == "completed" || s == "failed" || s == "cancelled") next
+              print order }'
+        return 0
+    fi
+
     while read -r order; do
         [ -n "$order" ] || continue
         status="$("$plan_bin" status "$order" 2>/dev/null | awk 'NR==1{print $2}')"
