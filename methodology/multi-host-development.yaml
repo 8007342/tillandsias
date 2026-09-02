@@ -1086,12 +1086,16 @@ loop_cadence:
     # local hours. No two slots within 15 minutes. A host arms its OWN slot —
     # relayed cadence is coordination config, but each session's operator or
     # loop harness does the arming (rate-change doctrine unchanged).
-    macos: "08 even hours (0-22/2) — reserved; currently loops on request"
+    macos: "08 even hours (0-22/2) — armed 2026-09-02 at the fleet restart (osx-next was 345 commits behind linux-next; the merge is its first cycle)"
     macuahuitl: "23 even hours (0-22/2) — coordinator; armed 2026-08-31, re-armed 2026-09-02 after the host reboot (session crons die with the session). Full meta-orchestration cycle at 38 past 02/06/10/14/18/22 (every 4h — the forge e2e rate limit — and ≥15 min from every sibling slot)"
     yolanda: "53 even hours (0-22/2)"
     pirria: "08 odd hours (1-23/2) — reserved; currently one-off per operator"
     lenovinha: "23 odd hours (1-23/2)"
     yoga: "53 odd hours (1-23/2)"
+    lenovinha-tillandsias-forge: "38 odd hours (1-23/2) — forge on lenovinha (CPU-only container lane); armed 2026-09-02 at the fleet restart; 15 min from lenovinha (23 odd) and yoga (53 odd), the same spacing the even window already uses"
+    macuahuitl-tillandsias-forge: "no slot — ephemeral and idempotent, driven by the coordinator per story; relaunch with tillandsias --claude --remote-control macuahuitl-tillandsias-forge"
+    floor-forges: "no slot — pirria-tillandsias-forge and esme-tillandsias-wsl2 are floor tier (4 cores): one-off per coordinator, because a per-cycle merge of linux-next costs the floor tens of minutes (863-iicc)"
+    tillandsias.org-forge: "no slot — the operator's own forge on macuahuitl (the first real user); never dispatched by the coordinator"
   coordinator_note: >
     The coordinator's slot at even:23 lands 30 minutes after yolanda's
     previous-window push and 30 before her next, and sweeps sibling landings
