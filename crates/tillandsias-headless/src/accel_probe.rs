@@ -2003,6 +2003,25 @@ fn enumerate_npus() -> Vec<DeviceRecord> {
     let accel_dir = Path::new("/sys/class/accel");
 
     // PROBE-2: Kernel without accel class (e.g. WSL2) yields empty list and succeeds
+    //
+    // THIS IS A FINDING, NOT A GAP, and the distinction is deliberate (805-r98w,
+    // 2026-09-02). The same day's work made native Windows report `unknown`
+    // instead of `none`, because there no enumeration code existed at all — the
+    // probe had never looked. Linux is not that case: sysfs IS the enumeration
+    // mechanism, it was consulted, and an absent accel class is a true statement
+    // about this kernel (no accel-class driver is bound). So this arm records no
+    // enumeration gap and `none` stands.
+    //
+    // Measured in the tillandsias-build WSL2 guest: /sys/class/accel absent,
+    // /dev/dxg present, amdxdna not loaded — on a machine whose NPU the Windows
+    // host enumerates as 1022:17f0. The guest's `none` is vantage-correct: that
+    // NPU is not passed through to WSL2 and nothing in the guest can reach it.
+    // Cross-vantage disagreement about one machine is expected and is why
+    // compare_documents refuses a cross-vantage pair.
+    //
+    // Do NOT "fix" this into `unknown`. Most Linux hosts genuinely have no NPU;
+    // reporting unknown everywhere would trade a correct answer for noise, and
+    // would be today's reasoning applied past the case that motivated it.
     if !accel_dir.exists() {
         return npus;
     }
