@@ -271,7 +271,23 @@ LIST_ONLY=0
 # LITMUS_PSI_FILE overrides the path so the hermetic fixture can inject
 # counters (scripts/test-litmus-kill-adjudicator.sh).
 _lt_cpu_stall_us() {
-    local f="${LITMUS_PSI_FILE:-/sys/fs/cgroup/cpu.pressure}"
+    local f="${LITMUS_PSI_FILE:-}"
+    if [ -z "$f" ]; then
+        # This process's OWN cgroup first: its `some` counter is time OUR
+        # runnable tasks waited for a CPU, whoever was hogging it. The cgroup
+        # root — the container's root inside a cgroup namespace, the whole
+        # host outside one — is the fallback when the own path is not
+        # exposed (measured on macuahuitl 2026-09-02: /proc/self/cgroup
+        # names a ptyxis scope; root `some total=` also counts every
+        # unrelated process's stall).
+        local own
+        own="$(sed -n 's/^0::\(.*\)$/\1/p' /proc/self/cgroup 2>/dev/null | head -1)"
+        if [ -n "$own" ] && [ "$own" != "/" ] && [ -r "/sys/fs/cgroup${own}/cpu.pressure" ]; then
+            f="/sys/fs/cgroup${own}/cpu.pressure"
+        else
+            f="/sys/fs/cgroup/cpu.pressure"
+        fi
+    fi
     [ -r "$f" ] || return 0
     awk '$1 == "some" { for (i = 2; i <= NF; i++) if ($i ~ /^total=/) { sub(/^total=/, "", $i); print $i; exit } }' "$f" 2>/dev/null
 }
