@@ -98,8 +98,46 @@ _archiver_cleanup() {
     rm -rf "$_s"/plan_tmp "$_s"/plan_tmp_bak scripts/archive-plan-packets-check.rb "$_s"/plan_tmp_*.txt
 }
 
+# ORDER 965-sxec. IS THERE A RUBY THIS SCRIPT CAN ACTUALLY RUN?
+#
+# `_ruby` above resolves host ruby, else the toolbox. Inside a FORGE neither is
+# there — the image deliberately ships no ruby (the meta-orchestration skill says
+# so in as many words) and what is on PATH is a brew shim whose on-demand install
+# fails by design under attestation verification. So `_ruby` exits 127, `set -e`
+# kills this script with 127, and build.sh's `-ne 0` branch prints "the plan
+# archiver would CHANGE THE READY SET" — a substantive claim about the ledger,
+# asserted on the strength of a command that never executed. Measured on
+# lenovinha-tillandsias-forge 2026-09-02 by an agent who then went looking for
+# ledger damage that did not exist.
+#
+# 923-ws3r ALREADY BUILT THE CHANNEL for this: exit 3 means could-not-run and
+# build.sh maps it to "the instrument is what needs repair". The signal simply
+# never reached it, which is that packet's own lesson arriving one exit code
+# short. This probe routes it.
+#
+# It runs the interpreter rather than testing for the binary, because on the host
+# that found this the binary IS on PATH and is a shim that cannot execute. An
+# executable bit is a claim; running it is evidence — the same rule
+# plan-binary-probe.sh states for tillandsias-plan, three files away.
+_ruby_runnable() {
+    _ruby -e 'exit 0' >/dev/null 2>&1
+}
+
 if [ "$1" == "--check" ]; then
     echo "Running in check mode..."
+    if ! _ruby_runnable; then
+        # A STABLE TOKEN, so a caller can tell THIS could-not-run from the others
+        # without parsing prose. Only this cause is skip-eligible: a stale plan
+        # binary or an unreadable fragment also exit 3 and must never be waved
+        # through, because those are repairable where they happen.
+        echo "could-not-run:no-usable-ruby (965-sxec)"
+        echo "Check COULD NOT RUN: no usable ruby (965-sxec). This script's worker is"
+        echo "  archive-plan-packets.rb and neither a host ruby nor the toolbox's is"
+        echo "  runnable here — inside a forge that is expected, the image ships none."
+        echo "  This says NOTHING about the ready set: the check did not execute."
+        echo "  Remedy: run the gate outside the forge, or add ruby to the image."
+        exit 3
+    fi
     # ORDER 964-9yyp. On a fast worktree this is "$REPO_ROOT" and every path
     # below is byte-for-byte what it was — a host that was correct before this
     # order behaves identically after it. On the Windows gate's 9p checkout it
@@ -199,7 +237,12 @@ if [ "$1" == "--check" ]; then
     sort -u "$SCRATCH"/plan_tmp_addressed_raw.txt > "$SCRATCH"/plan_tmp_addressed.txt
     _orphans "$SCRATCH"/plan_tmp/index.yaml "$SCRATCH"/plan_tmp_orphans_before.txt
 
-    _ruby scripts/archive-plan-packets-check.rb >/dev/null
+    if ! _ruby scripts/archive-plan-packets-check.rb >/dev/null; then
+        echo "Check COULD NOT RUN: the archiver's ruby worker failed to execute"
+        echo "  (965-sxec). The ready set was never re-derived, so nothing here is"
+        echo "  a statement about it."
+        exit 3
+    fi
 
     _orphans "$SCRATCH"/plan_tmp/index.yaml "$SCRATCH"/plan_tmp_orphans_after.txt
     if ! diff -u "$SCRATCH"/plan_tmp_orphans_before.txt "$SCRATCH"/plan_tmp_orphans_after.txt > "$SCRATCH"/plan_tmp_orphans_diff.txt; then
@@ -222,7 +265,11 @@ if [ "$1" == "--check" ]; then
 
     cp -a "$SCRATCH"/plan_tmp/ "$SCRATCH"/plan_tmp_bak/
     
-    _ruby scripts/archive-plan-packets-check.rb >/dev/null
+    if ! _ruby scripts/archive-plan-packets-check.rb >/dev/null; then
+        echo "Check COULD NOT RUN: the archiver's ruby worker failed on the second"
+        echo "  pass (965-sxec), so idempotency was never evaluated."
+        exit 3
+    fi
     
     if ! diff -qr "$SCRATCH"/plan_tmp/ "$SCRATCH"/plan_tmp_bak/ > /dev/null; then
         echo "Check failed: second run modified files. Not idempotent."

@@ -2246,20 +2246,58 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # inputs (scripts/archiver-check-memo.sh). A hit repeats a verdict the same
     # bytes earned; any change to plan/index.yaml, plan/archive, a fragment,
     # the archiver, its checker or the plan binary is a miss and runs it.
+    # 965-sxec: the output is TEED rather than swallowed, because the exit-3
+    # branch below has to read one token out of it while the operator still
+    # needs to see the whole thing. `_run` stays in the path — it carries the
+    # phase timing and the cd into SCRIPT_DIR, and a capture that dropped it
+    # would silently stop this step being profiled.
+    _archiver_log="$(mktemp "${TMPDIR:-/tmp}/tillandsias-archiver.XXXXXX")"
     if _archiver_memo="$(bash "$SCRIPT_DIR/scripts/archiver-check-memo.sh" check 2>/dev/null)"; then
         _info "$_archiver_memo — ledger and archiver unchanged since the last pass; check not re-run"
     else
-        _run bash "$SCRIPT_DIR/scripts/archive-plan-packets.sh" --check 2>&1 || _archiver_rc=$?
+        _run bash "$SCRIPT_DIR/scripts/archive-plan-packets.sh" --check 2>&1             | tee "$_archiver_log" || true
+        _archiver_rc="${PIPESTATUS[0]}"
         [ "$_archiver_rc" -eq 0 ] && bash "$SCRIPT_DIR/scripts/archiver-check-memo.sh" record >/dev/null 2>&1 || true
     fi
     if [ "$_archiver_rc" -eq 3 ]; then
-        _error "the plan archiver's check COULD NOT RUN (exit 3) — this says nothing about the ready set; the instrument is what needs repair (923-ws3r)"
-        exit 1
+        # ORDER 965-sxec. A forge ships NO ruby by design, so the archiver's
+        # worker cannot run there and the whole forge lane could not reach a
+        # verdict on ./build.sh --check at all — a p0 blocker, filed by an agent
+        # it stopped. Named as a SKIP here rather than a failure, and the skip is
+        # narrow twice over: only inside a forge, and only for the one cause the
+        # script tokenises. A stale plan binary or an unreadable fragment also
+        # exit 3 and still stop the gate, because those are repairable in the
+        # locus that hit them and waving them through would trade a false
+        # substantive verdict for a false green.
+        #
+        # It is LOUD on purpose. The ready set went unverified on this run; a
+        # reader has to be able to see that in the log, which is the 796-4ydb
+        # posture — say what was not checked rather than make one environment's
+        # missing package every host's red build.
+        if [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ]            && grep -q 'could-not-run:no-usable-ruby' "$_archiver_log" 2>/dev/null; then
+            _warn "SKIPPED the plan archiver check: no usable ruby in this forge (965-sxec). The ready set was NOT verified on this run — the archiver's ruby worker never executed. This is not a statement about the ledger."
+        else
+            _error "the plan archiver's check COULD NOT RUN (exit 3) — this says nothing about the ready set; the instrument is what needs repair (923-ws3r)"
+            exit 1
+        fi
     elif [ "$_archiver_rc" -ne 0 ]; then
         _error "the plan archiver would CHANGE THE READY SET, orphan events, or leave archived rows unanswerable — do not sweep"
         exit 1
     fi
+    rm -f "$_archiver_log"
     _info "Plan archiver check passed"
+
+    # Order 965-sxec. The fixture for the branch just above. It pins the VERDICT
+    # TEXT, not the exit code alone: build.sh failed either way before this, and
+    # what was wrong was what it SAID — "the plan archiver would CHANGE THE READY
+    # SET" on a run where the check never executed. A test that checked only the
+    # code would have stayed green through the whole incident.
+    _step "Checking a check that could not run never claims what it would have found (965-sxec)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-archiver-could-not-run-verdict.sh" 2>&1; then
+        _error "the archiver's could-not-run path regressed (965-sxec) — a gate that cannot RUN a check must never assert what the check would have FOUND"
+        exit 1
+    fi
+    _info "Archiver could-not-run verdict fixture passed"
 
     # Order 698-7n6q. The sibling of the check above: that one catches a
     # fragment whose declared status the fold DISCARDS; this one catches a
