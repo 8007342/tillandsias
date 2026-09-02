@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: archiver-check-internal-profile
+    field: status
+    value: in_progress
+    ts: "2026-09-02T22:29:46Z"
+    host: macuahuitl-tillandsias-forge
+
+events:
+  - packet_id: archiver-check-internal-profile
+    event:
+      type: note
+      ts: "2026-09-02T22:29:46Z"
+      host: macuahuitl-tillandsias-forge
+      summary: >
+        claimed for cycle 2026-09-02T22:25Z: profile the archiver check's internal phases
