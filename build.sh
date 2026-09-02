@@ -2766,6 +2766,20 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "wsl.exe single-constructor check passed"
 
+    # Order 803-49re. A purge that destroys the guest must also clear the host's
+    # copy of that guest's Vault identity. Part A landed the clearing in ONE of
+    # the two installers and the packet read as fixed; the other one went on
+    # unregistering the distro and clearing nothing for six days, reproducing the
+    # 2026-08-17 GitHub-login incident in full on the developer-facing path. The
+    # guard is here rather than a third careful edit because "one copy fixed, one
+    # copy missed" is the defect this project repeats most.
+    _step "Checking every guest-destroying purge clears the host vault credentials (803-49re)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-purge-clears-vault-credentials.sh" 2>&1; then
+        _error "a script unregisters the tillandsias distro without clearing the host's copy of that guest's Vault identity (803-49re) — call Clear-TillandsiasVaultHostCredentials from scripts/clear-vault-host-credentials.ps1"
+        exit 1
+    fi
+    _info "Purge credential-clearing check passed"
+
     # Order 716-f5kc. REPORT, not refusal. A Linux build of the Windows tray
     # compiles src/stubs/ and goes green without ever parsing the edited file,
     # which produced two unverified changes on 2026-08-13 alone. Refusing here

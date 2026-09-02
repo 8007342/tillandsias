@@ -132,20 +132,11 @@ if ($Uninstall -or $Purge) {
         # stale share fails to authenticate, and GitHub login is permanently
         # broken. Purging the distro without these is not a purge.
         #
-        # 'tillandsias-vm-uuid' is deliberately PRESERVED: it anchors the
-        # INSTALLATION, not the guest, and the in-VM Vault derives its master
-        # key from it.
-        foreach ($cred in @('vault-shamir-share-v1', 'vault-root-token-v1')) {
-            $listed = & cmdkey.exe /list:$cred 2>$null
-            if ($listed -match [regex]::Escape($cred)) {
-                & cmdkey.exe /delete:$cred > $null 2>&1
-                if ($LASTEXITCODE -eq 0) {
-                    Say "  cleared Credential Manager entry '$cred'"
-                } else {
-                    Say "  WARNING: could not clear Credential Manager entry '$cred'"
-                }
-            }
-        }
+        # The clearing itself moved to scripts/clear-vault-host-credentials.ps1
+        # because it was here and ONLY here, while there are two purge paths --
+        # see that file for what the second one was still doing on 2026-09-02.
+        . (Join-Path $PSScriptRoot 'clear-vault-host-credentials.ps1')
+        Clear-TillandsiasVaultHostCredentials -Say { param($m) Say $m }
         # Event Log source registration (HKLM) -- removable only from an
         # elevated shell; best-effort, silent skip otherwise. Already-logged
         # events stay in the Application log by design (they are the record).
