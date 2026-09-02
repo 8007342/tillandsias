@@ -261,6 +261,21 @@ TIMEOUT_SECONDS=600
 VERBOSE=0
 LIST_ONLY=0
 
+# ORDER 956-llei. CPU stall accounting for the kill-time adjudicator, read
+# from THIS cgroup's pressure file so a step run inside a container is
+# judged by the container's contention, not the host's (the /proc/loadavg
+# it replaced is not namespaced: a forge step was stamped with the host's
+# runqueue). Prints the `some` stall counter in microseconds, or nothing
+# when the kernel/cgroup does not expose it — the caller must then say
+# UNCLASSIFIED, never fall back to a number that measures something else.
+# LITMUS_PSI_FILE overrides the path so the hermetic fixture can inject
+# counters (scripts/test-litmus-kill-adjudicator.sh).
+_lt_cpu_stall_us() {
+    local f="${LITMUS_PSI_FILE:-/sys/fs/cgroup/cpu.pressure}"
+    [ -r "$f" ] || return 0
+    awk '$1 == "some" { for (i = 2; i <= NF; i++) if ($i ~ /^total=/) { sub(/^total=/, "", $i); print $i; exit } }' "$f" 2>/dev/null
+}
+
 # ORDER 958-b36m. Parse a named litmus file with the RUNNER'S OWN parser and
 # report whether its steps are extractable, WITHOUT executing any of them.
 #
@@ -1300,6 +1315,9 @@ run_litmus_test_file() {
         # TERM-immune fixtures.
         local step_capture
         step_capture="$(mktemp "${TMPDIR:-/tmp}/litmus-step-capture.XXXXXX")"
+        # 956-llei: stall counter + wall clock at launch, diffed at kill time.
+        local _lt_psi0 _lt_t0
+        _lt_psi0="$(_lt_cpu_stall_us)"; _lt_t0="$(date +%s)"
         LITMUS_STDLIB="${LITMUS_STDLIB}" timeout --kill-after=10s "${timeout_sec}s" bash -c 'source "$LITMUS_STDLIB"; '"${step_command}" >"$step_capture" 2>&1 || exit_code=$?
         step_output="$(cat "$step_capture")"
         rm -f "$step_capture"
@@ -1320,37 +1338,36 @@ run_litmus_test_file() {
             # suspect it had not convicted.
             #
             # ELAPSED TIME CANNOT DISCRIMINATE — a killed step always elapses
-            # its budget, by construction. Load at kill time can: a runqueue
-            # longer than the core count means other work was competing for the
-            # CPU this step was being timed on. Reported, never used to change
-            # the verdict: the step still FAILS, because a step that cannot
-            # finish inside its budget on this host has not passed.
-            _lt_load="unknown"; _lt_cpus="unknown"
-            if [ -r /proc/loadavg ]; then
-                _lt_load="$(cut -d' ' -f1 < /proc/loadavg 2>/dev/null)"
-            elif command -v sysctl >/dev/null 2>&1; then
-                _lt_load="$(sysctl -n vm.loadavg 2>/dev/null | tr -d '{}' | awk '{print $1}')"
+            # its budget, by construction. What can: how long this step's
+            # cgroup had runnable tasks WAITING for a CPU while the step ran
+            # (PSI `some` stall, diffed launch→kill). ORDER 956-llei retired
+            # the load1-vs-ncpus rule that stood here: /proc/loadavg is not
+            # namespaced (a forge step was judged by the HOST's runqueue);
+            # load1 > ncpus is utilization, not starvation (a fully busy box
+            # with no queueing stamped SATURATED); and its trailing 1-minute
+            # window mostly measured the PREVIOUS step. The counter diff is
+            # this step's own window, in this step's own cgroup. Reported,
+            # never used to change the verdict: the step still FAILS, because
+            # a step that cannot finish inside its budget has not passed.
+            # Threshold: a quarter of the wall time spent queued means the
+            # step saw at most ~75% of a CPU — tunable, LITMUS_STALL_CONTENDED_PCT.
+            local _lt_psi1 _lt_elapsed _lt_stall_us _lt_stall_pct
+            _lt_psi1="$(_lt_cpu_stall_us)"
+            _lt_elapsed=$(( $(date +%s) - ${_lt_t0:-0} ))
+            [ "$_lt_elapsed" -ge 1 ] 2>/dev/null || _lt_elapsed=1
+            if [ -z "${_lt_psi0:-}" ] || [ -z "${_lt_psi1:-}" ] || [ "$_lt_psi1" -lt "$_lt_psi0" ] 2>/dev/null; then
+                log_warn "  cpu.pressure unavailable in this cgroup — cause UNCLASSIFIED (slow step vs starved step); no fallback instrument, because none measures this step's contention"
+            else
+                _lt_stall_us=$(( _lt_psi1 - _lt_psi0 ))
+                # percent of the step's wall time that SOME task in this cgroup
+                # waited for a CPU; integer maths, bash 3.2 has no floats.
+                _lt_stall_pct=$(( _lt_stall_us / (_lt_elapsed * 10000) ))
+                if [ "$_lt_stall_pct" -ge "${LITMUS_STALL_CONTENDED_PCT:-25}" ]; then
+                    log_warn "  cpu.pressure some-stall ${_lt_stall_us}us over ${_lt_elapsed}s (${_lt_stall_pct}%) in this cgroup — step CONTENDED at kill time; a step that is fast when idle can be starved here, so re-run before treating this as a regression"
+                else
+                    log_warn "  cpu.pressure some-stall ${_lt_stall_us}us over ${_lt_elapsed}s (${_lt_stall_pct}%) in this cgroup — step NOT contended at kill time; genuinely too slow for its ${timeout_sec}s budget"
+                fi
             fi
-            if command -v nproc >/dev/null 2>&1; then
-                _lt_cpus="$(nproc 2>/dev/null)"
-            elif command -v sysctl >/dev/null 2>&1; then
-                _lt_cpus="$(sysctl -n hw.ncpu 2>/dev/null)"
-            fi
-            case "${_lt_load}:${_lt_cpus}" in
-                unknown:*|*:unknown|:*|*:)
-                    log_warn "  load at kill time: unavailable on this host — cause UNCLASSIFIED (slow step vs starved step)" ;;
-                *)
-                    # Scaled integer compare; bash 3.2 has no floats and bc is
-                    # not guaranteed present.
-                    _lt_l100="$(printf '%s' "$_lt_load" | awk '{printf "%d", $1 * 100}' 2>/dev/null)"
-                    _lt_c100=$(( _lt_cpus * 100 ))
-                    if [ -n "$_lt_l100" ] && [ "$_lt_l100" -gt "$_lt_c100" ] 2>/dev/null; then
-                        log_warn "  load1=${_lt_load} over ${_lt_cpus} cpus — host SATURATED at kill time; a step that is fast when idle can be starved here, so re-run before treating this as a regression"
-                    else
-                        log_warn "  load1=${_lt_load} over ${_lt_cpus} cpus — host NOT saturated at kill time; this step is genuinely too slow for its ${timeout_sec}s budget"
-                    fi
-                    ;;
-            esac
             return 1
         fi
 
