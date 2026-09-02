@@ -1065,6 +1065,70 @@ pub fn enumerate_render_nodes_at(root: &std::path::Path, vantage: Vantage) -> Ve
 /// NOT A UNIQUENESS CLAIM. Two genuinely identical machines SHOULD collide —
 /// that is the point. This says "same hardware", never "same host"; `host_id`
 /// remains the identity key and this is deliberately not a substitute for it.
+/// Why a fingerprint may not be computed from this document.
+///
+/// ORDER 805-r98w. Measured on native Windows 2026-09-02: the capability
+/// document there carries ONE device — `cpu/unknown/Host CPU`, cores reported
+/// 16c16t on an 8c/16t part — with no GPU record, no NPU record, and RAM absent
+/// from both `host.ram_gb` and `system_ram_gb`. [`hardware_fingerprint`] hashed
+/// that happily and returned `hw1-4714b1195f92e0c6`, which is not an identity:
+/// EVERY Windows host reporting 16 logical cores produces that same string.
+///
+/// A comparison key that silently degrades to a constant is worse than no key,
+/// because the failure it produces is a FALSE TWIN — two different machines
+/// declared identical — which is the exact failure this order was filed
+/// against. So the document must be refused, loudly, naming what is missing.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FingerprintRefusal {
+    pub missing: Vec<String>,
+}
+
+impl std::fmt::Display for FingerprintRefusal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "capability document cannot identify this machine (missing: {}) - a fingerprint from it would collide with unrelated hosts",
+            self.missing.join(", ")
+        )
+    }
+}
+
+/// The discriminating fields a document must carry before its hash means
+/// anything. Deliberately NOT "all of them": a machine with no NPU is still
+/// identifiable. The bar is that SOMETHING beyond a placeholder CPU name
+/// separates this host from another.
+///
+/// @trace scripts/hardware-fingerprint.sh (the sibling implementation, whose
+/// `compare` mode exists to REFUSE a twin claim rather than bless one)
+pub fn hardware_fingerprint_checked(
+    doc: &CapabilityDocument,
+) -> Result<String, FingerprintRefusal> {
+    let mut missing: Vec<String> = Vec::new();
+
+    // A CPU name the probe filled in with a placeholder identifies nothing.
+    // "Host CPU" is what the Windows path emits today; "unknown" vendor is the
+    // matching tell.
+    let cpu_named = doc.devices.iter().any(|d| {
+        d.device_class == "cpu" && !d.name.is_empty() && d.name != "Host CPU" && d.name != "unknown"
+    });
+    if !cpu_named {
+        missing.push("cpu model name (probe emitted a placeholder)".to_string());
+    }
+
+    let has_gpu = doc.devices.iter().any(|d| d.device_class == "gpu");
+    let has_npu = doc.devices.iter().any(|d| d.device_class == "npu");
+    let has_ram = doc.devices.iter().any(|d| d.system_ram_gb.is_some());
+    if !has_gpu && !has_npu && !has_ram {
+        missing.push("every secondary discriminator (no gpu, no npu, no ram)".to_string());
+    }
+
+    if missing.is_empty() {
+        Ok(hardware_fingerprint(doc))
+    } else {
+        Err(FingerprintRefusal { missing })
+    }
+}
+
 pub fn hardware_fingerprint(doc: &CapabilityDocument) -> String {
     fn ram_class(gb: f64) -> String {
         // Nearest power-of-two-ish class. 15.2 and 15.9 are both "16".
@@ -2393,9 +2457,19 @@ mod tests {
     }
 
     /// 805-r98w. The fingerprint exists so two hosts can be SHOWN identical
-    /// rather than asserted identical. The load-bearing arm is the twin pair:
-    /// same silicon, different OS, SAME fingerprint — because the substrate is
-    /// the other axis of the matrix, not part of the hardware's identity.
+    /// rather than asserted identical. The load-bearing arm is substrate
+    /// independence: the SAME device records must hash the same however the
+    /// OS, kernel, driver and lanes differ, because the substrate is the other
+    /// axis of the matrix, not part of the hardware's identity.
+    ///
+    /// CORRECTED 2026-09-02. This arm used to name its two documents "yolanda"
+    /// and "yoga" and call them "the twin pair". They are NOT twins — measured
+    /// by the yoga host: Ryzen AI 5 340 / 6c12t / Radeon 840M against Ryzen AI
+    /// 7 350 / 8c16t / Radeon 860M. The fleet asserted that pair was identical
+    /// for weeks and this test had quietly become the assertion's last refuge.
+    /// The hosts are generic here now; the real pair is the fixture of
+    /// `fingerprint_separates_the_hosts_the_fleet_called_twins` below, which
+    /// requires them to DIFFER.
     #[test]
     fn hardware_fingerprint_ignores_substrate_and_separates_real_hardware() {
         let gpu = |name: &str| {
@@ -2405,20 +2479,21 @@ mod tests {
             d
         };
 
-        // ARM 1 — THE TWIN PAIR. Same silicon, and everything the substrate
-        // owns differs: kernel, host_kind, host_id, driver, usable, lanes.
-        // These must fingerprint IDENTICALLY or the pair cannot be a control.
+        // ARM 1 — SUBSTRATE INDEPENDENCE. Identical device records, and
+        // everything the substrate owns differs: kernel, host_kind, host_id,
+        // driver, usable, lanes. These must fingerprint IDENTICALLY, or a
+        // same-hardware pair could never isolate the substrate.
         let mut a = doc_with(vec![gpu("AMD Radeon 860M")]);
         a.host.kernel_release = "6.18.33.2-microsoft-standard-WSL2".to_string();
         a.host.host_kind = "windows".to_string();
-        a.host.host_id = "yolanda".to_string();
+        a.host.host_id = "host-a".to_string();
         a.devices[0].driver = Some("amdgpu-wsl".to_string());
         a.devices[0].lanes = vec!["container".to_string()];
 
         let mut b = doc_with(vec![gpu("AMD Radeon 860M")]);
         b.host.kernel_release = "6.11.0-amd64".to_string();
         b.host.host_kind = "linux".to_string();
-        b.host.host_id = "yoga".to_string();
+        b.host.host_id = "host-b".to_string();
         b.devices[0].driver = Some("amdgpu".to_string());
         b.devices[0].usable = false;
 
@@ -2468,6 +2543,116 @@ mod tests {
             super::hardware_fingerprint(&f),
             super::hardware_fingerprint(&g),
             "device order must not change the fingerprint"
+        );
+    }
+
+    /// 805-r98w, from the yoga host's measurement 2026-08-30, relayed
+    /// 2026-09-02. These two machines were called a twin pair fleet-wide for
+    /// weeks. They are not: different SKU, different core counts, different
+    /// iGPU bin.
+    ///
+    /// THE TRAP THIS PINS. AMD ships the Radeon 840M and the 860M under ONE
+    /// PCI name, "Krackan [Radeon 840M / 860M Graphics]", so the GPU model
+    /// string is IDENTICAL on both hosts and a fingerprint resting on it would
+    /// bless a false twin — and every accel number keyed on that control would
+    /// have silently inherited a hardware difference. The CPU fields are what
+    /// actually separate them. `scripts/hardware-fingerprint.sh` documents the
+    /// same trap; this is the Rust side of it.
+    #[test]
+    fn fingerprint_separates_the_hosts_the_fleet_called_twins() {
+        let host = |cpu_name: &str, phys: u32, log: u32| {
+            let mut c = device("cpu", cpu_name, &["host-native"], None);
+            c.vendor = "amd".to_string();
+            c.cpu_cores = Some(CpuCores {
+                physical: phys,
+                logical: log,
+            });
+            c.system_ram_gb = Some(15.2);
+            // The SHARED, deceiving string: one PCI name for both bins.
+            let mut g = device(
+                "gpu",
+                "Krackan [Radeon 840M / 860M Graphics]",
+                &["host-native"],
+                None,
+            );
+            g.vendor = "amd".to_string();
+            doc_with(vec![c, g])
+        };
+
+        let yoga = host("AMD Ryzen AI 5 340 w/ Radeon 840M", 6, 12);
+        let yolanda = host("AMD Ryzen AI 7 350 w/ Radeon 860M", 8, 16);
+
+        assert_ne!(
+            super::hardware_fingerprint(&yoga),
+            super::hardware_fingerprint(&yolanda),
+            "these hosts differ in SKU and core count; a fingerprint that collides on them blesses a false substrate control"
+        );
+
+        // CONTROL — the trap is real, not hypothetical. Strip the CPU records
+        // and the two documents become indistinguishable, because everything
+        // that remains is the shared PCI name. This is what a GPU-keyed
+        // fingerprint would have done, and it pins WHICH fields the assertion
+        // above is resting on: without it, that assert_ne could pass for a
+        // reason unrelated to the CPU.
+        let gpu_only = |d: &CapabilityDocument| {
+            let mut x = d.clone();
+            x.devices.retain(|dev| dev.device_class == "gpu");
+            super::hardware_fingerprint(&x)
+        };
+        assert_eq!(
+            gpu_only(&yoga),
+            gpu_only(&yolanda),
+            "control failed: the GPU name was expected to be identical on both              hosts — if this ever differs, AMD split the PCI name and the              comment above needs revisiting"
+        );
+    }
+
+    /// 805-r98w. Measured on native Windows 2026-09-02: the probe emits ONE
+    /// device, `cpu/unknown/Host CPU`, no GPU, no NPU, no RAM — and the raw
+    /// hasher returned a confident `hw1-...` for it. That string is shared by
+    /// every Windows host with the same logical-core count, so publishing it
+    /// as an identity manufactures twins that do not exist.
+    #[test]
+    fn placeholder_document_is_refused_rather_than_hashed() {
+        let mut cpu = device("cpu", "Host CPU", &["host-native"], None);
+        cpu.vendor = "unknown".to_string();
+        cpu.cpu_cores = Some(CpuCores {
+            physical: 16,
+            logical: 16,
+        });
+        let windows_today = doc_with(vec![cpu]);
+
+        let refusal = super::hardware_fingerprint_checked(&windows_today)
+            .expect_err("a placeholder-only document must be refused");
+        assert!(
+            refusal.missing.iter().any(|m| m.contains("cpu model name")),
+            "the refusal must name the placeholder CPU: {refusal:?}"
+        );
+        assert!(
+            refusal
+                .missing
+                .iter()
+                .any(|m| m.contains("secondary discriminator")),
+            "the refusal must name the absent gpu/npu/ram: {refusal:?}"
+        );
+
+        // CONTROL: a document that CAN identify the machine still succeeds,
+        // so the guard refuses the placeholder and not the feature.
+        let mut cpu = device(
+            "cpu",
+            "AMD Ryzen AI 7 350 w/ Radeon 860M",
+            &["host-native"],
+            None,
+        );
+        cpu.vendor = "amd".to_string();
+        cpu.cpu_cores = Some(CpuCores {
+            physical: 8,
+            logical: 16,
+        });
+        cpu.system_ram_gb = Some(15.2);
+        let real = doc_with(vec![cpu]);
+        assert!(
+            super::hardware_fingerprint_checked(&real).is_ok(),
+            "a document carrying a real CPU model and RAM must be accepted"
         );
     }
 

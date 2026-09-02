@@ -381,6 +381,12 @@ fn main() {
     }
 
     let capabilities = user_args.iter().any(|a| a == "--capabilities");
+    // Order 805-r98w (second half). The fingerprint existed but nothing
+    // could obtain it, which made it useless for its ONE purpose: proving two
+    // hosts are the same hardware. A bare flag printing nothing but the hash
+    // is what a cross-host comparison actually needs — one command, one line,
+    // diffable by eye or by script across an OS boundary.
+    let hardware_fingerprint = user_args.iter().any(|a| a == "--hardware-fingerprint");
     // Order 852-dk9z: --fresh bypasses the capability cache. The row
     // generator passes it so a published row can never be a stale-cache
     // artifact of a previous binary.
@@ -593,6 +599,8 @@ fn main() {
         "--init",
         "--inference-tier",
         "--capabilities",
+        // Order 805-r98w: prints the substrate hash alone, for twin-host comparison.
+        "--hardware-fingerprint",
         // Order 852-dk9z: modifier for --capabilities; bypasses the probe cache.
         "--fresh",
         "--record-measurement",
@@ -837,6 +845,33 @@ fn main() {
         // (orders 401/402) grade their guests against it.
         println!("tier:{}", detect_inference_tier());
         std::process::exit(0);
+    }
+
+    if hardware_fingerprint {
+        // Deliberately the ONLY thing on stdout: this is meant to be compared
+        // between hosts, so `diff <(a) <(b)` and a human eye must both work.
+        // Honours --fresh for the same reason --capabilities does — a stale
+        // cache would compare two binaries, not two machines.
+        let doc = if fresh_capabilities {
+            accel_probe::probe_fresh(effective_inference_tier())
+        } else {
+            accel_probe::load_or_probe(effective_inference_tier())
+        };
+        // REFUSES rather than degrades. On native Windows today the probe
+        // yields a placeholder-only document, and hashing it returns a string
+        // every 16-thread Windows host shares — a false twin, which is the
+        // failure 805-r98w exists to prevent. Exit 3 distinguishes "this host
+        // cannot answer" from a probe crash.
+        match accel_probe::hardware_fingerprint_checked(&doc) {
+            Ok(fp) => {
+                println!("{fp}");
+                std::process::exit(0);
+            }
+            Err(refusal) => {
+                eprintln!("hardware-fingerprint: {refusal}");
+                std::process::exit(3);
+            }
+        }
     }
 
     if capabilities {
