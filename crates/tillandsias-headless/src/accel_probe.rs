@@ -399,7 +399,16 @@ pub fn record_measurement(m: MeasurementRecord) -> Result<(), String> {
 /// the other. Enumeration measures the machine; this field records what the
 /// tier probe asserted. Do not re-thread it downward.
 pub fn run_probe(effective_tier: &str) -> CapabilityDocument {
-    let (devices, enumeration_gaps) = enumerate_devices();
+    let (devices, mut enumeration_gaps) = enumerate_devices();
+    // 793-zumy REMAINING 2. "No container to ask" is a GAP, not a finding —
+    // the same distinction `enumeration_gaps` already carries for a device
+    // class this platform cannot enumerate. Measured by yoga 2026-09-02: with
+    // the two collapsed, a host whose container lane was working read
+    // identically to a host with no accelerator at all.
+    let container_lane = probe_container_render_nodes();
+    if container_lane.asked.is_none() {
+        enumeration_gaps.push("container-lane".to_string());
+    }
     let engines = enumerate_engines();
     let measurements = Vec::new(); // Microbenchmarks run on demand / bounded
     let host = enumerate_host();
@@ -418,8 +427,9 @@ pub fn run_probe(effective_tier: &str) -> CapabilityDocument {
         hardware_fingerprint: None,
         // 793-zumy REMAINING 2: PRODUCED, not modelled. Bounded and
         // fail-quiet - a host with no podman, no container or no devices
-        // contributes an empty vec rather than a fabricated row.
-        render_nodes: probe_container_render_nodes(),
+        // contributes an empty vec rather than a fabricated row, and the
+        // gap above says which of those it was.
+        render_nodes: container_lane.nodes,
     };
     // Computed from the devices just enumerated, so the document carries its own
     // hardware identity and no consumer has to re-derive it. `checked` rather
@@ -1806,18 +1816,73 @@ where
     nodes
 }
 
-/// The podman container the fleet's ollama runs in.
-const INFERENCE_CONTAINER: &str = "tillandsias-inference";
+/// The podman containers the fleet's ollama can run in, most-specific first.
+///
+/// CORRECTED 2026-09-02, MEASURED BY YOGA, and the correction is the point.
+/// This was a single hardcoded `"tillandsias-inference"` while
+/// `scripts/dev-inference-ensure.sh:102` creates `tillandsias-dev-inference`
+/// on every dev host. So the producer execed into a container that does not
+/// exist there, got nothing, and reported the bottom of the scale on a machine
+/// where the lane demonstrably works — devices passed, `/api/ps` answering from
+/// inside the container that IS running.
+///
+/// That is the sixth instance this cycle of one name fixed in one place: the
+/// plan-binary probe, the hardware fingerprint, this probe's own two
+/// transports, the Windows purge clear, the embed endpoint, and now this. The
+/// remedy is the same one: not a second hardcoded name beside the first, which
+/// is how these drift, but ONE resolution with the environment as the single
+/// source when a caller knows better.
+///
+/// `TILLANDSIAS_INFERENCE_CONTAINER` is that hook: the lane that CREATES the
+/// container can name it, and then there is one source rather than a list this
+/// file has to keep in sync with a shell script.
+const INFERENCE_CONTAINER_CANDIDATES: [&str; 2] =
+    ["tillandsias-inference", "tillandsias-dev-inference"];
 
-/// Run one bounded, read-only command inside [`INFERENCE_CONTAINER`].
+/// Which inference container is actually present, or `None` when there is none
+/// to ask.
+///
+/// `None` IS THE LOAD-BEARING RETURN. It is the difference between "we asked
+/// the container lane and it has nothing" and "there was no container lane to
+/// ask", and yoga's measurement is what proved those must not share a token: on
+/// their host the envelope read `accel_proof=-` — identical to a machine with
+/// no accelerator at all — while the lane was working. The failure was silent
+/// and it under-claimed, which is the direction this file already warns is the
+/// one that gets missed, because the wasted work it causes looks like
+/// diligence.
+fn resolve_inference_container() -> Option<String> {
+    let exists = |name: &str| -> bool {
+        tillandsias_podman::podman_cmd_sync()
+            .args(["container", "exists", name])
+            .output_bounded(tillandsias_podman::OperationKind::Inspect.default_budget())
+            .ok()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    };
+    if let Ok(name) = std::env::var("TILLANDSIAS_INFERENCE_CONTAINER")
+        && !name.trim().is_empty()
+    {
+        // An EXPLICIT name is the caller naming the container, not a candidate
+        // to be judged — the same rule plan-binary-probe.sh applies to
+        // TILLANDSIAS_PLAN_BIN, and for the same reason: probing an override
+        // collapses "you named the wrong one" into "there is none".
+        return Some(name.trim().to_string());
+    }
+    INFERENCE_CONTAINER_CANDIDATES
+        .iter()
+        .find(|n| exists(n))
+        .map(|n| n.to_string())
+}
+
+/// Run one bounded, read-only command inside the resolved inference container.
 ///
 /// Never `--tty` and never attaching stdin: an exec that attaches stdin can
 /// wedge a one-shot launch forever absorbing SIGTERM, which `main.rs`'s
 /// readiness probe already learned. Any non-success exit reads as "could not
 /// ask" - `None`, not an empty answer.
-fn inference_container_exec(args: &[&str]) -> Option<String> {
+fn inference_container_exec(container: &str, args: &[&str]) -> Option<String> {
     let mut cmd = tillandsias_podman::podman_cmd_sync();
-    cmd.args(["exec", INFERENCE_CONTAINER]);
+    cmd.args(["exec", container]);
     cmd.args(args);
     let out = cmd
         .output_bounded(tillandsias_podman::OperationKind::Inspect.default_budget())
@@ -1848,19 +1913,43 @@ fn inference_container_exec(args: &[&str]) -> Option<String> {
 /// which is what 937-68n4 landed. This family's other four instances all failed
 /// the other way, toward an over-claim; this one is worth naming separately
 /// because the wasted work it causes looks like diligence.
-pub fn probe_container_render_nodes() -> Vec<DrmRenderNode> {
-    produce_container_proofs_with(
-        || inference_container_exec(&["sh", "-c", CONTAINER_PROOF_SH]),
+pub fn probe_container_render_nodes() -> ContainerLaneProbe {
+    let Some(container) = resolve_inference_container() else {
+        return ContainerLaneProbe {
+            nodes: Vec::new(),
+            asked: None,
+        };
+    };
+    let nodes = produce_container_proofs_with(
+        || inference_container_exec(&container, &["sh", "-c", CONTAINER_PROOF_SH]),
         || {
-            inference_container_exec(&[
-                "curl",
-                "-fsS",
-                "--max-time",
-                "2",
-                "http://127.0.0.1:11434/api/ps",
-            ])
+            inference_container_exec(
+                &container,
+                &[
+                    "curl",
+                    "-fsS",
+                    "--max-time",
+                    "2",
+                    "http://127.0.0.1:11434/api/ps",
+                ],
+            )
         },
-    )
+    );
+    ContainerLaneProbe {
+        nodes,
+        asked: Some(container),
+    }
+}
+
+/// What the container-lane probe found AND whether there was anything to ask.
+///
+/// The second field exists because an empty `nodes` means two different things
+/// and the envelope must not render them the same. See
+/// [`resolve_inference_container`] for the measurement that forced the split.
+pub struct ContainerLaneProbe {
+    pub nodes: Vec<DrmRenderNode>,
+    /// The container actually probed, or `None` when none was present.
+    pub asked: Option<String>,
 }
 
 /// Does ONE spec body name the NVIDIA kind AND a usable device node?
@@ -2752,13 +2841,17 @@ pub fn accel_envelope(doc: &CapabilityDocument) -> String {
     // exists to end. Only `placed` may be read as a lane - `Proof::proves_a_lane`
     // is the one comparison a consumer should make, and it is one keystroke away
     // from `>= reachable`, which is the mistake this whole family is about.
-    let proof = doc
-        .render_nodes
-        .iter()
-        .map(|n| n.proof)
-        .max()
-        .map(|p| p.token())
-        .unwrap_or("-");
+    let proof = match doc.render_nodes.iter().map(|n| n.proof).max() {
+        Some(p) => p.token(),
+        // NOBODY TO ASK vs ASKED AND FOUND NOTHING. Yoga measured these
+        // collapsed into one token on 2026-09-02 and the envelope on a host
+        // with a WORKING container lane was indistinguishable from one with no
+        // accelerator — under-claiming, silently. `unknown` is the same word
+        // this envelope already uses for a device class the probe could not
+        // enumerate, and it is deliberately not `none`.
+        None if gap("container-lane") => "unknown",
+        None => "none",
+    };
 
     format!(
         "accel_class={} accel_gpu={} accel_gpu_name={} accel_npu={} accel_npu_name={} \
@@ -3191,11 +3284,22 @@ mod tests {
         };
         let mut doc = doc_with(Vec::new());
 
-        // Nobody asked, or nothing answered.
+        // ASKED AND FOUND NOTHING. A container lane was present and had no
+        // render node to offer: a finding.
         assert!(
-            super::accel_envelope(&doc).contains("accel_proof=-"),
-            "an absent producer and a producer that found a device are different facts"
+            super::accel_envelope(&doc).contains("accel_proof=none"),
+            "a probed container lane with no nodes is a finding"
         );
+
+        // NOBODY TO ASK. Yoga measured these two collapsed on 2026-09-02 and a
+        // host whose container lane was WORKING read identically to one with no
+        // accelerator at all — silent, and under-claiming.
+        doc.enumeration_gaps.push("container-lane".to_string());
+        assert!(
+            super::accel_envelope(&doc).contains("accel_proof=unknown"),
+            "no container to ask is a gap, not an affirmative denial"
+        );
+        doc.enumeration_gaps.clear();
 
         // The HIGHEST rung wins, not the first node's.
         doc.render_nodes = vec![

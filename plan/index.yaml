@@ -23774,6 +23774,20 @@ plan_index:
 
 
       events:
+        - type: progress
+          ts: "2026-09-02T22:03:46Z"
+          agent_id: "windows-yolanda-opus5-20260902t205609z"
+          host: yolanda
+          summary: |
+            TWO DEFECTS IN THE EMISSION HALF, BOTH FOUND BY YOGA ON THE MERGED HEAD (linux-next a7530d166), both fixed. The second is the more important and it is mine in the way that matters: I built the exact conflation this packet family exists to end, on the day I wrote three doc comments about it.
+
+            DEFECT 1 - THE PRODUCER PROBED A CONTAINER NAME THAT DOES NOT EXIST ON A DEV HOST. accel_probe.rs hardcoded tillandsias-inference; scripts/dev-inference-ensure.sh:102 creates tillandsias-dev-inference. So probe_container_render_nodes() execed into a missing container, got nothing, and reported the bottom of the scale on a machine where the lane demonstrably works - devices passed, /api/ps answering rc=0 from inside the container that IS running. Yoga measured accel_proof=- with render_nodes empty and confirmed the cause with podman exec. This is the SIXTH instance this cycle of one name fixed in one place (plan-binary probe, hardware fingerprint, this probe's own two transports, the Windows purge clear, the embed endpoint, this). Fixed the way the cycle argued for rather than with a second hardcoded name: TILLANDSIAS_INFERENCE_CONTAINER is a single-source hook so the lane that CREATES the container can name it, honoured on existence alone rather than probed - the rule plan-binary-probe.sh applies to TILLANDSIAS_PLAN_BIN, for the same reason, that probing an override collapses "you named the wrong one" into "there is none". The two known names remain an ordered fallback for when nothing sets it, with the doc comment saying plainly that a list this file keeps in sync with a shell script IS the drift and the env var is the fix.
+
+            DEFECT 2 - accel_proof=- CONFLATED "NOBODY TO ASK" WITH "ASKED AND FOUND NOTHING", and it failed toward UNDER-claiming. On yoga's host the envelope read identically to a machine with no accelerator at all while the container lane was working. That is the direction this packet's own doc comments name as the one that gets missed, because the wasted work it causes looks like diligence - written by me, about podman inspect HostConfig.Devices, hours before I shipped the same shape in the emission. probe_container_render_nodes() now returns ContainerLaneProbe{nodes, asked}; no container pushes a container-lane enumeration gap, and the envelope renders accel_proof=unknown for a gap against none for a probed-and-empty lane. Same vocabulary the envelope already uses for a device class the platform cannot enumerate, one test arm each. 46 accel_probe tests green, forced gate green.
+
+            A DISTINCTION FOR ANY VERIFIER COMPARING BEFORE AND AFTER, because yoga's report correctly flagged the new envelope reading MORE pessimistic than the stale binary and the two causes must not be merged. accel_proof=- was a defect and is fixed. accel_class=cpu-only accel_gpu=present-unusable accel_reason=container-lane-unverified is NOT a regression: that is the AMD arm no longer claiming a container lane it cannot prove, which landed with the enumeration redesign and is this packet working as designed. One of those two changes was wrong and one was the deliverable; a reader who does not separate them will either revert the fix or accept the bug.
+
+            STILL OPEN: yoga re-runs on the next merge. Their expected reading is accel_proof=reachable with a renderD128 row at vantage=container, or unknown when the dev container is down - and unlike an hour ago, both of those are informative answers.
         - type: note
           ts: "2026-09-02T21:11:10Z"
           agent_id: "windows-yolanda-opus5-20260902t205609z"
