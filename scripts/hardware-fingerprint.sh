@@ -186,6 +186,28 @@ compare)
         [[ -r "$_d" ]] || _fail "hardware-fingerprint: cannot read $_d — refusing to compare, an absent document is not evidence of anything"
         jq -e . "$_d" >/dev/null 2>&1 || _fail "hardware-fingerprint: $_d is not a readable JSON capability document — refusing to compare"
     done
+    # ORDER 805-r98w — REFUSE A CROSS-VANTAGE COMPARISON RATHER THAN REPORT A
+    # MISMATCH. yolanda's finding, 2026-09-02: the substrate does not merely
+    # decorate the device records, it CHANGES them. One machine reports
+    # "WSL2 paravirtual GPU (/dev/dxg)" under WSL2 and NO gpu device at all
+    # natively. So two documents whose host_kind differs may be one machine seen
+    # two ways, and a NOT-TWINS verdict there reads as "different hardware" when
+    # the truth is "different vantage" — the exact misreading this tool exists to
+    # prevent, arriving through the tool itself.
+    #
+    # This is not a mismatch to report, it is a comparison that cannot be made.
+    _ka="$(jq -r '.host.host_kind // "unknown"' "$a" 2>/dev/null)"
+    _kb="$(jq -r '.host.host_kind // "unknown"' "$b" 2>/dev/null)"
+    if [[ "$_ka" != "$_kb" ]]; then
+        echo "refused:cross-vantage-comparison"
+        echo "  $a is host_kind=$_ka; $b is host_kind=$_kb." >&2
+        echo "  The substrate CHANGES the device records — the same machine reports a" >&2
+        echo "  paravirtual GPU under WSL2 and no GPU device natively — so a verdict here" >&2
+        echo "  cannot distinguish different hardware from one machine seen two ways." >&2
+        echo "  Compare documents taken from the same vantage, or fix the probe first." >&2
+        exit 2
+    fi
+
     fa="$(_fingerprint_of "$a")" || exit 2
     fb="$(_fingerprint_of "$b")" || exit 2
     [[ -n "$fa" && -n "$fb" ]] || _fail "hardware-fingerprint: refusing to compare an empty fingerprint"

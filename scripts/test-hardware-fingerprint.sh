@@ -95,4 +95,21 @@ for f in cpu_model cpu_physical cpu_logical gpu_model npu_vendor npu_node ram_cl
         || fail "the reported field set lost $f — the canonical string and the JSON view must stay in step"
 done
 
+# 8. A CROSS-VANTAGE PAIR IS REFUSED, NOT REPORTED AS A MISMATCH.
+#    yolanda 2026-09-02: the substrate CHANGES the device records rather than
+#    decorating them — one machine reports a paravirtual GPU under WSL2 and no
+#    GPU device natively. A NOT-TWINS verdict on such a pair reads as "different
+#    hardware" when the truth may be "one machine, two vantages", which is the
+#    misreading this whole tool exists to prevent.
+crossv="$(mktemp)"; trap 'rm -f "$missing" "$nocpu" "$crossv"' EXIT
+jq '.host.host_kind="windows"' "$FIX/yoga-linux.json" > "$crossv"
+rc=0; "$FP" compare "$FIX/yoga-linux.json" "$crossv" >/dev/null 2>&1 || rc=$?
+[[ "$rc" == "2" ]] \
+    || fail "a cross-vantage pair must be REFUSED (exit 2), not given a twin verdict; got $rc"
+out="$("$FP" compare "$FIX/yoga-linux.json" "$crossv" 2>&1 || true)"
+grep -q "refused:cross-vantage-comparison" <<<"$out" \
+    || fail "the refusal must name itself as a cross-vantage refusal: $out"
+grep -q "NOT TWINS" <<<"$out" \
+    && fail "a cross-vantage pair was given a hardware verdict as well as a refusal: $out"
+
 echo "ok: the hardware fingerprint refuses an untrue twin claim, refuses to hash nothing, and is stable per document (805-r98w)"
