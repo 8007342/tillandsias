@@ -1,0 +1,74 @@
+events:
+  - packet_id: spec-expert-refusal-threshold-fleet-decision
+    event:
+      type: progress
+      ts: "2026-09-02T21:51:02Z"
+      agent_id: linux-yoga-claude-20260902t202842z
+      host: yoga
+      summary: |
+        YOGA RE-REPORTS ITS BANDS ON TODAY'S LIVE INDEX, AND THE HEADLINE IS THAT
+        THE FLOOR IS NOT REGIME-DEPENDENT BETWEEN THESE TWO REGIMES — which is the
+        opposite of what this row's 2026-08-29 event concluded from a smaller yoga
+        sample, so it is a correction of my own host's earlier number.
+
+        REGIME, stated in full because a band without one is unfalsifiable:
+        host yoga (Fedora Silverblue, AMD Ryzen AI 5 340 / Radeon 840M gfx1152,
+        12 cores, 15 GB RAM), embedder nomic-embed-text 137M F16 768-dim, NO
+        query or document prefix, index generation 77f8611 built this cycle from
+        linux-next 2acb4f9ca, 22,682 chunks, question set questions-wide-579.jsonl
+        (579 questions: 266 in / 243 near / 70 far), 579/579 measured, zero embed
+        or retrieve failures. ACCELERATOR: none, and this matters for the regime
+        claim — nomic-embed-text reports size_vram=0 on this host, so the index
+        embedded on the CPU at ~700 chunks/min (~70 min wall clock). The ROCm
+        devices ARE passed into the container (937-68n4: /dev/kfd, /dev/dri
+        present inside, OLLAMA_IGPU_ENABLE=1) and ollama still declines to place
+        a 137M model, which per 937-68n4's own table is probably correct — the
+        iGPU is a measured LOSS below ~3b params. So "ROCm lane" and "GPU-embedded
+        index" are different claims and only the first is true here.
+
+        GLOBAL BANDS (top-1 cosine):
+          band     n    floor    mean     ceiling
+          in     266    0.5619   0.7311   0.8569
+          near   243    0.5772   0.7123   0.8644
+          far     70    0.4800   0.5800   0.6909
+        Separable by one global threshold? NO — overlap 0.3026.
+        Margin (top1-top2) separable? NO — overlap 0.1304, worse than the raw
+        score, reproducing the ruled-out spread heuristic a third time.
+        Per-corpus, every corpus overlaps: spec 0.1897, methodology 0.2790,
+        plan 0.2565, code 0.1745, cheatsheets 0.2820.
+
+        FLOOR EFFICACY ON THIS HOST, per band:
+          0.58 -> far 38/70 refused, near   1/243, in-corpus cost  1/266 = 0.4%
+          0.60 -> far 49/70 refused, near   3/243, in-corpus cost  2/266 = 0.8%
+          0.62 -> far 58/70 refused, near   9/243, in-corpus cost  6/266 = 2.3%
+          0.65 -> far 67/70 refused, near  32/243, in-corpus cost 21/266 = 7.9%
+
+        THE REPRODUCTION, which is the actual finding. macuahuitl measured at the
+        D8 default 0.62: far 58/70 refused, in-corpus cost 11/458 = 2.4%. I get
+        far 58/70 and 6/266 = 2.3%. Same far count to the unit; in-corpus cost
+        within 0.1pp. Its top far leaker was postgresql-jsonb at 0.6911; mine is
+        the same question at 0.69088. Two different machines, two different
+        accelerator situations (NVIDIA vs CPU-only), one embedder and one corpus,
+        and the numbers land on top of each other.
+
+        SO THE SENTENCE "THE RIGHT FLOOR IS REGIME-DEPENDENT" NEEDS SPLITTING, and
+        the 2026-08-29 event's own parenthetical already had the right idea: the
+        bands are a property of (embedder, corpus, prefix), NOT of host silicon.
+        Darwin's n=30 differs because its question set differs, not because its
+        hardware does. That is a stronger position for the packet than
+        "regime-dependent, so no constant": 0.62 is defensible as a fleet DEFAULT
+        for the nomic/this-corpus regime, with the env knob kept for a host that
+        changes the EMBEDDER — which is the variable that actually moves it.
+        I am not shipping that as a decision; criterion 1 still wants the low-end
+        tier's report, and one reproduction is two points, not a fleet.
+
+        NOT MEASURED HERE, so nobody reads it as covered: the 7b-vs-14b cited-
+        synthesis floor the coordinator asked for. This host has 15 GB RAM total
+        (11 available) and a CPU-only decode lane; qwen2.5:14b is a ~9 GB pull
+        decoding on 12 cores, and running it beside a 22.7k-chunk index build was
+        not affordable in this cycle's envelope. That is outcome (c) territory —
+        the model floor may be a hardware property here rather than a number — but
+        I am recording it as UNMEASURED rather than asserting the conclusion the
+        RAM figure suggests. Named as the next slice.
+
+        Evidence committed: scripts/refusal-calibration/results-wide-579-nomic-20260902-yoga.tsv

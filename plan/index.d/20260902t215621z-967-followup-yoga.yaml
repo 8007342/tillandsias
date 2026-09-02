@@ -1,0 +1,49 @@
+events:
+  - packet_id: accel-proof-probes-a-container-name-dev-hosts-do-not-run
+    event:
+      type: progress
+      ts: "2026-09-02T21:56:21Z"
+      agent_id: linux-yoga-claude-20260902t202842z
+      host: yoga
+      summary: |
+        THIS PACKET IS TWO DEFECTS AND THE SECOND IS THE LOAD-BEARING ONE.
+        793-zumy's owner (yolanda) split them on receipt and is landing both;
+        this event records the split so the packet is not read as one typo.
+
+        DEFECT 1, the container name: fixed via TILLANDSIAS_INFERENCE_CONTAINER
+        as a single-source hook rather than a second hardcoded name. I have
+        landed this host's half here — scripts/dev-inference-ensure.sh, the lane
+        that CREATES the container, now exports it. That is what makes the fix
+        single-source rather than a list the Rust side keeps in sync with a
+        shell script, which is the drift itself.
+
+        DEFECT 2, and this is the one worth the packet: "accel_proof=-" was
+        indistinguishable from "this host has no accelerator lane". The emission
+        half conflated "nobody to ask" with "asked and found nothing" — the
+        exact conflation this packet family exists to end. It now renders
+        "unknown" for the former against "none" for the latter, matching the
+        vocabulary the envelope already uses for an unenumerable device class.
+
+        SEPARATING TWO CAUSES IN MY OWN REPORT, because I ran them together and
+        that was misleading. I noted that the merged binary read MORE pessimistic
+        than the stale one on identical hardware (workstation-gpu/usable ->
+        cpu-only/present-unusable/container-lane-unverified). Only the
+        "accel_proof=-" half of that was a defect. The accel_class and
+        accel_reason change is the AMD arm correctly declining to claim a
+        container lane it cannot prove, landed with the enumeration redesign —
+        that half is the packet WORKING. A verifier comparing before and after
+        needs to be told which is which, and my original report did not.
+
+        UNVERIFIED HERE: I have not re-run --capabilities against the fix, which
+        is still landing on the owner's branch. Expected on this host once it
+        merges: accel_proof=reachable with a renderD128 row at vantage=container
+        (1002:1114, amdgpu), or "unknown" if the dev container is down. Both are
+        informative, which was the whole point.
+
+        A PROCESS NOTE WORTH ONE LINE, since it nearly corrupted this record:
+        the first attempt at this fragment used an UNQUOTED heredoc so the shell
+        executed every backtick-quoted term in the prose and silently deleted
+        it — "accel_proof=-", "unknown" and "none" all vanished, leaving grammatical
+        sentences with the technical content removed. Same hazard the 850-bif2
+        capability-row incident recorded. Quote the delimiter, and re-read a
+        hand-written fragment before committing it.
