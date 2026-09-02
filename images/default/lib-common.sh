@@ -194,14 +194,22 @@ export TILLANDSIAS_EXTERNAL_LOGS="/var/log/tillandsias/external"
 # can surface lifecycle events back to the calling terminal.
 # @trace spec:cross-platform, spec:windows-wsl-runtime, spec:runtime-diagnostics-stream
 trace_lifecycle() {
-    # Only emit lifecycle traces when TILLANDSIAS_DEBUG is set.
-    # In production, these clutter the terminal (stderr shares the display).
-    [ -n "${TILLANDSIAS_DEBUG:-}" ] || return 0
+    # Write to the file log unconditionally so agents can always observe
+    # expert build state (order 797-thbw). Gate stderr only — in production,
+    # these clutter the terminal (stderr shares the display).
     local phase="$1"
     shift
     local line="[lifecycle] $phase | $*"
-    echo "$line" >&2
     echo "$line" >> /tmp/forge-lifecycle.log 2>/dev/null || true
+    # if-form, NOT `[ ... ] && echo`: as the function's LAST statement the
+    # &&-chain returns 1 whenever DEBUG is unset, and under this file's own
+    # `set -e` that killed EVERY sourcing shell at the first source-time
+    # trace call (export_pull_cache_path) — silently, before any function
+    # was defined past line ~240. Broke litmus:lane-observed-startup-log
+    # fleet-wide within the hour it landed.
+    if [ -n "${TILLANDSIAS_DEBUG:-}" ]; then
+        echo "$line" >&2
+    fi
 }
 
 export_pull_cache_path() {
@@ -2336,69 +2344,6 @@ harness_record_last_good() {
 # A fresh install that fails the health probe rolls back to the recorded
 # last-good version (order 284).
 # @trace plan/issues/forge-harness-every-launch-latest-2026-07-04.md (order 181)
-# ── Harness update mutex (order 626-p4xd) ───────────────────────────────────
-#
-# ONE lock, two writers. Both `ensure_forge_harnesses` (backgrounded from the
-# entrypoint) and `require_opencode` (foreground, same entrypoint, same
-# launch) write $HARNESS_CURL_ROOT/opencode/bin/opencode. Only the first one
-# ever took this lock, so the mutex was ONE-SIDED: the guarded background
-# updater could be rewriting the binary underneath the unguarded foreground
-# installer. Extracted here so the second writer can take the SAME lock
-# rather than inventing a second discipline.
-harness_update_lock_path() {
-    echo "$HOME/.cache/tillandsias-project/npm-update.lock"
-}
-
-# Returns 0 when this process now HOLDS the lock, 1 when another live holder
-# has it. Reclaims a leak older than an hour: a real updater finishes in
-# minutes, and these locks live on the PERSISTENT volume, where one leak used
-# to disable updates forever.
-harness_update_lock_acquire() {
-    local lock
-    lock="$(harness_update_lock_path)"
-    mkdir -p "$(dirname "$lock")" 2>/dev/null
-    if mkdir "$lock" 2>/dev/null; then
-        return 0
-    fi
-    if [ -d "$lock" ] && [ -n "$(find "$lock" -maxdepth 0 -mmin +60 2>/dev/null)" ]; then
-        trace_lifecycle "harness" "reclaiming stale npm-update lock (leaked pre-fix)"
-        rm -rf "$lock"
-        mkdir "$lock" 2>/dev/null || return 1
-        return 0
-    fi
-    return 1
-}
-
-harness_update_lock_release() {
-    rm -rf "$(harness_update_lock_path)" 2>/dev/null || true
-}
-
-# Order 805-yzhw: bounded wait for a sibling harness installer.
-#
-# harness_update_lock_acquire is non-blocking by design, which left the loser
-# with only two options: race the winner, or skip. Racing is what broke the
-# lane — two 127MB vendor extractions into one 256MB tmpfs both die with
-# ENOSPC and neither cleans up. Waiting turns the race into serialization,
-# which is the entire point of holding a mutex.
-#
-# The ceiling is deliberate and small. The winner is installing the SAME
-# binary this caller wants, so waiting is useful; but a lane must never hang
-# on a harness update, so a caller that times out falls through to whatever is
-# already cached (see require_opencode). Override with
-# TILLANDSIAS_HARNESS_LOCK_WAIT_SECS in fixtures.
-harness_update_lock_wait_acquire() {
-    local budget="${1:-${TILLANDSIAS_HARNESS_LOCK_WAIT_SECS:-180}}"
-    local waited=0
-    while :; do
-        if harness_update_lock_acquire; then
-            [ "$waited" -gt 0 ] && trace_lifecycle "harness" "acquired the harness-update lock after waiting ${waited}s for a sibling installer"
-            return 0
-        fi
-        [ "$waited" -ge "$budget" ] && return 1
-        sleep 2
-        waited=$((waited + 2))
-    done
-}
 
 ensure_forge_harnesses() {
     # Avoid a concurrent npm join race — only the first process runs npm.
@@ -2438,13 +2383,12 @@ ensure_forge_harnesses() {
     local update_stamp="$HOME/.cache/tillandsias-project/harness-update-stamp"
     date +%s > "$update_stamp" 2>/dev/null || true
 
-    # Official vendor installers are the source of truth for OpenCode and
-    # Claude. They write only into the persistent harness-curl cache. OpenCode
-    # is attempted every launch; Claude may use its bounded, version-matched
-    # currentness record so a recent warm launch performs zero network work.
-    if declare -F curl_install_opencode >/dev/null 2>&1; then
-        curl_install_opencode || trace_lifecycle "harness" "opencode curl refresh failed (using cache)"
-    fi
+    # The official vendor curl installer is the source of truth for Claude,
+    # writing only into the persistent harness-curl cache; a bounded,
+    # version-matched currentness record lets a recent warm launch perform
+    # zero network work. OpenCode left the curl channel 2026-08-31 (operator
+    # ruling; its installer could never populate the curl cache while the
+    # npm binary was on PATH) — it is npm on-demand via _require_harness.
     if declare -F curl_install_claude >/dev/null 2>&1; then
         curl_install_claude || trace_lifecycle "harness" "claude curl refresh failed (using cache)"
     fi
@@ -2452,9 +2396,10 @@ ensure_forge_harnesses() {
     # Update each harness to latest. We use `npm install` (not `npm update`) so
     # a missing or removed package is installed rather than silently skipped.
     # Uses $NPM_CONFIG_PREFIX (persistent cache, set in lib-common.sh).
-    # opencode and claude-code left this list 2026-07-21 (order 459): they
-    # are curl-managed at every launch by require_opencode/require_claude
-    # (official vendor installers, persistent-cache backed). Only the
+    # claude-code left this list 2026-07-21 (order 459): curl-managed at
+    # every launch by require_claude. opencode left it the same day and
+    # left the curl channel too (2026-08-31): _require_harness installs it
+    # on demand — do NOT re-add it here (the order-284 npm@latest class).
     # npm-channel harnesses remain here.
     local pkg bin lg
     for pkg in "@fission-ai/openspec" "@openai/codex"; do
@@ -2524,7 +2469,7 @@ ensure_forge_harnesses() {
     # this function alone (test-harness-rollback.sh) stay set -u clean.
     local floor_curl_root="${HARNESS_CURL_ROOT:-$HOME/.cache/tillandsias-project/harness-curl}"
     if [ "$any_harness" = "0" ]; then
-        if [ -x "$floor_curl_root/opencode/bin/opencode" ] || [ -x "$floor_curl_root/claude/bin/claude" ]; then
+        if [ -x "$floor_curl_root/claude/bin/claude" ]; then
             any_harness=1
         fi
     fi
@@ -2693,14 +2638,19 @@ harness_missing_fatal() {
     exit 1
 }
 
-# ── Curl-installed harnesses (order 459) ───────────────────────────────
+# ── Curl-installed harnesses (order 459; opencode retired 2026-08-31) ──
 # @trace spec:default-image
-# Operator directive 2026-07-21: Claude Code and OpenCode come from their
-# OFFICIAL vendor curl installers at CONTAINER LAUNCH — not npm@latest (the
-# order-284 rollback class: the npm channel repeatedly broke or lagged the
-# real releases, which is why order 431 wanted a pin) and not brew (Linux is
+# Operator directive 2026-07-21: Claude Code comes from its OFFICIAL vendor
+# curl installer at CONTAINER LAUNCH — not npm@latest (the order-284
+# rollback class: the npm channel repeatedly broke or lagged the real
+# releases, which is why order 431 wanted a pin) and not brew (Linux is
 # caskless for the siblings; attestation needs a token injection that drifts
-# the credential-free spec, order 435). IMAGE BUILD time cannot curl — the
+# the credential-free spec, order 435). OpenCode ALSO lived here 2026-07-21
+# to 2026-08-31, but its vendor installer's check_version() exits 0 on any
+# PATH-visible opencode without consulting OPENCODE_INSTALL_DIR — with the
+# npm binary first on PATH the curl lane could never populate its cache
+# (proven from upstream source; operator ruling: retire) — so opencode is
+# npm on-demand via _require_harness. IMAGE BUILD time cannot curl — the
 # enclave network/proxy does not exist during `podman build` (the original
 # reason these installers "failed in the Containerfile") — so the install
 # runs at LAUNCH with ephemerality + idempotency semantics:
@@ -2714,153 +2664,6 @@ harness_missing_fatal() {
 #     posture as the npm channel it replaces.
 # Codex/Antigravity stay on npm for now (operator: "maybe later").
 HARNESS_CURL_ROOT="$HOME/.cache/tillandsias-project/harness-curl"
-
-opencode_curl_last_good_path() {
-    printf '%s/opencode/last-good/opencode\n' "$HARNESS_CURL_ROOT"
-}
-
-opencode_record_curl_last_good() {
-    local bin_path="$1" last_good tmp
-    harness_probe opencode "$bin_path" || return 1
-    last_good="$(opencode_curl_last_good_path)"
-    mkdir -p "$(dirname "$last_good")" || return 1
-    tmp="${last_good}.tmp.$$"
-    if install -m 0755 "$bin_path" "$tmp" 2>/dev/null \
-        && mv -f -- "$tmp" "$last_good" 2>/dev/null; then
-        return 0
-    fi
-    rm -f -- "$tmp" 2>/dev/null || true
-    return 1
-}
-
-opencode_restore_curl_last_good() {
-    local target="$1" last_good
-    last_good="$(opencode_curl_last_good_path)"
-    [ -x "$last_good" ] || return 1
-    install -m 0755 "$last_good" "$target" 2>/dev/null || return 1
-    harness_probe opencode "$target"
-}
-
-# ORDER 797-t9m7. TWO DIFFERENT FAILURES USED TO PRINT THE SAME LINE, and the
-# more serious one printed a sentence that was not true.
-#
-# This function announced "rolling back to last-good" BEFORE checking whether a
-# last-good existed. On a cold cache nothing had ever been recorded, so the
-# harness reported a rollback to a binary that was never there — measured on
-# yoga across three cold launches (2026-08-17), where
-# $HARNESS_CURL_ROOT/opencode/bin stayed empty every time.
-#
-# It was also emitted at trace_lifecycle level, which returns early unless
-# TILLANDSIAS_DEBUG is set. So in normal operation the curl provisioning path
-# failed completely silently, on every launch, while the lane kept working
-# because opencode resolves from the NPM harness path instead
-# (NPM_CONFIG_PREFIX/bin is earlier on PATH). A failure invisible in normal
-# operation and mis-described in debug output is the fail-loud defect this
-# packet is filed under.
-#
-# WHAT THIS DOES NOT CHANGE, deliberately. Which binary the forge executes is
-# untouched: opencode still comes from npm, exactly as before. Retiring the
-# curl path or making it succeed both alter fleet provisioning and were left to
-# the per-host-kind treatment 793-rb9u is getting — yoga's 2026-08-17 judgement,
-# and it still holds. This slice only makes the existing outcome legible.
-opencode_validate_or_rollback() {
-    local bin="$1" last_good
-    OPENCODE_ROLLBACK_USED=0
-    if [ -x "$bin" ] && harness_probe opencode "$bin"; then
-        opencode_record_curl_last_good "$bin" >/dev/null 2>&1 || true
-        return 0
-    fi
-    last_good="$(opencode_curl_last_good_path)"
-    if [ -x "$last_good" ]; then
-        trace_lifecycle "harness" "opencode refresh FAILED auth contract — rolling back to last-good"
-        if opencode_restore_curl_last_good "$bin"; then
-            OPENCODE_ROLLBACK_USED=1
-            trace_lifecycle "harness" "opencode rollback to last-good OK"
-            return 0
-        fi
-        # A recorded last-good that will not restore is worse than none: the
-        # snapshot exists and is not usable, so say so rather than folding it
-        # into the empty-cache case below.
-        echo "[harness] WARNING: opencode rollback FAILED — a curl-side last-good exists at $last_good but could not be restored or did not pass the auth contract (order 797-t9m7)." >&2
-        return 1
-    fi
-    # THE EMPTY-CACHE CASE, which is the one that was lying. There is no
-    # last-good because the curl path has never once succeeded here.
-    echo "[harness] WARNING: opencode curl-install produced no usable binary and there is NO last-good to roll back to ($last_good does not exist). The curl provisioning path is not populating ${HARNESS_CURL_ROOT}/opencode/bin. This is not fatal: opencode runs from the npm harness path, which carries its own last-good and auth/render contracts. It means the SECOND provisioning path is inert — see order 797-t9m7 for the retire-or-repair decision." >&2
-    return 1
-}
-
-# Order 805-yzhw (secondary defect). curl_install_opencode removes its OWN two
-# temp files but knows nothing about the tree the VENDOR script creates —
-# /tmp/opencode_install_<pid>, ~127MB extracted. The vendor cleans it on
-# success and leaves it on failure, so on the forge's 256MB /tmp one failed
-# install permanently poisons the tmpfs for the container's remaining life and
-# no retry inside that container can recover.
-#
-# Two belts, because we do not control the vendor script: point TMPDIR at a
-# private directory we delete unconditionally, and sweep any opencode_install_*
-# tree left in /tmp that is too old to belong to an install still running. The
-# age bound is what makes the sweep safe under concurrency — it can never
-# remove a sibling's in-flight extraction.
-opencode_vendor_scratch_clean() {
-    local scratch="${1:-}"
-    [ -n "$scratch" ] && rm -rf "$scratch" 2>/dev/null
-    find /tmp -maxdepth 1 -type d -name 'opencode_install_*' -mmin +5 \
-        -exec rm -rf {} + 2>/dev/null
-    return 0
-}
-
-curl_install_opencode() {
-    OC_BIN=""
-    local dir="$HARNESS_CURL_ROOT/opencode/bin" tmp errlog bin scratch
-    local refresh_ok=0
-    mkdir -p "$dir" 2>/dev/null || true
-    bin="$dir/opencode"
-    # Snapshot only a binary that passes liveness, flag, and the isolated
-    # OPENCODE_AUTH_CONTENT/no-auth.json contract. This survives an official
-    # installer replacing the cached binary with a release that starts but
-    # silently dropped the undocumented credential primitive.
-    if [ -x "$bin" ]; then
-        opencode_record_curl_last_good "$bin" >/dev/null 2>&1 || true
-    fi
-    tmp="$(mktemp /tmp/opencode-install.XXXXXX 2>/dev/null || echo /tmp/opencode-install.sh)"
-    errlog="$(mktemp /tmp/opencode-install-log.XXXXXX 2>/dev/null || echo /tmp/opencode-install.err)"
-    # OPENCODE_INSTALL_DIR is the installer's documented target override; the
-    # binary downloads from GitHub releases (opencode.ai + github.com are
-    # both in the egress allowlist).
-    scratch="$(mktemp -d /tmp/oc-vendor.XXXXXX 2>/dev/null || echo "/tmp/oc-vendor.$$")"
-    if env -u OPENCODE_AUTH_CONTENT \
-        curl -fsSL --max-time 60 https://opencode.ai/install -o "$tmp" 2>"$errlog" \
-       && env -u OPENCODE_AUTH_CONTENT OPENCODE_INSTALL_DIR="$dir" TMPDIR="$scratch" \
-        bash "$tmp" >>"$errlog" 2>&1 \
-       && [ -x "$bin" ]; then
-        refresh_ok=1
-    fi
-    opencode_vendor_scratch_clean "$scratch"
-
-    if opencode_validate_or_rollback "$bin"; then
-        if [ "${OPENCODE_ROLLBACK_USED:-0}" -eq 1 ]; then
-            trace_lifecycle "harness" "opencode refresh rejected — reusing last-good ($("$bin" --version 2>/dev/null || echo '?'))"
-            rm -f "$tmp" "$errlog" 2>/dev/null || true
-        elif [ "$refresh_ok" -eq 1 ]; then
-            trace_lifecycle "harness" "opencode curl-install OK ($("$bin" --version 2>/dev/null || echo '?'))"
-            rm -f "$tmp" "$errlog" 2>/dev/null || true
-        else
-            trace_lifecycle "harness" "opencode curl-install unreachable — reusing cached ($("$bin" --version 2>/dev/null || echo '?'))"
-            rm -f "$tmp" 2>/dev/null || true
-        fi
-        OC_BIN="$bin"
-        return 0
-    fi
-
-    if [ ! -x "$bin" ]; then
-        trace_lifecycle "harness" "opencode curl-install FAILED, no cached binary: $(tail -3 "$errlog" 2>/dev/null | tr '\n' ' ' | cut -c1-300)"
-    else
-        trace_lifecycle "harness" "opencode auth contract FAILED and no usable last-good binary remains"
-    fi
-    rm -f "$tmp" 2>/dev/null || true
-    return 1
-}
 
 claude_probe() {
     # Claude's native launcher checks for and may install updates even for a
@@ -3175,50 +2978,16 @@ curl_install_claude() {
 }
 
 require_opencode() {
-    # Curl channel first (order 459); legacy npm as the transition fallback
-    # so a half-warm cache from the old channel still launches.
-    #
-    # Order 626-p4xd: take the SAME lock ensure_forge_harnesses takes. Both
-    # run from this entrypoint on one launch — one backgrounded, this one
-    # foreground — and both write $HARNESS_CURL_ROOT/opencode/bin/opencode.
-    # Guarding only the background writer left the mutex one-sided.
-    #
-    # Failing to get the lock is NOT fatal here: the other holder is
-    # installing the same binary, so fall through and use whatever it
-    # produced. Blocking the lane on a harness update would be worse than the
-    # race — this path exists to make the lane launchable.
-    # ORDER 805-yzhw: THE LOCK NOW GATES THE INSTALL, NOT JUST ITS RELEASE.
-    # `held` used to guard only the two release calls while curl_install_opencode
-    # ran unconditionally — so the loser logged "deferring to the in-flight
-    # harness updater" and then installed anyway. Two 127MB vendor extractions
-    # into the forge's 256MB /tmp tmpfs: one fits, two do not. Both died with
-    # `tar: Wrote only 2560 of 10240 bytes`, neither cleaned up, and the lane
-    # ended at a "Press any key to exit" prompt that reads as a hang. The mutex
-    # faithfully RECORDED a race it did not prevent.
-    local held=0
-    if harness_update_lock_acquire; then
-        held=1
-    else
-        trace_lifecycle "harness" "opencode install waiting for the in-flight harness updater (shared lock held elsewhere)"
-        harness_update_lock_wait_acquire && held=1
-    fi
-
-    if [ "$held" -eq 1 ]; then
-        if curl_install_opencode && [ -n "${OC_BIN:-}" ] && [ -x "$OC_BIN" ]; then
-            harness_update_lock_release
-            return 0
-        fi
-        harness_update_lock_release
-    else
-        # Waited out the budget and the sibling still holds it. Do NOT install
-        # concurrently — that is the defect. Use what the sibling produced.
-        trace_lifecycle "harness" "opencode install SKIPPED after the wait budget; a sibling installer still holds the lock, so using the cached binary rather than racing it into a full tmpfs (805-yzhw)"
-        local cached="$HARNESS_CURL_ROOT/opencode/bin/opencode"
-        if [ -x "$cached" ] && harness_probe opencode "$cached"; then
-            OC_BIN="$cached"
-            return 0
-        fi
-    fi
+    # npm on-demand is the ONLY channel (operator ruling 2026-08-31,
+    # opencode-curl-install-never-populates-its-cache): the vendor curl
+    # installer's own check_version() exits 0 on any PATH-visible opencode
+    # without consulting OPENCODE_INSTALL_DIR, so the curl lane could
+    # structurally never populate its cache while the npm binary existed —
+    # proven from the upstream installer source by yoga, measured by
+    # lenovinha. _require_harness installs opencode-ai only when the binary
+    # is missing and carries its own bounded wait on the npm-update lock,
+    # so the 626-p4xd/805-yzhw double-extraction race this function used to
+    # choreograph around cannot recur: there is one writer left.
     OC_BIN="$(_require_harness opencode opencode-ai opencode)"
     return 0
 }

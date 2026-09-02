@@ -6,7 +6,11 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 2
 ROOT="$PWD"
 fail=0
 ok()  { echo "ok: $1"; }
-bad() { echo "FAIL: $1" >&2; fail=1; }
+# 956-llei: the FINAL line names the failed arms — the litmus consumes this
+# fixture through `2>&1 | tail -1`, so an arm named only on an earlier
+# stderr line is an arm nobody sees.
+failed_arms=""
+bad() { echo "FAIL: $1" >&2; fail=1; failed_arms="${failed_arms:+$failed_arms | }$1"; }
 
 . "$ROOT/scripts/lib/tool-dispatch.sh" || { echo "FAIL: cannot source the lib" >&2; exit 1; }
 
@@ -279,5 +283,5 @@ if [ "$fail" -eq 0 ]; then
     echo "ok:tool-dispatch-lib:all"
     exit 0
 fi
-echo "fail:tool-dispatch-lib"
+echo "fail:tool-dispatch-lib: ${failed_arms}"
 exit 1

@@ -1,4 +1,5 @@
 <!-- @trace spec:host-guest-transport -->
+<!-- # freshness: auditor=linux-macuahuitl-fable51-20260902 date=2026-09-02 verdict=updated scope=facade types, backends and litmus pins re-validated against the tree; two claims corrected (see plan/issues/freshness-audit-host-guest-transport-2026-09-02.md) -->
 # host-guest-transport Specification
 
 ## Status
@@ -18,9 +19,12 @@ to guest" implementations. Two primitives cover every need the operator named:
 
 The facade contract (`GuestTransport` trait, `GuestEndpoint`, `ExecRequest`,
 `ExecOutput`, `ExecChunk`) lives in `tillandsias-control-wire::guest_transport`.
-Per-platform backends implement it: Linux AF_VSOCK + Unix in `control-wire`
-(feature `vsock`); macOS VZ virtio-vsock and Windows WSL/hvsock in
-`tillandsias-vm-layer`. Both primitives ride the unchanged wire protocol
+Per-platform backends implement it: macOS VZ virtio-vsock (`vm-layer::vz`,
+`impl GuestTransport for VzRuntime`) and Windows WSL/hvsock
+(`vm-layer::transport_windows`, `WslGuestTransport`) are landed; the Linux
+AF_VSOCK + Unix backend is NOT yet a `GuestTransport` impl — the wire lives in
+`control-wire` (feature `vsock`), the facade impl does not (freshness audit
+2026-09-02). Both primitives ride the unchanged wire protocol
 (`encode`/`decode`, 4-byte BE length prefix, `WIRE_VERSION`, `MAX_MESSAGE_BYTES`,
 `Hello`/`HelloAck`).
 
@@ -70,7 +74,10 @@ rejected with a typed error; `WIRE_VERSION` changes MUST remain additive.
 Each backend SHALL pass the shared conformance fixtures (InteractiveStream echo +
 half-close; ExecOneShot stdout/stderr/exit + stdin + streaming + version-skew
 rejection). The fixtures are identical across platforms so behavior is provably
-1:1. Pinned by `litmus:host-guest-transport-conformance` (per-host).
+1:1. Exercised by the Rust conformance fixtures in
+`tillandsias-vm-layer::transport_conformance` (per backend, in-crate tests); no
+litmus test binds them yet — the name `litmus:host-guest-transport-conformance`
+this spec used to cite did not exist (freshness audit 2026-09-02, 709-in2f shape).
 
 ## Nomenclature (canonical)
 

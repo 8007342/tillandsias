@@ -2538,6 +2538,39 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Litmus scalar-unescape check passed"
 
+    # 956-llei: the kill-time adjudicator must diff THIS cgroup's cpu.pressure
+    # stall counter across the step's own window and say CONTENDED / NOT
+    # contended / UNCLASSIFIED — never the retired host-wide load1-vs-ncpus
+    # rule, which judged forge steps by the host's runqueue. Three arms, run
+    # through the real runner in a temp root with injected counters.
+    _step "Checking the kill-time adjudicator diffs cpu.pressure (956-llei)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-kill-adjudicator.sh" 2>&1; then
+        _error "the litmus kill-time adjudicator does not classify by cpu.pressure diff (956-llei) — see the verdict line above"
+        exit 1
+    fi
+    _info "Litmus kill-time adjudicator check passed"
+
+    # 956-llei: a `phase: retired` litmus runs only under an explicit
+    # `--phase retired`; the "all" default (which --diff-scope fails closed
+    # into) must skip it with the retired reason. Two arms through the real
+    # runner in a temp root; the retired probe fails loudly if it ever runs.
+    _step "Checking retired-phase litmus tests run only when asked for (956-llei)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-retired-phase-skip.sh" 2>&1; then
+        _error "the litmus runner executes retired-phase tests under the default phase filter (956-llei) — see the verdict line above"
+        exit 1
+    fi
+    _info "Litmus retired-phase check passed"
+
+    # 956-llei: a litmus step that reads stdin must not swallow the rest of its
+    # spec's bound test list (the instant sweep ran 1 of 29 ci-release tests
+    # and reported PASS before the runner fed steps from /dev/null).
+    _step "Checking a stdin-reading litmus step does not eat its spec's test list (956-llei)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-stdin-does-not-eat-the-spec-list.sh" 2>&1; then
+        _error "a stdin-reading litmus step swallows the rest of its spec's test list (956-llei) — see the verdict line above"
+        exit 1
+    fi
+    _info "Litmus stdin isolation check passed"
+
     # Order 881-29me. A `plan/issues/` audit cites its evidence and nothing
     # checked those citations still resolved. Measured in one document: every
     # factual claim re-verified TRUE while every `file:line` citation
@@ -2599,12 +2632,26 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Stranded-sweep predicate fixture passed"
 
-    _step "Checking the opencode rollback failure is loud and accurate (797-t9m7)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-opencode-rollback-is-loud.sh" 2>&1; then
-        _error "opencode_validate_or_rollback stopped distinguishing its three outcomes (797-t9m7) — see the failing case above"
+    _step "Checking the inference pull-failure classifier (525)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-inference-pull-failure-classification.sh" 2>&1; then
+        _error "a TLS-trust pull failure stopped being distinguishable from an empty cache (525) — see the failing case above"
         exit 1
     fi
-    _info "Opencode rollback loudness fixture passed"
+    _info "Inference pull-failure classifier passed"
+
+    _step "Checking backgrounded entrypoint jobs redirect stderr (702-6jza D4)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-backgrounded-jobs-redirect-stderr.sh" 2>&1; then
+        _error "a backgrounded agent-entrypoint job redirects only fd 1 — its stderr lands on a live TUI (702-6jza D4)"
+        exit 1
+    fi
+    _info "Backgrounded-job stderr check passed"
+
+    _step "Checking bound litmus files are RUNNABLE, not merely parseable (958-b36m)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-bound-litmus-is-runnable.sh" 2>&1; then
+        _error "the bound-but-unrunnable check regressed (958-b36m) — see the failing case above"
+        exit 1
+    fi
+    _info "Bound-litmus-runnable fixture passed"
 
     _step "Checking plan fragments use keys the fold reads (944-vim8)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-fragment-keys-are-read.sh" 2>&1; then

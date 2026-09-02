@@ -29,7 +29,11 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 2
 GUARD="$PWD/scripts/check-daily-maintenance.sh"
 fail=0
 ok()  { echo "ok: $1"; }
-bad() { echo "FAIL: $1" >&2; fail=1; }
+# 956-llei: the FINAL line must name the failed arms — the litmus consumes
+# this fixture through `2>&1 | tail -1`, so an arm named only in an earlier
+# stderr line is an arm nobody sees.
+failed_arms=""
+bad() { echo "FAIL: $1" >&2; fail=1; failed_arms="${failed_arms:+$failed_arms | }$1"; }
 
 W="$(mktemp -d "${TMPDIR:-/tmp}/daily-boundary.XXXXXX")"
 trap 'rm -rf "$W"' EXIT
@@ -150,9 +154,23 @@ su="$(sed -n 's/.*utc=\([0-9-]*\)T.*/\1/p' "$S")"
 # the very input arm 2 passes. Without this, arm 2 could pass because the test
 # machine happens to sit at UTC.
 PRE="$W/pre-895-guard.sh"
-sed 's/^TODAY="${TILLANDSIAS_DAILY_MAINTENANCE_TODAY:-$(date -u +%Y-%m-%d/TODAY="${TILLANDSIAS_DAILY_MAINTENANCE_TODAY:-$(date +%Y-%m-%d/' \
+# 956-llei: the reconstruction must be evaluated AT THE BOUNDARY INSTANT, not
+# at the real "now" — with a live clock, every zone is weeks past the 08-25
+# marker, both sides say stale, they AGREE, and the control fails for the
+# wrong reason (it did, unobserved, until the runner's spec-list defect was
+# fixed and this test actually ran). `date -d @<epoch>` honours TZ, so the
+# pre-fix local-date guard reads 08-25 in Los Angeles and 08-26 in Tokyo.
+_boundary_epoch=1787701800   # 2026-08-25T23:50:00Z
+# Portable epoch->local-date: BSD `date -r <epoch>` first (macOS bash 3.2 lane);
+# GNU `date -r` means file mtime and fails on a bare number, so the GNU form
+# is the fallback. The injected text runs inside the reconstructed guard.
+# Injected WITHOUT its own $( ): the guard's line continues with
+# ` 2>/dev/null || echo unknown)`, so the replacement must stay inside that
+# one substitution as an || chain.
+_at="date -r ${_boundary_epoch} +%Y-%m-%d 2>\/dev\/null || date -d @${_boundary_epoch} +%Y-%m-%d"   # gnu-date: ok (BSD -r tried first; -d is the GNU fallback)
+sed "s/^TODAY=\"\${TILLANDSIAS_DAILY_MAINTENANCE_TODAY:-\$(date -u +%Y-%m-%d/TODAY=\"\${TILLANDSIAS_DAILY_MAINTENANCE_TODAY:-\$(${_at}/" \
     "$GUARD" > "$PRE"
-if ! grep -q 'date +%Y-%m-%d' "$PRE"; then
+if ! grep -q "date -r ${_boundary_epoch} +%Y-%m-%d" "$PRE"; then
     bad "could not reconstruct the pre-fix guard — the TODAY= line moved, so this control tests nothing"
 else
     # Pick an instant where local and UTC days differ in BOTH directions by
@@ -171,5 +189,5 @@ if [ "$fail" -eq 0 ]; then
     echo "ok:daily-maintenance-day-boundary:all"
     exit 0
 fi
-echo "fail:daily-maintenance-day-boundary"
+echo "fail:daily-maintenance-day-boundary: ${failed_arms}"
 exit 1

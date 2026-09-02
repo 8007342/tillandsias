@@ -18,8 +18,25 @@
 #   inference_state=<ready|not-ready> inference_models=<N> inference_warm=<csv|-> inference_reason=<name|->
 #
 # Reason vocabulary (CLOSED SET — there is deliberately no "starting up"):
-#   no-models            endpoint answers, zero models cached (preload pending,
-#                        a lazy/off preload policy, or a failed pull)
+#   no-models            endpoint answers, zero models cached. THREE CAUSES
+#                        share this token — preload pending, a lazy/off preload
+#                        policy, or a FAILED PULL — and this probe cannot tell
+#                        them apart, because it speaks plain HTTP to the local
+#                        endpoint while a pull fails on the container's OUTBOUND
+#                        path. Order 525: a TLS-trust failure used to be
+#                        indistinguishable from an empty cache. The engine now
+#                        classifies its own pull failures into stable tokens
+#                        (pull-failed-tls-untrusted / -unreachable / -not-found
+#                        / -other, images/inference/entrypoint.sh
+#                        tillandsias_classify_pull_failure), so the two states
+#                        ARE distinguishable — by reading the engine's log for a
+#                        `reason=pull-failed-*` line, which the detail string
+#                        below now names explicitly.
+#                        STILL OPEN: the probe cannot report that token itself.
+#                        It runs in the forge; the evidence is in the inference
+#                        container, and no channel carries it across. Adding a
+#                        reason here that nothing can set would be a vocabulary
+#                        entry with no producer, so it is deliberately NOT added.
 #   endpoint-unreachable curl 6/7 — DNS or connect refused
 #   endpoint-timeout     curl 28 — probe deadline exceeded
 #   endpoint-http-error  curl 22 — served a non-2xx
@@ -84,7 +101,7 @@ tillandsias_inference_state() {
         TILLANDSIAS_INFERENCE_STATUS="READY (models=${TILLANDSIAS_INFERENCE_MODELS}, warm=${TILLANDSIAS_INFERENCE_WARM})"
     else
         TILLANDSIAS_INFERENCE_REASON="no-models"
-        TILLANDSIAS_INFERENCE_STATUS="NOT-READY (no-models: endpoint is serving but no model is cached — preload pending, a lazy/off preload policy, or a failed pull; see \`podman logs tillandsias-inference\`)"
+        TILLANDSIAS_INFERENCE_STATUS="NOT-READY (no-models: endpoint is serving but no model is cached — preload pending, a lazy/off preload policy, or a failed pull. THESE ARE DIFFERENT FAULTS: run \`podman logs tillandsias-inference | grep reason=pull-failed\` — a \`reason=pull-failed-tls-untrusted\` line means the enclave CA is not trusted by the engine, NOT an empty cache (order 525))"
     fi
     _tillandsias_inference_emit
     return 0

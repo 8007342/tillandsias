@@ -36,10 +36,12 @@ critical_path:
     success_pattern: "PASS: opencode render-probe fixture"
     failure_pattern: "FAIL:"
 
-  - step: "Req: the gate is wired where all three consumers reach it"
-    # record-last-good, validate-or-rollback and restore-last-good all call
-    # harness_probe. Wiring the contract there — rather than at one call site
-    # — is what stops a broken binary being certified as last-good.
+  - step: "Req: the gate is wired where every consumer reaches it"
+    # Every prober of an opencode binary calls harness_probe (post-2026-08-31
+    # that is _require_harness and harness_record_last_good; the three
+    # curl-lane last-good consumers retired with that lane). Wiring the
+    # contract inside harness_probe — rather than at one call site — is what
+    # stops a broken binary being certified as last-good.
     command: "mf_stage prod 0 OUT -- awk '/^harness_probe\\(\\)/,/^}/' images/default/lib-common.sh && mf_holds OUT 'opencode_render_contract_cached' && echo 'ok: render contract inside harness_probe'"
     timeout_ms: 10000
     expected_behavior: "ok: render contract inside harness_probe"
@@ -49,12 +51,17 @@ critical_path:
     timeout_ms: 10000
     expected_behavior: "ok: update guards present"
 
-  - step: "Req: the harness update lock has TWO takers, not one"
-    # The mutex was one-sided: ensure_forge_harnesses took it while
-    # require_opencode wrote the same binary in the foreground without it.
-    command: "n=$(grep -c 'harness_update_lock_acquire' images/default/lib-common.sh); [ \"$n\" -ge 2 ] && echo \"ok: shared lock taken by $n callers\" || { echo \"FAIL: harness update lock has $n taker(s)\"; exit 1; }"
+  - step: "Req: one opencode writer — the two-taker mutex retired with the second writer"
+    # HISTORY: the mutex was one-sided (626-p4xd) — ensure_forge_harnesses
+    # took it while require_opencode wrote the same binary foreground without
+    # it — then two-sided (805-yzhw). On 2026-08-31 the opencode curl lane
+    # retired entirely (operator ruling), which removed the SECOND WRITER:
+    # the only remaining install site is _require_harness's only-when-missing
+    # npm install, gated on the npm-update lock. Two takers of a shared lock
+    # would now mean a second writer came back — pin the inverse.
+    command: "! grep -q 'harness_update_lock_acquire' images/default/lib-common.sh && awk '/^_require_harness\\(\\)/,/^}/' images/default/lib-common.sh | grep -q 'npm-update.lock' && echo 'ok: single-writer, lock-waited'"
     timeout_ms: 10000
-    expected_behavior: "ok: shared lock taken by"
+    expected_behavior: "ok: single-writer, lock-waited"
 
   # NO sibling-regression step here on purpose. litmus:harness-rollback-shape
   # and litmus:harness-byte-cheap already run those fixtures in this same
@@ -75,9 +82,11 @@ observability:
 rollback:
   on_failure: >
     The render gate drifted. harness_probe must call
-    opencode_render_contract_cached so all three consumers
-    (opencode_record_curl_last_good, opencode_validate_or_rollback,
-    opencode_restore_curl_last_good) inherit it; the probe must keep its
-    update guards; and the harness update lock must be taken by BOTH
-    ensure_forge_harnesses and require_opencode.
-  command: "grep -n 'opencode_render_contract\\|harness_update_lock_acquire' images/default/lib-common.sh | head -12"
+    opencode_render_contract_cached so every prober (_require_harness,
+    harness_record_last_good) inherits it, and the probe must keep its
+    update guards. Do NOT reintroduce harness_update_lock_* or a second
+    opencode writer — the curl lane and its two-taker mutex retired
+    2026-08-31 (operator ruling): _require_harness is the ONLY install
+    site, serialized on the npm-update lock, and step 4 of this fixture
+    fails on any resurrection.
+  command: "grep -n 'opencode_render_contract\\|npm-update.lock' images/default/lib-common.sh | head -12"

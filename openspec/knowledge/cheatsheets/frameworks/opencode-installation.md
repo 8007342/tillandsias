@@ -1,5 +1,14 @@
 # OpenCode Installation
 
+> **This project does NOT use the official curl installer** (operator ruling
+> 2026-08-31, packet opencode-curl-install-never-populates-its-cache): the
+> installer's `check_version()` exits 0 on any PATH-visible `opencode` without
+> consulting `OPENCODE_INSTALL_DIR`, so with the npm binary first on PATH it
+> can never populate a custom install dir. Forges get opencode via
+> `_require_harness` (npm on-demand, only-when-missing) in
+> `images/default/lib-common.sh`. The upstream facts below remain true of the
+> installer itself.
+
 ## Official Installer
 
 - `curl -fsSL https://opencode.ai/install | bash` — handles install AND update

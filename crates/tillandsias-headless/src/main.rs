@@ -4634,7 +4634,18 @@ fn build_inference_run_args(
         "--security-opt=no-new-privileges".into(),
         "--security-opt=label=disable".into(),
         "--userns=keep-id".into(),
-        "--pids-limit=128".into(),
+        // 811-28eh: the pids cgroup counts THREADS, and an ollama tree is
+        // threads — daemon 29 + one llama-server runner per resident model at
+        // 31-67 each (measured macuahuitl 2026-09-02, RTX A5000, two embedding
+        // clients: 131-139 with two runners). At 128 the runner's std::thread
+        // creation got EAGAIN and it aborted ("what(): Resource temporarily
+        // unavailable"), the daemon relayed the dead runner as HTTP 400
+        // (tokenize/detokenize "connection reset"), and a daemon that cannot
+        // spawn a thread exits 2 through Go's runtime fatal — the packet's
+        // silent exit(2). pids.events read "max 41" on the live cgroup. 1024 is
+        // ~8x the measured peak with headroom for five resident runners; the
+        // forge's 4096 (959-fpc5) is for a different tree shape.
+        "--pids-limit=1024".into(),
         "--env".into(),
         "OLLAMA_DEBUG=1".into(),
         "--env".into(),
@@ -8949,6 +8960,98 @@ fn select_github_login_input_mode(
     )
 }
 
+/// ORDER 759-vceg. Derive `owner/repo` from a git origin URL, for the
+/// push-AUTHORIZATION probe.
+///
+/// Accepts the two shapes an operator's origin actually takes — `https://` and
+/// `git@host:` — and refuses anything that is not a GitHub repository path,
+/// because a probe against the wrong repo answers a question nobody asked.
+fn github_owner_repo_from_origin(origin: &str) -> Option<String> {
+    let trimmed = origin.trim();
+    // The prefixes an operator's origin actually takes. Anything else is not a
+    // GitHub repository path and must yield None, so the caller says "could not
+    // verify" rather than probing some other host.
+    let rest = [
+        "https://github.com/",
+        "http://github.com/",
+        "git@github.com:",
+        "ssh://git@github.com/",
+    ]
+    .iter()
+    .find_map(|prefix| trimmed.strip_prefix(prefix))?;
+    let rest = rest.strip_suffix(".git").unwrap_or(rest);
+    let rest = rest.trim_end_matches('/');
+    let mut parts = rest.split('/');
+    let owner = parts.next()?;
+    let repo = parts.next()?;
+    if owner.is_empty() || repo.is_empty() || parts.next().is_some() {
+        return None;
+    }
+    Some(format!("{owner}/{repo}"))
+}
+
+/// ORDER 759-vceg. The in-container push-authorization probe.
+///
+/// Runs INSIDE the ephemeral login container, exactly where `gh auth status`
+/// already runs, so the token never reaches host disk, argv, or env — the
+/// property the whole login lane is built around. `.permissions.push` is
+/// reported for BOTH classic and fine-grained tokens, which is why it is the
+/// chosen signal.
+fn github_push_authorization_probe_args(container: &str, owner_repo: &str) -> Vec<String> {
+    vec![
+        "exec".to_string(),
+        container.to_string(),
+        "gh".to_string(),
+        "api".to_string(),
+        format!("repos/{owner_repo}"),
+        "--jq".to_string(),
+        ".permissions.push".to_string(),
+    ]
+}
+
+/// ORDER 759-vceg. Classify the probe's output into seed-or-refuse.
+///
+/// THE DEFECT THIS EXISTS FOR. The login flow checked non-emptiness, `gh auth
+/// status`, and a Vault round-trip — every one of which is AUTHENTICATION. None
+/// asked whether the token may PUSH. A fine-grained PAT missing Contents:write
+/// authenticates perfectly as its owner and is denied at push time, which is
+/// how "Permission to 8007342/tillandsias.git denied to 8007342" surfaced hours
+/// into a work cycle on 2026-08-15, long after the credential was seeded.
+///
+/// An UNPARSEABLE answer is refused, not waved through. "I could not tell"
+/// resolving to "seed it anyway" is how the original defect reads to an
+/// operator: a credential accepted with no evidence it works.
+fn github_push_authorization_verdict(owner_repo: &str, probe_stdout: &str) -> Result<(), String> {
+    match probe_stdout.trim() {
+        "true" => Ok(()),
+        "false" => Err(format!(
+            "the pasted token authenticates, but it CANNOT PUSH to {owner_repo}.\n\
+             \n\
+             Missing permission: Contents - Read and write.\n\
+             \n\
+             Nothing was written to Vault; the previous credential (if any) is untouched.\n\
+             \n\
+             Fix the token at https://github.com/settings/personal-access-tokens :\n\
+               - Repository access must INCLUDE {owner_repo}\n\
+               - Contents  - Read and write  (clone, fetch, push)\n\
+               - Metadata  - Read-only       (required by GitHub)\n\
+             \n\
+             Then run the login again. Seeding a token that cannot push moves this\n\
+             failure hours downstream, into the middle of a work cycle (order 759-vceg)."
+        )),
+        other => Err(format!(
+            "could not determine push permission on {owner_repo}: the probe answered {other:?} \
+             rather than true/false.\n\
+             \n\
+             Nothing was written to Vault. This is refused rather than assumed, because a \
+             credential seeded on an unreadable answer is exactly the state order 759-vceg \
+             exists to prevent — it looks seeded and fails at push time.\n\
+             \n\
+             Check that the token can read the repository at all (repository access must \
+             include {owner_repo}, Metadata read-only), then run the login again."
+        )),
+    }
+}
 fn provider_login_exec_args(
     container: &str,
     token_script: &str,
@@ -9201,6 +9304,58 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
                 "containerized {provider_name} authentication verification failed after login: {e}"
             )
         })?;
+    }
+
+    // ORDER 759-vceg. AUTHENTICATION IS NOT AUTHORIZATION, and until here
+    // only authentication had been checked. `gh auth status` above proves
+    // the token is a valid identity; it says nothing about whether that
+    // identity may PUSH to the repository this installation exists to push
+    // to. A fine-grained PAT missing Contents:write passes everything above
+    // and is denied at push time — the 2026-08-15 incident, surfacing hours
+    // after the credential was seeded.
+    //
+    // The probe runs in the SAME ephemeral container as the login itself,
+    // so the token still never reaches host disk, argv, or env.
+    //
+    // WHEN THERE IS NO UPSTREAM TO CHECK AGAINST, say so out loud rather
+    // than skipping quietly. A silent skip is indistinguishable from a
+    // passed check by anyone reading the output, which is the same
+    // ambiguity this packet exists to remove.
+    match read_host_project_origin_url(Path::new("."))
+        .as_deref()
+        .and_then(github_owner_repo_from_origin)
+    {
+        Some(owner_repo) => {
+            let mut probe = podman_command();
+            probe.args(github_push_authorization_probe_args(
+                &container,
+                &owner_repo,
+            ));
+            let probe_out = podman_command_output(probe, debug).map_err(|e| {
+                format!(
+                    "could not check push permission on {owner_repo}: {e}\n\n\
+                         Nothing was written to Vault. The token may be unable to READ the \
+                         repository at all — repository access must include {owner_repo} with \
+                         Metadata read-only (order 759-vceg)."
+                )
+            })?;
+            github_push_authorization_verdict(&owner_repo, &probe_out)?;
+            info!(
+                accountability = true,
+                category = "secrets",
+                spec = "secret-rotation",
+                operation = "github_push_authorization_verified",
+                "token has push permission on {owner_repo}; proceeding to Vault write"
+            );
+        }
+        None => {
+            eprintln!(
+                "NOTE: no GitHub upstream is configured for this checkout, so push \
+                     permission could NOT be verified against a repository. The token is \
+                     being seeded on authentication alone — if it lacks Contents:write, the \
+                     failure will appear at the first push, not here (order 759-vceg)."
+            );
+        }
     }
 
     info!(
@@ -13427,9 +13582,34 @@ fn build_forge_agent_run_args_with_vault(
         .name(forge_container_name_for_mode(project_name, mode))
         .hostname(forge_hostname(project_name))
         .network(ENCLAVE_NET)
-        .pids_limit(512);
+        // 4096, not 512 (667-se87 / 959-fpc5): 512 was reachable in NORMAL
+        // floor-hardware operation — a single vendor-installer fork storm
+        // pinned pids.peak at exactly 512 on two hosts (builds never came
+        // close: measured 3.5-6.6% of the ceiling). 65fe4e766 raised two
+        // sites and missed THIS one — the launcher of every working agent
+        // forge. The rationale travels with EVERY site now; a fix whose
+        // comment rides only some copies makes the missed ones look
+        // intentional.
+        .pids_limit(4096);
     if !non_interactive_prompt {
         spec = spec.interactive().tty();
+        // D3 of order 702-6jza. With --tty, podman injects its DEFAULT
+        // TERM=xterm unless one is set explicitly (container_spec.rs emits
+        // --interactive/--tty and no TERM), so the pinned xterm-256color the
+        // attach wire carries was being dropped at the container boundary for
+        // the Claude, Codex, Antigravity and Maintenance lanes — a downgraded
+        // palette on a live TUI.
+        //
+        // The 2026-07-27 fix for this exact anomaly was applied ONLY to the
+        // OpenCode lane (see the --env TERM push beside its --interactive/--tty
+        // block). This is the same fix, on the lanes it was never carried to:
+        // forward the SESSION's real terminal identity, since this process runs
+        // on the terminal the container renders into. Fallbacks keep a bare env
+        // sane rather than propagating an empty TERM.
+        // @trace plan/issues/bigpickle-macos-terminal-cooperative-debug-2026-07-27.md
+        spec = spec
+            .env("TERM", env_or("TERM", "xterm-256color"))
+            .env("COLORTERM", env_or("COLORTERM", "truecolor"));
     }
     // Order 437: clone-only by default. The host-checkout bind mount at
     // /home/forge/src/<project> is the OPT-IN legacy shared-mount path; without
@@ -13627,6 +13807,25 @@ fn build_forge_agent_run_args_with_vault(
     let raw_instance = std::env::var("TILLANDSIAS_FORGE_INSTANCE").ok();
     let mcp_dir = mcp_socket_host_dir(project_name, raw_instance.as_deref());
     if std::fs::create_dir_all(&mcp_dir).is_ok() {
+        // START THE LANE LISTENER TOO — not just the mount. The legacy tray
+        // path does this (tray/mod.rs build_launch_spec) and this live path
+        // did not, so a project launched AFTER tray startup got a mounted,
+        // env-var'd, EMPTY socket dir: the in-forge host-browser bridge died
+        // with CONNECTION_CLOSED on connect. Found live 2026-09-02 when the
+        // first tillandsias.org forge could not reach publish_local; the
+        // same dual-source-of-truth shape as the pids-limit partial fix
+        // (959-fpc5) — a capability added to one launcher and not the other.
+        // The tray-boot enumeration only covers projects that existed then.
+        // (cfg-gated with the module: the listener implementation lives in
+        // tray/mod.rs, so a no-tray build still cannot bind one — that
+        // pre-existing limitation is unchanged by this fix.)
+        #[cfg(feature = "tray")]
+        {
+            let _ = tray::start_mcp_socket_server_for_lane(
+                project_name,
+                raw_instance.as_deref().unwrap_or("default"),
+            );
+        }
         spec = spec
             .bind_mount(
                 mcp_dir.display().to_string(),
@@ -22050,6 +22249,259 @@ esac
         assert!(has_arg(&args, "TILLANDSIAS_DEBUG=1"));
     }
 
+    /// D3 of order 702-6jza. With `--tty`, podman injects its DEFAULT
+    /// `TERM=xterm` unless one is set explicitly, so the pinned
+    /// `xterm-256color` the attach wire carries was dropped at the container
+    /// boundary and a live TUI rendered on a downgraded palette.
+    ///
+    /// The 2026-07-27 fix was applied ONLY to the OpenCode lane. Every OTHER
+    /// interactive lane — Claude, Antigravity, Maintenance, and Codex without a
+    /// prompt — had the identical defect for a month, which is why this asserts
+    /// the whole set rather than the one lane that prompted the report: a fix
+    /// carried to one caller of a shared builder is the shape that produced the
+    /// regression in the first place.
+    #[test]
+    fn every_interactive_agent_lane_pins_term_across_the_container_boundary() {
+        let _pseam = podman_false_seam();
+        for mode in [
+            ForgeAgentMode::Claude,
+            ForgeAgentMode::Codex,
+            ForgeAgentMode::OpenCode,
+            ForgeAgentMode::Antigravity,
+            ForgeAgentMode::Maintenance,
+        ] {
+            let args = build_forge_agent_run_args(
+                &PathBuf::from("/tmp/project"),
+                "alpha",
+                None,
+                &PathBuf::from("/tmp/ca"),
+                "1.2.3",
+                mode,
+                false,
+            );
+            assert!(
+                has_arg(&args, "--tty"),
+                "{mode:?} is an interactive lane and must claim a TTY"
+            );
+            assert!(
+                args.iter().any(|a| a.starts_with("TERM=")),
+                "{mode:?} claims a TTY but sets no TERM — podman will inject its \
+                 default xterm and downgrade the palette (702-6jza D3)"
+            );
+            assert!(
+                args.iter().any(|a| a.starts_with("COLORTERM=")),
+                "{mode:?} claims a TTY but sets no COLORTERM (702-6jza D3)"
+            );
+        }
+    }
+
+    /// ORDER 759-vceg. The incident shape: a fine-grained PAT that
+    /// AUTHENTICATES as the repo owner and cannot push. Every check the login
+    /// flow had — non-emptiness, `gh auth status`, a Vault round-trip — passes
+    /// for this token. Only `.permissions.push` distinguishes it.
+    #[test]
+    fn a_token_without_push_permission_is_refused_with_the_missing_permission_named() {
+        let err = github_push_authorization_verdict("8007342/tillandsias", "false\n")
+            .expect_err("push=false must refuse");
+        assert!(
+            err.contains("CANNOT PUSH"),
+            "refusal must say what is wrong, got: {err}"
+        );
+        assert!(
+            err.contains("Contents - Read and write"),
+            "refusal must NAME the missing permission, not just fail: {err}"
+        );
+        assert!(
+            err.contains("Nothing was written to Vault"),
+            "refusal must state that no credential was persisted: {err}"
+        );
+        assert!(
+            err.contains("8007342/tillandsias"),
+            "refusal must name the repo it checked: {err}"
+        );
+    }
+
+    /// POSITIVE CONTROL. Without it, every arm above is satisfied by a verdict
+    /// function that refuses unconditionally — which would break every login.
+    #[test]
+    fn a_push_capable_token_seeds_exactly_as_before() {
+        assert!(
+            github_push_authorization_verdict("8007342/tillandsias", "true\n").is_ok(),
+            "push=true must seed"
+        );
+        assert!(
+            github_push_authorization_verdict("o/r", "true").is_ok(),
+            "a probe answer without a trailing newline must still seed"
+        );
+    }
+
+    /// AN UNREADABLE ANSWER IS REFUSED, NOT WAVED THROUGH. "I could not tell"
+    /// resolving to "seed it anyway" reproduces the original defect exactly: a
+    /// credential accepted with no evidence it works.
+    #[test]
+    fn an_unparseable_probe_answer_refuses_rather_than_assuming_permission() {
+        for answer in ["", "null", "gh: Not Found (HTTP 404)", "TRUE", "1"] {
+            let err = github_push_authorization_verdict("o/r", answer)
+                .expect_err("an unreadable answer must be refused, never treated as permission");
+            assert!(
+                err.contains("Nothing was written to Vault"),
+                "{answer:?} refusal must state no credential was persisted: {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn owner_repo_is_derived_from_every_origin_shape_an_operator_actually_has() {
+        for origin in [
+            "https://github.com/8007342/tillandsias.git",
+            "https://github.com/8007342/tillandsias",
+            "git@github.com:8007342/tillandsias.git",
+            "ssh://git@github.com/8007342/tillandsias.git",
+            "  https://github.com/8007342/tillandsias.git  ",
+        ] {
+            assert_eq!(
+                github_owner_repo_from_origin(origin).as_deref(),
+                Some("8007342/tillandsias"),
+                "failed to derive owner/repo from {origin}"
+            );
+        }
+    }
+
+    /// NEGATIVE CONTROL for the parser. A non-GitHub or malformed origin must
+    /// yield None so the caller takes the "cannot verify, say so" branch —
+    /// probing the WRONG repo would answer a question nobody asked and could
+    /// pass a token that cannot push where it matters.
+    #[test]
+    fn a_non_github_or_malformed_origin_yields_no_repo_to_probe() {
+        for origin in [
+            "https://gitlab.com/8007342/tillandsias.git",
+            "https://github.com/8007342",
+            "https://github.com/",
+            "https://github.com/a/b/c",
+            "",
+            "not a url",
+        ] {
+            assert!(
+                github_owner_repo_from_origin(origin).is_none(),
+                "{origin} must not produce a repo to probe"
+            );
+        }
+    }
+
+    /// The probe must run in the SAME container as the login, and ask for the
+    /// permission field that covers BOTH classic and fine-grained tokens.
+    #[test]
+    fn the_probe_runs_in_container_and_asks_for_the_push_permission() {
+        let args = github_push_authorization_probe_args("tillandsias-git-login", "o/r");
+        assert_eq!(args.first().map(String::as_str), Some("exec"));
+        assert!(
+            args.iter().any(|a| a == "tillandsias-git-login"),
+            "probe must run inside the ephemeral login container so the token never \
+             reaches host disk: {args:?}"
+        );
+        assert!(args.iter().any(|a| a == "repos/o/r"), "{args:?}");
+        assert!(
+            args.iter().any(|a| a == ".permissions.push"),
+            "must ask for .permissions.push — the field reported for classic AND \
+             fine-grained tokens: {args:?}"
+        );
+    }
+
+    /// ORDER 759-vceg. THE GATE MUST SIT BETWEEN AUTHENTICATION AND
+    /// PERSISTENCE, and that is an ORDERING property no unit test on the pure
+    /// verdict can see.
+    ///
+    /// The decision functions are covered and mutation-tested elsewhere in this
+    /// file. What they cannot show is that `run_provider_login` actually calls
+    /// them, and calls them BEFORE writing the token to Vault. Move the vault
+    /// write above the probe and every one of those tests still passes while
+    /// the defect returns in full: a token that cannot push, seeded anyway.
+    ///
+    /// Asserted on the function's own body, the same way
+    /// `idiomatic_podman_launch_paths_do_not_bypass_shared_layer` asserts its
+    /// architectural invariant. This is weaker than executing the path and is
+    /// not pretending otherwise — see the packet's event for why executing it
+    /// hermetically is not cheap: the gate sits downstream of vault bootstrap
+    /// and a full container preflight, so a stubbed podman dies at vault
+    /// preflight long before reaching it.
+    #[test]
+    fn the_push_authorization_gate_runs_before_the_vault_write() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let body = source_window(source, "fn run_provider_login(config: &ProviderLoginConfig");
+
+        let verdict_at = body.find("github_push_authorization_verdict").expect(
+            "run_provider_login must CALL the push-authorization verdict — \
+                     a decision function nothing invokes is the 759-vceg defect itself",
+        );
+        let probe_at = body
+            .find("github_push_authorization_probe_args")
+            .expect("run_provider_login must build the in-container probe");
+        let vault_write_at = body
+            .find("vault-cli.sh write-stdin")
+            .expect("run_provider_login must still contain the vault write");
+
+        assert!(
+            probe_at < verdict_at,
+            "the probe must run before its verdict is judged"
+        );
+        assert!(
+            verdict_at < vault_write_at,
+            "the push-authorization verdict must be reached BEFORE the token is \
+             written to Vault. Persisting first and checking after re-creates the \
+             exact defect: a token that authenticates, cannot push, and is seeded \
+             anyway — surfacing hours later at the first push (759-vceg)."
+        );
+    }
+
+    /// NEGATIVE CONTROL for the ordering test above: the window it inspects must
+    /// actually be `run_provider_login`'s body and not the whole file, or the
+    /// assertion would hold no matter where those calls lived.
+    #[test]
+    fn the_login_source_window_is_scoped_to_one_function() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let body = source_window(source, "fn run_provider_login(config: &ProviderLoginConfig");
+        assert!(
+            body.len() < source.len() / 4,
+            "the window is not scoped to a function: {} of {} bytes",
+            body.len(),
+            source.len()
+        );
+        assert!(
+            !body.contains("fn github_push_authorization_verdict"),
+            "the window has swallowed the helper DEFINITIONS, so finding their \
+             names inside it would prove nothing about the call site"
+        );
+    }
+
+    /// The NEGATIVE CONTROL for the test above, and the reason it cannot simply
+    /// assert "always set TERM": a prompt-driven Codex run deliberately does NOT
+    /// claim a TTY, because podman refuses with "input device is not a TTY" when
+    /// the parent is a background or e2e harness. A lane with no TTY has no
+    /// terminal identity to pin, and setting one there would assert a terminal
+    /// that does not exist.
+    #[test]
+    fn a_non_interactive_prompt_lane_claims_no_tty_and_pins_no_term() {
+        let _pseam = podman_false_seam();
+        let args = build_forge_agent_run_args_with_vault(
+            &PathBuf::from("/tmp/project"),
+            "alpha",
+            None,
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+            ForgeAgentMode::Codex,
+            false,
+            None,                 // vault_secret
+            Some("do the thing"), // prompt — this is the arg that matters
+        );
+        assert!(
+            !has_arg(&args, "--tty"),
+            "a prompt-driven Codex run must not claim a TTY"
+        );
+        assert!(
+            !args.iter().any(|a| a.starts_with("TERM=")),
+            "a lane with no TTY must not pin a terminal identity it does not have"
+        );
+    }
     /// Order 425: a repo with NO origin and a repo whose origin cannot be
     /// RESOLVED must not look alike. They used to both yield `None`, and a
     /// generated config with no `[url]` block was ambiguous between "healthy

@@ -4400,17 +4400,33 @@ mod tests {
             })
         }
 
-        // What launch_spec emits for a cloud project click.
-        let project_argv = vec![
-            "/usr/local/bin/tillandsias-headless".to_string(),
-            "--cloud".to_string(),
-            "8007342/tillandsias".to_string(),
-            "--opencode".to_string(),
+        // Drive the REAL builder. The previous revision of this test asserted
+        // wt-safety over a hand-written vector whose comment claimed it was
+        // what launch_spec emits; nothing called launch_spec, so a regression
+        // back to the flattened `bash -lc "<script>"` shape would have left
+        // this test green while every lane fell back to conhost again. That is
+        // the exact defect 805-ek9e reports, so the test must not be able to
+        // miss it.
+        let lanes: Vec<(&str, PtyIntent)> = vec![
+            ("shell", PtyIntent::Shell),
+            ("claude", PtyIntent::Agent(SelectedAgent::Claude)),
+            ("codex", PtyIntent::Agent(SelectedAgent::Codex)),
+            ("opencode", PtyIntent::Agent(SelectedAgent::OpenCode)),
+            // Antigravity and Claude are the two lanes the operator actually
+            // failed a device-code login in on 2026-08-17.
+            ("antigravity", PtyIntent::Agent(SelectedAgent::Antigravity)),
         ];
-        assert!(
-            is_wt_safe(&project_argv),
-            "the verbatim project argv must be safe for wt.exe re-parsing"
-        );
+        for (label, intent) in &lanes {
+            for project in ["myapp", "8007342/tillandsias"] {
+                let argv = launch_spec(intent, Some(project), 24, 80)
+                    .unwrap_or_else(|e| panic!("{label}/{project} refused: {e:?}"))
+                    .argv;
+                assert!(
+                    is_wt_safe(&argv),
+                    "lane {label} on project {project} builds a wt-unsafe argv, so it                      falls back to conhost and loses paste: {argv:?}"
+                );
+            }
+        }
 
         // A plain podman argv stays eligible for the wt tab.
         assert!(is_wt_safe(&[

@@ -38,7 +38,19 @@ GIT_HOOKS_DIR="$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-path
 # CURRENT shell speaks. Resolving there costs one subprocess and makes the hook
 # correct under every view of the checkout, so the generated bodies below
 # interpolate no host paths at all.
-HOOK_PREAMBLE='HOOK_ROOT="$(git rev-parse --show-toplevel)" || exit 1'
+# A GLOBAL hook must tolerate not being home (esmeraldinha, 2026-09-01).
+# The forge installs these hooks via `git config --global core.hooksPath`, so
+# they fire in EVERY repository on the box — including each /tmp fixture repo
+# a litmus test creates, and any scratch repo a user makes. Runtime resolution
+# then points HOOK_ROOT at that foreign repo, the helper is absent, bash exits
+# 127, and the COMMIT IS BLOCKED: measured in a forge guest, `git commit` was
+# impossible outside the checkout, six litmus suites failed as collateral, and
+# build.sh --check died at the 877-mynm fixture (6/5 -> 11/0 on removing the
+# global hook alone — the fixture was not regressed; it was being lied to by
+# the environment). In a repo that lacks the dispatch helper, the hook has
+# nothing to enforce: exit 0, silently.
+HOOK_PREAMBLE='HOOK_ROOT="$(git rev-parse --show-toplevel)" || exit 1
+[ -d "$HOOK_ROOT/scripts/hooks" ] || exit 0'
 
 # Ensure hooks directory exists
 mkdir -p "$GIT_HOOKS_DIR"
@@ -47,7 +59,7 @@ mkdir -p "$GIT_HOOKS_DIR"
 
 PRECOMMIT_SOURCE="$REPO_ROOT/scripts/hooks/pre-commit-openspec.sh"
 PRECOMMIT_TARGET="$GIT_HOOKS_DIR/pre-commit"
-PRECOMMIT_MARKER="# openspec-pre-commit-hook-v2"
+PRECOMMIT_MARKER="# openspec-pre-commit-hook-v3"
 PRECOMMIT_MARKER_OLD="# openspec-pre-commit-hook"
 PRECOMMIT_REL="scripts/hooks/pre-commit-openspec.sh"
 
@@ -86,7 +98,7 @@ fi
 # --- Install pre-push hook -------------------------------------------------
 
 PREPUSH_TARGET="$GIT_HOOKS_DIR/pre-push"
-PREPUSH_MARKER="# tillandsias-pre-push-v6"
+PREPUSH_MARKER="# tillandsias-pre-push-v7"
 
 MAIN_AFFORD_REL="scripts/hooks/pre-push-main-branch-affordance.sh"
 MERGE_GATE_REL="scripts/hooks/pre-push-linux-next-merged.sh"
@@ -148,9 +160,9 @@ HOOK
 
 if [[ -f "$PREPUSH_TARGET" ]] && grep -qF "$PREPUSH_MARKER" "$PREPUSH_TARGET" 2>/dev/null; then
     echo "✓ pre-push hook (linux-next merge gate + VERSION guard + local gate) already installed"
-elif [[ -f "$PREPUSH_TARGET" ]] && grep -qE "# (version-guard-hook|tillandsias-pre-push-v[2345])" "$PREPUSH_TARGET" 2>/dev/null; then
+elif [[ -f "$PREPUSH_TARGET" ]] && grep -qE "# (version-guard-hook|tillandsias-pre-push-v[23456])" "$PREPUSH_TARGET" 2>/dev/null; then
     install_prepush
-    echo "✓ pre-push hook upgraded to v6 (adds the main-branch affordance)"
+    echo "✓ pre-push hook upgraded to v7 (foreign-repo guard in the preamble)"
 elif [[ -f "$PREPUSH_TARGET" ]]; then
     echo "⚠ an unrecognized pre-push hook exists — leaving it alone" >&2
     echo "  To adopt the Tillandsias gate, move it aside and re-run this script." >&2
@@ -183,7 +195,7 @@ fi
 
 POSTCOMMIT_SOURCE="$REPO_ROOT/scripts/hooks/post-commit-dashboard-refresh.sh"
 POSTCOMMIT_TARGET="$GIT_HOOKS_DIR/post-commit"
-POSTCOMMIT_MARKER="# tillandsias-post-commit-v4"
+POSTCOMMIT_MARKER="# tillandsias-post-commit-v5"
 # Any hook THIS installer generated in the past, so a marker bump upgrades
 # rather than stranding the host. The version-number alternative is deliberate:
 # matching only the specific predecessors meant every bump turned every

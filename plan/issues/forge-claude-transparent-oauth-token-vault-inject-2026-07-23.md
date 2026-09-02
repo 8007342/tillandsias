@@ -1,5 +1,29 @@
 # Transparent Claude OAuth-token capture → Vault → inject → refresh (harness-auth parity with Codex/GitHub)
 
+> **SUPERSEDED 2026-09-02 — order 468 is `obsoleted`. Do not implement this document as written.**
+>
+> Its intent is already met by the shipped device-flow + credential-DOCUMENT model:
+> capture (`CLAUDE_DEVICE_AUTH_SPEC`, landed `4edc24946` 2026-07-14 — nine days
+> BEFORE this document was written), inject (`provider-oauth-vault restore` in
+> `entrypoint-forge-claude.sh`), refresh (`codex-oauth-session.sh` rotation harvest).
+>
+> The root problem below — the in-forge interactive TUI login box smearing the auth
+> URL when the credential file is missing/invalid/expired — NO LONGER REPRODUCES.
+> `restore_auth` returns 2/3 with an explicit ERROR naming the login command, and
+> `lib-common.sh` sets `set -euo pipefail`, so the entrypoint exits there rather than
+> launching an agent with no credentials.
+>
+> Its prescribed mechanism is also contraindicated: `CLAUDE_DEVICE_AUTH_SPEC` records
+> that "the full opaque credential document is what Vault stores — extracting a single
+> token would break refresh", while this document proposes a single
+> `CLAUDE_CODE_OAUTH_TOKEN`. Nobody has reconciled the two models, and `setup-token`
+> appears nowhere in the tree.
+>
+> Kept, not deleted: if a future Claude Code release drops the credential-file path,
+> this is the research record for the env-var route. Full reasoning is in the
+> 2026-09-02 note on order 468.
+
+
 - **Date:** 2026-07-23
 - **Class:** implementation
 - **Status:** ready

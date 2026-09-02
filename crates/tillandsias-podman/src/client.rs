@@ -1299,6 +1299,21 @@ impl PodmanClient {
                 redact_argv(&full_args).join(" ")
             ),
         ]);
+        // ORDER 665-zddn EC4. Record the failure on the HOST before returning
+        // the message. The caller's string goes to stderr, and on a forge
+        // launch that stderr dies with the terminal window — which is how the
+        // 2026-08-10 failure became recoverable only from `podman inspect`.
+        //
+        // The typed verdict is passed through so the breadcrumb carries the
+        // ACTIONABLE line, not just "something failed": for the stale-CDI case
+        // that is the difference between a file naming the remedy and a file
+        // naming a container.
+        let typed_verdict = match err {
+            PodmanError::CommandFailure(failure) => classify_typed_launch_failure(failure),
+            _ => None,
+        };
+        write_launch_breadcrumb(stage, container_name, typed_verdict.as_deref());
+
         let rendered = diagnostics.render_human();
         if !rendered.trim().is_empty() {
             parts.push(rendered);
@@ -2185,6 +2200,126 @@ fn summary_line(value: &str) -> &str {
     value.lines().next().unwrap_or(value)
 }
 
+/// ORDER 665-zddn EC4. The file every launch failure leaves behind on the host.
+///
+/// WHY A FILE AT ALL. Reproduced 2026-08-10: the forge launcher died starting
+/// inference AFTER router and git-mirror were already up, and the terminal
+/// window carrying the error closed with it. The failure was recoverable only
+/// from `podman inspect .State.Error` — which you can only think to run if you
+/// already know which service failed. Everything the launcher knew went to
+/// stderr and vanished. Windows has had a bundle for this since order 420
+/// (windows-tray notify_icon.rs `write_failure_diagnostics_bundle`); Linux had
+/// nothing.
+pub(crate) fn launch_breadcrumb_path() -> std::path::PathBuf {
+    // The override exists so unit tests never write to the real host state
+    // directory. A test that pollutes ~/.local/state is a test that changes
+    // its own machine.
+    if let Ok(dir) = std::env::var("TILLANDSIAS_LAUNCH_BREADCRUMB_DIR") {
+        return std::path::PathBuf::from(dir).join("launch-failures.log");
+    }
+    tillandsias_core::config::state_dir().join("launch-failures.log")
+}
+
+/// How many breadcrumb lines to keep. BOUNDED APPEND, not latest-wins.
+///
+/// Windows keeps exactly one bundle ("latest failure wins, no unbounded
+/// growth"), which is right for a multi-hundred-KB JSON bundle. These are one
+/// line each, and the case that motivated this packet — a driver update that
+/// breaks every launch until someone regenerates the CDI spec — is a REPEATING
+/// failure whose history is the evidence that it is not a one-off. Keeping a
+/// short window costs a few hundred bytes and answers "has this been happening
+/// all week?", which latest-wins cannot.
+const LAUNCH_BREADCRUMB_KEEP_LINES: usize = 50;
+
+/// Append one line naming the failed service and how to get the full error.
+///
+/// DELIBERATELY NARROW CONTENT: timestamp, stage, container, the typed verdict
+/// (our own text, from `classify_typed_launch_failure`), and the inspect
+/// command. NO podman stderr and NO argv — this file is durable and
+/// operator-shareable, and raw stderr/argv is where credentials would leak.
+/// The inspect command retrieves the full error on demand, which is the point
+/// of naming it.
+///
+/// Best-effort by construction: a launch failure must never be masked by a
+/// failure to write about the launch failure, so every error here is dropped
+/// after one warning.
+pub(crate) fn write_launch_breadcrumb(stage: &str, container_name: &str, verdict: Option<&str>) {
+    write_launch_breadcrumb_at(&launch_breadcrumb_path(), stage, container_name, verdict);
+}
+
+/// The breadcrumb core, taking its path explicitly.
+///
+/// SPLIT FROM THE WRAPPER SO THE TESTS NEED NO ENV VAR. `set_var` is
+/// process-global and these tests run in parallel, so an env-driven test would
+/// race its siblings and fail intermittently — the kind of flake that gets a
+/// test deleted rather than fixed.
+pub(crate) fn write_launch_breadcrumb_at(
+    path: &std::path::Path,
+    stage: &str,
+    container_name: &str,
+    verdict: Option<&str>,
+) {
+    if let Some(parent) = path.parent()
+        && let Err(err) = std::fs::create_dir_all(parent)
+    {
+        warn!(path = %parent.display(), error = %err, "could not create the launch-breadcrumb directory");
+        return;
+    }
+
+    let line = format!(
+        "{ts} stage={stage} service={container_name} verdict={verdict} inspect=\"podman inspect {container_name} --format '{{{{.State.Error}}}}'\"",
+        ts = iso8601_millis(chrono::Utc::now()),
+        verdict = verdict.unwrap_or("unclassified"),
+    );
+
+    let existing = std::fs::read_to_string(path).unwrap_or_default();
+    let body = bounded_breadcrumb_body(&existing, &line);
+
+    if let Err(err) = std::fs::write(path, body) {
+        warn!(path = %path.display(), error = %err, "could not write the launch breadcrumb");
+        return;
+    }
+    warn!(breadcrumb = %path.display(), stage, container = container_name, "launch failure recorded on the host");
+}
+
+/// Append `line` to `existing`, keeping only the newest
+/// [`LAUNCH_BREADCRUMB_KEEP_LINES`]. Pure, so the bound is testable without
+/// touching a filesystem.
+fn bounded_breadcrumb_body(existing: &str, line: &str) -> String {
+    let mut kept: Vec<&str> = existing.lines().filter(|l| !l.is_empty()).collect();
+    kept.push(line);
+    let start = kept.len().saturating_sub(LAUNCH_BREADCRUMB_KEEP_LINES);
+    kept[start..].join("\n") + "\n"
+}
+
+/// ORDER 665-zddn. Pull the driver version the STALE CDI spec still believes
+/// out of the OCI runtime's refusal.
+///
+/// The message names the first absent file, e.g.
+/// ``cannot stat `/usr/lib64/libEGL_nvidia.so.610.43.03` ``. The trailing
+/// dotted number is the driver release the spec was generated against, and
+/// printing it beside what `nvidia-smi` reports is what turns "some file is
+/// missing" into "your spec is one driver update behind".
+///
+/// Returns `None` rather than guessing when no `.so.<version>` suffix is
+/// present: an unlabelled remedy is better than a confidently wrong version.
+fn stale_driver_version_from_error(stderr: &str) -> Option<String> {
+    // Take the token after the LAST `.so.` — a path can contain other dots,
+    // and the version is always that suffix.
+    let (_, tail) = stderr.rsplit_once(".so.")?;
+    let version: String = tail
+        .chars()
+        .take_while(|c| c.is_ascii_digit() || *c == '.')
+        .collect();
+    // A bare `.so.` with nothing dotted after it is not a version, and neither
+    // is a lone separator.
+    let trimmed = version.trim_end_matches('.');
+    if trimmed.is_empty() || !trimmed.contains('.') {
+        return None;
+    }
+    Some(trimmed.to_string())
+}
+
 /// Step 15 slice 4: collapse the exit-125 cascade into a single actionable
 /// typed error line.
 ///
@@ -2203,7 +2338,31 @@ fn summary_line(value: &str) -> &str {
 pub(crate) fn classify_typed_launch_failure(
     failure: &crate::backend::CommandFailure,
 ) -> Option<String> {
-    if failure.output.status != Some(125) {
+    // ORDER 665-zddn. This gate used to read `!= Some(125) { return None }`,
+    // and left alone it would have made every CDI arm below DEAD ON ARRIVAL —
+    // a classifier arm that cannot be reached is indistinguishable from one
+    // that does not exist.
+    //
+    // MEASURED on lenovinha 2026-09-01 by replaying this packet's own failure
+    // with a CDI spec naming an absent hostPath:
+    //
+    //   $ podman run --replace --device <kind>=all …
+    //   Error: crun: cannot stat `/usr/lib64/libEGL_nvidia.so.610.43.03`:
+    //          No such file or directory: OCI runtime attempted to invoke a
+    //          command that was not found
+    //   exit status = 127        <-- NOT 125
+    //
+    // 125 is "podman itself refused"; a container-setup failure raised by the
+    // OCI RUNTIME surfaces as 126/127. So the single loudest and least
+    // self-explanatory class of launch failure — the one this packet was filed
+    // for — was categorically unclassifiable, and no amount of pattern-adding
+    // below would have changed that.
+    //
+    // Widening is safe for the three pre-existing arms: each keys on stderr
+    // text specific enough (network-not-found, address-in-use, no-such-image)
+    // that matching it under 126/127 is a better answer than `None`, not a
+    // wrong one.
+    if !matches!(failure.output.status, Some(125) | Some(126) | Some(127)) {
         return None;
     }
     let stderr_lc = failure.output.stderr.to_ascii_lowercase();
@@ -2246,6 +2405,62 @@ pub(crate) fn classify_typed_launch_failure(
             "typed-error: container image is not present locally — run the materializer \
              (`cargo run -p tillandsias-vm-layer --features materialize --bin materialize-cli`) \
              or `podman pull` the missing tag before this spawn"
+                .to_string(),
+        );
+    }
+
+    // ORDER 665-zddn, arm 1: a STALE CDI spec after a host driver update.
+    //
+    // The spec pins driver-versioned library paths. When the host driver
+    // updates underneath it, every one of those paths stops existing, and crun
+    // refuses the container naming the FIRST absent file. Reproduced 2026-08-10
+    // on macuahuitl (610.43.03 -> 610.57.04): the forge launcher died here
+    // AFTER router and git-mirror were already up, leaving a half-provisioned
+    // enclave and an error recoverable only from `podman inspect .State.Error`.
+    //
+    // The stale version is parsed out of the message rather than probed,
+    // because it is the one number that makes the mismatch legible: it is what
+    // the SPEC still believes, and `nvidia-smi` reports what the host actually
+    // has. A classifier that probed the host would also stop being a pure
+    // function of its input, which is what makes it unit-testable at all.
+    if stderr_lc.contains("cannot stat") && stderr_lc.contains("nvidia") {
+        let stale = stale_driver_version_from_error(&failure.output.stderr);
+        let stale_clause = match stale.as_deref() {
+            Some(v) => format!(
+                " The CDI spec still describes driver {v}; compare with the host's \
+                 `nvidia-smi --query-gpu=driver_version --format=csv,noheader`."
+            ),
+            None => String::new(),
+        };
+        return Some(format!(
+            "typed-error: the NVIDIA CDI spec is STALE — it names a driver library that no \
+             longer exists on this host, so the OCI runtime refused the container.{stale_clause} \
+             Remedy: re-run `scripts/ensure-nvidia-cdi.sh`, which regenerates the spec against \
+             the current driver, prunes absent paths, and removes duplicate specs for the same \
+             device kind (order 935-jhh5). The container is recreated on every launch, so no \
+             `podman rm` is needed."
+        ));
+    }
+
+    // ORDER 665-zddn, arm 2: the spec does not RESOLVE at all.
+    //
+    // Two different causes produce a byte-identical message, and both were paid
+    // for in lost time on lenovinha 2026-08-29, so both are named here:
+    //   (a) the spec is somewhere podman does not search. Podman's defaults are
+    //       [/etc/cdi, /var/run/cdi]; ~/.config/cdi is NOT searched unless
+    //       `cdi_spec_dirs` names it — and on an immutable host it is the only
+    //       user-writable persistent option.
+    //   (b) TWO spec files both declare the same device kind, which podman
+    //       reports as unresolvable rather than as a conflict.
+    if stderr_lc.contains("unresolvable cdi devices") || stderr_lc.contains("unresolvable cdi") {
+        return Some(
+            "typed-error: podman could not resolve the requested CDI device. Two different \
+             causes print this identical message: (1) the spec is in a directory podman does \
+             not search — its defaults are [/etc/cdi, /var/run/cdi], and ~/.config/cdi counts \
+             only once `cdi_spec_dirs` in ~/.config/containers/containers.conf names it; \
+             (2) TWO spec files declare the same device kind, which reads as unresolvable \
+             rather than as a conflict. Remedy for both: `scripts/ensure-nvidia-cdi.sh` \
+             (order 935-jhh5). Verify with `podman --help | grep cdi-spec-dir`."
                 .to_string(),
         );
     }
@@ -2776,10 +2991,10 @@ mod tests {
         );
     }
 
-    /// Non-125 exit codes are not classified — we don't want false
+    /// Statuses outside {125, 126, 127} are not classified — we do not want false
     /// positives swallowing legitimate runtime errors.
     #[test]
-    fn classify_typed_only_fires_on_125() {
+    fn classify_typed_fires_only_on_podman_and_oci_runtime_statuses() {
         let f = fake_failure(Some(1), "Error: network not found");
         assert!(classify_typed_launch_failure(&f).is_none());
         let f = fake_failure(None, "Error: network not found");
@@ -2792,6 +3007,217 @@ mod tests {
     fn classify_typed_unknown_125_falls_through() {
         let f = fake_failure(Some(125), "Error: some unrecognized failure");
         assert!(classify_typed_launch_failure(&f).is_none());
+    }
+
+    /// ORDER 665-zddn. The exact stderr podman produced on this host when a CDI
+    /// spec named an absent driver library. Captured from a live replay
+    /// (2026-09-01), not composed by hand — a classifier tested against an
+    /// invented string proves only that it matches the string you invented.
+    const STALE_CDI_STDERR: &str = "Error: crun: cannot stat \
+         `/usr/lib64/libEGL_nvidia.so.610.43.03`: No such file or directory: \
+         OCI runtime attempted to invoke a command that was not found";
+
+    /// ORDER 665-zddn, and the reason the status gate had to move.
+    ///
+    /// MEASURED: this failure exits **127**, not 125. Under the old
+    /// `!= Some(125) -> None` gate every arm below was unreachable, so this
+    /// test is the one that would have caught a classifier that looked
+    /// complete and could never fire.
+    #[test]
+    fn a_stale_nvidia_cdi_spec_is_classified_at_the_oci_runtime_exit_status() {
+        let f = fake_failure(Some(127), STALE_CDI_STDERR);
+        let typed = classify_typed_launch_failure(&f)
+            .expect("exit 127 is the measured status for this failure; it must classify");
+        assert!(
+            typed.starts_with("typed-error: the NVIDIA CDI spec is STALE"),
+            "got: {typed}"
+        );
+        assert!(
+            typed.contains("610.43.03"),
+            "the stale driver version makes the mismatch legible; got: {typed}"
+        );
+        assert!(
+            typed.contains("ensure-nvidia-cdi.sh"),
+            "the operator needs the exact remediation, not a description of it; got: {typed}"
+        );
+        assert!(
+            typed.contains("nvidia-smi"),
+            "naming the stale version without the command for the current one \
+             leaves the comparison unmakeable; got: {typed}"
+        );
+    }
+
+    /// ORDER 665-zddn. Same class, raised by podman rather than crun.
+    #[test]
+    fn an_unresolvable_cdi_device_names_both_causes_of_the_identical_message() {
+        let f = fake_failure(
+            Some(125),
+            "Error: setting up CDI devices: unresolvable CDI devices nvidia.com/gpu=all",
+        );
+        let typed = classify_typed_launch_failure(&f).expect("should classify");
+        assert!(
+            typed.starts_with("typed-error: podman could not resolve the requested CDI device"),
+            "got: {typed}"
+        );
+        // Both causes print this byte-identical message; naming only one sends
+        // the operator down a blind alley, which is what cost time on
+        // lenovinha 2026-08-29.
+        assert!(typed.contains("cdi_spec_dirs"), "got: {typed}");
+        assert!(
+            typed.contains("same device kind"),
+            "the duplicate-spec cause must be named too; got: {typed}"
+        );
+    }
+
+    /// ORDER 665-zddn, PARSER unit + its refusal case.
+    #[test]
+    fn the_stale_driver_version_parser_refuses_rather_than_guesses() {
+        assert_eq!(
+            stale_driver_version_from_error(STALE_CDI_STDERR).as_deref(),
+            Some("610.43.03")
+        );
+        // Trailing punctuation after the version must not be absorbed.
+        assert_eq!(
+            stale_driver_version_from_error("cannot stat `/lib/libfoo.so.570.1`: nope").as_deref(),
+            Some("570.1")
+        );
+        // No version suffix at all: an unlabelled remedy beats a confident
+        // wrong number.
+        assert_eq!(
+            stale_driver_version_from_error("cannot stat `/lib/libfoo.so`").as_deref(),
+            None
+        );
+        assert_eq!(
+            stale_driver_version_from_error("no library mentioned here").as_deref(),
+            None
+        );
+        // A single undotted number is not a driver version.
+        assert_eq!(
+            stale_driver_version_from_error("cannot stat `/lib/libfoo.so.6`").as_deref(),
+            None
+        );
+    }
+
+    /// ORDER 665-zddn SCOPE CONTROL. Widening the gate to the OCI-runtime
+    /// statuses must not turn the classifier into a catch-all: an
+    /// unrecognized 127 still falls through to the stage-keyed hint.
+    #[test]
+    fn an_unrecognized_oci_runtime_failure_still_falls_through() {
+        let f = fake_failure(Some(127), "Error: something else entirely went wrong");
+        assert!(classify_typed_launch_failure(&f).is_none());
+    }
+
+    /// ORDER 665-zddn EC4. A unique scratch path per test, so nothing races and
+    /// nothing touches the real host state directory.
+    fn scratch_breadcrumb(tag: &str) -> std::path::PathBuf {
+        let unique = format!(
+            "tillandsias-bc-{tag}-{}-{:?}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        );
+        std::env::temp_dir()
+            .join(unique)
+            .join("launch-failures.log")
+    }
+
+    /// ORDER 665-zddn EC4. The breadcrumb must name the failed SERVICE and the
+    /// command that retrieves the full error — those two facts are what the
+    /// vanishing terminal window took with it on 2026-08-10.
+    #[test]
+    fn the_launch_breadcrumb_names_the_failed_service_and_how_to_read_the_error() {
+        let path = scratch_breadcrumb("names");
+        write_launch_breadcrumb_at(
+            &path,
+            "forge-launch-inference",
+            "tillandsias-inference",
+            Some("typed-error: the NVIDIA CDI spec is STALE — remedy: ensure-nvidia-cdi.sh"),
+        );
+
+        let body = std::fs::read_to_string(&path).expect("the breadcrumb must exist on disk");
+        assert!(
+            body.contains("service=tillandsias-inference"),
+            "got: {body}"
+        );
+        assert!(body.contains("stage=forge-launch-inference"), "got: {body}");
+        assert!(
+            body.contains("podman inspect tillandsias-inference --format '{{.State.Error}}'"),
+            "the inspect command must be literally runnable, braces and all; got: {body}"
+        );
+        // The typed verdict is the actionable half. A breadcrumb naming only a
+        // container tells the operator where to look, not what to do.
+        assert!(body.contains("ensure-nvidia-cdi.sh"), "got: {body}");
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    /// ORDER 665-zddn EC4. An unclassified failure still leaves a breadcrumb —
+    /// the file exists for the failures we could NOT explain just as much as
+    /// for the ones we could.
+    #[test]
+    fn an_unclassified_launch_failure_still_leaves_a_breadcrumb() {
+        let path = scratch_breadcrumb("unclassified");
+        write_launch_breadcrumb_at(&path, "forge-launch-router", "tillandsias-router", None);
+        let body = std::fs::read_to_string(&path).expect("must exist");
+        assert!(body.contains("verdict=unclassified"), "got: {body}");
+        assert!(body.contains("service=tillandsias-router"), "got: {body}");
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    /// ORDER 665-zddn EC4. Repeated failures accumulate — the driver-update
+    /// case that motivated this packet breaks EVERY launch until someone
+    /// regenerates the spec, and the history is the evidence that it is not a
+    /// one-off. But the window is BOUNDED, so a host failing in a loop cannot
+    /// grow this file without limit.
+    #[test]
+    fn breadcrumbs_accumulate_but_the_window_is_bounded() {
+        let mut body = String::new();
+        for i in 0..(LAUNCH_BREADCRUMB_KEEP_LINES * 2) {
+            body = bounded_breadcrumb_body(&body, &format!("line-{i}"));
+        }
+        let lines: Vec<&str> = body.lines().collect();
+        assert_eq!(
+            lines.len(),
+            LAUNCH_BREADCRUMB_KEEP_LINES,
+            "the window must stay bounded on a host failing in a loop"
+        );
+        // NEWEST kept, oldest dropped — a window that discarded the most recent
+        // failure would be worse than no file.
+        assert_eq!(*lines.last().unwrap(), "line-99");
+        assert!(!body.contains("line-0\n"), "the oldest line must age out");
+        // Two failures in a row must BOTH be visible; latest-wins would fail here.
+        let two = bounded_breadcrumb_body("first-failure", "second-failure");
+        assert!(two.contains("first-failure") && two.contains("second-failure"));
+    }
+
+    /// ORDER 665-zddn EC4, SCOPE CONTROL. The breadcrumb is durable and
+    /// operator-shareable, so it must carry NEITHER podman stderr NOR argv —
+    /// that is where a credential would leak. It names the inspect command
+    /// instead, which fetches the full error on demand.
+    #[test]
+    fn the_breadcrumb_carries_no_stderr_and_no_argv() {
+        let path = scratch_breadcrumb("noleak");
+        write_launch_breadcrumb_at(
+            &path,
+            "forge-launch-git",
+            "tillandsias-git",
+            Some("typed-error: something"),
+        );
+        let body = std::fs::read_to_string(&path).expect("must exist");
+        for forbidden in [
+            "--env",
+            "GITHUB_TOKEN",
+            "ghp_",
+            "redacted argv",
+            "podman run",
+        ] {
+            assert!(
+                !body.contains(forbidden),
+                "breadcrumb must not carry {forbidden}; got: {body}"
+            );
+        }
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 
     /// Pins the idiomatic-layer container-launch diagnostics wire shape that

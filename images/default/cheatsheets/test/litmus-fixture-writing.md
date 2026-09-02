@@ -751,3 +751,78 @@ a failing measurement names the tool and invocation that produced it, and
 a surprising one is confirmed by a second, differently-shaped instrument
 before it is filed — the third measurement artifact of that night was
 caught only by asking a second tool.
+
+## Subtract yourself before attributing a signal to the environment (2026-09-01, two hosts)
+
+Five instances in one night, independently on a fat coordinator and an N100
+forge guest: a pgrep -f gate that matched its own sibling watchers' argv
+(twice, once per host); an idle-gate that deadlocked on it for 17 minutes; a
+"periodic" ~113-minute container killer whose periodicity was the observer's
+own retry cadence reflected back; a zsh harness word-splitting a bash-ism so
+a sampler reported 0MB peaks; and a forensic PATH shim whose first catch was
+its own installation command's argv. The rule: your watchers, your wrappers,
+your retry cadence, and your shell's semantics are all part of the observed
+system — gate on task lifecycle or an exec-path match, never on a pattern
+you also typed into a sibling command, and prefer `ps -eo args | grep -c
+"[b]racketed"` over pgrep -f inside any agent harness.
+
+The pair rule, from the same night's four self-caught corrections (the
+zero-SKIP claim, the /dev/null-disables-the-spy confound, the shim-cost
+magnitude, the truncated denominator): **confirmation is when the instrument
+gets the least scrutiny and needs the most** — when a result agrees with
+what you expected, read the instrument once more before reporting it. Three
+of the four corrections came from exactly that habit.
+
+## grep-REDS-on-comments (2026-09-01) — the mirror of grep-greens-on-comments
+
+litmus-shipped-diagnostic-tool-dispatch step 3 greps two shipped scripts for
+'brew install jq' and FAILS on the comment documenting the 799-tb7q removal
+of that very instruction — the fix quoted what it removed, and the guard
+added to protect the fix cannot tell code from the prose describing its own
+victory. Likely born red in the same commit that added it (a0ea1f169). A
+guard that punishes explaining a removal teaches people not to explain
+removals. Assert on BEHAVIOR (run the diagnostic without jq and inspect the
+output), or at minimum `grep -v '^\s*#'` before matching. Same disease as
+grep-greens-on-comments, opposite direction; file findings against either
+shape on sight.
+
+## Bound and still unrunnable — content verification is not delivery verification (2026-09-01)
+
+litmus:codex-e2e-launch-parity shipped with a top-level `steps:` key where
+the runner reads `critical_path:` — zero steps parsed, the whole file
+failed, fleet-wide, on every full run. The author had verified ALL NINE
+step commands by executing them in a shell (every one passed, reported as
+evidence), the YAML validated, and the 660-ryhn binding gate confirmed the
+file was bound. Two green checks standing over a file no runner could
+execute: 660-ryhn catches "nothing will ever run this"; nothing caught "the
+runner cannot parse this once it tries". And this is 944-vim8 EXACTLY, one
+file format over — same author, same key name even (`steps:` unread by a
+reader that wants another block) — the guard's own author reproduced the
+class the guard exists for, in a corpus the guard does not cover. The
+rules: (1) verifying a fixture means running it THROUGH ITS RUNNER at least
+once, not executing its commands by hand — the delivery mechanism is part
+of the thing under test; (2) when a reader consumes only named keys, every
+NEW file for that reader gets one parse-probe at bind time (the 660-ryhn
+extension), because the unread-key class recurs across file formats and
+survives every check that doesn't enter the reader's own code path. The
+runner's loud refusal is what surfaced this in hours instead of weeks —
+loud-on-unparseable is load-bearing; never soften it.
+
+## The census lied twice in one minute — pgrep is ERE, `$!` is not the worker (2026-09-02)
+
+A throttled `tillandsias --init` bake was declared "killed mid-build, no
+survivors" and was one turn from being relaunched onto its own 900s image
+flock. Both witnesses were the instrument. `pgrep -f 'init\|buildah\|podman
+build'` returns nothing because pgrep is ERE and `\|` is a literal pipe — an
+empty census READ as death. And the completion watch used `tail --pid=$!`,
+where `$!` was the `nice ionice setsid nohup` chain's setsid parent, which
+forks and exits at once, so the watch ended in seconds and "the stream
+ended" READ as the process ending. The build was at dnf package 139/573 the
+whole time. Rules: (1) before believing an EMPTY process census, run the
+same pattern against a process you know is alive — subtract-yourself's
+sibling: prove the instrument sees something; (2) a watch's exit is a fact
+about the watch; read the log's mtime and the pid table before reading it
+as a fact about the watched; (3) `$!` names the first exec of a wrapper
+chain, never the worker — take the worker pid from `pgrep -f` after launch.
+Same disease as confirmation-scrutiny: the finding you expected (957-bcsk's
+silent killer) is the one you check least.

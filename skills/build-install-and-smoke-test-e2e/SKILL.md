@@ -172,6 +172,51 @@ if ($LASTEXITCODE -ne 0) { throw "build-windows-tray.ps1 exited $LASTEXITCODE" }
 If the build, CI, install, path lookup, or version probe fails, **stop**. Do
 not destroy the runtime substrate, because no valid local build was installed.
 
+### The stop rule DISCRIMINATES — a red forge lane does not block destruction (order 808-zrzz)
+
+**Step 1 already contains §4.** `./build.sh --ci-full --install` runs a
+post-build litmus phase (`build.sh`, `_run_litmus_phase post-build e2e`), and
+`litmus:opencode-prompt-e2e-shape` is `phase: post-build, size: e2e` — it
+LAUNCHES A FORGE with the meta-orchestration prompt. So the forge lane this
+runbook presents as a separate §4 has already executed inside §1. The four steps
+below are not four independent things; §1 subsumes §4.
+
+That subsumption is why the stop rule needed narrowing. Read literally, ANY §1
+failure forbids §2 and §3 — so a forge lane that cannot push made the
+**idempotence test unreachable**, and those are unrelated properties. A stale
+mirror credential should not make it impossible to test that `tillandsias --init`
+rebuilds a wiped stack. Measured twice on macuahuitl 2026-08-17: pre-build litmus
+307 PASS / 0 FAIL, post-build 10 PASS / 1 FAIL, the single failure being the
+forge lane. Everything the build gate is nominally for was green.
+
+So:
+
+| §1 failure | destroy the substrate? |
+|---|---|
+| build, CI (pre-build litmus), install, path lookup, version probe | **NO — stop.** No valid local build was installed; destroying leaves the host with nothing to re-provision from. |
+| the post-build FORGE lane only | **YES — continue to §2/§3, and record it.** The build, the install and the version probe all succeeded; a binary capable of re-provisioning is on disk. |
+
+**Why this is safe, stated so it can be argued with:** the stop rule exists to
+prevent destroying a substrate that cannot be rebuilt. A forge-lane failure does
+not threaten that — it reports that a live forge could not complete a prompt,
+usually on upstream credentials, which says nothing about whether `--init`
+rebuilds a wiped stack. The property the rule protects is "a valid local build
+was installed", and that is exactly what the version probe above already
+asserted.
+
+**Record it, do not silently proceed:** note `forge_lane: FAIL (see §1 log)` in
+the findings, and file the forge failure as its own packet. A run that continues
+past a red forge lane must say so, or the next reader cannot tell a clean run
+from a partial one.
+
+**NOT DONE, deliberately (808-zrzz):** the forge litmus was NOT moved out of the
+build gate. That was the packet's other option and it is a bigger change than it
+looks — `--ci-full` is run by ordinary cycles, not only by this e2e, so moving
+the lane into §4 would silently drop forge coverage from every non-e2e run. The
+packet itself warns that the lane "is a real gate and the operator's cycles
+depend on it". Narrowing the stop rule removes the harmful coupling without
+removing anyone's coverage; moving the gate trades one problem for another and
+should be an explicit fleet decision if anyone still wants it.
 ---
 
 ## 2. Destroy the runtime substrate (DESTRUCTIVE — see warning above)
@@ -356,6 +401,14 @@ record where and why it halted.
 
 ## 4. Run continuous enhancement in the build forge — **Linux only**
 
+> **This step has ALREADY RUN once, inside §1** (order 808-zrzz).
+> `./build.sh --ci-full --install` executes `litmus:opencode-prompt-e2e-shape`
+> in its post-build phase, which launches a forge with the same prompt. Running
+> §4 here exercises the forge against the RE-PROVISIONED substrate, which is a
+> different and stronger claim than §1's run against the pre-existing one — that
+> is why it is still worth doing. But do not report them as two independent
+> passes, and do not read a §1 forge failure as "§4 has not been attempted".
+
 The `--opencode` forge lane is Linux/Podman today. **On macOS and Windows this
 step is N/A** — record it as `forge: n/a (linux-only lane)` and skip to
 findings.
@@ -375,6 +428,42 @@ test "$FORGE_RC" -eq 0
 Allow the in-forge agent to complete its skill, including filing and pushing
 its plan work packets. Do not terminate it merely because it runs long.
 
+
+### 4·Linux — choosing the harness (order 404)
+
+Two harnesses can run this lane non-interactively, and they are scored
+IDENTICALLY on purpose: same rate-limit class, same `MO-SMOKE: PASS|FAIL`
+verdict grammar, same de-escalation rule.
+
+| harness | launcher | full-mode attestation |
+|---|---|---|
+| OpenCode | `scripts/litmus-opencode-e2e-launch.sh` | asserts the `MO-FULL` terminal marker (order 614-2gqx) |
+| Codex | `scripts/litmus-codex-e2e-launch.sh` | NOT asserted — that surface is order 614-2gqx's scope for this lane |
+
+**They share one budget, not two.** Both resolve full-vs-smoke through
+`scripts/lib-e2e-mode.sh` against the same `full-meta` limiter class, so a Codex
+full run consumes the same 4h allowance an OpenCode one would. Running both
+back to back does not buy two full cycles; the second will resolve to smoke.
+That is deliberate — the 2026-07-11 directive caps provider spend per host, not
+per harness.
+
+**How the two are compared.** Because the verdict grammar is identical, a Codex
+smoke run and an OpenCode smoke run are directly comparable: both exit 0 only
+with `MO-SMOKE: PASS` in their log, and both report `FORGE_EXIT=126` when a run
+exits 0 WITHOUT the verdict — the case where a provider returns cleanly between
+tool calls having done nothing. Divergence between the two harnesses on the same
+prompt is therefore a finding about the harness, not about the scoring, and
+belongs in `codex-opencode-smoke-divergence-comparison`.
+
+Each lane writes its own evidence (`/tmp/codex-e2e-*` vs `/tmp/opencode-e2e-*`)
+so one run never overwrites the other's log or mode file.
+
+Parity is pinned by `litmus:codex-e2e-launch-parity`, which fails if the lanes
+drift apart — including if the shared decision is ever copied instead of
+sourced.
+
+Prefer OpenCode when the run needs full-mode attestation. Either is valid for a
+smoke run; record which one you used in the findings.
 ---
 
 ## Findings and report
