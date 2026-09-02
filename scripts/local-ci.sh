@@ -226,8 +226,8 @@ get_all_active_specs() {
         command -v resolve_plan_binary &>/dev/null && _bin="$(resolve_plan_binary 2>/dev/null)" || _bin=""
     fi
     local v
-    if [[ -n "$_bin" ]] && command -v jq &>/dev/null \
-        && v="$("$_bin" yaml-json "$REPO_ROOT/openspec/litmus-bindings.yaml" 2>/dev/null | jq -r '.specs[] | select(.status=="active") | .spec_id' 2>/dev/null)"; then
+    if [[ -n "$_bin" ]] && command -v "$JQ" &>/dev/null \
+        && v="$("$_bin" yaml-json "$REPO_ROOT/openspec/litmus-bindings.yaml" 2>/dev/null | "$JQ" -r '.specs[] | select(.status=="active") | .spec_id' 2>/dev/null)"; then
         [[ -n "$v" ]] && printf '%s\n' "$v"
     elif command -v yq &>/dev/null; then
         yq eval '.specs[] | select(.status=="active") | .spec_id' "$REPO_ROOT/openspec/litmus-bindings.yaml" 2>/dev/null || true
