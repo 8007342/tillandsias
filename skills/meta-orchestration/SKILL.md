@@ -1922,6 +1922,32 @@ Before exit:
    get unstuck — salvage first (872-c9nd) and report blocked with the salvage
    ref.
 
+3c. **EVERY LEDGER WRITE HAPPENS BEFORE THE GATE, NOT AFTER IT** (yolanda,
+   2026-09-02). The gate stamp hashes the CONTENT of every tracked and
+   untracked file in the worktree, so a ledger write after a green gate
+   creates a new `plan/index.d/` or `plan/loop_status.d/` file, moves the
+   digest, and the pre-push hook then refuses a tree whose CODE the gate
+   validated perfectly. Order your Finalization so that `append-event`,
+   `set-field`, `loop-status-append` and any issue file all land FIRST,
+   then gate once, then commit and push.
+
+   MEASURED: three extra full gates in one cycle on windows, about 25
+   minutes, plus a fourth on this host the same day. Both agents
+   rediscovered the ordering by trial; it was written down nowhere, which
+   is why it is here now rather than in a message that scrolls away.
+
+   The one exception is the attestation ledger, which CANNOT precede the
+   gate — `record` attests the head that finalization produces. That is
+   why step 9 re-verifies and re-derives; it is not a second chance at
+   the gate.
+
+   DO NOT diagnose this from the refusal message: it lists paths whose
+   MTIME is newer than the stamp, while the decision is made on CONTENT.
+   A merge or a regeneration that rewrites bytes identically appears in
+   that list without being the cause, and the file that actually moved
+   the digest may not appear at all. `scripts/gate-stamp.sh verify` is the
+   authority.
+
 4. Run the local gate: `./build.sh --check` and fix what it reports.
    An unparseable or unformatted push poisons every downstream clone. Push CI
    no longer exists on any working branch — only the manually-dispatched
