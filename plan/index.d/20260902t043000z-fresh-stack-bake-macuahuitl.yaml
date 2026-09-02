@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+
+events:
+  - packet_id: builder-container-serial-killer
+    event:
+      type: note
+      ts: "2026-09-02T04:30:00Z"
+      host: macuahuitl
+      summary: >
+        FRESH-STACK EVIDENCE (bounded): first image bake after the 2026-09-02
+        reboot — `tillandsias --debug --init` at v56.9.1.2, throttled
+        (nice 19 / ionice idle), cold forge-base (dnf 573 pkgs) + forge + web —
+        ran 04:18:29Z→04:28:21Z, INIT_RC=0, no kill, no journal entry, no
+        coredump; systemd-oomd active, earlyoom inactive, 39G free of 62G
+        throughout. What this does and does not say: it does NOT test the
+        "~15 min into a builder-resident build" mark (this bake took 10 min and
+        was not builder-resident); it DOES show the fresh stack survives a
+        multi-image bake with cargo clean + a --check gate running alongside.
+        INSTRUMENT RETRACTION: mid-bake the coordinator declared it "killed,
+        no survivors" from (a) `pgrep -f 'a\|b'` — ERE, `\|` is literal, empty
+        census — and (b) `tail --pid=$!` on a nice/ionice/setsid/nohup chain,
+        which watches the setsid parent that forks and exits at once. Any prior
+        957 sighting whose only evidence was an empty `pgrep -f` with `\|`
+        alternation is VOID; sightings backed by `podman ps` `Exited (137)`
+        rows or a journal 'container kill' entry stand. Cheatsheet entry
+        filed (litmus-fixture-writing: "the census lied twice").
