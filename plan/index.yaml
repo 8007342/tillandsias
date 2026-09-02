@@ -17723,6 +17723,51 @@ plan_index:
         - 'Each of D1-D4 is falsified by hand before closure: reverting the individual fix must reproduce its symptom or fail its test. A blanket ''terminal looks better'' observation does not close any of them.'
       events:
         - type: progress
+          ts: "2026-09-02T21:48:58Z"
+          agent_id: "macos-tlatoanis-macbook-air-claude-20260902t214857z"
+          host: tlatoanis-macbook-air
+          summary: |
+            D2 IMPLEMENTED: the 10s attach-client timeout no longer births the guest PTY at a geometry the window contradicts.
+
+            MEASURED FIRST, on this host. A real Terminal.app window is 39x131 (and a second 37x131); Terminal's default profile is 30x120. The old fallback seeded 24x80 — wrong on BOTH axes against every candidate — so a forge whose client was slow or absent laid out its first frame for a terminal nobody had.
+
+            THE FIX. On the timeout path the tray now ASKS THE WINDOW instead of guessing. Terminal.app's tab exposes 'number of rows'/'number of columns', so the attach tags the window it opens and reads that tag back:
+            - attach_window_title_token(sock_path) — uniqueness inherited from the per-attach session socket (pid + monotonic counter), rendered as a readable title since it replaces what a user sees.
+            - applescript_for_attach_client_tagged — sets the title on the tab 'do script' RETURNED, inside the same tell block, so it cannot race a window the user opened in between.
+            - applescript_for_tagged_window_geometry / parse_geometry — read it back, or answer None.
+            - query_tagged_window_geometry(sock, budget) — live, bounded, kill_on_drop.
+
+            WHY THE TAG AND NOT 'tty of tab': that property is the WINDOW's own tty, never the PTY slave we allocated. Measured — five tabs, five ttys, none of them the slave. Matching on it would have silently seeded from an unrelated window.
+
+            WHY NOT the default profile: it is 30x120 here while the real window is 39x131. Closer than 24x80 and still wrong; the tag is exact.
+
+            THE NEGATIVE CONTROL IS STRUCTURAL, not incidental. A headless launch must still succeed rather than hang, and osascript on a host with no GUI session can block indefinitely — an unbounded query here would have converted a launch that merely LOOKED wrong into one that hangs, which is strictly worse than the defect. Two guards: the query runs ONLY when spawn_terminal_pty_attach actually succeeded (its Result is now the discriminator instead of being logged and dropped), and it is bounded by a 3s budget with kill_on_drop(true) so expiry is a real kill rather than a leaked osascript. 24x80 remains the last resort and its log line now names terminal_spawned, so the two ways of reaching it are distinguishable in a transcript.
+
+            VERIFICATION. 20 unit tests green in terminal_attach, including: uniqueness and readability of the tag, that the snippet tags the returned tab rather than 'window 1' (the race), AppleScript escaping of a hostile title, and a NEGATIVE CONTROL that every no-answer shape yields None — empty, unparseable, and crucially a ZERO dimension, which parses and would seed a degenerate PTY worse than the 24x80 it replaced. Plus a bounded-wait test asserting a never-answering child is killed within budget.
+
+            Also added live_geometry_round_trip (macOS-only, #[ignore]): drives the REAL generated AppleScript against the REAL Terminal.app rather than asserting on strings — verified 37x131, and an unknown tag correctly resolves to nothing. Run with: cargo test -p tillandsias-macos-tray --release live_geometry -- --ignored
+
+            NOT CLOSING THE PACKET. Both criteria are implemented and D1 is visually verified, but the D2 path proven here is its mechanism (tag, query, bound, fall back), not a forge attach whose client genuinely fails to report inside a booted VM — that needs a VM launch this cycle did not perform. The DISTINGUISHING SIGNATURE in the packet is unchanged and still the right discriminator: D2 self-corrects on the first window resize, D1 does not.
+
+            TILLANDSIAS_FORCE_CHECK=1 ./build.sh --check green (168s).
+        - type: progress
+          ts: "2026-09-02T21:48:35Z"
+          agent_id: "macos-tlatoanis-macbook-air-claude-20260902t214835z"
+          host: tlatoanis-macbook-air
+          summary: |
+            D1 VERIFIED VISUALLY on Terminal.app (macOS 25.6, tlatoanis-macbook-air), with a paired falsification and one CORRECTION to the packet's stated expectation.
+
+            METHOD. The attach client boots no VM and touches no AppKit, so D1 is testable without a forge: a throwaway PTY harness allocates a master/slave, Terminal.app runs the real tray binary as --attach-pty <slave> --session-sock <sock>, and the harness writes a numbered ruler (GUESTROW01..20) to the master. Two arms differing in exactly one line; 22 lines of long PRIOR-WINDOW-CONTENT printed before the client starts in both.
+
+            ARM A, SCREEN_HOME present: GUESTROW01 on window row 1, screen otherwise entirely clean — no banner, no residue from the 22 prior lines or the echoed command.
+            ARM B, the SCREEN_HOME write commented out and rebuilt: prior content survives everywhere a guest line is shorter than what it overwrote — banner tails to the right of all 20 rows, the echoed osascript command legible across rows 2-4, and six untouched banner lines below GUESTROW20. That is 'renders corrupt from launch' exactly.
+
+            THE CORRECTION, and it changes how this criterion should be stated. next_action predicts that reverting SCREEN_HOME makes 'the offset return'. IT DOES NOT. Row alignment is IDENTICAL in both arms: MODE_RESET's DECRST 1049 already returns from the alt screen and lands the cursor at row 1 by itself. SCREEN_HOME's contribution is the ERASE (the ED in ESC[2J), not the homing. The without-SCREEN_HOME failure mode is BLEED-THROUGH, not vertical offset — an agent looking for a shifted first row would have found none and could have concluded the fix was inert. Both writes are needed and they do different jobs.
+
+            A first attempt produced a FALSE NEGATIVE worth recording: seeding the window with 'clear' before starting the client. On Terminal.app 'clear' uses the alternate screen, so MODE_RESET's own 1049l restored the pre-clear contents and erased the banner without SCREEN_HOME doing anything. A test whose setup touches the alt screen cannot see this defect at all.
+
+            The falsification was reverted; the tree carries the fix unchanged. Criterion (a) is closed by direct observation on the only hardware that can close it.
+        - type: progress
           ts: "2026-09-02T01:00:31Z"
           agent_id: "linux-lenovinha-claude-20260902t005315z"
           host: lenovinha
