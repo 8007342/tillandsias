@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: forge-pids-ceiling-512
+    field: status
+    value: ready
+    ts: "2026-09-02T17:45:41Z"
+    host: macuahuitl
+
+events:
+  - packet_id: forge-pids-ceiling-512
+    event:
+      type: note
+      ts: "2026-09-02T17:45:41Z"
+      host: macuahuitl
+      summary: >
+        released by the coordinator 2026-09-02T17:30Z (release-on-exit; the stranded sweep now flags it): the launcher rung landed (all seven sites at 4096, c68e89b3b) and 811-28eh closed today on the same mechanism in the inference container; what remains is one fresh 4096 forge-guest sample, which needs a lane launch from the relaunched tray on macuahuitl or a pirria/esmeraldinha relaunch — held in_progress it hid from ready and from burndown for 11h
