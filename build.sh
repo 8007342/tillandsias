@@ -1936,6 +1936,19 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Tier-model warm selection fixture passed"
 
+    # Order 448. images/default/cheatsheets/ is a TRACKED copy derived from the
+    # authored tree, so an authoring commit that omits it leaves every OTHER
+    # host unable to push (the v5 pre-push hook refuses) while the author's own
+    # commit succeeds — three measured instances, the latest 2026-09-02. The
+    # commit-time guard re-syncs into the same commit; this pins it, including
+    # the mutation arm that proves the drift is real without it.
+    _step "Checking the commit-time cheatsheet image sync (448)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-sync-image-cheatsheets-for-commit.sh" 2>&1; then
+        _error "the commit-time cheatsheet sync regressed — an authored cheatsheet can again strand every other host's push"
+        exit 1
+    fi
+    _info "Commit-time cheatsheet sync fixture passed"
+
     # Order 748-tkjx. ./build.sh --check runs NO litmus (deliberate — the suite
     # is minutes and a gate that slow gets bypassed with --no-verify), so a
     # green gate plus the spec you happened to run can both pass over another
