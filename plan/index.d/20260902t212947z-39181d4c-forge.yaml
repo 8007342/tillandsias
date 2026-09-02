@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tray-launched-forge-seeded-from-main-not-the-checkout-branch
+    field: next_action
+    value: 'HOST-SIDE MEASUREMENT (cannot be done from a forge): on a fresh launch, podman inspect the container and compare TILLANDSIAS_FORGE_SEED_BRANCH against git symbolic-ref --short HEAD of the checkout the tray actually launched from. Discriminators (a) remote-default-read and (c) skipped-read are ruled out in d4b764392; what remains is (b) — a stale registered project path, or a checkout that was genuinely on main at launch. The new SEED UNRESOLVED line will now name the path it read, which is the fastest way to see WHICH checkout the tray used. Also for the fleet: I landed a loud named failure rather than the hard refusal the criterion asks for, because a hard refusal breaks order 501''s end-user-transparency contract — decide whether to make refusal opt-in by env.'
+    ts: "2026-09-02T21:29:47Z"
+    host: forge
