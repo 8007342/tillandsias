@@ -1,17 +1,3 @@
-# Ledger fragment — append-only, IMMUTABLE once written.
-#
-# RE-LANDS the event body of
-# plan/index.d/20260902t204208z-919-vvyv-measurement-lenovinha-tillandsias-forge.yaml
-# (lenovinha's in-forge measurement of 919-vvyv), byte-for-byte in the summary,
-# with the one structural correction the fold requires: the event fields were
-# written at the ENTRY level instead of nested under `event:`, so the fold had
-# no handler and skipped the whole entry in silence — the 866-pvsx shape. The
-# original write did NOT land; this one does.
-#
-# The malformed original is removed in the same commit. It carried no content
-# the fold ever read, and while it sat in plan/index.d/ it failed
-# `check --strict-fragments`, which the pre-push hook consults — so it blocked
-# EVERY host's push, not only its author's.
 events:
   - packet_id: cpu-only-forge-expert-system-integration-gaps
     event:

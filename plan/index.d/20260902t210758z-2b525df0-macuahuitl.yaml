@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: litmus-low-end-instrument
+    field: next_action
+    value: 'NEXT RUNG (esme-tillandsias-wsl2 per-step log, 2026-09-02, WSL2 floor, socket genuinely absent): the host-browser-lane test does NOT fail on socket absence — steps 1-6 pass with the socket absent; step 7 and every other cargo-reaching litmus step FAIL because images/router/tillandsias-router-sidecar is a build artifact absent on any curl-installed forge (crates/tillandsias-headless/build.rs:139 panic, 710-w9kc): FAIL 27 / PASS 263 / SKIP 183 of 290 executed. Steps 8-11 of that test are UNKNOWN, not passed (the runner abandons at the first failing step). WIDEN the rung from host-browser to a SHARED precondition probe in run-litmus-test.sh: sidecar absent => every cargo-invoking step SKIPs with reason ''infra-absence: router sidecar not built (scripts/build-sidecar.sh)''. Also observed: the kill-time adjudicator''s censored marker fired in-forge on two tests (first floor field reading, 4024af89a works under WSL2); the CONTENDED line is absent from --compact output, so a non-compact rerun is what settles whether cpu.pressure is found inside a WSL2 forge. The other 26 failures are named in esme''s fragment and untriaged.'
+    ts: "2026-09-02T21:07:58Z"
+    host: macuahuitl
+
+events:
+  - packet_id: litmus-low-end-instrument
+    event:
+      type: note
+      ts: "2026-09-02T21:07:58Z"
+      host: macuahuitl
+      summary: >
+        esme 956 per-step log relayed by the coordinator (its mirror 403s)

@@ -1,0 +1,100 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# macuahuitl coordinator, 2026-09-02: two findings from the macuahuitl-tillandsias-forge 920-pxg6 cycle given rows; today's cheatsheet drift recorded on 448.
+
+packets:
+  - packet_id: tray-launched-forge-seeded-from-main-not-the-checkout-branch
+    order: 965-rb3v
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    release_target: forge-local-experts-milestone
+    capability_tags:
+      - forge
+      - launcher
+      - fail-loud
+      - branch
+    estimated_hours: 3
+    title: |
+      A forge launched from the tray on a linux-next checkout arrives with TILLANDSIAS_FORGE_SEED_BRANCH=main, so every Claude-launched forge starts on main and cannot commit until the agent notices.
+    context: |
+      MEASURED 2026-09-02 on macuahuitl (v56.9.2.1 stable curl-installed,
+      tray-launched `tillandsias --claude --remote-control
+      macuahuitl-tillandsias-forge`): podman inspect of
+      tillandsias-tillandsias-forge-claude shows
+      TILLANDSIAS_FORGE_SEED_BRANCH=main while the host project checkout at
+      /home/tlatoani/claudia/tillandsias has HEAD on linux-next
+      (git symbolic-ref --short HEAD) and origin/HEAD -> origin/main. The
+      operator's tillandsias.org forge on the same host reads seed
+      main. The forge's 20:29Z cycle opened with the committable-branch
+      guard refusing (blocked:committable-cycle-on-main) and the agent
+      switched to linux-next by hand before any work; it reported "I was
+      seeded on main, not linux-next". The Forge Expert Base Guard (order
+      531) exists because a forge seeded from main builds a pre-expert plan
+      binary — this is the same launch path failing one step earlier, and it
+      costs every Claude-launched forge its first cycle. CANDIDATES, to be
+      discriminated before any fix: read_host_project_current_branch resolving
+      the remote default instead of the checkout HEAD in the release build;
+      the tray's registered project entry carrying a stale branch; the
+      --remote-control launch path bypassing the branch read entirely.
+    exit_criteria:
+      - the seed branch a tray-launched forge receives equals git symbolic-ref --short HEAD of the host checkout at launch, measured by podman inspect on a fresh launch from a linux-next checkout
+      - when the checkout HEAD cannot be resolved, the launch refuses loudly, naming the path and the reason, instead of defaulting to main
+      - a unit test or litmus pins the discriminator so the regression cannot return silently
+  - packet_id: warm-the-tier-model-at-forge-lifecycle-start
+    order: 965-hz3f
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    release_target: forge-local-experts-milestone
+    capability_tags:
+      - forge
+      - experts
+      - inference
+      - performance
+    estimated_hours: 3
+    title: |
+      The Quick tier's budget is charged for VRAM load — cold 7b 23353ms / 14b 9996ms, warm 938ms / 1474ms through the full grounded pipeline — so warm the tier's selected model at forge lifecycle start instead of raising the budget.
+    context: |
+      MEASURED by macuahuitl-tillandsias-forge 2026-09-02 (NVIDIA lane,
+      v56.9.2.1, HEAD 5045ee7a6) through run_grounded end to end: latency is
+      bimodal and both warm figures sit inside Quick's 3000ms. 927-2q4w
+      (archived) read Darwin's 10-24s as a hardware floor and raised the
+      budget; that figure was cold-start charged to the tier. The escape
+      hatch stays: 14b with 6 chunks in context measured 10211ms warm.
+      COORDINATOR DECISION 2026-09-02: the remedy is (1) warm the tier's
+      SELECTED model — the ladder's pick for this host (919-vvyv on the CPU
+      floor; 14b on a GPU lane, pending yoga's ROCm replication requested on
+      824-6qxh) — at lifecycle start, after inference is up and before
+      expert-serve reports ready; (2) never charge model load to a tier
+      budget: measure and report load on its own line; (3) do not raise the
+      budget. The 14b-over-7b floor is NOT a fleet rule yet — it is one
+      regime (the same forge measured 7b citing 0 keys through the full
+      pipeline where Darwin's out-of-pipeline replication cited).
+    exit_criteria:
+      - a cold forge's first Quick-tier query lands inside the budget on the lane that measured 938ms warm, with the load time reported on its own line in the startup context
+      - on a lane where the selected model cannot be warmed (no inference, CPU floor), the startup context says so and the tier refuses honestly rather than timing out
+      - the 14b-vs-7b floor is re-measured on a second regime before it is written anywhere as a rule
+
+events:
+  - packet_id: cheatsheet-image-copy-drift-prevention
+    event:
+      type: note
+      ts: "2026-09-02T21:01:23Z"
+      host: macuahuitl
+      summary: >
+        THIRD MEASURED INSTANCE, and this one blocked the fleet: on 2026-09-02
+        a forge landing (7cdbc7546, 919-vvyv) authored
+        cheatsheets/architecture/cpu-only-model-tier-ladder.md without staging
+        images/default/cheatsheets, and the v5 pre-push hook then refused every
+        push from every host with cheatsheet-image-sync:drift
+        derived-tree-index-stale until the coordinator fixed forward
+        (5978ad787). The hook catches it at push time, on the NEXT host, after
+        the authoring host's push went through the mirror — so the guard exists
+        and still lets the drift reach the trunk. Evidence for exit criterion 1:
+        the loud failure has to fire at the authoring commit, or the copy has
+        to be generated. Prior instances: 2026-07-20 (packet outcome),
+        2026-08-16 (yoga note).
