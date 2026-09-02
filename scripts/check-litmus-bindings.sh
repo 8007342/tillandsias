@@ -130,8 +130,14 @@ BASE_REF="${TILLANDSIAS_LITMUS_BIND_BASE:-origin/linux-next}"
 
 if [ -x "$RUNNER" ] && git -C "$ROOT" rev-parse --verify "$BASE_REF" >/dev/null 2>&1; then
     # Names added to the registry in this change, mapped back to their files.
+    #
+    # The character class is repeated rather than written `\+`: BSD sed (every
+    # macOS host) has no `\+` in a BRE and matches a literal plus, so the
+    # extraction returned NOTHING there — `added_names` empty, `checked_new=0`,
+    # and the gate reported ok over a newly-bound unrunnable file. A gate that
+    # silently stops gating on one platform is worse than one that fails there.
     added_names="$(git -C "$ROOT" diff -U0 "$BASE_REF" -- openspec/litmus-bindings.yaml 2>/dev/null \
-        | sed -n 's/^+[[:space:]]*-[[:space:]]*\(litmus:[A-Za-z0-9._-]\+\).*/\1/p' | sort -u || true)"
+        | sed -n 's/^+[[:space:]]*-[[:space:]]*\(litmus:[A-Za-z0-9._-][A-Za-z0-9._-]*\).*/\1/p' | sort -u || true)"
     unrunnable=""
     checked_new=0
     while IFS= read -r nm; do
