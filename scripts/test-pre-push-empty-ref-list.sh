@@ -71,6 +71,20 @@ git init -q --bare "$W/bare.git"
 git init -q -b linux-next "$W/wc"; ( cd "$W/wc" && git remote add origin "$W/bare.git" )
 git init -q -b linux-next "$W/other"; ( cd "$W/other" && git remote add origin "$W/bare.git" )
 
+# core.hooksPath is GLOBAL and OVERRIDES .git/hooks — pin it per scratch repo.
+# A forge provisions core.hooksPath=~/.cache/tillandsias/git-hooks in
+# ~/.gitconfig, and git's rule is that a set core.hooksPath replaces the
+# per-repo hooks directory outright. install_spy below writes to .git/hooks,
+# so in a forge the spy was NEVER INVOKED: every arm that measures git's ref
+# list read an empty capture and reported '<none>', reddening ./build.sh
+# --check on every forge on the fleet while arms 6-11 (which pipe stdin to the
+# guard directly and never go through git) stayed green. The failure looked
+# like the ref-list behaviour had changed; it was the fixture never observing
+# it. Setting it LOCALLY here restores the documented default without touching
+# the ambient config, which the surrounding arms deliberately leave alone.
+( cd "$W/wc" && git config core.hooksPath .git/hooks )
+( cd "$W/other" && git config core.hooksPath .git/hooks )
+
 # A spy in the composed hook's exact shape: capture stdin once, report its size.
 install_spy() {
     cat > "$1/.git/hooks/pre-push" <<'SPY'
