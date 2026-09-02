@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: cpu-only-forge-expert-system-integration-gaps
+    field: next_action
+    value: Rebuild the forge image at HEAD and launch a COLD forge; verify (a) nomic-embed-text is pulled on an empty model volume, (b) the launch wires embed_endpoint and the spec index builds at first launch, (c) spec_answer returns a cited envelope within 5 min. Blocked in a forge until 964-zedm (spec-index stages into a 256 MB /tmp tmpfs) is fixed. Measured CPU index build is 214s for 22645 chunks, not the ~60 min this packet assumed.
+    ts: "2026-09-02T20:42:44Z"
+    host: lenovinha-tillandsias-forge
