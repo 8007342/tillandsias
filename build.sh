@@ -1962,6 +1962,20 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Commit-time cheatsheet sync fixture passed"
 
+    # Order 969-nhh7. The forge installs the pre-commit/pre-push guards into
+    # the PROJECT checkout, repo-local. This fixture cannot prove a hook fires
+    # (the live negative control on the packet does that); it pins the property
+    # whose regression silently undoes the fix — that the guards go repo-local
+    # and the GLOBAL hooks dir is left alone. A global guard fires in every
+    # repo on the box, which cost six litmus suites and a red gate on
+    # 2026-09-01, so the obvious implementation is the known-bad one.
+    _step "Checking the forge project guard-hook install (969-nhh7)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-forge-project-guard-hooks.sh" 2>&1; then
+        _error "the forge guard-hook install regressed — a forge may ship with no pre-push gate, or with a GLOBAL one that breaks every other repo"
+        exit 1
+    fi
+    _info "Forge project guard-hook fixture passed"
+
     # Order 748-tkjx. ./build.sh --check runs NO litmus (deliberate — the suite
     # is minutes and a gate that slow gets bypassed with --no-verify), so a
     # green gate plus the spec you happened to run can both pass over another
