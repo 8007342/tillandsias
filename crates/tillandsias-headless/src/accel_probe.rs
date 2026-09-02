@@ -1028,6 +1028,102 @@ pub fn enumerate_render_nodes_at(root: &std::path::Path, vantage: Vantage) -> Ve
     out
 }
 
+/// A stable identifier for the HARDWARE this document describes, so two hosts
+/// can be SHOWN identical rather than ASSERTED identical.
+///
+/// 805-r98w. The cost of not having this was paid on 2026-08-31: an accelerator
+/// result measured here was reported as "replicates on a THIRD SUBSTRATE" when
+/// nothing could establish that this host and yoga's are the same substrate.
+/// Both hosts then had to strike the framing. Two machines each describing
+/// themselves and calling the pair a control is precisely what this fixes.
+///
+/// WHAT IS IN IT — hardware only:
+///   cpu:<vendor>/<name>/<physical>c<logical>t
+///   gpu:<vendor>/<name>
+///   npu:<vendor>/<device_node>
+///   ram:<class>
+/// Devices are sorted before hashing, because enumeration order is not a
+/// property of the machine and a fingerprint that changed with it would fail
+/// the one job it has.
+///
+/// WHAT IS DELIBERATELY OUT, and this is the design rather than an omission:
+///
+///   * THE OS, KERNEL, AND CONTAINER RUNTIME. Those are the SUBSTRATE, and the
+///     packet's whole point is a matrix keyed on (fingerprint, substrate) where
+///     same-fingerprint rows isolate the substrate as the only free variable.
+///     Folding the OS in would make every row unique and the control impossible.
+///     This host and yoga's must fingerprint IDENTICALLY despite one running
+///     Windows/WSL2 and the other bare Linux — that equality is the deliverable.
+///   * `driver`, for the same reason: a driver version is substrate, not silicon.
+///   * `usable` and `lanes`: those are what the matrix MEASURES. Keying on them
+///     would let the answer choose the question.
+///
+/// RAM IS BUCKETED, not exact. Two machines with the same DIMMs report slightly
+/// different `system_ram_gb` once firmware reservations differ, and an exact
+/// figure would split a twin pair on a number neither user chose.
+///
+/// NOT A UNIQUENESS CLAIM. Two genuinely identical machines SHOULD collide —
+/// that is the point. This says "same hardware", never "same host"; `host_id`
+/// remains the identity key and this is deliberately not a substitute for it.
+pub fn hardware_fingerprint(doc: &CapabilityDocument) -> String {
+    fn ram_class(gb: f64) -> String {
+        // Nearest power-of-two-ish class. 15.2 and 15.9 are both "16".
+        const CLASSES: [f64; 9] = [2.0, 4.0, 8.0, 16.0, 32.0, 64.0, 128.0, 256.0, 512.0];
+        let best = CLASSES
+            .iter()
+            .min_by(|a, b| {
+                (*a - gb)
+                    .abs()
+                    .partial_cmp(&(*b - gb).abs())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .copied()
+            .unwrap_or(gb);
+        format!("{best:.0}")
+    }
+
+    let mut parts: Vec<String> = Vec::new();
+    let mut ram: Option<String> = None;
+    for d in &doc.devices {
+        match d.device_class.as_str() {
+            "cpu" => {
+                let cores = d
+                    .cpu_cores
+                    .as_ref()
+                    .map(|c| format!("{}c{}t", c.physical, c.logical))
+                    .unwrap_or_else(|| "?c?t".to_string());
+                parts.push(format!("cpu:{}/{}/{}", d.vendor, d.name, cores));
+            }
+            "gpu" => parts.push(format!("gpu:{}/{}", d.vendor, d.name)),
+            "npu" => parts.push(format!(
+                "npu:{}/{}",
+                d.vendor,
+                d.device_node.as_deref().unwrap_or("-")
+            )),
+            _ => {}
+        }
+        if ram.is_none() {
+            if let Some(gb) = d.system_ram_gb {
+                ram = Some(ram_class(gb));
+            }
+        }
+    }
+    parts.sort();
+    if let Some(r) = ram {
+        parts.push(format!("ram:{r}"));
+    }
+    let joined = parts.join("|");
+    // cksum-grade is enough: this is a comparison key, not a security boundary,
+    // and a readable prefix beats an opaque digest when a human is asking why
+    // two rows did not match.
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in joined.as_bytes() {
+        h ^= *b as u64;
+        h = h.wrapping_mul(0x1000_0000_01b3);
+    }
+    format!("hw1-{h:016x}")
+}
+
 /// Upgrade a node to [`Proof::Placed`] from a runtime's reported residency.
 ///
 /// 793-zumy REMAINING 2, second half. Takes the residency as a VALUE rather than
@@ -2294,6 +2390,85 @@ mod tests {
             cpu_cores: None,
             system_ram_gb: None,
         }
+    }
+
+    /// 805-r98w. The fingerprint exists so two hosts can be SHOWN identical
+    /// rather than asserted identical. The load-bearing arm is the twin pair:
+    /// same silicon, different OS, SAME fingerprint — because the substrate is
+    /// the other axis of the matrix, not part of the hardware's identity.
+    #[test]
+    fn hardware_fingerprint_ignores_substrate_and_separates_real_hardware() {
+        let gpu = |name: &str| {
+            let mut d = device("gpu", name, &["host-native"], None);
+            d.vendor = "amd".to_string();
+            d.system_ram_gb = Some(15.2);
+            d
+        };
+
+        // ARM 1 — THE TWIN PAIR. Same silicon, and everything the substrate
+        // owns differs: kernel, host_kind, host_id, driver, usable, lanes.
+        // These must fingerprint IDENTICALLY or the pair cannot be a control.
+        let mut a = doc_with(vec![gpu("AMD Radeon 860M")]);
+        a.host.kernel_release = "6.18.33.2-microsoft-standard-WSL2".to_string();
+        a.host.host_kind = "windows".to_string();
+        a.host.host_id = "yolanda".to_string();
+        a.devices[0].driver = Some("amdgpu-wsl".to_string());
+        a.devices[0].lanes = vec!["container".to_string()];
+
+        let mut b = doc_with(vec![gpu("AMD Radeon 860M")]);
+        b.host.kernel_release = "6.11.0-amd64".to_string();
+        b.host.host_kind = "linux".to_string();
+        b.host.host_id = "yoga".to_string();
+        b.devices[0].driver = Some("amdgpu".to_string());
+        b.devices[0].usable = false;
+
+        assert_eq!(
+            super::hardware_fingerprint(&a),
+            super::hardware_fingerprint(&b),
+            "the twin pair must fingerprint identically across substrates — \
+             otherwise same-fingerprint rows can never isolate the substrate, \
+             which is the only thing this fingerprint is for"
+        );
+
+        // ARM 2 — DIFFERENT GPU: must differ. A fingerprint that collides on
+        // real hardware differences licenses the comparison it exists to gate.
+        let c = doc_with(vec![gpu("NVIDIA RTX A5000")]);
+        assert_ne!(
+            super::hardware_fingerprint(&a),
+            super::hardware_fingerprint(&c)
+        );
+
+        // ARM 3 — RAM IS BUCKETED. 15.2 and 15.9 GB are the same class; firmware
+        // reservations must not split a twin pair on a number nobody chose.
+        let mut d = doc_with(vec![gpu("AMD Radeon 860M")]);
+        d.devices[0].system_ram_gb = Some(15.9);
+        assert_eq!(
+            super::hardware_fingerprint(&a),
+            super::hardware_fingerprint(&d)
+        );
+
+        // ARM 4 — a genuinely different RAM class DOES separate.
+        let mut e = doc_with(vec![gpu("AMD Radeon 860M")]);
+        e.devices[0].system_ram_gb = Some(64.0);
+        assert_ne!(
+            super::hardware_fingerprint(&a),
+            super::hardware_fingerprint(&e)
+        );
+
+        // ARM 5 — ENUMERATION ORDER IS NOT A PROPERTY OF THE MACHINE.
+        let f = doc_with(vec![
+            gpu("AMD Radeon 860M"),
+            device("npu", "XDNA2", &["host-native"], None),
+        ]);
+        let g = doc_with(vec![
+            device("npu", "XDNA2", &["host-native"], None),
+            gpu("AMD Radeon 860M"),
+        ]);
+        assert_eq!(
+            super::hardware_fingerprint(&f),
+            super::hardware_fingerprint(&g),
+            "device order must not change the fingerprint"
+        );
     }
 
     #[test]
