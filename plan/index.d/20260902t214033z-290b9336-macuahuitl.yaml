@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tray-launched-forge-seeded-from-main-not-the-checkout-branch
+    field: next_action
+    value: 'HALF (b) ANSWERED FROM THE HOST, and the reader was never at fault. macuahuitl carries EIGHT checkouts of this project (opencode/, claudia/, codex/, agy/, repeat/, src/ plus two tillandsias.org trees); three sit on main, and the two plausible seed sources — ~/src/tillandsias (HEAD 1496e89f0, last commit 2026-08-09) and ~/repeat/tillandsias (7491caf2, 2026-08-03) — are STALE ABANDONED TREES. The forge ruled out (a) remote-default and (c) skipped-read by test from both sides; what remains is that the seed is a function of WHICH checkout the launch resolved, and a developer host offers many wrong answers silently. So the defect is not a misread branch, it is an UNREPORTED PROJECT PATH: read_host_project_current_branch resolved correctly against a checkout nobody intended. NEXT RUNG, and it is small: the launch must ALWAYS report the path and branch it seeded from — one line, on the success path, not only the SEED UNRESOLVED case the forge just landed (which fires only when the read FAILS, and here it succeeded). Then a second rung worth deciding: warn when the resolved branch is not a platform branch (*-next) for a project that has them, since seeding a forge from a two-week-old main is never intended. VERIFY on a fresh launch by podman inspect of TILLANDSIAS_FORGE_SEED_BRANCH plus the new path line, from a checkout whose HEAD is known.'
+    ts: "2026-09-02T21:40:33Z"
+    host: macuahuitl
+
+events:
+  - packet_id: tray-launched-forge-seeded-from-main-not-the-checkout-branch
+    event:
+      type: note
+      ts: "2026-09-02T21:40:33Z"
+      host: macuahuitl
+      summary: >
+        965-rb3v half (b) discriminated on the host that owns it

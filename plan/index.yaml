@@ -8191,6 +8191,24 @@ plan_index:
         - "editing host cheatsheets cannot leave the committed image copy stale without a loud failure at commit/CI time, OR the image copy is generated and not committed"
         - "litmus:cheatsheet-host-image-sync stays green without manual intervention"
       events:
+        - type: progress
+          ts: "2026-09-02T21:34:48Z"
+          agent_id: "forge-macuahuitl-claude-20260902t203000z"
+          host: macuahuitl-tillandsias-forge
+          summary: |
+            COMMIT-TIME RE-SYNC LANDED a9c728740. The authoring commit now carries its own derived images/default/cheatsheets/ copy.
+
+            WHICH EXIT PATH AND WHY. This packet offered two: (1) a loud failure at commit/CI time, or (2) make the image copy generated and uncommitted. Path (2) is CLOSED by the 2026-08-16 decision already recorded on this packet — build.rs embeds images/ into the binary and the end-user lane builds the forge image from that embedded snapshot, where no authored tree and no staging script exist, so untracking breaks `tillandsias --init` for every curl-installed user and reds every_containerfile_copy_source_exists_in_embedded_assets on a fresh clone. So path (1) is the only one open, and I took it without re-litigating the decision.
+
+            RE-SYNC RATHER THAN REFUSE. scripts/stage-image-cheatsheets.sh already prints the exact remedy ("--stage && git add -f images/default/cheatsheets") when it finds drift. A guard whose entire contribution is making a human retype a command the tooling just printed has relocated the failure, not removed it. The derived tree is cheap and purely derived, so the guard runs the stager and stages the result into the same commit. This also preserves the pre-commit hook's stated philosophy — it still never blocks a commit — while actually closing the drift.
+
+            WHY THE AUTHOR NEVER SEES IT, which is the part that makes this worth automating rather than documenting: the authoring commit SUCCEEDS. The refusal lands on every OTHER host's push, as a v5 pre-push complaint about a file they never touched. No amount of care by the author surfaces it on their own machine, so a convention ("remember to stage the derived tree") is structurally unable to work here.
+
+            FAIL-SOFT AND SILENT WHEN IRRELEVANT: no-ops with skip:no-authored-cheatsheet-change unless the staged set touches cheatsheets/; a missing or failing stager emits warn: plus a loud stderr message naming the consequence other hosts will see, and still exits 0.
+
+            7/7 branches pinned by scripts/test-sync-image-cheatsheets-for-commit.sh, wired into ./build.sh --check. INCLUDING A MUTATION ARM: the fixture commits the same authored edit with the guard NOT run and asserts the derived copy goes stale — without that arm, the passing case would be agreeing with the status quo rather than causing it, which is how a guard ends up decorative.
+
+            RESIDUAL, and it is the honest limit of a hook: this fires only where the hook is installed (scripts/install-hooks.sh, or the forge's global core.hooksPath). A host that never ran install-hooks still drifts, and CI does not run pre-commit. If the fleet wants the criterion closed unconditionally rather than per-host, the same script should also run as a --check step comparing the two trees — I did not add that because on a fresh clone it would regenerate and dirty the worktree during a gate, which is its own boundary hazard and deserves a deliberate decision.
         - type: note
           ts: "2026-08-16T23:56:57Z"
           agent_id: "linux-yoga-claude-20260816t185912z"
