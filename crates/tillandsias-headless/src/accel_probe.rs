@@ -1129,6 +1129,11 @@ pub fn hardware_fingerprint_checked(
     }
 }
 
+/// The version of the FIELD SET the fingerprint is composed from — hashed into
+/// the string and carried in its `hw<N>-` prefix. Bump on any change to which
+/// fields are included or how they are classed.
+pub const FIELD_SET_VERSION: u32 = 1;
+
 pub fn hardware_fingerprint(doc: &CapabilityDocument) -> String {
     fn ram_class(gb: f64) -> String {
         // Nearest power-of-two-ish class. 15.2 and 15.9 are both "16".
@@ -1176,6 +1181,18 @@ pub fn hardware_fingerprint(doc: &CapabilityDocument) -> String {
     if let Some(r) = ram {
         parts.push(format!("ram:{r}"));
     }
+    // ORDER 805-r98w, adopted from yoga 2026-09-02. The field-set version is
+    // HASHED, not merely prefixed. A tag bolted on the front can be stripped,
+    // ignored, or compared away by a caller that only looks at the hex; folding
+    // it into the input makes a v1 and a v2 string differ EVERYWHERE, so they
+    // can never be silently compared even by code that never heard of the tag.
+    //
+    // Bump FIELD_SET_VERSION whenever the composition of `parts` changes —
+    // fields added, removed, or classed differently (the RAM rounding included).
+    // That is what makes such a change safe: it becomes a visible
+    // incompatibility rather than two hosts quietly disagreeing about what a
+    // number means.
+    parts.insert(0, format!("fieldset:{FIELD_SET_VERSION}"));
     let joined = parts.join("|");
     // cksum-grade is enough: this is a comparison key, not a security boundary,
     // and a readable prefix beats an opaque digest when a human is asking why
@@ -1185,7 +1202,7 @@ pub fn hardware_fingerprint(doc: &CapabilityDocument) -> String {
         h ^= *b as u64;
         h = h.wrapping_mul(0x1000_0000_01b3);
     }
-    format!("hw1-{h:016x}")
+    format!("hw{FIELD_SET_VERSION}-{h:016x}")
 }
 
 /// Upgrade a node to [`Proof::Placed`] from a runtime's reported residency.
@@ -2604,6 +2621,101 @@ mod tests {
             gpu_only(&yolanda),
             "control failed: the GPU name was expected to be identical on both              hosts — if this ever differs, AMD split the PCI name and the              comment above needs revisiting"
         );
+    }
+
+    /// 805-r98w, hazard adopted from yoga 2026-09-02. THIS TEST DOCUMENTS A
+    /// LIMITATION, NOT A GUARANTEE — it passes by asserting the fingerprint is
+    /// NOT substrate-independent in the case that matters most.
+    ///
+    /// `hardware_fingerprint_ignores_substrate_and_separates_real_hardware`
+    /// asserts that identical device records hash identically however the
+    /// kernel, driver and lanes differ. True, and useless on its own: the
+    /// substrate does not merely decorate the device records, it CHANGES them.
+    /// The same machine reports its iGPU as "WSL2 paravirtual GPU (/dev/dxg)"
+    /// under WSL2 — the PATH, not the silicon — and emits no GPU device at all
+    /// probed natively on Windows. So that test's premise (identical inputs)
+    /// assumes exactly what it is meant to prove.
+    ///
+    /// Consequence, pinned here so it is never rediscovered as a surprise:
+    /// comparing documents from different `host.host_kind` is NOT a valid
+    /// hardware comparison, and a mismatch across that boundary is not evidence
+    /// of different hardware. The compare path must refuse such a pair rather
+    /// than report a difference.
+    ///
+    /// gpu_model is deliberately NOT dropped to make the invariant hold: on
+    /// Linux it is a real discriminator, and trading a loud known limitation
+    /// for a quiet loss of signal is the worse bargain.
+    #[test]
+    fn same_machine_across_substrates_does_not_yet_fingerprint_alike() {
+        let cpu = || {
+            let mut c = device(
+                "cpu",
+                "AMD Ryzen AI 7 350 w/ Radeon 860M",
+                &["host-native"],
+                None,
+            );
+            c.vendor = "amd".to_string();
+            c.cpu_cores = Some(CpuCores {
+                physical: 8,
+                logical: 16,
+            });
+            c.system_ram_gb = Some(15.2);
+            c
+        };
+
+        // ONE machine, seen three ways by three probes.
+        let mut native_windows = doc_with(vec![cpu()]);
+        native_windows.host.host_kind = "windows".to_string();
+
+        let mut under_wsl2 = doc_with(vec![
+            cpu(),
+            device(
+                "gpu",
+                "WSL2 paravirtual GPU (/dev/dxg)",
+                &["container"],
+                None,
+            ),
+        ]);
+        under_wsl2.host.host_kind = "windows".to_string();
+
+        let mut native_linux = doc_with(vec![
+            cpu(),
+            device(
+                "gpu",
+                "Krackan [Radeon 840M / 860M Graphics]",
+                &["host-native"],
+                None,
+            ),
+        ]);
+        native_linux.host.host_kind = "linux".to_string();
+
+        let w = super::hardware_fingerprint(&native_windows);
+        let x = super::hardware_fingerprint(&under_wsl2);
+        let l = super::hardware_fingerprint(&native_linux);
+
+        assert_ne!(
+            w, x,
+            "documented limitation: the WSL2 probe adds a paravirtual GPU record the native probe lacks"
+        );
+        assert_ne!(
+            x, l,
+            "documented limitation: the WSL2 GPU string names the PATH, the Linux one names the silicon"
+        );
+
+        // The refusal guard does NOT paper over this: all three documents carry
+        // a real CPU model, so all three are accepted and hashed. The hazard is
+        // therefore live in exactly the case the guard cannot catch, which is
+        // why it is written down rather than left to be met in the field.
+        for (label, doc) in [
+            ("native_windows", &native_windows),
+            ("under_wsl2", &under_wsl2),
+            ("native_linux", &native_linux),
+        ] {
+            assert!(
+                super::hardware_fingerprint_checked(doc).is_ok(),
+                "{label} should be accepted — the guard catches blind probes, not this"
+            );
+        }
     }
 
     /// 805-r98w. Measured on native Windows 2026-09-02: the probe emits ONE
