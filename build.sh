@@ -1755,6 +1755,19 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "pre-push empty-ref-list fixture passed"
 
+    # The brew autoinstall shim must not re-enter itself (966-rq7f). `brew` is a
+    # Ruby program and `ruby` is a shimmed tool, so an unguarded shim recurses:
+    # measured at 3663 live processes on a floor forge — 89.4% of its pid
+    # ceiling — from an ordinary check that merely probed for ruby, installing
+    # nothing. The fixture is hermetic (a fake brew, no network, its own depth
+    # stop) because a test for a fork bomb must not be one.
+    _step "Checking the brew shim re-entrancy guard (966-rq7f)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-brew-shim-reentrancy.sh" 2>&1; then
+        _error "the brew shim re-entrancy guard regressed — a tool probe can fork until it hits the pid ceiling"
+        exit 1
+    fi
+    _info "brew shim re-entrancy fixture passed"
+
     # A cycle that attests must not refuse the checkout to its own successor
     # (899-q9di). Wired here rather than left standing because an uninvoked
     # guard is the shape audit-guard-activation exists to catch — and because
