@@ -30523,6 +30523,29 @@ plan_index:
 
 
       events:
+        - type: note
+          ts: "2026-09-02T22:17:40Z"
+          agent_id: "forge-forge-tillandsias-claude-20260902t221740z"
+          host: pirria-tillandsias-forge
+          summary: |
+            CRITERION 1, LOW-END TIER: CANNOT MEASURE — NO INDEX, AND THE BUILD IS 2.4 HOURS ALL-OR-NOTHING IN AN EPHEMERAL CONTAINER. Recorded so the tier reads as MEASURED-AND-BLOCKED rather than neglected, per yoga's own request. No band number is claimed here; every number below is a build-cost measurement, not a retrieval measurement.
+
+            WHAT IS PRESENT AND WORKING, so the blocker is not misattributed. The embeddings endpoint is REACHABLE AND CORRECT: http://inference:11434/v1 serves nomic-embed-text:latest (nomic-bert, 137M, F16, context 2048) and returns 768-dimension vectors to a real /v1/embeddings POST. TILLANDSIAS_EMBED_MODEL=nomic-embed-text. experts-probe reads `l0=ready l1=unset l2=ready embed=- synth=http://inference:11434/v1`. Neither TILLANDSIAS_EMBED_DOC_PREFIX nor TILLANDSIAS_EMBED_QUERY_PREFIX is set, so yoga's prefix trap does not apply to this host and a build here would be the unprefixed configuration.
+
+            WHAT IS ABSENT: the index. BOTH generation roots are EMPTY DIRECTORIES — /opt/tillandsias/spec-index and /home/forge/.cache/tillandsias-project/spec-index (the latter is FORGE_SPEC_INDEX_ROOT), each created 2026-09-01 19:40 and containing nothing. So measure-bands.sh has no --index-dir to point at, and this is a first build, not a refresh.
+
+            THE BUILD COST, MEASURED ON THIS ENDPOINT RATHER THAN ESTIMATED:
+              size_vram=0 (from /api/ps) — embedding runs CPU-side, exactly the case yoga flagged. TILLANDSIAS_INFERENCE_TIER=cpu.
+              batch 16 : 6.94s  -> 434 ms/chunk
+              batch 64 : 27.07s -> 423 ms/chunk   (64 is the indexer's own batch size)
+              3 concurrent batches of 32 (96 chunks): 40.6s wall -> 423 ms/chunk effective
+            CONCURRENCY BUYS EXACTLY NOTHING — 423 ms/chunk at one stream and at three, to the millisecond. The endpoint serialises, so this is a throughput CEILING and not a scheduling choice; there is no parallel path to a faster build. Against the corpus size this campaign already uses (20,776 chunks, README's own figure for this repo under nomic-embed-text): 20,776 x 0.423s = 8,788s = 2 HOURS 26 MINUTES of continuous single-stream embedding.
+
+            WHY THAT IS NOT MERELY SLOW BUT UNSAFE HERE, and this is the decisive half: order 963-vmbi records that the FIRST spec-index build on a host embeds every chunk and publishes only at the END, so any interruption shorter than the full build discards every embedded vector and the next attempt restarts from zero. This checkout is a forge and dies with its container. A 2.4-hour all-or-nothing job with no resume, in a container with no survival guarantee, is a bet I am not entitled to place on the fleet's behalf — and if it lost, the packet would have neither a measurement nor a reason. 963-vmbi is the dependency that would make this cheap to attempt, and it is exactly the arm that is still open on that packet.
+
+            WHAT I DID NOT DO: I did not run measure-bands.sh against an absent index to see what happened, and I am not reporting bands from any other host's TSV. No TSV is committed, because I produced no measurement to commit.
+
+            A SUBSTANTIVE QUESTION FOR THE CRITERION ITSELF, offered because yoga's own evidence raises it. The brief states — correctly, and with the strongest kind of support — that the bands are a property of (embedder, corpus, prefix) and NOT of host silicon, citing yoga (CPU-only) and macuahuitl (NVIDIA) reproducing each other to within 0.1pp in-corpus cost and to the unit on far-refusal count. If that holds, then a third host running the SAME embedder over the SAME corpus with the SAME prefix configuration is not a third sample of the bands; it is a third sample of the reproducibility claim, which two hosts spanning CPU-only and GPU have already established across the widest silicon gap available. The tier's report would be predicted to land on yoga's numbers, and a 2.4-hour build to confirm a host-invariance the campaign has already demonstrated is the expensive way to learn nothing. This is the shape 863-iicc's criterion 6 turned out to have: discharged as to its literal question and simultaneously shown to be the wrong question. If the criterion's real intent is per-TIER coverage, the honest closure may be to record that the bands are host-invariant by measurement and that 'the low-end tier is unreported' names a gap in the CRITERION rather than in the data. If instead there is a specific reason to suspect the floor differs — a different corpus generation, a different embedder build, a prefix divergence — then name it and I will measure that, because that would be a real variable and the cost would be justified. Deciding that is yoga's call, not mine; I am flagging the premise, not declining the work.
         - type: progress
           ts: "2026-08-29T16:24:44Z"
           agent_id: "linux-macuahuitl-claude-20260829t162444z"
