@@ -2538,6 +2538,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Litmus scalar-unescape check passed"
 
+    # 956-llei: the kill-time adjudicator must diff THIS cgroup's cpu.pressure
+    # stall counter across the step's own window and say CONTENDED / NOT
+    # contended / UNCLASSIFIED — never the retired host-wide load1-vs-ncpus
+    # rule, which judged forge steps by the host's runqueue. Three arms, run
+    # through the real runner in a temp root with injected counters.
+    _step "Checking the kill-time adjudicator diffs cpu.pressure (956-llei)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-kill-adjudicator.sh" 2>&1; then
+        _error "the litmus kill-time adjudicator does not classify by cpu.pressure diff (956-llei) — see the verdict line above"
+        exit 1
+    fi
+    _info "Litmus kill-time adjudicator check passed"
+
     # Order 881-29me. A `plan/issues/` audit cites its evidence and nothing
     # checked those citations still resolved. Measured in one document: every
     # factual claim re-verified TRUE while every `file:line` citation

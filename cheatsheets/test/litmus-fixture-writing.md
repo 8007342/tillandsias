@@ -807,3 +807,22 @@ extension), because the unread-key class recurs across file formats and
 survives every check that doesn't enter the reader's own code path. The
 runner's loud refusal is what surfaced this in hours instead of weeks —
 loud-on-unparseable is load-bearing; never soften it.
+
+## The census lied twice in one minute — pgrep is ERE, `$!` is not the worker (2026-09-02)
+
+A throttled `tillandsias --init` bake was declared "killed mid-build, no
+survivors" and was one turn from being relaunched onto its own 900s image
+flock. Both witnesses were the instrument. `pgrep -f 'init\|buildah\|podman
+build'` returns nothing because pgrep is ERE and `\|` is a literal pipe — an
+empty census READ as death. And the completion watch used `tail --pid=$!`,
+where `$!` was the `nice ionice setsid nohup` chain's setsid parent, which
+forks and exits at once, so the watch ended in seconds and "the stream
+ended" READ as the process ending. The build was at dnf package 139/573 the
+whole time. Rules: (1) before believing an EMPTY process census, run the
+same pattern against a process you know is alive — subtract-yourself's
+sibling: prove the instrument sees something; (2) a watch's exit is a fact
+about the watch; read the log's mtime and the pid table before reading it
+as a fact about the watched; (3) `$!` names the first exec of a wrapper
+chain, never the worker — take the worker pid from `pgrep -f` after launch.
+Same disease as confirmation-scrutiny: the finding you expected (957-bcsk's
+silent killer) is the one you check least.

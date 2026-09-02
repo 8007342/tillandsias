@@ -8556,6 +8556,29 @@ plan_index:
         injected + refreshed transparently. Promoted to the index 2026-07-24.
       events:
         - type: note
+          ts: "2026-09-02T04:55:19Z"
+          agent_id: "linux-lenovinha-claude-20260902t045313z"
+          host: lenovinha
+          summary: |
+            AUDIT-DISPOSE: OBSOLETED. The intent is fully implemented; the prescribed MECHANISM is contraindicated by the implementation that satisfies it. Measured on lenovinha 2026-09-02, prompted by the operator asking why a sign-off was needed for something they observe working.
+
+            THE PACKET'S PREMISE IS STALE. Its outcome line says it "unblocks the Claude forge lane on all three hosts". Claude device auth -> Vault landed 2026-07-14 in 4edc24946 (orders 303/304) — NINE DAYS BEFORE this packet was filed on 2026-07-23. The lane was never blocked by the time this was written.
+
+            ALL THREE LEGS OF "capture -> Vault -> inject -> refresh" EXIST:
+              capture  CLAUDE_DEVICE_AUTH_SPEC (main.rs): `tillandsias --claude-login` device flow via provider-device-auth, storing ~/.claude/.credentials.json as credentials_b64 at secret/claude/oauth. auth.rs maps ProviderId::Claude -> "claude/oauth".
+              inject   entrypoint-forge-claude.sh runs `provider-oauth-vault restore` before the agent starts (skipped only for ANTHROPIC_API_KEY sessions, which need no OAuth state).
+              refresh  codex-oauth-session.sh runs the agent in the foreground while a background watcher harvests credential-file rotations to Vault, plus a final harvest on exit — so a mid-session refresh-token rotation survives --rm teardown and the next launch does not re-prompt.
+
+            THE ROOT PROBLEM IT EXISTS TO CLOSE NO LONGER REPRODUCES. The packet says: "When that file is missing / invalid / expired, the in-forge fallback is Claude Code's OWN interactive TUI login box (entrypoint-forge-claude.sh:126-139), which smears the auth URL down the terminal." That fallback is GONE. restore_auth now returns 2 (credentials unavailable/invalid) or 3 (empty document), each printing an explicit ERROR naming the login command, and lib-common.sh sets `set -euo pipefail`, so the entrypoint DIES THERE — the line after the restore is never reached and no agent is launched without credentials.
+
+            VERIFIED EMPIRICALLY, not reasoned. I nearly filed the opposite finding: lib-common.sh contains a SECOND `set -uo pipefail` (no -e) at line 403, which would have re-enabled the smear path by disabling errexit. It is INSIDE A HEREDOC — the body of a generated post-commit hook, never executed by the library. I confirmed with a reproduction that mirrors the exact structure (a lib that sets -euo and contains that heredoc, sourced by a script that then runs a command returning 2): errexit reads ON after sourcing, the script exits 2, and the line after the failing command is NOT reached. Reading the heredoc as live code would have produced a confident, wrong "the smear is still live" verdict.
+
+            WHY THE PRESCRIBED MECHANISM MUST NOT BE BUILT AS WRITTEN. The deliverable is "claude setup-token ... token to secret/claude/oauth-token, injected + refreshed transparently" — a single CLAUDE_CODE_OAUTH_TOKEN env var. CLAUDE_DEVICE_AUTH_SPEC carries the opposite design decision in its own comment: "the full opaque credential document is what Vault stores — extracting a single token would break refresh." `claude setup-token` mints a different ~1-year credential rather than extracting from the document, so the two are not strictly contradictory, but NOBODY HAS RECONCILED THEM, and swapping a working document+rotation model for a single long-lived token is a credential-lifetime change, not a UX tweak. `setup-token` appears nowhere in the tree — only in plan documents.
+
+            WHAT IS NOT CLOSED BY THIS, so it is not lost: if a future Claude Code release removes the credential-file path or the device flow, the env-var route becomes relevant again, and this packet's research is the record of it. That is why this is OBSOLETED rather than deleted.
+
+            SIGN-OFF WITHDRAWN as unnecessary. The operator was being asked to approve building something whose goal is already met. No operator decision is required to retire it.
+        - type: note
           ts: "2026-09-02T03:00:14Z"
           agent_id: "linux-lenovinha-claude-20260902t025309z"
           host: lenovinha
