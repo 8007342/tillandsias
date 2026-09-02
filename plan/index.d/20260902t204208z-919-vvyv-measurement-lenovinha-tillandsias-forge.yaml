@@ -1,85 +1,86 @@
 events:
   - packet_id: cpu-only-forge-expert-system-integration-gaps
-    type: progress
-    ts: "2026-09-02T20:42:34Z"
-    agent_id: linux-lenovinha-tillandsias-forge-claude-20260902t202947z
-    host: lenovinha-tillandsias-forge
-    summary: |
-      MEASURED FROM INSIDE the CPU-only forge regime this packet describes
-      (lenovinha, v56.9.2.1, 16 cores / 13 GB RAM), then fixed. Three of the
-      packet's premises were stale and the correction matters more than the fixes.
+    event:
+      type: progress
+      ts: "2026-09-02T20:42:34Z"
+      agent_id: linux-lenovinha-tillandsias-forge-claude-20260902t202947z
+      host: lenovinha-tillandsias-forge
+      summary: |
+        MEASURED FROM INSIDE the CPU-only forge regime this packet describes
+        (lenovinha, v56.9.2.1, 16 cores / 13 GB RAM), then fixed. Three of the
+        packet's premises were stale and the correction matters more than the fixes.
 
-      COLD-FORGE OBSERVATIONS (all direct, none inferred):
+        COLD-FORGE OBSERVATIONS (all direct, none inferred):
 
-      D1 DID NOT REPRODUCE. /api/embeddings with nomic-embed-text returned a real
-      768-dim vector; /api/tags showed nomic-embed-text:latest (274 MB, cached
-      2026-08-22), qwen2.5:0.5b and qwen2.5:7b. But NOTHING PULLS the embed model
-      (DEFAULT_MODELS is qwen2.5:0.5b alone), so it was present only by accident
-      of the host-mounted cache and a genuinely cold volume still has D1.
+        D1 DID NOT REPRODUCE. /api/embeddings with nomic-embed-text returned a real
+        768-dim vector; /api/tags showed nomic-embed-text:latest (274 MB, cached
+        2026-08-22), qwen2.5:0.5b and qwen2.5:7b. But NOTHING PULLS the embed model
+        (DEFAULT_MODELS is qwen2.5:0.5b alone), so it was present only by accident
+        of the host-mounted cache and a genuinely cold volume still has D1.
 
-      D2 HAD A ROOT CAUSE ONE LEVEL UP, and this is the headline finding.
-      experts-probe read l1=unset and the startup context read
-      "spec_index=absent embed_endpoint=unset". lib-common.sh derives
-      TILLANDSIAS_EMBED_ENDPOINT from OLLAMA_HOST; container_profile.rs declares
-      OLLAMA_HOST=http://inference:11434 on BOTH forge profiles (:393, :692) and
-      it does not reach the container. So the fix already written for D1/D2 was
-      present and INERT in the very lane it was written for, and the spec-index
-      launch step skipped itself as (no-embed-endpoint) every time. Setting the
-      endpoint by hand moved the probe from l1=unset straight to l1=no-index: the
-      endpoint was the ONLY missing piece.
+        D2 HAD A ROOT CAUSE ONE LEVEL UP, and this is the headline finding.
+        experts-probe read l1=unset and the startup context read
+        "spec_index=absent embed_endpoint=unset". lib-common.sh derives
+        TILLANDSIAS_EMBED_ENDPOINT from OLLAMA_HOST; container_profile.rs declares
+        OLLAMA_HOST=http://inference:11434 on BOTH forge profiles (:393, :692) and
+        it does not reach the container. So the fix already written for D1/D2 was
+        present and INERT in the very lane it was written for, and the spec-index
+        launch step skipped itself as (no-embed-endpoint) every time. Setting the
+        endpoint by hand moved the probe from l1=unset straight to l1=no-index: the
+        endpoint was the ONLY missing piece.
 
-      THE ~60 MIN CPU INDEX BUILD IS WRONG BY ~17x. With the endpoint wired, the
-      full 22645-chunk corpus embedded and published in 214 SECONDS (3.6 min) on
-      this CPU-only host: "ok:spec-index:built:22645", EXIT=0. The packet's
-      context says ~60 minutes on CPU (21799 chunks at ~6 vectors/sec); the
-      measured rate is ~106 chunks/sec. Anything scoped on the assumption that a
-      CPU host cannot afford to build its own index should be re-derived.
+        THE ~60 MIN CPU INDEX BUILD IS WRONG BY ~17x. With the endpoint wired, the
+        full 22645-chunk corpus embedded and published in 214 SECONDS (3.6 min) on
+        this CPU-only host: "ok:spec-index:built:22645", EXIT=0. The packet's
+        context says ~60 minutes on CPU (21799 chunks at ~6 vectors/sec); the
+        measured rate is ~106 chunks/sec. Anything scoped on the assumption that a
+        CPU host cannot afford to build its own index should be re-derived.
 
-      WHAT ACTUALLY BLOCKS CRITERION 2 IS DISK, NOT CPU. The first two attempts
-      died with a jq ENOSPC write failure, verdict blocked:spec-index:payload-failed.
-      /tmp in the forge is a 256 MB tmpfs (191 MB free) and the builder stages
-      there via TMPDIR, while the index root sits on an overlay with 1.2 TB free.
-      Re-running with TMPDIR on the large filesystem is what produced the 214s
-      success above. Filed as 964-zedm; it is the real gate on building the index
-      at first launch inside a forge.
+        WHAT ACTUALLY BLOCKS CRITERION 2 IS DISK, NOT CPU. The first two attempts
+        died with a jq ENOSPC write failure, verdict blocked:spec-index:payload-failed.
+        /tmp in the forge is a 256 MB tmpfs (191 MB free) and the builder stages
+        there via TMPDIR, while the index root sits on an overlay with 1.2 TB free.
+        Re-running with TMPDIR on the large filesystem is what produced the 214s
+        success above. Filed as 964-zedm; it is the real gate on building the index
+        at first launch inside a forge.
 
-      ACCEL EVIDENCE IS ALSO STALE. The packet cites accel_class=unknown
-      accel_reason=envelope-not-exported. This forge reports
-      accel_class=workstation-gpu accel_gpu=usable
-      accel_gpu_name=NVIDIA_GeForce_RTX_3070_Laptop_GPU accel_cpu_cores=16
-      accel_ram_gb=13, and inference_state=ready with 3 models.
+        ACCEL EVIDENCE IS ALSO STALE. The packet cites accel_class=unknown
+        accel_reason=envelope-not-exported. This forge reports
+        accel_class=workstation-gpu accel_gpu=usable
+        accel_gpu_name=NVIDIA_GeForce_RTX_3070_Laptop_GPU accel_cpu_cores=16
+        accel_ram_gb=13, and inference_state=ready with 3 models.
 
-      AFTER THE MEASUREMENT, with the endpoint wired and the index built:
-      "experts_probe: l0=ready l1=ready l2=ready advice=-" — all three tiers live
-      on a CPU-only forge.
+        AFTER THE MEASUREMENT, with the endpoint wired and the index built:
+        "experts_probe: l0=ready l1=ready l2=ready advice=-" — all three tiers live
+        on a CPU-only forge.
 
-      WORK LANDED (commit 7cdbc7546):
-      (1) lib-common.sh — forge fallback deriving the embed endpoint from the same
-          canonical http://inference:11434 that lib-inference-state.sh uses,
-          PROBED before wiring so a forge without inference keeps spec_answer's
-          typed refusal rather than degrading an honest unset into a misleading
-          unreachable.
-      (2) images/inference/entrypoint.sh — an explicit embed-model pre-pull, kept
-          OUT of DEFAULT_MODELS because that literal is pinned by
-          litmus:zen-default-with-ollama-shape and order 168 narrowed it to one
-          ~400 MB model to stop a real OOM container-death.
-      (3) cheatsheets/architecture/cpu-only-model-tier-ladder.md — the RAM-keyed
-          CPU ladder (criterion 3), with the measured accuracy floor that makes it
-          meaningful: at T1 both 0.5b and 1.5b hallucinated 6/6 ungrounded
-          questions, so the raw model is worse than the refusal it would replace.
-      (4) lib-expert-capability.sh — embed_model= appended to the capability line
-          (criterion 4), so a producer/query model mismatch is visible from the
-          startup context instead of presenting as a missing index.
+        WORK LANDED (commit 7cdbc7546):
+        (1) lib-common.sh — forge fallback deriving the embed endpoint from the same
+            canonical http://inference:11434 that lib-inference-state.sh uses,
+            PROBED before wiring so a forge without inference keeps spec_answer's
+            typed refusal rather than degrading an honest unset into a misleading
+            unreachable.
+        (2) images/inference/entrypoint.sh — an explicit embed-model pre-pull, kept
+            OUT of DEFAULT_MODELS because that literal is pinned by
+            litmus:zen-default-with-ollama-shape and order 168 narrowed it to one
+            ~400 MB model to stop a real OOM container-death.
+        (3) cheatsheets/architecture/cpu-only-model-tier-ladder.md — the RAM-keyed
+            CPU ladder (criterion 3), with the measured accuracy floor that makes it
+            meaningful: at T1 both 0.5b and 1.5b hallucinated 6/6 ungrounded
+            questions, so the raw model is worse than the refusal it would replace.
+        (4) lib-expert-capability.sh — embed_model= appended to the capability line
+            (criterion 4), so a producer/query model mismatch is visible from the
+            startup context instead of presenting as a missing index.
 
-      Litmus: zen-default-with-ollama-analysis-pool 2/2 PASS, inference-container
-      PASS. forge-environment-discoverability fails only on
-      litmus:host-expert-refresh-gate-shape, confirmed PRE-EXISTING at linux-next
-      HEAD against a stashed tree; filed as 964-i4j9.
+        Litmus: zen-default-with-ollama-analysis-pool 2/2 PASS, inference-container
+        PASS. forge-environment-discoverability fails only on
+        litmus:host-expert-refresh-gate-shape, confirmed PRE-EXISTING at linux-next
+        HEAD against a stashed tree; filed as 964-i4j9.
 
-      NOT CLOSING THIS PACKET. Its verifiable_closure requires launching a fresh
-      forge from the UPDATED image and seeing spec_answer return a cited envelope
-      within 5 minutes of launch. An in-forge agent cannot rebuild the image it is
-      running inside or relaunch itself, so every fix above is proven by direct
-      observation of its mechanism but NONE is proven by the cold start the
-      closure names. Released to ready for a host that can rebuild images and
-      launch a forge.
+        NOT CLOSING THIS PACKET. Its verifiable_closure requires launching a fresh
+        forge from the UPDATED image and seeing spec_answer return a cited envelope
+        within 5 minutes of launch. An in-forge agent cannot rebuild the image it is
+        running inside or relaunch itself, so every fix above is proven by direct
+        observation of its mechanism but NONE is proven by the cold start the
+        closure names. Released to ready for a host that can rebuild images and
+        launch a forge.
