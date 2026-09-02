@@ -422,12 +422,20 @@ _tillandsias_expert_embed_state() {
 _tillandsias_expert_capability_emit() {
     TILLANDSIAS_EXPERT_CAP_SPEC_INDEX="$(_tillandsias_expert_spec_index_state)"
     TILLANDSIAS_EXPERT_CAP_EMBED="$(_tillandsias_expert_embed_state)"
+    # ORDER 919-vvyv exit criterion 4. embed_endpoint= says whether an endpoint
+    # ANSWERS; it cannot say which model the answer path will ask it for, and a
+    # mismatch between the model the corpus was embedded with and the model the
+    # query uses 404s while presenting as a missing index (the 760-hzi4 defect-i
+    # shape). Reporting the name makes that comparison possible from the startup
+    # context alone. APPENDED, never inserted, for the same substring-matching
+    # readers named below.
+    TILLANDSIAS_EXPERT_CAP_EMBED_MODEL="${TILLANDSIAS_EMBED_MODEL:-unset}"
     # spec_index and embed_endpoint are APPENDED, never inserted: the
     # existing fields are matched by substring in
     # litmus:capability-manifest-guard and
     # litmus:expert-capability-skew-honesty, so growing the line at the end
     # is additive for every current reader.
-    TILLANDSIAS_EXPERT_CAPABILITY_LINE="expert_capability: now=${TILLANDSIAS_EXPERT_CAP_NOW} after_relaunch=${TILLANDSIAS_EXPERT_CAP_AFTER} skew=${TILLANDSIAS_EXPERT_CAP_SKEW} blocked_capabilities=${TILLANDSIAS_EXPERT_CAP_BLOCKED} lost_on_relaunch=${TILLANDSIAS_EXPERT_CAP_LOST} spec_index=${TILLANDSIAS_EXPERT_CAP_SPEC_INDEX} embed_endpoint=${TILLANDSIAS_EXPERT_CAP_EMBED}"
+    TILLANDSIAS_EXPERT_CAPABILITY_LINE="expert_capability: now=${TILLANDSIAS_EXPERT_CAP_NOW} after_relaunch=${TILLANDSIAS_EXPERT_CAP_AFTER} skew=${TILLANDSIAS_EXPERT_CAP_SKEW} blocked_capabilities=${TILLANDSIAS_EXPERT_CAP_BLOCKED} lost_on_relaunch=${TILLANDSIAS_EXPERT_CAP_LOST} spec_index=${TILLANDSIAS_EXPERT_CAP_SPEC_INDEX} embed_endpoint=${TILLANDSIAS_EXPERT_CAP_EMBED} embed_model=${TILLANDSIAS_EXPERT_CAP_EMBED_MODEL}"
 }
 
 # tillandsias_expert_capability_advice — the one-sentence action for the verdict.

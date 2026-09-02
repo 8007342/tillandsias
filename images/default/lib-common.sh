@@ -1027,6 +1027,30 @@ if [ -z "${TILLANDSIAS_EMBED_ENDPOINT:-}" ] && [ -n "${OLLAMA_HOST:-}" ]; then
     # derivation start_expert_serve_fail_soft applies per-invocation below.
     export TILLANDSIAS_EMBED_ENDPOINT="${OLLAMA_HOST%/}/v1"
 fi
+# FORGE FALLBACK (order 919-vvyv, MEASURED on lenovinha 2026-09-02).
+# The block above is inert in the very lane it was written for. OLLAMA_HOST is
+# DECLARED on the forge profiles (container_profile.rs:393 and :692, literal
+# `http://inference:11434`) yet it does not reach the container: a live forge on
+# v56.9.2.1 reported `embed_endpoint=unset` with TILLANDSIAS_EMBED_MODEL set,
+# the inference service answering, and nomic-embed-text already cached. Setting
+# the endpoint by hand moved `experts-probe` from l1=unset straight to
+# l1=no-index, so the endpoint was the ONLY missing piece — the fix for 919-vvyv
+# D1/D2 was present and could never fire.
+#
+# So the forge does not depend on one variable arriving. It falls back to the
+# SAME canonical default lib-inference-state.sh already uses for the enclave
+# service, and — unlike the OLLAMA_HOST path — it PROBES first, because the
+# comment above promises that a forge with no inference service keeps
+# spec_answer's typed refusal. An unreachable endpoint left wired would convert
+# that honest `unset` into a misleading `unreachable`.
+if [ -z "${TILLANDSIAS_EMBED_ENDPOINT:-}" ] && [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ]; then
+    _tlc_infer_ep="${TILLANDSIAS_INFERENCE_ENDPOINT:-http://inference:11434}"
+    if command -v curl >/dev/null 2>&1 \
+        && curl -fsS -m 3 -o /dev/null "${_tlc_infer_ep%/}/v1/models" 2>/dev/null; then
+        export TILLANDSIAS_EMBED_ENDPOINT="${_tlc_infer_ep%/}/v1"
+    fi
+    unset _tlc_infer_ep
+fi
 if [ -z "${TILLANDSIAS_EMBED_MODEL:-}" ]; then
     # The OLLAMA name — what the inference entrypoint pulls at startup
     # (919-vvyv D1) and what spec-index-ensure.sh embeds the corpus with.
