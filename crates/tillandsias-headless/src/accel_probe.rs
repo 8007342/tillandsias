@@ -49,6 +49,30 @@ pub struct CapabilityDocument {
     /// behaviour and no worse than it was.
     #[serde(default)]
     pub enumeration_gaps: Vec<String>,
+    /// The derived HARDWARE identity of the machine this document describes, or
+    /// `None` when the probe could not identify it.
+    ///
+    /// ORDER 805-r98w, second half. The fleet matrix is keyed `(host_id,
+    /// locus)`: `locus` is the substrate half and already works, but `host_id`
+    /// is an ASSERTED machine name, so rows cannot be grouped by hardware and
+    /// "these two hosts are the same machine" stays unverifiable — which is the
+    /// whole reason this order exists.
+    ///
+    /// Recorded here rather than recomputed by the matrix reader ON PURPOSE.
+    /// A second implementation of an identity function is the bug this order
+    /// spent a day removing: yoga and this host briefly had two, they disagreed
+    /// on RAM source and rounding, and two hosts running different
+    /// implementations would have compared incommensurable strings. So the
+    /// probe computes it once, the document carries it, and every consumer
+    /// reads the same field.
+    ///
+    /// `None` IS MEANINGFUL AND MUST NOT BE PAPERED OVER: it means
+    /// [`hardware_fingerprint_checked`] refused, i.e. this document cannot
+    /// identify its machine. A row with `None` must never be grouped with
+    /// another `None` row — two documents that both failed to identify
+    /// themselves are not thereby the same hardware.
+    #[serde(default)]
+    pub hardware_fingerprint: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -354,7 +378,7 @@ pub fn run_probe(effective_tier: &str) -> CapabilityDocument {
     let host = enumerate_host();
     let timestamp = chrono::Utc::now().to_rfc3339();
 
-    CapabilityDocument {
+    let mut doc = CapabilityDocument {
         schema_version: SCHEMA_VERSION,
         legacy_tier: effective_tier.to_string(),
         devices,
@@ -364,7 +388,15 @@ pub fn run_probe(effective_tier: &str) -> CapabilityDocument {
         timestamp,
         probe_identity: Some(probe_identity()),
         enumeration_gaps,
-    }
+        hardware_fingerprint: None,
+    };
+    // Computed from the devices just enumerated, so the document carries its own
+    // hardware identity and no consumer has to re-derive it. `checked` rather
+    // than the raw hasher: a blind probe must contribute NO identity rather than
+    // a plausible-looking constant that would collide with every other blind
+    // host.
+    doc.hardware_fingerprint = hardware_fingerprint_checked(&doc).ok();
+    doc
 }
 
 /// Order 852-dk9z. The identity of the probe CODE, not of the host.
@@ -2901,6 +2933,7 @@ mod tests {
             legacy_tier: "cpu".to_string(),
             probe_identity: Some(probe_identity()),
             enumeration_gaps: Vec::new(),
+            hardware_fingerprint: None,
             devices,
             engines: Vec::new(),
             measurements: Vec::new(),
@@ -3912,6 +3945,7 @@ mod tests {
             legacy_tier: "cpu".to_string(),
             probe_identity: Some(probe_identity()),
             enumeration_gaps: Vec::new(),
+            hardware_fingerprint: None,
             devices: Vec::new(),
             engines: Vec::new(),
             measurements: vec![MeasurementRecord {
