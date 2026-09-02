@@ -968,6 +968,10 @@ pub fn help_text() -> String {
             deleting the VHDX + in-VM vault) and reprovision from scratch.\n                            \
             Destructive by design; you'll re-authenticate once. Exit: 0 = Ready,\n                            \
             1 = failed.\n    \
+            --forge <project>       Open a forge PTY for <project> without a tray click.\n                            \
+            Add --shell (default), --claude, --codex or --opencode to pick\n                            \
+            the intent. Runs the SAME launch path as the tray menu item.\n                            \
+            Exit: 0 = spawned, 2 = usage, 1 = refused or failed.\n    \
             --status-once [--json]  Connect to the live control wire, print VmStatus.\n                            \
             Exit: 0 = Ready, 2 = reachable-not-Ready, 1 = unreachable.\n    \
             --diagnose [--json]     Bundled health report (10+ keys). Exit: 0 healthy,\n                            \
@@ -992,11 +996,17 @@ pub fn help_text() -> String {
             (CI / reproducible-source scenarios). Bakes at compile time, not runtime.\n\
          \n\
          OUTPUT NOTE:\n    \
-            The tray is a GUI-subsystem binary; PowerShell pipe capture of stdout\n    \
-            is unreliable (Rust treats a detached stdout as BrokenPipe and discards).\n    \
-            Support scripts MUST redirect to a file: `tillandsias-tray.exe \\\n        \
-                --diagnose --json > out.json 2>nul`\n    \
-            and branch on the exit code rather than the captured output.\n\
+            The tray is a GUI-subsystem binary, so PowerShell does NOT wait for it.\n    \
+            A bare redirect returns before the child writes anything and records no\n    \
+            exit status at all: `$exe --diagnose --json > out.json` yields an EMPTY\n    \
+            $LASTEXITCODE and a 0-byte file. That reads as success-in-zero-seconds.\n    \
+            Support scripts MUST force a wait, either way works:\n    \
+              cmd.exe /c \"tillandsias-tray.exe --diagnose --json > out.json 2>nul\"\n    \
+              Start-Process tillandsias-tray.exe -ArgumentList '--diagnose','--json' \\\n        \
+                -Wait -PassThru -RedirectStandardOutput out.json\n    \
+            A pipeline (`| Out-String`) also works, because PowerShell reads to EOF\n    \
+            and that incidentally waits. Branch on the exit code only after one of\n    \
+            these — an exit code you did not wait for is not an exit code.\n\
          \n\
          See cheatsheets/runtime/windows-tray-diagnostics.md for the full\n\
          diagnose JSON schema + the canonical PowerShell consumer pattern.\n",
@@ -4032,18 +4042,43 @@ fn launch_open_shell_terminal(action: &MenuAction) {
     // HWND in scope for a balloon, and ERROR relays to tray.log AND the Windows
     // Event Log (source "Tillandsias"), which is the surface a GUI-only user is
     // pointed at by `--logs` and `--diagnose`.
-    let spec = match launch_spec(&intent, project.as_deref(), 24, 80) {
-        Ok(s) => s,
-        Err(refused) => {
-            tracing::error!(
-                refused = %refused,
-                ?intent,
-                project = ?project,
-                "refusing to open a PTY: unsafe project name"
-            );
-            return;
-        }
-    };
+    match launch_pty(&intent, project.as_deref()) {
+        Ok(()) => tracing::info!(?intent, project = ?project,
+            "opened in-VM PTY in a native terminal (wsl.exe)"),
+        Err(err) => tracing::error!(%err, ?intent, project = ?project,
+            "failed to open terminal for in-VM PTY"),
+    }
+}
+
+/// Open an in-VM PTY for `intent` — the launch path with NO GUI in it.
+///
+/// 945-vpg3. This body used to live inline in `launch_open_shell_terminal`,
+/// which meant the ONLY way to launch a forge was to click a tray menu item.
+/// A release blessing could therefore smoke every other leg headlessly and had
+/// to stop at the forge launch, and the v0.4.260830.5 round did exactly that.
+///
+/// The split is deliberately placed so that the menu arm and any headless
+/// caller run THE SAME CODE from here down. Everything above this line in
+/// `launch_open_shell_terminal` is genuinely GUI-only — the double-click
+/// debounce and `intent_for_action`, which maps a `MenuAction`. Everything
+/// from `launch_spec` onward is host-agnostic and lives here.
+///
+/// That placement is the point rather than an implementation detail: a
+/// headless path that reimplemented argv construction would let a smoke pass
+/// while the menu did something else, which is a test of the tester rather
+/// than of the client. Errors are RETURNED instead of logged so a caller that
+/// is not a tray can set an exit code; the menu arm logs them exactly as
+/// before.
+pub(crate) fn launch_pty(intent: &PtyIntent, project: Option<&str>) -> Result<(), String> {
+    // Hostile project names are REFUSED here (E3, 2026-08-17). launch_spec
+    // now emits the project as ONE verbatim argv element (823-u5zf), so the
+    // old single-quoted `--cloud '<p>'` breakout is structurally gone; the
+    // refusal stays because names come verbatim off disk and it is what keeps
+    // every token wt-safe (belt and braces). It deliberately does not
+    // sanitize, because a silently rewritten name launches a DIFFERENT
+    // project than the one clicked.
+    let spec = launch_spec(intent, project, 24, 80)
+        .map_err(|refused| format!("refusing to open a PTY: unsafe project name: {refused}"))?;
     // GitHub Login runs the INJECTED wrapper (bare path, zero shell
     // metacharacters): the inline `bash -lc '<script>'` argv had to survive
     // both std::process MSVC quoting AND wt.exe's own re-parse, and arrived
@@ -4057,7 +4092,7 @@ fn launch_open_shell_terminal(action: &MenuAction) {
         spec.argv.clone()
     };
     let distro = crate::wsl_lifecycle::DISTRO_NAME;
-    let title = terminal_title(&intent, project.as_deref());
+    let title = terminal_title(intent, project);
     // The credential-critical login lane bypasses wt.exe ENTIRELY: two field
     // crashes (Esmeralda, 2026-08-09) reached bash with an unbalanced quote
     // through the wt re-parse chain, and wt offers no verbatim-args contract.
@@ -4074,12 +4109,7 @@ fn launch_open_shell_terminal(action: &MenuAction) {
     } else {
         spawn_wsl_terminal(distro, &title, &argv)
     };
-    match spawn_result {
-        Ok(()) => tracing::info!(?intent, project = ?project, argv = ?argv,
-            "opened in-VM PTY in a native terminal (wsl.exe)"),
-        Err(err) => tracing::warn!(%err, ?intent, project = ?project,
-            "failed to open terminal for in-VM PTY"),
-    }
+    spawn_result.map_err(|err| format!("failed to spawn terminal for in-VM PTY: {err}"))
 }
 
 /// Plain-console spawn: `wsl.exe` in its own fresh conhost window, argv passed
@@ -4370,17 +4400,33 @@ mod tests {
             })
         }
 
-        // What launch_spec emits for a cloud project click.
-        let project_argv = vec![
-            "/usr/local/bin/tillandsias-headless".to_string(),
-            "--cloud".to_string(),
-            "8007342/tillandsias".to_string(),
-            "--opencode".to_string(),
+        // Drive the REAL builder. The previous revision of this test asserted
+        // wt-safety over a hand-written vector whose comment claimed it was
+        // what launch_spec emits; nothing called launch_spec, so a regression
+        // back to the flattened `bash -lc "<script>"` shape would have left
+        // this test green while every lane fell back to conhost again. That is
+        // the exact defect 805-ek9e reports, so the test must not be able to
+        // miss it.
+        let lanes: Vec<(&str, PtyIntent)> = vec![
+            ("shell", PtyIntent::Shell),
+            ("claude", PtyIntent::Agent(SelectedAgent::Claude)),
+            ("codex", PtyIntent::Agent(SelectedAgent::Codex)),
+            ("opencode", PtyIntent::Agent(SelectedAgent::OpenCode)),
+            // Antigravity and Claude are the two lanes the operator actually
+            // failed a device-code login in on 2026-08-17.
+            ("antigravity", PtyIntent::Agent(SelectedAgent::Antigravity)),
         ];
-        assert!(
-            is_wt_safe(&project_argv),
-            "the verbatim project argv must be safe for wt.exe re-parsing"
-        );
+        for (label, intent) in &lanes {
+            for project in ["myapp", "8007342/tillandsias"] {
+                let argv = launch_spec(intent, Some(project), 24, 80)
+                    .unwrap_or_else(|e| panic!("{label}/{project} refused: {e:?}"))
+                    .argv;
+                assert!(
+                    is_wt_safe(&argv),
+                    "lane {label} on project {project} builds a wt-unsafe argv, so it                      falls back to conhost and loses paste: {argv:?}"
+                );
+            }
+        }
 
         // A plain podman argv stays eligible for the wt tab.
         assert!(is_wt_safe(&[
@@ -5214,6 +5260,39 @@ mod tests {
                 "help text missing section header {section}"
             );
         }
+        // 802-fbkg: the OUTPUT NOTE must be CORRECT, not merely PRESENT.
+        //
+        // The header check above passed for a year while the note prescribed the
+        // one capture pattern that silently fails. A pinned-but-wrong note is
+        // indistinguishable from a pinned-and-right one — the order-531 shape in
+        // documentation form — so presence was never the property worth asserting.
+        //
+        // Measured on the shipped v0.4.260830.5 binary, four probes, one host:
+        //   A  $exe --diagnose --json > out.json    -> $LASTEXITCODE EMPTY, 0 bytes
+        //   B  $exe --diagnose --json | Out-String  -> exit 2, 2910 chars
+        //   C  Start-Process -Wait -PassThru -Redirect -> exit 2, 2854 bytes
+        //   D  cmd.exe /c "$exe ... > out.json 2>nul"  -> exit 2, 2854 bytes
+        // A was what the note told support scripts they MUST use. The binary is
+        // GUI-subsystem, so PowerShell does not wait on it; a bare redirect
+        // returns before the child writes and records no status. B works only
+        // because reading a pipeline to EOF incidentally waits.
+        //
+        // So the note must name a WAITING construct. This asserts that at least
+        // one wrapper token survives, which is the property that was violated.
+        assert!(
+            text.contains("cmd.exe /c") || text.contains("Start-Process"),
+            "the OUTPUT NOTE must name a construct that WAITS for the \
+             GUI-subsystem child (cmd.exe /c or Start-Process -Wait). Without \
+             one, the prescribed pattern yields an empty exit code and a 0-byte \
+             file, which reads as success (802-fbkg)."
+        );
+        // And it must not quietly return to prescribing the bare redirect as the
+        // required pattern: the failure mode is the word MUST attached to it.
+        assert!(
+            !text.contains("MUST redirect to a file"),
+            "the OUTPUT NOTE prescribes a bare file redirect again — that is the \
+             802-fbkg defect returning; a bare redirect does not wait."
+        );
         // Exit-code contract is part of the CLI promise — pin it.
         for exit_code_marker in [
             "Exit: 0",

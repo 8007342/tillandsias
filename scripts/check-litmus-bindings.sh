@@ -102,5 +102,88 @@ if [ -n "$dangling" ]; then
     exit 1
 fi
 
+
+# ORDER 958-b36m. BOUND IS NOT RUNNABLE.
+#
+# Everything above answers "will anything ever run this file?". Nothing asked
+# "can the runner actually run it?", and those are different questions with the
+# same green light. litmus:codex-e2e-launch-parity landed 2026-09-01 keyed
+# `steps:` where run-litmus-test.sh reads `critical_path:`: valid YAML (the
+# 933-4gm8 gate passed it), correctly bound (this gate passed it), steps
+# asserting behaviour rather than source (634-39ik passed it) — three green
+# checks over a file the runner could not enter, reddening every full pre-build
+# run fleet-wide for about four hours.
+#
+# The check ASKS THE RUNNER rather than imitating it. `--parse-only` runs the
+# runner's own parse and executes nothing. A second parser here would assert
+# THIS script's idea of the format and could go green while the runner refuses
+# the file — strictly worse than no check, and this corpus produced two
+# copied-rule divergences in one week (702-6jza D3, D4).
+#
+# DIFF-SCOPED, per 699-dycj: only files ADDED to the bindings registry in this
+# change are gated, so a pre-existing unparseable file cannot flip the whole
+# fleet red at once. The existing corpus gets an ADVISORY count instead — one
+# line, never a refusal — because the corpus demonstrably carried such a file
+# for four hours and whether it carries more is worth stating on every run.
+RUNNER="$ROOT/scripts/run-litmus-test.sh"
+BASE_REF="${TILLANDSIAS_LITMUS_BIND_BASE:-origin/linux-next}"
+
+if [ -x "$RUNNER" ] && git -C "$ROOT" rev-parse --verify "$BASE_REF" >/dev/null 2>&1; then
+    # Names added to the registry in this change, mapped back to their files.
+    added_names="$(git -C "$ROOT" diff -U0 "$BASE_REF" -- openspec/litmus-bindings.yaml 2>/dev/null \
+        | sed -n 's/^+[[:space:]]*-[[:space:]]*\(litmus:[A-Za-z0-9._-]\+\).*/\1/p' | sort -u || true)"
+    unrunnable=""
+    checked_new=0
+    while IFS= read -r nm; do
+        [ -n "$nm" ] || continue
+        file="$(grep -rlF "name: $nm" "$TESTS_DIR" 2>/dev/null | head -1)"
+        [ -n "$file" ] || continue
+        checked_new=$((checked_new + 1))
+        if ! "$RUNNER" --parse-only "$file" >/dev/null 2>&1; then
+            [ -n "$unrunnable" ] && unrunnable="$unrunnable,"
+            unrunnable="$unrunnable$nm"
+        fi
+    done <<< "$added_names"
+
+    if [ -n "$unrunnable" ]; then
+        echo "violation:bound-but-unrunnable:$unrunnable"
+        echo "each name above is newly bound and the RUNNER cannot extract its steps (958-b36m)." >&2
+        echo "Being valid YAML and correctly bound is not being runnable. Reproduce with:" >&2
+        echo "  scripts/run-litmus-test.sh --parse-only <file>" >&2
+        exit 1
+    fi
+
+    # ADVISORY over the whole bound corpus. Never a refusal (699-dycj): a
+    # pre-existing hole is worth a number, not a fleet-wide red.
+    #
+    # RUN ONLY WHEN THE CORPUS COULD HAVE MOVED. Parsing 394 files costs ~36s,
+    # which is a 29% tax on a 126s gate paid by every cycle on every host —
+    # most of them touching no litmus file at all. If neither the registry nor
+    # any litmus file changed against the base, the count cannot have changed
+    # either, so the sweep is skipped rather than re-derived. This is the same
+    # reasoning as diff-scoping the gate above, applied to cost instead of
+    # blast radius.
+    corpus_touched="$(git -C "$ROOT" diff --name-only "$BASE_REF" -- openspec/litmus-bindings.yaml openspec/litmus-tests 2>/dev/null || true)"
+    corpus_bad=0
+    if [ -z "$corpus_touched" ]; then
+        corpus_bad=-1
+    else
+    while IFS= read -r b; do
+        [ -n "$b" ] || continue
+        bf="$(grep -rlF "name: $b" "$TESTS_DIR" 2>/dev/null | head -1)"
+        [ -n "$bf" ] || continue
+        # A `phase: retired` file is DELIBERATELY shelved and never executed, so
+        # its steps being unextractable harms nobody. Counting it here would be
+        # crying wolf — the same defect the stranded sweep had (946-pdpi), where
+        # a number that looked like abandonment actually measured something
+        # else. Both of this corpus's current hits are retired.
+        grep -qE "^phase:[[:space:]]*retired[[:space:]]*$" "$bf" && continue
+        "$RUNNER" --parse-only "$bf" >/dev/null 2>&1 || corpus_bad=$((corpus_bad + 1))
+    done <<< "$bound"
+    fi
+    if [ "$corpus_bad" -gt 0 ]; then
+        echo "advisory:bound-but-unrunnable-existing=$corpus_bad (not gating; find them with scripts/run-litmus-test.sh --parse-only)" >&2
+    fi
+fi
 echo "ok:litmus-bindings:files=$files bound=$bound_n retired=$retired grandfathered=$grandfathered"
 exit 0

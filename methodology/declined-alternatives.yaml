@@ -1,0 +1,65 @@
+trace: spec:knowledge-source-of-truth, order:821-73es, order:824-6qxh
+
+# WHY THIS FILE EXISTS. The fat spec expert answers by cosine similarity over a
+# corpus, and cosine top-k ALWAYS returns k. Asked about a technology this
+# project does not use, it used to return six confident, verifiable citations
+# about something else — the 821-73es defect. Retrieval floors (2026-08-29) now
+# refuse the FAR band, but "how do I roll back a Helm release here?" is a NEAR
+# miss: plausible infrastructure vocabulary that scores high enough to answer.
+#
+# The fix for a near miss is not a threshold — that was measured and refuted at
+# n=579 (in-corpus and near-miss bands overlap by 0.17-0.28 in every corpus).
+# The fix is CORPUS CONTENT: give the expert a passage that says, in the
+# questioner's own vocabulary, that the thing is not used here. Then the honest
+# answer wins retrieval on its merits instead of losing to an unrelated one.
+#
+# Harness-measured on 824-6qxh: 2 of 5 near-miss questions converted to correct
+# answers, with zero in-corpus regression.
+#
+# ADDING AN ENTRY. Only for something genuinely NOT used, stated in the words a
+# newcomer would search with, naming what IS used instead. Verify against the
+# tree before writing — see the systemd note below for why that is not optional.
+
+declined_alternatives:
+
+  helm_and_kubernetes: >
+    Helm, Helm charts, Helm values, chart rollback, Kubernetes manifests and
+    kubectl are NOT used by Tillandsias, and there is no Helm rollback
+    procedure. Tillandsias runs rootless podman containers on Linux, a
+    Virtualization.framework VM on macOS, and a WSL2 distro on Windows.
+    Deployment and rollback are handled by versioned container images and the
+    git mirror, not by a chart registry. If you are asking how to roll back a
+    Helm release here, the answer is that there is not enough information,
+    because this project does not use Helm.
+
+  compose_ansible_terraform: >
+    Docker Compose, docker-compose.yml, Ansible playbooks and Terraform modules
+    are NOT used by Tillandsias for orchestration. There are no compose files,
+    no playbooks and no HCL deployment modules to configure. Container lifecycle
+    is driven by the tray binary through the control wire. If you are asking how
+    to write or run one of these here, there is not enough information, because
+    this project does not use them.
+
+  # CORRECTED 2026-08-31 (821-73es). The measured source record for the entry
+  # above also listed "systemd unit files" among the things NOT used. That is
+  # FALSE: `packaging/systemd/user/tillandsias.service` exists, is referenced
+  # from build.sh, is documented in cheatsheets/runtime/, and its own
+  # Description reads "Tillandsias Headless Orchestrator" — it is precisely an
+  # orchestration unit. Landing the record verbatim would have written a
+  # falsehood into the corpus as authority, and an agent asking whether a unit
+  # exists would have been confidently refused.
+  #
+  # The harness measured that the record CONVERTED questions; it never checked
+  # that the record was TRUE. Those are different properties, and only one of
+  # them was tested.
+  systemd_is_used_not_declined: >
+    systemd IS used by Tillandsias on Linux and must not be listed as a declined
+    alternative. `packaging/systemd/user/tillandsias.service` is a systemd USER
+    unit that runs the headless orchestrator (`ExecStart=tillandsias --headless`,
+    `After=podman.socket`, `Restart=always`), and the dedicated-service-account
+    runtime cheatsheet documents installing it at
+    `~/.config/systemd/user/tillandsias.service`. What systemd does NOT do here
+    is drive per-container lifecycle: there is no unit per enclave container, and
+    containers are started and stopped by the tray binary through the control
+    wire. So the accurate answer to "is there a systemd unit for this?" is yes,
+    one, for the host-side orchestrator process.

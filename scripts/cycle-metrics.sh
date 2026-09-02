@@ -689,19 +689,33 @@ if [ -r "$TIMING_LOG" ]; then
           # (No apostrophes in this block: it lives inside a single-quoted jq
           # program, where one would terminate the string.)
           | (if ($slow.phase // "") == "build-span" then "~span" else "" end) as $prov
+          # 890-nkdz rule 1 (FORCED-ONLY for cross-host gate timings): a memoised
+          # run (step build-check-memoized, ~0.4s ok:gate-fresh) never enters the
+          # mean above, but a log that CONTAINS memoised runs is a mixed log, and
+          # a host quoting build_check_ms_avg from it must say so at emission,
+          # not trust a reader to know. Fifth field: memoised count; sixth: forced.
+          | ($r | map(select(.step=="build-check-memoized")) | length) as $memo
           | "\($n) " +
             "\(if ($bc|length)>0 then (($bc|add)/($bc|length)|round) else "-" end) " +
             "\(if ($lm|length)>0 then (($lm|add)/($lm|length)|round) else "-" end) " +
-            "\($slow.step // "-")\($prov):\($slow.duration_ms // 0)"
+            "\($slow.step // "-")\($prov):\($slow.duration_ms // 0) " +
+            "\($memo) \($bc|length)"
           end' 2>/dev/null)"
     if [ -n "$timing_stats" ]; then
-        read -r timing_steps timing_build_check_avg timing_litmus_avg timing_slowest <<EOF
+        read -r timing_steps timing_build_check_avg timing_litmus_avg timing_slowest timing_memo timing_forced <<EOF
 $timing_stats
 EOF
     fi
 fi
-printf 'timing: steps=%s build_check_ms_avg=%s litmus_ms_avg=%s slowest=%s source=%s\n' \
-    "${timing_steps:-0}" "${timing_build_check_avg:--}" "${timing_litmus_avg:--}" \
+# 890-nkdz: the mixed/forced label is ABSENT only when every contributing run
+# was forced (no memoised record in the log); present otherwise, naming both
+# counts so a cross-host comparison can be restricted to forced runs.
+timing_mix=""
+if [ "${timing_memo:-0}" -gt 0 ] 2>/dev/null; then
+    timing_mix=" build_check_mix=mixed:forced=${timing_forced:-0},memoised=${timing_memo}"
+fi
+printf 'timing: steps=%s build_check_ms_avg=%s%s litmus_ms_avg=%s slowest=%s source=%s\n' \
+    "${timing_steps:-0}" "${timing_build_check_avg:--}" "$timing_mix" "${timing_litmus_avg:--}" \
     "${timing_slowest:--:-}" "$timing_source"
 
 if [ "$EXPERTS_ONLY" = true ]; then

@@ -272,7 +272,8 @@ pub fn forge_opencode_profile() -> ContainerProfile {
         env_vars: common_forge_env(),
         secrets: vec![],
         image_override: None,
-        pids_limit: 512,  // Compilers, language servers, AI tools
+        pids_limit: 4096, // Compilers, language servers, AI tools — 512 was
+        // reachable by one installer fork storm (667-se87/959-fpc5)
         read_only: false, // Forge needs mutable workspace
         tmpfs_mounts: vec![
             "/tmp:size=256m,mode=1777",
@@ -292,7 +293,8 @@ pub fn forge_claude_profile() -> ContainerProfile {
         env_vars: common_forge_env(),
         secrets: vec![],
         image_override: None,
-        pids_limit: 512,  // Compilers, language servers, AI tools
+        pids_limit: 4096, // Compilers, language servers, AI tools — 512 was
+        // reachable by one installer fork storm (667-se87/959-fpc5)
         read_only: false, // Forge needs mutable workspace
         tmpfs_mounts: vec![
             "/tmp:size=256m,mode=1777",
@@ -315,7 +317,7 @@ pub fn forge_opencode_web_profile() -> ContainerProfile {
         env_vars: common_forge_env(),
         secrets: vec![],
         image_override: None,
-        pids_limit: 512,
+        pids_limit: 4096, // 667-se87/959-fpc5
         read_only: false,
         tmpfs_mounts: vec![
             "/tmp:size=256m,mode=1777",
@@ -333,7 +335,7 @@ pub fn terminal_profile() -> ContainerProfile {
         // Setting -w would fail because the directory doesn't exist until after clone.
         working_dir: None,
         mounts: common_forge_mounts(),
-        pids_limit: 512,  // Same as forge (maintenance shell)
+        pids_limit: 4096, // Same as forge (maintenance shell) — 667-se87/959-fpc5
         read_only: false, // Terminal needs mutable workspace
         tmpfs_mounts: vec![
             "/tmp:size=256m,mode=1777",
@@ -549,7 +551,11 @@ pub fn inference_profile() -> ContainerProfile {
         ],
         secrets: vec![], // No credentials needed
         image_override: None,
-        pids_limit: 128, // Ollama server + model runners
+        // 811-28eh: pids cgroups count THREADS; an ollama tree measured 131-139
+        // with two runners on macuahuitl 2026-09-02 and aborted its runners at
+        // 128 (std::thread EAGAIN). 1024 = ~8x the measured peak; see the
+        // headless launch site for the full reading.
+        pids_limit: 1024, // Ollama server + model runners (threads count)
         // NOT read-only: ollama needs writable home dir for runtime state,
         // model downloads, and temporary files. Same --userns=keep-id
         // tmpfs ownership issue as squid (UID 1000 can't write root-owned tmpfs).
@@ -1048,21 +1054,29 @@ mod tests {
     }
 
     // @trace spec:podman-orchestration, spec:secrets-management
+    //
+    // 4096 for forge/terminal roles (667-se87/959-fpc5): 512 was reachable
+    // in NORMAL operation — one vendor-installer fork storm pinned
+    // pids.peak at exactly 512 on two floor hosts, while real builds
+    // measured 3.5-6.6% of the ceiling. This test previously PINNED the
+    // retired 512 while these profiles had no production callers — a test
+    // guarding a dead copy at a buggy value (the green-gate-vs-property
+    // trap). The value and this test now move together, by rule.
     #[test]
     fn pids_limits_match_container_roles() {
         assert_eq!(
             forge_opencode_profile().pids_limit,
-            512,
+            4096,
             "Forge opencode: compilers + LSP + AI"
         );
         assert_eq!(
             forge_claude_profile().pids_limit,
-            512,
+            4096,
             "Forge claude: compilers + LSP + AI"
         );
         assert_eq!(
             terminal_profile().pids_limit,
-            512,
+            4096,
             "Terminal: same as forge"
         );
         assert_eq!(
@@ -1077,8 +1091,8 @@ mod tests {
         );
         assert_eq!(
             inference_profile().pids_limit,
-            128,
-            "Inference: ollama + model runners"
+            1024,
+            "Inference: ollama + model runners — threads count, measured 131-139 at two runners (811-28eh)"
         );
         assert_eq!(web_profile().pids_limit, 32, "Web: httpd only");
     }

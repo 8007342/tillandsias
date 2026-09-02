@@ -268,7 +268,7 @@ ensure_container() {
     podman run --detach --name "$DEV_CONTAINER" \
         --publish "${ENDPOINT_HOST}:${ENDPOINT_PORT}:11434" \
         --cap-drop=ALL --security-opt=no-new-privileges --security-opt=label=disable \
-        --userns=keep-id --pids-limit=128 \
+        --userns=keep-id --pids-limit=1024 \
         $_ec_accel \
         --env OLLAMA_DEBUG=1 \
         $_ec_igpu \
@@ -286,7 +286,7 @@ ensure_container() {
         podman run --detach --name "$DEV_CONTAINER" \
             --publish "${ENDPOINT_HOST}:${ENDPOINT_PORT}:11434" \
             --cap-drop=ALL --security-opt=no-new-privileges --security-opt=label=disable \
-            --userns=keep-id --pids-limit=128 \
+            --userns=keep-id --pids-limit=1024 \
             --env OLLAMA_DEBUG=1 \
             --env TILLANDSIAS_INFERENCE_TIER=cpu \
             --env OLLAMA_KEEP_ALIVE="${TILLANDSIAS_DEV_INFERENCE_KEEP_ALIVE:-30m}" \

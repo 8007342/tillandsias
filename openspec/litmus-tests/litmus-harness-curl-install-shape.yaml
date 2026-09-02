@@ -5,37 +5,46 @@ phase: pre-build
 size: instant
 severity: medium
 description: >
-  Order 459 (operator directive 2026-07-21): Claude Code and OpenCode are
-  installed at CONTAINER LAUNCH via their OFFICIAL vendor curl installers
-  (image build cannot curl — the enclave network does not exist during
-  podman build), persisted on the tool-cache volume, with ephemerality +
-  idempotency semantics: the installer refreshes to newer versions, a recent
-  validated matching Claude version may short-circuit installer network work
-  for at most 600 seconds, warm restarts reuse the cache instantly, and
-  offline falls back to the cached binary. Replaces the npm@latest channel for
-  these two (the order-284 breakage class); codex/openspec remain npm-managed.
+  Order 459 (operator directive 2026-07-21): Claude Code is installed at
+  CONTAINER LAUNCH via its OFFICIAL vendor curl installer (image build cannot
+  curl — the enclave network does not exist during podman build), persisted on
+  the tool-cache volume, with ephemerality + idempotency semantics: the
+  installer refreshes to newer versions, a recent validated matching version
+  may short-circuit installer network work for at most 600 seconds, warm
+  restarts reuse the cache instantly, and offline falls back to the cached
+  binary. OpenCode left the curl channel 2026-08-31 (operator ruling,
+  opencode-curl-install-never-populates-its-cache): its vendor installer's
+  check_version() exits 0 on any PATH-visible opencode without consulting
+  OPENCODE_INSTALL_DIR, so with the npm binary first on PATH the curl lane
+  could structurally never populate its cache — opencode is npm ON-DEMAND via
+  _require_harness (install only-when-missing; NOT the npm@latest background
+  loop, which is the order-284 breakage class). codex/openspec remain
+  npm-managed.
 preconditions:
   - workspace contains images/default/lib-common.sh
 
 critical_path:
-  - step: "lib-common defines the curl channel and routes require_* through it"
-    # Scans each require_* FUNCTION BODY (awk between the definition and its
-    # closing brace) rather than the first three lines after the definition.
-    # The `-A3` window encoded how the source happened to be laid out, not the
-    # property being asserted: order 626-p4xd added the shared harness-update
-    # lock to require_opencode, which pushed the curl call to line 4 and
-    # turned this step red without changing the routing at all. Pin the
-    # property, not the line count (634-39ik).
-    command: "grep -q 'curl_install_opencode()' images/default/lib-common.sh && grep -q 'curl_install_claude()' images/default/lib-common.sh && awk '/^require_opencode\\(\\)/,/^}/' images/default/lib-common.sh | grep -q curl_install_opencode && awk '/^require_claude\\(\\)/,/^}/' images/default/lib-common.sh | grep -q curl_install_claude && echo 'ok: curl-channel-wired'"
+  - step: "lib-common wires claude through curl and opencode through npm on-demand ONLY"
+    # Both directions pinned: claude's curl channel present and routed, AND
+    # the opencode curl lane fully absent (a resurrection would reintroduce
+    # the never-populates-its-cache defect plus the 805-yzhw double-extraction
+    # class). require_opencode's body must reach _require_harness and must
+    # not name any curl installer.
+    command: "grep -q 'curl_install_claude()' images/default/lib-common.sh && awk '/^require_claude\\(\\)/,/^}/' images/default/lib-common.sh | grep -q curl_install_claude && ! grep -q 'curl_install_opencode' images/default/lib-common.sh && awk '/^require_opencode\\(\\)/,/^}/' images/default/lib-common.sh | grep -q _require_harness && ! awk '/^require_opencode\\(\\)/,/^}/' images/default/lib-common.sh | grep -q 'curl_install' && echo 'ok: channels-wired'"
     timeout_ms: 5000
-    expected_behavior: "ok: curl-channel-wired"
+    expected_behavior: "ok: channels-wired"
 
-  - step: "the npm background updater no longer manages the curl-managed pair"
+  - step: "the npm background updater manages neither claude nor opencode"
+    # claude is curl-managed; opencode is _require_harness on-demand. Adding
+    # either to the @latest loop reintroduces the order-284 breakage class.
     command: "! grep -E 'for pkg in' images/default/lib-common.sh | grep -E 'opencode-ai|claude-code' >/dev/null && echo 'ok: npm-loop-shrunk'"
     timeout_ms: 5000
     expected_behavior: "ok: npm-loop-shrunk"
 
-  - step: "egress allowlist covers both installer hosts"
+  - step: "egress allowlist covers the claude installer and opencode's API host"
+    # .opencode.ai stays after the curl retirement: the RUNNING npm binary
+    # talks to its own API/auth endpoints there. Only the installer download
+    # stopped happening.
     command: "grep -q '^\\.opencode\\.ai$' images/proxy/allowlist.txt && grep -q '^\\.claude\\.ai$' images/proxy/allowlist.txt && echo 'ok: installer-egress-allowed'"
     timeout_ms: 5000
     expected_behavior: "ok: installer-egress-allowed"
@@ -50,26 +59,22 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "ok: lib-common-parses"
 
-  - step: "the harness-update lock gates the vendor INSTALL, not just its release (order 805-yzhw)"
-    # Hermetic fixture, three cases. The lock used to be recorded and not
-    # enforced: require_opencode kept `held` for its two release calls and ran
-    # curl_install_opencode unconditionally, so a lane whose backgrounded
-    # ensure_forge_harnesses already held the lock ran a SECOND 127MB vendor
-    # extraction into the same 256MB /tmp tmpfs. Both died with
-    # `tar: Wrote only 2560 of 10240 bytes`, neither cleaned up, and the lane
-    # stopped at "Press any key to exit" — which an operator reads as a hang.
-    #
-    # Case 2 is the control that keeps the fix honest (an always-skip
-    # require_opencode would satisfy case 1 and break every cold lane), and
-    # case 3 pins the leaked-tree sweep as age-bounded so it can never delete a
-    # sibling's in-flight extraction.
-    #
-    # Falsifiability MEASURED, not assumed: the same case-1 harness run against
-    # `git show HEAD:images/default/lib-common.sh` before the fix counted 1
-    # install while a sibling held the lock, against the 0 this asserts.
-    command: "bash scripts/test-opencode-harness-lock.sh 2>&1 | tail -1"
-    timeout_ms: 20000
-    expected_behavior: "PASS: opencode harness-lock fixture (order 805-yzhw)"
+  - step: "one opencode writer remains (the 805-yzhw race is structurally gone, not just locked)"
+    # The harness-update lock choreography (626-p4xd/805-yzhw) existed
+    # because require_opencode and ensure_forge_harnesses both ran 127MB
+    # vendor extractions into a 256MB tmpfs. With the curl lane retired the
+    # ONLY opencode install site is _require_harness's only-when-missing npm
+    # install, which serializes on the npm-update lock ensure_forge_harnesses
+    # creates. Pin that: exactly one 'npm install' line inside
+    # _require_harness, and ensure_forge_harnesses INVOKES no opencode curl
+    # installer (its first-run-floor ADVICE text may still name the npm
+    # package for a human retry — that is not an install site; the @latest
+    # loop's membership is step 2's pin). (The old
+    # scripts/test-opencode-harness-lock.sh fixture retired with the race it
+    # reproduced.)
+    command: "test \"$(awk '/^_require_harness\\(\\)/,/^}/' images/default/lib-common.sh | grep -c 'npm install')\" = 1 && ! awk '/^ensure_forge_harnesses\\(\\)/,/^}/' images/default/lib-common.sh | grep -q 'curl_install_opencode' && echo 'ok: one-opencode-writer'"
+    timeout_ms: 5000
+    expected_behavior: "ok: one-opencode-writer"
 
 observability:
   traces:
@@ -81,8 +86,10 @@ observability:
 
 rollback:
   on_failure: >
-    Do NOT revert to npm@latest for opencode/claude without operator sign-off
-    — the npm channel is the breakage class this replaces (orders 284/431).
-    Fail-soft ordering is: fresh curl install > cached curl binary > legacy
-    npm fallback > harness_missing_fatal.
+    Do NOT revert claude to npm@latest without operator sign-off — the npm
+    channel is the breakage class curl replaced (orders 284/431). Do NOT
+    resurrect opencode's curl installer — it structurally cannot populate its
+    cache (operator ruling 2026-08-31). Claude fail-soft ordering is: fresh
+    curl install > cached curl binary > legacy npm fallback >
+    harness_missing_fatal; opencode is _require_harness on-demand only.
   command: "grep -n 'order 459' images/default/lib-common.sh"

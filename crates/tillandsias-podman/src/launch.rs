@@ -37,7 +37,12 @@ impl ContainerLauncher {
             .name(container_name)
             .hostname(format!("forge-{project_name}"))
             .detached()
-            .pids_limit(512);
+            // 4096, not 512 (667-se87/959-fpc5): 512 is reachable by one
+            // installer fork storm on floor hardware. NOTE this builder has
+            // no production callers today (2026-09-02 census) — it is
+            // value-aligned anyway so a future caller cannot silently
+            // inherit the retired ceiling.
+            .pids_limit(4096);
 
         // GPU passthrough (Linux only, silent when absent)
         if cfg!(target_os = "linux") {

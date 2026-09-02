@@ -25,6 +25,14 @@ allowed_path() {
     # allowlist never learned about them, so the gate failed on a file class it
     # was written to allow.
     AGENTS.md|GEMINI.md|.github/copilot-instructions.md) return 0 ;;
+    # PRIVACY.md — the Microsoft Store submission requires a public privacy
+    # policy URL (Partner Center rejects a listing without one), and that URL
+    # points at this file's GitHub blob at repo root. Moving it into docs/
+    # breaks the submitted URL, so it is a distribution surface pinned by
+    # location, same class as README.md above. Added when the 776-g6r3 Store
+    # lane landed it (windows-next 9699522c6) and the promotion gate flagged
+    # it as noncanonical.
+    PRIVACY.md) return 0 ;;
     # A RUNTIME SURFACE IN THE STRICTEST SENSE: inject_startup_context() appends
     # this file VERBATIM into .forge-startup-context.md at every forge launch,
     # read from the MOUNTED CHECKOUT (743-y5wh), and it carries its own litmus.

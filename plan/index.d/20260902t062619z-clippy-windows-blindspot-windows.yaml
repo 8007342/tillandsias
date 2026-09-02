@@ -1,0 +1,58 @@
+packets:
+  - packet_id: linux-gate-cannot-see-windows-only-clippy
+    order: 958-w4kq
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    title: 'the gate''s clippy runs on Linux, so every cfg(windows) file is unlinted — native-Windows `cargo clippy --all-targets -D warnings` is RED on windows-next today'
+    deliverable: Windows-only sources are linted by something that refuses, so a clippy error in cfg(windows) code cannot reach a platform branch head unnoticed
+    pickup_role: windows
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags:
+      - windows
+      - rust
+      - ci
+    context: |
+      MEASURED 2026-09-02 on windows-next head e399c888a, working-tree-clean
+      (confirmed by `git stash`: both errors reproduce without any local
+      change):
+
+        cargo clippy -p tillandsias-windows-tray --all-targets -- -D warnings
+        error: this pattern is unneeded as the `..` pattern can match that element
+          --> crates/tillandsias-windows-tray/src/hvsocket.rs:88:13
+        error: items after a test module
+          --> crates/tillandsias-windows-tray/src/main.rs:280:1
+
+      e399c888a passed `./build.sh --check` green. Both facts are true: the
+      gate runs inside the tillandsias-build WSL2 distro against a Linux
+      target, and hvsocket.rs is cfg(windows) — the gate never compiles it,
+      so it cannot lint it. This is not a flaky gate; it is a gate whose
+      coverage stops at a cfg boundary.
+
+      SCOPE OF THE HOLE is wider than these two lints. Any clippy error in
+      any cfg(windows) module can land on windows-next and sit there. The
+      two found here are trivial; that they were found by accident, while
+      verifying an unrelated test, is the actual signal.
+
+      NOT the same failure as the 805-r98w clippy red earlier the same day.
+      That one WAS gate-visible and I had simply not run clippy locally
+      (`cargo test` does not invoke it). This one is gate-INVISIBLE: running
+      clippy on the gate's own host, however diligently, would still miss
+      it. The fix for the first was discipline; this one needs an
+      instrument.
+    verifiable_closure: the two errors above are fixed AND a check exists that fails when a clippy error is introduced into a cfg(windows) file — demonstrated by introducing one and observing the refusal
+    evidence:
+      - 'windows-next e399c888a: build.sh --check GATE=0, native clippy exit non-zero on the same tree'
+      - 'git stash / stash pop bracketing confirms both errors pre-exist the working-tree change'
+    events:
+      - type: note
+        ts: "2026-09-02T06:26:19Z"
+        agent_id: windows-yolanda-opus5-20260902t0626z
+        host: windows
+        summary: |
+          Found while mutation-verifying the 805-ek9e lane-argv test. Recorded
+          rather than fixed: the two lints are cheap, but fixing them silently
+          would have left the blind spot that hid them in place, and
+          items-after-test-module in main.rs wants a code move rather than a
+          one-liner. The deliverable here is the instrument, not the two fixes.

@@ -92,6 +92,31 @@ jq -e '.choices[0].message.content | type == "string" and (length > 0)' \
     "$work/resp.json" >/dev/null 2>&1 \
     || emit_error "response carried no non-empty choices[0].message.content"
 
+# GUARD 6 — the answer must be an ANSWER, not merely a non-empty string.
+#
+# Guards 1-5 all verify that the MEASUREMENT happened: the request went out,
+# a body came back, it parsed, it was not an error object, it carried content.
+# Every one of them passes for a model emitting token soup. On 2026-08-30 this
+# host benchmarked Qwen2.5-0.5B-Instruct-Hybrid at a plausible 52.92 tok/s over
+# three consistent reps with finish_reason "stop" and exact completion_tokens,
+# while the model was returning "#, or ahtewek..." — a fully well-formed
+# measurement of a model that was not doing the task. A throughput figure from
+# an arm that cannot answer is not a slow measurement; it is not a measurement.
+#
+# So: when TILLANDSIAS_TIER_ASSERT is set, the content must contain it
+# (case-insensitively) or the whole run is REFUSED rather than reported. The
+# assertion is checked on the SAME response that produced the timing above —
+# never a second call. A control taken in a separate invocation can describe a
+# different process state than the one being measured, which is how a stale
+# control has already misled this fleet more than once.
+if [ -n "${TILLANDSIAS_TIER_ASSERT:-}" ]; then
+    jq -e --arg want "$TILLANDSIAS_TIER_ASSERT" \
+        '(.choices[0].message.content | ascii_downcase)
+         | contains($want | ascii_downcase)' \
+        "$work/resp.json" >/dev/null 2>&1 \
+        || emit_error "correctness assertion failed: the response does not contain '${TILLANDSIAS_TIER_ASSERT}' — the arm answered, but not the question (no number is reported for an arm that is not doing the task)"
+fi
+
 wall_ms="$(awk -v s="${secs:-0}" 'BEGIN { printf "%d\n", (s * 1000) + 0.5 }')"
 
 jq -c --argjson wall "$wall_ms" --arg model "$MODEL" '

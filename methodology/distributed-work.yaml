@@ -399,7 +399,8 @@ distributed_work:
         is consumed by the dependency resolver, burndown, guards, and
         selectors; no reader defines its own.
     rules:
-      - "A `claim` event changes status from ready to in_progress (mint lease_id; heartbeat per lease rules)."
+      - "A `claim` event changes status from ready to in_progress (mint lease_id; heartbeat per lease rules). IN PRACTICE the status change is what `tillandsias-plan set-field <id> status in_progress` writes, and that is the ONLY thing selectors read as a lease (943-unii)."
+      - "The `--reason` text passed to `set-field` is recorded as a `type: note` event, NOT `type: claim` (946-pdpi). A consumer that greps for claim-typed events therefore finds NOTHING from the current claim protocol; read the status LWW channel, which carries the value, the timestamp and the host. The stranded sweep ages on that channel for exactly this reason."
       - "A `blocked` event must name the blocker, owner host if known, and the next ping time."
       - "A checkpoint that lands the artifact with field verification still outstanding sets status `implemented` and MUST name the outstanding verification in next_action."
       - "A `completed` event REQUIRES evidence_refs and sets status to `completed` — or directly to `verified`/`done` when the evidence already meets that bar. Writers without as-wired check evidence write `completed`, never `verified`; writers without validation/acceptance evidence write `verified`, never `done`."

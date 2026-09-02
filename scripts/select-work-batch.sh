@@ -163,6 +163,7 @@ shift 2>/dev/null || true
 BUDGET=""
 RELEASE=""
 SEED=""
+SEED_EXPLICIT=0
 TOPK="3"
 
 while [ "$#" -gt 0 ]; do
@@ -171,8 +172,8 @@ while [ "$#" -gt 0 ]; do
         --budget=*) BUDGET="${1#--budget=}"; shift ;;
         --release) RELEASE="${2:-}"; shift 2 ;;
         --release=*) RELEASE="${1#--release=}"; shift ;;
-        --seed)    SEED="${2:-}"; shift 2 ;;
-        --seed=*)  SEED="${1#--seed=}"; shift ;;
+        --seed)    SEED="${2:-}"; SEED_EXPLICIT=1; shift 2 ;;
+        --seed=*)  SEED="${1#--seed=}"; SEED_EXPLICIT=1; shift ;;
         --topk)    TOPK="${2:-}"; shift 2 ;;
         --topk=*)  TOPK="${1#--topk=}"; shift ;;
         *) echo "refused:bad-role:unknown argument $1"; exit 1 ;;
@@ -778,6 +779,30 @@ if [ -n "$MY_CAP_LINE" ] && [ "$HOST_TIER" != "low-end" ]; then
         k="$width"
         ROUTE="rank:${my_rank}/${roster_n}:width=${width}"
     fi
+fi
+
+# ORDER 949-uv5k. AN EXPLICIT --seed OUTRANKS ORDINAL ROUTING, because the
+# KNOWN TRADEOFF note above promises exactly that remedy — "pass --seed
+# explicitly to override when it happens" — and without this the promise is
+# unkeepable for every routed host. Measured 2026-08-31: seven unrelated seeds
+# produced byte-identical batches on a host reporting route=rank:2/7:width=7,
+# because the pick below reads `routed_pick` and never consumes the seed.
+#
+# THE DEFAULT IS UNCHANGED, and that is the point. With no --seed the host
+# still routes by roster ordinal, so cross-host separation (847-wgy4) and the
+# cross-cycle cohesion the rotation provides both stand. Only a deliberate,
+# recorded, reproducible override takes the seeded path — and the escape hatch
+# was decaying precisely as 850-bif2 rows landed, since routing engages only
+# for hosts that HAVE a capability row.
+#
+# ROUTE is reset to "seed" rather than given a new token so the batch line
+# reports no `route=` field: the pick genuinely did not come from rank, and
+# the triage litmus grammar stays satisfied without widening it.
+if [ "$SEED_EXPLICIT" = "1" ] && [ "$ROUTE" != "seed" ]; then
+    k="$TOPK"
+    [ "$k" -gt "$epic_count" ] && k="$epic_count"
+    [ "$k" -lt 1 ] && k=1
+    ROUTE="seed"
 fi
 
 # SCORE-WEIGHTED, not uniform. Uniform choice over the top-K re-introduces the

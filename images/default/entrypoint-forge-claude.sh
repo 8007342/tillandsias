@@ -51,11 +51,11 @@ populate_hot_paths
 # @trace plan/issues/macos-forge-base-build-arch-and-fragility-2026-07-05.md (order 188)
 # FIRST_RUN arch-aware prebuilt dev-tools into the persistent cache; backgrounded
 # so it never blocks the agent launch, and fail-soft.
-ensure_forge_prebuilt_tools >>/tmp/forge-lifecycle.log &
+ensure_forge_prebuilt_tools >>/tmp/forge-lifecycle.log 2>&1 &
 
 # @trace plan/issues/forge-harness-every-launch-latest-2026-07-04.md (order 181)
 # EVERY_LAUNCH agent harness update; backgrounded, fail-soft.
-ensure_forge_harnesses >>/tmp/forge-lifecycle.log &
+ensure_forge_harnesses >>/tmp/forge-lifecycle.log 2>&1 &
 
 # @trace spec:forge-welcome
 trace_lifecycle "entrypoint" "claude-code starting"
@@ -87,6 +87,11 @@ fi
 # Run after OAuth restore because Claude keeps credentials and MCP registration
 # in the same document. The overlay merge preserves every non-MCP field.
 apply_claude_config_overlay
+seed_claude_first_run_defaults
+# Operator-approved interactive dialogs, restored from vault (2026-08-31):
+# first-ever launch prompts once — those are valid prompts — the watcher
+# below harvests the approval, and every later forge launch restores it.
+/usr/local/bin/claude-approvals-vault restore || true
 
 # ── SSH key auto-discovery ──────────────────────────────────
 # @trace gap:ON-007
@@ -130,6 +135,10 @@ trace_lifecycle "exec" "launching claude-code ($CC_BIN)"
 # --rm teardown, so the NEXT launch does not re-prompt.
 export TILLANDSIAS_OAUTH_PROVIDER=claude
 export TILLANDSIAS_CODEX_VAULT_HELPER=/usr/local/bin/provider-oauth-vault
+# Approvals watcher: $$ becomes claude's pid at exec below, so the watch
+# tracks the session itself and performs a final harvest when it exits —
+# the operator's first-ever approval reaches vault within seconds.
+/usr/local/bin/claude-approvals-vault watch $$ &
 # Mirror of the codex full-auto gate (order 358 family; operator repro
 # 2026-07-16: interactive Claude prompted for every tool call inside the
 # forge — 'regular mode is too slow'). The forge IS the external sandbox
@@ -140,5 +149,13 @@ export TILLANDSIAS_CODEX_VAULT_HELPER=/usr/local/bin/provider-oauth-vault
 claude_forge_args=()
 if [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ]; then
     claude_forge_args+=(--dangerously-skip-permissions)
+fi
+# Coordinator-minted sessions (2026-08-31): an initial prompt threaded from
+# `tillandsias <project> --claude --prompt "<text>"` opens the INTERACTIVE
+# session with the message already submitted — typically "report to the
+# coordinator for directions" — so a fleet coordinator can launch sibling
+# forge agents and direct them over the remote-control channel.
+if [ -n "${TILLANDSIAS_CLAUDE_PROMPT:-}" ]; then
+    claude_forge_args+=("$TILLANDSIAS_CLAUDE_PROMPT")
 fi
 exec /usr/local/bin/codex-oauth-session -- "$CC_BIN" "${claude_forge_args[@]}" "$@"

@@ -68,7 +68,7 @@ _run_runner() {
     env -u LITMUS_PODMAN_MODE -u LITMUS_PODMAN_CALLS_FILE -u LITMUS_PODMAN_STATE_DIR \
         -u TILLANDSIAS_PODMAN_BIN -u TILLANDSIAS_PODMAN_REMOTE_URL -u CONTAINER_HOST \
         NO_COLOR=1 PATH="$1:$PATH" \
-        bash scripts/run-litmus-test.sh "$TARGET_SPEC" \
+        bash scripts/run-litmus-test.sh "${2:-$TARGET_SPEC}" \
             --phase pre-build --size instant --compact 2>&1
 }
 
@@ -162,6 +162,79 @@ else
     fi
 fi
 
+
+# ---------------------------------------------------------------------------
+# Fixture C — THE SCOPE CONTROL (order 618-i4s6).
+#
+# Fixtures A and B both pin how the preflight DESCRIBES a broken podman. Neither
+# says anything about WHEN it should fire at all, so both stay green if the
+# trigger is re-broadened to every litmus — which is exactly the 2026-07-15
+# regression: an un-gated preflight blanket-ENV-FAILed 35 source-shape checks
+# (darwin instant suite 96% -> 72%), and on Windows a podman shim that
+# exists-but-fails turned every grep-shape litmus into a false ENV-FAIL.
+#
+# The trigger was then narrowed twice, by two lanes fixing one half each: macOS
+# added the Linux-only platform gate, Windows tightened a whole-file `podman`
+# grep down to command lines that actually INVOKE it. Nothing pinned either
+# narrowing, so a future edit can undo both and the suite stays green while
+# every source-shape check on the fleet turns red for an environment they never
+# touch.
+#
+# THE CONTROL MUST MENTION PODMAN WITHOUT INVOKING IT. That is the whole
+# discrimination. A spec whose files never say "podman" at all stays green even
+# under a whole-file grep, so it proves nothing — measured while writing this:
+# methodology-accountability was the first choice, the re-broadening mutation
+# was applied and VERIFIED to land, and the arm still passed. It was green for
+# the wrong reason.
+#
+# AND THE RUNNER MUST ACTUALLY SELECT IT. cross-platform-compilation was the
+# second choice and also failed, differently and more quietly: the runner
+# selects by bound spec_id, that name is bound under another spec, and the run
+# printed "no litmus tests matched filter" — so the arm was asserting the
+# absence of ENV-FAIL over an EMPTY selection. A green from nothing.
+#
+# enclave-network is selectable, has 3 litmuses in the instant pre-build
+# bucket, one of which mentions podman, and invokes it on zero command lines.
+# ---------------------------------------------------------------------------
+UNGATED_SPEC="enclave-network"
+
+# Guard the fixture's own premise. If that spec ever gains a podman-invoking
+# litmus, this arm would start asserting the opposite of what it means and would
+# read as a regression in the runner rather than drift in the corpus.
+_ungated_podman_carriers=0
+_ungated_mentions=0
+for _f in openspec/litmus-tests/*.yaml; do
+    [ "$(grep -m1 '^spec:' "$_f" | sed 's/spec: *//')" = "$UNGATED_SPEC" ] || continue
+    [ "$(grep -m1 '^phase:' "$_f" | sed 's/phase: *//')" = "pre-build" ] || continue
+    [ "$(grep -m1 '^size:' "$_f" | sed 's/size: *//')" = "instant" ] || continue
+    grep -qE '^[[:space:]]*command:.*(^|[ ;|&(])podman[[:space:]]' "$_f" \
+        && _ungated_podman_carriers=$((_ungated_podman_carriers + 1))
+    grep -q 'podman' "$_f" && _ungated_mentions=$((_ungated_mentions + 1))
+done
+
+if [ "$_ungated_mentions" -eq 0 ]; then
+    _fail "fixture C is toothless: $UNGATED_SPEC no longer MENTIONS podman anywhere in its instant pre-build bucket, so a re-broadened whole-file trigger would not fire on it either and this arm would pass for the wrong reason. Pick a spec that mentions podman without invoking it."
+elif [ "$_ungated_podman_carriers" -ne 0 ]; then
+    _fail "fixture C's premise has drifted: $UNGATED_SPEC now has $_ungated_podman_carriers podman-invoking litmus(es) in the instant pre-build bucket, so it can no longer serve as the ungated control. Pick another podman-free spec rather than deleting this arm."
+else
+    out_c="$(_run_runner "$SANDBOX/instant-fail" "$UNGATED_SPEC")"
+    if grep -Fq 'no litmus tests matched' <<<"$out_c"; then
+        _fail "fixture C selected NOTHING ($UNGATED_SPEC is not a selectable bound spec_id), so its green would assert the absence of ENV-FAIL over an empty run. Output: $out_c"
+    elif grep -Fq '[ENV-FAIL]' <<<"$out_c"; then
+        _fail "fixture C: a spec whose commands never invoke podman was ENV-FAILed by a broken podman on PATH — the preflight trigger has been re-broadened (this is the 2026-07-15 regression: 35 source-shape checks blanket-failed). Output: $out_c"
+    else
+        _ok "a litmus that never invokes podman is NOT gated on podman being healthy"
+    fi
+
+    # POSITIVE HALF of the same control: prove the fixture podman really was
+    # broken and first on PATH for this run. Without it, arm C also passes when
+    # the stub was never reachable, which would make it decoration.
+    if PATH="$SANDBOX/instant-fail:$PATH" podman ps >/dev/null 2>&1; then
+        _fail "fixture C: the stub podman answered successfully, so the arm above proves nothing about scoping"
+    else
+        _ok "the stub podman really is broken and first on PATH (so C's green is scoping, not luck)"
+    fi
+fi
 if [[ "$FAILED" -ne 0 ]]; then
     echo "FAIL: the podman preflight cannot tell a timeout from a failed exec"
     exit 1

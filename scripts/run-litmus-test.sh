@@ -260,6 +260,49 @@ export LITMUS_PODMAN_CALLS_FILE="${LITMUS_PODMAN_CALLS_FILE:-$PROJECT_ROOT/targe
 TIMEOUT_SECONDS=600
 VERBOSE=0
 LIST_ONLY=0
+
+# ORDER 956-llei. CPU stall accounting for the kill-time adjudicator, read
+# from THIS cgroup's pressure file so a step run inside a container is
+# judged by the container's contention, not the host's (the /proc/loadavg
+# it replaced is not namespaced: a forge step was stamped with the host's
+# runqueue). Prints the `some` stall counter in microseconds, or nothing
+# when the kernel/cgroup does not expose it — the caller must then say
+# UNCLASSIFIED, never fall back to a number that measures something else.
+# LITMUS_PSI_FILE overrides the path so the hermetic fixture can inject
+# counters (scripts/test-litmus-kill-adjudicator.sh).
+_lt_cpu_stall_us() {
+    local f="${LITMUS_PSI_FILE:-}"
+    if [ -z "$f" ]; then
+        # This process's OWN cgroup first: its `some` counter is time OUR
+        # runnable tasks waited for a CPU, whoever was hogging it. The cgroup
+        # root — the container's root inside a cgroup namespace, the whole
+        # host outside one — is the fallback when the own path is not
+        # exposed (measured on macuahuitl 2026-09-02: /proc/self/cgroup
+        # names a ptyxis scope; root `some total=` also counts every
+        # unrelated process's stall).
+        local own
+        own="$(sed -n 's/^0::\(.*\)$/\1/p' /proc/self/cgroup 2>/dev/null | head -1)"
+        if [ -n "$own" ] && [ "$own" != "/" ] && [ -r "/sys/fs/cgroup${own}/cpu.pressure" ]; then
+            f="/sys/fs/cgroup${own}/cpu.pressure"
+        else
+            f="/sys/fs/cgroup/cpu.pressure"
+        fi
+    fi
+    [ -r "$f" ] || return 0
+    awk '$1 == "some" { for (i = 2; i <= NF; i++) if ($i ~ /^total=/) { sub(/^total=/, "", $i); print $i; exit } }' "$f" 2>/dev/null
+}
+
+# ORDER 958-b36m. Parse a named litmus file with the RUNNER'S OWN parser and
+# report whether its steps are extractable, WITHOUT executing any of them.
+#
+# The binding gate needs to ask "can the runner run this file?" and there was
+# no way to ask. Reimplementing the parse in the gate would assert the GATE's
+# idea of the format and could go green while this runner refuses the file —
+# strictly worse than no gate, and this corpus has two instances THIS WEEK of a
+# rule copied to one lane and left on others (702-6jza D3, D4). So the answer
+# is a mode on the authority itself.
+PARSE_ONLY=0
+PARSE_ONLY_FILES=()
 FILTER_SPEC=""
 # 764-8m5j was REVERTED here on 2026-08-17 and the packet reopened. It made a
 # test-name filter RUN that single test, which is genuinely useful — but
@@ -293,6 +336,10 @@ TESTS_PASSED=0
 # output, and ONE --emit-timing-batch spawn (per-test spawns would tax an
 # instant suite seconds to measure milliseconds — the empty-suite-floor lesson).
 _PER_TEST_LOG=""
+# 956-llei: set by the step runner when a step is killed at its budget, read
+# by the per-test record so a timeout's duration is stored as CENSORED (rc 124)
+# rather than as a measurement — the budget is a lower bound, not the time.
+LITMUS_LAST_TEST_TIMED_OUT=0
 TESTS_FAILED=0
 TESTS_SKIPPED=0
 TESTS_RUN=0
@@ -1245,6 +1292,16 @@ run_litmus_test_file() {
         return 1
     fi
 
+    # ORDER 958-b36m. PARSE-ONLY returns HERE — after the same parse the real
+    # run does, and before a single step is executed. Both refusals above
+    # (PARSE FAIL for an unextractable named step, PARSE ERROR for a file with
+    # no steps at all) have already fired if they apply, so this mode's verdict
+    # is the runner's verdict by construction rather than by imitation.
+    if [[ $PARSE_ONLY -eq 1 ]]; then
+        printf 'ok:litmus-parseable:%s:%d step(s)\n' "$test_file" "${#step_commands[@]}"
+        return 0
+    fi
+
     local combined_output=""
     local step_index=0
 
@@ -1278,13 +1335,23 @@ run_litmus_test_file() {
         # TERM-immune fixtures.
         local step_capture
         step_capture="$(mktemp "${TMPDIR:-/tmp}/litmus-step-capture.XXXXXX")"
-        LITMUS_STDLIB="${LITMUS_STDLIB}" timeout --kill-after=10s "${timeout_sec}s" bash -c 'source "$LITMUS_STDLIB"; '"${step_command}" >"$step_capture" 2>&1 || exit_code=$?
+        # 956-llei: stall counter + wall clock at launch, diffed at kill time.
+        local _lt_psi0 _lt_t0
+        _lt_psi0="$(_lt_cpu_stall_us)"; _lt_t0="$(date +%s)"
+        # 956-llei: stdin is /dev/null, ALWAYS. The per-spec test loop feeds
+        # its bound test names through a here-string on stdin, and a step that
+        # reads stdin (a fixture with `read`, `cat`, an interactive-capable
+        # tool) drained the rest of its spec's list: measured 2026-09-02, the
+        # instant sweep executed 1 of the 29 tests bound to ci-release, and
+        # reported PASS. Two born-red tests sat unobserved in that gap.
+        LITMUS_STDLIB="${LITMUS_STDLIB}" timeout --kill-after=10s "${timeout_sec}s" bash -c 'source "$LITMUS_STDLIB"; '"${step_command}" </dev/null >"$step_capture" 2>&1 || exit_code=$?
         step_output="$(cat "$step_capture")"
         rm -f "$step_capture"
         combined_output+=$'\n'"[${step_index}:${step_name}]${step_output}"
 
         if [[ $exit_code -eq 124 ]]; then
             printf ' %b[TIMEOUT]%b\n' "${RED}" "${NC}" >&2
+            LITMUS_LAST_TEST_TIMED_OUT=1
             log_warn "Test timeout after ${timeout_sec}s in step: ${step_name:-step-${step_index}}"
             # ORDER 820-c8q8. A TIMEOUT has two causes that read identically,
             # and both happened on macuahuitl on 2026-08-18 within one hour:
@@ -1298,37 +1365,36 @@ run_litmus_test_file() {
             # suspect it had not convicted.
             #
             # ELAPSED TIME CANNOT DISCRIMINATE — a killed step always elapses
-            # its budget, by construction. Load at kill time can: a runqueue
-            # longer than the core count means other work was competing for the
-            # CPU this step was being timed on. Reported, never used to change
-            # the verdict: the step still FAILS, because a step that cannot
-            # finish inside its budget on this host has not passed.
-            _lt_load="unknown"; _lt_cpus="unknown"
-            if [ -r /proc/loadavg ]; then
-                _lt_load="$(cut -d' ' -f1 < /proc/loadavg 2>/dev/null)"
-            elif command -v sysctl >/dev/null 2>&1; then
-                _lt_load="$(sysctl -n vm.loadavg 2>/dev/null | tr -d '{}' | awk '{print $1}')"
+            # its budget, by construction. What can: how long this step's
+            # cgroup had runnable tasks WAITING for a CPU while the step ran
+            # (PSI `some` stall, diffed launch→kill). ORDER 956-llei retired
+            # the load1-vs-ncpus rule that stood here: /proc/loadavg is not
+            # namespaced (a forge step was judged by the HOST's runqueue);
+            # load1 > ncpus is utilization, not starvation (a fully busy box
+            # with no queueing stamped SATURATED); and its trailing 1-minute
+            # window mostly measured the PREVIOUS step. The counter diff is
+            # this step's own window, in this step's own cgroup. Reported,
+            # never used to change the verdict: the step still FAILS, because
+            # a step that cannot finish inside its budget has not passed.
+            # Threshold: a quarter of the wall time spent queued means the
+            # step saw at most ~75% of a CPU — tunable, LITMUS_STALL_CONTENDED_PCT.
+            local _lt_psi1 _lt_elapsed _lt_stall_us _lt_stall_pct
+            _lt_psi1="$(_lt_cpu_stall_us)"
+            _lt_elapsed=$(( $(date +%s) - ${_lt_t0:-0} ))
+            [ "$_lt_elapsed" -ge 1 ] 2>/dev/null || _lt_elapsed=1
+            if [ -z "${_lt_psi0:-}" ] || [ -z "${_lt_psi1:-}" ] || [ "$_lt_psi1" -lt "$_lt_psi0" ] 2>/dev/null; then
+                log_warn "  cpu.pressure unavailable in this cgroup — cause UNCLASSIFIED (slow step vs starved step); no fallback instrument, because none measures this step's contention"
+            else
+                _lt_stall_us=$(( _lt_psi1 - _lt_psi0 ))
+                # percent of the step's wall time that SOME task in this cgroup
+                # waited for a CPU; integer maths, bash 3.2 has no floats.
+                _lt_stall_pct=$(( _lt_stall_us / (_lt_elapsed * 10000) ))
+                if [ "$_lt_stall_pct" -ge "${LITMUS_STALL_CONTENDED_PCT:-25}" ]; then
+                    log_warn "  cpu.pressure some-stall ${_lt_stall_us}us over ${_lt_elapsed}s (${_lt_stall_pct}%) in this cgroup — step CONTENDED at kill time; a step that is fast when idle can be starved here, so re-run before treating this as a regression"
+                else
+                    log_warn "  cpu.pressure some-stall ${_lt_stall_us}us over ${_lt_elapsed}s (${_lt_stall_pct}%) in this cgroup — step NOT contended at kill time; genuinely too slow for its ${timeout_sec}s budget"
+                fi
             fi
-            if command -v nproc >/dev/null 2>&1; then
-                _lt_cpus="$(nproc 2>/dev/null)"
-            elif command -v sysctl >/dev/null 2>&1; then
-                _lt_cpus="$(sysctl -n hw.ncpu 2>/dev/null)"
-            fi
-            case "${_lt_load}:${_lt_cpus}" in
-                unknown:*|*:unknown|:*|*:)
-                    log_warn "  load at kill time: unavailable on this host — cause UNCLASSIFIED (slow step vs starved step)" ;;
-                *)
-                    # Scaled integer compare; bash 3.2 has no floats and bc is
-                    # not guaranteed present.
-                    _lt_l100="$(printf '%s' "$_lt_load" | awk '{printf "%d", $1 * 100}' 2>/dev/null)"
-                    _lt_c100=$(( _lt_cpus * 100 ))
-                    if [ -n "$_lt_l100" ] && [ "$_lt_l100" -gt "$_lt_c100" ] 2>/dev/null; then
-                        log_warn "  load1=${_lt_load} over ${_lt_cpus} cpus — host SATURATED at kill time; a step that is fast when idle can be starved here, so re-run before treating this as a regression"
-                    else
-                        log_warn "  load1=${_lt_load} over ${_lt_cpus} cpus — host NOT saturated at kill time; this step is genuinely too slow for its ${timeout_sec}s budget"
-                    fi
-                    ;;
-            esac
             return 1
         fi
 
@@ -1479,6 +1545,18 @@ run_tests_for_spec() {
             test_count=$((test_count+1))
             continue
         fi
+        # 956-llei: a test whose phase is `retired` runs ONLY when that phase is
+        # asked for. The default phase filter is "all", and --diff-scope fails
+        # CLOSED into exactly that default, so an escalated scoped run executed
+        # every retired fixture in the corpus (12 on 2026-09-01) — none of which
+        # anyone had asked for. Retired means kept for the record, not for the
+        # verdict; `--phase retired` is the explicit way to run them.
+        if [[ "$test_phase" == "retired" && "$FILTER_PHASE" != "retired" ]]; then
+            log_test_result "$spec_id" "$test_name" "SKIP" "Phase retired: runs only under --phase retired"
+            spec_skipped=1
+            test_count=$((test_count+1))
+            continue
+        fi
 
         # Order 661-emqi. Host-kind gate, before size so a forge-only test on a
         # laptop reports WHY it did not run rather than looking like a size miss.
@@ -1535,6 +1613,7 @@ run_tests_for_spec() {
         # is dropped downstream, never poisoned.
         local _pt_t0 _pt_dur _pt_rc
         _pt_t0="$(timing_now_ms 2>/dev/null || echo 0)"
+        LITMUS_LAST_TEST_TIMED_OUT=0
         if run_litmus_test_file "$test_file" "$spec_id"; then
             _pt_rc=0
             log_test_result "$spec_id" "$test_name" "PASS" ""
@@ -1542,6 +1621,12 @@ run_tests_for_spec() {
             _pt_rc=1
             log_test_result "$spec_id" "$test_name" "FAIL" "Check implementation"
             spec_failed=1
+        fi
+        # 956-llei: a killed test's elapsed time is its budget — censored data.
+        # Record rc 124 so the slowest-tests table and the timing consumer can
+        # tell "took 30s" from "was stopped at 30s".
+        if [[ "$_pt_rc" -ne 0 && "$LITMUS_LAST_TEST_TIMED_OUT" -eq 1 ]]; then
+            _pt_rc=124
         fi
         if [[ "$_pt_t0" =~ ^[0-9]+$ && "$_pt_t0" -gt 0 ]]; then
             _pt_dur=$(( $(timing_now_ms 2>/dev/null || echo 0) - _pt_t0 ))
@@ -1637,7 +1722,7 @@ print_summary() {
         # reported "litmus failures detected" over a log reading 100%
         # (measured 2026-08-25: full pre-build quick sweep exit 141, single
         # -spec runs unaffected because head never closes early on them).
-        _slow_tests="$(printf '%s' "$_PER_TEST_LOG" | sort -rn | awk -F'\t' '$1 >= 500 {printf "  %7.1fs  %s\n", $1/1000, $2}' | head -10 || true)"
+        _slow_tests="$(printf '%s' "$_PER_TEST_LOG" | sort -rn | awk -F'\t' '$1 >= 500 {printf "  %7.1fs  %s%s\n", $1/1000, $2, ($3 == 124 ? "  (killed at budget — censored; the true time is longer)" : "")}' | head -10 || true)"
         if [[ -n "$_slow_tests" ]]; then
             printf '%bSlowest tests%b (>=0.5s, top 10; full ranking in the timing records):\n%s\n\n' "${BOLD}" "${NC}" "$_slow_tests" >&2
         fi
@@ -1779,6 +1864,14 @@ parse_args() {
             --list)
                 LIST_ONLY=1
                 shift
+                ;;
+            --parse-only)
+                PARSE_ONLY=1
+                shift
+                while [[ $# -gt 0 && "${1:0:1}" != "-" ]]; do
+                    PARSE_ONLY_FILES+=("$1")
+                    shift
+                done
                 ;;
             --timeout)
                 TIMEOUT_SECONDS="${2}"
@@ -1938,6 +2031,32 @@ validate_environment() {
 
 main() {
     parse_args "$@"
+    # ORDER 958-b36m. `--parse-only <file>...` asks THIS runner whether it can
+    # extract the named files' steps, and answers without executing any of
+    # them. Short-circuits before selection and before the reporting banner:
+    # the caller is a gate wanting one verdict line per file, not a test run.
+    #
+    # Selection is deliberately bypassed. A gate checking a NEWLY BOUND file
+    # must be able to reach it whatever its phase, size or spec — the whole
+    # failure being closed is a file that no selection path reaches.
+    if [[ $PARSE_ONLY -eq 1 ]]; then
+        local parse_rc=0
+        local parse_target
+        if [[ ${#PARSE_ONLY_FILES[@]} -eq 0 ]]; then
+            printf 'blocked:parse-only:no files named\n' >&2
+            exit 2
+        fi
+        for parse_target in ${PARSE_ONLY_FILES[@]+"${PARSE_ONLY_FILES[@]}"}; do
+            if [[ ! -f "$parse_target" ]]; then
+                printf 'blocked:parse-only:missing:%s\n' "$parse_target" >&2
+                parse_rc=1
+                continue
+            fi
+            run_litmus_test_file "$parse_target" "parse-only" || parse_rc=1
+        done
+        exit "$parse_rc"
+    fi
+
 
     if [[ -n "$SPEC_SHORTHAND" ]]; then
         if [[ -z "$FILTER_SPEC" ]]; then

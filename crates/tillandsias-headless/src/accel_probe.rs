@@ -1028,6 +1028,192 @@ pub fn enumerate_render_nodes_at(root: &std::path::Path, vantage: Vantage) -> Ve
     out
 }
 
+/// A stable identifier for the HARDWARE this document describes, so two hosts
+/// can be SHOWN identical rather than ASSERTED identical.
+///
+/// 805-r98w. The cost of not having this was paid on 2026-08-31: an accelerator
+/// result measured here was reported as "replicates on a THIRD SUBSTRATE" when
+/// nothing could establish that this host and yoga's are the same substrate.
+/// Both hosts then had to strike the framing. Two machines each describing
+/// themselves and calling the pair a control is precisely what this fixes.
+///
+/// WHAT IS IN IT — hardware only:
+///   cpu:<vendor>/<name>/<physical>c<logical>t
+///   gpu:<vendor>/<name>
+///   npu:<vendor>/<device_node>
+///   ram:<class>
+/// Devices are sorted before hashing, because enumeration order is not a
+/// property of the machine and a fingerprint that changed with it would fail
+/// the one job it has.
+///
+/// WHAT IS DELIBERATELY OUT, and this is the design rather than an omission:
+///
+///   * THE OS, KERNEL, AND CONTAINER RUNTIME. Those are the SUBSTRATE, and the
+///     packet's whole point is a matrix keyed on (fingerprint, substrate) where
+///     same-fingerprint rows isolate the substrate as the only free variable.
+///     Folding the OS in would make every row unique and the control impossible.
+///     This host and yoga's must fingerprint IDENTICALLY despite one running
+///     Windows/WSL2 and the other bare Linux — that equality is the deliverable.
+///   * `driver`, for the same reason: a driver version is substrate, not silicon.
+///   * `usable` and `lanes`: those are what the matrix MEASURES. Keying on them
+///     would let the answer choose the question.
+///
+/// RAM IS BUCKETED, not exact. Two machines with the same DIMMs report slightly
+/// different `system_ram_gb` once firmware reservations differ, and an exact
+/// figure would split a twin pair on a number neither user chose.
+///
+/// NOT A UNIQUENESS CLAIM. Two genuinely identical machines SHOULD collide —
+/// that is the point. This says "same hardware", never "same host"; `host_id`
+/// remains the identity key and this is deliberately not a substitute for it.
+pub fn hardware_fingerprint(doc: &CapabilityDocument) -> String {
+    fn ram_class(gb: f64) -> String {
+        // Nearest power-of-two-ish class. 15.2 and 15.9 are both "16".
+        const CLASSES: [f64; 9] = [2.0, 4.0, 8.0, 16.0, 32.0, 64.0, 128.0, 256.0, 512.0];
+        let best = CLASSES
+            .iter()
+            .min_by(|a, b| {
+                (*a - gb)
+                    .abs()
+                    .partial_cmp(&(*b - gb).abs())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .copied()
+            .unwrap_or(gb);
+        format!("{best:.0}")
+    }
+
+    let mut parts: Vec<String> = Vec::new();
+    let mut ram: Option<String> = None;
+    for d in &doc.devices {
+        match d.device_class.as_str() {
+            "cpu" => {
+                let cores = d
+                    .cpu_cores
+                    .as_ref()
+                    .map(|c| format!("{}c{}t", c.physical, c.logical))
+                    .unwrap_or_else(|| "?c?t".to_string());
+                parts.push(format!("cpu:{}/{}/{}", d.vendor, d.name, cores));
+            }
+            "gpu" => parts.push(format!("gpu:{}/{}", d.vendor, d.name)),
+            "npu" => parts.push(format!(
+                "npu:{}/{}",
+                d.vendor,
+                d.device_node.as_deref().unwrap_or("-")
+            )),
+            _ => {}
+        }
+        // First device carrying a RAM figure wins; `map` keeps this flat, which
+        // clippy's collapsible_if requires under the gate's -D warnings.
+        if ram.is_none() {
+            ram = d.system_ram_gb.map(ram_class);
+        }
+    }
+    parts.sort();
+    if let Some(r) = ram {
+        parts.push(format!("ram:{r}"));
+    }
+    let joined = parts.join("|");
+    // cksum-grade is enough: this is a comparison key, not a security boundary,
+    // and a readable prefix beats an opaque digest when a human is asking why
+    // two rows did not match.
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in joined.as_bytes() {
+        h ^= *b as u64;
+        h = h.wrapping_mul(0x1000_0000_01b3);
+    }
+    format!("hw1-{h:016x}")
+}
+
+/// Upgrade a node to [`Proof::Placed`] from a runtime's reported residency.
+///
+/// 793-zumy REMAINING 2, second half. Takes the residency as a VALUE rather than
+/// fetching it, which keeps the only rung that proves a lane decidable without a
+/// network round trip and testable without a live runtime. The caller supplies
+/// `resident_bytes` — in practice the sum of `size_vram` across
+/// `ollama /api/ps` — and the IO stays at the caller's layer where it can be
+/// mocked, timed, and refused independently.
+///
+/// EXACTLY-ONE-CANDIDATE OR NOTHING, and this is the load-bearing rule.
+/// `/api/ps` reports residency per MODEL, never per DEVICE. On a host with one
+/// candidate node the attribution is unambiguous; with two it is a guess, and a
+/// guess recorded as `Placed` is precisely this packet's failure class — a label
+/// standing in for the wiring it names, one rung higher and therefore worse.
+/// With zero or several candidates this returns `None` and upgrades nothing.
+///
+/// CANDIDATES ARE `Reachable` NODES, not merely enumerated ones: a runtime
+/// cannot have placed weights on a device the work's vantage cannot even stat.
+/// That ordering is why the rungs are ordered.
+///
+/// NOT A CAPACITY CLAIM, restating the enum's own caveat because this is the
+/// function that could quietly become one: non-zero residency proves weights
+/// landed, not that the device does the compute (a partial offload reports
+/// non-zero VRAM with most layers on CPU) and not that a larger model would fit.
+///
+/// Returns the node index upgraded, or `None` when nothing could be attributed.
+pub fn upgrade_placed(nodes: &mut [DrmRenderNode], resident_bytes: u64) -> Option<usize> {
+    if resident_bytes == 0 {
+        return None;
+    }
+    let mut candidates = nodes
+        .iter()
+        .enumerate()
+        .filter(|(_, n)| n.proof >= Proof::Reachable);
+    let (idx, _) = candidates.next()?;
+    if candidates.next().is_some() {
+        // Two or more reachable nodes and a per-model residency figure: the
+        // honest answer is that we cannot say WHICH one, so we say nothing.
+        return None;
+    }
+    if nodes[idx].proof < Proof::Placed {
+        nodes[idx].proof = Proof::Placed;
+    }
+    Some(idx)
+}
+
+/// Upgrade `Enumerated` nodes to [`Proof::Reachable`] by STATTING them from the
+/// vantage the work runs in.
+///
+/// 793-zumy REMAINING 2, first half. The rungs were modelled but inert: nothing
+/// produced anything above `Enumerated`, and an honest model that does no work
+/// is only half the fix.
+///
+/// THE IN-TREE PRECEDENT IS `images/inference/entrypoint.sh`, which refuses a
+/// cuda tier when `[ -e /dev/nvidia0 ]` fails INSIDE the container. This is that
+/// check, lifted into the probe and given a rung.
+///
+/// CONTAINER VANTAGE ONLY, and this is the whole point rather than a
+/// restriction. [`Vantage::Container`] is documented as the only vantage that
+/// can speak for the container lane, so a HOST stat is not weaker evidence for
+/// that lane — it is evidence about a different question. A node enumerated on
+/// the host and statted on the host stays `Enumerated`; claiming otherwise
+/// would be this packet's own failure class, a label standing in for the wiring
+/// it names.
+///
+/// STILL NOT A LANE. Reachable is necessary and NOT sufficient: yoga's host sat
+/// exactly here with the device statted and `size_vram` still 0. Only
+/// [`Proof::Placed`] proves a lane, and nothing here produces it.
+///
+/// Never downgrades: a node already at a higher rung is left alone.
+pub fn upgrade_reachable_at(nodes: &mut [DrmRenderNode], dev_dri_root: &std::path::Path) -> usize {
+    let mut upgraded = 0;
+    for n in nodes.iter_mut() {
+        if n.vantage != Vantage::Container {
+            continue;
+        }
+        if n.proof >= Proof::Reachable {
+            continue;
+        }
+        // `exists()` follows symlinks, which is what we want: /dev/dri entries
+        // are commonly symlinked and the question is whether opening the path
+        // would find a device, not whether the entry is itself a node.
+        if dev_dri_root.join(&n.node).exists() {
+            n.proof = Proof::Reachable;
+            upgraded += 1;
+        }
+    }
+    upgraded
+}
+
 /// Does ONE spec body name the NVIDIA kind AND a usable device node?
 ///
 /// Split out so it is testable without the filesystem: a spec that names the
@@ -1794,6 +1980,111 @@ mod tests {
         assert!(super::Proof::Reachable < super::Proof::Placed);
     }
 
+    /// 793-zumy REMAINING 2, first half: the Reachable rung now has a producer,
+    /// and the rule that makes it mean anything is the vantage restriction.
+    ///
+    /// Four arms, three of them negative, because a producer that only ever
+    /// upgrades is indistinguishable from one that ignores its inputs.
+    #[test]
+    fn reachable_upgrades_only_from_container_vantage_and_only_when_the_node_exists() {
+        use super::{DrmRenderNode, Proof, Vantage};
+        let dir = std::env::temp_dir().join(format!("tz-reach-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        std::fs::write(dir.join("renderD128"), b"").expect("node");
+
+        let mk = |node: &str, vantage| DrmRenderNode {
+            node: node.to_string(),
+            vendor_id: 0x1002,
+            device_id: 0x1114,
+            driver: "amdgpu".to_string(),
+            vantage,
+            proof: Proof::Enumerated,
+        };
+
+        // ARM 1 — container vantage, node present: UPGRADES.
+        let mut a = vec![mk("renderD128", Vantage::Container)];
+        assert_eq!(super::upgrade_reachable_at(&mut a, &dir), 1);
+        assert_eq!(a[0].proof, Proof::Reachable);
+
+        // ARM 2 — HOST vantage, same node present: STAYS Enumerated. A host stat
+        // is not weak evidence for the container lane, it is evidence about a
+        // different question.
+        let mut b = vec![mk("renderD128", Vantage::Host)];
+        assert_eq!(super::upgrade_reachable_at(&mut b, &dir), 0);
+        assert_eq!(
+            b[0].proof,
+            Proof::Enumerated,
+            "a host-vantage stat must never claim the container lane's rung"
+        );
+
+        // ARM 3 — container vantage, node ABSENT: stays Enumerated.
+        let mut c = vec![mk("renderD129", Vantage::Container)];
+        assert_eq!(super::upgrade_reachable_at(&mut c, &dir), 0);
+        assert_eq!(c[0].proof, Proof::Enumerated);
+
+        // ARM 4 — never downgrades: a node already Placed stays Placed even
+        // though this function only ever knows how to reach Reachable.
+        let mut d = vec![mk("renderD128", Vantage::Container)];
+        d[0].proof = Proof::Placed;
+        assert_eq!(super::upgrade_reachable_at(&mut d, &dir), 0);
+        assert_eq!(d[0].proof, Proof::Placed);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// 793-zumy REMAINING 2, second half. Five arms, four negative, because the
+    /// rung that proves a lane is the one where a wrong upgrade costs most.
+    #[test]
+    fn placed_upgrades_only_on_unambiguous_attribution() {
+        use super::{DrmRenderNode, Proof, Vantage};
+        let mk = |node: &str, proof| DrmRenderNode {
+            node: node.to_string(),
+            vendor_id: 0x1002,
+            device_id: 0x1114,
+            driver: "amdgpu".to_string(),
+            vantage: Vantage::Container,
+            proof,
+        };
+
+        // ARM 1 — one reachable node, non-zero residency: UPGRADES.
+        let mut a = vec![mk("renderD128", Proof::Reachable)];
+        assert_eq!(super::upgrade_placed(&mut a, 572_228_893), Some(0));
+        assert_eq!(a[0].proof, Proof::Placed);
+
+        // ARM 2 — residency ZERO: nothing. This is exactly where yoga's host sat
+        // with the device statted and size_vram still 0.
+        let mut b = vec![mk("renderD128", Proof::Reachable)];
+        assert_eq!(super::upgrade_placed(&mut b, 0), None);
+        assert_eq!(b[0].proof, Proof::Reachable);
+
+        // ARM 3 — TWO reachable nodes: refuses. /api/ps reports per MODEL, not
+        // per DEVICE, so attributing to one of two would be a guess wearing the
+        // only rung that proves a lane.
+        let mut c = vec![
+            mk("renderD128", Proof::Reachable),
+            mk("renderD129", Proof::Reachable),
+        ];
+        assert_eq!(super::upgrade_placed(&mut c, 572_228_893), None);
+        assert!(c.iter().all(|n| n.proof == Proof::Reachable));
+
+        // ARM 4 — only ENUMERATED nodes: refuses. A runtime cannot have placed
+        // weights on a device the work's vantage cannot stat.
+        let mut d2 = vec![mk("renderD128", Proof::Enumerated)];
+        assert_eq!(super::upgrade_placed(&mut d2, 572_228_893), None);
+        assert_eq!(d2[0].proof, Proof::Enumerated);
+
+        // ARM 5 — one reachable among unreachable siblings: the enumerated ones
+        // are not candidates, so attribution stays unambiguous and it upgrades.
+        let mut e = vec![
+            mk("renderD128", Proof::Enumerated),
+            mk("renderD129", Proof::Reachable),
+        ];
+        assert_eq!(super::upgrade_placed(&mut e, 1), Some(1));
+        assert_eq!(e[1].proof, Proof::Placed);
+        assert_eq!(e[0].proof, Proof::Enumerated);
+    }
+
     /// A sysfs walk may claim ONLY the bottom rung. It cannot see a container's
     /// device list and cannot see size_vram, so any higher claim would be the
     /// substitution this packet exists to end.
@@ -1826,8 +2117,15 @@ mod tests {
     /// production was reverted to a wrong value.
     #[cfg(target_os = "linux")]
     fn drm_fixture(spec: &[(&str, &str, &str, &str)]) -> std::path::PathBuf {
-        let root =
-            std::env::temp_dir().join(format!("drm-fixture-{}-{}", std::process::id(), spec.len()));
+        // Key the root on a per-call sequence, NOT on spec.len(): every test
+        // in this binary shares one process, so (pid, len) collides for any
+        // two tests with same-sized specs — the first line below then deletes
+        // the sibling's live fixture, and which victim loses depends on
+        // thread interleaving. Latent until 2026-09-01, when an unrelated
+        // +1 test shifted the schedule and made the collision deterministic.
+        static FIXTURE_SEQ: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let seq = FIXTURE_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let root = std::env::temp_dir().join(format!("drm-fixture-{}-{}", std::process::id(), seq));
         let _ = std::fs::remove_dir_all(&root);
         for (node, vendor, device, driver) in spec {
             let dev = root.join(node).join("device");
@@ -2092,6 +2390,85 @@ mod tests {
             cpu_cores: None,
             system_ram_gb: None,
         }
+    }
+
+    /// 805-r98w. The fingerprint exists so two hosts can be SHOWN identical
+    /// rather than asserted identical. The load-bearing arm is the twin pair:
+    /// same silicon, different OS, SAME fingerprint — because the substrate is
+    /// the other axis of the matrix, not part of the hardware's identity.
+    #[test]
+    fn hardware_fingerprint_ignores_substrate_and_separates_real_hardware() {
+        let gpu = |name: &str| {
+            let mut d = device("gpu", name, &["host-native"], None);
+            d.vendor = "amd".to_string();
+            d.system_ram_gb = Some(15.2);
+            d
+        };
+
+        // ARM 1 — THE TWIN PAIR. Same silicon, and everything the substrate
+        // owns differs: kernel, host_kind, host_id, driver, usable, lanes.
+        // These must fingerprint IDENTICALLY or the pair cannot be a control.
+        let mut a = doc_with(vec![gpu("AMD Radeon 860M")]);
+        a.host.kernel_release = "6.18.33.2-microsoft-standard-WSL2".to_string();
+        a.host.host_kind = "windows".to_string();
+        a.host.host_id = "yolanda".to_string();
+        a.devices[0].driver = Some("amdgpu-wsl".to_string());
+        a.devices[0].lanes = vec!["container".to_string()];
+
+        let mut b = doc_with(vec![gpu("AMD Radeon 860M")]);
+        b.host.kernel_release = "6.11.0-amd64".to_string();
+        b.host.host_kind = "linux".to_string();
+        b.host.host_id = "yoga".to_string();
+        b.devices[0].driver = Some("amdgpu".to_string());
+        b.devices[0].usable = false;
+
+        assert_eq!(
+            super::hardware_fingerprint(&a),
+            super::hardware_fingerprint(&b),
+            "the twin pair must fingerprint identically across substrates — \
+             otherwise same-fingerprint rows can never isolate the substrate, \
+             which is the only thing this fingerprint is for"
+        );
+
+        // ARM 2 — DIFFERENT GPU: must differ. A fingerprint that collides on
+        // real hardware differences licenses the comparison it exists to gate.
+        let c = doc_with(vec![gpu("NVIDIA RTX A5000")]);
+        assert_ne!(
+            super::hardware_fingerprint(&a),
+            super::hardware_fingerprint(&c)
+        );
+
+        // ARM 3 — RAM IS BUCKETED. 15.2 and 15.9 GB are the same class; firmware
+        // reservations must not split a twin pair on a number nobody chose.
+        let mut d = doc_with(vec![gpu("AMD Radeon 860M")]);
+        d.devices[0].system_ram_gb = Some(15.9);
+        assert_eq!(
+            super::hardware_fingerprint(&a),
+            super::hardware_fingerprint(&d)
+        );
+
+        // ARM 4 — a genuinely different RAM class DOES separate.
+        let mut e = doc_with(vec![gpu("AMD Radeon 860M")]);
+        e.devices[0].system_ram_gb = Some(64.0);
+        assert_ne!(
+            super::hardware_fingerprint(&a),
+            super::hardware_fingerprint(&e)
+        );
+
+        // ARM 5 — ENUMERATION ORDER IS NOT A PROPERTY OF THE MACHINE.
+        let f = doc_with(vec![
+            gpu("AMD Radeon 860M"),
+            device("npu", "XDNA2", &["host-native"], None),
+        ]);
+        let g = doc_with(vec![
+            device("npu", "XDNA2", &["host-native"], None),
+            gpu("AMD Radeon 860M"),
+        ]);
+        assert_eq!(
+            super::hardware_fingerprint(&f),
+            super::hardware_fingerprint(&g),
+            "device order must not change the fingerprint"
+        );
     }
 
     #[test]

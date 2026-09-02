@@ -1,4 +1,5 @@
 <!-- @trace spec:subdomain-routing-via-reverse-proxy -->
+<!-- # freshness: auditor=linux-lenovinha-claude-20260902t025309z date=2026-09-02 verdict=updated scope=standing per-cycle audit, three drifts corrected against the live runtime: (1) the binding requirement pinned 127.0.0.1:80 and proxy:80, but the in-container listener is :8080 and the host port comes from the 80->8080->--port fallback (port 80 is privileged; pinning it made a conformant rootless launch impossible) - the loopback-only invariant it actually protects is unchanged; (2) the dynamic routing table is dynamic.Caddyfile merged with base.Caddyfile in-container, not a whole-config Caddyfile; (3) the reload requirement specified a POST to the Caddy admin API, which CANNOT work and must not be made to work - the admin port binds 127.0.0.1:2019 inside the container and is deliberately unpublished, so satisfying the old wording would have opened a reconfiguration hole; the canonical path is router-reload.sh in-container. Enclave alias verified as router, not proxy. -->
 # subdomain-routing-via-reverse-proxy Specification
 
 ## Status
@@ -18,25 +19,27 @@ same router/session gate as OpenCode Web.
 
 ## Requirements
 
+
 ### Requirement: Reverse-proxy container and binding
+A new reverse-proxy container (Caddy 2.x) MUST publish exactly one host address, and it MUST be loopback-only:
 
-A new reverse-proxy container (Caddy 2.x) MUST bind to exactly two addresses:
+1. `127.0.0.1:<host_port>` on the host, where `<host_port>` is chosen by `select_router_host_port()` from the fallback chain `80 -> 8080 -> --port`. The IN-CONTAINER listener is `:8080` and does not vary.
+2. `router:8080` on the enclave network (reachable by forge agents; the enclave alias is `router`).
 
-1. `127.0.0.1:80` on the host (loopback only — no external access possible)
-2. `proxy:80` on the enclave network (accessible to forge agents via the forward proxy)
+CORRECTED 2026-09-02 (standing freshness audit). This requirement previously specified `127.0.0.1:80` and `proxy:80`, and both literals had drifted. Port 80 is privileged, so a rootless host cannot always bind it — the fallback chain exists for exactly that, and pinning `80` would have made a spec-conformant launch impossible on a host where 80 is taken. What did NOT change, and what the requirement is actually protecting, is the loopback-only invariant: the publish is `127.0.0.1:{host_port}:8080` in every branch.
 
 The container MUST be named `tillandsias-router` and MUST be created alongside the proxy and git-service containers at attach time.
 
 #### Scenario: Reverse proxy binds to loopback only
 
 - **WHEN** `ensure_enclave_ready()` creates the router container
-- **THEN** port `80` MUST be bound to `127.0.0.1` only on the host
-- **AND** the container MUST be reachable at `proxy:80` on the enclave network
-- **AND** external port scanning MUST find no listening socket on `0.0.0.0:80`
+- **THEN** the published host port MUST be bound to `127.0.0.1` only
+- **AND** the in-container listener MUST be `:8080`
+- **AND** external port scanning MUST find no listening socket on any `0.0.0.0` address
 
 ### Requirement: Dynamic routing table from Caddyfile
 
-The tray MUST generate a Caddyfile at `$XDG_RUNTIME_DIR/tillandsias/router/Caddyfile` with one stanza per service at each attach. The stanza maps `<service>.<project>.localhost:80` to an internal container port using Caddy's `reverse_proxy` directive.
+The tray MUST generate a dynamic Caddyfile at `$XDG_RUNTIME_DIR/tillandsias/router/dynamic.Caddyfile` with one stanza per service at each attach. It is bind-mounted read-write at `/run/router/dynamic.Caddyfile` and MERGED with the image's `base.Caddyfile` inside the container; it is not the whole config. (Filename corrected 2026-09-02: the spec said `Caddyfile`, the runtime writes `dynamic.Caddyfile`.) The stanza maps `<service>.<project>.localhost:80` to an internal container port using Caddy's `reverse_proxy` directive.
 
 Service-to-port conventions:
 
@@ -87,16 +90,35 @@ Container service ports (e.g., `flutter run` binding `0.0.0.0:8080` inside the c
 - **AND** the reverse router MUST proxy to that internal port instead
 - **AND** the application MUST be unreachable from the host without going through the router
 
-### Requirement: Caddyfile reload via admin API
+### Requirement: Caddyfile reload via the in-container reload script
 
-The tray MUST reload the router's configuration by sending a POST request to the Caddy admin API (`http://proxy:2019/config/` by default) with the updated Caddyfile. This enables dynamic route updates without restarting the container.
+The tray MUST reload the router's configuration by executing
+`/usr/local/bin/router-reload.sh` inside the `tillandsias-router` container,
+which re-merges `base.Caddyfile` with the runtime-written `dynamic.Caddyfile`
+and runs `caddy reload`. This updates routes without restarting the container.
+
+CORRECTED 2026-09-02 (standing freshness audit). This requirement previously
+read "sending a POST request to the Caddy admin API (`http://proxy:2019/config/`
+by default)". **That mechanism cannot work, and its impossibility is
+deliberate.** Caddy's admin API binds `127.0.0.1:2019` INSIDE the container and
+the router publishes only its public listener to the host, so a POST from the
+host always gets connection refused. Exposing the admin port to satisfy the old
+wording would have handed anything on the host loopback full reconfiguration
+authority over the router — the spec was, in effect, asking for a hole. The
+in-container script is the canonical path precisely because it needs no exposed
+admin surface.
+
+The reload MUST tolerate a not-yet-ready router: a `connection refused` from the
+script is retried, and exhausting the retries logs a warning rather than failing
+the launch, since a stale config is detected by subsequent operations.
 
 #### Scenario: Configuration update without container restart
 
 - **WHEN** a new service spins up inside the forge
-- **THEN** the tray MUST update `$XDG_RUNTIME_DIR/tillandsias/router/Caddyfile`
-- **AND** MUST POST it to the Caddy admin API
-- **AND** the new route MUST be live within milliseconds (no container restart)
+- **THEN** the tray MUST update `$XDG_RUNTIME_DIR/tillandsias/router/dynamic.Caddyfile`
+- **AND** MUST invoke `router-reload.sh` inside the router container
+- **AND** the new route MUST be live without a container restart
+- **AND** the Caddy admin port MUST NOT be published to the host
 
 ### Requirement: Agent instructions for service binding
 

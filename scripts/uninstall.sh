@@ -235,7 +235,35 @@ rm -f "$HOME/.config/autostart/tillandsias.desktop"
 update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
 
 # ── macOS desktop cleanup ─────────────────────────────────────
-rm -rf "$HOME/Applications/Tillandsias.app"
+# Stop the tray FIRST. install-macos.sh already does this before it replaces
+# the bundle; the uninstaller did not, so `uninstall` left the tray running
+# from a bundle that no longer exists — menu bar icon still there, still
+# OWNING THE VM, surviving until logout, on a machine the user believes they
+# have uninstalled from. Verified live on tlatoanis-macbook-air 2026-08-30:
+# pid alive 12m after a "complete" uninstall with its bundle deleted.
+# Same two-stage stop as the installer, and the same tolerance of absence.
+if pgrep -f tillandsias-tray >/dev/null 2>&1; then
+    pkill -TERM -f tillandsias-tray 2>/dev/null || true
+    sleep 1
+    pkill -KILL -f tillandsias-tray 2>/dev/null || true
+fi
+
+# BOTH candidate install dirs, in the installer's own precedence order.
+# install-macos.sh prefers /Applications and falls back to
+# $HOME/Applications only when /Applications is not writable — so the
+# DEFAULT target on an admin account (most personal Macs) was the one this
+# block used to miss entirely. It removed the LaunchAgent below either way,
+# leaving the worst possible state: the app still installed, and the thing
+# that launches it gone, with the uninstaller reporting success.
+#
+# The `.bak` sibling goes with it. install-macos.sh moves any existing app
+# aside to `Tillandsias.app.bak` before extracting; nothing ever reads it
+# back (there is no rollback path) and nothing removes it on success, so it
+# outlives the install it was taken from. Uninstalling must not leave a
+# 30 MB copy of a removed application behind.
+for _app_dir in "/Applications" "$HOME/Applications"; do
+    rm -rf "$_app_dir/Tillandsias.app" "$_app_dir/Tillandsias.app.bak"
+done
 rm -f "$HOME/Library/LaunchAgents/com.tillandsias.tray.plist"
 
 SERVICE_HOME_REMOVED=false

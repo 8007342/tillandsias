@@ -632,3 +632,197 @@ creation (an explicit table of names the app's own builders mint —
 time. Before writing any destructive sweep, ask where the ownership fact
 is RECORDED; if the answer is "in the name", the sweep will eventually
 destroy something that merely resembles yours.
+
+## Some assertions must not be executable, and a banner-located block must fail loud
+
+Two design choices from the macOS uninstaller drain (945-qs3n, 2026-08-31),
+recorded because each is the correct resolution of a trap this file already
+documents, applied under pressure.
+
+First: the fixture asserts the uninstaller's tray-stop TEXTUALLY, not by
+running it — an executable assertion would `pkill` the developer's real
+tray on every machine that runs the gate. The self-matching-process-query
+trap taught "match the object, not the process table"; this is its sibling:
+when the behaviour under test is inherently destructive to the host running
+the test, pin the CODE that performs it and verify the behaviour in a live
+pass on the owning platform, not in the gate.
+
+Second: the fixture locates the block under test by its banner comment and
+FAILS LOUD with an explanatory message when the banner is missing — never
+silently finds nothing and passes. A scan that can come back empty must
+distinguish "checked and clean" from "found nothing to check" (the
+dialect-gate scan-empty lesson, applied at authoring time instead of after
+an incident).
+
+And the drain itself re-proved the standing rule: the live pass found what
+no fixture could — a tray running from a deleted bundle, still owning the
+VM, on a machine the user believes clean. Fixtures pin what you know;
+running the real thing on real hardware finds what you don't.
+
+## The text you executed is not necessarily the text that is committed
+
+Lenovinha's retraction of the vacuous-awk finding (2026-08-31), kept
+because the error survived their otherwise-rigorous falsification. They
+tested the check's BEHAVIOUR properly — even "proved" it unconditional
+against a tag known to have a row — but never diffed the runbook text they
+RECEIVED against the file on disk. The text had been corrupted upstream of
+them (a harness bug substituted a bare $0 in the skill body with the first
+word of the invocation args), so a sound experiment ran on a corrupted
+premise and produced a confident false finding about the committed code.
+
+Before filing "this committed check is broken": run the COMMITTED text —
+`git show <ref>:<path>`, copy the block from the file, not from what your
+tooling rendered — and only then attribute the failure to the repository.
+Watching something fail is not evidence that the committed thing fails.
+
+## A reproduction that endangers the host running it is a defect in the reproduction
+
+Lenovinha's line, from the harness-substitution retraction (2026-08-31),
+after their shared repro recipe — "invoke this skill with a distinctive
+first args word" — omitted that invoking that skill loads
+`podman system reset --force` into whatever session obeys. The informed
+reader declined; the recipe was fixed before an uninformed one arrived.
+A repro published into a shared report will eventually be run by someone
+with no context: it must carry its blast radius in its first line, name
+the safe substrate (a scratch session, never an active one), and where
+possible be settled from the evidence pattern WITHOUT executing the
+dangerous version at all — corroboration by evidence beats corroboration
+by detonation.
+
+## A view you have read the output of is still an unverified data source
+
+Lenovinha's summary of their own three defects in the 946-pdpi sweep fix
+(2026-08-31), each caught by a check rather than by the author: the sweep
+was first built on `--list-live`, a view that OMITS expire-candidates —
+the most stranded rows in the table — so it excluded precisely what it
+existed to find; the row timestamp sat in a different column per row
+kind, so a fixed index was right for two of three; and `date -u -d` is
+GNU-only where BSD date SUCCEEDS with garbage, making an exit-code guard
+impossible (the remedy was not a portability check but eliminating shell
+date arithmetic entirely, with a pinned --now-epoch). The common root:
+having READ a source's output is not having VERIFIED its scope, its
+schema, or its portability. Before building on a view, ask what it
+excludes, whether its shape is uniform, and whether its tools fail loud —
+the fixture's first run is the cheapest place to learn all three.
+
+And the author's own correction of the flattering summary, kept because
+it is the argument for this whole file: only one of the catching checks
+was theirs. The dialect guard (761-g36m) and the plan-binary probe
+(721-nyev) were left behind by earlier cycles — by people who hit those
+failures first and built the guard instead of only fixing their instance.
+"Checks left behind by earlier cycles caught three defects their authors
+will never know about." That sentence is the return-on-investment case to
+cite when deciding whether a guard is worth the extra hour: the payoff
+lands on a stranger, later, silently — which is exactly why it happens at
+all.
+
+## A green names its artifact, or it proves nothing (2026-08-31, v56.8.31 release train)
+
+Provenance: the epoch-cutover night produced five failures of one shape —
+"I carried it" vs "the ref contains it" — and the fifth was the sharpest
+because it involved no false claim at all. The Windows packager's
+migration was verified GREEN by its author against her working tree; the
+runner executed trunk's copy of the same file and died at the exact parse
+her commit removed. Both parties then stared at a passing check while the
+release burned an hour. Her naming, kept verbatim because she found it:
+
+  "A green that does not name which artifact it verified is a green that
+  can be true and useless simultaneously."
+
+The rule that follows: every verification result handed to another agent
+states WHAT it ran against — a ref (`origin/branch@sha`, greppable by the
+recipient) or an explicit "working-tree-only, not what CI executes". A
+verdict missing that clause is not evidence of the deployed behavior; it
+is evidence that a copy somewhere can pass. The cheap mechanical check
+that settles it every time, in either direction:
+
+  git show <ref>:<path> | grep -c <the-load-bearing-line>
+
+Corollary from the same night: the check is worth running before
+IRREVERSIBLE steps in particular — the one party who diffed before
+dropping a commit is the reason the fix existed anywhere at all.
+
+The pair to it, from the same author the same night, after her own first
+pass nearly reported a false RED (a `grep -c $'\r'` whose pattern
+collapsed to empty in Git Bash, matching all four lines of a clean file;
+`tr -cd '\r' | wc -c` and file(1) disagreed, and were right): "a RED that
+does not name its instrument can be false and expensive." Symmetric rule:
+a failing measurement names the tool and invocation that produced it, and
+a surprising one is confirmed by a second, differently-shaped instrument
+before it is filed — the third measurement artifact of that night was
+caught only by asking a second tool.
+
+## Subtract yourself before attributing a signal to the environment (2026-09-01, two hosts)
+
+Five instances in one night, independently on a fat coordinator and an N100
+forge guest: a pgrep -f gate that matched its own sibling watchers' argv
+(twice, once per host); an idle-gate that deadlocked on it for 17 minutes; a
+"periodic" ~113-minute container killer whose periodicity was the observer's
+own retry cadence reflected back; a zsh harness word-splitting a bash-ism so
+a sampler reported 0MB peaks; and a forensic PATH shim whose first catch was
+its own installation command's argv. The rule: your watchers, your wrappers,
+your retry cadence, and your shell's semantics are all part of the observed
+system — gate on task lifecycle or an exec-path match, never on a pattern
+you also typed into a sibling command, and prefer `ps -eo args | grep -c
+"[b]racketed"` over pgrep -f inside any agent harness.
+
+The pair rule, from the same night's four self-caught corrections (the
+zero-SKIP claim, the /dev/null-disables-the-spy confound, the shim-cost
+magnitude, the truncated denominator): **confirmation is when the instrument
+gets the least scrutiny and needs the most** — when a result agrees with
+what you expected, read the instrument once more before reporting it. Three
+of the four corrections came from exactly that habit.
+
+## grep-REDS-on-comments (2026-09-01) — the mirror of grep-greens-on-comments
+
+litmus-shipped-diagnostic-tool-dispatch step 3 greps two shipped scripts for
+'brew install jq' and FAILS on the comment documenting the 799-tb7q removal
+of that very instruction — the fix quoted what it removed, and the guard
+added to protect the fix cannot tell code from the prose describing its own
+victory. Likely born red in the same commit that added it (a0ea1f169). A
+guard that punishes explaining a removal teaches people not to explain
+removals. Assert on BEHAVIOR (run the diagnostic without jq and inspect the
+output), or at minimum `grep -v '^\s*#'` before matching. Same disease as
+grep-greens-on-comments, opposite direction; file findings against either
+shape on sight.
+
+## Bound and still unrunnable — content verification is not delivery verification (2026-09-01)
+
+litmus:codex-e2e-launch-parity shipped with a top-level `steps:` key where
+the runner reads `critical_path:` — zero steps parsed, the whole file
+failed, fleet-wide, on every full run. The author had verified ALL NINE
+step commands by executing them in a shell (every one passed, reported as
+evidence), the YAML validated, and the 660-ryhn binding gate confirmed the
+file was bound. Two green checks standing over a file no runner could
+execute: 660-ryhn catches "nothing will ever run this"; nothing caught "the
+runner cannot parse this once it tries". And this is 944-vim8 EXACTLY, one
+file format over — same author, same key name even (`steps:` unread by a
+reader that wants another block) — the guard's own author reproduced the
+class the guard exists for, in a corpus the guard does not cover. The
+rules: (1) verifying a fixture means running it THROUGH ITS RUNNER at least
+once, not executing its commands by hand — the delivery mechanism is part
+of the thing under test; (2) when a reader consumes only named keys, every
+NEW file for that reader gets one parse-probe at bind time (the 660-ryhn
+extension), because the unread-key class recurs across file formats and
+survives every check that doesn't enter the reader's own code path. The
+runner's loud refusal is what surfaced this in hours instead of weeks —
+loud-on-unparseable is load-bearing; never soften it.
+
+## The census lied twice in one minute — pgrep is ERE, `$!` is not the worker (2026-09-02)
+
+A throttled `tillandsias --init` bake was declared "killed mid-build, no
+survivors" and was one turn from being relaunched onto its own 900s image
+flock. Both witnesses were the instrument. `pgrep -f 'init\|buildah\|podman
+build'` returns nothing because pgrep is ERE and `\|` is a literal pipe — an
+empty census READ as death. And the completion watch used `tail --pid=$!`,
+where `$!` was the `nice ionice setsid nohup` chain's setsid parent, which
+forks and exits at once, so the watch ended in seconds and "the stream
+ended" READ as the process ending. The build was at dnf package 139/573 the
+whole time. Rules: (1) before believing an EMPTY process census, run the
+same pattern against a process you know is alive — subtract-yourself's
+sibling: prove the instrument sees something; (2) a watch's exit is a fact
+about the watch; read the log's mtime and the pid table before reading it
+as a fact about the watched; (3) `$!` names the first exec of a wrapper
+chain, never the worker — take the worker pid from `pgrep -f` after launch.
+Same disease as confirmation-scrutiny: the finding you expected (957-bcsk's
+silent killer) is the one you check least.

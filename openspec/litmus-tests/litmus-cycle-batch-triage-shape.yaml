@@ -49,6 +49,46 @@ critical_path:
     timeout_ms: 60000
     expected_behavior: "ok: reproducible"
 
+  - step: "EXPLICIT --seed OVERRIDES ordinal routing (949-uv5k)"
+    # The KNOWN TRADEOFF note in select-work-batch.sh promises "pass --seed
+    # explicitly to override" for a host routed onto an epic it cannot drain.
+    # Under ordinal routing the seed was never consumed, so seven unrelated
+    # seeds produced byte-identical batches on a host reporting
+    # route=rank:2/7:width=7 (measured lenovinha 2026-08-31). The promise was
+    # unkeepable for exactly the hosts it addressed, and it decayed as
+    # 850-bif2 capability rows landed, since routing engages only for hosts
+    # that HAVE a row.
+    #
+    # POSITIVE ARM: distinct explicit seeds must be able to reach distinct
+    # epics. Skipped, not failed, when the live frontier holds one epic —
+    # a single-epic frontier cannot demonstrate variation and a red light
+    # there would be reporting the ledger, not the code.
+    command: "out=$(scripts/select-work-batch.sh linux 2>/dev/null); nf=$(printf '%s\\n' \"$out\" | grep -c \"^frontier$(printf '\\t')\"); if [ \"$nf\" -lt 2 ]; then echo 'ok: seed-override n/a (single-epic frontier)'; exit 0; fi; seen=''; for s in aaa zzz 12345 yoga-x pirria-q7 abc123 qqq seed-8 seed-9; do e=$(scripts/select-work-batch.sh linux --seed \"$s\" 2>/dev/null | head -1 | sed 's/.*epic=\\([^ ]*\\).*/\\1/'); case \" $seen \" in *\" $e \"*) ;; *) seen=\"$seen $e\" ;; esac; done; n=$(printf '%s' \"$seen\" | wc -w); if [ \"$n\" -lt 2 ]; then echo \"FAIL: nine explicit seeds all chose one epic ($seen) — --seed is inert, the documented override is unreachable (949-uv5k)\"; exit 1; fi; echo \"ok: explicit seed reaches $n distinct epics\""
+    timeout_ms: 120000
+    expected_behavior: "ok: explicit seed reaches"
+
+  - step: "NEGATIVE CONTROL: the DEFAULT still routes by rank, unseeded (949-uv5k)"
+    # The override must not become the behaviour. Without --seed a routed host
+    # must still take its roster ordinal, or 847-wgy4's cross-host separation
+    # and the rotation's cross-cycle cohesion are both gone — which is a
+    # strictly worse failure than the one above. This arm is what stops the
+    # fix from being "always reseed".
+    #
+    # A host with no capability row legitimately reports no route= field; that
+    # is the seeded path by design, so it is a skip rather than a failure.
+    command: "out=$(scripts/select-work-batch.sh linux 2>/dev/null | head -1); if ! printf '%s' \"$out\" | grep -q ' route=rank:'; then echo 'ok: default-routing n/a (host is not ordinal-routed)'; exit 0; fi; a=$(scripts/select-work-batch.sh linux 2>/dev/null | head -1); b=$(scripts/select-work-batch.sh linux 2>/dev/null | head -1); if [ \"$a\" != \"$b\" ]; then echo 'FAIL: default pick is not stable'; exit 1; fi; printf '%s' \"$a\" | grep -q ' route=rank:' || { echo 'FAIL: default run lost its rank routing — the seed override leaked into the default path'; exit 1; }; echo 'ok: default still routes by rank'"
+    timeout_ms: 60000
+    expected_behavior: "ok: default still routes by rank"
+
+  - step: "An explicit-seed run reports NO route= field (949-uv5k)"
+    # The pick did not come from rank, so claiming rank in the machine-readable
+    # line would be a false provenance record — and the triage grammar above
+    # admits only rank:/tier: tokens, so inventing a third would widen the
+    # grammar to describe a lie.
+    command: "l=$(scripts/select-work-batch.sh linux --seed grammar-probe 2>/dev/null | head -1); printf '%s' \"$l\" | grep -q ' route=' && { echo 'FAIL: explicit-seed run still advertises a route'; exit 1; }; printf '%s' \"$l\" | grep -qE '^batch: epic=[A-Za-z0-9._-]+ role=linux release=[^ ]+ size=[0-9]+ budget=[0-9]+ score=[0-9.]+ seed=[^ ]+ pick=[0-9]+/[0-9]+( urgent=[A-Za-z0-9._-]+)?( harness=[A-Za-z0-9._-]+)?$' || { echo 'FAIL: explicit-seed batch line left the pinned grammar'; exit 1; }; echo 'ok: explicit-seed line carries no route and holds the grammar'"
+    timeout_ms: 30000
+    expected_behavior: "ok: explicit-seed line carries no route"
+
   # Both entropy properties are asserted from the PRINTED PROBABILITIES, not by
   # sampling seeds. The sampling versions were inherently flaky: once
   # release-scoping widened the score gap to ~6x, the top epic legitimately held
