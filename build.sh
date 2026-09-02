@@ -1755,6 +1755,19 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "pre-push empty-ref-list fixture passed"
 
+    # The brew autoinstall shim must not re-enter itself (966-rq7f). `brew` is a
+    # Ruby program and `ruby` is a shimmed tool, so an unguarded shim recurses:
+    # measured at 3663 live processes on a floor forge — 89.4% of its pid
+    # ceiling — from an ordinary check that merely probed for ruby, installing
+    # nothing. The fixture is hermetic (a fake brew, no network, its own depth
+    # stop) because a test for a fork bomb must not be one.
+    _step "Checking the brew shim re-entrancy guard (966-rq7f)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-brew-shim-reentrancy.sh" 2>&1; then
+        _error "the brew shim re-entrancy guard regressed — a tool probe can fork until it hits the pid ceiling"
+        exit 1
+    fi
+    _info "brew shim re-entrancy fixture passed"
+
     # A cycle that attests must not refuse the checkout to its own successor
     # (899-q9di). Wired here rather than left standing because an uninvoked
     # guard is the shape audit-guard-activation exists to catch — and because
@@ -1920,6 +1933,34 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Live MCP server build fixture passed"
+
+    # Order 965-hz3f. The forge lifecycle warms the tier's SELECTED model
+    # before expert-serve reports ready, so a cold VRAM load is not charged
+    # against a tier budget that only ever promised inference latency
+    # (measured on an RTX A5000: 7b 23353ms cold vs 938ms warm, 14b 9996ms vs
+    # 1474ms — both warm figures inside Quick's 3000ms). The SELECTION is the
+    # part that can be wrong silently: warming a 14b on the CPU floor would
+    # recreate the very stall it removes on a GPU. Wired here so the policy
+    # cannot ship as a guard nobody invokes (the 865-n8vq shape).
+    _step "Checking the tier-model warm selection (965-hz3f)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-warm-tier-model.sh" 2>&1; then
+        _error "the tier-model warm selection regressed — the CPU floor could be handed a model it cannot serve in-budget"
+        exit 1
+    fi
+    _info "Tier-model warm selection fixture passed"
+
+    # Order 448. images/default/cheatsheets/ is a TRACKED copy derived from the
+    # authored tree, so an authoring commit that omits it leaves every OTHER
+    # host unable to push (the v5 pre-push hook refuses) while the author's own
+    # commit succeeds — three measured instances, the latest 2026-09-02. The
+    # commit-time guard re-syncs into the same commit; this pins it, including
+    # the mutation arm that proves the drift is real without it.
+    _step "Checking the commit-time cheatsheet image sync (448)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-sync-image-cheatsheets-for-commit.sh" 2>&1; then
+        _error "the commit-time cheatsheet sync regressed — an authored cheatsheet can again strand every other host's push"
+        exit 1
+    fi
+    _info "Commit-time cheatsheet sync fixture passed"
 
     # Order 748-tkjx. ./build.sh --check runs NO litmus (deliberate — the suite
     # is minutes and a gate that slow gets bypassed with --no-verify), so a

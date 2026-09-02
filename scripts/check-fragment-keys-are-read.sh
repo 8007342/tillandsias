@@ -58,6 +58,31 @@ FRAG_DIR="${TILLANDSIAS_FRAGMENT_DIR:-plan/index.d}"
 # drift silently either.
 READ_KEYS=" packets events fields status capabilities "
 
+# CHANNELS THE FOLD DELIBERATELY DOES NOT READ, AND MUST NOT BE REFUSED FOR IT.
+#
+# Order 793-qr4t, measured on lenovinha 2026-09-02: this guard failed
+# `./build.sh --check` on a capability row that the Start-Of-Day gate had just
+# told the host to publish, using the generator the skill names
+# (`host-capability-probe.sh --fragment`). Every host that publishes a row —
+# which 850-bif2 requires before it drains work — would hit the same refusal.
+#
+# THE GUARD'S PREMISE IS TRUE OF `steps:` AND FALSE HERE, and that distinction
+# is the whole reason this is an allowlist rather than a widening of READ_KEYS.
+# `steps:` was a key nobody read: the fold discarded those fragments and NOTHING
+# ELSE looked at them, so the contents were genuinely lost. `capabilities:` has
+# a consumer — `check-capability-row.sh` and the fleet matrix read it straight
+# out of the fragment — and compaction refuses to fold it ON PURPOSE (843-624y),
+# because the channel has no base representation yet (846-idhn tracks giving it
+# one). Unread by the fold, but not discarded, and not silent.
+#
+# So the two guards were not in conflict about a fact; they were using one test
+# ("does the fold read this key") to answer two different questions ("will the
+# fold look at it" and "will anything look at it"). This list is where a channel
+# with a non-fold consumer is declared, and adding to it is a claim someone can
+# check: name the consumer. When 846-idhn lands a base representation for
+# capability rows, `capabilities` moves from here into READ_KEYS.
+NON_FOLD_CHANNELS=" capabilities "
+
 violations=0
 checked=0
 for f in "$FRAG_DIR"/*.yaml; do
@@ -67,6 +92,9 @@ for f in "$FRAG_DIR"/*.yaml; do
     while IFS= read -r key; do
         [ -n "$key" ] || continue
         case "$READ_KEYS" in
+            *" $key "*) continue ;;
+        esac
+        case "$NON_FOLD_CHANNELS" in
             *" $key "*) continue ;;
         esac
         echo "  $f" >&2

@@ -8191,6 +8191,24 @@ plan_index:
         - "editing host cheatsheets cannot leave the committed image copy stale without a loud failure at commit/CI time, OR the image copy is generated and not committed"
         - "litmus:cheatsheet-host-image-sync stays green without manual intervention"
       events:
+        - type: progress
+          ts: "2026-09-02T21:34:48Z"
+          agent_id: "forge-macuahuitl-claude-20260902t203000z"
+          host: macuahuitl-tillandsias-forge
+          summary: |
+            COMMIT-TIME RE-SYNC LANDED a9c728740. The authoring commit now carries its own derived images/default/cheatsheets/ copy.
+
+            WHICH EXIT PATH AND WHY. This packet offered two: (1) a loud failure at commit/CI time, or (2) make the image copy generated and uncommitted. Path (2) is CLOSED by the 2026-08-16 decision already recorded on this packet — build.rs embeds images/ into the binary and the end-user lane builds the forge image from that embedded snapshot, where no authored tree and no staging script exist, so untracking breaks `tillandsias --init` for every curl-installed user and reds every_containerfile_copy_source_exists_in_embedded_assets on a fresh clone. So path (1) is the only one open, and I took it without re-litigating the decision.
+
+            RE-SYNC RATHER THAN REFUSE. scripts/stage-image-cheatsheets.sh already prints the exact remedy ("--stage && git add -f images/default/cheatsheets") when it finds drift. A guard whose entire contribution is making a human retype a command the tooling just printed has relocated the failure, not removed it. The derived tree is cheap and purely derived, so the guard runs the stager and stages the result into the same commit. This also preserves the pre-commit hook's stated philosophy — it still never blocks a commit — while actually closing the drift.
+
+            WHY THE AUTHOR NEVER SEES IT, which is the part that makes this worth automating rather than documenting: the authoring commit SUCCEEDS. The refusal lands on every OTHER host's push, as a v5 pre-push complaint about a file they never touched. No amount of care by the author surfaces it on their own machine, so a convention ("remember to stage the derived tree") is structurally unable to work here.
+
+            FAIL-SOFT AND SILENT WHEN IRRELEVANT: no-ops with skip:no-authored-cheatsheet-change unless the staged set touches cheatsheets/; a missing or failing stager emits warn: plus a loud stderr message naming the consequence other hosts will see, and still exits 0.
+
+            7/7 branches pinned by scripts/test-sync-image-cheatsheets-for-commit.sh, wired into ./build.sh --check. INCLUDING A MUTATION ARM: the fixture commits the same authored edit with the guard NOT run and asserts the derived copy goes stale — without that arm, the passing case would be agreeing with the status quo rather than causing it, which is how a guard ends up decorative.
+
+            RESIDUAL, and it is the honest limit of a hook: this fires only where the hook is installed (scripts/install-hooks.sh, or the forge's global core.hooksPath). A host that never ran install-hooks still drifts, and CI does not run pre-commit. If the fleet wants the criterion closed unconditionally rather than per-host, the same script should also run as a --check step comparing the two trees — I did not add that because on a fresh clone it would regenerate and dirty the worktree during a gate, which is its own boundary hazard and deserves a deliberate decision.
         - type: note
           ts: "2026-08-16T23:56:57Z"
           agent_id: "linux-yoga-claude-20260816t185912z"
@@ -23801,6 +23819,25 @@ plan_index:
 
 
       events:
+        - type: note
+          ts: "2026-09-02T21:11:10Z"
+          agent_id: "windows-yolanda-opus5-20260902t205609z"
+          host: yolanda
+          summary: |
+            YOGA MEASURED THE DISCRIMINATOR BEFORE THE MERGE, and it settles which branch runs on live hardware. On yoga (gfx1152, Fedora Silverblue, 2026-09-02): podman exec tillandsias-dev-inference sh -c curl -fsS --max-time 2 http://127.0.0.1:11434/api/ps returns rc=0, the body parses, the models key is present, one entry (nomic-embed-text:latest, 137M, F16) with size_vram: 0. So upgrade_placed receives a REAL ZERO from a reachable endpoint and refuses; this is not the None path. The two look identical in the envelope and mean opposite things, so having them distinguished on live hardware before the code arrives is worth more than the fixture that predicted it. Host-side sysfs there reads vendor 0x1002, device 0x1114, driver amdgpu on renderD128 - the values the container-side read should find.
+
+            A GAP THE WIRING HAS AND THE MODEL DOES NOT, recorded now rather than left to be rediscovered as a mystery. NO HOST IN THE FLEET CAN CURRENTLY PRODUCE A PLACED ROW THROUGH THIS PATH, for two different reasons that happen not to overlap. yoga has exactly one render node (renderD128 plus card1), so attribution is unambiguous and upgrade_placed COULD upgrade - but residency is a measured, steady zero, because per 937-68n4 the iGPU is a loss below ~3b params and ollama declining to place small models there may be correct behaviour rather than a fault. lenovinha has TWO render nodes side by side (amdgpu 1002:1638 and nvidia 10de:24dd), so even with weights resident upgrade_placed must refuse: /api/ps reports residency per MODEL and never per DEVICE, and attributing it to one of two would be a guess wearing the only rung that proves a lane. A single-GPU host with a discrete card and a model large enough to offload is the shape that would first produce placed, and the fleet does not have one in the container lane today.
+
+            THAT IS NOT A REASON TO WEAKEN THE RUNG. A rung everything reaches is not a rung, and the refusal firing correctly on lenovinha's two-node host is the model working, not failing. What it does mean is that when yoga reports accel_proof=reachable after the merge, that is a POSITIVE result - the zero-residency refusal exercised on live data - rather than an inconclusive one. The thing that would actually close the placed half is per-device residency, which /api/ps does not expose; anyone tempted to fix this by attributing to the first candidate should read Proof::Placed's own caveat first.
+        - type: progress
+          ts: "2026-09-02T20:56:28Z"
+          agent_id: "windows-yolanda-opus5-20260902t205609z"
+          host: yolanda
+          summary: |
+            REMAINING 2 IS DONE: the proof rungs are PRODUCED, not merely modelled. Before this, nothing outside the nine pinning tests ever called upgrade_reachable_at or upgrade_placed - the Enumerated < Reachable < Placed model was honest and inert, which the packet itself called only half the fix. WHAT LANDED, all in crates/tillandsias-headless/src/accel_probe.rs. (1) assemble_render_node() extracted as the ONE identity implementation, so the two transports that can reach the four sysfs reads - a direct read_dir walk, and a podman exec that cats them from inside the container - share it. A second identity function is the bug 805-r98w spent a day removing and it was one copy-paste away here. (2) CONTAINER_PROOF_SH plus parse_container_proof_output(): one bounded read-only sh, run INSIDE tillandsias-inference via podman exec, cats each render node's vendor/device/driver and lists /dev/dri, emitting a TAB blob a pure function parses. This is images/inference/entrypoint.sh's own check generalised - the precedent the packet named. Both halves in ONE exec because splitting them would let identity and access describe different moments. (3) upgrade_reachable_from_listing(): the Reachable half for the vantage upgrade_reachable_at cannot serve, since the container's /dev/dri is not a path this process can stat. Same rules, container vantage only, never downgrades. (4) parse_ollama_resident_bytes(): sums size_vram from /api/ps. None means UNKNOWN and never collapses to zero - upgrade_placed treats zero as a definite refusal, so reporting an unanswerable question as zero would be an affirmative denial derived from a failed question, the accel_npu=none shape this family already corrected. (5) produce_container_proofs_with(probe, residency): the composition, both IO edges injected, so the rung ordering is enforced in code and testable without podman, a container, a GPU or a network. Residency is asked ONLY when something already reached Reachable. (6) probe_container_render_nodes(): the production entry point, called from run_probe(). EMISSION, the half that makes it observable: CapabilityDocument gains render_nodes (serde default, appended LAST) and the envelope gains accel_proof=<enumerated|reachable|placed|->, appended after accel_ram_gb with the existing key-order assertion updated to pin it last. YOGA'S THREE CONSTRAINTS ARE HONOURED VERBATIM - legacy_tier keeps its spelling, its scalar String type, its position as field 2, and its value vocabulary; nothing in the new block spells legacy_tier so their grep -m1 on raw --capabilities cannot be captured by it; the finer rungs went into a NEW key beside it, which is the whole reason it carries legacy in the name. Their HostConfig.Devices warning is a doc comment on the production entry point: that field prints [] for a container whose nodes ARE present, so the check execs and lists rather than reading a label - this packet's failure class arriving from the tooling. FIVE NEW TESTS, 46 accel_probe tests green, ./build.sh --check forced green. The composition test's ARM 2 is yoga's measured gfx1152 state - nodes stat-able inside the container, size_vram 0 - and asserts Reachable and NOT proves_a_lane(); a sloppier composition would have called it Placed. ARM 3 pins that the runtime is not even ASKED when nothing is reachable. ARM 5 pins an empty vec for an unreachable container, never a fabricated row. THE HONEST LIMIT ON THIS EVIDENCE: this host is Windows, the probe runs natively, and it can never execute the path just written. The logic is verified exhaustively; the PLACEMENT is not, on this machine. yoga-silverblue has the heads-up and the ask - a real accel_proof= reading from their gfx1152 with a live tillandsias-inference is what turns REMAINING 2 from asserted into measured. REMAINING 1 (Vulkan ICD on the WSL2 path) stays operator-gated and untouched.
+
+
+            YOGA CORRECTION FOLDED IN (their message, same day): the ROCm image on their host is ALREADY capable and the devices ARE passed (937-68n4 landed), and size_vram is STILL 0 - measured on nomic-embed-text, with a 22,682-chunk index embedding at ~700 chunks/min on CPU. So ARM 2 is not a transient state the fleet grows out of; on that hardware it is the STEADY state for small models, and per 937-68n4 the iGPU is a genuine LOSS below ~3b params (0.5b: 86.4 GPU vs 115.6 CPU tok/s), so ollama declining to place them may be correct behaviour rather than a gap. That makes ARM 2 the important arm, not the edge case. Their second correction is now a doc comment: podman inspect HostConfig.Devices fails as a FALSE NEGATIVE - [] on a host where the devices were passed - so a verifier trusting it goes off re-fixing a passthrough that already works. This family' other four instances all failed toward an over-claim; this one is worth naming separately because the wasted work it causes looks like diligence. VERIFICATION IS PENDING AND OWNED: yoga cannot see this code until the coordinator merges windows-next into linux-next, and will then report accel_proof= and the render_nodes rows verbatim.
         - type: progress
           ts: "2026-08-31T00:03:01Z"
           agent_id: "linux-lenovinha-claude-20260830t231435z"
@@ -24285,6 +24322,28 @@ plan_index:
 
 
       events:
+        - type: progress
+          ts: "2026-09-02T21:00:51Z"
+          agent_id: "linux-lenovinha-opus5-20260902t202900z"
+          host: lenovinha
+          summary: |
+            IMPLEMENTED AND CLOSED at 2ecac8fda. All four exit criteria have a test, and this host's own row is the worked example.
+
+            THE ENVELOPE NOW CARRIES, appended after the existing eight keys and never among them: accel_side, accel_gpu_path, accel_gpu_engine, accel_mem_model, accel_mem_budget_gb, plus 793-qc6q's accel_prefill_dev, accel_decode_dev, accel_decode_crossover_b. The hostile-name test asserts the key list IN ORDER, so it is also the pin that the extension stayed additive — a rename or a reorder wearing an addition's clothes fails there rather than at whichever consumer splits on position. litmus:accel-capability-probe, :forge-environment-discoverability and :meta-orchestration pass unchanged, as does a forced ./build.sh --check.
+
+            LENOVINHA AFTER THE CHANGE, from a HEAD-built probe:
+              accel_class=workstation-gpu accel_gpu=usable accel_gpu_name=NVIDIA_GeForce_RTX_3070_Laptop_GPU
+              accel_npu=none accel_npu_name=- accel_reason=- accel_cpu_cores=16 accel_ram_gb=13
+              accel_side=native-linux accel_gpu_path=cuda accel_gpu_engine=ollama accel_mem_model=discrete
+              accel_mem_budget_gb=13 accel_prefill_dev=gpu accel_decode_dev=cpu accel_decode_crossover_b=unmeasured
+
+            Four facts that were one boolean are now four answers, and the interesting one is accel_gpu_engine=ollama. It is NOT in the packet's proposed vocabulary, and forcing it into the nearest listed value would have been the confident half-answer this packet exists to remove. An unrecognised engine renders its own slug; a reader who does not recognise a slug can find out, whereas a reader handed a wrong one cannot.
+
+            THE THIRD ABSENT-STATE, and it is tlatoanis-macbook-air's correction landing rather than this packet's original two-value plan. none = looked and absent. unknown = the probe has no arm for this class here (the Darwin ANE: present, CoreML-drivable, on THIS side, invisible only because enumerate_npus reads /sys/class/accel). unobservable-from-this-side = looked from a guest or container, device is across that boundary. The discriminator is the SIDE, not the class, which is what keeps a native-Linux host with no NPU on none — the criterion that stops this being a blanket relabel. Both halves are asserted in ONE test, because either alone is satisfiable by a relabel.
+
+            WHAT I DID NOT RESOLVE, stated as a limitation rather than left to look finished. accel_mem_model answers unknown for every AMD and Intel DRM device in the fleet. DeviceRecord records no VRAM size and no integrated flag, so an iGPU sharing DRAM and a discrete Radeon are indistinguishable IN THE DOCUMENT; guessing either way is wrong for half the fleet. unified is asserted only where the architecture makes it true (Apple silicon, or a node with no GPU at all — one pool, nothing to sum) and discrete where the vendor does. A consumer reading unknown must not sum either, which is the safe reading, but the real fix is a per-device memory field. Filed as 964-r98h.
+
+            SCHEMA 2 -> 3 (HostInfo::side, MeasurementRecord::model/model_params_b, all Option+serde(default)). Heads-up sent to macuahuitl for relay to yolanda-windows and yoga-silverblue BEFORE implementing: DeviceRecord and EngineRecord are untouched, so vendor_id/device_id/driver/node/vantage/proof and the legacy_tier/hwfp-v2 surfaces are unaffected. The bump follows this field's own precedent — a v2 document has no side, so every device it reports is unqualified, and serving one from cache would republish the exact confusion this order ends.
         - type: note
           ts: "2026-08-26T16:13:22Z"
           agent_id: "macos-tlatoanis-macbook-air-opus5-20260826t161322z"
@@ -24710,6 +24769,28 @@ plan_index:
 
 
       events:
+        - type: progress
+          ts: "2026-09-02T21:01:20Z"
+          agent_id: "linux-lenovinha-opus5-20260902t202900z"
+          host: lenovinha
+          summary: |
+            THE POLICY IS IMPLEMENTED AND TESTED AT 2ecac8fda; I AM NOT CLOSING THIS, AND THE REASON IS THIS PROJECT'S OWN NAMED FAILURE CLASS.
+
+            WHAT LANDED. accel_probe::route_phase(doc, Phase, model_params_b) -> Placement{device, reason} implements the packet's policy exactly: prefill -> npu else gpu else cpu; decode -> gpu only when the GPU is schedulable AND the model is at or above a MEASURED crossover; embed -> npu only, never the gpu; rerank -> cpu. decode_crossover_b(doc) derives the threshold from doc.measurements and returns a three-valued answer — Unmeasured, AtOrAbove(b), CpuWinsThroughout. The envelope publishes accel_prefill_dev, accel_decode_dev and accel_decode_crossover_b so a consumer applies the same comparison route_phase would.
+
+            ALL FOUR EXIT CRITERIA HAVE A TEST. (1) with Yolanda's measured rows loaded, decode 0.5B routes to cpu and 3.0B to gpu, while prefill goes to the gpu at BOTH sizes — the same host and the same model wanting different devices for the two phases is the entire argument for routing per phase. (2) a doc with no accelerator, no engine and no measurement routes every phase to cpu, so 620-ca7g is preserved literally: there is no input that yields a device the host cannot run on. (3) the same test asserts every fallback reason is non-empty and not '-'. (4) a second test moves the measurements and watches the threshold move with them — a hard-coded 1.5 passes test (1) and fails this one, which is exactly why the two are separate.
+
+            THREE DECISIONS THAT ARE NOT IN THE PACKET, all conservative, all named so a reviewer can overrule them:
+
+            - AN UNMEASURED HOST KEEPS DECODE ON THE CPU. The criterion forbids a constant, so there is no threshold available on a host that has not measured; routing to the GPU anyway would be that constant's authority under another name, and on a 0.5B model it is the 1.23x regression this packet was written to prevent. Cost: every host in the fleet is Unmeasured today, so nothing routes decode to a GPU until someone runs the bench. That is the intended shape — the measurement is the enabling step, not a formality.
+            - A DEGRADED MeasurementRecord IS EXCLUDED. It is evidence the run went wrong, not evidence about the device, and 793-a8e7 records a real cold-load stall of >9 minutes at 40% prompt processing. Folding one in would move a threshold on the strength of a failure.
+            - EMBED'S GPU BAN IS UNCONDITIONAL, not conditioned on accel_mem_model==unified. mem_model answers unknown for every AMD and Intel DRM device (see 964-r98h), i.e. on exactly the host the CPU 8.7ms vs GPU 10.2ms measurement came from — so a guard written as 'unless unified' would open precisely where the evidence says it must not.
+
+            WHY IT STAYS ready. NOTHING CALLS route_phase EXCEPT THE ENVELOPE RENDERER. The decision function exists, is correct, and is unit-tested; no inference caller consults it, so no work is actually routed by it yet. That is order 480's shape verbatim — 'the module's own tests passed while the feature did not exist at runtime' — and litmus:accel-envelope-reaches-the-forge exists because someone closed a packet in that state. Marking this done would be the same claim.
+
+            RESIDUAL, in order: (a) wire route_phase into the inference call path so a phase's device is chosen by it rather than by the engine's own default; (b) teach scripts/bench-accel-lane.sh to send model and model_params_b through --record-measurement (the reader now accepts both; the writer does not send them, which is the same upstream/downstream split workload_suite had); (c) run the bench on at least one host so some machine has a real crossover instead of Unmeasured. (c) is the cheapest and unblocks the rest.
+
+            NOT AVAILABLE HERE: this host is native-linux with a discrete RTX 3070, so its crossover would say nothing about the unified-memory claim the policy rests on — that measurement wants Yolanda or the M5, and tlatoanis-macbook-air has already written down exactly what it would run if asked.
         - type: note
           ts: "2026-08-26T16:10:27Z"
           agent_id: "macos-tlatoanis-macbook-air-opus5-20260826t161027z"
