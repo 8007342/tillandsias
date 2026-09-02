@@ -46743,6 +46743,22 @@ plan_index:
         shows zero denials under the same load, or both.
       events:
         - type: note
+          ts: "2026-09-02T21:14:32Z"
+          agent_id: "forge-forge-tillandsias-claude-20260902t211432z"
+          host: pirria-tillandsias-forge
+          summary: |
+            THE CEILING WAS TESTED FOR REAL, BY ACCIDENT, AND 4096 HELD AT 3663. This is the strongest evidence this packet has had, and it arrived unplanned: a `./build.sh --check` on this floor guest tripped the brew autoinstall shim, and pids.peak went from 81 to 3663 — 89.4% of the 4096 ceiling — with pids.events STILL READING `max 0`. ZERO DENIALS AT 89% UTILISATION. Recovery verified: pids.current back to 33, peak latched at 3663, events `max 0`, worktree clean.
+
+            WHAT 512 WOULD HAVE DONE, and this is the packet's whole argument settled with a number instead of an inference: 3663 is 7.15x the old ceiling. Under 512 this single event would have hit the wall and kept hitting it for the duration — which is exactly the recorded pre-fix symptom on this same host (peak pinned at EXACTLY 512, 140 cumulative denials, the project-info MCP server dying with CONNECTION_CLOSED and not returning, `git status` failing with 'unable to create threaded lstat'). The raise is not merely adequate; it is the difference between a failed tool install and a wedged guest.
+
+            THE MECHANISM IS A RECURSIVE FORK BOMB, NOT MERELY A 'FORK STORM' — sharpening this packet's own FINAL ATTRIBUTION. Read live from the process table at peak, not inferred: 2872 `bash` and 716 `timeout 150 /home/linuxbrew/.linuxbrew/bin/brew install --formula ruby`. SEVEN HUNDRED AND SIXTEEN nested copies of the SAME command. Their ppids are a mix of pid 1 (reparented) and each other, so the shim is being RE-ENTERED BY BREW ITSELF: brew's own subprocesses hit a tool probe, the shim fires again, and each level pays another `timeout 150`. Zero zombies — these were 3663 LIVE processes, not accumulated corpses. The packet previously described this vector as 'installer fork storm' and sized the ceiling against it; the correct description is unbounded recursion with a 150s hold per level, which has no natural bound at all and whose peak is set by whatever ceiling stops it.
+
+            CONFIRMS AND EXTENDS THE PAIR'S EARLIER FINDINGS. pirria previously paid 364s for one tokei bootstrap; esmeraldinha paid 299MB and 100 denials and got nothing. This run adds the third and worst shape: `brew install ruby` failed on attestation verification ('attestation verification is REQUIRED and may be the cause — that is by design'), the Cellar is EMPTY (/home/linuxbrew/.linuxbrew/Cellar does not exist; the tree is 31M of bootstrap and no formulae), and it still reached 3663 pids. Expensive, empty, AND nearly fatal. The pair's TILLANDSIAS_BREW_AUTOINSTALL=0 measurement protocol is hereby vindicated as a SAFETY rule and not only a measurement-hygiene rule — this fired inside an ordinary gate, with nobody asking for a tool.
+
+            DRAIN BEHAVIOUR, measured, because it matters for how long the hazard lasts: the pile self-drains at roughly 10 pids per 5 seconds as the 150s timeouts expire — from 3663 that is on the order of 30 minutes at 65%+ of the ceiling, during which any OTHER fork-hungry work on the guest is running with a few hundred pids of headroom. I terminated the tree explicitly (pkill on the failed install) rather than waiting it out: current returned to 33 within seconds. A guest that hits this and does NOT notice spends half an hour one bad moment away from the pre-fix failure mode even at 4096.
+
+            CLOSURE STATUS AFTER THIS. Combined with this cycle's earlier two reads (cold 63, post-litmus 81, both `max 0`), the verifiable_closure's first arm now has BOTH halves on floor hardware: zero denials across a full evaluation + litmus cycle in ordinary operation, AND zero denials under the one vector this packet identified as actually able to reach a ceiling, at 89% of the new value. What 4096 does NOT have is margin against a DEEPER recursion — the bomb was stopped by attestation failure and the 150s timeout, not by any bound in the shim. Raising the ceiling further is the wrong answer to that; bounding the shim's re-entry is 960-tpop's territory and is where the residual risk sits. Recorded there too.
+        - type: note
           ts: "2026-09-02T20:46:05Z"
           agent_id: "forge-forge-tillandsias-claude-20260902t204605z"
           host: pirria-tillandsias-forge
@@ -46840,6 +46856,23 @@ plan_index:
         logs show cache/persistent-path hits), and the second launch's
         first-tool-probe cost drops from ~364s to sub-second.
 
+      events:
+        - type: note
+          ts: "2026-09-02T21:15:02Z"
+          agent_id: "forge-forge-tillandsias-claude-20260902t211502z"
+          host: pirria-tillandsias-forge
+          summary: |
+            THE AUTOINSTALL SHIM RE-ENTERS ITSELF WITHOUT A BOUND — measured live on the floor, 2026-09-02, and it is a different and worse defect than the re-paid-cost one this packet was filed for. During an ordinary `./build.sh --check` on pirria (N150/CachyOS/native podman forge, v56.9.2.1), a tool probe for `ruby` fired the brew autoinstall shim and the guest went from 81 to 3663 live processes — 89.4% of its 4096 pid ceiling. Process table at peak: 2872 `bash` plus 716 concurrent `timeout 150 /home/linuxbrew/.linuxbrew/bin/brew install --formula ruby`. Same command, 716 times, ppids mixed between pid 1 and each other. Brew's own subprocesses hit tool probes, which fire the shim, which runs brew. Nothing bounds the depth; each level holds for its full 150s timeout.
+
+            WHAT IT COST AND WHAT IT BOUGHT: nothing. `brew install ruby` FAILED on attestation verification ('attestation verification is REQUIRED and may be the cause — that is by design'). /home/linuxbrew/.linuxbrew/Cellar DOES NOT EXIST — the tree is 31M of bootstrap with zero formulae installed. This is esmeraldinha's expensive-and-empty shape (299MB, 100 denials, no tool) with the price paid in pids instead of bytes, and it is the sharper example this packet wanted.
+
+            RELATION TO THIS PACKET'S FILED SCOPE. 960-tpop is about PLACEMENT — payloads landing on the container overlay and being re-paid per launch. That framing assumes the install eventually succeeds and the only question is where it lands. This run shows the failure mode BEFORE placement matters: a bootstrap that cannot complete still forks unboundedly trying. Fixing persistence would not have prevented this; a persistent Cellar with no ruby in it produces exactly the same recursion on the next probe. So the verifiable_closure as written ('re-resolves agy and one previously-installed brew formula WITHOUT network downloads') does not cover it — that criterion can pass while this defect is fully live.
+
+            THE FIX THIS NEEDS, offered rather than claimed (this is a floor-tier measurement slot, not an implementation one): the shim must refuse to re-enter itself. A single environment marker exported before it invokes brew, and checked on entry, converts 716 nested installs into one — the standard re-entrancy guard. TILLANDSIAS_BREW_AUTOINSTALL=0 already exists as the documented off-switch and the pair adopted it as measurement protocol on 959-fpc5; that protocol is now also a SAFETY rule, because this fired inside a routine gate with nobody asking for a tool. But an off-switch the caller must remember is not a bound.
+
+            CROSS-LINK: recorded in full on 959-fpc5, where it doubles as that packet's strongest closure evidence — 4096 held at 3663 with pids.events reading `max 0`, against a pre-fix ceiling of 512 that this event would have exceeded 7.15-fold. The residual risk that survives the pids raise is precisely this unbounded recursion, and it belongs here rather than there: the answer to a fork bomb is not a higher ceiling.
+
+            ALSO OBSERVED, drain behaviour, because it sets how long the hazard lasts: the pile self-drains at ~10 pids per 5s as the 150s timeouts expire — roughly 30 minutes from 3663, spent above 65% of the ceiling. I killed the tree explicitly and pids.current returned to 33 within seconds. A guest that hits this without noticing spends half an hour with a few hundred pids of headroom.
     - packet_id: first-spec-index-build-is-all-or-nothing-and-discards-45-minutes-on-any-interruption
       order: 963-vmbi
       status: ready
