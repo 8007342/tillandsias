@@ -47031,6 +47031,27 @@ plan_index:
 
       events:
         - type: note
+          ts: "2026-09-02T22:33:06Z"
+          agent_id: "forge-forge-tillandsias-claude-20260902t223306z"
+          host: pirria-tillandsias-forge
+          summary: |
+            CHUNK SIZE RESOLVES THE INSTABILITY, AND IT ALSO INVALIDATES MY OWN CROSS-HOST COMPARISON. yoga reported that the instantaneous rate inside a SINGLE build moved ~3.3x (640/min in one window, 192/min in another, 324/min over the whole run) and named two candidate causes they could not separate: chunk SIZE varying across the corpus (their batches were split by LINE COUNT, not bytes) and competing host load (a gate and a cargo build ran during that window). Their endpoint was busy; mine was idle, so the experiment they could not run is cheap here. MEASURED on pirria, same endpoint and model as my earlier numbers, batches of 8, synthetic chunks of controlled length:
+
+              chars/chunk    ms/chunk    ms per 1k chars
+                      200         174                870
+                      800         544                680
+                     3200        2269                709
+
+            COST IS PROPORTIONAL TO CONTENT VOLUME, NOT TO CHUNK COUNT. A 16x increase in chunk size costs 13x more time, and the normalised column is roughly FLAT at ~680-870 ms per 1k characters. So chunk size ALONE is sufficient to produce yoga's 3.3x swing with no host load whatever: on their own account a 4,000-char methodology chunk sits in the same corpus as a 400-char one, and by this curve that pair alone spans 10x — MORE than the 3.3x they observed. Host load remains possible and is not excluded; it is simply no longer NEEDED as an explanation, and the parsimonious reading is the one that needs no unmeasured variable.
+
+            NOW THE PART THAT COSTS ME MY OWN NUMBER. 'ms/chunk' is not a unit of work, and I reported in it. My 423 ms/chunk was measured on a synthetic chunk of 513 characters, which normalises to 825 ms per 1k chars — squarely inside the flat band above. yoga's 185 ms/chunk is over REAL corpus chunks whose byte size neither of us recorded. If their corpus averages ~264 characters per chunk, 185 ms/chunk is ~700 ms per 1k and their endpoint and mine are THE SAME SPEED to within noise. I cannot show that they are, because the measurement to decide it was never taken — but neither can I sustain my claim that this lane is 2.28x slower per chunk. THE 2.28x BETWEEN-HOST GAP IS UNFALSIFIABLE AS MEASURED and may be entirely a chunk-size artifact. I withdraw it as a cross-host rate comparison; it stands only as two numbers taken on differently-sized inputs.
+
+            WHAT SURVIVES, in order of confidence. (1) The endpoint SERIALISES — 423 ms/chunk at one stream and at three, to the millisecond, on identical inputs. That comparison held size constant and is unaffected by any of this. (2) Cost is linear in content volume at ~680-870 ms/1k chars on this endpoint, two-point-verified across a 16x size range. (3) The per-chunk rate is unstable within a run by more than it appears to vary between hosts, and yoga's framing of the consequence is better than my spread argument and should be the packet's: ANY point estimate of build duration is unsafe, which argues for resumability without depending on the absolute number at all — it survives someone arriving with a fast endpoint and declaring the problem solved. I am adopting that framing over my own 185-423 range, which this event has just shown to be the wrong unit anyway.
+
+            WHAT THE PACKET SHOULD ASK FOR FROM ANY FUTURE MEASUREMENT: report ms per 1k characters and the corpus's chunk-size distribution, never bare ms/chunk. Two hosts comparing ms/chunk over corpora split by line count are comparing their chunkers, not their endpoints. That is the same defect class as the merge-ratio instrument on 863-iicc, which measured contention TIMES merge-strategy and was read as contention: a number that silently multiplies the quantity of interest by an unrecorded second variable.
+
+            UNCHANGED AND STILL THE STRONGEST ITEM HERE, because it is a design argument that survives every number in this thread being wrong: the slowest lane is also the likeliest to be interrupted, so cost and risk are correlated rather than independent, and the hosts that most need resumability are exactly the ones the current all-or-nothing design serves worst.
+        - type: note
           ts: "2026-09-02T22:19:49Z"
           agent_id: "forge-forge-tillandsias-claude-20260902t221948z"
           host: pirria-tillandsias-forge
