@@ -1,0 +1,96 @@
+packets:
+  - packet_id: build-check-unrunnable-in-forge-ruby-absent
+    order: 965-sxec
+    status: ready
+    title: |
+      build.sh --check cannot pass inside a forge: the plan archiver needs ruby, exits 127, and build.sh reports a FALSE substantive verdict instead of could-not-run
+    kind: bug
+    pickup_role: any
+    priority: p1
+    desired_release: v0.5
+    capability_tags:
+      - forge
+      - build
+      - plan-ledger
+      - container-image
+    estimated_hours: 2
+    deliverable: |
+      A forge can run ./build.sh --check to a real verdict: either the archiver
+      check acquires a ruby it can use, or its unavailability maps to the
+      could-not-run exit (3) so build.sh stops asserting a claim about the ready
+      set that it has not tested.
+    context: |
+      MEASURED on lenovinha-tillandsias-forge 2026-09-02 (v56.9.2.1) while trying
+      to satisfy the meta-orchestration exit contract's local gate.
+
+      scripts/archive-plan-packets.sh has a HARD ruby dependency (its worker is
+      archive-plan-packets.rb). The forge image deliberately carries NO ruby — the
+      meta-orchestration skill says so in as many words ("ruby is NOT in the forge
+      image; yq is"). What is on PATH is a brew shim that attempts an on-demand
+      userspace install and fails by design under attestation verification:
+
+          $ scripts/archive-plan-packets.sh --check
+          tillandsias: brew install ruby failed (attestation verification is
+              REQUIRED and may be the cause — that is by design).
+          tillandsias: 'ruby' is not installed.
+          rc=127
+
+      TWO DEFECTS, and the second is worse than the first.
+
+      (1) The gate is unrunnable here at all, so the forge lane cannot satisfy the
+      Non-Negotiable Exit Contract's "run the local gate" step. build.sh:2218 is a
+      hard `exit 1`.
+
+      (2) THE VERDICT IS FALSE, NOT MERELY FAILING. build.sh already draws exactly
+      the distinction that matters — build.sh:2214 maps rc==3 to "the archiver's
+      check COULD NOT RUN ... the instrument is what needs repair (923-ws3r)". But
+      a missing interpreter exits 127, not 3, so control falls to the `-ne 0`
+      branch at :2217 and prints:
+
+          the plan archiver would CHANGE THE READY SET, orphan events, or leave
+          archived rows unanswerable — do not sweep
+
+      That is a substantive claim about the ledger, asserted on the strength of a
+      command that never executed. An agent reading it goes looking for ledger
+      damage that does not exist. 923-ws3r built the could-not-run channel for
+      precisely this case; 127 simply does not reach it.
+
+      This is the same shape as order 531 and the order-552 class the 919-vvyv
+      notes describe: a truthful-looking state that reports the wrong thing,
+      because the signal for "I could not measure" was not routed to the place
+      that decides what to say.
+    exit_criteria:
+      - |
+          A missing or unusable ruby makes scripts/archive-plan-packets.sh exit 3
+          (could-not-run), never a bare 127, so build.sh reports the instrument
+          rather than the ready set
+      - |
+          ./build.sh --check reaches a real pass/fail verdict inside a forge
+      - |
+          The forge lane's inability to run a check step is either removed or
+          NAMED as a skip, not reported as a ledger defect
+    verifiable_closure: |
+      Inside a forge with no ruby, run ./build.sh --check and observe it either
+      pass, or fail with a verdict naming the missing instrument — and never with
+      the "would CHANGE THE READY SET" text, which asserts something the run did
+      not test.
+    evidence:
+      - 'lenovinha forge 2026-09-02: scripts/archive-plan-packets.sh --check -> rc=127'
+      - 'build.sh:2214 maps rc==3 to could-not-run; :2217 catches 127 and asserts the ready-set claim'
+      - scripts/archive-plan-packets.sh:14 — "HARD ruby dependency"
+      - 'meta-orchestration SKILL.md: "ruby is NOT in the forge image; yq is"'
+    events:
+      - type: filed
+        ts: "2026-09-02T21:13:27Z"
+        agent_id: linux-lenovinha-tillandsias-forge-claude-20260902t202947z
+        host: lenovinha-tillandsias-forge
+        summary: |
+          Measured while trying to satisfy the local gate inside a forge; the
+          archiver exits 127 for want of ruby and build.sh converts that into a
+          false claim about the ready set.
+    notes: |
+      Found while working 919-vvyv from inside a CPU-only forge. Sibling to
+      964-zedm: both are ways the forge environment silently fails a step that
+      passes everywhere else, and both were invisible until something ran the step
+      in a forge and read the output. Related: 923-ws3r (the could-not-run channel
+      this fails to reach), 777-amku (the toolbox-first pattern the script cites).
