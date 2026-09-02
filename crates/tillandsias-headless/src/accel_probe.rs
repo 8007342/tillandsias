@@ -14,7 +14,15 @@ use std::process::Command;
 /// `load_or_probe` uses this to decide a cached document is still describable
 /// — a v1 cache has no `host_id`, and re-probing is cheaper than reasoning
 /// about a document that cannot name itself.
-pub const SCHEMA_VERSION: u32 = 2;
+///
+/// 3 (order 793-qr4t/793-qc6q) adds `HostInfo::side` — which SIDE of which
+/// boundary the probe ran on — and the model dimension on
+/// `MeasurementRecord`. Same reasoning as 2, and sharper: a v2 document has
+/// no side, so every device it reports is unqualified, and the envelope
+/// cannot distinguish "no NPU here" from "the NPU is on the other side of a
+/// VM boundary". Serving that from cache would republish the exact confusion
+/// 793-qr4t exists to end.
+pub const SCHEMA_VERSION: u32 = 3;
 
 /// Derived document describing host execution devices, engine availability, and measurements.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -186,6 +194,38 @@ pub struct MeasurementRecord {
     /// potentially wrong in a way no consumer can see.
     #[serde(default)]
     pub locus: Option<String>,
+
+    /// WHICH MODEL produced these numbers, e.g. `qwen2.5:0.5b` (order
+    /// 793-qc6q).
+    #[serde(default)]
+    pub model: Option<String>,
+
+    /// The model's parameter count in BILLIONS, e.g. `0.5` or `3.0`.
+    ///
+    /// THIS IS THE AXIS THE DECODE CROSSOVER LIVES ON, and without it
+    /// 793-qc6q's exit criterion is not merely unmet but inexpressible. That
+    /// criterion forbids a hard-coded threshold: the crossover must be
+    /// "derived from a bounded per-host measurement cached in
+    /// capabilities.json ... not from a constant that happens to fit
+    /// windows/Yolanda". A crossover is the point where the CPU and GPU decode
+    /// curves cross AS MODEL SIZE VARIES — so deriving one requires ordering
+    /// decode rows by size, and this struct had no size. Two `decode_tps`
+    /// values with no model dimension cannot be ordered, and the only way to
+    /// ship a threshold without this field is to type 1.5 into the source,
+    /// which is the thing the criterion rules out.
+    ///
+    /// Parameters, not bytes: quantisation changes the byte count by 4x
+    /// without moving the arithmetic-per-token that decides whether the
+    /// per-dispatch cost is absorbed, and it is that ratio the crossover is
+    /// about.
+    ///
+    /// `Option` + `serde(default)` for the same reason `workload_suite` is:
+    /// `--record-measurement` must keep accepting the payload
+    /// `scripts/bench-accel-lane.sh` sends TODAY. A record without it is
+    /// usable for everything except crossover derivation, and
+    /// [`decode_crossover_b`] simply does not count it.
+    #[serde(default)]
+    pub model_params_b: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -251,6 +291,35 @@ pub struct HostInfo {
     /// would be a confident half-answer. The correct fix is the host-side
     /// contribution 809-7e4m specifies, which knows rather than infers.
     pub host_kind: String,
+
+    /// WHICH SIDE OF WHICH BOUNDARY this probe ran on (order 793-qr4t).
+    ///
+    /// `native-linux` | `wsl2-guest` | `windows-host` | `macos-host` |
+    /// `container` | `unknown-side`.
+    ///
+    /// `host_kind` above deliberately refuses to invent a `windows-wsl2` term,
+    /// and that refusal is correct FOR THAT FIELD: it names the execution
+    /// context's OS family, and a guest guessing at the machine's OS would be
+    /// a confident half-answer. This is the field that was missing when that
+    /// note was written. It does not guess at the MACHINE; it records a fact
+    /// about the PROBE — where it stood — which the probe is the only party
+    /// entitled to state and can state from evidence (`/dev/dxg` plus a
+    /// `microsoft` kernel release is WSL2; `/run/.containerenv` is a
+    /// container). The two fields answer different questions and a consumer
+    /// needs both.
+    ///
+    /// WHY IT MUST LIVE IN THE DOCUMENT rather than be recomputed by whoever
+    /// renders it: the fleet matrix folds documents produced ELSEWHERE, so a
+    /// reader's own `cfg!` describes the reader, not the row. This is the same
+    /// reasoning `enumeration_gaps` records above, and the same failure it
+    /// prevents — a transported document keeps its own facts.
+    ///
+    /// `Option` + `serde(default)` because every document written before this
+    /// order has no side. `None` reads as "this document does not say", which
+    /// is true of them and is NOT the same as `unknown-side` (a probe that
+    /// looked and could not tell).
+    #[serde(default)]
+    pub side: Option<String>,
 }
 
 /// The env INPUT that names this machine, overriding the derived chain.
@@ -2318,6 +2387,7 @@ fn windows_npus() -> Option<Vec<DeviceRecord>> {
     )
 }
 
+#[cfg(target_os = "linux")]
 fn enumerate_npus() -> Vec<DeviceRecord> {
     let mut npus = Vec::new();
     let accel_dir = Path::new("/sys/class/accel");
@@ -2430,13 +2500,75 @@ fn enumerate_host() -> HostInfo {
 
     let (host_id, host_id_source) = resolve_host_id();
 
+    let side = detect_side(&kernel);
+
     HostInfo {
         is_battery_present: battery,
         kernel_release: kernel,
         host_id,
         host_id_source,
         host_kind: host_kind().to_string(),
+        side: Some(side.to_string()),
     }
+}
+
+/// Order 793-qr4t. Which side of which boundary this probe is standing on.
+///
+/// Evidence, in the order that matters, and the ORDER IS THE DESIGN: a forge
+/// inside a container on a WSL2 guest is BOTH, and the answer a consumer needs
+/// is the innermost boundary — that is the one whose far side holds the devices
+/// it cannot reach. Widening the container test to run second would report
+/// `wsl2-guest` for a container and re-open exactly the blind spot this field
+/// closes.
+///
+/// Kernel release is a PARAMETER so the WSL2 arm is testable on a host that is
+/// not WSL2. The filesystem probes are not parameterised because they are cheap
+/// and their absence is the common case; [`side_from_evidence`] is the pure
+/// function the tests drive.
+#[cfg_attr(not(target_os = "linux"), allow(unused_variables))]
+fn detect_side(kernel_release: &str) -> &'static str {
+    #[cfg(target_os = "macos")]
+    {
+        "macos-host"
+    }
+    #[cfg(target_os = "windows")]
+    {
+        "windows-host"
+    }
+    #[cfg(target_os = "linux")]
+    {
+        side_from_evidence(
+            Path::new("/run/.containerenv").exists() || Path::new("/.dockerenv").exists(),
+            Path::new("/dev/dxg").exists(),
+            kernel_release,
+        )
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+    {
+        "unknown-side"
+    }
+}
+
+/// The Linux side decision as a pure function (order 793-qr4t).
+///
+/// WSL2 wants BOTH signals, not either. `/dev/dxg` alone appears on a Windows
+/// host running WSLg-adjacent stacks and, more importantly, is the very node
+/// 793-zumy teaches the GPU arm to read — reusing it as a side test would make
+/// the side depend on whether a GPU happened to be paravirtualised. A
+/// `microsoft` kernel release alone is likewise not decisive: it is the string
+/// two WSL2 guests already share verbatim (see `HostInfo::host_id`), and it
+/// survives into any image built from that kernel. Together they are the shape
+/// only a WSL2 guest has.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn side_from_evidence(in_container: bool, dxg_present: bool, kernel_release: &str) -> &'static str {
+    if in_container {
+        return "container";
+    }
+    let microsoft_kernel = kernel_release.to_ascii_lowercase().contains("microsoft");
+    if dxg_present && microsoft_kernel {
+        return "wsl2-guest";
+    }
+    "native-linux"
 }
 
 // @trace spec:accel-capability-probe
@@ -2704,12 +2836,41 @@ pub fn accel_envelope(doc: &CapabilityDocument) -> String {
     // the platform that is rendering it — a cached or transported document
     // keeps its own gaps, which a compile-time constant could never do.
     let gap = |class: &str| doc.enumeration_gaps.iter().any(|g| g == class);
-    if npu.is_none() && gap("npu") {
-        npu_state = "unknown";
+
+    // ORDER 793-qr4t. A THIRD reason a class can come back empty, and it is not
+    // the same as either of the two above.
+    //
+    // `none` means enumerated-and-absent. `unknown` means this probe has no arm
+    // for the class on this platform (the Darwin ANE: present, drivable through
+    // CoreML, on THIS side, and invisible only because `enumerate_npus` reads
+    // `/sys/class/accel`). Neither describes a WSL2 guest, where the arm exists,
+    // ran, and correctly found nothing — because the device is on the far side
+    // of a VM boundary. Measured: an XDNA2 NPU healthy on the Windows side
+    // (VEN_1022&DEV_17F0, driver 32.0.20102.3930) rendering `accel_npu=none` in
+    // the guest, which reads as "this machine cannot do NPU work" and would
+    // mis-plan a whole tier.
+    //
+    // The discriminator is the SIDE, not the class: on a boundary side the
+    // probe's enumeration is evidence about the guest, never about the machine.
+    // A native-Linux host with no NPU keeps `none`, which is the criterion that
+    // stops this from being a blanket relabel.
+    let side = accel_side(doc);
+    let boundary_side = matches!(side, "wsl2-guest" | "container");
+    let absent_state = |gap: bool| -> &'static str {
+        if gap {
+            "unknown"
+        } else if boundary_side {
+            "unobservable-from-this-side"
+        } else {
+            "none"
+        }
+    };
+    if npu.is_none() {
+        npu_state = absent_state(gap("npu"));
     }
     let mut gpu_state = gpu_state;
-    if gpu.is_none() && gap("gpu") {
-        gpu_state = "unknown";
+    if gpu.is_none() {
+        gpu_state = absent_state(gap("gpu"));
     }
 
     let class = match (gpu_state, npu_state) {
@@ -2723,13 +2884,21 @@ pub fn accel_envelope(doc: &CapabilityDocument) -> String {
     let reason = gpu
         .and_then(|d| d.unusable_reason.as_deref())
         .or_else(|| npu.and_then(|d| d.unusable_reason.as_deref()))
-        .unwrap_or(match (gpu_state == "unknown", npu_state == "unknown") {
+        .unwrap_or(match (gpu_state, npu_state) {
             // So `cpu-only` is never a bare verdict on a host that simply could
             // not look for the accelerators it is denying.
-            (true, true) => "gpu-and-npu-not-enumerable-on-this-platform",
-            (true, false) => "gpu-not-enumerable-on-this-platform",
-            (false, true) => "npu-not-enumerable-on-this-platform",
-            (false, false) => "-",
+            ("unknown", "unknown") => "gpu-and-npu-not-enumerable-on-this-platform",
+            ("unknown", _) => "gpu-not-enumerable-on-this-platform",
+            (_, "unknown") => "npu-not-enumerable-on-this-platform",
+            // Order 793-qr4t: same principle one boundary out. The obstruction
+            // is the boundary itself, and naming it is what stops a reader
+            // concluding the hardware is absent.
+            ("unobservable-from-this-side", "unobservable-from-this-side") => {
+                "gpu-and-npu-across-the-boundary-from-this-side"
+            }
+            ("unobservable-from-this-side", _) => "gpu-across-the-boundary-from-this-side",
+            (_, "unobservable-from-this-side") => "npu-across-the-boundary-from-this-side",
+            _ => "-",
         });
 
     let cpu = doc.devices.iter().find(|d| d.device_class == "cpu");
@@ -2760,9 +2929,20 @@ pub fn accel_envelope(doc: &CapabilityDocument) -> String {
         .map(|p| p.token())
         .unwrap_or("-");
 
+    // ORDERS 793-qr4t + 793-qc6q. APPENDED, never interleaved: every key above
+    // keeps its name, position and meaning, so 769-w3ma's consumers and
+    // `litmus:accel-envelope-reaches-the-forge` read exactly what they read
+    // before. A grammar extension that moved an existing key would be a rename
+    // wearing an addition's clothes.
+    let mem_model = mem_model(side, gpu);
+    let routing = routing_summary(doc);
+
     format!(
         "accel_class={} accel_gpu={} accel_gpu_name={} accel_npu={} accel_npu_name={} \
-         accel_reason={} accel_cpu_cores={} accel_ram_gb={} accel_proof={}",
+         accel_reason={} accel_cpu_cores={} accel_ram_gb={} accel_proof={} \
+         accel_side={} accel_gpu_path={} accel_gpu_engine={} \
+         accel_mem_model={} accel_mem_budget_gb={} \
+         accel_prefill_dev={} accel_decode_dev={} accel_decode_crossover_b={}",
         class,
         gpu_state,
         gpu.map(|d| slug(&d.name))
@@ -2774,7 +2954,406 @@ pub fn accel_envelope(doc: &CapabilityDocument) -> String {
         cores,
         ram,
         proof,
+        side,
+        gpu_path(side, gpu),
+        gpu_engine(doc, gpu),
+        mem_model,
+        // ONE budget, side-scoped, and the whole point of emitting it beside
+        // `accel_mem_model` rather than alone. Measured on windows/Yolanda: the
+        // probe reported `accel_ram_gb=7` (the guest's slice) while dzn
+        // advertised a 7.58 GiB DEVICE_LOCAL heap — the SAME physical DRAM,
+        // counted twice, and neither of them the machine's 15.2 GB. A 522
+        // sizing consumer that adds a GPU pool to a CPU pool on a
+        // `unified` node has doubled a pool that does not exist. There is
+        // exactly one number here on purpose: nothing to add.
+        ram,
+        routing.prefill,
+        routing.decode,
+        routing.crossover,
     )
+}
+
+/// Order 793-qr4t. Which side of which boundary produced this document.
+///
+/// Read from the DOCUMENT, never from the reader's own `cfg!`: the fleet matrix
+/// folds rows probed on other machines, so a renderer that asked itself would
+/// answer about itself. `None` (every pre-schema-3 document) reads
+/// `unknown-side`, which is honest — those documents genuinely do not say — and
+/// is deliberately NOT `native-linux`, since defaulting a missing side to the
+/// commonest one would silently re-assert the collapse this field removes.
+// @trace order:793-qr4t, spec:accel-capability-probe
+pub fn accel_side(doc: &CapabilityDocument) -> &str {
+    doc.host.side.as_deref().unwrap_or("unknown-side")
+}
+
+/// HOW the GPU is reached: `drm` | `dxg-d3d12` | `metal` | `cuda` | `none`.
+///
+/// The PATH is not the ENGINE and conflating them is one of the four facts
+/// 793-qr4t is unpacking. A WSL2 guest reaches its GPU over `/dev/dxg` and
+/// drives it with Vulkan-over-D3D12; the path is a property of the boundary,
+/// the engine of the software stack, and a host can have either without the
+/// other. Measured on windows/Yolanda: `/dev/dxg` present and ollama logging
+/// `library=cpu`, because no Vulkan loader was installed — a real path with no
+/// engine on it.
+///
+/// Decided from the device NODE first, because that is evidence, and only then
+/// from the side, which is an inference about a device we could not otherwise
+/// place.
+// @trace order:793-qr4t, spec:accel-capability-probe
+fn gpu_path(side: &str, gpu: Option<&DeviceRecord>) -> &'static str {
+    let Some(g) = gpu else {
+        return "none";
+    };
+    let node = g.device_node.as_deref().unwrap_or("");
+    if node.starts_with("/dev/dxg") {
+        return "dxg-d3d12";
+    }
+    if node.starts_with("/dev/nvidia") {
+        return "cuda";
+    }
+    if node.starts_with("/dev/dri") || node.starts_with("/dev/kfd") {
+        return "drm";
+    }
+    match side {
+        "macos-host" => "metal",
+        "windows-host" => "dxg-d3d12",
+        "wsl2-guest" => "dxg-d3d12",
+        "native-linux" | "container" => "drm",
+        _ => "none",
+    }
+}
+
+/// WHICH ENGINE, IF ANY, CAN DRIVE THE GPU — the third of the four collapsed
+/// facts, and the one whose absence made a host with a usable RTX A5000 report
+/// `schedulable: none`.
+///
+/// `engine-missing` and `none` are different answers to different questions and
+/// that difference is the whole key: `none` means there is no GPU here (buy
+/// hardware); `engine-missing` means there is a GPU and we ship nothing that
+/// can drive it (ship a lane). The probe already distinguishes them for the
+/// NPU — that record carries `unusable_reason: engine-missing` — and could not
+/// for the GPU, because `accel_envelope` never read `doc.engines` at all.
+///
+/// AN UNRECOGNISED ENGINE RENDERS ITS OWN SLUG rather than being forced into
+/// the nearest listed value. The known mappings below cover the stacks the
+/// fleet ships; `ollama` is on this very host and is not one of them. Reporting
+/// it as, say, `rocm` because it is the closest label would be exactly the
+/// confident half-answer this packet is dismantling, and a reader who does not
+/// recognise a slug can find out, whereas a reader given a wrong one cannot.
+// @trace order:793-qr4t, spec:accel-capability-probe
+fn gpu_engine(doc: &CapabilityDocument, gpu: Option<&DeviceRecord>) -> String {
+    let Some(_) = gpu else {
+        return "none".to_string();
+    };
+    let Some(e) = doc
+        .engines
+        .iter()
+        .find(|e| e.supported_device_classes.iter().any(|c| c == "gpu"))
+    else {
+        return "engine-missing".to_string();
+    };
+    let hay = format!("{} {}", e.name, e.backend).to_ascii_lowercase();
+    let known = if hay.contains("rocm") || hay.contains("hip") {
+        Some("rocm")
+    } else if hay.contains("cuda") {
+        Some("cuda")
+    } else if hay.contains("metal") {
+        Some("metal")
+    } else if hay.contains("vulkan") && (hay.contains("dozen") || hay.contains("dzn")) {
+        Some("vulkan-dozen")
+    } else if hay.contains("vulkan") && hay.contains("radv") {
+        Some("vulkan-radv")
+    } else {
+        None
+    };
+    known
+        .map(|k| k.to_string())
+        .unwrap_or_else(|| slug(&e.name))
+}
+
+/// `unified` | `discrete` | `unknown` — the fourth fact, and the one a sizing
+/// consumer gets wrong most expensively.
+///
+/// `unified` is a licence to read `accel_mem_budget_gb` as THE budget and a
+/// prohibition on summing it with anything. It is asserted only where the
+/// architecture makes it true by construction (Apple silicon; a node with no
+/// GPU at all, which has exactly one pool and therefore nothing to sum) or
+/// where the vendor makes it false (NVIDIA carries its own VRAM).
+///
+/// EVERYTHING ELSE IS `unknown` ON PURPOSE, and this is a real limitation
+/// rather than a stub. An AMD or Intel DRM device may be an integrated part
+/// sharing DRAM or a discrete board with its own, and `DeviceRecord` records
+/// nothing that separates them — no VRAM size, no integrated flag. Guessing
+/// `unified` from the vendor would be wrong for a discrete Radeon; guessing
+/// `discrete` would be wrong for every iGPU in the fleet. A consumer that reads
+/// `unknown` must not sum either, which is the safe reading, and the fix is a
+/// per-device memory field on the probe rather than a cleverer guess here.
+///
+/// It is derived from the SELECTED device because memory model is a property of
+/// a device, not of a host: this machine carries a discrete RTX 3070 and an
+/// integrated Vega at once, and the honest single-line answer is the one for
+/// the device the envelope is reporting.
+// @trace order:793-qr4t, spec:accel-capability-probe
+fn mem_model(side: &str, gpu: Option<&DeviceRecord>) -> &'static str {
+    let Some(g) = gpu else {
+        return "unified";
+    };
+    let vendor = g.vendor.to_ascii_lowercase();
+    if side == "macos-host" || vendor.contains("apple") {
+        return "unified";
+    }
+    if vendor.contains("nvidia") {
+        return "discrete";
+    }
+    "unknown"
+}
+
+/// Where the decode phase's CPU/GPU curves cross, DERIVED from this host's own
+/// measurements (order 793-qc6q).
+#[derive(Debug, Clone, Copy, PartialEq)]
+// @trace order:793-qc6q, spec:accel-capability-probe
+pub enum DecodeCrossover {
+    /// No pair of CPU and GPU decode measurements at a common model size.
+    /// The policy MUST NOT invent one: the packet's exit criterion rules out
+    /// "a constant that happens to fit windows/Yolanda", and an unmeasured host
+    /// routing decode to the GPU on that constant's authority is precisely the
+    /// silent 1.23x regression it was written to prevent.
+    Unmeasured,
+    /// The GPU wins decode at this parameter count (billions) and above.
+    AtOrAbove(f64),
+    /// Measured across every available size and the CPU won at all of them.
+    /// Distinct from `Unmeasured`: this host HAS looked, and the answer is no.
+    CpuWinsThroughout,
+}
+
+/// Derive the decode crossover from `doc.measurements`.
+///
+/// WHY THIS READS A CACHE AND NOT A CONSTANT: decode is memory-bandwidth-bound,
+/// so on unified memory the iGPU reads the same DRAM as the CPU and brings only
+/// compute against a fixed per-dispatch cost. Below some size that cost
+/// dominates. WHERE that size falls is a property of one machine's
+/// compute-to-bandwidth ratio — measured at between 0.5B and 3B on
+/// windows/Yolanda (decode 0.5B: CPU 78.68 vs GPU 63.75 t/s; 3B: CPU 19.64 vs
+/// GPU 26.96) — and Apple silicon is a second unified architecture with far
+/// higher bandwidth where the same threshold has no reason to hold. Hard-coding
+/// Yolanda's number would read one host's hardware ratio as an architectural
+/// law.
+///
+/// The returned threshold is a MEASURED SIZE, never an interpolation between
+/// two. Interpolating would manufacture a precision the three-point sample
+/// cannot support, and the routing decision only ever compares against it.
+// @trace order:793-qc6q, spec:accel-capability-probe
+pub fn decode_crossover_b(doc: &CapabilityDocument) -> DecodeCrossover {
+    // (params, cpu_tps, gpu_tps) for every size measured on BOTH devices.
+    let mut sizes: Vec<(f64, Option<f64>, Option<f64>)> = Vec::new();
+    for m in &doc.measurements {
+        let (Some(p), Some(tps)) = (m.model_params_b, m.decode_tps) else {
+            continue;
+        };
+        // A degraded run is not evidence about the device; it is evidence the
+        // run went wrong, and folding it in would move a threshold on the
+        // strength of a failure.
+        if m.degraded {
+            continue;
+        }
+        let dev = m.device.to_ascii_lowercase();
+        let slot = sizes.iter_mut().find(|(sp, _, _)| (*sp - p).abs() < 1e-9);
+        let entry = match slot {
+            Some(e) => e,
+            None => {
+                sizes.push((p, None, None));
+                sizes.last_mut().expect("just pushed")
+            }
+        };
+        if dev.starts_with("cpu") {
+            entry.1 = Some(entry.1.map_or(tps, |v: f64| v.max(tps)));
+        } else if dev.starts_with("gpu") {
+            entry.2 = Some(entry.2.map_or(tps, |v: f64| v.max(tps)));
+        }
+    }
+
+    let mut paired: Vec<(f64, f64, f64)> = sizes
+        .into_iter()
+        .filter_map(|(p, c, g)| Some((p, c?, g?)))
+        .collect();
+    if paired.is_empty() {
+        return DecodeCrossover::Unmeasured;
+    }
+    paired.sort_by(|a, b| a.0.partial_cmp(&b.0).expect("finite sizes"));
+
+    match paired.iter().find(|(_, cpu, gpu)| gpu >= cpu) {
+        Some((p, _, _)) => DecodeCrossover::AtOrAbove(*p),
+        None => DecodeCrossover::CpuWinsThroughout,
+    }
+}
+
+/// A phase of inference work. The UNIT OF ROUTING (order 793-qc6q).
+///
+/// Not the host and not the model. Two independent lines of evidence agree that
+/// the phases want different devices on the SAME host with the SAME model:
+/// ours (prefill is a batched GEMM and compute-bound, so the iGPU wins;
+/// decode is bandwidth-bound and on unified memory it does not) and AMD's
+/// Lemonade hybrid mode, which puts prompt processing on the NPU and token
+/// generation on the GPU. A per-host device choice has to be wrong for one of
+/// them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+// @trace order:793-qc6q, spec:accel-capability-probe
+pub enum Phase {
+    Prefill,
+    Decode,
+    Embed,
+    Rerank,
+}
+
+/// Where a phase runs, and WHY it is not running somewhere better.
+#[derive(Debug, Clone, PartialEq, Eq)]
+// @trace order:793-qc6q, spec:accel-capability-probe
+pub struct Placement {
+    /// `npu` | `gpu` | `cpu`.
+    pub device: &'static str,
+    /// Never empty, and never `-` when the device is `cpu`.
+    ///
+    /// THE PACKET'S THIRD EXIT CRITERION IS ABOUT THIS FIELD: "a fallback is
+    /// never silent". The failure it names is the one that cost a day on
+    /// windows/Yolanda — ollama logging `library=cpu` while every signal said
+    /// GPU, because the loader was absent and nothing said so. A reason string
+    /// is the difference between a fallback and a mystery.
+    pub reason: String,
+}
+
+/// Whether a device class can actually be driven here: a lane AND an engine.
+///
+/// BOTH HALVES, and this is the engine-qualification 793-qr4t adds being
+/// consumed rather than merely published. macuahuitl reported a container-lane
+/// RTX A5000 with `engines: []` and the matrix printed `schedulable: none` —
+/// correctly, since a device nothing can drive is not a target. Routing that
+/// reads only the lane would send work to it and land on the same
+/// `library=cpu` silence.
+// @trace order:793-qc6q, spec:accel-capability-probe
+fn phase_device_usable(doc: &CapabilityDocument, class: &str) -> bool {
+    let lane_ok = doc.devices.iter().any(|d| {
+        d.device_class == class
+            && d.lanes.iter().any(|l| l == "container")
+            && d.unusable_reason.is_none()
+    });
+    let engine_ok = doc
+        .engines
+        .iter()
+        .any(|e| e.supported_device_classes.iter().any(|c| c == class));
+    lane_ok && engine_ok
+}
+
+/// Route one phase, given the model's size in billions of parameters where the
+/// caller knows it (order 793-qc6q).
+///
+/// THE CPU IS THE FLOOR AND EVERY ARM ENDS THERE. 620-ca7g is preserved
+/// literally: there is no input to this function that yields a device the host
+/// cannot run on, and no configuration that makes an accelerator a hard
+/// requirement — the worst case is `cpu` with a reason naming what was missing.
+// @trace order:793-qc6q, spec:accel-capability-probe
+pub fn route_phase(
+    doc: &CapabilityDocument,
+    phase: Phase,
+    model_params_b: Option<f64>,
+) -> Placement {
+    let npu = phase_device_usable(doc, "npu");
+    let gpu = phase_device_usable(doc, "gpu");
+    let cpu = |reason: &str| Placement {
+        device: "cpu",
+        reason: reason.to_string(),
+    };
+
+    match phase {
+        // Compute-bound and batched: every accelerator we have measured wins,
+        // so the order is simply best-available.
+        Phase::Prefill => {
+            if npu {
+                Placement {
+                    device: "npu",
+                    reason: "npu-usable-prefill-is-compute-bound".to_string(),
+                }
+            } else if gpu {
+                Placement {
+                    device: "gpu",
+                    reason: "no-usable-npu-gpu-wins-compute-bound-prefill".to_string(),
+                }
+            } else {
+                cpu("no-usable-accelerator-for-prefill")
+            }
+        }
+        Phase::Decode => {
+            if !gpu {
+                return cpu("no-usable-gpu-for-decode");
+            }
+            match decode_crossover_b(doc) {
+                DecodeCrossover::Unmeasured => cpu("decode-crossover-unmeasured-on-this-host"),
+                DecodeCrossover::CpuWinsThroughout => {
+                    cpu("cpu-wins-decode-at-every-measured-size-on-this-host")
+                }
+                DecodeCrossover::AtOrAbove(t) => match model_params_b {
+                    None => cpu("model-size-unknown-cannot-apply-measured-crossover"),
+                    Some(p) if p >= t => Placement {
+                        device: "gpu",
+                        reason: format!("model-{p}b-at-or-above-measured-crossover-{t}b"),
+                    },
+                    Some(p) => cpu(&format!("model-{p}b-below-measured-crossover-{t}b")),
+                },
+            }
+        }
+        // NEVER THE iGPU, and the guard is unconditional rather than
+        // conditioned on `mem_model` reaching `unified`. Measured: embed is
+        // CPU 8.7ms vs GPU 10.2ms — the GPU LOSES — and `mem_model` answers
+        // `unknown` for every AMD and Intel DRM device in the fleet, so a
+        // guard written as "unless unified" would open on exactly the hosts
+        // the measurement came from.
+        Phase::Embed => {
+            if npu {
+                Placement {
+                    device: "npu",
+                    reason: "npu-embedding-engine-usable".to_string(),
+                }
+            } else {
+                cpu("embed-never-routed-to-gpu-measured-slower-than-cpu")
+            }
+        }
+        // Not measured anywhere in the fleet. The floor is the honest answer
+        // and it says so, rather than borrowing the embed arm's reasoning for
+        // a workload nobody has timed.
+        Phase::Rerank => cpu("rerank-on-npu-unverified-cpu-is-the-measured-floor"),
+    }
+}
+
+/// The three routing keys the envelope renders (order 793-qc6q).
+struct RoutingSummary {
+    prefill: &'static str,
+    decode: &'static str,
+    crossover: String,
+}
+
+/// WHY `accel_decode_dev` IS NOT A PER-MODEL ANSWER: the envelope is rendered
+/// once at forge launch and read by agents choosing models later, so it cannot
+/// know a size. It states the POLICY — is the GPU reachable for decode at all
+/// on this host — and publishes the threshold beside it as
+/// `accel_decode_crossover_b`, so a consumer applies the same comparison
+/// [`route_phase`] would. Folding the threshold into the device value would
+/// force a size the renderer does not have.
+fn routing_summary(doc: &CapabilityDocument) -> RoutingSummary {
+    let prefill = route_phase(doc, Phase::Prefill, None).device;
+    let crossover = decode_crossover_b(doc);
+    let decode = match crossover {
+        DecodeCrossover::AtOrAbove(_) if phase_device_usable(doc, "gpu") => "gpu",
+        _ => "cpu",
+    };
+    let crossover = match crossover {
+        DecodeCrossover::Unmeasured => "unmeasured".to_string(),
+        DecodeCrossover::CpuWinsThroughout => "cpu-wins".to_string(),
+        DecodeCrossover::AtOrAbove(t) => format!("{t}"),
+    };
+    RoutingSummary {
+        prefill,
+        decode,
+        crossover,
+    }
 }
 
 /// Extract the model name from an `nvidia-smi -L` line.
@@ -3501,6 +4080,7 @@ mod tests {
                 host_id: "test-host".to_string(),
                 host_id_source: "input".to_string(),
                 host_kind: "linux".to_string(),
+                side: Some("native-linux".to_string()),
             },
             timestamp: "1970-01-01T00:00:00Z".to_string(),
         }
@@ -4047,6 +4627,20 @@ mod tests {
                 // 793-zumy REMAINING 2, appended last so every offset above it
                 // is the one existing consumers already read.
                 "accel_proof",
+                // Orders 793-qr4t + 793-qc6q, APPENDED. The list is asserted in
+                // ORDER, so this test is also the pin that the additive
+                // extension stayed additive: any key inserted among the eight
+                // above — a rename or a reorder wearing an addition's
+                // clothes — fails here rather than at whichever consumer
+                // splits on position.
+                "accel_side",
+                "accel_gpu_path",
+                "accel_gpu_engine",
+                "accel_mem_model",
+                "accel_mem_budget_gb",
+                "accel_prefill_dev",
+                "accel_decode_dev",
+                "accel_decode_crossover_b",
             ],
             "every field must survive a hostile name: {env}"
         );
@@ -4361,6 +4955,8 @@ mod tests {
             degraded_reason: None,
             workload_suite: Some("802-2536-v1".to_string()),
             locus: Some("in-guest".to_string()),
+            model: None,
+            model_params_b: None,
         };
         let json = serde_json::to_string(&rec).expect("serializes");
         let back: MeasurementRecord = serde_json::from_str(&json).expect("round-trips");
@@ -4396,6 +4992,7 @@ mod tests {
             host_id: "yolanda".to_string(),
             host_id_source: "node-name".to_string(),
             host_kind: "linux".to_string(),
+            side: Some("native-linux".to_string()),
         };
         let b = HostInfo {
             host_id: "esmeraldinha".to_string(),
@@ -4484,6 +5081,7 @@ mod tests {
             host_id: "yolanda".to_string(),
             host_id_source: "node-name".to_string(),
             host_kind: "linux".to_string(),
+            side: Some("native-linux".to_string()),
         };
         assert!(
             guest_row.kernel_release.contains("microsoft-standard-WSL2"),
@@ -4520,6 +5118,8 @@ mod tests {
                 degraded_reason: None,
                 workload_suite: Some("802-2536-v1".to_string()),
                 locus: Some(locus.to_string()),
+                model: None,
+                model_params_b: None,
             }],
             host: HostInfo {
                 is_battery_present: true,
@@ -4527,6 +5127,7 @@ mod tests {
                 host_id: host.to_string(),
                 host_id_source: "node-name".to_string(),
                 host_kind: "linux".to_string(),
+                side: Some("native-linux".to_string()),
             },
             timestamp: "1970-01-01T00:00:00Z".to_string(),
         };
@@ -4790,7 +5391,7 @@ mod tests {
     fn test_cpu_only_probe_yields_a_valid_document_not_silence() {
         let _seam = podman_seam();
         let doc = run_probe("cpu");
-        assert_eq!(doc.schema_version, 2);
+        assert_eq!(doc.schema_version, SCHEMA_VERSION);
         assert!(
             doc.devices.iter().any(|d| d.device_class == "cpu"),
             "even an accelerator-less host records its CPU"
@@ -4800,6 +5401,439 @@ mod tests {
             "a row without a host_id folds to nothing in the matrix"
         );
         let json = serde_json::to_string(&doc).expect("document serializes");
-        assert!(json.contains("\"schema_version\":2"));
+        assert!(json.contains(&format!("\"schema_version\":{SCHEMA_VERSION}")));
+        // Order 793-qr4t: the side is part of what makes the document valid
+        // rather than merely well-formed. A row that cannot say where it was
+        // probed cannot have its `none`s read, which is the whole finding.
+        assert!(
+            doc.host.side.is_some(),
+            "a document must state which side produced it"
+        );
+    }
+
+    // ================================================================
+    // Order 793-qr4t — the envelope is side- and engine-qualified.
+    // ================================================================
+
+    fn field<'a>(env: &'a str, key: &str) -> &'a str {
+        env.split(' ')
+            .find_map(|f| f.strip_prefix(&format!("{key}=")))
+            .unwrap_or_else(|| panic!("envelope has no {key}: {env}"))
+    }
+
+    fn doc_on_side(side: &str, devices: Vec<DeviceRecord>) -> CapabilityDocument {
+        let mut d = doc_with(devices);
+        d.host.side = Some(side.to_string());
+        d
+    }
+
+    #[test]
+    // @trace order:793-qr4t, spec:accel-capability-probe
+    /// EXIT CRITERION 1, both halves in one test because the criterion is the
+    /// DISTINCTION and either half alone is satisfiable by a blanket relabel.
+    ///
+    /// The guest case is measured: an XDNA2 NPU healthy on the Windows side
+    /// (VEN_1022&DEV_17F0, driver 32.0.20102.3930) reported `accel_npu=none`
+    /// in the WSL2 guest, because `enumerate_npus` reads `/sys/class/accel`
+    /// and a WSL2 kernel has no accel class. `none` reads as "this machine
+    /// cannot do NPU work", which is false and mis-plans a whole tier.
+    fn an_accelerator_across_a_boundary_is_unobservable_never_none() {
+        let guest = doc_on_side(
+            "wsl2-guest",
+            vec![device("cpu", "cpu", &["container"], None)],
+        );
+        assert_eq!(
+            field(&accel_envelope(&guest), "accel_npu"),
+            "unobservable-from-this-side",
+            "a guest's enumeration is evidence about the guest, not the machine"
+        );
+
+        let native = doc_on_side(
+            "native-linux",
+            vec![device("cpu", "cpu", &["container"], None)],
+        );
+        assert_eq!(
+            field(&accel_envelope(&native), "accel_npu"),
+            "none",
+            "a native host that looked and found nothing keeps its affirmative denial"
+        );
+    }
+
+    #[test]
+    // @trace order:793-qr4t, spec:accel-capability-probe
+    /// The THIRD absent-state, kept distinct from the other two.
+    ///
+    /// tlatoanis-macbook-air's correction, and it is the reason this is not a
+    /// two-value field: the Apple Neural Engine is present, CoreML-drivable and
+    /// on the SAME side as the probe. `unobservable-from-this-side` would be as
+    /// false there as `none` is. It is `unknown` — recorded as an enumeration
+    /// gap — because the probe has no arm for that platform.
+    fn a_same_side_device_the_probe_cannot_look_for_is_unknown_not_unobservable() {
+        let mut mac = doc_on_side(
+            "macos-host",
+            vec![device("cpu", "cpu", &["container"], None)],
+        );
+        mac.enumeration_gaps.push("npu".to_string());
+        let env = accel_envelope(&mac);
+        assert_eq!(field(&env, "accel_npu"), "unknown", "{env}");
+        assert_eq!(
+            field(&env, "accel_reason"),
+            "npu-not-enumerable-on-this-platform",
+            "cpu-only is never a bare verdict: {env}"
+        );
+    }
+
+    #[test]
+    // @trace order:793-qr4t, spec:accel-capability-probe
+    /// EXIT CRITERION 2. "No GPU here", "a GPU with no driver stack", and "a
+    /// GPU that belongs to the other side" are three different engineering
+    /// problems — buy hardware, ship a lane, cross a boundary — and the
+    /// envelope collapsed all three into one token.
+    fn no_gpu_a_driverless_gpu_and_a_far_side_gpu_are_three_answers() {
+        let none = doc_on_side(
+            "native-linux",
+            vec![device("cpu", "cpu", &["container"], None)],
+        );
+        let env = accel_envelope(&none);
+        assert_eq!(field(&env, "accel_gpu"), "none");
+        assert_eq!(field(&env, "accel_gpu_engine"), "none", "{env}");
+
+        // A real, container-deliverable GPU that nothing can drive. This is
+        // macuahuitl's row: a usable RTX A5000 with `engines: []`, which the
+        // matrix rendered as `schedulable: none` while ollama was serving
+        // models on that very machine.
+        let driverless = doc_on_side(
+            "native-linux",
+            vec![
+                device("cpu", "cpu", &["container"], None),
+                device("gpu", "NVIDIA RTX A5000", &["container"], None),
+            ],
+        );
+        let env = accel_envelope(&driverless);
+        assert_eq!(field(&env, "accel_gpu"), "usable");
+        assert_eq!(
+            field(&env, "accel_gpu_engine"),
+            "engine-missing",
+            "a present device nothing can drive must say so: {env}"
+        );
+
+        let far = doc_on_side(
+            "container",
+            vec![device("cpu", "cpu", &["container"], None)],
+        );
+        assert_eq!(
+            field(&accel_envelope(&far), "accel_gpu"),
+            "unobservable-from-this-side"
+        );
+    }
+
+    #[test]
+    // @trace order:793-qr4t, spec:accel-capability-probe
+    /// The engine is named when we recognise it and slugged when we do not.
+    ///
+    /// An unrecognised engine forced into the nearest known bucket would be
+    /// the confident half-answer this packet exists to remove — and `ollama`,
+    /// the engine on the host that implemented this, is exactly such a case.
+    fn a_recognised_engine_is_named_and_an_unrecognised_one_keeps_its_own_slug() {
+        let mut d = doc_on_side(
+            "native-linux",
+            vec![
+                device("cpu", "cpu", &["container"], None),
+                device("gpu", "Radeon", &["container"], None),
+            ],
+        );
+        d.engines.push(EngineRecord {
+            name: "llama.cpp".to_string(),
+            backend: "rocm".to_string(),
+            supported_device_classes: vec!["gpu".to_string()],
+            lanes: None,
+        });
+        assert_eq!(field(&accel_envelope(&d), "accel_gpu_engine"), "rocm");
+
+        d.engines[0] = EngineRecord {
+            name: "ollama".to_string(),
+            backend: "container".to_string(),
+            supported_device_classes: vec!["gpu".to_string()],
+            lanes: Some(vec!["container".to_string()]),
+        };
+        assert_eq!(field(&accel_envelope(&d), "accel_gpu_engine"), "ollama");
+    }
+
+    #[test]
+    // @trace order:793-qr4t, spec:accel-capability-probe
+    /// EXIT CRITERION 3. The envelope emits exactly ONE memory number, so a
+    /// 522 sizing consumer has nothing to add to it.
+    ///
+    /// Measured on windows/Yolanda: `accel_ram_gb=7` (the guest's slice) beside
+    /// a dzn-advertised 7.58 GiB DEVICE_LOCAL heap — the same physical DRAM
+    /// counted twice, and neither of them the machine's installed 15.2 GB.
+    fn a_unified_node_publishes_one_budget_and_declares_itself_unified() {
+        let mac = doc_on_side(
+            "macos-host",
+            vec![device("cpu", "cpu", &["container"], None)],
+        );
+        let env = accel_envelope(&mac);
+        assert_eq!(field(&env, "accel_mem_model"), "unified", "{env}");
+        assert_eq!(
+            env.split(' ')
+                .filter(|f| f.starts_with("accel_mem_budget_gb=") || f.starts_with("accel_ram_gb="))
+                .count(),
+            2,
+            "exactly one budget, rendered under both the old and the new key: {env}"
+        );
+
+        let mut nv = doc_on_side(
+            "native-linux",
+            vec![
+                device("cpu", "cpu", &["container"], None),
+                device("gpu", "RTX 3070", &["container"], None),
+            ],
+        );
+        nv.devices[1].vendor = "nvidia".to_string();
+        assert_eq!(field(&accel_envelope(&nv), "accel_mem_model"), "discrete");
+
+        // An AMD/Intel DRM device is genuinely undecidable from what
+        // DeviceRecord records — no VRAM size, no integrated flag — and
+        // `unknown` is the answer that keeps a consumer from summing.
+        let mut amd = nv.clone();
+        amd.devices[1].vendor = "amd".to_string();
+        assert_eq!(field(&accel_envelope(&amd), "accel_mem_model"), "unknown");
+    }
+
+    #[test]
+    // @trace order:793-qr4t, spec:accel-capability-probe
+    /// The side is read from the DOCUMENT, so a transported row keeps its own
+    /// facts — the same property `enumeration_gaps` already has, and the
+    /// reason the fleet matrix can fold rows probed elsewhere at all.
+    fn a_pre_schema3_document_reads_unknown_side_never_a_default() {
+        let mut old = doc_with(vec![device("cpu", "cpu", &["container"], None)]);
+        old.host.side = None;
+        assert_eq!(accel_side(&old), "unknown-side");
+        // And it must NOT thereby become a boundary side: a document that does
+        // not say where it stood cannot have its absences upgraded.
+        assert_eq!(field(&accel_envelope(&old), "accel_npu"), "none");
+    }
+
+    #[test]
+    // @trace order:793-qr4t, spec:accel-capability-probe
+    /// The WSL2 test wants BOTH signals. `/dev/dxg` alone is the node the GPU
+    /// arm reads, so reusing it would make the SIDE depend on whether a GPU
+    /// happened to be paravirtualised; a `microsoft` kernel release alone is
+    /// the string two WSL2 guests already share verbatim and survives into any
+    /// image built from that kernel.
+    fn side_evidence_needs_both_signals_and_container_wins_the_innermost() {
+        assert_eq!(
+            side_from_evidence(false, true, "6.18.33.2-microsoft-standard-WSL2"),
+            "wsl2-guest"
+        );
+        assert_eq!(
+            side_from_evidence(false, true, "6.16.4-200.fc44.x86_64"),
+            "native-linux"
+        );
+        assert_eq!(
+            side_from_evidence(false, false, "6.18.33.2-microsoft-standard-WSL2"),
+            "native-linux"
+        );
+        // A forge inside a container on a WSL2 guest is both, and the answer a
+        // consumer needs is the INNERMOST boundary — that is the one whose far
+        // side holds the devices it cannot reach.
+        assert_eq!(
+            side_from_evidence(true, true, "6.18.33.2-microsoft-standard-WSL2"),
+            "container"
+        );
+    }
+
+    // ================================================================
+    // Order 793-qc6q — per-phase routing from measured crossovers.
+    // ================================================================
+
+    fn decode_row(device: &str, params_b: f64, tps: f64) -> MeasurementRecord {
+        MeasurementRecord {
+            device: device.to_string(),
+            engine: "ollama".to_string(),
+            prefill_tps: None,
+            decode_tps: Some(tps),
+            joules_per_token: None,
+            degraded: false,
+            degraded_reason: None,
+            workload_suite: Some("802-2536-v1".to_string()),
+            locus: Some("in-guest".to_string()),
+            model: Some(format!("qwen2.5:{params_b}b")),
+            model_params_b: Some(params_b),
+        }
+    }
+
+    /// A host whose GPU is both container-deliverable and driveable.
+    fn schedulable_gpu_doc() -> CapabilityDocument {
+        let mut d = doc_on_side(
+            "wsl2-guest",
+            vec![
+                device("cpu", "cpu", &["container"], None),
+                device("gpu", "Radeon 860M", &["container"], None),
+            ],
+        );
+        d.engines.push(EngineRecord {
+            name: "ollama".to_string(),
+            backend: "vulkan-dozen".to_string(),
+            supported_device_classes: vec!["gpu".to_string()],
+            lanes: Some(vec!["container".to_string()]),
+        });
+        d
+    }
+
+    #[test]
+    // @trace order:793-qc6q, spec:accel-capability-probe
+    /// EXIT CRITERION 1. The measured numbers are windows/Yolanda's, medians
+    /// of 3 unique-prompt reps on ollama 0.32.9: decode 0.5B is CPU 78.68 vs
+    /// GPU 63.75 t/s (the CPU wins by 1.23x) and decode 3B is CPU 19.64 vs GPU
+    /// 26.96 (the GPU wins by 1.37x). Routing 0.5B decode to the iGPU is a
+    /// silent 1.23x REGRESSION on exactly the model class the semantic-layer
+    /// floor work depends on.
+    fn a_small_models_decode_is_not_sent_to_the_igpu() {
+        let mut d = schedulable_gpu_doc();
+        d.measurements = vec![
+            decode_row("cpu", 0.5, 78.68),
+            decode_row("gpu", 0.5, 63.75),
+            decode_row("cpu", 3.0, 19.64),
+            decode_row("gpu", 3.0, 26.96),
+        ];
+        assert_eq!(decode_crossover_b(&d), DecodeCrossover::AtOrAbove(3.0));
+
+        let small = route_phase(&d, Phase::Decode, Some(0.5));
+        assert_eq!(small.device, "cpu", "{}", small.reason);
+        let large = route_phase(&d, Phase::Decode, Some(3.0));
+        assert_eq!(large.device, "gpu", "{}", large.reason);
+
+        // Prefill is compute-bound and goes to the accelerator at BOTH sizes —
+        // which is the point of routing per phase rather than per host: the
+        // same host and the same 0.5B model want different devices for the two
+        // phases.
+        assert_eq!(route_phase(&d, Phase::Prefill, Some(0.5)).device, "gpu");
+    }
+
+    #[test]
+    // @trace order:793-qc6q, spec:accel-capability-probe
+    /// EXIT CRITERION 4: the threshold is DERIVED, so it moves when the
+    /// measurements move. A hard-coded 1.5 would pass the test above and fail
+    /// this one — that is the whole reason this test exists beside it.
+    fn the_crossover_follows_the_measurements_and_is_never_a_constant() {
+        let mut d = schedulable_gpu_doc();
+        // A machine whose GPU wins decode from 1B upward.
+        d.measurements = vec![
+            decode_row("cpu", 0.5, 80.0),
+            decode_row("gpu", 0.5, 60.0),
+            decode_row("cpu", 1.0, 40.0),
+            decode_row("gpu", 1.0, 55.0),
+        ];
+        assert_eq!(decode_crossover_b(&d), DecodeCrossover::AtOrAbove(1.0));
+        assert_eq!(route_phase(&d, Phase::Decode, Some(1.0)).device, "gpu");
+
+        // A machine where the CPU wins at every size measured. Distinct from
+        // never having looked, and it must not become a licence to guess.
+        d.measurements = vec![
+            decode_row("cpu", 0.5, 80.0),
+            decode_row("gpu", 0.5, 60.0),
+            decode_row("cpu", 3.0, 20.0),
+            decode_row("gpu", 3.0, 15.0),
+        ];
+        assert_eq!(decode_crossover_b(&d), DecodeCrossover::CpuWinsThroughout);
+        assert_eq!(route_phase(&d, Phase::Decode, Some(70.0)).device, "cpu");
+
+        // An unmeasured host: the GPU is usable and decode still goes to the
+        // CPU, because the only threshold available would be a constant.
+        let unmeasured = schedulable_gpu_doc();
+        assert_eq!(decode_crossover_b(&unmeasured), DecodeCrossover::Unmeasured);
+        let p = route_phase(&unmeasured, Phase::Decode, Some(3.0));
+        assert_eq!(p.device, "cpu");
+        assert_eq!(p.reason, "decode-crossover-unmeasured-on-this-host");
+
+        // A degraded run is evidence the run went wrong, not evidence about
+        // the device; folding it in would move a threshold on a failure.
+        let mut degraded = schedulable_gpu_doc();
+        degraded.measurements = vec![decode_row("cpu", 3.0, 19.64), {
+            let mut m = decode_row("gpu", 3.0, 26.96);
+            m.degraded = true;
+            m.degraded_reason = Some("cold-load-stall".to_string());
+            m
+        }];
+        assert_eq!(decode_crossover_b(&degraded), DecodeCrossover::Unmeasured);
+    }
+
+    #[test]
+    // @trace order:793-qc6q, spec:accel-capability-probe
+    /// EXIT CRITERION 2 (620-ca7g preserved). There is no input that yields a
+    /// device this host cannot run on. The doc below has no accelerator, no
+    /// engine and no measurement — the worst case — and every phase still
+    /// lands somewhere runnable.
+    fn the_cpu_is_the_floor_for_every_phase_and_no_accelerator_is_ever_required() {
+        let bare = doc_on_side(
+            "native-linux",
+            vec![device("cpu", "cpu", &["container"], None)],
+        );
+        for phase in [Phase::Prefill, Phase::Decode, Phase::Embed, Phase::Rerank] {
+            let p = route_phase(&bare, phase, Some(70.0));
+            assert_eq!(p.device, "cpu", "{phase:?} must fall to the floor");
+            assert!(
+                !p.reason.is_empty() && p.reason != "-",
+                "EXIT CRITERION 3: a fallback is never silent, {phase:?} said {:?}",
+                p.reason
+            );
+        }
+    }
+
+    #[test]
+    // @trace order:793-qc6q, spec:accel-capability-probe
+    /// A device with a container lane and NO engine is not a routing target.
+    ///
+    /// This is 793-qr4t's engine-qualification being consumed rather than
+    /// merely published. Routing that read only the lane would send work to
+    /// macuahuitl's RTX A5000 and land on the same `library=cpu` silence that
+    /// cost windows/Yolanda a day.
+    fn a_lane_without_an_engine_is_not_a_routing_target() {
+        let mut d = schedulable_gpu_doc();
+        d.engines.clear();
+        d.measurements = vec![decode_row("cpu", 3.0, 19.64), decode_row("gpu", 3.0, 26.96)];
+        let p = route_phase(&d, Phase::Decode, Some(3.0));
+        assert_eq!(p.device, "cpu", "{}", p.reason);
+        assert_eq!(p.reason, "no-usable-gpu-for-decode");
+        assert_eq!(route_phase(&d, Phase::Prefill, None).device, "cpu");
+    }
+
+    #[test]
+    // @trace order:793-qc6q, spec:accel-capability-probe
+    /// Embed NEVER goes to the GPU, and the guard is unconditional rather than
+    /// conditioned on `accel_mem_model` reaching `unified` — which it does not
+    /// on any AMD or Intel DRM host, i.e. on exactly the host the measurement
+    /// (CPU 8.7ms vs GPU 10.2ms) came from.
+    fn embed_never_reaches_the_gpu_even_on_a_host_whose_memory_model_is_unknown() {
+        let mut d = schedulable_gpu_doc();
+        d.measurements = vec![decode_row("cpu", 0.5, 60.0), decode_row("gpu", 0.5, 90.0)];
+        assert_eq!(field(&accel_envelope(&d), "accel_mem_model"), "unknown");
+        let p = route_phase(&d, Phase::Embed, Some(0.5));
+        assert_eq!(p.device, "cpu", "{}", p.reason);
+    }
+
+    #[test]
+    // @trace order:793-qc6q, spec:accel-capability-probe
+    /// The envelope's routing keys state the POLICY and publish the threshold
+    /// beside it, because the renderer does not know a model size.
+    fn the_envelope_states_the_policy_and_publishes_the_threshold() {
+        let unmeasured = schedulable_gpu_doc();
+        let env = accel_envelope(&unmeasured);
+        assert_eq!(field(&env, "accel_prefill_dev"), "gpu", "{env}");
+        assert_eq!(field(&env, "accel_decode_dev"), "cpu", "{env}");
+        assert_eq!(
+            field(&env, "accel_decode_crossover_b"),
+            "unmeasured",
+            "{env}"
+        );
+
+        let mut measured = schedulable_gpu_doc();
+        measured.measurements = vec![decode_row("cpu", 3.0, 19.64), decode_row("gpu", 3.0, 26.96)];
+        let env = accel_envelope(&measured);
+        assert_eq!(field(&env, "accel_decode_dev"), "gpu", "{env}");
+        assert_eq!(field(&env, "accel_decode_crossover_b"), "3", "{env}");
+        assert_eq!(field(&env, "accel_gpu_path"), "dxg-d3d12", "{env}");
+        assert_eq!(field(&env, "accel_side"), "wsl2-guest", "{env}");
     }
 }

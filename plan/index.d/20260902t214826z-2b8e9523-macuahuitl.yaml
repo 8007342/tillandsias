@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: host-lane-spec-index-never-refreshes
+    event:
+      type: verification
+      ts: "2026-09-02T21:48:26Z"
+      agent_id: linux-macuahuitl-claude-20260902t214826z
+      host: macuahuitl
+      summary: >
+        CAUSE VERIFIED AND QUANTIFIED, not inferred. The index the expert answered from carries .commit = b300d6b92418501f6fcc362eeb0b097332230aa2, built 2026-09-02T11:43 local, in the podman volume tillandsias-spec-index-tillandsias (its 'current' pointer names that build). HEAD at grading time was cd0174bc9: SEVENTY-NINE commits later, with crates/tillandsias-headless/src/main.rs gaining 201 insertions and 6 deletions over that span. That is the ~55-line offset the two FABRICATED citations show, arithmetic included. The post-commit hook ran on all 79 of those commits and refreshed nothing, because spec-index-ensure.sh:296 exits 0 on skip:spec-index:no-embed-endpoint. So the index is three hours and 79 commits stale on the coordinator, the expert answered from it with confidence=retrieved throughout, and the only signal anywhere was a two-point drop in an advisory metric line. NOTE FOR WHOEVER TAKES THIS: the endpoint IS present and healthy at localhost:11434 serving qwen2.5:14b, so the fix is a derivation, not provisioning. Do not 'fix' it by hand-exporting the variable on one host — that is the sixth copy.
