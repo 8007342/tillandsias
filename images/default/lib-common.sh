@@ -1355,9 +1355,17 @@ start_forge_experts_async() {
     (
         discover_generic_project >>/tmp/forge-lifecycle.log 2>&1 || true
         ensure_forge_experts >>/tmp/forge-lifecycle.log 2>&1 || true
+        # ORDER 965-hz3f: warm the tier's selected model BEFORE expert-serve
+        # is reachable, so the first real question does not pay the VRAM load
+        # inside a tier budget that was only ever a promise about inference
+        # latency. Measured cold-vs-warm on an RTX A5000: 7b 23353ms -> 938ms,
+        # 14b 9996ms -> 1474ms; both warm figures fit Quick's 3000ms, both
+        # cold ones do not. Fail-soft — a cold model is slow, not broken.
+        warm_tier_model_fail_soft >>/tmp/forge-lifecycle.log 2>&1 || true
         # ORDER 920-pxg6: the grounded OpenAI-compatible endpoint the
         # local-experts OpenCode agent talks to. AFTER ensure_forge_experts,
-        # so the capabilities probe sees the freshly installed binary.
+        # so the capabilities probe sees the freshly installed binary, and
+        # after the warm above so "ready" means ready to answer in-budget.
         start_expert_serve_fail_soft >>/tmp/forge-lifecycle.log 2>&1 || true
         # ORDER 919-vvyv (D2): LAST, because it can churn for a long time on
         # CPU (measured: ~2min GPU, ~60min CPU cold; 0.05s warm) and nothing
@@ -1479,6 +1487,123 @@ ensure_forge_spec_index() {
     rc=0
     verdict="$(bash "$ensure" 2>>/tmp/forge-lifecycle.log)" || rc=$?
     echo "[spec-index] ${verdict:-no-verdict} (rc=${rc}, root=${FORGE_SPEC_INDEX_ROOT:-unset})"
+    return 0
+}
+
+# _tillandsias_select_warm_model — ORDER 965-hz3f. Pure selection: given the
+# host's accel class and the models the endpoint actually reports, name the ONE
+# model to warm. Echoes the model, or nothing when no candidate is present.
+#
+# Pure and argument-fed so the policy is testable without an endpoint, an
+# accelerator, or a forge — the same reason format_seed_staleness exists on the
+# Rust side. scripts/test-warm-tier-model.sh exercises every branch.
+#
+# THE LADDER IS THE INFERENCE CONTAINER'S, NOT A SECOND ONE. images/inference/
+# entrypoint.sh classifies by VRAM/RAM and pulls T2 (qwen2.5:7b) .. T5; this
+# picks which of the ALREADY-PRESENT models the expert lane will actually use,
+# so it can only ever narrow that set. Re-deriving a tier here would be the
+# 704-zcgi shape — two probes for one fact, drifting apart.
+_tillandsias_select_warm_model() {
+    _wm_class="${1:-cpu-only}"
+    _wm_available="${2:-}"
+    # GPU lanes get the model that satisfies the citation contract; the CPU
+    # floor gets the small default it can actually serve inside a tier budget.
+    # 14b-over-7b is the measured floor on ONE regime (macuahuitl RTX A5000,
+    # 2026-09-02: through the full pipeline 7b echoed 0 retrieved keys and 14b
+    # echoed 3 with a correct Sources line) and is deliberately NOT written as
+    # a fleet rule here — it is a preference order over what is present, so a
+    # host with only 7b still warms 7b. yoga's ROCm replication (824-6qxh) is
+    # what would make it a rule.
+    case "$_wm_class" in
+        workstation-gpu|hybrid-gpu-npu) _wm_order="qwen2.5:14b qwen2.5:7b qwen2.5:3b" ;;
+        *)                              _wm_order="qwen2.5:3b qwen2.5:7b qwen2.5:0.5b" ;;
+    esac
+    for _wm_cand in $_wm_order; do
+        case ",${_wm_available}," in
+            *",${_wm_cand},"*) printf '%s\n' "$_wm_cand"; return 0 ;;
+        esac
+    done
+    return 1
+}
+
+# warm_tier_model_fail_soft — ORDER 965-hz3f (coordinator decision, from the
+# 2026-09-02 forge measurement on 927-2q4w).
+#
+# WHY THIS EXISTS. A tier budget is a promise about INFERENCE latency, and it
+# was being charged for a VRAM MODEL LOAD as well. Measured on macuahuitl's
+# RTX A5000: the same model, same prompt, cold vs warm — qwen2.5:7b 23353ms
+# then 938ms; qwen2.5:14b 9996ms then 1474ms. Both WARM figures sit inside the
+# Quick tier's 3000ms; both COLD figures blow through it. So the first query
+# against any fresh endpoint times out and every later one fits, which
+# presents as "this model is too slow for the budget" and is really "nobody
+# warmed the model".
+#
+# That misreading had already been drawn once: darwin's 10-24s measurements
+# (2026-08-29) were read as a model-size floor conflicting with the tier
+# budget, and the remedy proposed was to raise the budget. The budget is NOT
+# raised here, deliberately — raising it would hide the load behind a longer
+# promise instead of removing it from the promise, and a budget the user waits
+# out is not a budget. TILLANDSIAS_SYNTH_BUDGET_MS stays as the operator
+# escape hatch for genuinely slow lanes.
+#
+# LOAD IS REPORTED ON ITS OWN LINE, never folded into a tier verdict, so
+# "loading" and "slow" stay distinguishable in the startup context.
+#
+# FAIL-SOFT on every rung, like every other lifecycle step here: no endpoint,
+# no candidate model, a failed request, or a missing curl each write a state
+# and return 0. A cold model is slow, not broken.
+warm_tier_model_fail_soft() {
+    local ep model accel_class available started elapsed state_dir
+    state_dir="${FORGE_EXPERTS_STATE_DIR:-/dev/shm/tillandsias-experts}"
+    mkdir -p "$state_dir" 2>/dev/null || true
+    _warm_state() { printf '%s\n' "$1" >"$state_dir/model-warm" 2>/dev/null || true; }
+
+    ep="${TILLANDSIAS_INFERENCE_ENDPOINT:-http://inference:11434}"
+    ep="${ep%/}"
+    case "$ep" in */v1) ep="${ep%/v1}" ;; esac
+    if ! command -v curl >/dev/null 2>&1; then
+        _warm_state "model_warm=- warm_state=skipped warm_reason=no-curl load_ms=-"
+        return 0
+    fi
+
+    available="$(curl -fsS -m 5 "$ep/api/tags" 2>/dev/null \
+        | tr ',' '\n' | sed -n 's/.*"name":"\([^"]*\)".*/\1/p' | paste -sd, - 2>/dev/null)"
+    if [ -z "$available" ]; then
+        _warm_state "model_warm=- warm_state=skipped warm_reason=endpoint-unreachable load_ms=-"
+        echo "[warm] inference endpoint $ep did not list models — nothing to warm (non-fatal)"
+        return 0
+    fi
+
+    # An explicit operator model always wins, and is warmed even if the
+    # preference order would not have picked it.
+    if [ -n "${TILLANDSIAS_INFERENCE_MODEL:-}" ]; then
+        model="$TILLANDSIAS_INFERENCE_MODEL"
+    else
+        accel_class="$(printf '%s\n' "${TILLANDSIAS_ACCEL_ENVELOPE:-}" \
+            | sed -n 's/.*accel_class=\([a-z-]*\).*/\1/p')"
+        model="$(_tillandsias_select_warm_model "${accel_class:-cpu-only}" "$available")" || model=""
+    fi
+    if [ -z "$model" ]; then
+        _warm_state "model_warm=- warm_state=skipped warm_reason=no-candidate-present load_ms=-"
+        echo "[warm] no tier-model candidate among: $available (non-fatal)"
+        return 0
+    fi
+
+    # ONE minimal completion. The point is the VRAM load, not the answer, so
+    # ask for as few tokens as the server will emit.
+    started="$(date +%s%3N 2>/dev/null || echo 0)"
+    if curl -fsS -m 300 -o /dev/null \
+        -H 'Content-Type: application/json' \
+        -d "{\"model\":\"$model\",\"max_tokens\":1,\"messages\":[{\"role\":\"user\",\"content\":\"warm\"}]}" \
+        "$ep/v1/chat/completions" 2>/dev/null; then
+        elapsed="$(( $(date +%s%3N 2>/dev/null || echo 0) - started ))"
+        _warm_state "model_warm=$model warm_state=warm warm_reason=- load_ms=$elapsed"
+        echo "[warm] $model loaded in ${elapsed}ms — tier budgets now measure inference, not model load (965-hz3f)"
+    else
+        elapsed="$(( $(date +%s%3N 2>/dev/null || echo 0) - started ))"
+        _warm_state "model_warm=$model warm_state=failed warm_reason=request-failed load_ms=$elapsed"
+        echo "[warm] warming $model failed after ${elapsed}ms (non-fatal; first real query pays the load)" >&2
+    fi
     return 0
 }
 
@@ -3933,6 +4058,18 @@ inject_startup_context() {
         _inference_count=0
         _inference_status="NOT-READY (probe-helper-missing: ${_inference_state_lib} not present in this image)"
     fi
+    # Order 965-hz3f: the model warm-up verdict, written to tmpfs by
+    # warm_tier_model_fail_soft during the lifecycle lane. Absent means the
+    # lane has not reached the warm step yet — reported as `pending` rather
+    # than as a skip, because "not yet" and "decided not to" are different
+    # facts and only one of them is worth acting on.
+    local _model_warm_line _model_warm_file
+    _model_warm_file="${FORGE_EXPERTS_STATE_DIR:-/dev/shm/tillandsias-experts}/model-warm"
+    if [[ -r "$_model_warm_file" ]]; then
+        _model_warm_line="$(head -1 "$_model_warm_file" 2>/dev/null)"
+    fi
+    [[ -n "${_model_warm_line:-}" ]] \
+        || _model_warm_line="model_warm=- warm_state=pending warm_reason=lifecycle-not-reached load_ms=-"
     # Order 456 / 394 rung 1 EXTENSION (experts launch state): a PEER line to
     # the inference state above, under the same discipline — a closed token
     # vocabulary and never an ambiguous "may still be building". The experts
@@ -4184,6 +4321,8 @@ inject_startup_context() {
   - Machine-readable (branch on this, do not parse the prose): \`inference_state=${_inference_state} inference_models=${_inference_count} inference_warm=${_inference_warm} inference_reason=${_inference_reason}\`
   - \`inference_state\` is \`ready\` only when the endpoint answers AND at least one model is cached. Otherwise \`not-ready\` with a named \`inference_reason\`: \`no-models\` (endpoint up, nothing cached), \`endpoint-unreachable\`, \`endpoint-timeout\`, \`endpoint-http-error\`, \`probe-tool-missing\`, \`probe-helper-missing\`, or \`probe-error-<n>\`. There is no indeterminate "starting up" state.
   - Local inference is OPTIONAL: a \`not-ready\` endpoint never blocks this session. Use cloud models, or pull one yourself (\`curl http://inference:11434/api/pull -d '{"name":"qwen2.5:0.5b"}'\`).
+  - Machine-readable MODEL WARM-UP (order 965-hz3f — branch on this, do not parse the prose): \`${_model_warm_line}\`
+  - This is a SEPARATE line from the tier verdicts on purpose. A tier budget is a promise about INFERENCE latency, and a cold model charges a VRAM load against it: measured on an RTX A5000, qwen2.5:7b took 23353ms cold and 938ms warm, 14b 9996ms then 1474ms — both warm figures inside the Quick tier's 3000ms, both cold ones far outside. Folding the load into a tier verdict makes "loading" and "slow" indistinguishable, which is exactly how a cold-start was once read as a model-size floor and nearly answered by raising the budget. \`warm_state\` is \`warm\` (loaded, and \`load_ms\` is what the load cost), \`failed\` (the request errored — the first real query pays the load), or \`skipped\` with a named \`warm_reason\`: \`no-curl\`, \`endpoint-unreachable\`, \`no-candidate-present\`. The budget is NOT raised to accommodate a cold model; \`TILLANDSIAS_SYNTH_BUDGET_MS\` remains the operator escape hatch for a genuinely slow lane.
 - **Experts** — \`experts: ${_experts_status}\`. An expert is a CITED RETRIEVAL SURFACE behind an MCP tool, not a model; the plan expert runs NO inference. Query it through the \`forge-plan\` MCP server (\`plan_answer\`, \`plan_next\`, \`methodology_ask\`, \`spec_answer\`, \`plan_check\`, \`plan_status\`, \`plan_ready\`, \`plan_blocked_by\`, \`plan_closure\`, \`plan_burndown\`; \`expert_capability\` when any answer is \`unsupported\`) instead of grepping \`plan/index.yaml\`.
   - Machine-readable (branch on this, do not parse the prose): \`experts_state=${_experts_state} experts_reason=${_experts_reason} experts_elapsed=${_experts_elapsed}\`
   - Machine-readable CAPABILITY SKEW (order 569 — branch on this, do not parse the prose): \`${_cap_line}\`
