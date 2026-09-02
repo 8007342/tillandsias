@@ -3793,6 +3793,61 @@ fn format_seed_staleness(
 /// launch (exit 1, loud remediation) when `behind` exceeds it. No auto-ff:
 /// mutating an operator-owned checkout is the 763-munc ruling still held
 /// open.
+/// Order 965-rb3v: the line printed when the host checkout's HEAD could NOT be
+/// resolved, so no `TILLANDSIAS_FORGE_SEED_BRANCH` is injected.
+///
+/// WHY THIS IS LOUD AND UNCONDITIONAL. The unresolved case is currently
+/// SILENT — `if let Some(seed) = read_host_project_current_branch(..)` simply
+/// injects nothing — and silence here is indistinguishable from success while
+/// producing a specific, wrong outcome: with no seed the mirror's HEAD falls
+/// back to UPSTREAM'S DEFAULT BRANCH inside ensure-mirror-head, which on this
+/// project is `main`. So "could not read the branch" and "deliberately seed
+/// from main" render identically in every log, and the forge lands on `main`
+/// with nothing having reported a problem.
+///
+/// AND THE GUEST CANNOT CATCH IT, which is the part worth stating in code.
+/// The startup context's honesty guard reports
+/// `base_state=ok base_actual=<x> base_expected=<x>`, where `base_expected` IS
+/// the seed. A wrong seed therefore agrees with itself and reads `ok` — the
+/// context file says as much ("a seed that matches an old branch agrees with
+/// itself"). Nothing on the guest side ever learns the host checkout's HEAD,
+/// so the host is the ONLY place this can be observed, and it was the one
+/// place staying quiet.
+///
+/// NOT a hard refusal, deliberately, and this is a decision worth naming
+/// rather than burying. Order 501's contract is that a project with no
+/// readable branch injects NO seed env and the guest behaves byte-identically
+/// to pre-501 — end-user transparency for the ordinary non-Tillandsias project
+/// that is not a git checkout at all. A hard failure here would turn every
+/// such launch into an error. The failure is made LOUD and NAMED instead; the
+/// refuse-vs-warn default is the operator's call, as it already is for
+/// `TILLANDSIAS_SEED_STALENESS_MAX_BEHIND`.
+///
+/// Formatted from plain values so the shape is unit-testable without a repo,
+/// same as [`format_seed_staleness`].
+fn format_seed_unresolved(project_display: &str) -> String {
+    format!(
+        "[tillandsias] [forge-launch] SEED UNRESOLVED: could not read a branch \
+         from the host checkout at {project_display} — injecting no \
+         TILLANDSIAS_FORGE_SEED_BRANCH. The mirror's HEAD will fall back to \
+         UPSTREAM'S DEFAULT BRANCH (typically `main`), so this forge may land \
+         somewhere other than the branch you are working on, and the guest's \
+         base_state will still read `ok` because it compares the clone against \
+         the seed rather than against your checkout. Causes: detached HEAD, a \
+         path that is not a git checkout, or an unreadable .git."
+    )
+}
+
+/// Emit [`format_seed_unresolved`] for a project path whose HEAD did not
+/// resolve. Separated from the formatter so the wording is testable and the
+/// call sites stay one line.
+fn report_seed_unresolved(project_path: &Path) {
+    eprintln!(
+        "{}",
+        format_seed_unresolved(&project_path.display().to_string())
+    );
+}
+
 fn report_seed_staleness(project_path: &Path, seed: &str) {
     let git = |git_args: &[&str]| -> Option<String> {
         let out = std::process::Command::new("git")
@@ -6739,6 +6794,10 @@ fn build_opencode_forge_args(
         report_seed_staleness(project_path, &seed);
         args.push("--env".into());
         args.push(format!("TILLANDSIAS_FORGE_SEED_BRANCH={seed}"));
+    } else {
+        // 965-rb3v: the unresolved case was silent, and silence renders
+        // identically to a deliberate `main` seed. Still injects nothing.
+        report_seed_unresolved(project_path);
     }
     // Forge gitconfig injection (order 224): pre-populate global git config
     // with mirror redirect and safe.directory, bind-mounted
@@ -13130,13 +13189,22 @@ pub(crate) fn ensure_enclave_for_project(
     // detached HEAD, git-less host) falls back to upstream's default inside
     // ensure-mirror-head.
     let project_default_branch = project_path.and_then(read_host_project_current_branch);
-    if debug {
-        match &project_default_branch {
-            Some(b) => eprintln!("[tillandsias] [forge-launch] Host checkout branch: {b}"),
-            None => eprintln!(
-                "[tillandsias] [forge-launch] No host checkout branch (mirror falls back to upstream default)"
-            ),
+    match (&project_default_branch, project_path) {
+        (Some(b), _) => {
+            if debug {
+                eprintln!("[tillandsias] [forge-launch] Host checkout branch: {b}");
+            }
         }
+        // 965-rb3v: this arm used to be gated on `debug`, so the ordinary
+        // launch said nothing at all while the mirror silently took upstream's
+        // default (`main`). The consequence is the same whether or not anyone
+        // passed --debug, so the report must be too.
+        (None, Some(p)) => report_seed_unresolved(p),
+        (None, None) => eprintln!(
+            "[tillandsias] [forge-launch] SEED UNRESOLVED: no project path was given, so no \
+             branch could be read — the mirror's HEAD will fall back to UPSTREAM'S DEFAULT \
+             BRANCH (typically `main`)."
+        ),
     }
 
     let rt = podman_runtime()?;
@@ -13750,6 +13818,10 @@ fn build_forge_agent_run_args_with_vault(
     // no env → guest behavior unchanged.
     if let Some(seed) = read_host_project_current_branch(project_path) {
         spec = spec.env("TILLANDSIAS_FORGE_SEED_BRANCH", seed);
+    } else {
+        // 965-rb3v: see build_opencode_forge_args — same silent-unresolved
+        // hazard on this lane, same loud notice, same no-env behaviour.
+        report_seed_unresolved(project_path);
     }
     // Every OAuth-credentialed agent lane mounts a scoped Vault token so its
     // entrypoint can restore the opaque provider document. OpenCode re-execs
@@ -21225,6 +21297,129 @@ mod tests {
                 "{lane} builder must not invent a seed branch for a non-repo project: {args:?}"
             );
         }
+    }
+
+    /// Order 965-rb3v, THE DISCRIMINATOR. A tray-launched forge came up with
+    /// `TILLANDSIAS_FORGE_SEED_BRANCH=main` while the host checkout's HEAD was
+    /// `linux-next` and its `origin/HEAD` pointed at `origin/main`. Three
+    /// causes were in play and they need different fixes; this pins the one
+    /// that is answerable in-process — does the resolution read the CHECKOUT'S
+    /// HEAD, or does it resolve the REMOTE'S DEFAULT?
+    ///
+    /// The fixture is the exact shape that separates them: local HEAD and
+    /// `origin/HEAD` deliberately DISAGREE, and they disagree with precisely
+    /// the two branch names from the field report. Anything resolving the
+    /// remote default yields `main` and fails here; reading the checkout's own
+    /// HEAD yields `linux-next` and passes. A fixture where the two agree
+    /// could not tell the two implementations apart at all — which is why the
+    /// existing seed test, whose repo has no remote, never caught this.
+    ///
+    /// A PASS HERE NARROWS, IT DOES NOT ACQUIT. It rules out the remote-default
+    /// reading; a stale registered project path, or a checkout that really was
+    /// on `main` at launch, both still produce the field symptom and are only
+    /// measurable on the host (podman inspect on a fresh launch).
+    #[test]
+    fn seed_branch_reads_checkout_head_not_the_remotes_default() {
+        let _env = env_lock();
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let project = tmp.path().join("disagreeing");
+        let git_dir = project.join(".git");
+        std::fs::create_dir_all(git_dir.join("objects")).expect("mkdir objects");
+        std::fs::create_dir_all(git_dir.join("refs").join("heads")).expect("mkdir heads");
+        std::fs::create_dir_all(git_dir.join("refs").join("remotes").join("origin"))
+            .expect("mkdir origin");
+
+        // The checkout is on linux-next...
+        std::fs::write(git_dir.join("HEAD"), "ref: refs/heads/linux-next\n").expect("write HEAD");
+        // ...while the remote's default is main. This is the disagreement.
+        std::fs::write(
+            git_dir
+                .join("refs")
+                .join("remotes")
+                .join("origin")
+                .join("HEAD"),
+            "ref: refs/remotes/origin/main\n",
+        )
+        .expect("write origin/HEAD");
+        // A config with an origin remote, so nothing can mistake this for the
+        // remote-less shape the older fixture uses.
+        std::fs::write(
+            git_dir.join("config"),
+            "[core]\n\trepositoryformatversion = 0\n\
+             [remote \"origin\"]\n\turl = https://example.invalid/tillandsias.git\n\
+             \tfetch = +refs/heads/*:refs/remotes/origin/*\n",
+        )
+        .expect("write config");
+
+        assert_eq!(
+            read_host_project_current_branch(&project).as_deref(),
+            Some("linux-next"),
+            "the seed must come from the checkout's HEAD, never the remote's default branch"
+        );
+
+        // And it must reach BOTH builders as linux-next, not main — the read
+        // being right is not the same as the launch arg being right.
+        let certs = tmp.path().join("ca");
+        let opencode = build_opencode_forge_args(
+            &project,
+            "alpha",
+            None,
+            None,
+            &certs,
+            "1.2.3",
+            ForgeMode::Cli,
+            None,
+            false,
+            false,
+        );
+        let agent = build_forge_agent_run_args_with_vault(
+            &project,
+            "alpha",
+            None,
+            &certs,
+            "1.2.3",
+            ForgeAgentMode::Maintenance,
+            false,
+            None,
+            None,
+        );
+        for (lane, args) in [("opencode", &opencode), ("agent", &agent)] {
+            assert!(
+                has_arg(args, "TILLANDSIAS_FORGE_SEED_BRANCH=linux-next"),
+                "{lane} builder must seed from the checkout HEAD: {args:?}"
+            );
+            assert!(
+                !has_arg(args, "TILLANDSIAS_FORGE_SEED_BRANCH=main"),
+                "{lane} builder must NOT seed from the remote default: {args:?}"
+            );
+        }
+    }
+
+    /// Order 965-rb3v: the unresolved case must NAME ITSELF. It injects no
+    /// seed (order 501's end-user-transparency contract, pinned by
+    /// `forge_builders_inject_seed_branch_from_host_checkout`), which means
+    /// the mirror falls back to upstream's default — so the only thing
+    /// separating "could not read the branch" from "deliberately seeded main"
+    /// is this line existing and saying so.
+    #[test]
+    fn seed_unresolved_notice_names_the_path_and_the_main_fallback() {
+        let notice = format_seed_unresolved("/home/op/src/tillandsias");
+        assert!(
+            notice.contains("/home/op/src/tillandsias"),
+            "the notice must name the path it failed to read: {notice}"
+        );
+        assert!(
+            notice.contains("SEED UNRESOLVED"),
+            "the notice needs a greppable token: {notice}"
+        );
+        assert!(
+            notice.contains("main"),
+            "the notice must name the branch the mirror will actually fall back to: {notice}"
+        );
+        assert!(
+            notice.contains("base_state"),
+            "the notice must say why the guest's base_state cannot catch this: {notice}"
+        );
     }
 
     #[test]
