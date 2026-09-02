@@ -20,6 +20,11 @@ source "$DIR/ensure_toolbox.sh"
 # grepping the base index, so this script has a hard tillandsias-plan
 # dependency too — resolved by execution, through the one shared probe.
 source "$DIR/plan-binary-probe.sh"
+# ORDER 964-9yyp. Where this check's scratch copies land. See the file for the
+# measurement; the short version is that --check copies plan/, rewrites the
+# copy, copies it again and diffs the two trees, so it is metadata- and
+# write-bound, and on the Windows gate's 9p checkout that costs 11.7x.
+source "$DIR/native-scratch-dir.sh"
 _ruby() {
     # -E UTF-8:UTF-8 pins Ruby's default external/internal encodings. On an
     # unset-locale host (measured 2026-08-23: the WSL lane the Windows gate
@@ -85,16 +90,31 @@ cd "$REPO_ROOT"
 # place deliberately: they free the copy EARLY on long paths, and running the
 # cleanup twice is harmless.
 _archiver_cleanup() {
-    rm -rf plan_tmp plan_tmp_bak scripts/archive-plan-packets-check.rb plan_tmp_*.txt
+    # ORDER 964-9yyp: the scratch may live outside the worktree now, and the
+    # trap has to reach it there. `${SCRATCH:-$REPO_ROOT}` because this trap is
+    # armed before SCRATCH is assigned on some paths and an unbound expansion
+    # under `set -u` would turn a cleanup into a second failure.
+    local _s="${SCRATCH:-$REPO_ROOT}"
+    rm -rf "$_s"/plan_tmp "$_s"/plan_tmp_bak scripts/archive-plan-packets-check.rb "$_s"/plan_tmp_*.txt
 }
 
 if [ "$1" == "--check" ]; then
     echo "Running in check mode..."
+    # ORDER 964-9yyp. On a fast worktree this is "$REPO_ROOT" and every path
+    # below is byte-for-byte what it was — a host that was correct before this
+    # order behaves identically after it. On the Windows gate's 9p checkout it
+    # is a native-FS directory, and the check drops from 62.3s to 5.3s doing
+    # exactly the same work. It also stops the copy landing in the worktree,
+    # which is the leak the cleanup trap above exists to survive.
+    SCRATCH="$(native_scratch_dir archiver-check "$REPO_ROOT")"
     trap _archiver_cleanup EXIT INT TERM
-    rm -rf plan_tmp plan_tmp_bak
-    cp -a plan/ plan_tmp/
+    rm -rf "$SCRATCH"/plan_tmp "$SCRATCH"/plan_tmp_bak
+    cp -a plan/ "$SCRATCH"/plan_tmp/
     
-    sed 's|plan/|plan_tmp/|g' scripts/archive-plan-packets.rb > scripts/archive-plan-packets-check.rb
+    # The generated .rb reads and writes the COPY, so it needs the copy's real
+    # location. `|` stays the delimiter because the replacement is a path and
+    # contains no `|`; it is a directory name we chose, not user input.
+    sed "s|plan/|$SCRATCH/plan_tmp/|g" scripts/archive-plan-packets.rb > scripts/archive-plan-packets-check.rb
 
     # THE ACCEPTANCE ASSERTION (831-ezea). Everything below the idempotency
     # diff was already here and it proved the WRONG PROPERTY. An archiver that
@@ -146,7 +166,7 @@ if [ "$1" == "--check" ]; then
     # The .rb resolves the same binary; hand it the probed answer rather than
     # letting it re-derive one.
     export TILLANDSIAS_PLAN_BIN="$PLAN_BIN"
-    "$PLAN_BIN" --index plan_tmp/index.yaml ready > plan_tmp_ready_before.txt
+    "$PLAN_BIN" --index "$SCRATCH"/plan_tmp/index.yaml ready > "$SCRATCH"/plan_tmp_ready_before.txt
 
     # SECOND INVARIANT: archiving must not ORPHAN live fragment events.
     #
@@ -163,54 +183,53 @@ if [ "$1" == "--check" ]; then
     # CREATING new ones.
     _orphans() {   # $1 = index path, $2 = output file
         "$PLAN_BIN" --index "$1" query --limit 0 2>/dev/null \
-            | cut -f1,2 | tr '\t' '\n' | sed '/^$/d' | sort -u > plan_tmp_live.txt
-        comm -23 plan_tmp_addressed.txt plan_tmp_live.txt > "$2"
+            | cut -f1,2 | tr '\t' '\n' | sed '/^$/d' | sort -u > "$SCRATCH"/plan_tmp_live.txt
+        comm -23 "$SCRATCH"/plan_tmp_addressed.txt "$SCRATCH"/plan_tmp_live.txt > "$2"
     }
-    : > plan_tmp_addressed_raw.txt
-    for _frag in plan_tmp/index.d/*.yaml; do
+    : > "$SCRATCH"/plan_tmp_addressed_raw.txt
+    for _frag in "$SCRATCH"/plan_tmp/index.d/*.yaml; do
         [ -e "$_frag" ] || continue
-        if ! "$PLAN_BIN" fragment-event-packets "$_frag" >> plan_tmp_addressed_raw.txt 2>/dev/null; then
+        if ! "$PLAN_BIN" fragment-event-packets "$_frag" >> "$SCRATCH"/plan_tmp_addressed_raw.txt 2>/dev/null; then
             echo "Check FAILED: cannot read fragment $_frag, so the orphan invariant"
             echo "  cannot be evaluated. Refusing."
-            rm -rf plan_tmp plan_tmp_bak scripts/archive-plan-packets-check.rb plan_tmp_*.txt
+            _archiver_cleanup
             exit 3
         fi
     done
-    sort -u plan_tmp_addressed_raw.txt > plan_tmp_addressed.txt
-    _orphans plan_tmp/index.yaml plan_tmp_orphans_before.txt
+    sort -u "$SCRATCH"/plan_tmp_addressed_raw.txt > "$SCRATCH"/plan_tmp_addressed.txt
+    _orphans "$SCRATCH"/plan_tmp/index.yaml "$SCRATCH"/plan_tmp_orphans_before.txt
 
     _ruby scripts/archive-plan-packets-check.rb >/dev/null
 
-    _orphans plan_tmp/index.yaml plan_tmp_orphans_after.txt
-    if ! diff -u plan_tmp_orphans_before.txt plan_tmp_orphans_after.txt > plan_tmp_orphans_diff.txt; then
+    _orphans "$SCRATCH"/plan_tmp/index.yaml "$SCRATCH"/plan_tmp_orphans_after.txt
+    if ! diff -u "$SCRATCH"/plan_tmp_orphans_before.txt "$SCRATCH"/plan_tmp_orphans_after.txt > "$SCRATCH"/plan_tmp_orphans_diff.txt; then
         echo "Check FAILED: archiving ORPHANED live fragment events. These packet ids are"
         echo "  addressed by a plan/index.d events block that the fold will now DISCARD:"
-        grep '^+[^+]' plan_tmp_orphans_diff.txt | sed -n '1,40p'
-        rm -rf plan_tmp plan_tmp_bak scripts/archive-plan-packets-check.rb plan_tmp_*.txt
+        grep '^+[^+]' "$SCRATCH"/plan_tmp_orphans_diff.txt | sed -n '1,40p'
+        _archiver_cleanup
         exit 1
     fi
 
-    "$PLAN_BIN" --index plan_tmp/index.yaml ready > plan_tmp_ready_after.txt
-    if ! diff -u plan_tmp_ready_before.txt plan_tmp_ready_after.txt > plan_tmp_ready_diff.txt; then
+    "$PLAN_BIN" --index "$SCRATCH"/plan_tmp/index.yaml ready > "$SCRATCH"/plan_tmp_ready_after.txt
+    if ! diff -u "$SCRATCH"/plan_tmp_ready_before.txt "$SCRATCH"/plan_tmp_ready_after.txt > "$SCRATCH"/plan_tmp_ready_diff.txt; then
         echo "Check FAILED: archiving CHANGED THE READY SET. These rows are schedulable"
         echo "  work that the archive swallowed; they will answer 'no packet matches':"
-        sed -n '1,40p' plan_tmp_ready_diff.txt
-        rm -rf plan_tmp plan_tmp_bak scripts/archive-plan-packets-check.rb \
-               plan_tmp_ready_before.txt plan_tmp_ready_after.txt plan_tmp_ready_diff.txt
+        sed -n '1,40p' "$SCRATCH"/plan_tmp_ready_diff.txt
+        _archiver_cleanup
         exit 1
     fi
-    rm -f plan_tmp_*.txt
+    rm -f "$SCRATCH"/plan_tmp_*.txt
 
-    cp -a plan_tmp/ plan_tmp_bak/
+    cp -a "$SCRATCH"/plan_tmp/ "$SCRATCH"/plan_tmp_bak/
     
     _ruby scripts/archive-plan-packets-check.rb >/dev/null
     
-    if ! diff -qr plan_tmp/ plan_tmp_bak/ > /dev/null; then
+    if ! diff -qr "$SCRATCH"/plan_tmp/ "$SCRATCH"/plan_tmp_bak/ > /dev/null; then
         echo "Check failed: second run modified files. Not idempotent."
-        rm -rf plan_tmp plan_tmp_bak scripts/archive-plan-packets-check.rb plan_tmp_*.txt
+        _archiver_cleanup
         exit 1
     fi
-    rm -rf plan_tmp plan_tmp_bak scripts/archive-plan-packets-check.rb plan_tmp_*.txt
+    _archiver_cleanup
 
     # THIRD INVARIANT: archiving must not break what the expert system can ANSWER.
     #

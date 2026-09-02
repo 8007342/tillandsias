@@ -66,22 +66,29 @@ READ_KEYS=" packets events fields status capabilities "
 # (`host-capability-probe.sh --fragment`). Every host that publishes a row —
 # which 850-bif2 requires before it drains work — would hit the same refusal.
 #
-# THE GUARD'S PREMISE IS TRUE OF `steps:` AND FALSE HERE, and that distinction
-# is the whole reason this is an allowlist rather than a widening of READ_KEYS.
-# `steps:` was a key nobody read: the fold discarded those fragments and NOTHING
-# ELSE looked at them, so the contents were genuinely lost. `capabilities:` has
-# a consumer — `check-capability-row.sh` and the fleet matrix read it straight
-# out of the fragment — and compaction refuses to fold it ON PURPOSE (843-624y),
-# because the channel has no base representation yet (846-idhn tracks giving it
-# one). Unread by the fold, but not discarded, and not silent.
+# THE GUARD'S PREMISE IS TRUE OF `steps:` AND THIS LIST IS WHERE AN EXCEPTION GOES.
 #
-# So the two guards were not in conflict about a fact; they were using one test
-# ("does the fold read this key") to answer two different questions ("will the
-# fold look at it" and "will anything look at it"). This list is where a channel
-# with a non-fold consumer is declared, and adding to it is a claim someone can
-# check: name the consumer. When 846-idhn lands a base representation for
-# capability rows, `capabilities` moves from here into READ_KEYS.
-NON_FOLD_CHANNELS=" capabilities "
+# `steps:` was a key nobody read: the fold discarded those fragments and NOTHING
+# ELSE looked at them, so the contents were genuinely lost. A channel with a
+# non-fold CONSUMER is different, and belongs here rather than in READ_KEYS —
+# adding to it is a claim someone can check: name the consumer.
+#
+# `capabilities` WAS listed here (793-qr4t, lenovinha) and has been removed by
+# the coordinator, by the rule this comment itself prescribed: "when 846-idhn
+# lands a base representation for capability rows, `capabilities` moves from
+# here into READ_KEYS". 846-idhn is completed and archived; compaction now
+# serialises `capabilities:` into the base (fragments.rs, ORDER 846-idhn) and
+# plan/index.yaml carries the key. So the fold both READS the channel
+# (fold_capabilities) and WRITES it, which is exactly what READ_KEYS asserts.
+#
+# WHY THIS NEEDED A THIRD PARTY. Two hosts fixed the same deadlock the same
+# hour, independently and both defensibly: macbook widened READ_KEYS, lenovinha
+# added this allowlist because widening looked like it would make the litmus
+# assertion false to buy silence. It would have, BEFORE 846-idhn. Both landed,
+# and the merged result listed one key in two lists that mean opposite things —
+# with READ_KEYS matched first, so the allowlist entry was also dead. Neither
+# host could see it: each was looking at its own branch, and both gates passed.
+NON_FOLD_CHANNELS=" "
 
 violations=0
 checked=0

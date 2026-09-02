@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: gate-ledger-native-fs-staging-windows
+    field: next_action
+    value: |-
+      STATE 2026-09-02 (yolanda). IMPLEMENTED AND MEASURED; exit criteria 1 and 3 are met, criterion 2 is met in substance with a caveat named below. The archiver check drops 69.1s to 42.1s standalone (its ledger-bound portion 62.3s to 5.3s, 11.7x) and 78.4s to 43.7s inside ./build.sh --check, via scripts/native-scratch-dir.sh. The negative control on a deliberately broken tree gives rc=3 from both the baseline and the new script with the same refusal reason.
+
+      THE DELIVERABLE AS WRITTEN WAS NOT IMPLEMENTED AND SHOULD NOT BE. Staging plan/ for the general ledger-reading checks LOSES: a fold is CPU-bound in the YAML parse, 9p costs it 1.36x (170ms), and one staging pass costs 5796ms, so it needs about 34 folds to break even. The 24.6x is true about raw file IO (cat 40x, find 23x) and was being read as a claim about the checks. Full numbers on the progress event.
+
+      REMAINING, AND IT IS SMALL: criterion 2 asks for a full forced --check re-profiled per step beside the 1214s baseline. This host does not reproduce that baseline - forced gates here measured 615s, 533s, 520s and 500s across this cycle, on a ledger of 43 fragments and a 3.95MB index. Either the 1214s was taken on a much larger ledger or under a cold Windows file cache, and until that is settled a before/after against it would be comparing two different machines. SMALLEST NEXT ACTION: whoever recorded 1214s says what the ledger size and cache state were, or the baseline is restated from this cycle (500-615s forced, archiver step 43.7s post-change).
+
+      DO NOT GENERALISE THE STAGING to the other ledger-reading steps on the strength of the raw-IO multiplier. The measurements that make that a losing trade are recorded on this packet so the next reader does not re-derive them.
+    ts: "2026-09-02T21:40:40Z"
+    host: yolanda
