@@ -1374,6 +1374,13 @@ pub const FIELD_SET_VERSION: u32 = 2;
 // stands and is restated here because it was broken once already — bump on ANY
 // change to which fields are included, how they are classed, OR how they are
 // serialised.
+//
+// WHY THAT MISS WAS STRUCTURAL, not careless (yoga, 2026-09-02): a version
+// constant cannot guard the commit that creates it, because at that moment
+// there is no previous version for anything to differ from. The FIRST use of a
+// new invariant is the one occurrence the invariant cannot check. Whatever the
+// next such guard is, its introducing commit is the one that needs reviewing by
+// hand — the guard will cover every case but that one.
 
 pub fn hardware_fingerprint(doc: &CapabilityDocument) -> String {
     fn ram_class(gb: f64) -> String {
