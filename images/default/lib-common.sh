@@ -1147,53 +1147,33 @@ export FORGE_EXPERTS_BIN_DIR FORGE_EXPERTS_STATE_DIR
 # return immediately, so a forge without inference pays no measurable launch
 # cost. An explicit TILLANDSIAS_EMBED_ENDPOINT is never probed and never
 # overridden.
-if [ -z "${TILLANDSIAS_EMBED_ENDPOINT:-}" ]; then
-    # ollama's OpenAI-compatible surface, for /v1/embeddings — the same
-    # derivation start_expert_serve_fail_soft applies per-invocation below.
-    if [ -n "${OLLAMA_HOST:-}" ]; then
-        _tec_embed_candidate="${OLLAMA_HOST%/}/v1"
-    else
-        _tec_embed_candidate="${TILLANDSIAS_INFERENCE_ENDPOINT:-http://inference:11434}"
-        _tec_embed_candidate="${_tec_embed_candidate%/}"
-        # TILLANDSIAS_INFERENCE_ENDPOINT is the ROOT url by convention
-        # (lib-experts-probe.sh: "root url, no /v1"), so add the /v1 base the
-        # embeddings path needs — unless an operator already spelled it that
-        # way, in which case appending again would 404 on /v1/v1/embeddings.
-        case "$_tec_embed_candidate" in
-            */v1) : ;;
-            *) _tec_embed_candidate="$_tec_embed_candidate/v1" ;;
-        esac
-    fi
-    if command -v curl >/dev/null 2>&1 \
-        && curl -fsS -m 3 -o /dev/null "$_tec_embed_candidate/models" 2>/dev/null; then
-        export TILLANDSIAS_EMBED_ENDPOINT="$_tec_embed_candidate"
-    fi
-    unset _tec_embed_candidate
-fi
-# FORGE FALLBACK (order 919-vvyv, MEASURED on lenovinha 2026-09-02).
-# The block above is inert in the very lane it was written for. OLLAMA_HOST is
-# DECLARED on the forge profiles (container_profile.rs:393 and :692, literal
-# `http://inference:11434`) yet it does not reach the container: a live forge on
-# v56.9.2.1 reported `embed_endpoint=unset` with TILLANDSIAS_EMBED_MODEL set,
-# the inference service answering, and nomic-embed-text already cached. Setting
-# the endpoint by hand moved `experts-probe` from l1=unset straight to
-# l1=no-index, so the endpoint was the ONLY missing piece — the fix for 919-vvyv
-# D1/D2 was present and could never fire.
+# ORDER 967-xq5e — ONE derivation, in images/default/lib-embed-endpoint.sh.
 #
-# So the forge does not depend on one variable arriving. It falls back to the
-# SAME canonical default lib-inference-state.sh already uses for the enclave
-# service, and — unlike the OLLAMA_HOST path — it PROBES first, because the
-# comment above promises that a forge with no inference service keeps
-# spec_answer's typed refusal. An unreachable endpoint left wired would convert
-# that honest `unset` into a misleading `unreachable`.
-if [ -z "${TILLANDSIAS_EMBED_ENDPOINT:-}" ] && [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ]; then
-    _tlc_infer_ep="${TILLANDSIAS_INFERENCE_ENDPOINT:-http://inference:11434}"
-    if command -v curl >/dev/null 2>&1 \
-        && curl -fsS -m 3 -o /dev/null "${_tlc_infer_ep%/}/v1/models" 2>/dev/null; then
-        export TILLANDSIAS_EMBED_ENDPOINT="${_tlc_infer_ep%/}/v1"
-    fi
-    unset _tlc_infer_ep
+# What used to live here was TWO blocks: the original probe-and-export, plus a
+# forge fallback (919-vvyv) added when the first turned out to be inert in the
+# very lane it was written for. Two blocks in one file, each knowing how to
+# spell the endpoint, is the drift this repo keeps paying for — and a THIRD copy
+# existed in config-overlay/mcp/lib-dev-env.sh while the host lane had none at
+# all, which is 967-xq5e: spec-index-ensure.sh inherited the variable and
+# refused when absent, so the host lane never refreshed an index anywhere.
+#
+# The helper preserves every property those blocks documented: an explicit
+# endpoint is never probed and never overridden; a derived candidate is PROBED
+# with the bounded OpenAI-shape liveness check (712-r5x8) so a lane with no
+# inference service wires nothing and keeps its typed refusal; a root url gains
+# /v1 and one already spelled /v1 does not gain a second. The forge/host split
+# moves INTO the helper as the default it picks (`inference` inside the enclave,
+# loopback on a host), which is what made the old fallback necessary.
+#
+# Pinned by scripts/test-embed-endpoint-derivation.sh, whose last arm fails if
+# any second `export TILLANDSIAS_EMBED_ENDPOINT=` reappears outside the helper.
+_tlc_embed_lib="${BASH_SOURCE[0]%/*}/lib-embed-endpoint.sh"
+if [ -r "$_tlc_embed_lib" ]; then
+    # shellcheck source=lib-embed-endpoint.sh
+    source "$_tlc_embed_lib"
+    resolve_embed_endpoint >/dev/null 2>&1 || true
 fi
+unset _tlc_embed_lib
 if [ -z "${TILLANDSIAS_EMBED_MODEL:-}" ]; then
     # The OLLAMA name — what the inference entrypoint pulls at startup
     # (919-vvyv D1) and what spec-index-ensure.sh embeds the corpus with.

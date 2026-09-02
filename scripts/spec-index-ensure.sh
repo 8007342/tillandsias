@@ -283,6 +283,30 @@ if [ "${1:-}" = "--where" ]; then
     exit 0
 fi
 
+# ORDER 967-xq5e. DERIVE, do not merely inherit. This line used to be
+#     EMBED_EP="${TILLANDSIAS_EMBED_ENDPOINT:-}"
+# and the refusal below fired whenever the caller had not exported it. Every
+# site that derived that variable lived in the FORGE lane, so on a bare-metal
+# host it arrived only if whatever ran `git commit` happened to have it — and a
+# git hook inherits its caller's environment. MEASURED: macuahuitl logged 32
+# consecutive `skip:spec-index:no-embed-endpoint` and zero non-skips ever, index
+# 128 commits stale, with a healthy endpoint on localhost the whole time; yoga
+# built fine because one line in a git-ignored .claude/settings.local.json
+# exported it. The host lane had never refreshed an index anywhere.
+#
+# The derivation is SHARED, never copied — images/default/lib-embed-endpoint.sh
+# is the one directory both the image and a host checkout can reach, and
+# lib-common.sh sources the same file. A second copy here is the drift this
+# repo keeps paying for (967-6ax6, one container name in two places).
+_sie_embed_lib="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/images/default/lib-embed-endpoint.sh"
+if [ -r "$_sie_embed_lib" ]; then
+    # shellcheck source=../images/default/lib-embed-endpoint.sh
+    . "$_sie_embed_lib"
+    resolve_embed_endpoint >/dev/null 2>&1 || true
+    _sie_verdict="${TILLANDSIAS_EMBED_ENDPOINT_VERDICT:-no-verdict}"
+else
+    _sie_verdict="skip:embed-endpoint:helper-absent:$_sie_embed_lib"
+fi
 EMBED_EP="${TILLANDSIAS_EMBED_ENDPOINT:-}"
 EMBED_MODEL="${TILLANDSIAS_EMBED_MODEL:-nomic-embed-text}"
 BATCH="${TILLANDSIAS_SPEC_INDEX_BATCH:-64}"
@@ -293,7 +317,19 @@ MAX_CHARS="${TILLANDSIAS_SPEC_INDEX_MAX_CHARS:-6000}"
 for _tool in jq curl; do
     command -v "$_tool" >/dev/null 2>&1 || { echo "skip:spec-index:no-$_tool"; exit 0; }
 done
-[ -n "$EMBED_EP" ] || { echo "skip:spec-index:no-embed-endpoint"; exit 0; }
+# The refusal NAMES WHAT IT TRIED (967-xq5e). The old verdict was
+# `skip:spec-index:no-embed-endpoint` and nothing else — it named a missing
+# variable and named nothing that would supply it, empty stderr, so 32 honest
+# refusals on macuahuitl read as configuration rather than breakage and nobody
+# had reason to open the log. A refusal that cannot be acted on is a refusal
+# nobody acts on.
+[ -n "$EMBED_EP" ] || {
+    echo "skip:spec-index:no-embed-endpoint"
+    echo "  derivation: ${_sie_verdict:-not-attempted}" >&2
+    echo "  remedy: start the dev inference lane (scripts/dev-inference-ensure.sh)," >&2
+    echo "          or export TILLANDSIAS_EMBED_ENDPOINT to an OpenAI-shape /v1 base." >&2
+    exit 0
+}
 
 # Resolve the binary through the SHARED probe, never a hardcoded path — a
 # hardcoded ./target/release path is the bug 704-zcgi centralised this to stop

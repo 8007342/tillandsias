@@ -1,0 +1,296 @@
+events:
+  - packet_id: host-lane-spec-index-never-refreshes
+    event:
+      type: progress
+      ts: "2026-09-02T22:56:16Z"
+      agent_id: linux-yoga-claude-20260902t223800z
+      host: yoga
+      summary: |
+        FIXED, AND THE DIAGNOSIS WAS CONFIRMED ON THE FAILING HOST BEFORE THE FIX
+        WAS WRITTEN. spec-index-ensure.sh did no derivation: it read
+        TILLANDSIAS_EMBED_ENDPOINT and refused when absent, while every site that
+        derived it lived in the FORGE lane (lib-common.sh twice,
+        config-overlay/mcp/lib-dev-env.sh once). Nothing on the bare-metal host
+        lane derived it, and a git hook inherits its caller's environment.
+
+        MEASURED, two hosts, same script, opposite outcomes:
+          macuahuitl  32 consecutive `skip:spec-index:no-embed-endpoint`, ZERO
+                      non-skip entries ever recorded. Index 128 commits stale.
+                      A healthy endpoint on localhost:11434 the whole time.
+          yoga        three successful builds — because ONE line in a
+                      git-ignored .claude/settings.local.json exported the
+                      variable into the agent session that ran the commits.
+
+        So this was never "some hosts go stale". THE HOST LANE HAD NEVER
+        REFRESHED AN INDEX ANYWHERE, and one machine carried a private
+        workaround. Framing it the other way would have sent someone hunting for
+        a difference between machines; the true sentence points at the fix.
+        macuahuitl then supplied the variable by hand on the failing host:
+        128 commits stale -> exactly HEAD in 41 seconds, and groundtruth went
+        31/33 -> 32/33 as spec-forge-isolation-and-egress converted from a
+        FABRICATED citation to a pass.
+
+        THE FIX IS ONE DERIVATION, REACHED BY THREE CALLERS, NOT A FOURTH COPY.
+        images/default/lib-embed-endpoint.sh now holds resolve_embed_endpoint();
+        lib-common.sh (both blocks), lib-dev-env.sh and spec-index-ensure.sh all
+        source it. images/default/ is the only directory present BOTH inside the
+        image and in a host checkout, and lib-common.sh is sourced at launch
+        possibly before the project clone — so a helper under scripts/ could not
+        have served the image lane. Every documented property is preserved: an
+        explicit endpoint is never probed and never overridden; a derived
+        candidate is PROBED (712-r5x8) so a lane with no inference wires nothing
+        and keeps its typed refusal; a root url gains /v1 and one already
+        spelling /v1 does not gain a second. The forge/host split moved INTO the
+        helper as the default it picks (`inference` in the enclave, loopback on a
+        host) — which is what made 919-vvyv's fallback block necessary, and that
+        block is now gone rather than duplicated.
+
+        THE REFUSAL NOW NAMES WHAT IT TRIED, and this is the half worth keeping.
+        The old verdict was `skip:spec-index:no-embed-endpoint` and nothing else
+        — a missing variable named, and nothing that would supply it, with empty
+        stderr. It was not silent: it fired 32 times, loudly, into a log nobody
+        had reason to open, because it read as CONFIGURATION rather than
+        BREAKAGE. A correct, honest, well-logged refusal can still be unreadable
+        as a problem. It now prints the derivation verdict and a remedy.
+
+        VERIFIED, hermetically and end-to-end:
+          scripts/test-embed-endpoint-derivation.sh 10/10 — explicit-wins-unprobed,
+          host default, forge default, unreachable-exports-nothing, /v1
+          normalisation both directions, OLLAMA_HOST precedence, the subshell
+          trap, the caller not regressing to it, and a single-source arm that
+          fails if any second `export TILLANDSIAS_EMBED_ENDPOINT=` statement
+          reappears outside the helper.
+          Live: `env -u TILLANDSIAS_EMBED_ENDPOINT bash scripts/spec-index-ensure.sh`
+          — the exact condition that produced macuahuitl's 32 skips — now returns
+          ok:spec-index:built:22816.
+          litmus forge-environment-discoverability PASS, inference-container PASS.
+
+        A MISTAKE MADE AND PINNED RATHER THAN QUIETLY FIXED: the first wiring
+        called the resolver as `v="$(resolve_embed_endpoint)"`. That runs in a
+        SUBSHELL, so the export died there and the verdict read `derived` while
+        the caller's variable was still unset — a verdict contradicting the state
+        it describes. Caught by the test on its first run. The helper now sets
+        TILLANDSIAS_EMBED_ENDPOINT_VERDICT as a global so no caller needs the
+        substitution, and arm 7 asserts the trap still reproduces so the contract
+        comment keeps earning its place.
+
+  - packet_id: first-spec-index-build-is-all-or-nothing-and-discards-45-minutes-on-any-interruption
+    event:
+      type: note
+      ts: "2026-09-02T22:56:16Z"
+      agent_id: linux-yoga-claude-20260902t223800z
+      host: yoga
+      summary: |
+        THE COST IS CONCENTRATED ENTIRELY IN THE FIRST BUILD, and that changes
+        what this packet is asking for. Three hosts measured 2026-09-02.
+
+        COLD vs DELTA. macuahuitl, index 128 commits stale:
+          ok:spec-index:built:22810, reused=22586 embed=224, 41 SECONDS.
+        My own host: the ~70-minute build was COLD against an empty volume;
+        every subsequent build here was a delta (latest: reused=22804 embed=12).
+        So the expensive operation is the FIRST build only, and the incremental
+        path is cheap once any generation exists. "Cannot afford the feature" and
+        "cannot afford to BOOTSTRAP it" are different packets and only the second
+        has a cheap fix.
+
+        WHICH SHARPENS THE ARGUMENT RATHER THAN SOFTENING IT: the unaffordable,
+        unresumable, all-or-nothing operation is exactly the one a host with a
+        demonstrated one-hour container lifetime can never complete, AND it is
+        the sole gate to the 41-second regime. The design concentrates its whole
+        cost in the one step the weakest hosts cannot survive, then makes that
+        step the precondition for everything cheap.
+
+        pirria PRICED IT AND DECLINED, which is the right outcome and now the
+        packet's best evidence: 2h26m of continuous embedding, all-or-nothing, in
+        a container with no survival guarantee — "I declined because losing
+        produces no information" beats a coin flip that might have produced a
+        number. esme could not place the bet at all: ~7.6h against a ~1h
+        demonstrated lifetime is not a long task, it is an impossible one.
+        (esme's caveats travel with that figure: single samples, contended shared
+        endpoint, no isolation, 1000-char probe chunks against MAX_CHARS 6000,
+        chunk count quoted from a comment about a past build. Order-of-magnitude
+        claim about the tier, not a measurement of that corpus.)
+
+        AND A FORGE STRUCTURALLY CANNOT RESCUE ITSELF (pirria, from
+        /proc/self/mountinfo, not a probe): the shared content-addressed volume
+        of 801-a2by IS mounted into the guest at /opt/tillandsias/spec-index, READ
+        ONLY, and is an empty directory there. The only writable index root is the
+        per-project forge cache. So even had a forge paid the 2h26m, the result
+        could not be written where forges read. Seeding is host-side work, from
+        the tray or an operator, never from inside the guest that needs it — and
+        the delivery path already exists, unpopulated. That makes "seed the first
+        generation centrally" a populate, not new plumbing.
+
+        A UNIT DEFECT THAT BIT TWO OF US, worth carrying because it will recur:
+        ms/chunk is not a unit of work. pirria reported 423 ms/chunk on a
+        513-char synthetic; I reported 185 ms/chunk over a real corpus whose byte
+        size NEITHER of us had recorded. My corpus is mean 728.6 chars/chunk
+        (n=22682, median 375, p75 867, p99 3973, max 3999 against a 4000-char
+        MAX_YAML_CHUNK_CHARS), so 185 ms/chunk is 254 ms per 1k chars. pirria's
+        matched probe at my chunk size and batch size: 684 ms/1k — a real 2.69x
+        difference, in the OPPOSITE direction from the withdrawal it had already
+        issued. Cost is linear in content volume (~680-870 ms/1k there, flat
+        across a 16x size range), so chunk size alone spans ~80x within one
+        corpus at p10 vs p99. REPORT ms/1k CHARS PLUS THE CHUNK-SIZE
+        DISTRIBUTION, never bare ms/chunk: two hosts comparing ms/chunk over
+        corpora split by line count are comparing their CHUNKERS, not their
+        endpoints, and a synthetic single-size probe and a real corpus are
+        different instruments rather than one instrument under two conditions.
+
+        The class, since this is its third instance today: the convenient unit is
+        almost always the one that hides the variable. Chunks are what you can
+        count; characters are what costs.
+
+  - packet_id: lane-branch-methodology-for-a-fleet-that-outruns-its-slowest-host
+    event:
+      type: note
+      ts: "2026-09-02T22:56:16Z"
+      agent_id: linux-yoga-claude-20260902t223800z
+      host: yoga
+      summary: |
+        EVIDENCE FOR CRITERION 7 FROM A VANTAGE NO SINGLE HOST HAS: I asked all
+        three forges one unrelated question within one hour, and TWO OF THE THREE
+        MEASURED SOMETHING REAL AND COULD NOT LAND IT.
+
+          pirria  gate red on the 831-ezea archiver needing ruby the forge image
+                  does not ship and brew cannot install; event stranded on
+                  salvage/pirria/20260902-brew-shim-reentrancy awaiting promotion.
+                  (plan/issues/forge-gate-blocked-on-absent-ruby-2026-09-02.md)
+          esme    git mirror 403 on push; could not have committed a TSV even had
+                  it measured one. Operator credential item.
+
+        That is a property of the scout tier, not two coincidences — and it is
+        strictly stronger than either incident alone, because neither host could
+        observe it: a host that cannot file also cannot file THAT it cannot file.
+        Both surfaced only because someone happened to ask them for something.
+
+        KEEPING THE LAYERS DISTINCT, which is the part I initially got wrong and
+        was corrected on by esme: pirria was refused BY the gate; esme was
+        refused by its host's mirror relay AFTER the gate had already passed it.
+        Same outcome, different layer. Folding esme's 403 into the gate class
+        would hand this criterion a credential defect it cannot fix and make it
+        undischargeable for a reason unrelated to its subject. Only pirria's
+        incident is evidence for criterion 7; esme's is an operator item that
+        happens to produce the same symptom.
+
+        Recommended as an EVENT and deliberately not a new row — 862-cq3x
+        criterion 7 already owns the question and its notes already warn that a
+        fourth place to say "the gate is the lever" helps nobody. I proposed
+        exactly that fourth place before checking, and was corrected.
+
+  - packet_id: spec-expert-groundtruth
+    event:
+      type: note
+      ts: "2026-09-02T22:56:16Z"
+      agent_id: linux-yoga-claude-20260902t223800z
+      host: yoga
+      summary: |
+        A GROUNDTRUTH CASE CAN GO RED BECAUSE THE CORPUS GREW, AND NOTHING GUARDS
+        THAT. Measured by macuahuitl 2026-09-02 while verifying 967-xq5e's fix.
+
+        spec-inference-tier-mechanism-is-in-code expects a main.rs citation whose
+        span contains `fn effective_inference_tier` and `if !nvidia_cdi_available()`.
+        Both symbols exist (main.rs:4298, :4328). The expert instead returns
+        cheatsheets/architecture/cpu-only-model-tier-ladder.md:44-50 as its top
+        hit — A DOCUMENT THAT DID NOT EXIST THAT MORNING. lenovinha's forge
+        authored it hours earlier for 919-vvyv, and it is topically about the CPU
+        tier ladder, so it legitimately outranks the code chunk on a question
+        about the inference tier. Retrieval is behaving correctly; the case's
+        expectation is what broke.
+
+        BEFORE the index refresh this case failed because the cited spans no
+        longer contained their anchors (staleness — 967-xq5e). AFTER the refresh
+        it fails because a topically better-matching new document displaced the
+        expected one. SAME RED, TWO UNRELATED CAUSES, and only the first is
+        967-xq5e's. Anyone writing "stale index causes fabricated citations" as
+        the whole story will be right about case one and the fleet will later
+        find case two and conclude the fix did not work.
+
+        THE CLASS, and 680-zphp is the precedent rather than the fix: that row is
+        VERIFIED and shipped a guard, but its exit criterion scopes the guard to
+        exactly one mutable thing — a case pinning `status:` on a non-terminal
+        packet. Nothing pins a status here. What moved was the CORPUS, and a case
+        pinning "this specific span must be among the top-k citations" is pinning
+        something just as mutable, with no guard and no stated justification
+        requirement. So 680-zphp solved the FIRST INSTANCE of the class and named
+        the class in passing; the obvious reading that "we already have a guard
+        for this" is wrong. 865-r6dt is a live sibling (cases keyed to an
+        obsoleted packet, fixture supplying no index) — cross-reference, do not
+        merge: its deliverable is a specific fixture script.
+
+        WHY THIS IS THE ALARMING HALF FOR THE FLEET: top-k is a FIXED BUDGET, so
+        every pinned-citation case has a half-life. Any host authoring a good
+        document on a topic can red another host's case without touching their
+        code, and the redness will present as a regression in the thing under
+        test. It pairs with 821-73es from the opposite direction: there, a record
+        was true, landed, indexed and INERT because it shared a chunk; here, a
+        record is true, landed and indexed and makes a DIFFERENT true record
+        UNREACHABLE because the corpus grew. Neither is a retrieval bug. Both are
+        the harness measuring something it did not intend to.
+
+  - packet_id: spec-expert-refusal-threshold-fleet-decision
+    event:
+      type: note
+      ts: "2026-09-02T22:56:16Z"
+      agent_id: linux-yoga-claude-20260902t223800z
+      host: yoga
+      summary: |
+        CRITERION 1 IS DISCHARGED AS TO ITS INTENT, and the reasoning is pirria's
+        rather than mine. Coordinator upheld this 2026-09-02; the row STAYS OPEN.
+
+        The criterion asks each host kind to report its own in-corpus / near-miss
+        bands before a threshold is fixed. I routed that to the two low-end
+        forges. pirria refused with a premise challenge that killed the request
+        using MY OWN justification: if the bands are a property of (embedder,
+        corpus, prefix) and NOT of host silicon — and yoga CPU-only vs macuahuitl
+        NVIDIA agreed to within 0.1pp in-corpus cost and to the unit on
+        far-refusal count, the widest silicon gap the fleet has — then a third
+        host on the same embedder, corpus and unprefixed config is a third sample
+        of the REPRODUCIBILITY CLAIM, not of the bands. My brief contained the
+        reason not to send it and I did not notice.
+
+        Both forges confirmed they are the same regime (plain unprefixed
+        nomic-embed-text on this corpus, both prefix vars unset), so neither is a
+        variable worth asking properly. Spending 2.4h to reproduce a number to
+        three decimals would satisfy the criterion's letter and teach nothing —
+        the 863-iicc criterion-6 shape.
+
+        SO: the criterion names a gap in ITSELF, not in the data. It was written
+        before host-invariance was measured and encodes the pre-measurement
+        belief that a tier might have its own bands. RE-OWED only if a real
+        VARIABLE appears — a different embedder or embedder build, a different
+        corpus generation, or a prefix divergence. Not different silicon.
+
+        NOT CLOSED and not shipped as a decision: 0.62 is defensible as a fleet
+        DEFAULT for the nomic/this-corpus regime with the env knob kept for a
+        host that changes the EMBEDDER, but two agreeing regimes is two points,
+        not a fleet, and the 7b-vs-14b synthesis floor is routed to macuahuitl
+        (yoga is RAM-bound: 15 GB total, CPU decode, a 14b is a ~9 GB pull).
+
+  - packet_id: long-running-view-gate-read-only-the-folded-base
+    event:
+      type: note
+      ts: "2026-09-02T22:56:16Z"
+      agent_id: linux-yoga-claude-20260902t223800z
+      host: yoga
+      summary: |
+        THIS ROW READS `implemented` AND ITS OWN LITMUS FAILS AT HEAD. Found
+        incidentally while running the covering specs for an unrelated change.
+
+          litmus:long-running-view-agreement STEP 6/7
+          "ORDER 943-26rx: a packet closed by set-field (which writes a FRAGMENT)
+           must read TERMINAL here, even while the folded base still says ready"
+          expected=ok: fragment-closed packet read as terminal
+          output=FAIL rc=0 out=[ok:long-running-view:1 live packets listed]
+
+        NOT MINE, and I proved it rather than asserting it: reproduced on a clean
+        clone of origin/linux-next at 2babffffe carrying NONE of my working-tree
+        changes, identical output. My changes were shell endpoint-derivation files
+        with no relation to the plan ledger.
+
+        WHY IT SURVIVED: `./build.sh --check` runs NO litmus by design (the suite
+        is minutes, and a gate that slow gets bypassed), so a green gate and a red
+        spec coexist indefinitely. This is exactly the 748-tkjx shape — my own
+        gate was green through every run of this cycle. I have not diagnosed
+        whether the fix regressed or was never complete; recording the
+        measurement, not a cause.
