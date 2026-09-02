@@ -14,6 +14,21 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Name the reader explicitly. The runner reads its OWN metadata (bindings, probe
+# yaml) through the compiled tillandsias-plan when one resolves, and falls back
+# to yq/grep otherwise (746-htj9). PROJECT_ROOT here is the TEMP root, whose
+# target/ is empty, so the resolve finds nothing and the fallback needs yq on
+# PATH — which no macOS host has. Without the override both arms failed as
+# `No litmus tests bound to spec`, for a reason unrelated to phase filtering.
+. "$ROOT/scripts/plan-binary-probe.sh"
+PLAN_BIN="$(cd "$ROOT" && resolve_plan_binary)" || {
+    echo "SKIP: no runnable tillandsias-plan to read the fixture's own metadata (956-llei)"
+    exit 0
+}
+# The probe prints a path relative to the checkout; the arms cd into the temp
+# root, so absolutize it here or the override names nothing.
+case "$PLAN_BIN" in /*) ;; *) PLAN_BIN="$ROOT/${PLAN_BIN#./}" ;; esac
+
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/litmus-retired-phase.XXXXXX")"
 trap 'rm -rf "$tmp"' EXIT
 
@@ -73,7 +88,7 @@ pass=0; fail=0
 check() { if [ "$1" = ok ]; then pass=$((pass + 1)); printf 'ok   %s\n' "$2"; else fail=$((fail + 1)); printf 'FAIL %s\n' "$2"; fi; }
 
 # Arm 1: default phase filter ("all") — retired is skipped with its reason.
-out="$(cd "$tmp" && bash "$tmp/scripts/run-litmus-test.sh" "$spec_slug" 2>&1)" && rc=0 || rc=$?
+out="$(cd "$tmp" && TILLANDSIAS_PLAN_BIN="$PLAN_BIN" bash "$tmp/scripts/run-litmus-test.sh" "$spec_slug" 2>&1)" && rc=0 || rc=$?
 if [ "$rc" -eq 0 ] && grep -q 'Phase retired: runs only under --phase retired' <<<"$out" && ! grep -q 'RETIRED-PROBE-EXECUTED' <<<"$out"; then
     check ok "default filter: retired probe SKIPPED with the retired reason, suite passes (rc=$rc)"
 else
@@ -88,7 +103,7 @@ else
 fi
 
 # Arm 2: --phase retired — the retired probe EXECUTES (and fails, loudly).
-out="$(cd "$tmp" && bash "$tmp/scripts/run-litmus-test.sh" "$spec_slug" --phase retired 2>&1)" && rc=0 || rc=$?
+out="$(cd "$tmp" && TILLANDSIAS_PLAN_BIN="$PLAN_BIN" bash "$tmp/scripts/run-litmus-test.sh" "$spec_slug" --phase retired 2>&1)" && rc=0 || rc=$?
 if [ "$rc" -ne 0 ] && grep -q 'RETIRED-PROBE-EXECUTED' <<<"$out"; then
     check ok "--phase retired: retired probe executed (rc=$rc)"
 else

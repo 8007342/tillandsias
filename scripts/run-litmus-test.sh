@@ -77,7 +77,17 @@ readonly PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # Build/test DURATION telemetry (packet 682-emvg). Best-effort side-channel that
 # times the litmus suite; a timing failure must NEVER change the runner's exit.
-. "$(dirname "${BASH_SOURCE[0]}")/timing-log.sh" 2>/dev/null || true
+# The `-f` test is what makes the "best-effort" real. bash 3.2 — the system
+# shell on every macOS host — ABORTS a non-interactive shell when `.` cannot
+# find its file, and `|| true` does not save it (bash 4.4+ does not, which is
+# why this survived on Linux). So a runner copied somewhere without
+# timing-log.sh beside it died on this line before parsing anything, and a
+# timing side-channel changed the runner's exit after all. Verified:
+# `bash -c 'set -eo pipefail; . /nonexistent 2>/dev/null || true; echo X'`
+# prints nothing and exits 1 under 3.2.57.
+if [[ -f "$(dirname "${BASH_SOURCE[0]}")/timing-log.sh" ]]; then
+    . "$(dirname "${BASH_SOURCE[0]}")/timing-log.sh" 2>/dev/null || true
+fi
 command -v timing_emit >/dev/null 2>&1 || { timing_now_ms() { echo 0; }; timing_emit() { return 0; }; }
 readonly LITMUS_BINDINGS="${PROJECT_ROOT}/openspec/litmus-bindings.yaml"
 readonly LITMUS_TESTS_DIR="${PROJECT_ROOT}/openspec/litmus-tests"

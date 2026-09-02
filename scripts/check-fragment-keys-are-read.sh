@@ -47,7 +47,16 @@ FRAG_DIR="${TILLANDSIAS_FRAGMENT_DIR:-plan/index.d}"
 # the Rust, because a parser that guessed wrong would fail OPEN — and failing
 # open is the whole defect. If the fold learns a new channel, this list is
 # updated in the same commit; the litmus asserts the list matches the source.
-READ_KEYS=" packets events fields status "
+#
+# `capabilities` was added on 2026-09-02 after this list had already drifted from
+# it: the fold has read that channel since 843-624y (LWW by (ts, host), and
+# fold_capability_rows above), and the list had not been updated in the same
+# commit — the exact staleness the paragraph above warns about. The effect was a
+# deadlock, not a lost fragment: 850-bif2 makes publishing a capability row a
+# daily obligation and this guard refused every row the generator produced.
+# The litmus arm now iterates the same five names, so the next channel cannot
+# drift silently either.
+READ_KEYS=" packets events fields status capabilities "
 
 violations=0
 checked=0

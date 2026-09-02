@@ -2318,6 +2318,7 @@ fn windows_npus() -> Option<Vec<DeviceRecord>> {
     )
 }
 
+#[cfg(target_os = "linux")]
 fn enumerate_npus() -> Vec<DeviceRecord> {
     let mut npus = Vec::new();
     let accel_dir = Path::new("/sys/class/accel");
