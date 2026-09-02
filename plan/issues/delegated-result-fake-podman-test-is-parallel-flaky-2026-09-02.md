@@ -11,7 +11,7 @@ Found during: order 793-qr4t / 793-qc6q implementation
 ```
 test tests::delegated_result_fake_podman_covers_fresh_status_and_exact_timeout_reap ... FAILED
 [forge-result] codex FAILED: exit 37 (transcript said: succeeded: looks successful)
-panicked at crates/tillandsias-headless/src/main.rs:21782
+panicked in the delegated-result assertion in crates/tillandsias-headless/src/main.rs
 test result: FAILED. 462 passed; 1 failed; 1 ignored
 ```
 
