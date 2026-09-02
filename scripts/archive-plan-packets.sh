@@ -99,6 +99,29 @@ _archiver_cleanup() {
 }
 
 if [ "$1" == "--check" ]; then
+    # ORDER 964-js34: per-phase profile, opt-in and zero-cost when off.
+    _ap_t0=0; _ap_last=0
+    # BSD date SUCCEEDS on %3N and emits a literal "N", so an exit-code guard
+    # cannot catch it (761-g36m). Digit-validate, then degrade to whole
+    # seconds — this feeds a profile line only.
+    _ap_now() {
+        local _t
+        _t="$(date +%s%3N 2>/dev/null || true)" # gnu-date: ok (digit-validated below)
+        case "$_t" in '' | *[!0-9]*) _t="$(date +%s 2>/dev/null || echo 0)000" ;; esac
+        printf '%s' "$_t"
+    }
+    _ap_phase() {
+        [ -n "${TILLANDSIAS_ARCHIVER_PROFILE:-}" ] || return 0
+        local _n; _n=$(_ap_now)
+        [ "$_ap_last" = 0 ] && { _ap_t0=$_n; _ap_last=$_n; return 0; }
+        printf '[archiver-profile] %-28s %6sms\n' "$1" "$((_n - _ap_last))" >&2
+        _ap_last=$_n
+    }
+    _ap_total() {
+        [ -n "${TILLANDSIAS_ARCHIVER_PROFILE:-}" ] || return 0
+        printf '[archiver-profile] %-28s %6sms\n' TOTAL "$(( $(_ap_now) - _ap_t0 ))" >&2
+    }
+    _ap_phase start
     echo "Running in check mode..."
     # ORDER 964-9yyp. On a fast worktree this is "$REPO_ROOT" and every path
     # below is byte-for-byte what it was — a host that was correct before this
@@ -110,11 +133,13 @@ if [ "$1" == "--check" ]; then
     trap _archiver_cleanup EXIT INT TERM
     rm -rf "$SCRATCH"/plan_tmp "$SCRATCH"/plan_tmp_bak
     cp -a plan/ "$SCRATCH"/plan_tmp/
+    _ap_phase copy-plan-tree
     
     # The generated .rb reads and writes the COPY, so it needs the copy's real
     # location. `|` stays the delimiter because the replacement is a path and
     # contains no `|`; it is a directory name we chose, not user input.
     sed "s|plan/|$SCRATCH/plan_tmp/|g" scripts/archive-plan-packets.rb > scripts/archive-plan-packets-check.rb
+    _ap_phase sed-rewrite-rb
 
     # THE ACCEPTANCE ASSERTION (831-ezea). Everything below the idempotency
     # diff was already here and it proved the WRONG PROPERTY. An archiver that
@@ -167,6 +192,7 @@ if [ "$1" == "--check" ]; then
     # letting it re-derive one.
     export TILLANDSIAS_PLAN_BIN="$PLAN_BIN"
     "$PLAN_BIN" --index "$SCRATCH"/plan_tmp/index.yaml ready > "$SCRATCH"/plan_tmp_ready_before.txt
+    _ap_phase ready-before
 
     # SECOND INVARIANT: archiving must not ORPHAN live fragment events.
     #
@@ -198,10 +224,13 @@ if [ "$1" == "--check" ]; then
     done
     sort -u "$SCRATCH"/plan_tmp_addressed_raw.txt > "$SCRATCH"/plan_tmp_addressed.txt
     _orphans "$SCRATCH"/plan_tmp/index.yaml "$SCRATCH"/plan_tmp_orphans_before.txt
+    _ap_phase orphans-before
 
     _ruby scripts/archive-plan-packets-check.rb >/dev/null
+    _ap_phase ruby-sweep
 
     _orphans "$SCRATCH"/plan_tmp/index.yaml "$SCRATCH"/plan_tmp_orphans_after.txt
+    _ap_phase orphans-after
     if ! diff -u "$SCRATCH"/plan_tmp_orphans_before.txt "$SCRATCH"/plan_tmp_orphans_after.txt > "$SCRATCH"/plan_tmp_orphans_diff.txt; then
         echo "Check FAILED: archiving ORPHANED live fragment events. These packet ids are"
         echo "  addressed by a plan/index.d events block that the fold will now DISCARD:"
@@ -211,6 +240,7 @@ if [ "$1" == "--check" ]; then
     fi
 
     "$PLAN_BIN" --index "$SCRATCH"/plan_tmp/index.yaml ready > "$SCRATCH"/plan_tmp_ready_after.txt
+    _ap_phase ready-after
     if ! diff -u "$SCRATCH"/plan_tmp_ready_before.txt "$SCRATCH"/plan_tmp_ready_after.txt > "$SCRATCH"/plan_tmp_ready_diff.txt; then
         echo "Check FAILED: archiving CHANGED THE READY SET. These rows are schedulable"
         echo "  work that the archive swallowed; they will answer 'no packet matches':"
@@ -223,7 +253,9 @@ if [ "$1" == "--check" ]; then
     cp -a "$SCRATCH"/plan_tmp/ "$SCRATCH"/plan_tmp_bak/
     
     _ruby scripts/archive-plan-packets-check.rb >/dev/null
+    _ap_phase ruby-sweep
     
+    _ap_phase idempotency-diff
     if ! diff -qr "$SCRATCH"/plan_tmp/ "$SCRATCH"/plan_tmp_bak/ > /dev/null; then
         echo "Check failed: second run modified files. Not idempotent."
         _archiver_cleanup
@@ -247,6 +279,7 @@ if [ "$1" == "--check" ]; then
     # rather than inlined because the answer requires a full tree copy and a
     # cargo run — see the script's header for why it is a tree and not a plan/.
     echo "Checking the sweep does not break what the expert system can answer..."
+    _ap_phase pre-answerability
     if ! _answerability="$("$DIR/check-archive-answerability.sh")"; then
         # 923-ws3r. The sub-check names its own inability distinctly from a real
         # regression, so relay the distinction instead of flattening it.
@@ -266,6 +299,8 @@ if [ "$1" == "--check" ]; then
     fi
     echo "  $_answerability"
 
+    _ap_phase answerability
+    _ap_total
     echo "Check passed: ready set unchanged, no new orphaned events, archived packets stay answerable, and the script is idempotent."
     exit 0
 fi

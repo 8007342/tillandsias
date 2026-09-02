@@ -29,6 +29,28 @@
 # ignored target/ tree, not /tmp: forge /tmp is a 256 MiB tmpfs and a cold Rust
 # target alone exceeds it.
 #
+# PROFILED per phase 2026-09-02 (order 964-js34) on a forge — overlayfs
+# checkout, 20 cores, warm $WORK/target — with TILLANDSIAS_ARCHIVER_PROFILE=1:
+#
+#   phase                 before    after
+#   tree-copy             30273ms    297ms   <- the whole story
+#   cargo-test             7621ms   7581ms
+#   sweep                  1818ms    913ms
+#   ready-after/before      932ms    420ms
+#   resolve-plan-binary       2ms      3ms
+#   TOTAL                 40647ms   9215ms
+#
+# The copy was 74% of the harness and the suite it exists to run was 19%. The
+# copy is now a reflink (see the block below), and the verdict is unchanged in
+# both arms: ok:archive-answerability:274/274, 892 packets, ready set 403.
+# `archive-plan-packets.sh --check` end-to-end went 109s -> 12.6s on the memo
+# MISS path, twice, which is the number the gate actually pays.
+#
+# ONE REGIME ONLY. These are workstation-class numbers. The packet asks for two
+# and the second is the N150 floor host, which no forge can measure for it —
+# the profile is opt-in and left in place precisely so that host can produce a
+# comparable set rather than a differently-derived one.
+#
 # Exit codes are three-valued, like `plan grade`:
 #   0 — the sweep ran and the post-archive suite is green;
 #   1 — the sweep ran and something is RED (this is the regression);
@@ -124,6 +146,24 @@ fi
 _cleanup() { [ "$KEEP" -eq 1 ] || rm -rf "$TREE"; }
 trap _cleanup EXIT
 
+# ORDER 964-js34: opt-in per-phase profile (same shape as archive-plan-packets.sh).
+_aa_last=0; _aa_t0=0
+# BSD date SUCCEEDS on %3N and emits a literal "N" (761-g36m); digit-validate
+# and degrade to whole seconds rather than trusting the exit code.
+_aa_now() {
+    _t="$(date +%s%3N 2>/dev/null || true)" # gnu-date: ok (digit-validated below)
+    case "$_t" in '' | *[!0-9]*) _t="$(date +%s 2>/dev/null || echo 0)000" ;; esac
+    printf '%s' "$_t"
+}
+_aa_phase() {
+    [ -n "${TILLANDSIAS_ARCHIVER_PROFILE:-}" ] || return 0
+    _aa_n=$(_aa_now)
+    if [ "$_aa_last" = 0 ]; then _aa_t0=$_aa_n; _aa_last=$_aa_n; return 0; fi
+    printf '[answerability-profile] %-22s %6sms\n' "$1" "$((_aa_n - _aa_last))" >&2
+    _aa_last=$_aa_n
+}
+_aa_total() { [ -n "${TILLANDSIAS_ARCHIVER_PROFILE:-}" ] || return 0; printf '[answerability-profile] %-22s %6sms\n' TOTAL "$(( $(_aa_now) - _aa_t0 ))" >&2; }
+_aa_phase start
 # ---------------------------------------------------------------- copy tree
 # Everything except build outputs and agent scratch. `git ls-files` would miss
 # untracked-but-needed files and would not carry modes; a pruned copy is both
@@ -162,13 +202,60 @@ if [ "$COPY_KB" -gt "$BUDGET_KB" ]; then
     exit 1
 fi
 
-if ! tar -C "$REPO_ROOT" "${TAR_PRUNE[@]}" -cf - . 2>"$LOG/copy.err" \
-     | tar -C "$TREE" -xf - 2>>"$LOG/copy.err"; then
-    echo "fail:${NAME}:tree-copy-failed:see-$LOG/copy.err"
-    KEEP=1
-    exit 1
+# ORDER 964-js34: COPY-ON-WRITE FIRST, tar as the fallback.
+#
+# This copy is the single largest phase of the whole archiver check. Measured
+# in a forge (overlayfs, 208 MB tree of which .git is 149 MB): the tar pipe
+# takes 11.6s idle and was seen at 30.3s under load — 74% of a 40.6s harness,
+# against 7.6s for the cargo suite it exists to run. Everything else in the
+# harness is noise by comparison: the du budget scan is 22ms and the rm is
+# 175ms.
+#
+# `cp -a --reflink=auto` does the same job in 304ms — 38x — because a reflink
+# copies extent references rather than bytes. It is a REAL copy, not a
+# hardlink: verified here that appending to the copy's plan/index.yaml leaves
+# the original's checksum unchanged, so "THE LIVE LEDGER IS NEVER TOUCHED"
+# still holds by construction.
+#
+# WHY NOT JUST PRUNE .git, which is 72% of the bytes: because the prune-list
+# comment above says it is copied on purpose — gitref.rs shells out to git —
+# and a faster copy that quietly removes what the suite tests is not a
+# speedup. This keeps the copy byte-identical in content and only changes how
+# it is made.
+#
+# `--reflink=auto` already degrades to a full byte copy where the filesystem
+# cannot share extents, so the only host that needs the tar fallback is one
+# whose `cp` does not know the flag at all (BSD userland). Probed once, never
+# assumed — and on the fallback path the behaviour is exactly what it was.
+_aa_copy_ok=0
+if cp --reflink=auto --help >/dev/null 2>&1 || cp --help 2>/dev/null | grep -q -- '--reflink'; then
+    _aa_copy_ok=1
+    (
+        cd "$REPO_ROOT" || exit 1
+        shopt -s dotglob nullglob
+        for _aa_entry in *; do
+            _aa_skip=0
+            for _aa_p in "${TAR_PRUNE[@]}"; do
+                [ "${_aa_p#--exclude=./}" = "$_aa_entry" ] && { _aa_skip=1; break; }
+            done
+            [ "$_aa_skip" = 1 ] && continue
+            cp -a --reflink=auto "$_aa_entry" "$TREE/" || exit 1
+        done
+    ) 2>"$LOG/copy.err" || _aa_copy_ok=0
+fi
+if [ "$_aa_copy_ok" != 1 ]; then
+    # Fallback: the original tar pipe, unchanged. A host that lands here is
+    # exactly as fast (and as correct) as it was before this order.
+    rm -rf "${TREE:?}"/* "${TREE:?}"/.[!.]* 2>/dev/null || true
+    if ! tar -C "$REPO_ROOT" "${TAR_PRUNE[@]}" -cf - . 2>>"$LOG/copy.err" \
+         | tar -C "$TREE" -xf - 2>>"$LOG/copy.err"; then
+        echo "fail:${NAME}:tree-copy-failed:see-$LOG/copy.err"
+        KEEP=1
+        exit 1
+    fi
 fi
 
+_aa_phase tree-copy
 if [ ! -f "$TREE/plan/index.yaml" ]; then
     echo "fail:${NAME}:copy-missing-plan-index"
     exit 1
@@ -189,6 +276,7 @@ case "$PLAN_BIN" in
     *) PLAN_BIN="$REPO_ROOT/${PLAN_BIN#./}" ;;
 esac
 export TILLANDSIAS_PLAN_BIN="$PLAN_BIN"
+_aa_phase resolve-plan-binary
 
 # ------------------------------------------------- ready set, BEFORE the sweep
 # Recorded from the COPY, so the comparison is like-for-like with the after.
@@ -199,6 +287,7 @@ if ! "$PLAN_BIN" --index "$TREE/plan/index.yaml" ready > "$WORK/ready_before.txt
 fi
 READY_BEFORE="$(wc -l < "$WORK/ready_before.txt" | tr -d ' ')"
 
+_aa_phase ready-before
 # ---------------------------------------------------------------- the sweep
 # The copy's own archive script, so REPO_ROOT inside it is the copy.
 if ! ( cd "$TREE" && ./scripts/archive-plan-packets.sh ) >"$LOG/sweep.out" 2>&1; then
@@ -209,6 +298,7 @@ fi
 
 ARCHIVED_ROWS="$(grep -c 'packet_id:' "$TREE"/plan/archive/*.yaml 2>/dev/null | awk -F: '{s+=$NF} END {print s+0}')"
 
+_aa_phase sweep
 # ------------------------------------------------- ready set, AFTER the sweep
 if ! "$PLAN_BIN" --index "$TREE/plan/index.yaml" ready > "$WORK/ready_after.txt" 2>"$LOG/ready_after.err"; then
     echo "fail:${NAME}:ready-listing-failed-after-sweep"
@@ -224,6 +314,7 @@ if ! diff -u "$WORK/ready_before.txt" "$WORK/ready_after.txt" > "$WORK/ready_dif
     exit 1
 fi
 
+_aa_phase ready-after
 # ------------------------------------------------ THE CAPABILITY ASSERTION
 # The crate suite, re-asked against the post-archive ledger. --offline so a
 # missing network is a missing network and not a mystery; the registry cache
@@ -233,6 +324,8 @@ fi
     CARGO_TARGET_DIR="$WORK/target" cargo test --offline -p tillandsias-plan --lib
 ) >"$LOG/cargo-test.out" 2>&1
 TEST_STATUS=$?
+_aa_phase cargo-test
+_aa_total
 
 SUMMARY="$(grep -E '^test result:' "$LOG/cargo-test.out" | tail -1)"
 
