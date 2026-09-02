@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: codex-opencode-smoke-divergence-comparison
+    field: next_action
+    value: 'Run the paired comparison with BOTH lanes pinned to the same mode — TILLANDSIAS_E2E_FORCE_MODE=smoke scripts/litmus-codex-e2e-launch.sh then the same for litmus-opencode-e2e-launch.sh — on a host with provider budget authorisation. Do NOT run them without the override: the first full-meta lane records against a 4h-per-host rate limit and silently downgrades the second to smoke, so the two lanes get DIFFERENT prompts and the comparison is invalid while looking fine. Verified 2026-09-02 via --print-mode (both full without the override, both smoke with it). Then capture both verdicts + /tmp/{codex,opencode}-e2e-* evidence and classify per exit criterion 2.'
+    ts: "2026-09-02T06:55:07Z"
+    host: linux

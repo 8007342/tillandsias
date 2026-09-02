@@ -7379,6 +7379,48 @@ plan_index:
         - "a comparison report in plan/issues/ classifying the outcome (shared-issue | codex-only | opencode-only | both-clean) with the actual logs"
         - "every divergence surfaced is filed as its own plan/issues packet (not left only in the report)"
       events:
+        - type: progress
+          ts: "2026-09-02T06:55:06Z"
+          agent_id: "linux-lenovinha-claude-20260902t065311z"
+          host: lenovinha
+          summary: |
+            READINESS SLICE, no live run and no provider spend. The harness is ready — and it contains a defect that would have SILENTLY INVALIDATED the first paired comparison anyone ran. Measured on lenovinha 2026-09-02 using only --print-mode and the rate-limiter's status verb, both of which resolve without launching anything.
+
+            THE DEFECT: A NAIVE SEQUENTIAL PAIRED RUN PRODUCES AN INVALID COMPARISON, AND NOTHING SAYS SO.
+
+              scripts/forge-e2e-rate-limit.sh: the `full-meta` class is allowed AT MOST ONCE PER WINDOW PER HOST (default 14400s = 4h).
+              Both launchers, when MODE resolves to full, call `rate-limit record full-meta` BEFORE launching.
+
+              So the obvious invocation — run codex, then run opencode — goes:
+                lane 1 (codex)    check full-meta -> allow  -> MODE=full  -> RECORDS full-meta
+                lane 2 (opencode) check full-meta -> LIMITED -> MODE=smoke
+
+              And the two modes send DIFFERENT PROMPTS:
+                full  : "Use the /meta-orchestration skill"
+                smoke : "Use the /meta-orchestration skill in smoke mode (verify-only)"
+
+              Exit criterion 1 of this packet requires "codex + opencode on the SAME prompt/forge". The sequential invocation cannot satisfy it, and the divergence it then reports would be attributed to the HARNESS (codex-only vs opencode-only) when the real cause is that the two lanes were asked different questions. That is precisely the misattribution this packet exists to avoid — the comparison's whole value is telling shared-issue from one-sided failure.
+
+            MEASURED THIS CYCLE (all free):
+              scripts/litmus-codex-e2e-launch.sh    --print-mode  -> mode=full
+              scripts/litmus-opencode-e2e-launch.sh --print-mode  -> mode=full
+              scripts/forge-e2e-rate-limit.sh status full-meta    -> allow:full-meta
+              both launchers present and executable
+            So this host WOULD run lane 1 at full today, and the trap is live rather than hypothetical.
+
+            THE CORRECT INVOCATION, verified in both directions:
+                TILLANDSIAS_E2E_FORCE_MODE=smoke scripts/litmus-codex-e2e-launch.sh
+                TILLANDSIAS_E2E_FORCE_MODE=smoke scripts/litmus-opencode-e2e-launch.sh
+              POSITIVE CONTROL: with the override, BOTH launchers print mode=smoke — identical prompt, identical mode, comparable verdicts. Without it, both print mode=full and the first to run silently downgrades the second.
+              This override is safe by construction and is documented as such in lib-e2e-mode.sh: it is DE-ESCALATION ONLY, so forcing smoke can only ever make a run cheaper and cannot be abused to bypass the limiter.
+
+            WHY SMOKE RATHER THAN forcing both to full: TILLANDSIAS_E2E_FORCE=1 would let both run full, but that is two of the most expensive runs and defeats the limiter the operator put there. Smoke gives a VALID first datapoint at the lowest cost, which is the right shape for a multi_cycle packet that accretes datapoints rather than needing one perfect run.
+
+            NOT DONE, and why: even smoke does a real `tillandsias . --codex|--opencode --prompt ...` forge launch, i.e. a full enclave bring-up and REAL PROVIDER SPEND on the operator's accounts, twice. That is the operator's money and their call, not an autonomous one, so no run was started. Nothing in this slice cost anything.
+
+            NEXT ACTION for whoever holds budget authorisation: run the two commands above back to back on one host, capture both verdict lines plus /tmp/codex-e2e-* and /tmp/opencode-e2e-* evidence, and classify per exit criterion 2. The mode-asymmetry trap is now recorded, so the run will be comparable rather than quietly confounded.
+
+            WORTH CONSIDERING SEPARATELY (not filed, to avoid inventing scope): the launchers could refuse a paired run whose two lanes resolved to different modes, rather than leaving that to a runbook note. That would make the trap fail loud instead of silent, in the spirit of the fail-loud-diagnosis milestone.
         - type: filed
           ts: "2026-07-17T18:55:00Z"
           agent_id: "linux-macuahuitl-fable5-20260717T1747Z"
