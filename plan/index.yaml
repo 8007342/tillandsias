@@ -46360,6 +46360,32 @@ plan_index:
         each survivor's budget carries a low-end rationale.
       events:
         - type: note
+          ts: "2026-09-02T20:45:38Z"
+          agent_id: "forge-forge-tillandsias-claude-20260902t204538z"
+          host: pirria-tillandsias-forge
+          summary: |
+            LOW-END TIMING TABLE, the scout measurement this packet's budgets rung needs. `scripts/run-litmus-test.sh --size instant --phase pre-build --compact`, run once, start 2026-09-02T20:30:02Z. REGIME: pirria, Intel N150, 4 physical/4 logical cores, CachyOS (Linux 7.2.2-1-cachyos), NATIVE podman (no WSL2, no VM), inside a tray-minted agent forge (/proc/1/cmdline = /run/podman-init -- /usr/local/bin/entrypoint-forge-claude.sh), v56.9.2.1 curl-installed release, checkout seeded from linux-next 2acb4f9ca and carrying this cycle's own plan/methodology commits. cgroup: pids.max=4096, memory.max and cpu.max both UNBOUNDED — so this is a 4-core-limited measurement, not a memory- or quota-limited one.
+
+            WALL CLOCK, the headline the budgets rung actually needs: 8m57.41s total (537s), 500.09s user + 130.78s system at 117% CPU. 117% of one core on a 4-core box means the suite is overwhelmingly SERIAL — it is not saturating the floor's cores, so the floor's 4-core-ness is NOT what makes this slow. That matters for the budgets: adding cores would buy little, and a per-step budget set from a fast host's wall clock will be wrong for a reason unrelated to parallelism.
+
+            RESULTS: PASS 265, FAIL 25, SKIP 183 (excluded from coverage). Total 473, executed 290. Coverage 100% [100/100 specs]. Pass rate 91% (265/290). For calibration against the meta-orchestration skill's own §2a warning — that an unscoped pre-build suite in a forge produces a near-total failure because most of it needs vault/podman/vsock — this floor forge got 91%, not the 0.4% (1/252) that section records from macuahuitl 2026-08-18. The skip mechanism is doing its job here; the 25 failures are a real minority, not an infrastructure wipeout.
+
+            TOP-FIVE TIMING TABLE (the runner's own >=0.5s ranking; full ranking in the timing records):
+              1.  81.3s  litmus:forge-policy-binary-discoverability
+              2.  50.6s  litmus:codex-e2e-launch-parity
+              3.  34.2s  litmus:cycle-metrics-answer-rate-shape
+              4.  19.6s  litmus:cycle-batch-triage-shape
+              5.  15.3s  litmus:build-test-timing-telemetry-shape
+            Next five, for the shape of the tail: 15.3s cycle-checkout-lock-shape; 15.1s freshness-inventory-shape; 14.8s terminal-status-vocabulary-shape; 14.4s forge-clone-reachability-probe-shape; 12.5s mcp-expert-health-probe-shape.
+
+            THE DISTRIBUTION IS THE FINDING, not any single row. The top five sum to 201s = 37% of a 537s suite, and the top ten to 273s = 51%. Half the instant tier's wall clock on floor hardware is ten tests. A budgets rung that sets one uniform per-step budget will either be too loose to catch anything or will red the same ten rows on every floor host forever; the top ten are where a budget is worth setting individually.
+
+            ONE ROW IS A MEASUREMENT DEFECT AND MUST NOT BE BUDGETED FROM AS-IS: litmus:freshness-inventory-shape reports 15.1s with the runner's own annotation `(killed at budget — censored; the true time is longer)`. Its recorded time is a CEILING, not a duration — the instrument stopped the clock by stopping the test. Any budget derived from a censored row is derived from the budget that censored it, which is circular. Either raise its budget until it completes once on the floor and record the real number, or mark the row censored in the budgets table so nobody reads 15.1s as a time.
+
+            WORTH CARRYING to whoever sets the numbers: the slowest row (forge-policy-binary-discoverability, 81.3s) is 15% of the suite by itself and is forge-shaped — it is exactly the kind of row a fast host will never see as expensive, which is what makes a floor scout the right instrument for this packet.
+
+            CROSS-LINK to 959-fpc5, measured on the same run rather than assumed: this entire suite executed with pids.events at `max 0` throughout and pids.peak reaching only 81 of 4096. The precondition-hole arm of this packet that 959-fpc5 reframed — a leaked-gate FAIL possibly being downstream of pid exhaustion rather than an independent absence — is EXCLUDED for this run. Whatever the 25 failures are, none of them is a pids incident.
+        - type: note
           ts: "2026-09-01T10:00:00Z"
           host: macuahuitl
           summary: |
@@ -46698,6 +46724,26 @@ plan_index:
         are serialized (953-fflt's scheduling fix) such that pids.events
         shows zero denials under the same load, or both.
       events:
+        - type: note
+          ts: "2026-09-02T20:46:05Z"
+          agent_id: "forge-forge-tillandsias-claude-20260902t204605z"
+          host: pirria-tillandsias-forge
+          summary: |
+            END-OF-CYCLE RE-READ — THE CLOSURE ARM IS COMPLETE ON FLOOR HARDWARE, and it is the first one this packet has had. Pairs with this host's cold pre-cycle sample earlier today; same guest, same container lifetime, no relaunch between the two reads, so the counters are directly comparable rather than two separate regimes.
+
+              read           uptime   pids.max   current   peak   pids.events
+              cold (pre)     1h09m    4096       33        63     max 0
+              end of cycle   1h24m    4096       36        81     max 0
+
+            WHAT RAN BETWEEN THEM, which is what makes this the criterion and not just a second sample: a full instant-tier pre-build litmus suite — 473 tests, 290 executed, 8m57s wall, 500s user + 131s system — plus this cycle's plan and methodology work, ledger folds, several tillandsias-plan mints and four push/rebase rounds against a contended remote. The verifiable_closure asks for `pids.events` showing ZERO denials over a full evaluation + litmus cycle on a floor host. That is exactly this: **`max 0` before, `max 0` after, zero kernel-counted fork denials across the whole cycle.**
+
+            PEAK 81 OF 4096 = 2.0% UTILISATION. The suite moved the peak by 18 (63 -> 81) and current barely at all (33 -> 36). Compare what this packet recorded from the SAME host class before the raise: pids.peak pinned at EXACTLY 512 with 140 cumulative denials on pirria and 100 on esmeraldinha. The ceiling is no longer within reach of anything this cycle did.
+
+            TWO-REGIME AGREEMENT, which the packet wanted and previously could not get because the floor was the only place 512 was reachable: macuahuitl (workstation, v56.9.2.1, two forges at PidsLimit 4096) read peaks of 81 and 66 with `max 0` over 93 minutes. This floor guest reads peak 81 with `max 0` over 84 minutes — the SAME NUMBER on a 4-core N150 as on the workstation. That is the strongest form the evidence could take: the workload's pid footprint is a property of the workload, not of the hardware, so 4096 is not merely sufficient on the floor by luck of a lighter load.
+
+            WHAT THIS DOES AND DOES NOT CLOSE. It discharges the FIRST arm of the verifiable_closure ('pids.max raised to a value with measured headroom on the 4-core class, justified against pids.events reading 0 denials over a full evaluation + litmus cycle on a floor host') for the LIVE LAUNCH PATH — build_forge_agent_run_args_with_vault, confirmed as this guest's launcher by /proc/1/cmdline. It does NOT verify the rest of the coordinator's fix census: tray/mod.rs:2157, orchestrate-enclave.sh:322/404, the container_profile.rs dead profiles, pids_limits_match_container_roles moving with the value, and main.rs:10706's pids_limit(64) utility container. A guest can only report the ceiling it was launched under; the other five sites need a reader of the tree, not a reader of a cgroup.
+
+            NOT MEASURED, stated so nobody reads it in: this cycle ran NO workspace build. The 953-fflt/step-(d) hold on workspace-fanout compiles was respected — 27 cargo-compiling litmus steps are single-crate at -j4, already measured safe. The boot-time contributors the packet names (the cargo -j4 expert build, the 199MiB vendor extract) happened before this container's first read, so the 63 cold peak already includes whatever they cost and they are not separately attributable here. Also unexercised: the tool-install fork storm that the packet's FINAL ATTRIBUTION identified as the thing that actually reaches a ceiling (364s tokei bootstrap, hyperfine shim). Nothing installed a tool this cycle. So this measurement proves ordinary operation is far from 4096; it does not prove an installer storm is.
         - type: note
           ts: "2026-09-02T20:31:12Z"
           agent_id: "forge-forge-tillandsias-claude-20260902t203111z"
