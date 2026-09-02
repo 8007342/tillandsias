@@ -1338,7 +1338,13 @@ run_litmus_test_file() {
         # 956-llei: stall counter + wall clock at launch, diffed at kill time.
         local _lt_psi0 _lt_t0
         _lt_psi0="$(_lt_cpu_stall_us)"; _lt_t0="$(date +%s)"
-        LITMUS_STDLIB="${LITMUS_STDLIB}" timeout --kill-after=10s "${timeout_sec}s" bash -c 'source "$LITMUS_STDLIB"; '"${step_command}" >"$step_capture" 2>&1 || exit_code=$?
+        # 956-llei: stdin is /dev/null, ALWAYS. The per-spec test loop feeds
+        # its bound test names through a here-string on stdin, and a step that
+        # reads stdin (a fixture with `read`, `cat`, an interactive-capable
+        # tool) drained the rest of its spec's list: measured 2026-09-02, the
+        # instant sweep executed 1 of the 29 tests bound to ci-release, and
+        # reported PASS. Two born-red tests sat unobserved in that gap.
+        LITMUS_STDLIB="${LITMUS_STDLIB}" timeout --kill-after=10s "${timeout_sec}s" bash -c 'source "$LITMUS_STDLIB"; '"${step_command}" </dev/null >"$step_capture" 2>&1 || exit_code=$?
         step_output="$(cat "$step_capture")"
         rm -f "$step_capture"
         combined_output+=$'\n'"[${step_index}:${step_name}]${step_output}"

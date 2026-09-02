@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: cross-host-measurement-practice-lives-only-in-transcripts
+    field: status
+    value: completed
+    ts: "2026-09-02T07:27:44Z"
+    host: macuahuitl
+
+events:
+  - packet_id: cross-host-measurement-practice-lives-only-in-transcripts
+    event:
+      type: completed
+      ts: "2026-09-02T07:27:44Z"
+      host: macuahuitl
+      summary: >
+        status 'completed' with evidence_refs: ea2b7b5c1: methodology/verification.yaml measurement_practice (rules 1-4 + 886-yizb review rule + probe protocol v1, each with its earning error); rule 1 enforced at emission — scripts/cycle-metrics.sh build_check_mix label, fixture scripts/test-cycle-metrics-mix-label.sh 'PASS: build_check_mix label 2/2 (890-nkdz)' (RED against the previous reporter), litmus:cycle-metrics-answer-rate-shape Status PASS through the runner; rule 2 enforced by check-bash-dialect.sh; rules 3-4 recorded as judgment
+  - packet_id: cross-host-measurement-practice-lives-only-in-transcripts
+    event:
+      type: note
+      ts: "2026-09-02T07:27:44Z"
+      host: macuahuitl
+      summary: >
+        deliverable met in the 2026-09-02T07:07:59Z cycle

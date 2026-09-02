@@ -69,7 +69,7 @@ operator_notes() {
         /^[[:space:]]*-[[:space:]]*packet_id:/ { inside = 0; next }
         /^[[:space:]]*(packets|events|status):[[:space:]]*$/ { inside = 0; next }
         inside { print }
-    ' "$LEDGER" "${FRAGMENTS[@]}" 2>/dev/null
+    ' "$LEDGER" "${FRAGMENTS[@]}" "${ARCHIVES[@]}" 2>/dev/null
 }
 
 # Fragment list resolved ONCE, tolerating an EMPTY index.d: a fully compacted
@@ -81,6 +81,16 @@ operator_notes() {
 FRAGMENTS=()
 for _f in plan/index.d/*.yaml; do
     [ -e "$_f" ] && FRAGMENTS+=("$_f")
+done
+# The ARCHIVE is a ledger source too (911-m7js cycle, 2026-09-02): an approval
+# is a durable fact about a string, and the packet that carries it completes
+# and gets archived like any other. The first archiver sweep after 626-w3fn
+# landed moved first-run-long-work-is-silent-across-surfaces — and its
+# operator_note for "Getting your workspace ready…" — into plan/archive/, and
+# this gate went red on a tree where nothing about the string had changed.
+ARCHIVES=()
+for _f in plan/archive/*.yaml; do
+    [ -e "$_f" ] && ARCHIVES+=("$_f")
 done
 
 LEDGER="plan/index.yaml"

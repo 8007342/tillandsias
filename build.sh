@@ -2561,6 +2561,16 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Litmus retired-phase check passed"
 
+    # 956-llei: a litmus step that reads stdin must not swallow the rest of its
+    # spec's bound test list (the instant sweep ran 1 of 29 ci-release tests
+    # and reported PASS before the runner fed steps from /dev/null).
+    _step "Checking a stdin-reading litmus step does not eat its spec's test list (956-llei)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-stdin-does-not-eat-the-spec-list.sh" 2>&1; then
+        _error "a stdin-reading litmus step swallows the rest of its spec's test list (956-llei) — see the verdict line above"
+        exit 1
+    fi
+    _info "Litmus stdin isolation check passed"
+
     # Order 881-29me. A `plan/issues/` audit cites its evidence and nothing
     # checked those citations still resolved. Measured in one document: every
     # factual claim re-verified TRUE while every `file:line` citation
