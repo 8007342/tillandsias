@@ -13571,7 +13571,15 @@ fn build_forge_agent_run_args_with_vault(
         .name(forge_container_name_for_mode(project_name, mode))
         .hostname(forge_hostname(project_name))
         .network(ENCLAVE_NET)
-        .pids_limit(512);
+        // 4096, not 512 (667-se87 / 959-fpc5): 512 was reachable in NORMAL
+        // floor-hardware operation — a single vendor-installer fork storm
+        // pinned pids.peak at exactly 512 on two hosts (builds never came
+        // close: measured 3.5-6.6% of the ceiling). 65fe4e766 raised two
+        // sites and missed THIS one — the launcher of every working agent
+        // forge. The rationale travels with EVERY site now; a fix whose
+        // comment rides only some copies makes the missed ones look
+        // intentional.
+        .pids_limit(4096);
     if !non_interactive_prompt {
         spec = spec.interactive().tty();
         // D3 of order 702-6jza. With --tty, podman injects its DEFAULT

@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+
+events:
+  - packet_id: web-catalog-docroot-convention
+    event:
+      type: note
+      ts: "2026-09-02T22:45:00Z"
+      host: macuahuitl
+      summary: >
+        SEVERITY UPGRADE from the consumer's live probing
+        (tillandsias.org-forge-claude): root-serving is not cosmetic —
+        /.git/config returned 200 through the router (full history +
+        remote URLs reconstructible), and the same container shape is
+        what the Cloudflare tunnel rung later makes PUBLIC, where a
+        served /.git/ is a standard actively-scanned finding. The rung
+        is the fix that stops the docroot being the repo root; until it
+        lands the coordinator capped the exposure at the Caddy layer
+        (403 on /.git paths, verified) — the GENERATED caddyfile for
+        public routes should carry the same dotfile deny permanently
+        (add to this packet's scope). SECOND consumer finding: only
+        www.<project> gets a route; the apex <project>.localhost was
+        Caddy-404 — and production is APEX-canonical with www 301ing to
+        it, so the local redirect target must exist. Apex route
+        registered manually (200 verified); publish_local should
+        register BOTH (scope added). CONTENT LOOP PROVEN END-TO-END:
+        forge commit -> mirror push -> host pull (ext::podman exec
+        transport — enclave IPs are unreachable from a rootless host,
+        so `git -c protocol.ext.allow=always fetch "ext::podman exec -i
+        tillandsias-git-<project> git upload-pack
+        /srv/git/<project>"` is the working host-side pull) -> ro mount
+        -> the agent's own propagation canary flipped 404->200. The
+        consumer also fixed their dev-run.sh token gate on the
+        coordinator's nit and held HTTPS work pending adjudication
+        exactly as ruled — model consumer behavior on a capability's
+        first live day.
