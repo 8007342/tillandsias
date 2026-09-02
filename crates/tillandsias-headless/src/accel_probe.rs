@@ -35,6 +35,44 @@ pub struct CapabilityDocument {
     /// said which code probed it.
     #[serde(default)]
     pub probe_identity: Option<String>,
+    /// Device classes this probe COULD NOT ENUMERATE on this platform, as
+    /// opposed to enumerated-and-found-none.
+    ///
+    /// ORDER 805-r98w / NPU parity, 2026-09-02. Before this existed, both
+    /// outcomes produced an empty device list and the envelope rendered either
+    /// as `none` — so a probe that had never looked published an affirmative
+    /// denial. Measured on native Windows: `accel_npu=none` on a host whose
+    /// XDNA2 NPU was serving models at that moment.
+    ///
+    /// `#[serde(default)]` because documents written before this order have no
+    /// such field; an old cache reads as "no gaps", which is the pre-existing
+    /// behaviour and no worse than it was.
+    #[serde(default)]
+    pub enumeration_gaps: Vec<String>,
+    /// The derived HARDWARE identity of the machine this document describes, or
+    /// `None` when the probe could not identify it.
+    ///
+    /// ORDER 805-r98w, second half. The fleet matrix is keyed `(host_id,
+    /// locus)`: `locus` is the substrate half and already works, but `host_id`
+    /// is an ASSERTED machine name, so rows cannot be grouped by hardware and
+    /// "these two hosts are the same machine" stays unverifiable — which is the
+    /// whole reason this order exists.
+    ///
+    /// Recorded here rather than recomputed by the matrix reader ON PURPOSE.
+    /// A second implementation of an identity function is the bug this order
+    /// spent a day removing: yoga and this host briefly had two, they disagreed
+    /// on RAM source and rounding, and two hosts running different
+    /// implementations would have compared incommensurable strings. So the
+    /// probe computes it once, the document carries it, and every consumer
+    /// reads the same field.
+    ///
+    /// `None` IS MEANINGFUL AND MUST NOT BE PAPERED OVER: it means
+    /// [`hardware_fingerprint_checked`] refused, i.e. this document cannot
+    /// identify its machine. A row with `None` must never be grouped with
+    /// another `None` row — two documents that both failed to identify
+    /// themselves are not thereby the same hardware.
+    #[serde(default)]
+    pub hardware_fingerprint: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -334,13 +372,13 @@ pub fn record_measurement(m: MeasurementRecord) -> Result<(), String> {
 /// the other. Enumeration measures the machine; this field records what the
 /// tier probe asserted. Do not re-thread it downward.
 pub fn run_probe(effective_tier: &str) -> CapabilityDocument {
-    let devices = enumerate_devices();
+    let (devices, enumeration_gaps) = enumerate_devices();
     let engines = enumerate_engines();
     let measurements = Vec::new(); // Microbenchmarks run on demand / bounded
     let host = enumerate_host();
     let timestamp = chrono::Utc::now().to_rfc3339();
 
-    CapabilityDocument {
+    let mut doc = CapabilityDocument {
         schema_version: SCHEMA_VERSION,
         legacy_tier: effective_tier.to_string(),
         devices,
@@ -349,7 +387,16 @@ pub fn run_probe(effective_tier: &str) -> CapabilityDocument {
         host,
         timestamp,
         probe_identity: Some(probe_identity()),
-    }
+        enumeration_gaps,
+        hardware_fingerprint: None,
+    };
+    // Computed from the devices just enumerated, so the document carries its own
+    // hardware identity and no consumer has to re-derive it. `checked` rather
+    // than the raw hasher: a blind probe must contribute NO identity rather than
+    // a plausible-looking constant that would collide with every other blind
+    // host.
+    doc.hardware_fingerprint = hardware_fingerprint_checked(&doc).ok();
+    doc
 }
 
 /// Order 852-dk9z. The identity of the probe CODE, not of the host.
@@ -368,19 +415,65 @@ pub fn probe_identity() -> String {
 }
 
 // @trace spec:accel-capability-probe
-fn enumerate_devices() -> Vec<DeviceRecord> {
+fn enumerate_devices() -> (Vec<DeviceRecord>, Vec<String>) {
     let mut devices = Vec::new();
+    let mut gaps = Vec::new();
 
     // 1. CPU Device
     devices.push(enumerate_cpu());
 
     // 2. GPUs
-    devices.extend(enumerate_gpus());
+    match enumerate_gpus_checked() {
+        Some(g) => devices.extend(g),
+        None => gaps.push("gpu".to_string()),
+    }
 
     // 3. NPUs
-    devices.extend(enumerate_npus());
+    match enumerate_npus_checked() {
+        Some(n) => devices.extend(n),
+        None => gaps.push("npu".to_string()),
+    }
 
-    devices
+    (devices, gaps)
+}
+
+/// GPU enumeration that distinguishes "looked and found none" (`Some(vec![])`)
+/// from "could not look here" (`None`).
+///
+/// ORDER 805-r98w. The distinction is the whole point: an empty list rendered
+/// as `accel_gpu=none` on a host with a Radeon 860M, because there was no
+/// Windows arm and no way for the caller to tell absence from blindness.
+fn enumerate_gpus_checked() -> Option<Vec<DeviceRecord>> {
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    {
+        Some(enumerate_gpus())
+    }
+    #[cfg(target_os = "windows")]
+    {
+        windows_gpus()
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+    {
+        // An unknown platform has NOT looked. Saying so costs a discriminator;
+        // claiming `none` would be a denial we cannot support.
+        None
+    }
+}
+
+/// NPU enumeration, same contract as [`enumerate_gpus_checked`].
+fn enumerate_npus_checked() -> Option<Vec<DeviceRecord>> {
+    #[cfg(target_os = "linux")]
+    {
+        Some(enumerate_npus())
+    }
+    #[cfg(target_os = "windows")]
+    {
+        windows_npus()
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
+    {
+        None
+    }
 }
 
 // @trace spec:accel-capability-probe
@@ -450,6 +543,71 @@ fn enumerate_cpu() -> DeviceRecord {
         flags.push("neon".to_string());
     }
 
+    // ORDER 805-r98w / NPU parity, 2026-09-02. Native Windows used to fall
+    // through to the generic arm below, which sets physical = logical. On this
+    // 8c/16t part that reported 16c16t — a WRONG number, not a missing one, and
+    // the CPU model stayed the placeholder "Host CPU". Together those made the
+    // hardware fingerprint refuse (correctly) and made the capability document
+    // unable to identify the machine at all.
+    //
+    // Everything here comes from the OS, not from a guess: a query that fails
+    // leaves the generic fallback in place rather than inventing a value.
+    #[cfg(target_os = "windows")]
+    {
+        let mut got = None;
+        if let Some(lines) = powershell_lines(
+            "$c = Get-CimInstance Win32_Processor -ErrorAction Stop | Select-Object -First 1; \
+             $m = (Get-CimInstance Win32_ComputerSystem -ErrorAction Stop).TotalPhysicalMemory; \
+             $c.Name + '|' + $c.NumberOfCores + '|' + $c.NumberOfLogicalProcessors + '|' + \
+             $c.Manufacturer + '|' + $m",
+        ) {
+            if let Some(line) = lines.first() {
+                let f: Vec<&str> = line.split('|').collect();
+                if f.len() >= 5 {
+                    let name = f[0].trim().to_string();
+                    // Only accept a COMPLETE row. A partial parse that keeps
+                    // some real fields and silently defaults the rest is how a
+                    // document ends up half-trustworthy, which is worse than a
+                    // uniformly unknown one.
+                    if let (Ok(phys), Ok(log)) =
+                        (f[1].trim().parse::<u32>(), f[2].trim().parse::<u32>())
+                    {
+                        if !name.is_empty() && phys > 0 && log > 0 {
+                            got = Some((
+                                name,
+                                phys,
+                                log,
+                                f[3].trim().to_string(),
+                                f[4].trim().parse::<u64>().ok(),
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        match got {
+            Some((name, phys, log, manufacturer, total_bytes)) => {
+                cpu_name = name;
+                physical_cores = phys;
+                logical_cores = log;
+                vendor = match manufacturer.as_str() {
+                    "AuthenticAMD" => "amd".to_string(),
+                    "GenuineIntel" => "intel".to_string(),
+                    other if !other.is_empty() => other.to_ascii_lowercase(),
+                    _ => "unknown".to_string(),
+                };
+                ram_gb = total_bytes.map(|b| b as f64 / (1024.0 * 1024.0 * 1024.0));
+            }
+            None => {
+                // The query could not be run or came back unparseable. Report
+                // the little we know for certain and leave the model name as
+                // the placeholder, which the fingerprint guard already refuses.
+                logical_cores = num_cpus();
+                physical_cores = logical_cores;
+            }
+        }
+    }
+
     // Every other target (653-7rag). Without this arm both bindings are read
     // uninitialized and the crate fails to COMPILE on Windows — a hard error in
     // `cargo build --workspace` for a contributor who touched nothing here.
@@ -461,7 +619,7 @@ fn enumerate_cpu() -> DeviceRecord {
     // being fixed. Reporting fewer facts is correct here — the probe's contract
     // is "what this host can tell you", and an unknown physical count is a
     // legitimate answer where no enumeration path exists.
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
     {
         logical_cores = num_cpus();
         physical_cores = logical_cores;
@@ -1065,6 +1223,197 @@ pub fn enumerate_render_nodes_at(root: &std::path::Path, vantage: Vantage) -> Ve
 /// NOT A UNIQUENESS CLAIM. Two genuinely identical machines SHOULD collide —
 /// that is the point. This says "same hardware", never "same host"; `host_id`
 /// remains the identity key and this is deliberately not a substitute for it.
+/// Why a fingerprint may not be computed from this document.
+///
+/// ORDER 805-r98w. Measured on native Windows 2026-09-02: the capability
+/// document there carries ONE device — `cpu/unknown/Host CPU`, cores reported
+/// 16c16t on an 8c/16t part — with no GPU record, no NPU record, and RAM absent
+/// from both `host.ram_gb` and `system_ram_gb`. [`hardware_fingerprint`] hashed
+/// that happily and returned `hw1-4714b1195f92e0c6`, which is not an identity:
+/// EVERY Windows host reporting 16 logical cores produces that same string.
+///
+/// A comparison key that silently degrades to a constant is worse than no key,
+/// because the failure it produces is a FALSE TWIN — two different machines
+/// declared identical — which is the exact failure this order was filed
+/// against. So the document must be refused, loudly, naming what is missing.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FingerprintRefusal {
+    pub missing: Vec<String>,
+}
+
+impl std::fmt::Display for FingerprintRefusal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "capability document cannot identify this machine (missing: {}) - a fingerprint from it would collide with unrelated hosts",
+            self.missing.join(", ")
+        )
+    }
+}
+
+/// The discriminating fields a document must carry before its hash means
+/// anything. Deliberately NOT "all of them": a machine with no NPU is still
+/// identifiable. The bar is that SOMETHING beyond a placeholder CPU name
+/// separates this host from another.
+///
+/// @trace scripts/hardware-fingerprint.sh (the sibling implementation, whose
+/// `compare` mode exists to REFUSE a twin claim rather than bless one)
+pub fn hardware_fingerprint_checked(
+    doc: &CapabilityDocument,
+) -> Result<String, FingerprintRefusal> {
+    let mut missing: Vec<String> = Vec::new();
+
+    // A CPU name the probe filled in with a placeholder identifies nothing.
+    // "Host CPU" is what the Windows path emits today; "unknown" vendor is the
+    // matching tell.
+    let cpu_named = doc.devices.iter().any(|d| {
+        d.device_class == "cpu" && !d.name.is_empty() && d.name != "Host CPU" && d.name != "unknown"
+    });
+    if !cpu_named {
+        missing.push("cpu model name (probe emitted a placeholder)".to_string());
+    }
+
+    let has_gpu = doc.devices.iter().any(|d| d.device_class == "gpu");
+    let has_npu = doc.devices.iter().any(|d| d.device_class == "npu");
+    let has_ram = doc.devices.iter().any(|d| d.system_ram_gb.is_some());
+    if !has_gpu && !has_npu && !has_ram {
+        missing.push("every secondary discriminator (no gpu, no npu, no ram)".to_string());
+    }
+
+    if missing.is_empty() {
+        Ok(hardware_fingerprint(doc))
+    } else {
+        Err(FingerprintRefusal { missing })
+    }
+}
+
+/// The outcome of a VALID hardware comparison between two capability documents.
+///
+/// ORDER 805-r98w. Returned only when the comparison is legitimate; every case
+/// where it is not is a [`ComparisonRefusal`], which deliberately carries NO
+/// verdict. A refusal that still hands back a hardware answer is worse than
+/// either alone — the caller reads the answer and discards the caveat, which is
+/// exactly how a false twin gets blessed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FingerprintComparison {
+    /// Same fingerprint. NOT a uniqueness claim: two genuinely identical
+    /// machine models SHOULD collide, which is the whole point.
+    Same(String),
+    Different {
+        a: String,
+        b: String,
+    },
+}
+
+/// Why two documents may not be compared at all.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ComparisonRefusal {
+    /// One or both documents cannot identify their machine.
+    Unidentifiable {
+        which: String,
+        refusal: FingerprintRefusal,
+    },
+    /// The documents were produced from different VANTAGES, so their device
+    /// records are not commensurable.
+    ///
+    /// The same machine reports its iGPU as "WSL2 paravirtual GPU (/dev/dxg)"
+    /// under WSL2 — the PATH, not the silicon — and emits no GPU device at all
+    /// probed natively on Windows. A difference across that boundary is not
+    /// evidence of different hardware, so reporting one would be a FALSE
+    /// NEGATIVE twin: the mirror of the false positive this order was filed
+    /// against, and just as wrong.
+    CrossVantage { a_kind: String, b_kind: String },
+}
+
+impl std::fmt::Display for ComparisonRefusal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ComparisonRefusal::Unidentifiable { which, refusal } => {
+                write!(f, "refused:unidentifiable-document ({which}): {refusal}")
+            }
+            ComparisonRefusal::CrossVantage { a_kind, b_kind } => write!(
+                f,
+                "refused:cross-vantage-comparison ({a_kind} vs {b_kind}) - the substrate changes the device records, so a difference here is not evidence of different hardware"
+            ),
+        }
+    }
+}
+
+/// Compare two capability documents as HARDWARE, refusing when the comparison
+/// would not mean what a reader takes it to mean.
+///
+/// This is the single implementation of the comparison rule — the shell's
+/// `compare` mode calls it rather than restating it, because two copies of an
+/// identity rule is the same bug the fingerprint exists to prevent, moved up a
+/// layer. Adopted with yoga 2026-09-02.
+///
+/// Refuses, never guesses:
+///   - either document unable to identify its machine (see
+///     [`hardware_fingerprint_checked`]),
+///   - documents from different `host.host_kind` vantages.
+pub fn compare_documents(
+    a: &CapabilityDocument,
+    b: &CapabilityDocument,
+) -> Result<FingerprintComparison, ComparisonRefusal> {
+    // Vantage FIRST. A cross-vantage pair must refuse even when both documents
+    // are individually fine, and checking identifiability first would let a
+    // caller that only inspects the error type believe the vantage was checked.
+    if a.host.host_kind != b.host.host_kind {
+        return Err(ComparisonRefusal::CrossVantage {
+            a_kind: a.host.host_kind.clone(),
+            b_kind: b.host.host_kind.clone(),
+        });
+    }
+
+    let fa =
+        hardware_fingerprint_checked(a).map_err(|refusal| ComparisonRefusal::Unidentifiable {
+            which: "a".to_string(),
+            refusal,
+        })?;
+    let fb =
+        hardware_fingerprint_checked(b).map_err(|refusal| ComparisonRefusal::Unidentifiable {
+            which: "b".to_string(),
+            refusal,
+        })?;
+
+    if fa == fb {
+        Ok(FingerprintComparison::Same(fa))
+    } else {
+        Ok(FingerprintComparison::Different { a: fa, b: fb })
+    }
+}
+
+/// The version of the FIELD SET the fingerprint is composed from — hashed into
+/// the string and carried in its `hw<N>-` prefix. Bump on any change to which
+/// fields are included or how they are classed.
+pub const FIELD_SET_VERSION: u32 = 2;
+
+// VERSION HISTORY, kept because the reason for the bump is the evidence that
+// the mechanism works.
+//
+// 1 -> 2 (2026-09-02). Version 1 shipped in two INCOMPATIBLE forms and both
+// called themselves `hw1-`. The commit that introduced this constant also
+// folded `fieldset:N` into the hashed input, which changes the string for
+// identical hardware — a field-set change by this constant's own definition —
+// and did not bump the version. yoga built off the earlier commit and got
+// `hw1-134b5c800683d4d2`; this host on the later one produced a different
+// composition under the same tag. Two incomparable strings sharing a version is
+// exactly what the constant exists to prevent, and it happened in the commit
+// that created it.
+//
+// Bumping to 2 makes the incompatibility visible instead of silent: every
+// string minted before that commit is now distinguishable at a glance. The rule
+// stands and is restated here because it was broken once already — bump on ANY
+// change to which fields are included, how they are classed, OR how they are
+// serialised.
+//
+// WHY THAT MISS WAS STRUCTURAL, not careless (yoga, 2026-09-02): a version
+// constant cannot guard the commit that creates it, because at that moment
+// there is no previous version for anything to differ from. The FIRST use of a
+// new invariant is the one occurrence the invariant cannot check. Whatever the
+// next such guard is, its introducing commit is the one that needs reviewing by
+// hand — the guard will cover every case but that one.
+
 pub fn hardware_fingerprint(doc: &CapabilityDocument) -> String {
     fn ram_class(gb: f64) -> String {
         // Nearest power-of-two-ish class. 15.2 and 15.9 are both "16".
@@ -1112,6 +1461,18 @@ pub fn hardware_fingerprint(doc: &CapabilityDocument) -> String {
     if let Some(r) = ram {
         parts.push(format!("ram:{r}"));
     }
+    // ORDER 805-r98w, adopted from yoga 2026-09-02. The field-set version is
+    // HASHED, not merely prefixed. A tag bolted on the front can be stripped,
+    // ignored, or compared away by a caller that only looks at the hex; folding
+    // it into the input makes a v1 and a v2 string differ EVERYWHERE, so they
+    // can never be silently compared even by code that never heard of the tag.
+    //
+    // Bump FIELD_SET_VERSION whenever the composition of `parts` changes —
+    // fields added, removed, or classed differently (the RAM rounding included).
+    // That is what makes such a change safe: it becomes a visible
+    // incompatibility rather than two hosts quietly disagreeing about what a
+    // number means.
+    parts.insert(0, format!("fieldset:{FIELD_SET_VERSION}"));
     let joined = parts.join("|");
     // cksum-grade is enough: this is a comparison key, not a security boundary,
     // and a readable prefix beats an opaque digest when a human is asking why
@@ -1121,7 +1482,7 @@ pub fn hardware_fingerprint(doc: &CapabilityDocument) -> String {
         h ^= *b as u64;
         h = h.wrapping_mul(0x1000_0000_01b3);
     }
-    format!("hw1-{h:016x}")
+    format!("hw{FIELD_SET_VERSION}-{h:016x}")
 }
 
 /// Upgrade a node to [`Proof::Placed`] from a runtime's reported residency.
@@ -1497,11 +1858,202 @@ fn enumerate_gpus() -> Vec<DeviceRecord> {
 }
 
 // @trace spec:accel-capability-probe
+/// Run a PowerShell query and return its non-empty stdout lines, or `None` when
+/// the query could not be RUN at all.
+///
+/// ORDER 805-r98w. `None` and `Some(vec![])` are different facts and the caller
+/// must not be able to confuse them: a PowerShell that failed to launch, exited
+/// non-zero, or was blocked by policy has told us NOTHING about the hardware,
+/// while an empty result set is a genuine finding. Collapsing the two is the
+/// exact defect this order was filed against, one layer down.
+#[cfg(target_os = "windows")]
+fn powershell_lines(script: &str) -> Option<Vec<String>> {
+    let out = std::process::Command::new("powershell.exe")
+        .args(["-NoProfile", "-NonInteractive", "-Command", script])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    Some(
+        String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .map(|l| l.trim().to_string())
+            .filter(|l| !l.is_empty())
+            .collect(),
+    )
+}
+
+/// Pull `VEN_xxxx` / `DEV_xxxx` out of a Windows PNP instance id.
+///
+/// Returns the pair as `1002:1114`, vendor and device TOGETHER — never either
+/// alone. Vendor collides across parts, and device collides across vendors.
+///
+/// CAUTION, measured 2026-09-02 and stronger than the fleet assumed: the pair
+/// is NOT sufficient to separate two machines either. This host (Radeon 860M)
+/// reports 1002:1114, and yoga's host (Radeon 840M) reports 1002:1114 as well —
+/// AMD ships the two bins under one device id, not merely one marketing name.
+/// So the PCI pair would NOT have separated the hosts the fleet called twins;
+/// the CPU model is still what does. Recorded on the accessor so nobody keys a
+/// substrate control on it later.
+#[cfg(target_os = "windows")]
+fn pci_pair(instance_id: &str) -> Option<String> {
+    let up = instance_id.to_ascii_uppercase();
+    let grab = |key: &str| -> Option<String> {
+        let i = up.find(key)? + key.len();
+        let v: String = up[i..].chars().take(4).collect();
+        (v.len() == 4 && v.chars().all(|c| c.is_ascii_hexdigit())).then_some(v)
+    };
+    Some(format!(
+        "{}:{}",
+        grab("VEN_")?.to_lowercase(),
+        grab("DEV_")?.to_lowercase()
+    ))
+}
+
+/// Enumerate GPUs on native Windows via `Win32_VideoController`.
+///
+/// HOST-NATIVE LANE ONLY, deliberately. Presence of a display adapter says
+/// nothing about whether a CONTAINER can reach it, and the container lane on
+/// this platform runs inside the WSL2 guest which probes itself. Claiming a
+/// container lane from here would manufacture the reachability the accel matrix
+/// exists to measure — the `Enumerated < Reachable < Placed` ordering is not
+/// decoration.
+#[cfg(target_os = "windows")]
+fn windows_gpus() -> Option<Vec<DeviceRecord>> {
+    let lines = powershell_lines(
+        "Get-CimInstance Win32_VideoController -ErrorAction Stop | \
+         ForEach-Object { $_.Name + '|' + $_.PNPDeviceID + '|' + $_.DriverVersion }",
+    )?;
+    Some(
+        lines
+            .iter()
+            .filter_map(|l| {
+                let mut f = l.split('|');
+                let name = f.next()?.trim().to_string();
+                if name.is_empty() {
+                    return None;
+                }
+                let instance = f.next().unwrap_or("").trim();
+                let driver = f.next().unwrap_or("").trim();
+                let pair = pci_pair(instance);
+                Some(DeviceRecord {
+                    device_class: "gpu".to_string(),
+                    vendor: match pair.as_deref().and_then(|p| p.split(':').next()) {
+                        Some("1002") => "amd".to_string(),
+                        Some("8086") => "intel".to_string(),
+                        Some("10de") => "nvidia".to_string(),
+                        _ => "unknown".to_string(),
+                    },
+                    name,
+                    device_node: pair,
+                    fw_version: None,
+                    driver: (!driver.is_empty()).then(|| driver.to_string()),
+                    // ENUMERATED, not reachable: see the doc comment.
+                    usable: false,
+                    unusable_reason: Some("host-native-only-not-container-reachable".to_string()),
+                    lanes: vec!["host-native".to_string()],
+                    memory_bandwidth_gbps: None,
+                    memory_bandwidth_source: "unknown".to_string(),
+                    cpu_flags: None,
+                    cpu_cores: None,
+                    system_ram_gb: None,
+                })
+            })
+            .collect(),
+    )
+}
+
+/// Enumerate NPUs on native Windows via the `ComputeAccelerator` device class.
+///
+/// Queried BY CLASS rather than by a hardware id, so an Intel NPU enumerates
+/// here too without a table of ids to keep current. Verified on this host:
+/// VEN_1022 / DEV_17F0, Status OK, FriendlyName "NPU Compute Accelerator
+/// Device" — the same 1022:17f0 part yoga enumerates on Linux as amdxdna.
+///
+/// `usable: false` with `engine-missing` mirrors the Linux arm on purpose. A
+/// present, driver-bound NPU still has no runtime this product can dispatch to;
+/// yoga's phrase for the Linux side — "not missing the NPU, missing a
+/// userspace" — is true on Windows as well, and a probe that flipped this to
+/// usable because the device enumerates would be labelling wiring that does not
+/// exist.
+#[cfg(target_os = "windows")]
+fn windows_npus() -> Option<Vec<DeviceRecord>> {
+    let lines = powershell_lines(
+        "Get-PnpDevice -Class ComputeAccelerator -PresentOnly -ErrorAction Stop | \
+         ForEach-Object { $_.Status + '|' + $_.FriendlyName + '|' + $_.InstanceId }",
+    )?;
+    Some(
+        lines
+            .iter()
+            .filter_map(|l| {
+                let mut f = l.split('|');
+                let status = f.next()?.trim().to_string();
+                let name = f.next().unwrap_or("").trim().to_string();
+                let instance = f.next().unwrap_or("").trim();
+                let pair = pci_pair(instance);
+                let vendor = match pair.as_deref().and_then(|p| p.split(':').next()) {
+                    Some("1022") => "AMD XDNA".to_string(),
+                    Some("8086") => "Intel NPU".to_string(),
+                    _ => "unknown".to_string(),
+                };
+                // A device the OS reports as not-OK is enumerated but not
+                // healthy; say which, rather than folding it into the same
+                // engine-missing bucket as a working one.
+                let reason = if status.eq_ignore_ascii_case("OK") {
+                    "engine-missing"
+                } else {
+                    "device-not-ok"
+                };
+                Some(DeviceRecord {
+                    device_class: "npu".to_string(),
+                    vendor,
+                    name: if name.is_empty() {
+                        "Unknown Compute Accelerator".to_string()
+                    } else {
+                        name
+                    },
+                    device_node: pair,
+                    fw_version: None,
+                    driver: None,
+                    usable: false,
+                    unusable_reason: Some(reason.to_string()),
+                    lanes: vec!["host-native".to_string()],
+                    memory_bandwidth_gbps: None,
+                    memory_bandwidth_source: "unknown".to_string(),
+                    cpu_flags: None,
+                    cpu_cores: None,
+                    system_ram_gb: None,
+                })
+            })
+            .collect(),
+    )
+}
+
 fn enumerate_npus() -> Vec<DeviceRecord> {
     let mut npus = Vec::new();
     let accel_dir = Path::new("/sys/class/accel");
 
     // PROBE-2: Kernel without accel class (e.g. WSL2) yields empty list and succeeds
+    //
+    // THIS IS A FINDING, NOT A GAP, and the distinction is deliberate (805-r98w,
+    // 2026-09-02). The same day's work made native Windows report `unknown`
+    // instead of `none`, because there no enumeration code existed at all — the
+    // probe had never looked. Linux is not that case: sysfs IS the enumeration
+    // mechanism, it was consulted, and an absent accel class is a true statement
+    // about this kernel (no accel-class driver is bound). So this arm records no
+    // enumeration gap and `none` stands.
+    //
+    // Measured in the tillandsias-build WSL2 guest: /sys/class/accel absent,
+    // /dev/dxg present, amdxdna not loaded — on a machine whose NPU the Windows
+    // host enumerates as 1022:17f0. The guest's `none` is vantage-correct: that
+    // NPU is not passed through to WSL2 and nothing in the guest can reach it.
+    // Cross-vantage disagreement about one machine is expected and is why
+    // compare_documents refuses a cross-vantage pair.
+    //
+    // Do NOT "fix" this into `unknown`. Most Linux hosts genuinely have no NPU;
+    // reporting unknown everywhere would trade a correct answer for noise, and
+    // would be today's reasoning applied past the case that motivated it.
     if !accel_dir.exists() {
         return npus;
     }
@@ -1856,7 +2408,21 @@ pub fn accel_envelope(doc: &CapabilityDocument) -> String {
 
     let gpu = pick("gpu");
     let npu = pick("npu");
-    let (gpu_state, npu_state) = (state(gpu), state(npu));
+    let (gpu_state, mut npu_state) = (state(gpu), state(npu));
+
+    // "none" is a FINDING; where the probe could not look it would be a guess
+    // wearing a finding's clothes. The document records WHICH classes it failed
+    // to enumerate, so this reads the run that produced the document rather than
+    // the platform that is rendering it — a cached or transported document
+    // keeps its own gaps, which a compile-time constant could never do.
+    let gap = |class: &str| doc.enumeration_gaps.iter().any(|g| g == class);
+    if npu.is_none() && gap("npu") {
+        npu_state = "unknown";
+    }
+    let mut gpu_state = gpu_state;
+    if gpu.is_none() && gap("gpu") {
+        gpu_state = "unknown";
+    }
 
     let class = match (gpu_state, npu_state) {
         ("usable", "usable") => "hybrid-gpu-npu",
@@ -1869,7 +2435,14 @@ pub fn accel_envelope(doc: &CapabilityDocument) -> String {
     let reason = gpu
         .and_then(|d| d.unusable_reason.as_deref())
         .or_else(|| npu.and_then(|d| d.unusable_reason.as_deref()))
-        .unwrap_or("-");
+        .unwrap_or(match (gpu_state == "unknown", npu_state == "unknown") {
+            // So `cpu-only` is never a bare verdict on a host that simply could
+            // not look for the accelerators it is denying.
+            (true, true) => "gpu-and-npu-not-enumerable-on-this-platform",
+            (true, false) => "gpu-not-enumerable-on-this-platform",
+            (false, true) => "npu-not-enumerable-on-this-platform",
+            (false, false) => "-",
+        });
 
     let cpu = doc.devices.iter().find(|d| d.device_class == "cpu");
     let cores = cpu
@@ -2359,6 +2932,8 @@ mod tests {
             schema_version: SCHEMA_VERSION,
             legacy_tier: "cpu".to_string(),
             probe_identity: Some(probe_identity()),
+            enumeration_gaps: Vec::new(),
+            hardware_fingerprint: None,
             devices,
             engines: Vec::new(),
             measurements: Vec::new(),
@@ -2393,9 +2968,19 @@ mod tests {
     }
 
     /// 805-r98w. The fingerprint exists so two hosts can be SHOWN identical
-    /// rather than asserted identical. The load-bearing arm is the twin pair:
-    /// same silicon, different OS, SAME fingerprint — because the substrate is
-    /// the other axis of the matrix, not part of the hardware's identity.
+    /// rather than asserted identical. The load-bearing arm is substrate
+    /// independence: the SAME device records must hash the same however the
+    /// OS, kernel, driver and lanes differ, because the substrate is the other
+    /// axis of the matrix, not part of the hardware's identity.
+    ///
+    /// CORRECTED 2026-09-02. This arm used to name its two documents "yolanda"
+    /// and "yoga" and call them "the twin pair". They are NOT twins — measured
+    /// by the yoga host: Ryzen AI 5 340 / 6c12t / Radeon 840M against Ryzen AI
+    /// 7 350 / 8c16t / Radeon 860M. The fleet asserted that pair was identical
+    /// for weeks and this test had quietly become the assertion's last refuge.
+    /// The hosts are generic here now; the real pair is the fixture of
+    /// `fingerprint_separates_the_hosts_the_fleet_called_twins` below, which
+    /// requires them to DIFFER.
     #[test]
     fn hardware_fingerprint_ignores_substrate_and_separates_real_hardware() {
         let gpu = |name: &str| {
@@ -2405,20 +2990,21 @@ mod tests {
             d
         };
 
-        // ARM 1 — THE TWIN PAIR. Same silicon, and everything the substrate
-        // owns differs: kernel, host_kind, host_id, driver, usable, lanes.
-        // These must fingerprint IDENTICALLY or the pair cannot be a control.
+        // ARM 1 — SUBSTRATE INDEPENDENCE. Identical device records, and
+        // everything the substrate owns differs: kernel, host_kind, host_id,
+        // driver, usable, lanes. These must fingerprint IDENTICALLY, or a
+        // same-hardware pair could never isolate the substrate.
         let mut a = doc_with(vec![gpu("AMD Radeon 860M")]);
         a.host.kernel_release = "6.18.33.2-microsoft-standard-WSL2".to_string();
         a.host.host_kind = "windows".to_string();
-        a.host.host_id = "yolanda".to_string();
+        a.host.host_id = "host-a".to_string();
         a.devices[0].driver = Some("amdgpu-wsl".to_string());
         a.devices[0].lanes = vec!["container".to_string()];
 
         let mut b = doc_with(vec![gpu("AMD Radeon 860M")]);
         b.host.kernel_release = "6.11.0-amd64".to_string();
         b.host.host_kind = "linux".to_string();
-        b.host.host_id = "yoga".to_string();
+        b.host.host_id = "host-b".to_string();
         b.devices[0].driver = Some("amdgpu".to_string());
         b.devices[0].usable = false;
 
@@ -2468,6 +3054,340 @@ mod tests {
             super::hardware_fingerprint(&f),
             super::hardware_fingerprint(&g),
             "device order must not change the fingerprint"
+        );
+    }
+
+    /// 805-r98w, from the yoga host's measurement 2026-08-30, relayed
+    /// 2026-09-02. These two machines were called a twin pair fleet-wide for
+    /// weeks. They are not: different SKU, different core counts, different
+    /// iGPU bin.
+    ///
+    /// THE TRAP THIS PINS. AMD ships the Radeon 840M and the 860M under ONE
+    /// PCI name, "Krackan [Radeon 840M / 860M Graphics]", so the GPU model
+    /// string is IDENTICAL on both hosts and a fingerprint resting on it would
+    /// bless a false twin — and every accel number keyed on that control would
+    /// have silently inherited a hardware difference. The CPU fields are what
+    /// actually separate them. `scripts/hardware-fingerprint.sh` documents the
+    /// same trap; this is the Rust side of it.
+    #[test]
+    fn fingerprint_separates_the_hosts_the_fleet_called_twins() {
+        let host = |cpu_name: &str, phys: u32, log: u32| {
+            let mut c = device("cpu", cpu_name, &["host-native"], None);
+            c.vendor = "amd".to_string();
+            c.cpu_cores = Some(CpuCores {
+                physical: phys,
+                logical: log,
+            });
+            c.system_ram_gb = Some(15.2);
+            // The SHARED, deceiving string: one PCI name for both bins.
+            let mut g = device(
+                "gpu",
+                "Krackan [Radeon 840M / 860M Graphics]",
+                &["host-native"],
+                None,
+            );
+            g.vendor = "amd".to_string();
+            doc_with(vec![c, g])
+        };
+
+        let yoga = host("AMD Ryzen AI 5 340 w/ Radeon 840M", 6, 12);
+        let yolanda = host("AMD Ryzen AI 7 350 w/ Radeon 860M", 8, 16);
+
+        assert_ne!(
+            super::hardware_fingerprint(&yoga),
+            super::hardware_fingerprint(&yolanda),
+            "these hosts differ in SKU and core count; a fingerprint that collides on them blesses a false substrate control"
+        );
+
+        // CONTROL — the trap is real, not hypothetical. Strip the CPU records
+        // and the two documents become indistinguishable, because everything
+        // that remains is the shared PCI name. This is what a GPU-keyed
+        // fingerprint would have done, and it pins WHICH fields the assertion
+        // above is resting on: without it, that assert_ne could pass for a
+        // reason unrelated to the CPU.
+        let gpu_only = |d: &CapabilityDocument| {
+            let mut x = d.clone();
+            x.devices.retain(|dev| dev.device_class == "gpu");
+            super::hardware_fingerprint(&x)
+        };
+        assert_eq!(
+            gpu_only(&yoga),
+            gpu_only(&yolanda),
+            "control failed: the GPU name was expected to be identical on both              hosts — if this ever differs, AMD split the PCI name and the              comment above needs revisiting"
+        );
+    }
+
+    /// 805-r98w. The comparison rule, single-implementation, so the shell's
+    /// `compare` mode calls it rather than restating it.
+    #[test]
+    fn comparison_refuses_cross_vantage_and_carries_no_verdict() {
+        let machine = |kind: &str| {
+            let mut c = device(
+                "cpu",
+                "AMD Ryzen AI 7 350 w/ Radeon 860M",
+                &["host-native"],
+                None,
+            );
+            c.vendor = "amd".to_string();
+            c.cpu_cores = Some(CpuCores {
+                physical: 8,
+                logical: 16,
+            });
+            c.system_ram_gb = Some(15.2);
+            let mut d = doc_with(vec![c]);
+            d.host.host_kind = kind.to_string();
+            d
+        };
+
+        // Same records, different vantage: MUST refuse, not report "same".
+        // Reporting equality here would be as wrong as reporting difference —
+        // the documents are not commensurable, whichever way they come out.
+        let err = super::compare_documents(&machine("windows"), &machine("linux"))
+            .expect_err("a cross-vantage pair must be refused");
+        assert!(
+            matches!(err, super::ComparisonRefusal::CrossVantage { .. }),
+            "wrong refusal: {err:?}"
+        );
+
+        // THE PROPERTY yoga asked for: a refusal hands back NO hardware answer.
+        // The type enforces it — Err carries no fingerprint — so this asserts
+        // the rendering does not leak one either.
+        let rendered = err.to_string();
+        assert!(
+            !rendered.contains("hw"),
+            "a refusal must not also emit a verdict: {rendered}"
+        );
+
+        // Vantage is checked BEFORE identifiability: a caller inspecting only
+        // the error type must not conclude the vantage was validated.
+        let mut blind = machine("linux");
+        blind.devices[0].name = "Host CPU".to_string();
+        blind.devices[0].vendor = "unknown".to_string();
+        blind.devices[0].system_ram_gb = None;
+        let err = super::compare_documents(&machine("windows"), &blind)
+            .expect_err("cross-vantage must win over unidentifiable");
+        assert!(
+            matches!(err, super::ComparisonRefusal::CrossVantage { .. }),
+            "vantage must be checked first: {err:?}"
+        );
+
+        // A blind document within ONE vantage refuses as unidentifiable.
+        let err = super::compare_documents(&machine("linux"), &blind)
+            .expect_err("an unidentifiable document must be refused");
+        assert!(
+            matches!(err, super::ComparisonRefusal::Unidentifiable { .. }),
+            "wrong refusal: {err:?}"
+        );
+
+        // CONTROL — a legitimate comparison still succeeds, so the refusals
+        // above are not simply refusing everything.
+        assert!(matches!(
+            super::compare_documents(&machine("linux"), &machine("linux")),
+            Ok(super::FingerprintComparison::Same(_))
+        ));
+    }
+
+    /// 805-r98w / NPU parity, 2026-09-02. `none` must mean "looked and found
+    /// nothing", never "could not look".
+    ///
+    /// MEASURED, not hypothetical: native Windows on this host rendered
+    /// `accel_gpu=none accel_npu=none accel_reason=-` while the machine has a
+    /// Radeon 860M and an XDNA2 NPU that Lemonade was serving models on at that
+    /// moment. enumerate_gpus has Linux and macOS arms and no Windows arm;
+    /// enumerate_npus reads /sys/class/accel. Both return empty and SUCCEED.
+    #[test]
+    fn absent_accelerators_read_unknown_where_the_probe_cannot_look() {
+        let bare = || doc_with(vec![device("cpu", "Host CPU", &["host-native"], None)]);
+
+        // LOOKED AND FOUND NOTHING: no gaps recorded, so `none` is a finding.
+        let found_none = super::accel_envelope(&bare());
+        assert!(found_none.contains("accel_gpu=none"), "{found_none}");
+        assert!(found_none.contains("accel_npu=none"), "{found_none}");
+
+        // COULD NOT LOOK: the probe recorded that it failed to enumerate, so
+        // the same empty device list must NOT render as an absence.
+        let mut blind = bare();
+        blind.enumeration_gaps = vec!["gpu".to_string(), "npu".to_string()];
+        let env = super::accel_envelope(&blind);
+        assert!(
+            env.contains("accel_gpu=unknown"),
+            "a probe that could not look must not claim none: {env}"
+        );
+        assert!(
+            env.contains("accel_npu=unknown"),
+            "a probe that could not look must not claim none: {env}"
+        );
+        assert!(
+            env.contains("not-enumerable-on-this-platform"),
+            "cpu-only must never be a bare verdict here: {env}"
+        );
+
+        // ONE CLASS ONLY: a gap in gpu must not make the npu unknown too.
+        let mut gpu_blind = bare();
+        gpu_blind.enumeration_gaps = vec!["gpu".to_string()];
+        let env = super::accel_envelope(&gpu_blind);
+        assert!(env.contains("accel_gpu=unknown"), "{env}");
+        assert!(
+            env.contains("accel_npu=none"),
+            "an npu that WAS enumerated stays a finding: {env}"
+        );
+
+        // A REAL device still reports its own state even when its class was
+        // listed as a gap — an enumerated device outranks the gap record, and
+        // this pins that the change cannot turn present hardware into unknown.
+        let mut gpu = device("gpu", "AMD Radeon 860M", &["container"], None);
+        gpu.vendor = "amd".to_string();
+        let mut with_gpu = doc_with(vec![device("cpu", "Host CPU", &["host-native"], None), gpu]);
+        with_gpu.enumeration_gaps = vec!["gpu".to_string()];
+        let env2 = super::accel_envelope(&with_gpu);
+        assert!(
+            env2.contains("accel_gpu=usable"),
+            "an enumerated device must still report its real state: {env2}"
+        );
+    }
+
+    /// 805-r98w, hazard adopted from yoga 2026-09-02. THIS TEST DOCUMENTS A
+    /// LIMITATION, NOT A GUARANTEE — it passes by asserting the fingerprint is
+    /// NOT substrate-independent in the case that matters most.
+    ///
+    /// `hardware_fingerprint_ignores_substrate_and_separates_real_hardware`
+    /// asserts that identical device records hash identically however the
+    /// kernel, driver and lanes differ. True, and useless on its own: the
+    /// substrate does not merely decorate the device records, it CHANGES them.
+    /// The same machine reports its iGPU as "WSL2 paravirtual GPU (/dev/dxg)"
+    /// under WSL2 — the PATH, not the silicon — and emits no GPU device at all
+    /// probed natively on Windows. So that test's premise (identical inputs)
+    /// assumes exactly what it is meant to prove.
+    ///
+    /// Consequence, pinned here so it is never rediscovered as a surprise:
+    /// comparing documents from different `host.host_kind` is NOT a valid
+    /// hardware comparison, and a mismatch across that boundary is not evidence
+    /// of different hardware. The compare path must refuse such a pair rather
+    /// than report a difference.
+    ///
+    /// gpu_model is deliberately NOT dropped to make the invariant hold: on
+    /// Linux it is a real discriminator, and trading a loud known limitation
+    /// for a quiet loss of signal is the worse bargain.
+    #[test]
+    fn same_machine_across_substrates_does_not_yet_fingerprint_alike() {
+        let cpu = || {
+            let mut c = device(
+                "cpu",
+                "AMD Ryzen AI 7 350 w/ Radeon 860M",
+                &["host-native"],
+                None,
+            );
+            c.vendor = "amd".to_string();
+            c.cpu_cores = Some(CpuCores {
+                physical: 8,
+                logical: 16,
+            });
+            c.system_ram_gb = Some(15.2);
+            c
+        };
+
+        // ONE machine, seen three ways by three probes.
+        let mut native_windows = doc_with(vec![cpu()]);
+        native_windows.host.host_kind = "windows".to_string();
+
+        let mut under_wsl2 = doc_with(vec![
+            cpu(),
+            device(
+                "gpu",
+                "WSL2 paravirtual GPU (/dev/dxg)",
+                &["container"],
+                None,
+            ),
+        ]);
+        under_wsl2.host.host_kind = "windows".to_string();
+
+        let mut native_linux = doc_with(vec![
+            cpu(),
+            device(
+                "gpu",
+                "Krackan [Radeon 840M / 860M Graphics]",
+                &["host-native"],
+                None,
+            ),
+        ]);
+        native_linux.host.host_kind = "linux".to_string();
+
+        let w = super::hardware_fingerprint(&native_windows);
+        let x = super::hardware_fingerprint(&under_wsl2);
+        let l = super::hardware_fingerprint(&native_linux);
+
+        assert_ne!(
+            w, x,
+            "documented limitation: the WSL2 probe adds a paravirtual GPU record the native probe lacks"
+        );
+        assert_ne!(
+            x, l,
+            "documented limitation: the WSL2 GPU string names the PATH, the Linux one names the silicon"
+        );
+
+        // The refusal guard does NOT paper over this: all three documents carry
+        // a real CPU model, so all three are accepted and hashed. The hazard is
+        // therefore live in exactly the case the guard cannot catch, which is
+        // why it is written down rather than left to be met in the field.
+        for (label, doc) in [
+            ("native_windows", &native_windows),
+            ("under_wsl2", &under_wsl2),
+            ("native_linux", &native_linux),
+        ] {
+            assert!(
+                super::hardware_fingerprint_checked(doc).is_ok(),
+                "{label} should be accepted — the guard catches blind probes, not this"
+            );
+        }
+    }
+
+    /// 805-r98w. Measured on native Windows 2026-09-02: the probe emits ONE
+    /// device, `cpu/unknown/Host CPU`, no GPU, no NPU, no RAM — and the raw
+    /// hasher returned a confident `hw1-...` for it. That string is shared by
+    /// every Windows host with the same logical-core count, so publishing it
+    /// as an identity manufactures twins that do not exist.
+    #[test]
+    fn placeholder_document_is_refused_rather_than_hashed() {
+        let mut cpu = device("cpu", "Host CPU", &["host-native"], None);
+        cpu.vendor = "unknown".to_string();
+        cpu.cpu_cores = Some(CpuCores {
+            physical: 16,
+            logical: 16,
+        });
+        let windows_today = doc_with(vec![cpu]);
+
+        let refusal = super::hardware_fingerprint_checked(&windows_today)
+            .expect_err("a placeholder-only document must be refused");
+        assert!(
+            refusal.missing.iter().any(|m| m.contains("cpu model name")),
+            "the refusal must name the placeholder CPU: {refusal:?}"
+        );
+        assert!(
+            refusal
+                .missing
+                .iter()
+                .any(|m| m.contains("secondary discriminator")),
+            "the refusal must name the absent gpu/npu/ram: {refusal:?}"
+        );
+
+        // CONTROL: a document that CAN identify the machine still succeeds,
+        // so the guard refuses the placeholder and not the feature.
+        let mut cpu = device(
+            "cpu",
+            "AMD Ryzen AI 7 350 w/ Radeon 860M",
+            &["host-native"],
+            None,
+        );
+        cpu.vendor = "amd".to_string();
+        cpu.cpu_cores = Some(CpuCores {
+            physical: 8,
+            logical: 16,
+        });
+        cpu.system_ram_gb = Some(15.2);
+        let real = doc_with(vec![cpu]);
+        assert!(
+            super::hardware_fingerprint_checked(&real).is_ok(),
+            "a document carrying a real CPU model and RAM must be accepted"
         );
     }
 
@@ -2615,6 +3535,22 @@ mod tests {
     fn envelope_on_a_bare_cpu_host_is_cpu_only_with_no_phantom_devices() {
         let env = accel_envelope(&doc_with(vec![device("cpu", "CPU", &["container"], None)]));
         assert!(env.contains("accel_class=cpu-only"), "{env}");
+
+        // THE PROPERTY THIS TEST OWNS is that no device is MANUFACTURED: the
+        // class stays cpu-only and neither name field names anything.
+        assert!(env.contains("accel_gpu_name=-"), "{env}");
+        assert!(env.contains("accel_npu_name=-"), "{env}");
+
+        // The STATE, however, is platform-dependent, and asserting `none`
+        // unconditionally is what this test used to get wrong (2026-09-02). It
+        // silently assumed the running platform can enumerate accelerators. On
+        // native Windows it cannot — no Windows arm in enumerate_gpus, and
+        // enumerate_npus reads a Linux-only sysfs path — so `none` there was
+        // the probe denying hardware it had never looked for. "Looked and found
+        // nothing" and "cannot look here" are different facts and only the
+        // first is `none`.
+        // This document records NO gaps, so an empty device list here is a
+        // genuine finding and `none` is the honest rendering on every platform.
         assert!(env.contains("accel_gpu=none"), "{env}");
         assert!(env.contains("accel_npu=none"), "{env}");
     }
@@ -3008,6 +3944,8 @@ mod tests {
             schema_version: SCHEMA_VERSION,
             legacy_tier: "cpu".to_string(),
             probe_identity: Some(probe_identity()),
+            enumeration_gaps: Vec::new(),
+            hardware_fingerprint: None,
             devices: Vec::new(),
             engines: Vec::new(),
             measurements: vec![MeasurementRecord {

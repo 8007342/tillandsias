@@ -1,0 +1,59 @@
+# Ledger fragment — append-only. Event-only: the packet is NOT re-declared.
+events:
+  - packet_id: windows-credential-manager-retains-stale-unseal-share-across-guest-wipe
+    event:
+      type: progress
+      ts: "2026-09-02T14:03:19Z"
+      agent_id: windows-yolanda-opus5-20260902t1403z
+      host: windows
+      summary: >
+        THIRD DEFECT FIXED (ed942ff35): the generate-root self-heal never
+        consulted the guest's own tillandsias-vault-unseal podman secret. On the
+        2026-08-17 incident all three sources it DID consult — host-delivered
+        credentials, host keychain, fallback file — were stale against live
+        storage, while the key that would have worked was the one the vault
+        entrypoint had already unsealed that same storage with in that same
+        boot. shamir_share_candidates now leads with it, via the existing
+        read_unseal_secret_bytes(); ordering is otherwise behaviour-preserving
+        (every candidate is still tried until one authenticates, and two that
+        authenticate against one epoch are the same key) but the incident now
+        heals on the first attempt rather than after three failures. It cannot
+        displace a working host share — an absent, erroring or short podman read
+        contributes no candidate, asserted not assumed. The no-candidates
+        operator text was widened to name the new source.
+  - packet_id: windows-credential-manager-retains-stale-unseal-share-across-guest-wipe
+    event:
+      type: note
+      ts: "2026-09-02T14:03:19Z"
+      agent_id: windows-yolanda-opus5-20260902t1403z
+      host: windows
+      summary: >
+        NOT RUNTIME-VERIFIED AND I CANNOT DO IT FROM WINDOWS. This is guest-side
+        vault code; the real path needs a guest holding a stale host share AND a
+        valid podman secret, which is an e2e/smoke shape. Verified: compiles,
+        ordering + dedup + validation hold against the PRODUCTION assembly
+        (mutation-verified — moving the podman secret last fails the test), 425
+        pass with the 2 pre-existing baseline failures of 958-w4kq, zero clippy
+        in headless. The order now lives in one pure fn, assemble_share_candidates,
+        because my first test hand-built the list and asserted its own
+        construction — the same vacuous shape 793-zumy's note records and that I
+        had fixed in the lane-argv test hours earlier.
+  - packet_id: windows-credential-manager-retains-stale-unseal-share-across-guest-wipe
+    event:
+      type: note
+      ts: "2026-09-02T14:03:19Z"
+      agent_id: windows-yolanda-opus5-20260902t1403z
+      host: windows
+      summary: >
+        PACKET NOT CLOSED, and the remaining Windows verification is
+        OPERATOR-GATED. The reconcile half stays with 890-y72v (pickup_role
+        linux): DeliverCredentialsReply still carries no accept/reject
+        discriminator, so a host share that fails to authenticate still cannot
+        lose to the guest's secret at the wire. This change makes the guest
+        better at healing itself; it does not stop the host overwriting it. The
+        discriminating Part A check still needs a wipe path that does NOT
+        reprovision (installer -Purge or the e2e smoke) — presence after
+        --reset-guest cannot distinguish a stale credential from a correctly
+        recreated one. All three wipe paths DO log what they cleared, so such a
+        run would be conclusive; it is destructive on the operator's machine and
+        was not run unasked.

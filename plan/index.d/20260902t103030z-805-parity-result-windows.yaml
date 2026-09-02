@@ -1,0 +1,61 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Event-only: the packet is NOT re-declared under `packets:`, which would be a
+# G-Set no-op, and (as the gate caught on the first attempt) registers a second
+# definition of order 805-r98w with no status — a duplicate order token.
+events:
+  - packet_id: hardware-fingerprint-makes-the-twin-hosts-a-substrate-control
+    event:
+      type: progress
+      ts: "2026-09-02T10:30:30Z"
+      agent_id: windows-yolanda-opus5-20260902t1030z
+      host: windows
+      summary: >
+        FIRST MEANINGFUL COMPARISON BETWEEN THESE HOSTS, and its verdict refutes
+        this packet's own title. yoga hw2-e94acbd479cb8b80 (linux, Ryzen AI 5
+        340, 6c12t, 840M) vs yolanda hw2-f4e46bd13a0220cf (windows, Ryzen AI 7
+        350, 8c16t, 860M) — computed by the product's own key, independently on
+        each host, from probes that both now enumerate real devices. They
+        DIFFER. The twin pair is not a substrate control and never was. Title
+        left as-is deliberately: renaming would erase what the fleet believed
+        for weeks. The deliverable underneath is met — the document can now
+        prove or REFUSE a same-hardware claim instead of having one asserted
+        over it, and its first real verdict is that the assertion it was built
+        to check was false. Route: refused by yoga's shell script 2026-08-30
+        from CPU model and core counts; refused again today by an independent
+        Rust implementation on both hosts, an instrument neither host could tune
+        to a preferred answer.
+  - packet_id: hardware-fingerprint-makes-the-twin-hosts-a-substrate-control
+    event:
+      type: note
+      ts: "2026-09-02T10:30:30Z"
+      agent_id: windows-yolanda-opus5-20260902t1030z
+      host: windows
+      summary: >
+        NPU PARITY (the operator's instruction) reached the same place. Both
+        hosts now report accel_npu=present-unusable on 1022:17f0, the same part;
+        this morning both said none. On the GPU line the two give DIFFERENT
+        honest reasons — windows engine-missing (no dispatchable userspace),
+        yoga container-lane-unverified (a host enumeration cannot speak for a
+        container). NOT CLOSED: the accel matrix keyed on (fingerprint,
+        substrate) is untouched, and NEITHER platform has a usable NPU lane — a
+        present device with no runtime this product can dispatch to, on both.
+        Recorded as a gap, not a result.
+  - packet_id: hardware-fingerprint-makes-the-twin-hosts-a-substrate-control
+    event:
+      type: note
+      ts: "2026-09-02T10:30:30Z"
+      agent_id: windows-yolanda-opus5-20260902t1030z
+      host: windows
+      summary: >
+        THREE ERRORS OF MINE EN ROUTE, all one shape — a green that names only
+        itself. (1) cargo test passed while clippy failed the gate. (2) cargo
+        build passed while the TEST code did not compile. (3) FIELD_SET_VERSION
+        was not bumped in the commit that introduced it, so v1 shipped in two
+        incompatible forms both tagged hw1-. yoga's diagnosis of (3) is the
+        general one and is now recorded in code beside the constant: a version
+        constant cannot guard the commit that creates it, because at that moment
+        there is no previous version to differ from — the FIRST use of a new
+        invariant is the one occurrence the invariant cannot check. A fourth
+        followed while filing this very record: the first draft re-declared the
+        packet under `packets:` and the gate refused it as a duplicate order
+        token.
