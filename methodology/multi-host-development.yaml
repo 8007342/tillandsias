@@ -937,7 +937,7 @@ loop_cadence:
     # relayed cadence is coordination config, but each session's operator or
     # loop harness does the arming (rate-change doctrine unchanged).
     macos: "08 even hours (0-22/2) — reserved; currently loops on request"
-    macuahuitl: "23 even hours (0-22/2) — coordinator; armed 2026-08-31"
+    macuahuitl: "23 even hours (0-22/2) — coordinator; armed 2026-08-31, re-armed 2026-09-02 after the host reboot (session crons die with the session). Full meta-orchestration cycle at 38 past 02/06/10/14/18/22 (every 4h — the forge e2e rate limit — and ≥15 min from every sibling slot)"
     yolanda: "53 even hours (0-22/2)"
     pirria: "08 odd hours (1-23/2) — reserved; currently one-off per operator"
     lenovinha: "23 odd hours (1-23/2)"
