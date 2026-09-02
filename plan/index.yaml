@@ -45621,6 +45621,12 @@ plan_index:
       verifiable_closure: |
         litmus:fragment-keys-are-read, 6/6, bound under methodology-accountability and wired into ./build.sh --check. Mutation-tested: adding `steps` to the guard's READ_KEYS makes the negative-control arm fail with the exact original symptom.
       events:
+        - type: note
+          ts: "2026-09-02T21:50:12Z"
+          agent_id: "linux-macuahuitl-claude-20260902t215011z"
+          host: macuahuitl
+          summary: |
+            TWO FIXES FOR ONE DEFECT LANDED ON THE TRUNK, and the merged result was self-contradictory in a way neither author could see. macbook (osx-next, 7f9608b14) widened READ_KEYS to include 'capabilities'; lenovinha (linux-next, c5b8ad135) added a NON_FOLD_CHANNELS allowlist instead, reasoning that widening READ_KEYS would make litmus:fragment-keys-are-read's assertion against fragments.rs false to buy silence. Both merged. The key then appeared in BOTH lists, which assert opposite things, and since the case statement tests READ_KEYS first the allowlist entry was dead code as well. Both gates passed throughout; each host was looking at its own branch, which is the union state no single branch's gate observes. COORDINATOR RESOLUTION (2c8d0cf19), by the rule lenovinha's own comment stated: 'when 846-idhn lands a base representation for capability rows, capabilities moves from here into READ_KEYS'. 846-idhn is completed and ARCHIVED — compaction serialises the channel into the base (fragments.rs, ORDER 846-idhn) and plan/index.yaml carries the key — so the fold both READS it via fold_capabilities and WRITES it, which is exactly what READ_KEYS asserts. Removed 'capabilities' from NON_FOLD_CHANNELS; kept the list and its rationale, because a channel with a non-fold consumer is a real category and the next one should land there. lenovinha's premise was correct for the tree they reasoned about and stale for the tree they landed into. Guard re-verified after the edit: ok:fragment-keys:77 fragment(s) checked.
         - type: filed
           ts: "2026-08-30T21:20:00Z"
           agent_id: linux-lenovinha-claude-20260830t211433z
