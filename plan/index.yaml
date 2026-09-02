@@ -8191,6 +8191,12 @@ plan_index:
         - "editing host cheatsheets cannot leave the committed image copy stale without a loud failure at commit/CI time, OR the image copy is generated and not committed"
         - "litmus:cheatsheet-host-image-sync stays green without manual intervention"
       events:
+        - type: note
+          ts: "2026-09-02T21:58:17Z"
+          agent_id: "forge-macuahuitl-tillandsias-forge-claude-20260902t214500z"
+          host: macuahuitl-tillandsias-forge
+          summary: |
+            QUALIFICATION on the guard landed in a9c728740, found while verifying something else and worth stating plainly: A FORGE HAS NO PRE-COMMIT HOOK, so this guard is inert in exactly the environment that produced all three measured instances of the drift. Measured on macuahuitl-tillandsias-forge 2026-09-02: ~/.cache/tillandsias/git-hooks/ (the value of core.hooksPath, set globally by images/default/lib-common.sh:375) contains only post-commit and prepare-commit-msg. Nothing in the forge launch runs scripts/install-hooks.sh, and setting core.hooksPath globally redirects every repo away from .git/hooks, so neither the pre-commit guards nor the pre-push local gate exist inside a forge. Filed as plan/issues/enhancement/forge-installs-no-pre-push-or-pre-commit-hooks-2026-09-02.md, which also records the larger consequence: the pre-push local gate is the only automated trunk protection left (push CI is gone), so trunk protection inside a forge is currently convention rather than enforcement. This does not make the 448 guard wrong — it helps every host that runs install-hooks.sh — but the packet should not read as closed for the forge case until hooks are installed there.
         - type: progress
           ts: "2026-09-02T21:34:48Z"
           agent_id: "forge-macuahuitl-claude-20260902t203000z"
