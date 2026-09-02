@@ -1,0 +1,143 @@
+packets:
+  - packet_id: spec-index-builder-stages-into-256mb-tmpfs
+    order: 964-zedm
+    status: ready
+    title: |
+      spec-index-ensure.sh stages its payload in /tmp, which is a 256 MB tmpfs in the forge — the index build cannot complete there at any CPU speed
+    kind: bug
+    pickup_role: any
+    priority: p1
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    capability_tags:
+      - forge
+      - experts
+      - inference
+      - container-image
+    estimated_hours: 2
+    deliverable: |
+      spec-index-ensure.sh stages its intermediate payload somewhere with room for
+      the corpus (the index root's filesystem, or an explicit TILLANDSIAS_SPEC_INDEX_TMPDIR),
+      so a first-launch index build on a forge completes instead of dying on ENOSPC.
+    context: |
+      MEASURED on lenovinha-tillandsias-forge 2026-09-02 (CPU-only forge, v56.9.2.1,
+      16 cores / 13 GB) while working 919-vvyv exit criterion 2.
+
+      With the embed endpoint wired by hand, `scripts/spec-index-ensure.sh` planned
+      22645 chunks and then failed:
+
+          spec-index:delta reused=0 embed=22645 of 22645
+          jq: error: writing output failed: No space left on device
+          blocked:spec-index:payload-failed
+          EXIT=1
+
+      The producer TYPED the failure, which is the system working — but the verdict
+      names the payload, not the cause, and the cause is not where anyone looks:
+
+          $ df -h /tmp /home/forge/.cache
+          tmpfs           256M   66M  191M  26% /tmp
+          overlay         1.9T  691G  1.2T  38% /
+
+      FORGE_SPEC_INDEX_ROOT is on the 1.2 TB overlay with room to spare. /tmp is a
+      256 MB tmpfs, and the jq staging goes there via TMPDIR. So the index build
+      fails for lack of space on a host that has 1.2 TB free.
+
+      This is the 915-wkm2 shape (a tmpfs quota where df on the "real" filesystem
+      reports plenty) applied to the index builder, and it has a specific consequence
+      for 919-vvyv: exit criterion 2 asks for the index to be "built at first launch",
+      and on a forge THAT CANNOT SUCCEED today regardless of how long it is given.
+      The ~60min-on-CPU estimate in 919-vvyv's context is therefore not the binding
+      constraint — the build dies in seconds, on disk, long before CPU time matters.
+
+      A re-run with TMPDIR pointed at the large filesystem is the confirming
+      experiment and the basis for the real CPU timing number.
+    exit_criteria:
+      - |
+          spec-index-ensure.sh stages intermediate payloads on a filesystem with
+          capacity for the corpus, not the ambient /tmp tmpfs
+      - |
+          A forge first-launch index build completes on a host whose /tmp is a
+          256 MB tmpfs
+      - |
+          The ENOSPC failure, if it still occurs, names the DIRECTORY that ran out
+          rather than only `payload-failed`
+    verifiable_closure: |
+      On a forge with a 256 MB /tmp tmpfs, run scripts/spec-index-ensure.sh from cold
+      with a reachable embed endpoint and observe it publish vectors.jsonl (and
+      `tillandsias-plan experts-probe` move to l1=ready) rather than exiting
+      blocked:spec-index:payload-failed.
+    evidence:
+      - 'lenovinha forge 2026-09-02: jq: error: writing output failed: No space left on device'
+      - 'df: /tmp is tmpfs 256M (191M avail); index root overlay has 1.2T avail'
+      - scripts/spec-index-ensure.sh — payload staging via ambient TMPDIR
+    notes: |
+      Found while measuring 919-vvyv from inside the CPU-only forge regime. Related:
+      915-wkm2 (scratchpad tmpfs quota, same invisible-ENOSPC shape), 919-vvyv
+      (the parent story), 916-ijxa.
+    events:
+      - type: filed
+        ts: "2026-09-02T20:38:29Z"
+        agent_id: linux-lenovinha-tillandsias-forge-claude-20260902t202947z
+        host: lenovinha-tillandsias-forge
+        summary: |
+          Filed from a direct measurement while working 919-vvyv exit criterion 2 on a
+          CPU-only forge: the spec index build dies on ENOSPC in a 256 MB /tmp tmpfs
+          while the index root has 1.2 TB free, so "build the index at first launch"
+          cannot succeed on a forge today at any CPU speed.
+
+  - packet_id: host-expert-refresh-gate-shape-red-on-linux-next
+    order: 964-i4j9
+    status: ready
+    title: |
+      litmus:host-expert-refresh-gate-shape is RED at linux-next HEAD — generated post-commit hook missing gate or expert body
+    kind: bug
+    pickup_role: any
+    priority: p2
+    desired_release: v0.5
+    capability_tags:
+      - litmus
+      - forge
+      - experts
+    estimated_hours: 1
+    deliverable: |
+      Either scripts/install-hooks.sh emits the TILLANDSIAS_HOST_EXPERTS gate and the
+      expert body the test asserts, or the test is corrected to match the intended
+      generated hook — with the spec re-run green either way.
+    context: |
+      MEASURED on lenovinha-tillandsias-forge 2026-09-02, and CONFIRMED PRE-EXISTING:
+      the same failure reproduces against a stashed (clean) tree at linux-next HEAD
+      f313426a3, so it is not caused by the 919-vvyv change that found it.
+
+          spec=forge-environment-discoverability test=litmus:host-expert-refresh-gate-shape
+          [STEP 3/4] INSTALLER EMITS THE GATE: the generated post-commit guards the
+                     expert body with TILLANDSIAS_HOST_EXPERTS ... [FAIL]
+          output=FAIL: gate or expert body missing from generated hook
+
+      The rest of the spec passes; this is the single red test in it.
+
+      Filed rather than fixed because the 919-vvyv cycle's surface is the inference
+      and embed-endpoint lane, and this is the hook installer — a different owner and
+      a different blast radius. It is recorded here so the red does not stay a thing
+      each host rediscovers by running a spec it happened to touch, which is the
+      921-vtf4 shape.
+    exit_criteria:
+      - |
+          litmus:host-expert-refresh-gate-shape passes at linux-next HEAD
+      - |
+          The commit records whether the INSTALLER or the TEST was wrong
+    verifiable_closure: |
+      scripts/run-litmus-test.sh forge-environment-discoverability --phase pre-build
+      --size instant reports PASS with litmus:host-expert-refresh-gate-shape executed.
+    evidence:
+      - 'lenovinha forge 2026-09-02: FAIL reproduced against a stashed clean tree at f313426a3'
+    notes: |
+      Related: 921-vtf4 (three tests found red back to af745f3fd only because a full
+      suite happened to run — the same class of invisible red).
+    events:
+      - type: filed
+        ts: "2026-09-02T20:38:29Z"
+        agent_id: linux-lenovinha-tillandsias-forge-claude-20260902t202947z
+        host: lenovinha-tillandsias-forge
+        summary: |
+          Found while running the litmus specs covering the 919-vvyv change; confirmed
+          pre-existing at linux-next HEAD by re-running against a stashed tree.
