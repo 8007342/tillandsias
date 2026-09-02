@@ -14,7 +14,7 @@ post-commit  prepare-commit-msg
 ```
 
 That directory is the value of `core.hooksPath`, set globally by
-`images/default/lib-common.sh:375` so the forge's own agent-trailer and
+`images/default/lib-common.sh` (the `git config --global core.hooksPath` call in its agent-trailer hook installer) so the forge's own agent-trailer and
 expert-refresh hooks run. Setting it globally REDIRECTS EVERY REPO'S HOOKS away
 from `.git/hooks`, and nothing in the forge launch runs
 `scripts/install-hooks.sh`, so the two guards that matter are simply absent:
