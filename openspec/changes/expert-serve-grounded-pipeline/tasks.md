@@ -83,5 +83,17 @@
       registration tests, domain-filter unit, OpenAI/SSE shape tests, and
       the port-0 integration test (typed refusal end-to-end, /v1/models,
       404, fast shutdown).
-- [ ] 5.10 Live OpenCode session verification against a running
-      expert-serve (operator/forge relaunch) — OPEN.
+- [x] 5.10 Live OpenCode session verification against a running
+      expert-serve — DONE on macuahuitl-tillandsias-forge 2026-09-02
+      (RTX A5000, inference:11434, 22682-chunk index from b300d6b92).
+      Covered -> synthesized prose with a correct `Sources:` line and
+      citations narrowed 6->3 to the ones the prose used; uncovered ->
+      typed `unsupported:` refusal, citations=[], naming best score
+      (0.56-0.58) against the 0.62 floor. Both through the `pipeline`
+      CLI arm and over the expert-serve HTTP endpoint; /v1/models,
+      typed 404, `rag_source_commit` == the entry `.commit`. Required
+      fixing the launch first: the forge derived the embed endpoint
+      only from OLLAMA_HOST, which nothing in the forge sets, so the
+      lifecycle-started server answered `unsupported: no embedding
+      endpoint` with everything else in place (fixed, ea280c2d9).
+      Full evidence on the 920-pxg6 events.

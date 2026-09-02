@@ -1020,12 +1020,80 @@ export FORGE_EXPERTS_BIN_DIR FORGE_EXPERTS_STATE_DIR
 # which the enclave ollama at inference:11434 404s — so the L1 tier was dead on
 # every cold forge (919-vvyv). Same split lib-dev-env.sh draws on the dev side:
 # the ENVIRONMENT names the endpoint and the model that matches it; an explicit
-# operator value always wins. Without OLLAMA_HOST (no enclave inference
-# service) the endpoint stays unset and spec_answer keeps its typed refusal.
-if [ -z "${TILLANDSIAS_EMBED_ENDPOINT:-}" ] && [ -n "${OLLAMA_HOST:-}" ]; then
+# operator value always wins. With no reachable inference service at all the
+# endpoint stays unset and spec_answer keeps its typed refusal.
+#
+# OLLAMA_HOST IS NOT THE SENTINEL FOR "THERE IS AN ENCLAVE INFERENCE SERVICE",
+# and treating it as one left this whole block dead on the forge it was written
+# for (order 964-fwvh). Measured on macuahuitl-tillandsias-forge 2026-09-02:
+# OLLAMA_HOST unset, and yet inference:11434 up and serving eight models, a
+# 22682-chunk spec index published at /opt/tillandsias/spec-index, and
+# TILLANDSIAS_EMBED_MODEL exported by the unconditional branch immediately
+# below. So the launch armed the model and not the endpoint, and every answer
+# through the launch-started expert-serve was
+# `unsupported: no embedding endpoint` — the 712-r5x8 fresh-forge gap intact,
+# in the one configuration built to close it. The enclave service is named by
+# TILLANDSIAS_INFERENCE_ENDPOINT (default http://inference:11434, per
+# lib-inference-state.sh), which is what lib-dev-env.sh already derives from on
+# the dev side; OLLAMA_HOST is one operator's way of spelling it, not the
+# fleet's.
+#
+# PROBE, DO NOT ASSUME. The invariant this block must keep is that a forge with
+# no inference service wires nothing and keeps its typed refusal — an endpoint
+# exported on faith would replace an honest `unsupported: no embedding
+# endpoint` with a misleading `the embedding endpoint did not answer`. So the
+# derived candidate is confirmed with the same cheap bounded OpenAI-shape
+# liveness probe the capability line uses (_tillandsias_expert_embed_state,
+# 712-r5x8): GET <base>/models, 3s ceiling. Refused connections and DNS misses
+# return immediately, so a forge without inference pays no measurable launch
+# cost. An explicit TILLANDSIAS_EMBED_ENDPOINT is never probed and never
+# overridden.
+if [ -z "${TILLANDSIAS_EMBED_ENDPOINT:-}" ]; then
     # ollama's OpenAI-compatible surface, for /v1/embeddings — the same
     # derivation start_expert_serve_fail_soft applies per-invocation below.
-    export TILLANDSIAS_EMBED_ENDPOINT="${OLLAMA_HOST%/}/v1"
+    if [ -n "${OLLAMA_HOST:-}" ]; then
+        _tec_embed_candidate="${OLLAMA_HOST%/}/v1"
+    else
+        _tec_embed_candidate="${TILLANDSIAS_INFERENCE_ENDPOINT:-http://inference:11434}"
+        _tec_embed_candidate="${_tec_embed_candidate%/}"
+        # TILLANDSIAS_INFERENCE_ENDPOINT is the ROOT url by convention
+        # (lib-experts-probe.sh: "root url, no /v1"), so add the /v1 base the
+        # embeddings path needs — unless an operator already spelled it that
+        # way, in which case appending again would 404 on /v1/v1/embeddings.
+        case "$_tec_embed_candidate" in
+            */v1) : ;;
+            *) _tec_embed_candidate="$_tec_embed_candidate/v1" ;;
+        esac
+    fi
+    if command -v curl >/dev/null 2>&1 \
+        && curl -fsS -m 3 -o /dev/null "$_tec_embed_candidate/models" 2>/dev/null; then
+        export TILLANDSIAS_EMBED_ENDPOINT="$_tec_embed_candidate"
+    fi
+    unset _tec_embed_candidate
+fi
+# FORGE FALLBACK (order 919-vvyv, MEASURED on lenovinha 2026-09-02).
+# The block above is inert in the very lane it was written for. OLLAMA_HOST is
+# DECLARED on the forge profiles (container_profile.rs:393 and :692, literal
+# `http://inference:11434`) yet it does not reach the container: a live forge on
+# v56.9.2.1 reported `embed_endpoint=unset` with TILLANDSIAS_EMBED_MODEL set,
+# the inference service answering, and nomic-embed-text already cached. Setting
+# the endpoint by hand moved `experts-probe` from l1=unset straight to
+# l1=no-index, so the endpoint was the ONLY missing piece — the fix for 919-vvyv
+# D1/D2 was present and could never fire.
+#
+# So the forge does not depend on one variable arriving. It falls back to the
+# SAME canonical default lib-inference-state.sh already uses for the enclave
+# service, and — unlike the OLLAMA_HOST path — it PROBES first, because the
+# comment above promises that a forge with no inference service keeps
+# spec_answer's typed refusal. An unreachable endpoint left wired would convert
+# that honest `unset` into a misleading `unreachable`.
+if [ -z "${TILLANDSIAS_EMBED_ENDPOINT:-}" ] && [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ]; then
+    _tlc_infer_ep="${TILLANDSIAS_INFERENCE_ENDPOINT:-http://inference:11434}"
+    if command -v curl >/dev/null 2>&1 \
+        && curl -fsS -m 3 -o /dev/null "${_tlc_infer_ep%/}/v1/models" 2>/dev/null; then
+        export TILLANDSIAS_EMBED_ENDPOINT="${_tlc_infer_ep%/}/v1"
+    fi
+    unset _tlc_infer_ep
 fi
 if [ -z "${TILLANDSIAS_EMBED_MODEL:-}" ]; then
     # The OLLAMA name — what the inference entrypoint pulls at startup
@@ -1454,11 +1522,16 @@ start_expert_serve_fail_soft() {
     fi
     # The server's lifetime is stdin EOF (deliberate: `</dev/null` keeps the
     # capability-sweep litmus fast), so the lane holds its stdin open with a
-    # silent pipe that dies with the container. The embed endpoint defaults
-    # from the enclave inference service the profile already injects
-    # (OLLAMA_HOST); an explicit operator value always wins, and with neither
-    # the server refuses typed per request — same discipline as spec_answer.
-    TILLANDSIAS_EMBED_ENDPOINT="${TILLANDSIAS_EMBED_ENDPOINT:-${OLLAMA_HOST:+${OLLAMA_HOST%/}/v1}}" \
+    # silent pipe that dies with the container. The embed endpoint is resolved
+    # ONCE, at source time, by the probed derivation block above (964-fwvh):
+    # explicit operator value, else OLLAMA_HOST, else the enclave inference
+    # service — and only if it actually answered. Inheriting that decision is
+    # the point; re-deriving here from OLLAMA_HOST alone is what left this
+    # server serving `unsupported: no embedding endpoint` on a forge whose
+    # inference container was up the whole time. With nothing resolved the
+    # variable stays empty and the server refuses typed per request — same
+    # discipline as spec_answer.
+    TILLANDSIAS_EMBED_ENDPOINT="${TILLANDSIAS_EMBED_ENDPOINT:-}" \
         nohup bash -c "tail -f /dev/null | '$bin' expert-serve --port '$port' --root '$project_dir'" \
         >>/tmp/forge-lifecycle.log 2>&1 &
     trace_lifecycle "expert-serve" "starting: ${bin} expert-serve on 127.0.0.1:${port} (root ${project_dir}, pid $!)"

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: lane-branch-methodology-for-a-fleet-that-outruns-its-slowest-host
+    field: status
+    value: in_progress
+    ts: "2026-09-02T20:32:12Z"
+    host: pirria-tillandsias-forge
+
+events:
+  - packet_id: lane-branch-methodology-for-a-fleet-that-outruns-its-slowest-host
+    event:
+      type: note
+      ts: "2026-09-02T20:32:12Z"
+      host: pirria-tillandsias-forge
+      summary: >
+        claimed for the research half (durable lane-branch methodology text) per coordinator assignment 2026-09-02; interim ruling already unblocks it

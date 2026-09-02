@@ -114,7 +114,24 @@ PLAN="$(resolve_plan_binary)" || { echo "unavailable:no-runnable-plan-binary"; e
 # and name the remedy. The platform test is the canonical one
 # (TILLANDSIAS_HOST_KIND=forge, else the .forge-startup-context.md marker), not
 # a guess at the image name.
-if [ -z "${TILLANDSIAS_WORKSTATION:-}" ] && [ "$(tillandsias_agent_platform)" = "forge" ]; then
+#
+# THE FIXTURE IS EXEMPT, AND MUST BE (order 964-fwvh). This guard and the host
+# resolution below both run at top level, BEFORE the `case` dispatch at the
+# foot of the file, so on an ephemeral forge they refused `fixture` too — the
+# hermetic self-test never reached its first case, printed the live refusal,
+# and exited 2. `./build.sh --check` reads that as "the capability-row truth
+# fixture broke — a stale row can be consumed as a current fact again", so
+# every forge failed the gate with a message about a defect that was not there.
+# Measured on macuahuitl-tillandsias-forge 2026-09-02.
+#
+# The exemption is sound rather than convenient: this guard exists to stop a
+# host PUBLISHING under a name that changes every launch, and the fixture
+# publishes nothing. It supplies `TILLANDSIAS_WORKSTATION=fixturehost` on every
+# one of its own `_run` invocations, so the identity it tests with is its own and the
+# ambient one is irrelevant to it.
+if [ "${1:-check}" = "fixture" ]; then
+    :
+elif [ -z "${TILLANDSIAS_WORKSTATION:-}" ] && [ "$(tillandsias_agent_platform)" = "forge" ]; then
     echo "[check-capability-row] This forge has no stable identity: TILLANDSIAS_WORKSTATION is unset and every other source (HOSTNAME, /etc/hostname, uname -n) reports the container id, which changes on every launch. Publishing under it would add a matrix row per container. Export TILLANDSIAS_WORKSTATION with the forge's fleet name before asking it to publish." >&2
     echo "unavailable:forge-identity-ephemeral"
     exit 2

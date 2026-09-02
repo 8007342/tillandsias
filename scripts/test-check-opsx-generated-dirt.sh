@@ -3,11 +3,14 @@
 # test-check-opsx-generated-dirt.sh — fixture proof for the deterministic
 # launch-generated opsx-dirt detector.
 #
-# Proves three branches against throwaway repos:
-#   1. ok:opsx-only      — ONLY the 22 generated opsx/openspec paths are dirty
-#   2. non-opsx:<path>   — ANY real dirt fails closed (tracked edit, untracked,
+# Proves the detector's branches against throwaway repos:
+#   1.  ok:opsx-only      — ONLY the 22 generated opsx/openspec paths are dirty
+#   1b. ok:opsx-only      — the same set in the .claude/ locus (order 964-fwvh)
+#   1c. ok:opsx-only      — both harness loci dirty at once
+#   1d. non-opsx:<path>   — the widened set still fails closed on real dirt
+#   2.  non-opsx:<path>   — ANY real dirt fails closed (tracked edit, untracked,
 #                          and the untracked-vs-tracked mix)
-#   3. ok:clean-tree     — no dirt at all (exit 4, distinct from a sync)
+#   3.  ok:clean-tree     — no dirt at all (exit 4, distinct from a sync)
 #
 # Grammar pinned: ^(ok:opsx-only|ok:clean-tree|non-opsx:[a-z0-9._/-]+)$
 set -euo pipefail
@@ -58,6 +61,72 @@ fi
     exit 1
 }
 echo "ok: branch1 ok:opsx-only rc=0"
+
+# ── branch 1b: the SAME set in the .claude/ locus → ok:opsx-only (964-fwvh) ──
+# A Claude-Code-launched forge gets the identical 22 artifacts under `.claude/`
+# with the CLI's nested command layout. Before 964-fwvh the detector knew only
+# the `.opencode/` locus, so a Claude-launched forge read `non-opsx:` on 22
+# provably-generated paths and refused its entire cycle — measured live on
+# macuahuitl-tillandsias-forge 2026-09-02.
+git -C "$repo" checkout -q -- .
+mkdir -p "$repo/.claude/commands/opsx" "$repo/.claude/skills"
+for cmd in apply archive bulk-archive continue explore ff new onboard propose sync verify; do
+    printf '%s\n' "opsx $cmd v1" >"$repo/.claude/commands/opsx/$cmd.md"
+done
+for sk in apply-change archive-change bulk-archive-change continue-change explore ff-change new-change onboard propose sync-specs verify-change; do
+    mkdir -p "$repo/.claude/skills/openspec-$sk"
+    printf '%s\n' "openspec-$sk v1" >"$repo/.claude/skills/openspec-$sk/SKILL.md"
+done
+git -C "$repo" add -A
+git -C "$repo" commit -qm claude-opsx-baseline
+
+for cmd in apply archive bulk-archive continue explore ff new onboard propose sync verify; do
+    printf '%s\n' "opsx $cmd v2" >"$repo/.claude/commands/opsx/$cmd.md"
+done
+for sk in apply-change archive-change bulk-archive-change continue-change explore ff-change new-change onboard propose sync-specs verify-change; do
+    printf '%s\n' "openspec-$sk v2" >"$repo/.claude/skills/openspec-$sk/SKILL.md"
+done
+
+if verdict="$(cd "$repo" && "$CHECKER")"; then
+    code=0
+else
+    code=$?
+fi
+[[ "$verdict" == "ok:opsx-only" && $code -eq 0 ]] || {
+    echo "FAIL branch1b: expected ok:opsx-only rc=0 for .claude locus, got '$verdict' rc=$code" >&2
+    exit 1
+}
+echo "ok: branch1b ok:opsx-only rc=0 (.claude locus)"
+
+# ── branch 1c: both loci dirty at once → still ok:opsx-only ──────────────────
+for cmd in apply archive bulk-archive continue explore ff new onboard propose sync verify; do
+    printf '%s\n' "opsx-$cmd v3" >"$repo/.opencode/commands/opsx-$cmd.md"
+done
+if verdict="$(cd "$repo" && "$CHECKER")"; then
+    code=0
+else
+    code=$?
+fi
+[[ "$verdict" == "ok:opsx-only" && $code -eq 0 ]] || {
+    echo "FAIL branch1c: expected ok:opsx-only rc=0 for both loci, got '$verdict' rc=$code" >&2
+    exit 1
+}
+echo "ok: branch1c ok:opsx-only rc=0 (both loci)"
+
+# ── branch 1d: real dirt alongside .claude locus dirt → still fails closed ───
+# The widened set must not weaken the refusal: one non-generated path is enough.
+printf 'real operator edit\n' >"$repo/base.txt"
+if verdict="$(cd "$repo" && "$CHECKER")"; then
+    code=0
+else
+    code=$?
+fi
+[[ "$verdict" == "non-opsx:base.txt" && $code -eq 3 ]] || {
+    echo "FAIL branch1d: expected non-opsx:base.txt rc=3, got '$verdict' rc=$code" >&2
+    exit 1
+}
+echo "ok: branch1d fails closed with .claude dirt present, rc=3"
+git -C "$repo" checkout -q -- .
 
 # ── branch 2a: a tracked non-opsx edit → non-opsx, fail closed ───────────────
 printf 'real operator edit\n' >"$repo/base.txt"
