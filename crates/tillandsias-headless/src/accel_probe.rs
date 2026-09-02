@@ -35,6 +35,20 @@ pub struct CapabilityDocument {
     /// said which code probed it.
     #[serde(default)]
     pub probe_identity: Option<String>,
+    /// Device classes this probe COULD NOT ENUMERATE on this platform, as
+    /// opposed to enumerated-and-found-none.
+    ///
+    /// ORDER 805-r98w / NPU parity, 2026-09-02. Before this existed, both
+    /// outcomes produced an empty device list and the envelope rendered either
+    /// as `none` — so a probe that had never looked published an affirmative
+    /// denial. Measured on native Windows: `accel_npu=none` on a host whose
+    /// XDNA2 NPU was serving models at that moment.
+    ///
+    /// `#[serde(default)]` because documents written before this order have no
+    /// such field; an old cache reads as "no gaps", which is the pre-existing
+    /// behaviour and no worse than it was.
+    #[serde(default)]
+    pub enumeration_gaps: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -334,7 +348,7 @@ pub fn record_measurement(m: MeasurementRecord) -> Result<(), String> {
 /// the other. Enumeration measures the machine; this field records what the
 /// tier probe asserted. Do not re-thread it downward.
 pub fn run_probe(effective_tier: &str) -> CapabilityDocument {
-    let devices = enumerate_devices();
+    let (devices, enumeration_gaps) = enumerate_devices();
     let engines = enumerate_engines();
     let measurements = Vec::new(); // Microbenchmarks run on demand / bounded
     let host = enumerate_host();
@@ -349,6 +363,7 @@ pub fn run_probe(effective_tier: &str) -> CapabilityDocument {
         host,
         timestamp,
         probe_identity: Some(probe_identity()),
+        enumeration_gaps,
     }
 }
 
@@ -368,19 +383,65 @@ pub fn probe_identity() -> String {
 }
 
 // @trace spec:accel-capability-probe
-fn enumerate_devices() -> Vec<DeviceRecord> {
+fn enumerate_devices() -> (Vec<DeviceRecord>, Vec<String>) {
     let mut devices = Vec::new();
+    let mut gaps = Vec::new();
 
     // 1. CPU Device
     devices.push(enumerate_cpu());
 
     // 2. GPUs
-    devices.extend(enumerate_gpus());
+    match enumerate_gpus_checked() {
+        Some(g) => devices.extend(g),
+        None => gaps.push("gpu".to_string()),
+    }
 
     // 3. NPUs
-    devices.extend(enumerate_npus());
+    match enumerate_npus_checked() {
+        Some(n) => devices.extend(n),
+        None => gaps.push("npu".to_string()),
+    }
 
-    devices
+    (devices, gaps)
+}
+
+/// GPU enumeration that distinguishes "looked and found none" (`Some(vec![])`)
+/// from "could not look here" (`None`).
+///
+/// ORDER 805-r98w. The distinction is the whole point: an empty list rendered
+/// as `accel_gpu=none` on a host with a Radeon 860M, because there was no
+/// Windows arm and no way for the caller to tell absence from blindness.
+fn enumerate_gpus_checked() -> Option<Vec<DeviceRecord>> {
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    {
+        Some(enumerate_gpus())
+    }
+    #[cfg(target_os = "windows")]
+    {
+        windows_gpus()
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+    {
+        // An unknown platform has NOT looked. Saying so costs a discriminator;
+        // claiming `none` would be a denial we cannot support.
+        None
+    }
+}
+
+/// NPU enumeration, same contract as [`enumerate_gpus_checked`].
+fn enumerate_npus_checked() -> Option<Vec<DeviceRecord>> {
+    #[cfg(target_os = "linux")]
+    {
+        Some(enumerate_npus())
+    }
+    #[cfg(target_os = "windows")]
+    {
+        windows_npus()
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
+    {
+        None
+    }
 }
 
 // @trace spec:accel-capability-probe
@@ -450,6 +511,71 @@ fn enumerate_cpu() -> DeviceRecord {
         flags.push("neon".to_string());
     }
 
+    // ORDER 805-r98w / NPU parity, 2026-09-02. Native Windows used to fall
+    // through to the generic arm below, which sets physical = logical. On this
+    // 8c/16t part that reported 16c16t — a WRONG number, not a missing one, and
+    // the CPU model stayed the placeholder "Host CPU". Together those made the
+    // hardware fingerprint refuse (correctly) and made the capability document
+    // unable to identify the machine at all.
+    //
+    // Everything here comes from the OS, not from a guess: a query that fails
+    // leaves the generic fallback in place rather than inventing a value.
+    #[cfg(target_os = "windows")]
+    {
+        let mut got = None;
+        if let Some(lines) = powershell_lines(
+            "$c = Get-CimInstance Win32_Processor -ErrorAction Stop | Select-Object -First 1; \
+             $m = (Get-CimInstance Win32_ComputerSystem -ErrorAction Stop).TotalPhysicalMemory; \
+             $c.Name + '|' + $c.NumberOfCores + '|' + $c.NumberOfLogicalProcessors + '|' + \
+             $c.Manufacturer + '|' + $m",
+        ) {
+            if let Some(line) = lines.first() {
+                let f: Vec<&str> = line.split('|').collect();
+                if f.len() >= 5 {
+                    let name = f[0].trim().to_string();
+                    // Only accept a COMPLETE row. A partial parse that keeps
+                    // some real fields and silently defaults the rest is how a
+                    // document ends up half-trustworthy, which is worse than a
+                    // uniformly unknown one.
+                    if let (Ok(phys), Ok(log)) =
+                        (f[1].trim().parse::<u32>(), f[2].trim().parse::<u32>())
+                    {
+                        if !name.is_empty() && phys > 0 && log > 0 {
+                            got = Some((
+                                name,
+                                phys,
+                                log,
+                                f[3].trim().to_string(),
+                                f[4].trim().parse::<u64>().ok(),
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        match got {
+            Some((name, phys, log, manufacturer, total_bytes)) => {
+                cpu_name = name;
+                physical_cores = phys;
+                logical_cores = log;
+                vendor = match manufacturer.as_str() {
+                    "AuthenticAMD" => "amd".to_string(),
+                    "GenuineIntel" => "intel".to_string(),
+                    other if !other.is_empty() => other.to_ascii_lowercase(),
+                    _ => "unknown".to_string(),
+                };
+                ram_gb = total_bytes.map(|b| b as f64 / (1024.0 * 1024.0 * 1024.0));
+            }
+            None => {
+                // The query could not be run or came back unparseable. Report
+                // the little we know for certain and leave the model name as
+                // the placeholder, which the fingerprint guard already refuses.
+                logical_cores = num_cpus();
+                physical_cores = logical_cores;
+            }
+        }
+    }
+
     // Every other target (653-7rag). Without this arm both bindings are read
     // uninitialized and the crate fails to COMPILE on Windows — a hard error in
     // `cargo build --workspace` for a contributor who touched nothing here.
@@ -461,7 +587,7 @@ fn enumerate_cpu() -> DeviceRecord {
     // being fixed. Reporting fewer facts is correct here — the probe's contract
     // is "what this host can tell you", and an unknown physical count is a
     // legitimate answer where no enumeration path exists.
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
     {
         logical_cores = num_cpus();
         physical_cores = logical_cores;
@@ -1228,7 +1354,26 @@ pub fn compare_documents(
 /// The version of the FIELD SET the fingerprint is composed from — hashed into
 /// the string and carried in its `hw<N>-` prefix. Bump on any change to which
 /// fields are included or how they are classed.
-pub const FIELD_SET_VERSION: u32 = 1;
+pub const FIELD_SET_VERSION: u32 = 2;
+
+// VERSION HISTORY, kept because the reason for the bump is the evidence that
+// the mechanism works.
+//
+// 1 -> 2 (2026-09-02). Version 1 shipped in two INCOMPATIBLE forms and both
+// called themselves `hw1-`. The commit that introduced this constant also
+// folded `fieldset:N` into the hashed input, which changes the string for
+// identical hardware — a field-set change by this constant's own definition —
+// and did not bump the version. yoga built off the earlier commit and got
+// `hw1-134b5c800683d4d2`; this host on the later one produced a different
+// composition under the same tag. Two incomparable strings sharing a version is
+// exactly what the constant exists to prevent, and it happened in the commit
+// that created it.
+//
+// Bumping to 2 makes the incompatibility visible instead of silent: every
+// string minted before that commit is now distinguishable at a glance. The rule
+// stands and is restated here because it was broken once already — bump on ANY
+// change to which fields are included, how they are classed, OR how they are
+// serialised.
 
 pub fn hardware_fingerprint(doc: &CapabilityDocument) -> String {
     fn ram_class(gb: f64) -> String {
@@ -1674,36 +1819,176 @@ fn enumerate_gpus() -> Vec<DeviceRecord> {
 }
 
 // @trace spec:accel-capability-probe
-/// Whether this build can enumerate GPUs AT ALL.
+/// Run a PowerShell query and return its non-empty stdout lines, or `None` when
+/// the query could not be RUN at all.
 ///
-/// ORDER 805-r98w / NPU parity with yoga, 2026-09-02. [`enumerate_gpus`] has a
-/// Linux arm and a macOS arm and NO Windows arm, so on native Windows it
-/// returns an empty list and the envelope renders `accel_gpu=none` — on this
-/// host, which has a Radeon 860M. Same false negative as the NPU case and found
-/// by the same question: does `none` here mean "looked and found nothing", or
-/// "never looked"?
-pub const fn gpu_enumeration_supported() -> bool {
-    cfg!(target_os = "linux") || cfg!(target_os = "macos")
+/// ORDER 805-r98w. `None` and `Some(vec![])` are different facts and the caller
+/// must not be able to confuse them: a PowerShell that failed to launch, exited
+/// non-zero, or was blocked by policy has told us NOTHING about the hardware,
+/// while an empty result set is a genuine finding. Collapsing the two is the
+/// exact defect this order was filed against, one layer down.
+#[cfg(target_os = "windows")]
+fn powershell_lines(script: &str) -> Option<Vec<String>> {
+    let out = std::process::Command::new("powershell.exe")
+        .args(["-NoProfile", "-NonInteractive", "-Command", script])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    Some(
+        String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .map(|l| l.trim().to_string())
+            .filter(|l| !l.is_empty())
+            .collect(),
+    )
 }
 
-/// Whether this build can enumerate NPUs AT ALL.
+/// Pull `VEN_xxxx` / `DEV_xxxx` out of a Windows PNP instance id.
 ///
-/// ORDER 805-r98w / NPU parity with yoga, 2026-09-02. [`enumerate_npus`] reads
-/// `/sys/class/accel`, which exists only on Linux. On every other platform it
-/// returns an empty list and SUCCEEDS, and an empty list renders in the
-/// envelope as `accel_npu=none`.
+/// Returns the pair as `1002:1114`, vendor and device TOGETHER — never either
+/// alone. Vendor collides across parts, and device collides across vendors.
 ///
-/// That is a false negative stated as fact. This very host — native Windows,
-/// yolanda — has an XDNA2 NPU that Lemonade is serving models on right now, and
-/// its own capability document says the machine has no NPU. Absence of evidence
-/// is being published as evidence of absence, which is the same failure family
-/// as a fingerprint that degrades to a constant: the instrument answers
-/// confidently in a case it cannot see.
+/// CAUTION, measured 2026-09-02 and stronger than the fleet assumed: the pair
+/// is NOT sufficient to separate two machines either. This host (Radeon 860M)
+/// reports 1002:1114, and yoga's host (Radeon 840M) reports 1002:1114 as well —
+/// AMD ships the two bins under one device id, not merely one marketing name.
+/// So the PCI pair would NOT have separated the hosts the fleet called twins;
+/// the CPU model is still what does. Recorded on the accessor so nobody keys a
+/// substrate control on it later.
+#[cfg(target_os = "windows")]
+fn pci_pair(instance_id: &str) -> Option<String> {
+    let up = instance_id.to_ascii_uppercase();
+    let grab = |key: &str| -> Option<String> {
+        let i = up.find(key)? + key.len();
+        let v: String = up[i..].chars().take(4).collect();
+        (v.len() == 4 && v.chars().all(|c| c.is_ascii_hexdigit())).then_some(v)
+    };
+    Some(format!(
+        "{}:{}",
+        grab("VEN_")?.to_lowercase(),
+        grab("DEV_")?.to_lowercase()
+    ))
+}
+
+/// Enumerate GPUs on native Windows via `Win32_VideoController`.
 ///
-/// The honest distinction is between "looked, found none" and "cannot look
-/// here", and only the first of those is `none`.
-pub const fn npu_enumeration_supported() -> bool {
-    cfg!(target_os = "linux")
+/// HOST-NATIVE LANE ONLY, deliberately. Presence of a display adapter says
+/// nothing about whether a CONTAINER can reach it, and the container lane on
+/// this platform runs inside the WSL2 guest which probes itself. Claiming a
+/// container lane from here would manufacture the reachability the accel matrix
+/// exists to measure — the `Enumerated < Reachable < Placed` ordering is not
+/// decoration.
+#[cfg(target_os = "windows")]
+fn windows_gpus() -> Option<Vec<DeviceRecord>> {
+    let lines = powershell_lines(
+        "Get-CimInstance Win32_VideoController -ErrorAction Stop | \
+         ForEach-Object { $_.Name + '|' + $_.PNPDeviceID + '|' + $_.DriverVersion }",
+    )?;
+    Some(
+        lines
+            .iter()
+            .filter_map(|l| {
+                let mut f = l.split('|');
+                let name = f.next()?.trim().to_string();
+                if name.is_empty() {
+                    return None;
+                }
+                let instance = f.next().unwrap_or("").trim();
+                let driver = f.next().unwrap_or("").trim();
+                let pair = pci_pair(instance);
+                Some(DeviceRecord {
+                    device_class: "gpu".to_string(),
+                    vendor: match pair.as_deref().and_then(|p| p.split(':').next()) {
+                        Some("1002") => "amd".to_string(),
+                        Some("8086") => "intel".to_string(),
+                        Some("10de") => "nvidia".to_string(),
+                        _ => "unknown".to_string(),
+                    },
+                    name,
+                    device_node: pair,
+                    fw_version: None,
+                    driver: (!driver.is_empty()).then(|| driver.to_string()),
+                    // ENUMERATED, not reachable: see the doc comment.
+                    usable: false,
+                    unusable_reason: Some("host-native-only-not-container-reachable".to_string()),
+                    lanes: vec!["host-native".to_string()],
+                    memory_bandwidth_gbps: None,
+                    memory_bandwidth_source: "unknown".to_string(),
+                    cpu_flags: None,
+                    cpu_cores: None,
+                    system_ram_gb: None,
+                })
+            })
+            .collect(),
+    )
+}
+
+/// Enumerate NPUs on native Windows via the `ComputeAccelerator` device class.
+///
+/// Queried BY CLASS rather than by a hardware id, so an Intel NPU enumerates
+/// here too without a table of ids to keep current. Verified on this host:
+/// VEN_1022 / DEV_17F0, Status OK, FriendlyName "NPU Compute Accelerator
+/// Device" — the same 1022:17f0 part yoga enumerates on Linux as amdxdna.
+///
+/// `usable: false` with `engine-missing` mirrors the Linux arm on purpose. A
+/// present, driver-bound NPU still has no runtime this product can dispatch to;
+/// yoga's phrase for the Linux side — "not missing the NPU, missing a
+/// userspace" — is true on Windows as well, and a probe that flipped this to
+/// usable because the device enumerates would be labelling wiring that does not
+/// exist.
+#[cfg(target_os = "windows")]
+fn windows_npus() -> Option<Vec<DeviceRecord>> {
+    let lines = powershell_lines(
+        "Get-PnpDevice -Class ComputeAccelerator -PresentOnly -ErrorAction Stop | \
+         ForEach-Object { $_.Status + '|' + $_.FriendlyName + '|' + $_.InstanceId }",
+    )?;
+    Some(
+        lines
+            .iter()
+            .filter_map(|l| {
+                let mut f = l.split('|');
+                let status = f.next()?.trim().to_string();
+                let name = f.next().unwrap_or("").trim().to_string();
+                let instance = f.next().unwrap_or("").trim();
+                let pair = pci_pair(instance);
+                let vendor = match pair.as_deref().and_then(|p| p.split(':').next()) {
+                    Some("1022") => "AMD XDNA".to_string(),
+                    Some("8086") => "Intel NPU".to_string(),
+                    _ => "unknown".to_string(),
+                };
+                // A device the OS reports as not-OK is enumerated but not
+                // healthy; say which, rather than folding it into the same
+                // engine-missing bucket as a working one.
+                let reason = if status.eq_ignore_ascii_case("OK") {
+                    "engine-missing"
+                } else {
+                    "device-not-ok"
+                };
+                Some(DeviceRecord {
+                    device_class: "npu".to_string(),
+                    vendor,
+                    name: if name.is_empty() {
+                        "Unknown Compute Accelerator".to_string()
+                    } else {
+                        name
+                    },
+                    device_node: pair,
+                    fw_version: None,
+                    driver: None,
+                    usable: false,
+                    unusable_reason: Some(reason.to_string()),
+                    lanes: vec!["host-native".to_string()],
+                    memory_bandwidth_gbps: None,
+                    memory_bandwidth_source: "unknown".to_string(),
+                    cpu_flags: None,
+                    cpu_cores: None,
+                    system_ram_gb: None,
+                })
+            })
+            .collect(),
+    )
 }
 
 fn enumerate_npus() -> Vec<DeviceRecord> {
@@ -2067,15 +2352,17 @@ pub fn accel_envelope(doc: &CapabilityDocument) -> String {
     let npu = pick("npu");
     let (gpu_state, mut npu_state) = (state(gpu), state(npu));
 
-    // "none" is a FINDING; on a platform that cannot enumerate NPUs it would be
-    // a guess wearing a finding's clothes. This host (native Windows) has an
-    // XDNA2 NPU serving models while its probe reads a Linux-only sysfs path,
-    // so the honest value is `unknown` — see `npu_enumeration_supported`.
-    if npu.is_none() && !npu_enumeration_supported() {
+    // "none" is a FINDING; where the probe could not look it would be a guess
+    // wearing a finding's clothes. The document records WHICH classes it failed
+    // to enumerate, so this reads the run that produced the document rather than
+    // the platform that is rendering it — a cached or transported document
+    // keeps its own gaps, which a compile-time constant could never do.
+    let gap = |class: &str| doc.enumeration_gaps.iter().any(|g| g == class);
+    if npu.is_none() && gap("npu") {
         npu_state = "unknown";
     }
     let mut gpu_state = gpu_state;
-    if gpu.is_none() && !gpu_enumeration_supported() {
+    if gpu.is_none() && gap("gpu") {
         gpu_state = "unknown";
     }
 
@@ -2587,6 +2874,7 @@ mod tests {
             schema_version: SCHEMA_VERSION,
             legacy_tier: "cpu".to_string(),
             probe_identity: Some(probe_identity()),
+            enumeration_gaps: Vec::new(),
             devices,
             engines: Vec::new(),
             measurements: Vec::new(),
@@ -2850,42 +3138,48 @@ mod tests {
     /// enumerate_npus reads /sys/class/accel. Both return empty and SUCCEED.
     #[test]
     fn absent_accelerators_read_unknown_where_the_probe_cannot_look() {
-        let doc = doc_with(vec![device("cpu", "Host CPU", &["host-native"], None)]);
-        let env = super::accel_envelope(&doc);
+        let bare = || doc_with(vec![device("cpu", "Host CPU", &["host-native"], None)]);
 
-        if super::npu_enumeration_supported() {
-            assert!(
-                env.contains("accel_npu=none"),
-                "on a platform that CAN enumerate, empty means none: {env}"
-            );
-        } else {
-            assert!(
-                env.contains("accel_npu=unknown"),
-                "a platform that cannot enumerate NPUs must not claim none: {env}"
-            );
-            assert!(
-                env.contains("not-enumerable-on-this-platform"),
-                "cpu-only must never be a bare verdict here: {env}"
-            );
-        }
+        // LOOKED AND FOUND NOTHING: no gaps recorded, so `none` is a finding.
+        let found_none = super::accel_envelope(&bare());
+        assert!(found_none.contains("accel_gpu=none"), "{found_none}");
+        assert!(found_none.contains("accel_npu=none"), "{found_none}");
 
-        if super::gpu_enumeration_supported() {
-            assert!(
-                env.contains("accel_gpu=none"),
-                "on a platform that CAN enumerate, empty means none: {env}"
-            );
-        } else {
-            assert!(
-                env.contains("accel_gpu=unknown"),
-                "a platform that cannot enumerate GPUs must not claim none: {env}"
-            );
-        }
+        // COULD NOT LOOK: the probe recorded that it failed to enumerate, so
+        // the same empty device list must NOT render as an absence.
+        let mut blind = bare();
+        blind.enumeration_gaps = vec!["gpu".to_string(), "npu".to_string()];
+        let env = super::accel_envelope(&blind);
+        assert!(
+            env.contains("accel_gpu=unknown"),
+            "a probe that could not look must not claim none: {env}"
+        );
+        assert!(
+            env.contains("accel_npu=unknown"),
+            "a probe that could not look must not claim none: {env}"
+        );
+        assert!(
+            env.contains("not-enumerable-on-this-platform"),
+            "cpu-only must never be a bare verdict here: {env}"
+        );
 
-        // A REAL device still reports its own state on every platform — the
-        // change must not turn present hardware into "unknown".
+        // ONE CLASS ONLY: a gap in gpu must not make the npu unknown too.
+        let mut gpu_blind = bare();
+        gpu_blind.enumeration_gaps = vec!["gpu".to_string()];
+        let env = super::accel_envelope(&gpu_blind);
+        assert!(env.contains("accel_gpu=unknown"), "{env}");
+        assert!(
+            env.contains("accel_npu=none"),
+            "an npu that WAS enumerated stays a finding: {env}"
+        );
+
+        // A REAL device still reports its own state even when its class was
+        // listed as a gap — an enumerated device outranks the gap record, and
+        // this pins that the change cannot turn present hardware into unknown.
         let mut gpu = device("gpu", "AMD Radeon 860M", &["container"], None);
         gpu.vendor = "amd".to_string();
-        let with_gpu = doc_with(vec![device("cpu", "Host CPU", &["host-native"], None), gpu]);
+        let mut with_gpu = doc_with(vec![device("cpu", "Host CPU", &["host-native"], None), gpu]);
+        with_gpu.enumeration_gaps = vec!["gpu".to_string()];
         let env2 = super::accel_envelope(&with_gpu);
         assert!(
             env2.contains("accel_gpu=usable"),
@@ -3196,20 +3490,10 @@ mod tests {
         // the probe denying hardware it had never looked for. "Looked and found
         // nothing" and "cannot look here" are different facts and only the
         // first is `none`.
-        let (gpu_expected, npu_expected) = (
-            if gpu_enumeration_supported() {
-                "accel_gpu=none"
-            } else {
-                "accel_gpu=unknown"
-            },
-            if npu_enumeration_supported() {
-                "accel_npu=none"
-            } else {
-                "accel_npu=unknown"
-            },
-        );
-        assert!(env.contains(gpu_expected), "{env}");
-        assert!(env.contains(npu_expected), "{env}");
+        // This document records NO gaps, so an empty device list here is a
+        // genuine finding and `none` is the honest rendering on every platform.
+        assert!(env.contains("accel_gpu=none"), "{env}");
+        assert!(env.contains("accel_npu=none"), "{env}");
     }
 
     #[test]
@@ -3601,6 +3885,7 @@ mod tests {
             schema_version: SCHEMA_VERSION,
             legacy_tier: "cpu".to_string(),
             probe_identity: Some(probe_identity()),
+            enumeration_gaps: Vec::new(),
             devices: Vec::new(),
             engines: Vec::new(),
             measurements: vec![MeasurementRecord {
