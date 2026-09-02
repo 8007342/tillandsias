@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: dev-inference-container-exits-2-mid-workload-with-no-error
+    field: status
+    value: completed
+    ts: "2026-09-02T06:47:28Z"
+    host: macuahuitl
+
+events:
+  - packet_id: dev-inference-container-exits-2-mid-workload-with-no-error
+    event:
+      type: completed
+      ts: "2026-09-02T06:47:28Z"
+      host: macuahuitl
+      summary: >
+        status 'completed' with evidence_refs: 21322c507 + 0842e0e66: falsification run 2026-09-02 05:59-06:39Z, 10,471 requests, 11 HTTP 400 before the live pids raise at 06:01:56Z and 0 in the 10,080 after; cgroup pids.events unchanged at 'max 41' after the raise; pids.peak 142 under the new 1024 ceiling; container running exit 0 restarts 0
+  - packet_id: dev-inference-container-exits-2-mid-workload-with-no-error
+    event:
+      type: note
+      ts: "2026-09-02T06:47:28Z"
+      host: macuahuitl
+      summary: >
+        closure event 2026-09-02T06:45Z in plan/index.d/20260902t064500z-811-closure-macuahuitl.yaml

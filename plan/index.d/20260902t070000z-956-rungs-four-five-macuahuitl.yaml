@@ -1,0 +1,46 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+
+events:
+  - packet_id: litmus-low-end-instrument
+    event:
+      type: progress
+      ts: "2026-09-02T07:00:00Z"
+      host: macuahuitl
+      summary: >
+        RUNNER DEFECT FOUND AND FIXED (8438cbf2b), and a CORRECTION to this
+        packet's 05:05Z and 06:20Z events: their "instant pre-build sweep
+        Status PASS" was over 253 tests while 36 bound tests silently never
+        ran. The per-spec loop feeds test names through a here-string on
+        stdin and every step inherited it, so a stdin-reading step drained the
+        rest of its spec's list — the sweep executed 1 of 29 ci-release tests
+        and reported PASS. Steps now run with stdin from /dev/null; the sweep
+        executes 289 and passes. Fixture through the real runner:
+        scripts/test-litmus-stdin-does-not-eat-the-spec-list.sh "PASS ... 3/3",
+        wired into --check. THREE BORN-RED TESTS the gap hid, all repaired and
+        green through the runner (scripts/litmus-run-one.sh, new: runs one
+        litmus file by path through the real runner — the runner has no
+        by-name selector, which is how born-red fixtures stay unobserved):
+        shipped-diagnostic-tool-dispatch (guard now
+        scripts/check-no-end-user-brew-instruction.sh, executable lines only,
+        mutation pair scripts/test-no-end-user-brew-instruction.sh "PASS 3/3"
+        as a litmus step — verifiable_closure rung 2 DONE);
+        daily-maintenance-day-boundary (mutation control now evaluated at the
+        boundary instant, BSD date -r first / GNU -d fallback, dialect gate
+        clean); tool-dispatch-lib (local-ci.sh's one bare jq pipeline routed
+        through its own resolved $JQ — not 914-ahsy's loop restructuring,
+        which stays open). verifiable_closure rung 3 DONE: the three multi-arm
+        fixtures (day-boundary, shipped-diagnostic, tool-dispatch-lib) end
+        with a final line naming the failed arms — the litmus reads them via
+        tail -1, so an arm named only earlier on stderr was an arm nobody saw.
+        STILL OPEN: rung 1 (host-browser-mcp-lane "executed and FAILed on an
+        absence" — the shape test has no runtime probe; needs the audit's
+        per-step log to name the test) and rung 4 (top-five timing table /
+        low-end budgets — needs the esmeraldinha/pirria measurements).
+        Also on this host: target-guest staging (v56.9.1.2) was stale against
+        VERSION 56.8.31.3 and read as a mismatch by
+        litmus:guest-binary-embed-integrity — cleared (ephemeral, gitignored),
+        verify now skip-stale-staging; a checked-out VERSION older than the
+        last install is the regime to expect after a promotion.
+        evidence_refs: 8438cbf2b; ./build.sh --check green (125s); instant
+        pre-build sweep 289 executed, Status PASS; check-litmus-pin-claims
+        ok:84.
