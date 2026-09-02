@@ -119,6 +119,33 @@ _yaml_entries="$(
         . 2>/dev/null || true
 )"
 
+# ── MARKDOWN: anchored annotations only (order 867-vd4z, second rung) ──────
+# Markdown carried 1,347 occurrences of the marker and none were gated. The same
+# positional rule as YAML applies: an annotation begins its line (after optional
+# indentation, optionally inside an HTML comment opener); anything mid-line is
+# prose discussing annotations. Two directories are excluded on purpose:
+#   * plan/ — the ledger is DATA (see the YAML rationale above).
+#   * openspec/changes/ — proposal prose: a change's markdown names the spec it
+#     WILL create or retire, so a missing spec directory there is the proposal
+#     doing its job, not a ghost. Measured on this tree 2026-09-02: 34 ghost ids
+#     over 90 annotations with changes included, 20 ids over 53 without — the 14
+#     that vanish are all change proposals naming their own future specs.
+# The 20 remaining ids (cheatsheets/, docs/cheatsheets/, images/default/config-
+# overlay/) entered the ratchet baseline once, with the reason recorded there;
+# from this commit a new markdown ghost fails the gate like any other.
+_md_entries="$(
+    grep -rnE '^[[:space:]]*(<!--[[:space:]]*)?@trace[[:space:]]+spec:' \
+        --include="*.md" \
+        --exclude-dir='.claude' \
+        --exclude-dir='.git' \
+        --exclude-dir='plan' \
+        --exclude-dir='changes' \
+        --exclude-dir='target' \
+        --exclude-dir='target-musl' \
+        --exclude-dir='node_modules' \
+        . 2>/dev/null || true
+)"
+
 # ── Scan: every @trace spec: token, with its file and line ──────────────────
 # Same include/exclude set as the generator this replaces, so coverage numbers
 # are comparable across the transition.
@@ -135,7 +162,7 @@ entries="$(
         --exclude-dir='target' \
         --exclude-dir='target-musl' \
         . 2>/dev/null || true
-      printf '%s\n' "$_yaml_entries"; } \
+      printf '%s\n' "$_yaml_entries" "$_md_entries"; } \
     | grep "spec:" \
     | awk '
         # ONE pass. This was a shell `while read` that spawned a grep, a sed

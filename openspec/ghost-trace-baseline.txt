@@ -35,3 +35,26 @@ forge-skills-mapping
 browser-isolation-telemetry
 ephemeral-guarantee
 fail-loud-diagnosis
+# 2026-09-02 SCOPE WIDENING, second rung (867-vd4z), macuahuitl. Markdown enters
+# the gate: 1,092 anchored annotations across 193 ids (plan/ and openspec/changes/
+# excluded — ledger data and proposal prose). The 14 below have no spec directory and
+# no in-flight change directory, and were invisible until this scan. Same rule as
+# the yaml rung: the baseline grows exactly once on the day the population becomes
+# visible, and may only shrink afterwards. They live in cheatsheets/, docs/cheatsheets/
+# and images/default/config-overlay/ — agent-facing documentation traced to specs
+# that were renamed, merged or never written. Fix by re-pointing the annotation to
+# the spec that now owns the contract, or by dropping a trace that is decoration.
+agent-source-of-truth
+appimage-builder-source-slim
+cheatsheets-metrics-collection
+chromium-browser-isolation
+container-health
+enclave-startup-sequencing
+forge-bake-nix
+forge-container
+forge-hot-cold-split-tmpfs-lane
+init-system-checks
+proxy-cache-config
+test-latency
+tray-icon-ux
+verification-level-tracking

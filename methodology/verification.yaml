@@ -221,3 +221,85 @@ verification:
       L0_specs: warn_if_no_litmus
       L1_specs: require_litmus_pass
       L2_specs: block_merge_on_failure
+
+  # Order 890-nkdz. Four measurement rules and one review rule were ratified as
+  # fleet practice on 2026-08-25 during a cross-host performance characterisation
+  # and lived only in session transcripts — the shape that cost this project
+  # 801-qasc (a marker that was prose), 660-ryhn (an unbound litmus) and 709-in2f
+  # (a methodology claim about a packet that had no script). Each rule below
+  # carries the error that earned it; the two mechanical ones are ENFORCED, the
+  # two judgment ones are recorded as judgment rather than dressed as mechanism.
+  measurement_practice:
+    rules:
+      - id: forced_only_gate_timings
+        kind: mechanical
+        rule: >
+          A cross-host comparison of `build_check_ms_avg` uses ONLY forced runs
+          (`TILLANDSIAS_FORCE_CHECK=1`). Since 765-tkq2 an unchanged tree returns
+          `ok:gate-fresh` in ~0.4s, so a mean over a mix of memoised and forced
+          runs encodes how many no-op runs a host happened to do, not how fast it
+          is. A host quoting a mixed mean must say so.
+        earned_by: >
+          A host's own 39171 ms mean was such a mixture and was compared across
+          the fleet before anyone asked which runs were in it.
+        enforced_by: >
+          scripts/cycle-metrics.sh labels the emission at the source —
+          `build_check_mix=mixed:forced=N,memoised=M` appears whenever the
+          contributing log holds any memoised run and is ABSENT only when every
+          run was forced; the mean itself never includes memoised records.
+          Pinned by litmus:cycle-metrics-answer-rate-shape (RED before the
+          labelling change, green after).
+      - id: portable_measurement_tools
+        kind: mechanical
+        rule: >
+          Measurement scripts that run on more than one host use only forms every
+          host's shell and coreutils accept: no GNU-only date, du or sed forms
+          without the documented exemption marker and a BSD-first fallback.
+        earned_by: >
+          A BSD date succeeds with garbage output on a GNU-only format, so an
+          exit-code guard cannot catch it; the day-boundary fixture reproduced
+          exactly that on 2026-09-02 before its reconstruction used BSD -r first.
+        enforced_by: >
+          scripts/check-bash-dialect.sh refuses GNU-date and (since 886-yizb)
+          GNU-du forms in shared scripts; wired into ./build.sh --check.
+      - id: measure_a_host_against_itself
+        kind: judgment
+        rule: >
+          A performance claim about ONE variable (WSL2 native-ext4 vs /mnt/c;
+          Silverblue toolbox vs host-native) is measured on one host across that
+          variable only, which holds hardware generation, kernel, distro and
+          toolchain constant by construction. Two hosts differ in all of them at
+          once, so any cross-host gap is unattributable.
+        earned_by: >
+          The 2026-08-25 characterisation compared hosts of different generation
+          and distro and could attribute nothing.
+        enforced_by: "judgment — recorded here so it is not re-derived; a rule that cannot be enforced says so"
+      - id: falsifier_before_the_numbers
+        kind: judgment
+        rule: >
+          No cross-host performance claim without a stated falsifier committed
+          BEFORE the numbers arrive — including the result that would mean the
+          experiment does not show what it was designed to show.
+        earned_by: >
+          Same characterisation: results were read after the fact for whatever
+          they seemed to say. See also peer_falsification in distributed-work.
+        enforced_by: "judgment — the falsifier is filed as a ledger event before the reading (as 811-28eh did on 2026-09-02)"
+    review_rule:
+      id: threshold_of_zero_tests_only_the_comparison
+      source: 886-yizb
+      rule: >
+        A threshold test that sets the threshold to zero is testing `>=`. Any
+        gate that measures and then compares needs one leg where the MEASUREMENT
+        ITSELF is the assertion.
+    probe_protocol_v1:
+      purpose: "near-pure filesystem stat traffic — discriminates stat-bound checkouts from compute-bound ones"
+      steps:
+        - "warm twice with `cargo check --workspace --all-targets`, discard"
+        - "`/usr/bin/time -p sh -c 'i=0; while [ $i -lt 20 ]; do cargo check --workspace --all-targets >/dev/null 2>&1; i=$((i+1)); done'`"
+        - "report real/user/sys, real/20 as ms per no-op, `git ls-files | wc -l`, the checkout's filesystem, RAM, physical cores, and whether the toolchain is host-native or crossed"
+      regime_note: >
+        The Darwin leg measured user 2.05s vs sys 1.09s over 20 no-ops —
+        stat-bound rather than compute-bound, which is what makes the probe
+        discriminating. Attach the regime to every reading (host, filesystem,
+        toolchain) or the number becomes a fleet rule that is wrong on half the
+        hosts.
