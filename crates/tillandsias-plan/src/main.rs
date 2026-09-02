@@ -7,8 +7,8 @@
 
 use std::path::{Path, PathBuf};
 use tillandsias_plan::{
-    Ledger, Schema, answer, count_release, edit, fragments, groundtruth, loop_status, methodology,
-    spec, str_field, str_list,
+    Ledger, Schema, answer, count_release, fragments, groundtruth, loop_status, methodology, spec,
+    str_field, str_list,
 };
 
 /// ORDER 569. The capability manifest, embedded from the crate's own
@@ -5697,14 +5697,13 @@ fn main() {
                 .filter(|h| !h.trim().is_empty())
                 .map(require_acceptable_host)
                 .unwrap_or_else(resolve_writer_host);
-            let block = edit::event_block(etype, &ts, &agent, &host, summary);
-            let raw = match std::fs::read_to_string(&index) {
-                Ok(r) => r,
-                Err(e) => {
-                    eprintln!("error: read {}: {e}", index.display());
-                    std::process::exit(1);
-                }
-            };
+            // 966-7umc: the base is no longer read here. It was read only to
+            // locate the packet's block for an in-place append; the fragment
+            // path needs neither the block nor the base text, so a scout
+            // recording a finding no longer pulls a 31k-line ledger into memory
+            // to write four lines. Existence and the archived refusal are both
+            // settled above, against the folded ledger, before any byte is
+            // written.
 
             // 699-usxc. A packet declared only in an uncompacted fragment has no
             // block in the BASE to append into — this arm locates packets by
@@ -5720,11 +5719,43 @@ fn main() {
             // hardest when someone is correcting a mistake in the record —
             // exactly when the ledger most needs to accept a write.
             //
-            // So: if the base cannot host the event, write it as a NEW FRAGMENT,
-            // which is what the overlay is for and what set-field already does.
-            // The fold reads events from fragments, so the result is identical
-            // to a base append from every reader's point of view.
-            if !edit::base_hosts_packet(&raw, &target) {
+            // So: write the event as a NEW FRAGMENT, which is what the overlay
+            // is for and what set-field already does. The fold reads events
+            // from fragments, so the result is identical to a base append from
+            // every reader's point of view.
+            //
+            // ORDER 966-7umc: THE FRAGMENT IS NOW THE DEFAULT, NOT THE FALLBACK.
+            //
+            // This branch used to be conditional on `!base_hosts_packet(..)`,
+            // so the common case — a packet that IS in the base — appended to
+            // plan/index.yaml. That write is OUTSIDE the plan-only push lane
+            // (scripts/hooks/pre-push-local-gate.sh admits only NEW files under
+            // plan/index.d/, plan/loop_status.d/, plan/issues/<class>/ and
+            // plan/mo-full-attestations.d/), so recording one event obliged the
+            // writer to pass a full `./build.sh --check`.
+            //
+            // WHICH IS A GATE THE HOSTS THAT MOST NEED TO RECORD CANNOT PASS.
+            // Measured 2026-09-02: an N100/WSL2 floor host (curl-installed, no
+            // built router sidecar) and a CPU-only forge each hand-authored a
+            // fragment to get their findings in, and said so in the fragment
+            // header. A hand-authored fragment then broke the fold and stopped
+            // every push in the fleet for twenty minutes. The tool was harder
+            // to use than hand-writing YAML, so people hand-wrote YAML — and
+            // the failure mode of hand-written YAML is exactly the one the
+            // flush guard exists to prevent.
+            //
+            // The point is not that the base append was wrong. It is that a
+            // scout with a finding must have a path that does not run a
+            // compiler. `compact` folds fragments into the base later, on a
+            // host that can afford the gate, which is where that cost belongs.
+            //
+            // `base_hosts_packet` and `edit::append_event` remain — compaction
+            // is what needs them — and the ONE thing this must not do is
+            // silently write a fragment the fold would skip, so the same
+            // 775-b4qz parse check set-field has is applied below. It was
+            // missing from this path, which is the same defect class in the
+            // one place it had already been fixed.
+            {
                 let compact = loop_status::iso_to_compact(&ts);
                 let suffix = format!(
                     "{:08x}",
@@ -5741,11 +5772,16 @@ fn main() {
                 let path = dir.join(fragments::fragment_name(&compact, &suffix, &host));
                 let mut body = String::new();
                 body.push_str("# Ledger fragment — append-only, IMMUTABLE once written.\n");
-                body.push_str("# Written by: tillandsias-plan append-event (order 699-usxc).\n");
                 body.push_str(
-                    "#\n# The target packet is declared only in an uncompacted fragment, so the\n\
-                     # BASE ledger has no block to append into. Recording the event here keeps\n\
-                     # it visible to the fold, which is what every reader consults.\n",
+                    "# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).\n",
+                );
+                body.push_str(
+                    "#\n# Events go to the OVERLAY, never to plan/index.yaml: a base write falls\n\
+                     # outside the plan-only push lane and would oblige the writer to pass a full\n\
+                     # ./build.sh --check, which is precisely the gate a floor host or a forge may\n\
+                     # not be able to run. The fold reads events from fragments, so every reader\n\
+                     # sees this exactly as it would a base append; `compact` folds it into the\n\
+                     # base later, on a host that can afford the gate.\n",
                 );
                 body.push_str("events:\n");
                 body.push_str(&format!("  - packet_id: {target}\n"));
@@ -5762,34 +5798,17 @@ fn main() {
                     eprintln!("error: write {}: {e}", path.display());
                     std::process::exit(1);
                 }
+                // 775-b4qz: never exit 0 on a fragment the fold would skip.
+                // set-field has had this since 775-b4qz; append-event never
+                // did, and a fragment the fold skips is INVISIBLE — the write
+                // reports success and the finding is simply absent from every
+                // answer. That is strictly worse than a refusal, and it is the
+                // failure a hand-authored fragment produced fleet-wide today.
+                if let Err(e) = fragments::verify_written_parses(&path) {
+                    reject_written_fragment(&path, &e);
+                }
                 println!("appended {etype} event to {target} ({})", path.display());
-                return;
             }
-            let candidate = match edit::append_event(&raw, &target, &block) {
-                Ok(c) => c,
-                Err(e) => {
-                    eprintln!("error: {e}");
-                    std::process::exit(1);
-                }
-            };
-            // FLUSH GUARD: never write a broken ledger (order-263 by construction).
-            let violations = edit::validate_candidate(
-                &candidate,
-                ledger.archived_ids(),
-                &schema.reference_fields,
-            );
-            if !violations.is_empty() {
-                eprintln!("REFUSED: this edit would break the ledger:");
-                for v in &violations {
-                    eprintln!("  violation: {v}");
-                }
-                std::process::exit(1);
-            }
-            if let Err(e) = std::fs::write(&index, candidate) {
-                eprintln!("error: write {}: {e}", index.display());
-                std::process::exit(1);
-            }
-            println!("appended {etype} event to {target}");
         }
         // Order 569. Was `usage()`, which conflated "this binary cannot do that"
         // with "you forgot an operand". The wrapper needs the two apart: the
