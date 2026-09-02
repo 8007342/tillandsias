@@ -15,7 +15,7 @@ committed_for_project: false
 ---
 # Runtime Limitations Reporting
 
-@trace spec:agent-source-of-truth
+@trace spec:knowledge-source-of-truth
 
 **Version baseline**: Tillandsias forge image (v0.1.170+)  
 **Use when**: The forge lacks a tool you need, or a baked tool behaves unexpectedly due to the offline/isolated runtime

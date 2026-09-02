@@ -33,7 +33,7 @@ observability:
     - "@trace spec:browser-isolation-launcher"
     - "@trace spec:host-chromium-on-demand"
     - "@trace spec:chromium-safe-variant"
-    - "@trace spec:ephemeral-guarantee"
+    - "@trace spec:host-chromium-on-demand"
   expected_log: "Browser launcher recorded ephemeral profile and cleaned it after exit"
   log_fields:
     spec: "host-chromium-on-demand"

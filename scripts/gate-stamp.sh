@@ -17,6 +17,8 @@
 # hash of the diff; the guarantee is the same.
 #
 # WHAT THE STAMP COVERS
+# (930-i6x4: everything EXCEPT the plan fast lane — plan/index.d/*.yaml,
+# plan/loop_status.d/*.md, plan/mo-full-attestations.d/*.md — see `compute`.)
 #
 # HEAD plus the full working-tree diff against it, including untracked files.
 # Any edit after the gate ran invalidates the stamp. This is deliberately strict:
@@ -278,6 +280,23 @@ compute() {
     local -a paths=() kinds=() execbits=() file_digests=() symlink_digests=()
     local path absolute digest line i
     while IFS= read -r -d '' path; do
+        # ORDER 930-i6x4 — THE PLAN FAST LANE NEVER ENTERS THE STAMP.
+        # plan/index.d/*.yaml, plan/loop_status.d/*.md and
+        # plan/mo-full-attestations.d/*.md are append-only ledger traffic the
+        # pre-push plan-only lane already accepts WITHOUT a stamp (668-2xeh).
+        # Hashing them here meant every sibling landing rebased into a
+        # checkout staled a stamp that remained true of every byte of code:
+        # nine commits inside one ~10-minute gate on 2026-08-29 (four rounds
+        # to push a cheatsheet), three merge-check-push rounds on 2026-09-02.
+        # The stale stamp was judged against the whole tree instead of against
+        # what moved. Code, specs, scripts, images, methodology and
+        # plan/index.yaml itself (the compacted BASE, which a fold rewrites)
+        # all still hash; a change to any of them re-gates. Negative control:
+        # scripts/test-gate-stamp.sh cases 6-7. Skipping here cannot desync the
+        # exec-bit lockstep below: the pointer catches up on the next path.
+        case "$path" in
+            plan/index.d/*.yaml|plan/loop_status.d/*.md|plan/mo-full-attestations.d/*.md) continue ;;
+        esac
         absolute="$REPO_ROOT/$path"
         if [[ -L "$absolute" ]]; then
             kinds+=(symlink) paths+=("$path") execbits+=(-)

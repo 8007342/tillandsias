@@ -1,4 +1,4 @@
-<!-- @trace spec:tray-icon-ux -->
+<!-- @trace spec:tray-icon-lifecycle -->
 # Tray Icon UX Guidelines
 
 ## Design Principles

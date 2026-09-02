@@ -15,7 +15,7 @@ committed_for_project: false
 ---
 # curl and wget
 
-@trace spec:agent-source-of-truth
+@trace spec:knowledge-source-of-truth
 
 **Version baseline**: curl 8.5.0, wget 1.21.4 (Fedora 43)  
 **Use when**: Downloading files, making HTTP requests, testing APIs, or working through proxies

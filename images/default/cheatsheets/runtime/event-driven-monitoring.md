@@ -20,7 +20,7 @@ pull_recipe: see-section-pull-on-demand
 
 # Event-driven monitoring
 
-@trace spec:container-health, spec:external-logs-layer
+@trace spec:podman-idiomatic-patterns, spec:external-logs-layer
 @cheatsheet architecture/event-driven-basics.md
 
 **Version baseline**: Podman 4.0+, Docker 20.10+, systemd 250+

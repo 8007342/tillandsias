@@ -20,7 +20,7 @@ pull_recipe: see-section-pull-on-demand
 
 # Container health checks
 
-@trace spec:container-health, spec:wsl-daemon-orchestration
+@trace spec:podman-idiomatic-patterns, spec:wsl-daemon-orchestration
 @cheatsheet runtime/event-driven-monitoring.md
 
 **Version baseline**: Podman 4.0+, Docker 1.13+

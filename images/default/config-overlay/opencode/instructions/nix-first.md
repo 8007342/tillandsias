@@ -1,6 +1,6 @@
 # Nix-First Methodology
 
-@trace spec:forge-bake-nix
+@trace spec:nix-builder
 @cheatsheet runtime/forge-shared-cache-via-nix.md, build/nix-flake-basics.md
 
 When starting a NEW project, Nix is the entry point for declaring build inputs and system dependencies — before `cargo init`, `npm init`, or any language-specific tool.

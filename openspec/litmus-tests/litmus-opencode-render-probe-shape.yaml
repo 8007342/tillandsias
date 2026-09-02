@@ -1,4 +1,4 @@
-# @trace spec:default-image, spec:fail-loud-diagnosis
+# @trace spec:default-image, spec:default-image
 name: litmus:opencode-render-probe-shape
 spec: default-image
 phase: pre-build

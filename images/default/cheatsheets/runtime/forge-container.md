@@ -16,7 +16,7 @@ committed_for_project: false
 ---
 # Forge Container Runtime
 
-@trace spec:agent-source-of-truth
+@trace spec:knowledge-source-of-truth
 
 **Version baseline**: Fedora 43 minimal + hand-curated toolset (see images/default/Containerfile)  
 **Use when**: Understanding what the forge container can do, where files live, how to avoid common runtime traps

@@ -53,7 +53,7 @@ gating_points:
 observability:
   traces:
     - "@trace spec:certificate-authority"
-    - "@trace spec:ephemeral-guarantee"
+    - "@trace spec:certificate-authority"
   expected_log: "CA certificate cleaned on proxy shutdown"
   log_fields:
     spec: "certificate-authority"

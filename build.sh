@@ -2199,7 +2199,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # broken and this step has learned nothing about the ledger.
     _step "Checking the plan archiver preserves the ready set (831-ezea)..."
     _archiver_rc=0
-    _run bash "$SCRIPT_DIR/scripts/archive-plan-packets.sh" --check 2>&1 || _archiver_rc=$?
+    # ORDER 911-m7js. The check is LEDGER-BOUND (16-20s here, 105s on a slow
+    # host, proportional to the ledger) and its inputs are exactly the ledger
+    # plus the archiver itself, so its verdict is memoised on a digest of those
+    # inputs (scripts/archiver-check-memo.sh). A hit repeats a verdict the same
+    # bytes earned; any change to plan/index.yaml, plan/archive, a fragment,
+    # the archiver, its checker or the plan binary is a miss and runs it.
+    if _archiver_memo="$(bash "$SCRIPT_DIR/scripts/archiver-check-memo.sh" check 2>/dev/null)"; then
+        _info "$_archiver_memo — ledger and archiver unchanged since the last pass; check not re-run"
+    else
+        _run bash "$SCRIPT_DIR/scripts/archive-plan-packets.sh" --check 2>&1 || _archiver_rc=$?
+        [ "$_archiver_rc" -eq 0 ] && bash "$SCRIPT_DIR/scripts/archiver-check-memo.sh" record >/dev/null 2>&1 || true
+    fi
     if [ "$_archiver_rc" -eq 3 ]; then
         _error "the plan archiver's check COULD NOT RUN (exit 3) — this says nothing about the ready set; the instrument is what needs repair (923-ws3r)"
         exit 1
@@ -2570,6 +2581,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Litmus stdin isolation check passed"
+
+    # 911-m7js: the archiver-check memo hits only on an unchanged ledger AND
+    # unchanged instrument; a fragment written or removed flips it.
+    _step "Checking the archiver-check memo keys on the ledger and the instrument (911-m7js)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-archiver-check-memo.sh" 2>&1; then
+        _error "the archiver-check memo does not miss on a ledger or instrument change (911-m7js) — see the verdict line above"
+        exit 1
+    fi
+    _info "Archiver-check memo check passed"
 
     # Order 881-29me. A `plan/issues/` audit cites its evidence and nothing
     # checked those citations still resolved. Measured in one document: every

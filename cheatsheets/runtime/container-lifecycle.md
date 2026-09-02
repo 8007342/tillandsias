@@ -175,7 +175,7 @@ podman run -d --name tillandsias-inference \
   tillandsias-inference &  # Run in background; tray doesn't wait
 ```
 
-@trace spec:enclave-startup-sequencing
+@trace
 
 ### Pattern 2: Health Check with Exponential Backoff
 

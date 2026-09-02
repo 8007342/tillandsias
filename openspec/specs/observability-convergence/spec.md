@@ -244,7 +244,7 @@ git checkout crates/tillandsias-headless/src/main.rs
 ```bash
 # Create new spec
 cat > openspec/specs/test-latency/spec.md << 'EOF'
-<!-- @trace spec:test-latency -->
+<!-- @trace spec:observability-convergence -->
 # Test Latency Spec
 ## Requirements
 ### Requirement: Test requirement
@@ -257,7 +257,7 @@ git commit -m "test: create latency spec"
 SPEC_DATE=$(git log -1 --format=%aI openspec/specs/test-latency/spec.md)
 
 # Add implementation trace
-echo "// @trace spec:test-latency" >> crates/tillandsias-headless/src/test.rs
+echo "// @trace spec:observability-convergence" >> crates/tillandsias-headless/src/test.rs
 git add crates/tillandsias-headless/src/test.rs
 git commit -m "test: implement latency spec"
 

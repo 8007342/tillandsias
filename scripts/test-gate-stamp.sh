@@ -36,10 +36,10 @@ git config user.name Fixture
 # `git checkout --` restore rewrites line endings, which would make case 3 fail
 # for a reason that has nothing to do with the stamp.
 git config core.autocrlf false
-mkdir -p plan/index.d
+mkdir -p plan/index.d docs
 echo seed > f.txt
-printf 'packets: []\n' > plan/index.d/folded-a.yaml
-printf 'packets: []\n' > plan/index.d/folded-b.yaml
+printf 'packets: []\n' > docs/folded-a.txt
+printf 'packets: []\n' > docs/folded-b.txt
 git add -A
 git commit -qm base
 
@@ -73,7 +73,7 @@ echo "ok: case 0 — clean tree hashes"
 # --- case 1: a compaction-shaped tree stamps and verifies --------------------
 # Only dirt is deleted tracked files, exactly what `tillandsias-plan compact`
 # leaves behind after folding fragments into the base.
-rm plan/index.d/folded-a.yaml plan/index.d/folded-b.yaml
+rm docs/folded-a.txt docs/folded-b.txt
 issue_pass_token || fail "could not issue a pass token"
 out="$(bash "$STAMP" write)"
 [ "$out" = "ok:gate-stamped" ] || fail "case 1: write on a deletion-only tree said '$out'"
@@ -98,7 +98,7 @@ echo "ok: case 2 — modified tracked file still refused"
 DELETED_STAMP="$(bash "$STAMP" compute)"
 [ "$DELETED_STAMP" != "$BASE_STAMP" ] \
     || fail "case 3: deleting two tracked files did not change the stamp"
-git checkout -q -- plan/index.d/folded-a.yaml plan/index.d/folded-b.yaml
+git checkout -q -- docs/folded-a.txt docs/folded-b.txt
 RESTORED_STAMP="$(bash "$STAMP" compute)"
 [ "$RESTORED_STAMP" = "$BASE_STAMP" ] \
     || fail "case 3: restoring the files did not restore the stamp"
@@ -137,7 +137,7 @@ echo "ok: case 5 — non-file, non-symlink entry still refused"
 # fragments) -> gate -> stamp -> commit -> push. The stamp must survive the
 # commit, because the hook checks it AFTER the commit. Content, not HEAD, is
 # what the stamp covers — so no second gate run is needed anywhere in here.
-rm plan/index.d/folded-a.yaml plan/index.d/folded-b.yaml
+rm docs/folded-a.txt docs/folded-b.txt
 issue_pass_token || fail "case 6: could not issue a pass token"   # <- the gate
 out="$(bash "$STAMP" write)"                      # <- the ONLY gate+stamp
 [ "$out" = "ok:gate-stamped" ] || fail "case 6: write said '$out'"
@@ -148,4 +148,41 @@ out="$(bash "$STAMP" verify)"                     # <- what the pre-push hook ru
     || fail "case 6: stamp must survive the commit of the deletions, got '$out'"
 echo "ok: case 6 — compact, gate once, commit, and the push-time check still passes"
 
-echo "PASS: gate-stamp (7/7)"
+# ── case 7 (930-i6x4): the plan FAST LANE never stales a stamp ──────────────
+# A sibling's landing rebased into this checkout arrives as new fragment,
+# loop-status and attestation files — append-only ledger traffic the plan-only
+# push lane accepts without a stamp. Before 930-i6x4 they were hashed here, so
+# nine commits inside one gate cost four merge-check-push rounds. The stamp's
+# claim is "the gate validated this CODE"; ledger traffic does not falsify it.
+issue_pass_token || fail "case 7: could not issue a pass token"
+out="$(bash "$STAMP" write)"
+[ "$out" = "ok:gate-stamped" ] || fail "case 7: write said '$out'"
+mkdir -p plan/index.d plan/loop_status.d plan/mo-full-attestations.d
+printf 'events: []\n' > plan/index.d/20260902t000000z-sibling.yaml
+printf '## Cycle\n' > plan/loop_status.d/20260902t000000z-sibling.md
+printf 'MO-FULL: COMPLETE 0 main 0\n' > plan/mo-full-attestations.d/sibling.md
+out="$(bash "$STAMP" verify)"
+[ "$out" = "ok:gate-fresh" ] \
+    || fail "case 7: untracked fast-lane files must not stale the stamp, got '$out'"
+git add -A
+git commit -qm "ledger: sibling burst (fragment, loop-status, attestation)"
+out="$(bash "$STAMP" verify)"
+[ "$out" = "ok:gate-fresh" ] \
+    || fail "case 7: a committed fast-lane burst must not stale the stamp, got '$out'"
+echo "ok: case 7 — fragment + loop-status + attestation traffic leaves the stamp fresh"
+
+# ── case 8 (930-i6x4 NEGATIVE CONTROL): the base ledger and code still stale ─
+printf 'packets: []\n' > plan/index.yaml          # the compacted BASE is not fast-lane
+out="$(bash "$STAMP" verify)"
+[ "$out" = "stale:tree-changed-since-gate" ] \
+    || fail "case 8: a plan/index.yaml change must stale the stamp, got '$out'"
+rm plan/index.yaml
+out="$(bash "$STAMP" verify)"
+[ "$out" = "ok:gate-fresh" ] || fail "case 8: removing the base change must restore freshness, got '$out'"
+echo changed >> f.txt
+out="$(bash "$STAMP" verify)"
+[ "$out" = "stale:tree-changed-since-gate" ] \
+    || fail "case 8: a code change must stale the stamp, got '$out'"
+git checkout -q -- f.txt
+echo "ok: case 8 — the base ledger and code still stale the stamp (the retry arm is not a bypass)"
+echo "PASS: gate-stamp (9/9)"

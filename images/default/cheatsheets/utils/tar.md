@@ -20,7 +20,7 @@ pull_recipe: see-section-pull-on-demand
 ---
 # tar
 
-@trace spec:agent-cheatsheets, spec:appimage-builder-source-slim
+@trace spec:agent-cheatsheets, spec:appimage-build-pipeline
 
 **Version baseline**: GNU tar 1.35 (Fedora 43, Ubuntu 22.04). On Alpine the
 `tar` binary is BusyBox tar, which is missing several flags below — the
@@ -66,7 +66,7 @@ cannot serve).
 `cp -r` has no `--exclude`. tar does. The pipe streams in one pass — no
 temp file, no double disk write. Used by `build.sh` to drop the
 appimage-builder source copy from 47 GB to 17 MB
-(`@trace spec:appimage-builder-source-slim`).
+(`@trace spec:appimage-build-pipeline`).
 
 ### Pattern 2 — Extract a single file from a big archive
 

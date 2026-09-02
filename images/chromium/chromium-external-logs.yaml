@@ -1,4 +1,4 @@
-# @trace spec:browser-isolation-telemetry
+# @trace spec:external-logs-layer
 # External telemetry manifest for Chromium containers.
 # Logs CDP (Chrome DevTools Protocol) interactions and page load metrics.
 # References: openspec/specs/external-logs-layer/spec.md and

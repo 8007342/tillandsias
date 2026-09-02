@@ -16,7 +16,7 @@ committed_for_project: false
 ---
 # Claude Code
 
-@trace spec:agent-source-of-truth
+@trace spec:knowledge-source-of-truth
 
 **Version baseline**: Claude Code v0.2+ (baked at /opt/agents/claude)  
 **Use when**: Running Claude Code inside the forge, understanding its CLI, passing model flags, reading task output

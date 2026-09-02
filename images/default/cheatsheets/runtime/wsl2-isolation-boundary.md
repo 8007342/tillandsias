@@ -23,7 +23,7 @@ pull_recipe: see-section-pull-on-demand
 
 # WSL2 isolation boundary — what crosses, what doesn't
 
-@trace spec:agent-cheatsheets, spec:cross-platform, spec:windows-wsl-runtime, spec:chromium-browser-isolation
+@trace spec:agent-cheatsheets, spec:cross-platform, spec:windows-wsl-runtime, spec:browser-isolation-core
 
 **Version baseline**: WSL2 on Windows 10 build 19044+ / Windows 11; latest knobs (`sparseVhd`, `dnsTunneling`, `autoProxy`, `firewall`, `hostAddressLoopback`) require Windows 11 22H2+.
 **Use when**: deciding whether the WSL2 layer is providing a security boundary for a given concern, OR designing the host-side configuration that closes a host↔distro bridge. The architectural premise of `spec:windows-wsl-runtime` after 2026-04-28: a vanilla WSL2 distro is a **porous Hyper-V utility VM**, not a container. Real container isolation requires podman *inside* the distro plus the wsl.conf hardening below.

@@ -1,60 +1,14 @@
-# 2026-08-16 union-gate surfacing (767-yrnd): seven pre-existing ghosts from
-# sibling branches, first caught when the macOS host ran the gate on the
-# merged union. All seven were resolved by the 767-yrnd owners and pruned
-# 2026-08-16 (linux_mutable cycle 2) when the ratchet flagged the baseline
-# stale — the gate's may-only-shrink direction enforced exactly this removal.
-# 2026-08-25 pruned eight (740-k8ef, macuahuitl): four specs WRITTEN
-# (meta-orchestration, enclave-service-catalog, guest-crashloop-detection,
-# forge-git-identity-anonymization — all registry-asserted or multi-site),
-# four re-pointed to real specs/orders or removed where the trace was
-# decoration (fat-spec-corpus-index -> order:547; litmus-runner ->
-# spec:litmus-framework; forge-push-credential-channel ->
-# spec:git-mirror-service; forge-git-ergonomics -> trace removed, locale
-# setup is not a git contract). The ratchet flagged the baseline stale and
-# this prune rode the fixing commit, exactly as designed.
-forge-skills-mapping
-# 2026-08-23 SCOPE WIDENING (867-vd4z), lenovinha. The six below are not new
-# ghosts and nothing regressed: the gate simply could not see them. It scanned
-# six file types and never *.yaml, where 979 of the repository's ~4,200 trace
-# annotations live — so its coverage number was computed over the minority, and
-# openspec/litmus-tests/*.yaml, the corpus where litmus tests bind themselves to
-# specs, was entirely ungated.
-#
-# THE BASELINE GROWS EXACTLY ONCE HERE, for the same reason it was created in
-# the first place: turning a newly-visible population into a hard failure on the
-# day it first becomes visible breaks the build for everyone on work they did not
-# do. The may-only-shrink direction is preserved for the NEW, wider scope from
-# this commit forward — a ghost introduced in yaml tomorrow fails the gate.
-#
-# Each was verified to have no spec directory AND no in-flight change directory,
-# and each is traced from real litmus tests, which is what makes them worth
-# fixing rather than deleting: a litmus test bound to a spec that does not exist
-# is asserting coverage of nothing. cross-platform-compilation is traced by
-# litmus-cross-target-cfg-gate-check.yaml — the very check 656-spux is about —
-# and ephemeral-guarantee is traced from three separate litmus tests.
-browser-isolation-telemetry
+# ghost-trace baseline (openspec/ghost-trace-baseline.txt) — the RATCHET's floor.
+# History: 2026-08-16 seven union-gate ghosts (767-yrnd) fixed and pruned; 2026-08-23 the
+# yaml rung (867-vd4z, lenovinha) grew it once by six; 2026-08-25 eight pruned (740-k8ef);
+# 2026-09-02 the markdown rung grew it once by fourteen, and the 658-kcd5 cleanup the same
+# day re-pointed or dropped every cheatsheet/doc/litmus trace to the spec that owns it
+# (agent-source-of-truth -> knowledge-source-of-truth x15, chromium-browser-isolation ->
+# browser-isolation-core x5, container-health -> podman-idiomatic-patterns x4, ... and
+# docs examples that spelled real annotations with made-up ids now cite real specs).
+# The baseline may only shrink from here; what remains is listed with its reason.
+# ephemeral-guarantee: three litmus tests (forge-experts-ephemerality-shape,
+#   forge-experts-teardown-ephemeral, init-log-cleanup) declare it as their OWN spec and
+#   bind under it; the spec FILE is owed — writing it (or re-homing the three) is a spec
+#   decision, not a cleanup. Every other trace to it now names the test's real spec.
 ephemeral-guarantee
-fail-loud-diagnosis
-# 2026-09-02 SCOPE WIDENING, second rung (867-vd4z), macuahuitl. Markdown enters
-# the gate: 1,092 anchored annotations across 193 ids (plan/ and openspec/changes/
-# excluded — ledger data and proposal prose). The 14 below have no spec directory and
-# no in-flight change directory, and were invisible until this scan. Same rule as
-# the yaml rung: the baseline grows exactly once on the day the population becomes
-# visible, and may only shrink afterwards. They live in cheatsheets/, docs/cheatsheets/
-# and images/default/config-overlay/ — agent-facing documentation traced to specs
-# that were renamed, merged or never written. Fix by re-pointing the annotation to
-# the spec that now owns the contract, or by dropping a trace that is decoration.
-agent-source-of-truth
-appimage-builder-source-slim
-cheatsheets-metrics-collection
-chromium-browser-isolation
-container-health
-enclave-startup-sequencing
-forge-bake-nix
-forge-container
-forge-hot-cold-split-tmpfs-lane
-init-system-checks
-proxy-cache-config
-test-latency
-tray-icon-ux
-verification-level-tracking
