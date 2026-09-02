@@ -1280,9 +1280,18 @@ async fn run_pty_attach(
         .map_err(|e| format!("session socket bind {}: {e}", sock_path.display()))?;
     let sock_path_str = sock_path.to_string_lossy().into_owned();
 
-    if let Err(e) = crate::terminal_attach::spawn_terminal_pty_attach(&slave_path, &sock_path_str) {
-        eprintln!("[tillandsias-tray] terminal spawn failed: {e}");
-    }
+    // Whether a WINDOW WAS ASKED FOR is the discriminator the geometry
+    // fallback below needs (702-6jza D2): if this spawn failed there is no
+    // window to interrogate, and asking anyway is how a headless launch turns
+    // into a hang.
+    let terminal_spawned =
+        match crate::terminal_attach::spawn_terminal_pty_attach(&slave_path, &sock_path_str) {
+            Ok(()) => true,
+            Err(e) => {
+                eprintln!("[tillandsias-tray] terminal spawn failed: {e}");
+                false
+            }
+        };
 
     // Event-driven geometry gate (replaces the former 100ms seed poll): the
     // attach client's Hello carries the window's true size the instant the
@@ -1313,10 +1322,42 @@ async fn run_pty_attach(
             }
             early_client = Some(stream);
         }
-        _ => eprintln!(
-            "[tillandsias-tray] pty-attach: no attach client within 10s; \
-             launching at 24x80 (a late client will reconcile via resize)"
-        ),
+        _ => {
+            // ORDER 702-6jza D2. The client never reported. Do NOT birth the
+            // guest PTY at 24x80 that a real window contradicts: ASK THE
+            // WINDOW. Measured on this host 2026-09-02 — Terminal.app's actual
+            // window was 39x131 and its default profile 30x120, so 24x80 was
+            // wrong on both axes and the forge's first frame was laid out for
+            // a terminal nobody had.
+            //
+            // Only when a window was actually requested, and always bounded:
+            // see query_tagged_window_geometry on why the budget IS the
+            // headless negative control.
+            let queried = if terminal_spawned {
+                crate::terminal_attach::query_tagged_window_geometry(
+                    &sock_path_str,
+                    Duration::from_secs(3),
+                )
+                .await
+            } else {
+                None
+            };
+            match queried {
+                Some((rows, cols)) => {
+                    eprintln!(
+                        "[tillandsias-tray] pty-attach: no attach client within 10s; \
+                         seeding at the window's own {rows}x{cols} (a late client \
+                         will reconcile via resize)"
+                    );
+                    seed = (rows, cols);
+                }
+                None => eprintln!(
+                    "[tillandsias-tray] pty-attach: no attach client within 10s and no \
+                     window geometry (terminal_spawned={terminal_spawned}); launching at \
+                     24x80 (a late client will reconcile via resize)"
+                ),
+            }
+        }
     }
     eprintln!(
         "[tillandsias-tray] pty-attach: seeding forge at {}x{} (attach-client geometry)",

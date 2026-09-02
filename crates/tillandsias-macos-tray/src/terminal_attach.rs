@@ -189,6 +189,89 @@ pub fn applescript_for_attach_client(exe_path: &str, slave_path: &str, sock_path
     ))
 }
 
+/// A window title unique to ONE attach, derived from that attach's session
+/// socket path — which `pty_attach_and_bridge` already mints per attach from
+/// pid + a monotonic counter, so uniqueness is inherited rather than invented.
+///
+/// ORDER 702-6jza D2. The title is how the geometry query below names OUR
+/// window instead of whichever happens to be frontmost ten seconds later.
+/// Matching on `tty of tab` cannot do it: that property is the WINDOW's own
+/// tty, never the PTY slave we allocated, so every tab reports a device
+/// unrelated to this attach (measured on Terminal.app 2026-09-02 — five tabs,
+/// five ttys, none of them the slave).
+///
+/// Kept human-readable because it REPLACES the window title a person sees.
+/// A raw socket path would be unique and unreadable; this is both.
+pub fn attach_window_title_token(sock_path: &str) -> String {
+    let stem = std::path::Path::new(sock_path)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("session");
+    format!("Tillandsias {stem}")
+}
+
+/// AppleScript that opens the attach-client window AND tags it with
+/// [`attach_window_title_token`], so its geometry can be read back later.
+///
+/// The tag is set on the tab `do script` RETURNS, inside the same `tell`
+/// block, so it cannot race a window the user opened in between.
+///
+/// @trace spec:macos-native-tray.lifecycle.terminal-attach@v2
+///        order:702-6jza
+pub fn applescript_for_attach_client_tagged(
+    exe_path: &str,
+    slave_path: &str,
+    sock_path: &str,
+) -> String {
+    let command = applescript_escape(&attach_client_shell_command(
+        exe_path, slave_path, sock_path,
+    ));
+    let title = applescript_escape(&attach_window_title_token(sock_path));
+    format!(
+        "tell application \"Terminal\"\n    \
+         set t to do script \"{command}\"\n    \
+         set custom title of t to \"{title}\"\n    \
+         activate\nend tell"
+    )
+}
+
+/// AppleScript that prints `<rows>x<cols>` for the window tagged with `title`,
+/// or an empty string when no such window exists (it was closed, or never
+/// opened because this host has no GUI session).
+///
+/// Empty is a real answer and the caller must treat it as one — see
+/// `pty_attach_and_bridge`'s headless negative control.
+///
+/// @trace spec:macos-native-tray.lifecycle.terminal-attach@v2
+///        order:702-6jza
+pub fn applescript_for_tagged_window_geometry(title: &str) -> String {
+    let title = applescript_escape(title);
+    format!(
+        "tell application \"Terminal\"\n    \
+         repeat with w in windows\n        \
+         repeat with t in tabs of w\n            \
+         if custom title of t is \"{title}\" then\n                \
+         return ((number of rows of t) as text) & \"x\" & \
+         ((number of columns of t) as text)\n            \
+         end if\n        \
+         end repeat\n    \
+         end repeat\n    \
+         return \"\"\nend tell"
+    )
+}
+
+/// Parse the `<rows>x<cols>` reply of [`applescript_for_tagged_window_geometry`].
+///
+/// Returns `None` for the empty reply, for anything unparseable, and for a
+/// ZERO dimension — a zero would pass `rows > 0` nowhere else and would seed a
+/// PTY with a degenerate geometry, which is worse than the 24x80 it replaced.
+pub fn parse_geometry(reply: &str) -> Option<(u16, u16)> {
+    let (rows, cols) = reply.trim().split_once('x')?;
+    let rows: u16 = rows.trim().parse().ok()?;
+    let cols: u16 = cols.trim().parse().ok()?;
+    (rows > 0 && cols > 0).then_some((rows, cols))
+}
+
 /// AppleScript snippet for iTerm2 — Cocoa Scripting API creates a new
 /// window and writes the command into the active session.
 ///
@@ -294,17 +377,65 @@ mod live {
                 "tray executable path is not valid UTF-8",
             )
         })?;
-        let snippet = applescript_for_attach_client(exe, slave_path, sock_path);
+        let snippet = applescript_for_attach_client_tagged(exe, slave_path, sock_path);
         std::process::Command::new("osascript")
             .arg("-e")
             .arg(&snippet)
             .spawn()?;
         Ok(())
     }
+
+    /// Ask Terminal.app for the real geometry of the window this attach
+    /// tagged, waiting at most `budget`. `None` means "no answer" — the
+    /// window is gone, osascript failed, there is no GUI session, or the
+    /// reply did not parse.
+    ///
+    /// ORDER 702-6jza D2. Only reached on the attach-client timeout path,
+    /// where the alternative is seeding the guest PTY at 24x80 that a real
+    /// window contradicts.
+    ///
+    /// THE BUDGET IS THE NEGATIVE CONTROL, not a nicety. On a host with no
+    /// GUI session `osascript` can block indefinitely, and this runs inside
+    /// the attach path — an unbounded call here would convert a headless
+    /// launch that merely LOOKED wrong (24x80) into one that hangs, which is
+    /// strictly worse and is the exact regression the packet forbids. The
+    /// child is killed when the budget expires; `None` is returned either way.
+    ///
+    /// @trace spec:macos-native-tray.lifecycle.terminal-attach@v2
+    ///        order:702-6jza
+    pub async fn query_tagged_window_geometry(
+        sock_path: &str,
+        budget: std::time::Duration,
+    ) -> Option<(u16, u16)> {
+        let snippet = applescript_for_tagged_window_geometry(&attach_window_title_token(sock_path));
+        let mut child = tokio::process::Command::new("osascript")
+            .arg("-e")
+            .arg(&snippet)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            // The budget can only bound the WAIT; without this it would leave
+            // a hung osascript running for the life of the tray. `kill_on_drop`
+            // is what makes the timeout an actual kill, and the future below
+            // owns the handle, so expiry drops it and the child dies with it.
+            .kill_on_drop(true)
+            .spawn()
+            .ok()?;
+        match tokio::time::timeout(budget, child.wait_with_output()).await {
+            Ok(Ok(out)) if out.status.success() => {
+                parse_geometry(&String::from_utf8_lossy(&out.stdout))
+            }
+            // Timed out, failed to run, or exited non-zero. All three mean the
+            // same thing to the caller — no geometry — and it falls back.
+            _ => None,
+        }
+    }
 }
 
 #[cfg(target_os = "macos")]
-pub use live::{LiveInstalledTerminals, spawn_terminal_pty_attach, spawn_terminal_stub_window};
+pub use live::{
+    LiveInstalledTerminals, query_tagged_window_geometry, spawn_terminal_pty_attach,
+    spawn_terminal_stub_window,
+};
 
 #[cfg(test)]
 mod tests {
@@ -320,6 +451,155 @@ mod tests {
     }
     fn installed(ids: &[&str]) -> MockInstalled {
         MockInstalled(ids.iter().map(|s| (*s).to_string()).collect())
+    }
+
+    // ---- ORDER 702-6jza D2: seeding the guest PTY at the window's real size.
+
+    /// The tag must be unique per attach, or the geometry query reads some
+    /// other session's window and seeds this one from it.
+    ///
+    /// @trace order:702-6jza
+    #[test]
+    fn attach_window_title_is_unique_per_session_socket() {
+        let a = attach_window_title_token("/tmp/tillandsias-pty-99-0.sock");
+        let b = attach_window_title_token("/tmp/tillandsias-pty-99-1.sock");
+        assert_ne!(a, b, "two attaches must not share a window tag");
+        assert!(
+            a.contains("tillandsias-pty-99-0"),
+            "tag loses the identity: {a}"
+        );
+        assert!(
+            !a.contains(".sock"),
+            "extension is noise in a window title: {a}"
+        );
+    }
+
+    /// The tag REPLACES the title a person reads, so it stays legible.
+    ///
+    /// @trace order:702-6jza
+    #[test]
+    fn attach_window_title_is_human_readable() {
+        let t = attach_window_title_token("/tmp/tillandsias-pty-99-0.sock");
+        assert!(
+            t.starts_with("Tillandsias "),
+            "not recognizable to a user: {t}"
+        );
+        assert!(
+            !t.contains('/'),
+            "a path in a window title is not a title: {t}"
+        );
+    }
+
+    /// The tagging snippet must tag the tab `do script` RETURNED — tagging
+    /// `window 1` would race a window the user opened in between.
+    ///
+    /// @trace order:702-6jza
+    #[test]
+    fn tagging_snippet_tags_the_tab_do_script_returned() {
+        let s = applescript_for_attach_client_tagged(
+            "/Applications/T.app/exe",
+            "/dev/ttys005",
+            "/tmp/tillandsias-pty-99-0.sock",
+        );
+        assert!(
+            s.contains("set t to do script"),
+            "must capture the tab: {s}"
+        );
+        assert!(
+            s.contains("set custom title of t to"),
+            "must tag THAT tab: {s}"
+        );
+        assert!(
+            !s.contains("custom title of window 1"),
+            "tagging the front window is the race this avoids: {s}"
+        );
+        assert!(
+            s.contains("--attach-pty '/dev/ttys005'"),
+            "lost the client: {s}"
+        );
+    }
+
+    /// A quote in a path must not break out of the AppleScript literal.
+    ///
+    /// @trace order:702-6jza
+    #[test]
+    fn geometry_snippet_escapes_its_title() {
+        let s = applescript_for_tagged_window_geometry("we\"ird\\tag");
+        assert!(s.contains("we\\\"ird\\\\tag"), "unescaped title: {s}");
+    }
+
+    /// @trace order:702-6jza
+    #[test]
+    fn geometry_reply_parses_rows_by_cols() {
+        assert_eq!(parse_geometry("39x131"), Some((39, 131)));
+        assert_eq!(parse_geometry("  30x120 \n"), Some((30, 120)));
+    }
+
+    /// NEGATIVE CONTROL. Every no-answer shape must be `None` so the caller
+    /// falls back rather than seeding a degenerate PTY. A zero dimension is
+    /// the dangerous one: it parses, and it is worse than the 24x80 it would
+    /// replace.
+    ///
+    /// @trace order:702-6jza
+    #[test]
+    fn geometry_reply_refuses_absence_and_degenerate_sizes() {
+        for reply in [
+            "",
+            "\n",
+            "no window",
+            "39",
+            "39x",
+            "x131",
+            "39x0",
+            "0x131",
+            "-1x80",
+        ] {
+            assert_eq!(parse_geometry(reply), None, "must not seed from {reply:?}");
+        }
+    }
+
+    /// NEGATIVE CONTROL for the headless path (702-6jza). A query that cannot
+    /// answer must RETURN, bounded, rather than hang the attach — the packet
+    /// requires that a genuinely headless launch still succeed. Uses a stub
+    /// that never exits, standing in for an osascript blocked on a GUI session
+    /// that does not exist.
+    ///
+    /// @trace order:702-6jza
+    #[tokio::test]
+    async fn a_query_that_never_answers_is_bounded_and_kills_its_child() {
+        let started = std::time::Instant::now();
+        let mut child = tokio::process::Command::new("/bin/sleep")
+            .arg("30")
+            .stdout(std::process::Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()
+            .expect("spawn sleep");
+        let pid = child.id().expect("pid");
+        let out = tokio::time::timeout(
+            std::time::Duration::from_millis(300),
+            child.wait_with_output(),
+        )
+        .await;
+        assert!(out.is_err(), "the stub answered when it should not have");
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(5),
+            "the bounded wait did not bound: {:?}",
+            started.elapsed()
+        );
+        // kill_on_drop fired: the pid is gone (or a zombie already reaped).
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        let alive = std::process::Command::new("/bin/ps")
+            .args(["-o", "stat=", "-p", &pid.to_string()])
+            .output()
+            .map(|o| {
+                let s = String::from_utf8_lossy(&o.stdout).trim().to_string();
+                !s.is_empty() && !s.starts_with('Z')
+            })
+            .unwrap_or(false);
+        assert!(
+            !alive,
+            "the timed-out child survived the budget (pid {pid})"
+        );
     }
 
     /// @trace spec:macos-native-tray.lifecycle.terminal-attach@v2
@@ -483,5 +763,77 @@ mod tests {
         assert_eq!(Terminal::ITerm2.bundle_id(), "com.googlecode.iterm2");
         assert_eq!(Terminal::Warp.bundle_id(), "dev.warp.Warp-Stable");
         assert_eq!(Terminal::TerminalApp.bundle_id(), "com.apple.Terminal");
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod live_geometry_probe {
+    use super::*;
+
+    /// LIVE, macOS-only, `--ignored` by default: drives the REAL AppleScript
+    /// this module generates against the REAL Terminal.app, so the snippets
+    /// are verified by the thing that has to accept them rather than by a
+    /// string assertion. Run with:
+    ///   cargo test -p tillandsias-macos-tray --release live_geometry -- --ignored
+    ///
+    /// @trace order:702-6jza
+    #[test]
+    #[ignore = "opens a real Terminal.app window"]
+    fn live_geometry_round_trip() {
+        let sock = "/tmp/tillandsias-pty-livetest-0.sock";
+        let tag = attach_window_title_token(sock);
+        // Tag a window running a harmless sleep, using the SAME snippet shape
+        // the attach path emits (command body swapped for `sleep`).
+        let open = format!(
+            "tell application \"Terminal\"\n    \
+             set t to do script \"sleep 20\"\n    \
+             set custom title of t to \"{}\"\n    \
+             activate\nend tell",
+            applescript_escape(&tag)
+        );
+        let st = std::process::Command::new("osascript")
+            .arg("-e")
+            .arg(&open)
+            .status()
+            .expect("osascript");
+        assert!(st.success(), "could not open the tagged window");
+        std::thread::sleep(std::time::Duration::from_secs(2));
+
+        let out = std::process::Command::new("osascript")
+            .arg("-e")
+            .arg(applescript_for_tagged_window_geometry(&tag))
+            .output()
+            .expect("osascript");
+        let reply = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        let geom = parse_geometry(&reply);
+        assert!(
+            geom.is_some(),
+            "the generated geometry snippet did not resolve the tagged window: {reply:?}"
+        );
+        let (rows, cols) = geom.unwrap();
+        assert!(rows > 0 && cols > 0);
+        assert_ne!(
+            (rows, cols),
+            (24, 80),
+            "a real Terminal.app window read back as the 24x80 fallback this packet exists to \
+             stop seeding; either the query matched nothing or the host is genuinely 24x80"
+        );
+        eprintln!("live tagged-window geometry: {rows}x{cols}");
+
+        // NEGATIVE CONTROL: an unknown tag must answer empty, not borrow some
+        // other window's size.
+        let out = std::process::Command::new("osascript")
+            .arg("-e")
+            .arg(applescript_for_tagged_window_geometry(
+                "Tillandsias no-such-window-tag",
+            ))
+            .output()
+            .expect("osascript");
+        let reply = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        assert_eq!(
+            parse_geometry(&reply),
+            None,
+            "an unknown tag resolved to a window: {reply:?}"
+        );
     }
 }
