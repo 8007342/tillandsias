@@ -96,6 +96,7 @@ capture, verified here rather than taken on report.
 identifier occurs in **two** files rather than one. It does not: at the tag the
 explainer pins there is exactly ONE, and my second hit was this very file
 quoting the identifier it is about. The explainer is correct as published.
+
 ## 1. Strong law — a documentation edit
 
 `methodology/philosophy.yaml`, `convergence_via_velocity.weak_vs_strong`
