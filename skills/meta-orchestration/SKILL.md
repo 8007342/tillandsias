@@ -669,6 +669,41 @@ filing — not the prompt.
    Release at Finalization (step 9b) with
    `TILLANDSIAS_CYCLE_HOLDER_PID=$PPID scripts/cycle-checkout-lock.sh release`.
 
+   **IF YOU RELOCATE, TAKE THE BOUNDARY IN THE WORKTREE YOU RELOCATE TO**
+   (order 983-xha6). This is one line and its absence cost the fleet visibility
+   three separate times on 2026-09-03:
+
+   ```bash
+   cd <the clone or worktree you will actually work in>
+   boundary_dir="$(mktemp -d "${TMPDIR:-/tmp}/meta-orchestration-boundary.XXXXXX")"
+   scripts/meta-orchestration-worktree-guard.sh snapshot "$boundary_dir"
+   ```
+
+   The guard's stamps live in `$(git rev-parse --git-dir)`, so they are ALREADY
+   per-checkout and a relocated worktree can hold its own boundary — verified in
+   a fresh clone: snapshot, commit, `verify` -> `ok: startup worktree boundary
+   preserved`. Nothing needed building. What was missing was anyone saying to do
+   it, so step 3 below snapshotted the checkout the cycle then correctly stopped
+   using, the clone never got a boundary, and `mo-full-attest` refused at
+   Finalization with `no verified startup boundary for this cycle` — AFTER a
+   green gate with every commit pushed.
+
+   The consequence is not a missing line of output. `MO-FULL:` is how automation
+   learns a cycle finished, so a lawfully relocated cycle is INDISTINGUISHABLE
+   FROM ONE THAT DIED: the trunk carries its commits while the fleet record says
+   the host never reported. A forge hits this by default — its checkout is a
+   clone, it is often seeded from `main` (965-rb3v), and `main` is refused by
+   `check-committable-branch.sh` — so relocating is the NORMAL forge path, not an
+   exception.
+
+   Snapshotting a fresh clone is not a formality and not vacuous: the clone
+   starts clean, so the boundary proves the cycle left nothing uncommitted behind
+   it. What IS vacuous — and must never be done to obtain a marker — is
+   snapshotting AFTER the work and verifying immediately: that compares a tree
+   against itself and emits a valid-looking proof of nothing (651-2x5s). If you
+   reach Finalization having never snapshotted, the honest outcome is a BLOCKED
+   exit with no marker; do not manufacture one.
+
 3. Snapshot the startup boundary before classifying or changing any path:
    ```bash
    boundary_dir="$(mktemp -d "${TMPDIR:-/tmp}/meta-orchestration-boundary.XXXXXX")"
