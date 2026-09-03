@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: check-cheatsheet-tiers-reports-cargo-missing-while-cargo-is-on-path
+    event:
+      type: finding
+      ts: "2026-09-03T18:09:44Z"
+      agent_id: linux-macuahuitl-fable5-20260903t180944z
+      host: macuahuitl
+      summary: |-
+        DOES NOT REPRODUCE ON LINUX, and I am deliberately NOT fixing it blind. Ran scripts/check-cheatsheet-tiers.sh here: rc=0, no cargo: command not found, cargo resolves. The bare invocation is at line 57, cargo build --quiet --manifest-path, so on a host where cargo lives under a rustup prefix that is not on the PATH this script sees, it fails - while macneo reports every OTHER cargo phase of the same gate succeeding, which means this script runs in a different environment rather than the tool being absent. THAT DIFFERENCE IS THE PACKET and it cannot be characterised from here. Fixing it from linux would be exactly the authoring-host trap this fleet has recorded six times today, most recently macbook hardcoding macos into a fixture whose subject is that host assumptions differ - and mine would be worse, because I would be editing a script I cannot make fail. WHAT THE NEXT TAKER NEEDS, and it is a macOS host: the PATH this script actually sees when the gate runs it, compared against the PATH the succeeding cargo phases see. If those differ, the fix is to make this phase use the same resolution the others do rather than to hardcode a path. Still p3 and still worth doing - macneo's point stands that a non-blocking error which is always present trains readers to ignore the channel it prints on.
