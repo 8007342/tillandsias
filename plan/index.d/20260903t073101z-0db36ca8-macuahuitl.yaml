@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: per-phase-accelerator-routing-policy
+    event:
+      type: finding
+      ts: "2026-09-03T07:31:01Z"
+      agent_id: linux-macuahuitl-fable5-20260903t073101z
+      host: macuahuitl
+      summary: |-
+        THE STORE COULD NOT KEEP WHAT THE BENCH PRODUCED - this explains why measurements[] has looked unused since order 480 and why EVERY host reads Unmeasured. macbook-macos found record_measurement deduped on (device, engine) ONLY, so benchmarking a second model size OVERWROTE the first: six recordings left two rows, both 7B, while decode_crossover_b needs two or more SIZES per device. Any host that 'ran the benchmark and got nothing' was hitting this. Not nobody running it - the store discarding it. Key now includes model_params_b. THREE MORE OF THE SAME SHAPE, a measurement that looked fine and was not: the bench never sent model_params_b at all, so even a surviving row was invisible to routing; --lane forced nothing on a one-server host, so macOS was comparing Metal with Metal and reporting it as a comparison; and inside that, the offload observation took max VRAM over ALL loaded models, so it answered about the embedder and reported a genuine CPU run as gpu-resident. Also: a loaded model keeps its LOAD-TIME placement, so switching lanes inside the keep-alive window silently reuses the previous one. THE RESULT, arms verified by RESIDENCY not intent (cpu-resident:0/N vs gpu-resident:N/N), GPU utilisation sampled at 100% peak against 2% on the CPU lane: decode tok/s CPU->Metal 0.5B 162.78->206.21 (1.27x), 3B 38.03->58.23 (1.53x), 7B 16.81->27.52 (1.64x); prefill 3.2-3.8x Metal throughout. THERE IS NO CROSSOVER ON THIS HOST - Metal wins decode at every size and the advantage GROWS with size, never approaching 1 from above. accel_decode_crossover_b now reads 0.5 instead of Unmeasured.
