@@ -1,0 +1,74 @@
+events:
+  - packet_id: obligation-lattice-model-in-rust
+    event:
+      type: progress
+      ts: "2026-09-03T05:18:34Z"
+      agent_id: linux-yoga-claude-20260903t050907z
+      host: yoga
+      summary: |
+        RUNG 1 LANDED. crates/tillandsias-plan/src/obligation.rs — ObligationState
+        (the seven-value chain), SpecState and ProjectState (product orders), and
+        Refiner (the refinement operator). 10 tests green, gate green.
+
+        RE-MEASURED THE ABSENCE FIRST rather than inheriting it: ObligationState,
+        centicolon_function, evidence_bundled and refine_obligation each returned
+        ZERO across crates/ and scripts/ excluding target/. Confirmed, and
+        local-ci.sh:500's `total_cc` is the name collision described — a weighted
+        checklist of passing CI checks, not the methodology's ranking function.
+
+        THE ORDER IS DECLARED ONCE. Rust derives PartialOrd/Ord on a fieldless
+        enum from declaration position, so the chain is stated exactly where the
+        variants are, in methodology sequence. A `rank()` match returning 0..6
+        would have been a second place for it to drift — the one-copy defect this
+        repository keeps paying for. A test asserts the seven literal spellings
+        AGAINST the methodology's list rather than against the enum's own ALL, so
+        reordering the enum fails the test instead of silently redefining the
+        lattice.
+
+        THE DECISION THAT DECIDES RUNG 2, and I want it visible before anyone
+        builds on it: SpecState::partial_cmp returns None for genuinely
+        incomparable pairs and does NOT fall back to Equal, and does not compare
+        a summary number instead. A partial order that silently totalises would
+        make rung 2's monotonicity property VACUOUSLY TRUE, because no pair could
+        ever witness a violation. There is a dedicated test for the case —
+        `opposite_directions_are_incomparable` — and ProjectState propagates a
+        single incomparable component rather than absorbing it.
+
+        REFINE IS DELIBERATELY NOT MONOTONE BY CONSTRUCTION. `refine(s) = s ⊔
+        fixed_evidence` would be monotone, inflationary AND idempotent for free,
+        and every property in rung 2 would hold trivially — a paper model with a
+        passing suite, which is the exact failure 976-kk6x exists to avoid. So a
+        Rule carries a PREDICATE over the current state (`applies: fn(&SpecState)
+        -> bool`), because real validators are conditional — a trace check gated
+        on a declaration, a bundling step gated on a test having run — and those
+        conditions are where monotonicity can genuinely fail. Whether the fleet's
+        actual rules ARE monotone is rung 2's question, and a NO there is a
+        finding about the methodology's claim, not a bug in the test.
+
+        Rules only ever RAISE a component, so refine is inflationary by
+        construction on what it touches — that half is honest to assert. The
+        iteration bound REFUSES rather than truncating: RefineOutcome
+        distinguishes Fixed{steps} from Unstable{bound}, so a caller cannot read
+        a gave-up result as a fixed point.
+
+        ALIGNMENT IS TOTAL: an absent key reads as Absent (the chain's bottom),
+        so two states over different ID sets are still comparable — the
+        methodology's "aligning stable IDs and tombstones". Comparing only the
+        intersection would call a state equal to one carrying obligations it had
+        never heard of; there is a test for that too.
+
+        A CLIPPY REFUSAL WORTH RECORDING, because its reasoning was the test's own
+        subject. I first wrote `assert!(!(a <= b) && !(b <= a))`. Clippy refuses
+        negated comparison on a partially ordered type: `!(a <= b)` reads as "a is
+        greater" and actually means "a is greater OR they cannot be compared".
+        On a type whose entire point is that the third case exists, that is the
+        wrong assertion to write — replaced with partial_cmp().is_none() and a
+        comment naming why. The linter caught a clarity defect in a test ABOUT
+        clarity of comparison.
+
+        NOT DONE HERE, and correctly so: no property tests (rung 2, 977-dpbj), no
+        scorer wiring (rung 3), no centicolon_function at all. The methodology's
+        ranking function is deliberately absent from this rung — it has a
+        separately reported denominator and residual and a monotone-only-within-a
+        -regime qualifier, and building it before the properties exist would
+        repeat the mistake this packet was split to avoid.
