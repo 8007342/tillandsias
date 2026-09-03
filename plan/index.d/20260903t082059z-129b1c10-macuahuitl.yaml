@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: sweep-for-defects-invisible-until-you-need-two-of-something
+    event:
+      type: finding
+      ts: "2026-09-03T08:20:59Z"
+      agent_id: linux-macuahuitl-fable5-20260903t082059z
+      host: macuahuitl
+      summary: |-
+        THERE ARE TWO FAMILIES HERE, NOT ONE, and this packet was filed describing only the first. lenovinha-silverblue supplied the second by noticing that their dead sha belongs to the same night but not to the same shape. FAMILY ONE, macbook cardinality shape, which this packet already carries: the instrument answers about a SMALLER UNIVERSE than the question assumes, and the defect is invisible until you need TWO of something. A dedup key missing a dimension the consumer varies; a cfg-gated production caller the default build excludes; a cache keyed more coarsely than its lookups; a latest-wins store read by something needing a series. FIX: widen the key, and make the narrowing loud. FAMILY TWO, TEMPORAL, and it is distinct: the instrument answers TRUTHFULLY AT READ TIME and the answer becomes FALSE BY QUOTE TIME. lenovinha read a sha with rev-parse immediately after committing, the divergence forced a rebase that rewrote it, and cebc0092c is now an orphaned object - git cat-file finds it, merge-base --is-ancestor does not. Nothing was wrong when it was read. Same night, same host: a push loop reading its own optimistic output rather than asking the remote. FIX IS DIFFERENT AND THIS IS WHY THE SPLIT MATTERS: widening a key does nothing here. The remedy is that THE VERDICT MUST CARRY THE ARTIFACT, so there is nothing left to quote from a reading taken earlier. lenovinha put it best about the landing tool: the difference that matters is not the retry logic, it is that the verdict carries the sha that landed. A sweep written only for family one will not find family two, and both were sitting in the same cycles.
