@@ -26,6 +26,10 @@ use tillandsias_plan::{
 /// relaunch would provide. One file, two readers — see capabilities.txt for why
 /// this is data rather than a Rust array. If it becomes a Rust array again, the
 /// shell side has to hardcode a second copy and the two will drift.
+// @trace order:984-i4k2
+#[path = "source_revision.rs"]
+mod source_revision;
+
 const CAPABILITY_MANIFEST: &str = include_str!("../capabilities.txt");
 
 /// The manifest's tokens, comments and blank lines stripped.
@@ -63,6 +67,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "answer",
     "arrival-routing-check",
     "blocked-by",
+    "build-id",
     "blocked-closure",
     "blocking-counts",
     "burndown",
@@ -103,6 +108,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "select-rows",
     "split-parents",
     "experts-probe",
+    "source-revision",
     "spec-envelope",
     "score-checks",
     "spec-floor",
@@ -233,6 +239,8 @@ const USAGE: &str = concat!(
     "                                     scripts/check-arrival-routing.sh), 3 on a named fragment\n",
     "                                     the fold could not read.\n",
     "           next-order [prefix]       mint a COLLISION-FREE order token for a new packet\n",
+    "           build-id                  which SOURCES this binary was compiled from (984-i4k2)\n",
+    "           source-revision [dir]     what a rebuild from a checkout would bake (984-i4k2)\n",
     "                                     (<seq>-<suffix>, e.g. 581-k3f9). Never compute the\n",
     "                                     'next free order' yourself: that reads a ledger snapshot\n",
     "                                     which is stale the moment another host commits, so\n",
@@ -4251,6 +4259,47 @@ fn main() {
                 index.display(),
                 removed
             );
+        }
+        "build-id" => {
+            // ORDER 984-i4k2. WHICH CODE IS THIS BINARY, as opposed to which
+            // subcommands does it have.
+            //
+            // The expert-capability skew line compares subcommand SETS, so a
+            // subcommand present in both the running binary and the checkout is
+            // invisible to it however much its behaviour changed. Measured
+            // 2026-09-03: four hosts' binaries predated 823e3ac0d and kept
+            // writing `append-event` output into plan/index.yaml rather than a
+            // fragment, while the skew line truthfully reported `skew=none`.
+            // Baked by build.rs from the sources actually compiled.
+            println!(
+                "{}+{}",
+                env!("CARGO_PKG_VERSION"),
+                env!("TILLANDSIAS_PLAN_REVISION")
+            );
+            return;
+        }
+        "source-revision" => {
+            // The other half of the comparison: what a REBUILD from this
+            // checkout would bake. Same code as build.rs uses (one
+            // implementation, `include!`d there), so the two sides cannot
+            // drift into reporting skew forever or never.
+            let dir = args
+                .get(1)
+                .cloned()
+                .unwrap_or_else(|| "crates/tillandsias-plan".to_string());
+            let path = std::path::Path::new(&dir);
+            if !path.is_dir() {
+                eprintln!(
+                    "error: source-revision needs the tillandsias-plan crate directory; '{dir}' is not a directory"
+                );
+                std::process::exit(2);
+            }
+            println!(
+                "{}+{}",
+                env!("CARGO_PKG_VERSION"),
+                source_revision::source_revision(path)
+            );
+            return;
         }
         "next-order" => {
             // Mint a collision-free order token for a NEW packet.
