@@ -9,6 +9,7 @@ active
 ## Requirements
 
 ### Requirement: Runtime events can share trace context
+<!-- req-id: 2910315a -->
 
 Logging components that propagate span or trace context MUST preserve identifiers across event boundaries so related runtime events can be correlated after collection.
 

@@ -15,6 +15,7 @@ Fix Windows container image building by routing each image type (forge, proxy, g
 ## Requirements
 
 ### Requirement: Image Build Path Routing by Type
+<!-- req-id: 9cc0b696 -->
 
 The Windows direct-podman build path in `run_build_image_script()` MUST route each image type to its correct Containerfile and context directory.
 
@@ -45,6 +46,7 @@ The Windows direct-podman build path in `run_build_image_script()` MUST route ea
 - **THEN** `images/inference/` is the build context directory
 
 ### Requirement: Correct Image Entrypoints
+<!-- req-id: 1bd211e4 -->
 
 Each built image MUST contain the correct entrypoint for its service type.
 
@@ -61,6 +63,7 @@ Each built image MUST contain the correct entrypoint for its service type.
 - **THEN** the entrypoint runs ollama, not the forge entrypoint
 
 ### Requirement: Image Build Centralized in Helper
+<!-- req-id: 3f7cde28 -->
 
 The routing logic MUST be encapsulated in a small `image_build_paths(image_name: &str) -> (Containerfile, ContextDir)` helper function.
 
@@ -71,6 +74,7 @@ The routing logic MUST be encapsulated in a small `image_build_paths(image_name:
 - The helper is available for reuse if/when a unified typed Podman layer path lands
 
 ### Requirement: Defensive Integration Test or Self-Check
+<!-- req-id: b591d745 -->
 
 A defensive mechanism MUST flag duplicate image IDs across `tillandsias-{forge,proxy,git,inference}` tags.
 
@@ -91,6 +95,7 @@ Either:
 - **THEN** the enclave cannot launch until the images are rebuilt
 
 ### Requirement: Build Number Bump
+<!-- req-id: 2db75890 -->
 
 After the fix is merged, the build number MUST be incremented.
 

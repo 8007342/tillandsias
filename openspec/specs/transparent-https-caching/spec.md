@@ -11,6 +11,7 @@ active
 ## Requirements
 
 ### Requirement: HTTPS cache interception uses generated CA material
+<!-- req-id: 49ce05dd -->
 
 Development and enclave proxy paths that enable HTTPS caching MUST generate or mount intermediate CA material before Squid starts SSL bumping traffic.
 
@@ -21,6 +22,7 @@ Development and enclave proxy paths that enable HTTPS caching MUST generate or m
 - **AND** consumers MUST see either the previous complete certificate/key pair or the new complete pair, never partial files
 
 ### Requirement: The intermediate CA private key is never world-readable
+<!-- req-id: b036cfc1 -->
 
 The interception CA's PRIVATE key MUST reach Squid only through a
 confidential channel, and MUST NOT be readable by other local users at any
@@ -47,6 +49,7 @@ it — a claim that had already been false since the secret channel landed.
   already exists
 
 ### Requirement: Runtime containers trust the Tillandsias proxy CA
+<!-- req-id: 7bc09274 -->
 
 Containers whose proxied HTTPS traffic may follow a redirect to the exact
 release-asset bump target MUST install the mounted Tillandsias CA into the
@@ -72,6 +75,7 @@ files with `GIT_SSL_CAINFO`, `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`, or
 - **AND** package-manager TLS failures MUST not be hidden by silently disabling trust checks
 
 ### Requirement: HTTPS interception is exact-host, step-aware, and fail-closed
+<!-- req-id: 254c9eee -->
 
 Squid MUST restrict the initial `peek` action to `SslBump1`, use
 client-requested `ssl::server_name` at `SslBump2`, bump only the exact

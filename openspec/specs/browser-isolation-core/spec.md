@@ -10,6 +10,7 @@ active
 ## Requirements
 
 ### Requirement: Security model for chromium-core image
+<!-- req-id: 030e60c8 -->
 
 The `chromium-core` image MUST enforce the following security properties:
 
@@ -18,6 +19,7 @@ The `chromium-core` image MUST enforce the following security properties:
 - **Reduced capabilities** — the image MUST use minimal kernel capabilities via `--cap-drop=ALL`
 
 ### Requirement: Content-hash image identity with human aliases
+<!-- req-id: 8bc78920 -->
 
 The `chromium-core` image MUST use a content-hash tag derived from the image source set as its canonical identity:
 
@@ -26,6 +28,7 @@ The `chromium-core` image MUST use a content-hash tag derived from the image sou
 - Human-facing `v<Major>.<Minor>.<YYMMDD>.<Build>` and `:latest` tags MAY exist only as aliases to the canonical hash tag
 
 ### Requirement: Build invocation via build-image.sh
+<!-- req-id: 6e8c2937 -->
 
 The image build MUST be invoked via `scripts/build-image.sh chromium-core` which:
 

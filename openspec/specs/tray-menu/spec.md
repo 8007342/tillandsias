@@ -9,6 +9,7 @@ active
 ## Requirements
 
 ### Requirement: Tray menu reflects current runtime state
+<!-- req-id: 093502c9 -->
 
 The tray menu MUST expose actions and status labels that match current runtime state, selected project, and available services.
 

@@ -11,6 +11,7 @@ Define the minimalistic tray UX flow for Tillandsias, showing only essential ele
 ## Requirements
 
 ### Requirement: UX curation governance — Tlatoāni approval is MANDATORY for every UX change
+<!-- req-id: 9f0a7e3f -->
 UX exists for END USERS ONLY — not for agents, not for the operator. End
 users are assumed to have zero knowledge of the system's internals: they do
 not know what a VM, WSL, enclave, git mirror, container, or virtualization
@@ -46,6 +47,7 @@ everything is curated to the last detail."
   survived, the leaf did not)
 
 ### Requirement: First-launch minimal tray
+<!-- req-id: 9f571421 -->
 At launch, the tray MUST show only four elements: @trace spec:tray-ux
 1. `<☐ Verifying environment ...` (dynamic status icon + text)
 2. Divider
@@ -59,6 +61,7 @@ At launch, the tray MUST show only four elements: @trace spec:tray-ux
 - **AND** the status item MUST show "☐ Verifying environment..." initially
 
 ### Requirement: Dynamic environment verification status
+<!-- req-id: c24689e2 -->
 The first element MUST change dynamically as containers are initialized:
 - Initial: `☐ Verifying environment ...`
 - During builds: Shows icons (🌐=proxy, 🔧=forge, 🪞=git, 🧠=inference, 🌐=chromium) + "Building Network + Forge + Mirror..."
@@ -82,6 +85,7 @@ The first element MUST change dynamically as containers are initialized:
 - **THEN** the status shows `🌹 Unhealthy environment`
 
 ### Requirement: Post-initialization menu items
+<!-- req-id: c7e4f679 -->
 Once `forge_available = true`, the UX MUST show at the top level:
 - `<Root Terminal>` (opens terminal at watch path)
 - `<Cloud> Remote Projects >` if GitHub authenticated AND remote repos exist
@@ -102,6 +106,7 @@ Once `forge_available = true`, the UX MUST show at the top level:
 - **AND** Cloud > submenu SHOULD be shown if authenticated
 
 ### Requirement: Per-project action buttons
+<!-- req-id: 03de68b1 -->
 Each project submenu MUST display 4 explicit action buttons:
 1. `💻 OpenCode` — Opens terminal-based IDE
 2. `🌐 OpenCode Web` — Opens web-based IDE via browser isolation
@@ -157,6 +162,7 @@ Gating points:
 - `cheatsheets/utils/podman-logging.md` — Log inspection techniques for debugging container issues
 
 ### Requirement: Stale container cleanup
+<!-- req-id: 96026a9e -->
 The system MUST clean up stale Tillandsias containers on startup:
 - MUST remove any containers with `tillandsias-*` pattern that are not currently tracked
 - MAY allow new containers to regenerate accordingly

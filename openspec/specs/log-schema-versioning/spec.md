@@ -9,6 +9,7 @@ active
 ## Requirements
 
 ### Requirement: Log entries carry schema version
+<!-- req-id: c33c8262 -->
 
 Structured log entries MUST include a schema version so readers can handle additive changes and reject incompatible records deliberately.
 

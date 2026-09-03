@@ -11,6 +11,7 @@ Define behavior of `tillandsias --init` command including incremental builds, de
 ## Requirements
 
 ### Requirement: Init CLI command
+<!-- req-id: d4fd2499 -->
 The application MUST provide a `tillandsias --init` command that pre-builds all container images. The command MUST support `--force` to rebuild all images and `--debug` to enable verbose output with failed build log capture. The command MUST track successful builds across runs and skip already-built images on re-run when the release-shipped image source digest is unchanged. The implementation MUST be compiled Rust that invokes Podman directly; it MUST NOT depend on executing repository shell scripts as part of the shipped runtime path.
 
 #### Scenario: First run
@@ -41,6 +42,7 @@ The application MUST provide a `tillandsias --init` command that pre-builds all 
 - **THEN** the `--init` flag MUST be listed with description "Pre-build container images" and `--debug` flag MUST be shown as available option
 
 ### Requirement: Init path does not invoke shell wrappers
+<!-- req-id: d5b8c9f2 -->
 `tillandsias --init` SHALL be implemented as a compiled Rust runtime path that talks to Podman directly. It SHALL NOT shell out to `scripts/build-image.sh` or extract temp scripts in order to perform image builds.
 
 #### Scenario: No script middleware
@@ -50,6 +52,7 @@ The application MUST provide a `tillandsias --init` command that pre-builds all 
 - **AND** the runtime SHALL not depend on repository shell scripts
 
 ### Requirement: Init does not require a checkout
+<!-- req-id: 367ea860 -->
 `tillandsias --init` SHALL resolve image contexts from the release binary's embedded runtime assets by default. `TILLANDSIAS_ROOT` SHALL remain available as an explicit developer override and SHALL fail loudly when it points at an invalid checkout.
 
 #### Scenario: Init outside the repository
@@ -59,6 +62,7 @@ The application MUST provide a `tillandsias --init` command that pre-builds all 
 - **AND** the command SHALL NOT report "Could not find Tillandsias checkout"
 
 ### Requirement: Init build uses host user namespace
+<!-- req-id: d140f829 -->
 The init build path SHALL select a Podman user namespace mode that does not depend on `newuidmap` on immutable hosts. The default build contract SHALL prefer host namespace reuse for the build container itself while preserving the normal image security contract for runtime containers.
 
 #### Scenario: Rootless build on immutable host
@@ -67,6 +71,7 @@ The init build path SHALL select a Podman user namespace mode that does not depe
 - **AND** the user-facing runtime contract for launched containers SHALL remain unchanged
 
 ### Requirement: Init failure diagnostics are host-specific
+<!-- req-id: 255af6f2 -->
 When `--init` fails because rootless Podman cannot set up a namespace, the build output SHALL print a concise diagnostic that includes the current user, uid/gid, and any matching `/etc/subuid` and `/etc/subgid` entries before the final build failure message. The diagnostic SHALL distinguish overlap-safe subordinate mappings from host refusal to write the rootless uid_map.
 
 #### Scenario: newuidmap failure
@@ -77,6 +82,7 @@ When `--init` fails because rootless Podman cannot set up a namespace, the build
 - **AND** the output SHALL include matching subuid/subgid entries if present
 
 ### Requirement: Exit code contract for init command
+<!-- req-id: 61babd7d -->
 The `--init` command MUST exit deterministically with codes 0 (all images built successfully) or 1 (any image build failed), enabling safe use in shell pipelines and conditionals.
 
 #### Scenario: Successful init
@@ -91,6 +97,7 @@ The `--init` command MUST exit deterministically with codes 0 (all images built 
 - **AND** MUST be chainable with error handling: `tillandsias --init || echo "init failed"`
 
 ### Requirement: Debug mode log capture
+<!-- req-id: 42a83a3f -->
 When `--debug` flag is passed, init MUST capture each image build's output to `/tmp/tillandsias-init-{image}.log` and display failed logs on stderr.
 
 #### Scenario: Debug mode tees output
@@ -105,6 +112,7 @@ When `--debug` flag is passed, init MUST capture each image build's output to `/
 - **AND** log lines MUST be prefixed with image name for clarity
 
 ### Requirement: All images built
+<!-- req-id: 621a4948 -->
 The init command MUST build exactly eight container images in sequence.
 
 #### Scenario: Image build sequence

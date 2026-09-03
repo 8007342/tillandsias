@@ -8,6 +8,7 @@ status: active
 Define the forge storage split between HOT tmpfs mounts, COLD disk-backed state, and the runtime banner that makes those boundaries visible to agents and humans.
 ## Requirements
 ### Requirement: HOT tier — RAM-backed tmpfs for finely curated paths
+<!-- req-id: dd7d6e7e -->
 
 Every forge profile (OpenCode, Claude, OpenCode-Web, maintenance terminal) MUST
 mount the following paths as kernel tmpfs at container start time:
@@ -42,6 +43,7 @@ paths (build artefacts, `/nix/store`, caches, logs) remain COLD.
 ---
 
 ### Requirement: Per-mount size caps
+<!-- req-id: 79bda5bb -->
 
 Every tmpfs mount MUST carry a kernel-enforced size cap expressed as
 `--tmpfs=<path>:size=<N>m,mode=<oct>` in the podman arguments. The cap is NOT
@@ -77,6 +79,7 @@ advisory: writes that would exceed it MUST fail with ENOSPC.
 ---
 
 ### Requirement: --memory ceiling pairs with tmpfs caps
+<!-- req-id: 0d24437b -->
 
 When ANY tmpfs mount is present in the profile, the podman invocation MUST also
 pass `--memory=<ceiling>m` and `--memory-swap=<ceiling>m` (no swap escape).
@@ -101,6 +104,7 @@ The ceiling is: `sum(all tmpfs size_mb) + 256` (256 MB working-set baseline).
 ---
 
 ### Requirement: Pre-flight RAM check refuses launch on insufficient host RAM
+<!-- req-id: 0d67b862 -->
 
 The host available RAM MUST be measured before every forge launch via platform-native APIs (Linux: `/proc/meminfo`; macOS: `vm_stat`; Windows: `GlobalMemoryStatusEx`). If `mem_available_mb < required_mb × 1.25` (1.25× headroom factor), the launch MUST be refused immediately — no podman invocation occurs.
 
@@ -136,6 +140,7 @@ The host available RAM MUST be measured before every forge launch via platform-n
 ---
 
 ### Requirement: Per-launch project source budget
+<!-- req-id: 5525555f -->
 
 The `/home/forge/src` tmpfs size MUST be computed per-launch from the project's
 git mirror pack size.
@@ -165,6 +170,7 @@ git mirror pack size.
 ---
 
 ### Requirement: Agent transparency
+<!-- req-id: f87462f8 -->
 
 The HOT tier MUST change only the BACKING STORE of agent-visible paths — the paths themselves MUST remain byte-identical. Agents experience zero behavioral difference and require no code or env-var changes.
 
@@ -184,6 +190,7 @@ The HOT tier MUST change only the BACKING STORE of agent-visible paths — the p
 ---
 
 ### Requirement: Tmpfs-overlay lane for per-project ephemeral cache
+<!-- req-id: 185fbe6c -->
 
 A third storage pattern MUST be admitted alongside HOT (kernel tmpfs with hard cap, ENOSPC on overflow) and COLD (disk, no spec-level cap): the **tmpfs-overlay lane**. The tmpfs-overlay lane is a tmpfs view rooted on top of a COLD per-project cache directory, with LRU eviction across the tmpfs/disk boundary as a single per-project pool. The tmpfs-overlay lane is NOT a fifth HOT root; the four HOT roots (`/opt/cheatsheets`, `/home/forge/src`, `/tmp`, `/run/user/1000`) MUST remain unchanged. The tmpfs-overlay lane is scoped to `~/.cache/tillandsias/cheatsheets-pulled/` only; other paths require a dedicated spec change to opt in.
 

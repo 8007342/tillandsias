@@ -27,6 +27,7 @@ Cross-references:
 ## Requirements
 
 ### Requirement: Vault container runs inside the secrets boundary with persistent storage
+<!-- req-id: 48a0c6fb -->
 - **ID**: tillandsias-vault.deployment.vault-container@v3
 - **Modality**: MUST
 - **Measurable**: true
@@ -74,6 +75,7 @@ external host network.
   `0.0.0.0:8201`, `<host-ip>:8200`, or `<host-ip>:8201`.
 
 ### Requirement: Auto-unseal key securely stored in host native keychain with versioning
+<!-- req-id: a60a28de -->
 - **ID**: tillandsias-vault.security.transparent-auto-unseal@v4
 - **Modality**: MUST
 - **Measurable**: true
@@ -138,6 +140,7 @@ require that marker before replacing an existing unseal secret.
 - **AND** SHALL delete any entries that are not the current version (`v1`) or belong to defunct installations.
 
 ### Requirement: Vault is the ONLY secret store (Legacy Fallback Removed)
+<!-- req-id: 3aff9d04 -->
 - **ID**: tillandsias-vault.linux.only-secret-store@v3
 - **Modality**: MUST
 - **Measurable**: true
@@ -162,6 +165,7 @@ ALWAYS store the GitHub token in Vault at `secret/github/token`.
 - **THEN** the launcher SHALL exit with a fatal error indicating the flags are removed.
 
 ### Requirement: Policy taxonomy enforces least privilege per container kind
+<!-- req-id: fb4a088f -->
 - **ID**: tillandsias-vault.security.policy-taxonomy@v2
 - **Modality**: MUST
 - **Measurable**: true
@@ -208,6 +212,7 @@ Vault SHALL be configured idempotently with these ACL policies:
 - **THEN** the call SHALL return HTTP 403.
 
 ### Requirement: Per-container Vault authentication is short-lived and revocable
+<!-- req-id: 8c4d8e4b -->
 - **ID**: tillandsias-vault.security.short-lived-tokens@v4
 - **Modality**: MUST
 - **Measurable**: true
@@ -303,6 +308,7 @@ to the existing 24h maximum TTL.
 - **AND** later AppRole logins with those SecretIDs SHALL fail.
 
 ### Requirement: Forge Vault access is optional and provider-scoped
+<!-- req-id: a2769c2c -->
 - **ID**: tillandsias-vault.security.forge-offline@v2
 - **Modality**: MUST
 - **Measurable**: true
@@ -330,6 +336,7 @@ derived documents SHALL NOT cross the launcher boundary in argv or logs.
 - **AND** the free Zen and local-model lane SHALL remain available.
 
 ### Requirement: Default-image Vault requests verify TLS and keep live tokens off argv
+<!-- req-id: 25b85f14 -->
 
 The default forge image's `vault-cli.sh` SHALL verify Vault TLS explicitly and
 fail closed when no readable CA is available. Explicit `VAULT_CACERT` and

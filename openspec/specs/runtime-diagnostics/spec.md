@@ -19,6 +19,7 @@ This spec ensures:
 ## Requirements
 
 ### Requirement: Capture exit code and termination signal
+<!-- req-id: 3f083755 -->
 
 When a container exits, the runtime MUST record the exit code, any termination signal, and the duration the container ran.
 
@@ -40,6 +41,7 @@ When a container exits, the runtime MUST record the exit code, any termination s
 - **AND** the user MUST see "Build timed out after 1 hour"
 
 ### Requirement: Capture container stderr during execution
+<!-- req-id: 57b6a99b -->
 
 The container's stderr output MUST be streamed to a temporary log file during execution and MUST be deleted on shutdown.
 
@@ -62,6 +64,7 @@ The container's stderr output MUST be streamed to a temporary log file during ex
 - **AND** MUST continue capture without blocking the container
 
 ### Requirement: Detect resource exhaustion conditions
+<!-- req-id: d233a2a6 -->
 
 The runtime MUST detect OOM (out of memory) kills, disk full conditions, and file descriptor exhaustion from container-side signals.
 
@@ -84,6 +87,7 @@ The runtime MUST detect OOM (out of memory) kills, disk full conditions, and fil
 - **AND** the user MUST see "Build failed: too many open files (increase ulimit)"
 
 ### Requirement: Analyze stderr for common failure patterns
+<!-- req-id: a3d1e9fd -->
 
 The runtime MUST scan captured stderr for patterns indicating common failures and surface human-readable explanations.
 
@@ -104,6 +108,7 @@ The runtime MUST scan captured stderr for patterns indicating common failures an
 - **AND** SHOULD suggest "Check file/directory ownership or container capabilities"
 
 ### Requirement: Ephemeral diagnostics lifecycle
+<!-- req-id: 269cfd2e -->
 
 Diagnostic data (stderr logs, exit codes, failure analysis) MUST be ephemeral, collected only during container execution, and MUST be destroyed on shutdown.
 
@@ -125,6 +130,7 @@ Diagnostic data (stderr logs, exit codes, failure analysis) MUST be ephemeral, c
 - **AND** next tray launch MUST NOT have inherited diagnostic data
 
 ### Requirement: Litmus test — runtime diagnostics capture and lifecycle
+<!-- req-id: eb029a2d -->
 
 Critical verification paths:
 

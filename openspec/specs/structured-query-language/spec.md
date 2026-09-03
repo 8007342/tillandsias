@@ -9,6 +9,7 @@ active
 ## Requirements
 
 ### Requirement: Trace queries use structured predicates
+<!-- req-id: 289d5aaa -->
 
 Trace query tooling MUST support structured predicates over trace metadata instead of relying only on ad hoc text search.
 

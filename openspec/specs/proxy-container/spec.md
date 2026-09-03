@@ -15,6 +15,7 @@ traffic end to end.
 
 ## Requirements
 ### Requirement: Caching HTTP/HTTPS proxy with ssl-bump MITM architecture
+<!-- req-id: ea5f7215 -->
 The system SHALL build and run a `tillandsias-proxy` container that provides a
 caching HTTP/HTTPS proxy service. The proxy SHALL use Squid configured with
 ssl-bump on both ports, using an ephemeral intermediate CA certificate for
@@ -61,6 +62,7 @@ asset is eligible for storage.
   a separately verified StoreID policy is introduced
 
 ### Requirement: Ephemeral CA chain (per-launch generation)
+<!-- req-id: 14883356 -->
 The system SHALL generate a fresh two-level CA chain on every proxy launch. The chain SHALL consist of a self-signed Root CA and an Intermediate CA signed by the root, both using EC P-256 keys. All key material SHALL be stored on tmpfs (`$XDG_RUNTIME_DIR/tillandsias/proxy-certs/`) and SHALL be destroyed when the session ends (logout/reboot). No CA keys SHALL persist to disk.
 
 @trace spec:proxy-container
@@ -91,6 +93,7 @@ The system SHALL generate a fresh two-level CA chain on every proxy launch. The 
 - **AND** no CA keys SHALL remain on any persistent storage
 
 ### Requirement: Dual-port architecture
+<!-- req-id: 25da0ed6 -->
 The proxy SHALL listen on two ports with different access policies. Both ports SHALL have ssl-bump configured (same intermediate CA cert/key). The port determines which ACL rules apply.
 
 @trace spec:proxy-container
@@ -111,6 +114,7 @@ The proxy SHALL listen on two ports with different access policies. Both ports S
 - **AND** domain filtering SHALL NOT apply
 
 ### Requirement: Image builds bypass the proxy
+<!-- req-id: e830edd8 -->
 Container image builds (via `build-image.sh`) SHALL NOT route through the proxy.
 Build containers run outside the enclave network and do not have the ephemeral
 CA chain installed. Because ssl-bump is active for the exact release-asset CDN,
@@ -130,6 +134,7 @@ containers (forge, terminal) have the CA chain injected.
 - **AND** the tray SHALL notify the user of degraded mode
 
 ### Requirement: CA chain injection into forge containers
+<!-- req-id: db8f87ba -->
 Runtime containers (forge, terminal) SHALL have the ephemeral CA chain bind-mounted once. The shared rootless initializer SHALL incorporate it into the image's system-default bundle before clients start. This enables these containers to trust the proxy's dynamically generated server certificates without per-client CA path overrides.
 
 @trace spec:proxy-container
@@ -148,6 +153,7 @@ Runtime containers (forge, terminal) SHALL have the ephemeral CA chain bind-moun
 - **AND** tools inside the container SHALL be able to verify certificates signed by the ephemeral intermediate CA
 
 ### Requirement: Generous developer-focused domain allowlist
+<!-- req-id: b74fc1ff -->
 The proxy SHALL include a built-in allowlist (`images/proxy/allowlist.txt`) covering web, mobile, and cloud development ecosystems. The allowlist SHALL be comprehensive enough that common development workflows (npm install, cargo build, pip install, flutter pub get) work out of the box without configuration. The allowlist applies only to port 3128 (strict).
 
 @trace spec:proxy-container
@@ -182,6 +188,7 @@ One domain per line, prefixed with `.` to match the domain and all subdomains. S
 - **THEN** the proxy response SHALL include the blocked domain name for debugging
 
 ### Requirement: SSL bump policy is step-aware and narrowly selective
+<!-- req-id: 264e3f3a -->
 The ssl-bump policy SHALL use an `at_step SslBump1` ACL so `peek` runs only
 once. At `SslBump2`, Squid SHALL use the client-requested
 `ssl::server_name` and bump only the exact hostname
@@ -215,6 +222,7 @@ match at `SslBump2` as well and usually preclude bumping later.
 - **AND** `ssl_bump splice all` SHALL preserve client-to-origin TLS and pinning
 
 ### Requirement: Release-asset caching preserves origin semantics
+<!-- req-id: cf4a2b9c -->
 The release-asset refresh rule SHALL be scoped to the exact HTTPS hostname and
 checked before Squid's conservative defaults. It MAY provide bounded heuristic
 freshness when the origin omits an explicit lifetime, but MUST NOT use
@@ -237,6 +245,7 @@ keys are content-identical.
   trace demonstrates stable keys and a repeated `TCP_HIT`
 
 ### Requirement: Upstream TLS verification
+<!-- req-id: 7fdd474c -->
 The proxy SHALL verify upstream (origin) server certificates against the system CA store when connecting to origin servers. TLS options SHALL enforce minimum TLS 1.2 with strong ciphers.
 
 @trace spec:proxy-container
@@ -248,6 +257,7 @@ The proxy SHALL verify upstream (origin) server certificates against the system 
 - **AND** neither `DONT_VERIFY_PEER` nor `DONT_VERIFY_DOMAIN` SHALL be active
 
 ### Requirement: Proxy container image versioned and built via pipeline
+<!-- req-id: 8f9e2bff -->
 The proxy container image SHALL be tagged as `tillandsias-proxy:v{FULL_VERSION}` and built via the existing `build-image.sh` pipeline. The image SHALL be Alpine-based with squid + SSL support installed. The Containerfile and configuration SHALL be stored in `images/proxy/`.
 
 @trace spec:proxy-container
@@ -263,6 +273,7 @@ The proxy container image SHALL be tagged as `tillandsias-proxy:v{FULL_VERSION}`
 - **AND** it SHALL run as non-root user `proxy` (UID 1000)
 
 ### Requirement: Proxy container lifecycle management
+<!-- req-id: c92d3ee8 -->
 The proxy container SHALL be started automatically as part of infrastructure setup (before any forge containers). It SHALL be shared across all projects. It SHALL be version-checked and auto-restarted if running a stale image version. It SHALL be stopped on application exit.
 
 @trace spec:proxy-container
@@ -284,6 +295,7 @@ The proxy container SHALL be started automatically as part of infrastructure set
 - **THEN** the system SHALL stop the proxy container
 
 ### Requirement: Proxy request telemetry
+<!-- req-id: 253d862e -->
 All proxy requests SHALL be logged to the `--log-proxy` accountability window. Logs SHALL include domain, request size, allow/deny status, and cache hit/miss. No request content or credentials SHALL appear in logs. Squid access logs go to stdout, cache logs to stderr, for container log capture.
 
 @trace spec:proxy-container
@@ -298,6 +310,7 @@ All proxy requests SHALL be logged to the `--log-proxy` accountability window. L
 - **AND** the log entry SHALL be at WARN level for visibility
 
 ### Requirement: Privacy and identity
+<!-- req-id: dd1b6316 -->
 The proxy SHALL delete the `Forwarded` (and `X-Forwarded-For`) header from outgoing requests and disable the `Via` header. Origin servers SHALL not be able to determine that requests are proxied or identify the client.
 
 @trace spec:proxy-container
@@ -308,6 +321,7 @@ The proxy SHALL delete the `Forwarded` (and `X-Forwarded-For`) header from outgo
 - **AND** the `Via` header SHALL be absent
 
 ### Requirement: Allowlist covers OpenCode's default egress footprint
+<!-- req-id: e9f82266 -->
 
 The domain allowlist (`/etc/squid/allowlist.txt`, sourced from `images/proxy/allowlist.txt`) SHALL include every external domain that OpenCode Web reaches in its default configuration. At minimum the allowlist MUST contain `.models.dev` (OpenCode model registry), `.openrouter.ai` (OpenRouter aggregation gateway), and `.helicone.ai` (Helicone telemetry / gateway), in addition to the provider domains already listed (`.anthropic.com`, `.openai.com`, `.together.ai`, `.groq.com`, `.deepseek.com`, `.mistral.ai`, `.fireworks.ai`, `.cerebras.ai`, `.sambanova.ai`, `.huggingface.co`). New providers added to OpenCode MUST have their domains added to the allowlist in the same commit that introduces the provider.
 
@@ -323,6 +337,7 @@ The domain allowlist (`/etc/squid/allowlist.txt`, sourced from `images/proxy/all
 - **AND** the CONNECT tunnel is established
 
 ### Requirement: Allowlist entries follow Squid 6.x single-entry rule
+<!-- req-id: 128cc0ad -->
 
 Every allowlist entry SHALL be listed exactly once and SHALL use the
 leading-dot form (`.example.com`). Bare-domain duplicates of an already-listed
@@ -343,6 +358,7 @@ entries as a fatal startup error.
   duplicates of already-covered domains
 
 ### Requirement: Forward proxy recognises `*.localhost` as enclave-internal
+<!-- req-id: 1267df1f -->
 
 The Squid proxy SHALL allow `*.localhost` destinations and forward
 them to a sibling reverse-proxy container at `router:80` instead of
@@ -379,6 +395,7 @@ both an `acl localhost_subdomain dstdomain .localhost` and a
 
 
 ### Requirement: NO_PROXY exemptions and the Node egress contract
+<!-- req-id: bbe2e7c6 -->
 
 The system MUST inject the same seven proxy variables into every enclave
 container, from a SINGLE source of truth, regardless of which builder launches

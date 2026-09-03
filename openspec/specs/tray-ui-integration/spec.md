@@ -9,6 +9,7 @@ active
 ## Requirements
 
 ### Requirement: Native tray integration matches platform expectations
+<!-- req-id: 200568a0 -->
 
 Native tray builds MUST use the platform tray/status notifier integration appropriate for the target desktop while keeping launcher behavior traceable to tray state.
 

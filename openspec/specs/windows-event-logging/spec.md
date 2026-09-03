@@ -28,6 +28,7 @@ implementation in the native tray: `crates/tillandsias-windows-tray/src/eventlog
 ## Requirements
 
 ### Requirement: Windows Event Log Integration
+<!-- req-id: ee664e0a -->
 
 The Tillandsias tray binary MUST write selected tracing events to the Windows
 Application Event Log via `RegisterEventSourceW`/`ReportEventW`. @trace spec:windows-event-logging
@@ -47,6 +48,7 @@ Application Event Log via `RegisterEventSourceW`/`ReportEventW`. @trace spec:win
 - **AND** installation and tray startup MUST proceed normally
 
 ### Requirement: Event Type Mapping
+<!-- req-id: 598255e7 -->
 
 Tracing events MUST be mapped to Windows Event Log types by level. Operator
 directive 2026-07-18: ALL INFO events relay — provisioning progress/failure
@@ -92,6 +94,7 @@ the tray emits at DEBUG) stay out of the Event Log.
 - **AND** sub-phase progress refinements (download % ticks) MUST be emitted at DEBUG and MUST NOT reach the Event Log
 
 ### Requirement: Metadata Preservation in Event Log
+<!-- req-id: c6de87d0 -->
 
 Accountability events written to Windows Event Log MUST include structured metadata fields.
 
@@ -128,6 +131,7 @@ Safety: Never written to disk, injected via bind mount
 - **AND** MUST write full message to Event Viewer
 
 ### Requirement: Graceful Degradation
+<!-- req-id: 81ce2114 -->
 
 A logging relay MUST never take the tray down or block its startup.
 
@@ -142,6 +146,7 @@ A logging relay MUST never take the tray down or block its startup.
 - **AND** the tray MUST start normally with file logging only
 
 ### Requirement: Layer Implementation
+<!-- req-id: 2bc5f683 -->
 
 The Windows Event Log layer MUST be implemented as a `tracing_subscriber::Layer<S>` wrapping `RegisterEventSourceW`/`ReportEventW` (`windows` crate, features `Win32_System_EventLog` + `Win32_Security`).
 
@@ -179,6 +184,7 @@ tracing_subscriber::registry()
 ```
 
 ### Requirement: Cross-Platform Cost
+<!-- req-id: ad333b43 -->
 
 - **Conditional compilation**: `#![cfg(target_os = "windows")]` gates the whole module; other platforms MUST compile nothing (zero runtime cost)
 - The `mod eventlog;` declaration in `main.rs` is unconditional; the gate lives inside the file

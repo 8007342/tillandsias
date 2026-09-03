@@ -44,12 +44,50 @@ proximity:
       user_visible_contract_multiplier: 1.25
       internal_helper_multiplier: 0.5
 
+  requirement_identity_across_edits:
+    description: >
+      When a requirement's text changes, does it keep its identifier? Operator
+      ruling, 2026-09-03, verbatim: "If the meaning changes and no longer
+      reflects the original intent then it's a tombstone plus a new id. If the
+      change is a refinement over the original text and the original still
+      stands then it's a stable id keeping."
+    rules:
+      - refinement_keeps_the_identifier
+      - changed_obligation_gets_a_tombstone_and_a_new_identifier
+    enforced_by: author-judgement-only
+    why_no_validator: >
+      The boundary is about MEANING — whether the reworded text still carries
+      the original obligation — and no checker can see it.
+      `scripts/check-requirement-ids.sh` enforces presence and uniqueness and
+      nothing else. Do not read a green gate as agreement that the right
+      identifier was kept: a refinement that should have been a new obligation
+      passes the guard exactly as a correct one does.
+
   earning_rules:
     description: >
       Obligations earn CentiColons only when evidence is queryable and the linked
       artifact exists at the cited revision.
     evidence_credit:
       spec_exists_and_active: 0.10
+      # ORDER 976-suab. PAYABLE SINCE 2026-09-03, AND IT WAS NOT BEFORE.
+      #
+      # This weight paid ten percent of evidence credit for a property NO
+      # artifact had: zero of 177 spec files carried an identifier, and a
+      # committed-ref grep at v56.9.2.1 returned exactly one occurrence in the
+      # whole repository — this line. The lattice model's cross-release
+      # comparison is defined in terms of aligning identifiers that did not
+      # exist as data.
+      #
+      # The precondition is now met and is ENFORCED rather than asserted:
+      # `scripts/check-requirement-ids.sh` runs in `./build.sh --check` and
+      # fails on a missing or duplicated identifier, so every one of the 653
+      # requirements carries a unique one and a new requirement cannot land
+      # without.
+      #
+      # WHAT THE GUARD DOES NOT COVER, so nothing here is read as more than it
+      # is: it enforces that identifiers EXIST and are UNIQUE. It cannot check
+      # that the RIGHT identifier was kept across an edit — see
+      # `requirement_identity_across_edits` below, which is author judgement.
       requirement_has_stable_id: 0.10
       implementation_trace_present: 0.15
       litmus_positive_passes: 0.20

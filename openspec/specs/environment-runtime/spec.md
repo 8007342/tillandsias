@@ -6,6 +6,7 @@ status: active
 ## Requirements
 
 ### Requirement: Global and per-project configuration
+<!-- req-id: 8856aa41 -->
 The configuration system MUST support a two-level hierarchy: global defaults at a platform-specific path and per-project overrides at `<project>/.tillandsias/config.toml`.
 
 #### Scenario: Platform-specific config paths
@@ -21,6 +22,7 @@ The configuration system MUST support a two-level hierarchy: global defaults at 
 - **THEN** the global config MUST be located at `~/.config/tillandsias/config.toml`
 
 ### Requirement: User-facing files must be verbose and non-technical
+<!-- req-id: 475bf3b0 -->
 
 All configuration files, log directories, and data files that a user
 may discover on their filesystem MUST include clear, non-technical
@@ -34,6 +36,7 @@ Users MUST NOT feel alarmed or confused by Tillandsias artifacts
 on their system. Transparency and accountability are non-negotiable.
 
 ### Requirement: Accountable uninstall
+<!-- req-id: 9114a3bc -->
 
 The uninstall script MUST:
 - Print a list of files and directories that will be removed BEFORE deletion
@@ -43,6 +46,7 @@ The uninstall script MUST:
 - Support `--wipe` for cache and container image removal
 
 ### Requirement: Desktop user-session runtime
+<!-- req-id: 71258bd9 -->
 
 Interactive Linux launches on Fedora Workstation and similar desktop systems MUST run in the logged-in user's real session. The runtime MUST rely on logind/systemd to provide a writable `XDG_RUNTIME_DIR`, MUST use the rootless Podman state owned by that user, and MUST NOT synthesize a fake `/run/user/<uid>` or substitute a helper runtime layer in production.
 
@@ -58,6 +62,7 @@ Interactive Linux launches on Fedora Workstation and similar desktop systems MUS
 - **AND** the error MUST say that the interactive runtime requires a real desktop user session
 
 ### Requirement: Dedicated service account runtime for headless installs
+<!-- req-id: 372608c0 -->
 
 Linux installs that provision the headless orchestrator MUST create and track a dedicated `tillandsias` service account, its group, its systemd user unit, and its writable state directories. The runtime MUST be supervised by systemd in the foreground and MUST use the rootless Podman socket owned by that user.
 
@@ -82,6 +87,7 @@ Linux installs that provision the headless orchestrator MUST create and track a 
 
 
 ### Requirement: TILLANDSIAS_AGENT accepts opencode-web
+<!-- req-id: fcf02729 -->
 
 The runtime environment contract MUST recognise `TILLANDSIAS_AGENT=opencode-web` as a valid agent value in addition to `opencode`, `claude`, and `terminal`.
 
@@ -95,6 +101,7 @@ The runtime environment contract MUST recognise `TILLANDSIAS_AGENT=opencode-web`
 - **THEN** existing fallback behaviour MUST remain unchanged
 
 ### Requirement: Forge launchers export the exact active harness identity
+<!-- req-id: 4730136e -->
 
 Every forge launcher MUST inject `TILLANDSIAS_AGENT` into the container with
 the identity of the harness it actually launches. The stable values are

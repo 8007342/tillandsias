@@ -216,12 +216,46 @@ Short description of what this capability does and why it exists.
 ## Requirements
 
 ### Requirement: New Feature
+<!-- req-id: 3f9a1c04 -->
 The system SHALL do something new.
 
 #### Scenario: Basic case
 - **WHEN** user does X
 - **THEN** system does Y
 ```
+
+**Requirement identifiers, and the one judgement call only you can make**
+
+Every requirement in a main spec carries `<!-- req-id: xxxxxxxx -->` on the line
+directly below its heading (order 976-suab). It is random, assigned once, and it
+is what lets one obligation be followed across releases even after the file
+moves or the heading is reworded. `./build.sh --check` fails on a requirement
+without one, or on two that share one.
+
+**You do not write these by hand.** For a brand-new requirement, leave it off and
+run `scripts/stamp-requirement-ids.sh`, which stamps only what is missing and
+never touches an identifier that already exists.
+
+**When you MODIFY a requirement, you decide whether the identifier survives, and
+no tool can decide it for you.** The operator's rule:
+
+> If the meaning changes and no longer reflects the original intent then it's a
+> tombstone plus a new id. If the change is a refinement over the original text
+> and the original still stands then it's a stable id keeping.
+
+So: a refinement — sharpening wording, adding a scenario, tightening a bound the
+original already implied — **keeps** the identifier. A changed obligation —
+where the requirement now asks for something the old text did not — gets a
+tombstone and a **new** identifier, because it is a different promise wearing the
+same heading.
+
+A RENAMED requirement almost always keeps its identifier: renaming is the case
+the identifier exists for.
+
+**The validator cannot check this and will not warn you.** It enforces that
+identifiers exist and are unique, nothing more. A changed obligation that kept
+its old identifier passes the gate exactly as a correct refinement does — the
+green tells you the field is populated, never that you judged it right.
 
 **Key Principle: Intelligent Merging**
 

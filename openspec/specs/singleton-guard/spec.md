@@ -9,6 +9,7 @@ active
 TBD - created by archiving change singleton-instance. Update Purpose after archive.
 ## Requirements
 ### Requirement: Single instance enforcement
+<!-- req-id: 05155e71 -->
 The application MUST ensure only one tray-mode instance runs per user session. CLI attach mode is not affected.
 
 #### Scenario: First launch
@@ -28,6 +29,7 @@ The application MUST ensure only one tray-mode instance runs per user session. C
 - **THEN** no singleton check MUST be performed and the command MUST run regardless of other instances
 
 ### Requirement: Lock file location
+<!-- req-id: 365e26c2 -->
 The lock file MUST be placed in a platform-appropriate runtime directory.
 
 #### Scenario: Linux with XDG_RUNTIME_DIR
@@ -47,6 +49,7 @@ The lock file MUST be placed in a platform-appropriate runtime directory.
 - **THEN** the lock file MUST be created at `%TEMP%\tillandsias.lock`
 
 ### Requirement: Lock file cleanup on exit
+<!-- req-id: 46f0e062 -->
 The lock file MUST be removed when the application exits gracefully.
 
 #### Scenario: Normal shutdown
@@ -58,6 +61,7 @@ The lock file MUST be removed when the application exits gracefully.
 - **THEN** the lock file MAY remain but MUST be detected as stale on next launch
 
 ### Requirement: Stale lock detection
+<!-- req-id: ba42653f -->
 The singleton check MUST verify that the PID in the lock file belongs to an active tillandsias process, not just any process.
 
 #### Scenario: PID alive and is tillandsias

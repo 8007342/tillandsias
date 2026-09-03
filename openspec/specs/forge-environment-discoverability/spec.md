@@ -15,6 +15,7 @@ Define the runtime discovery interface for the forge container, allowing agents 
 ## Requirements
 
 ### Requirement: Inventory CLI lists installed toolchains
+<!-- req-id: 299f227e -->
 
 The forge MUST provide a `tillandsias-inventory` command that outputs a structured list of all installed programming language toolchains and their versions.
 
@@ -30,6 +31,7 @@ The forge MUST provide a `tillandsias-inventory` command that outputs a structur
 - **AND** optional: last-updated date if applicable
 
 ### Requirement: Services CLI lists running containers and services
+<!-- req-id: 9a2420a1 -->
 
 The forge MUST provide a `tillandsias-services` command that queries the enclave network and lists running containers with their network endpoints and roles.
 
@@ -45,6 +47,7 @@ The forge MUST provide a `tillandsias-services` command that queries the enclave
 - **AND** a list of available models (output from `ollama list`)
 
 ### Requirement: Models CLI queries available LLM models
+<!-- req-id: 1292534a -->
 
 The forge MUST provide a `tillandsias-models` command that queries the inference service and lists available language models with their capabilities.
 
@@ -60,6 +63,7 @@ The forge MUST provide a `tillandsias-models` command that queries the inference
 - **AND** includes tier classification (T0 = instant, T1 = fast, T2-T5 = larger/slower)
 
 ### Requirement: Welcome banner on terminal entry
+<!-- req-id: 8c30cad9 -->
 
 The forge MUST display a welcome banner when a user opens an interactive terminal session. The banner SHOULD be brief and point to discovery commands.
 
@@ -70,6 +74,7 @@ The forge MUST display a welcome banner when a user opens an interactive termina
 - **AND** the banner is non-intrusive (e.g., colorized, brief, not blocking)
 
 ### Requirement: Discovery commands are discoverable via `--help`
+<!-- req-id: ad873245 -->
 
 All discovery commands MUST support `--help` and provide usage examples.
 
@@ -79,6 +84,7 @@ All discovery commands MUST support `--help` and provide usage examples.
 - **AND** includes example usage for the flat command shape
 
 ### Requirement: MCP host-services tool surface is organically discoverable
+<!-- req-id: 22a60484 -->
 
 The forge MUST expose host-service tools (publish_local, service_status,
 service_stop) via the MCP tool surface so that an agent can discover and
@@ -102,6 +108,7 @@ all reference the same tool family.
 - **AND** it explains the safety model (project attribution from session, not request)
 
 ### Requirement: Plan expert preserves release constraints and dependency direction
+<!-- req-id: b1b8bb45 -->
 
 @trace order:606-e2hg
 
@@ -131,6 +138,7 @@ consumers MUST remain separate query primitives.
 - **AND** neither surface silently executes a broader unconstrained query
 
 ### Requirement: Plan expert ranks claimable next work deterministically
+<!-- req-id: c4c79e45 -->
 
 @trace order:606-xu52
 
@@ -156,6 +164,7 @@ MUST stay within the committed byte budget.
 - **AND** no unscoped or widened query runs silently
 
 ### Requirement: Generic project expert bootstrap is zero-intervention
+<!-- req-id: 7bf21547 -->
 
 @trace order:606-z389
 
@@ -181,6 +190,7 @@ design record.
 - **AND** no bootstrap step fails or blocks on the absence of git metadata
 
 ### Requirement: Project index is ephemeral and rebuilt from the active checkout
+<!-- req-id: aa58caaa -->
 
 @trace order:606-z389
 
@@ -196,6 +206,7 @@ persistent per-project volumes, or leak into images.
 - **AND** no stale discovery survives from the previous session
 
 ### Requirement: Host-session experts refresh on commit, env-gated
+<!-- req-id: fec4b183 -->
 
 @trace order:685-yidq, order:682-z5h8
 
@@ -236,6 +247,7 @@ host bodies (e.g. dashboard refresh) MUST NOT be placed behind this gate.
 - **AND** the unconditional dashboard-refresh body still runs
 
 ### Requirement: Generic expert readiness is machine-readable and never blocks launch
+<!-- req-id: 965518ce -->
 
 @trace order:606-z389
 
@@ -252,6 +264,7 @@ the same abandoned-build degradation the plan expert uses.
 - **AND** the harness session proceeds normally with the degraded state visible to agents
 
 ### Requirement: project_answer is one uniform cited surface with a deterministic fallback
+<!-- req-id: 996e42e7 -->
 
 @trace order:606-z389
 
@@ -275,6 +288,7 @@ configuration.
 - **AND** questions needing synthesis return `unsupported:` rather than an uncited guess
 
 ### Requirement: Every citation names the frame it was read in, and the reader's position is derived rather than assumed
+<!-- req-id: b79f6094 -->
 
 @trace order:801-g9nn
 

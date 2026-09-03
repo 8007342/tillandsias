@@ -16,6 +16,7 @@ and correctness-proximity scoring.
 ## Requirements
 
 ### Requirement: Methodology claims cite provenance
+<!-- req-id: 348030a1 -->
 - **ID**: methodology-accountability.claims.provenance@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -40,6 +41,7 @@ record. External analogies SHALL name their limits.
   penalty where that claim supports a correctness score
 
 ### Requirement: Unknown events are first-class artifacts
+<!-- req-id: 1440983f -->
 - **ID**: methodology-accountability.events.unknown-intake@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -63,6 +65,7 @@ are normalized away as implementation drift, spec churn, or agent memory.
   runtime trace schema
 
 ### Requirement: Correctness proximity uses CentiColons
+<!-- req-id: 9e6b3ea2 -->
 - **ID**: methodology-accountability.proximity.centicolons@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -87,6 +90,7 @@ model in `methodology/math-foundations.yaml`.
 - **AND** SHALL NOT present the changed score as pure implementation progress
 
 ### Requirement: Existing convergence score remains coarse
+<!-- req-id: c39441c8 -->
 - **ID**: methodology-accountability.proximity.convergence-score-boundary@v1
 - **Modality**: SHOULD
 - **Measurable**: true
@@ -97,6 +101,7 @@ signals. They SHALL NOT replace CentiColon residuals when discussing proximity
 to correctness.
 
 ### Requirement: Mathematical convergence claims are bounded
+<!-- req-id: f22c47b3 -->
 - **ID**: methodology-accountability.math.claim-boundary@v1
 - **Modality**: MUST
 - **Measurable**: true

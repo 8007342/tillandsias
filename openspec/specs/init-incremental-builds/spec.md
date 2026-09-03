@@ -11,6 +11,7 @@ Track and resume partial `tillandsias --init` builds, with debug logging for fai
 ## Requirements
 
 ### Requirement: Incremental build state tracking
+<!-- req-id: 42cf88c1 -->
 The init command MUST maintain a state file at `$HOME/.cache/tillandsias/init-build-state.json` tracking which images were successfully built, the runtime asset manifest digest, and the per-image source digest used for the build.
 
 #### Scenario: First run with no state file
@@ -31,6 +32,7 @@ The init command MUST maintain a state file at `$HOME/.cache/tillandsias/init-bu
 - **AND** the state file MUST be refreshed with the new digest after a successful build
 
 ### Requirement: Final Containerfile instruction layers are squashed
+<!-- req-id: f6b84744 -->
 
 Every Tillandsias Podman build from a Containerfile MUST pass exactly one
 `--squash`, collapsing the layers created by that Containerfile into one final
@@ -61,6 +63,7 @@ governed by `spec:nix-builder`.
 - **AND** subsequent unchanged init runs MAY reuse the squashed image and intermediate build cache
 
 ### Requirement: Debug flag for init command
+<!-- req-id: a6aea586 -->
 The init command MUST accept a `--debug` flag that enables verbose output and failed build log capture.
 
 #### Scenario: Init with debug flag
@@ -72,6 +75,7 @@ The init command MUST accept a `--debug` flag that enables verbose output and fa
 - **THEN** no debug logs MUST be captured and no log files MUST be created
 
 ### Requirement: Failed build log display
+<!-- req-id: b21e00c8 -->
 After all images are processed, if `--debug` was used and any builds failed, the init command MUST display the last 10 lines of each failed build's log file.
 
 #### Scenario: Failed builds with debug mode

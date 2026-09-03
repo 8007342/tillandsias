@@ -33,6 +33,7 @@ Cross-references:
 ## Requirements
 
 ### Requirement: First-run provisioning downloads Fedora rootfs and tillandsias binary
+<!-- req-id: 9de5a6a6 -->
 - **ID**: vm-provisioning-lifecycle.provision.first-run-downloads@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -74,6 +75,7 @@ requests).
 - **AND** SHALL provide a "Retry" sub-item
 
 ### Requirement: Provisioning surfaces as a single condensed status line
+<!-- req-id: 60c73dd9 -->
 - **ID**: vm-provisioning-lifecycle.ux.condensed-status@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -113,6 +115,7 @@ On failure: `🥀 Provisioning failed: <reason>` with sub-items "Retry" and
 - **AND** two sub-items SHALL appear: `Retry` and `Open log` (the latter opens the provisioning log file in the host's default text editor)
 
 ### Requirement: Provisioning is idempotent
+<!-- req-id: 29ce6737 -->
 - **ID**: vm-provisioning-lifecycle.provision.idempotency@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -144,6 +147,7 @@ recreation of the VM. The host SHALL detect prior provisioning by checking:
 - **AND** SHALL re-import from the cached rootfs (no re-download of the rootfs itself, since the cached file is still valid)
 
 ### Requirement: Tray exit triggers graceful drain
+<!-- req-id: d561ba7c -->
 - **ID**: vm-provisioning-lifecycle.shutdown.graceful-drain@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -182,6 +186,7 @@ future setting can be added if users want persistent VMs.
 - **AND** the spec's invariant `shutdown-no-opt-out` SHALL gate any future addition behind an explicit spec revision
 
 ### Requirement: Provisioning log is captured for diagnostics
+<!-- req-id: 79c051d0 -->
 - **ID**: vm-provisioning-lifecycle.observability.provision-log@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -209,6 +214,7 @@ unseal key, or any credential material.
 - **THEN** the host's default text editor SHALL open `<host-data-dir>/provision.log`
 
 ### Requirement: Launch failures are graceful — bounded, classified, actionable
+<!-- req-id: 58d55793 -->
 - **ID**: vm-provisioning-lifecycle.launch.graceful-failure@v1
 - **Modality**: MUST
 - **Measurable**: true

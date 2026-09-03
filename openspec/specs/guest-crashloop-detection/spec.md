@@ -19,6 +19,7 @@ before this file existed — order 877 closed that ghost.
 ## Requirements
 
 ### Requirement: A loop is detected within the window
+<!-- req-id: c46003b9 -->
 
 A driven stop→start series (repeated Ready→Provisioning transitions, or a
 sealed-vault restart loop) MUST flip `--diagnose`'s verdict to
@@ -32,6 +33,7 @@ subsystem.
   (litmus:guest-crashloop-detection, positive arm)
 
 ### Requirement: Slow progress is never a crash loop
+<!-- req-id: 4f54ca71 -->
 
 A normal, slow, monotonically-progressing provision MUST NEVER flip the
 verdict — no false positive on slow starts. This negative arm is an explicit
@@ -45,6 +47,7 @@ first-provisions (multi-GB rootfs downloads) trains operators to ignore it.
   (litmus:guest-crashloop-detection, negative arm)
 
 ### Requirement: The detector is proven where it ships
+<!-- req-id: aaab9ee9 -->
 
 The faithful proof is the Rust unit suite of `tillandsias-control-wire` — the
 code every tray actually consumes — not a shell re-implementation that could

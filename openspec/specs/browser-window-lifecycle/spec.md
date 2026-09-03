@@ -9,6 +9,7 @@ active
 ## Requirements
 
 ### Requirement: Browser windows have explicit lifecycle state
+<!-- req-id: 49ba1aab -->
 
 Browser MCP windows MUST be tracked from launch through close with stable IDs, creation timestamps, last activity timestamps, and process handles where available.
 

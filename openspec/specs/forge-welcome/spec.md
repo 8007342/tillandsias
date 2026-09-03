@@ -9,6 +9,7 @@ status: active
 Define the interactive terminal welcome banner and its once-per-session startup gating so new forge sessions expose project context, OS context, and discovery tips without repeating themselves.
 ## Requirements
 ### Requirement: Welcome message on terminal launch
+<!-- req-id: df32e99d -->
 The forge container MUST display a colorful welcome message when an interactive terminal session starts.
 
 #### Scenario: Welcome message content
@@ -28,6 +29,7 @@ The forge container MUST display a colorful welcome message when an interactive 
 - **THEN** it MUST display friendly names like "Fedora 43 (Minimal)" and "Fedora Silverblue 43", not raw kernel version strings
 
 ### Requirement: Fish as default interactive shell
+<!-- req-id: 4acd53b3 -->
 The Terminal menu item and `--bash` CLI flag MUST launch the fish shell instead of bash.
 
 #### Scenario: Terminal from tray

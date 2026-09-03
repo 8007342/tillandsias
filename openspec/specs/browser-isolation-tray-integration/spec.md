@@ -12,6 +12,7 @@ safe GUI browser windows for OpenCode Web and other web-based tools.
 ## Requirements
 
 ### Requirement: Tray launches run in the desktop user session
+<!-- req-id: 76ca6f79 -->
 Interactive tray-driven launches SHALL run in the logged-in desktop user's session with writable `XDG_RUNTIME_DIR` and rootless Podman state owned by that user. The tray MUST NOT invent a synthetic `/run/user/<uid>` or rely on a helper runtime wrapper in production.
 
 #### Scenario: Tray session is ready for Podman
@@ -24,6 +25,7 @@ Interactive tray-driven launches SHALL run in the logged-in desktop user's sessi
 - **THEN** the launch SHALL fail with an actionable error explaining that the runtime requires a real login session
 
 ### Requirement: OpenCode Web launches in browser isolation
+<!-- req-id: d176e60b -->
 When a user clicks the "🌐 OpenCode Web" action button in a project submenu:
 1. An OpenCode Web container is launched (persistent, per-project)
 2. Once the auth-gated route is healthy, a GUI browser window is launched in
@@ -66,6 +68,7 @@ When a user clicks the "🌐 OpenCode Web" action button in a project submenu:
   concurrently
 
 ### Requirement: Versioned identity without `latest`
+<!-- req-id: 0a65eaf9 -->
 The browser isolation containers MUST use the running Tillandsias version tag
 for reproducible launches across sessions. Content-hash tags MAY be added as a
 future alias, but `:latest` MUST NOT be the authoritative identity.
@@ -77,6 +80,7 @@ future alias, but `:latest` MUST NOT be the authoritative identity.
 - **AND** `:latest` is never used for browser container launches
 
 ### Requirement: Safe window type by default
+<!-- req-id: 661b7f2f -->
 The browser window launched for OpenCode Web SHALL use safe window type:
 - Visible GUI Chromium window in app mode with no tabs or URL bar
 - No dev tools or debugging interfaces exposed to the user
@@ -102,6 +106,7 @@ The browser window launched for OpenCode Web SHALL use safe window type:
   Chromium builds that reject the switch
 
 ### Requirement: Browser launcher uses the secure OpenCode Web session
+<!-- req-id: 081bbd83 -->
 The browser launcher SHALL reach OpenCode Web through the published
 project-local host route `http://opencode.<project>.localhost[:port]/`. The browser
 container SHALL inherit the runtime CA bundle for the session and shall only
@@ -125,6 +130,7 @@ launch after the OpenCode Web OTP/session gate is healthy.
   with route diagnostics attached
 
 ### Requirement: Browser window lifecycle
+<!-- req-id: b359b16e -->
 A browser window launched from the tray:
 1. Opens in response to user action (not automatically at startup)
 2. Runs inside an ephemeral container (`--rm` flag applied)
@@ -168,6 +174,7 @@ A browser window launched from the tray:
   actionable error
 
 ### Requirement: No Tauri webview path
+<!-- req-id: 2bd397a7 -->
 The tray application SHALL NOT use Tauri's native webview for OpenCode Web.
 All web-based interfaces are launched through browser isolation containers only.
 

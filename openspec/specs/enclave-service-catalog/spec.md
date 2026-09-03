@@ -19,6 +19,7 @@ file existed — order 877 closed that ghost.
 ## Requirements
 
 ### Requirement: The catalog is an allowlist, not a namespace
+<!-- req-id: 924d63ac -->
 
 A forge may request only service categories the catalog declares (today:
 `WEB`, nothing else until order 358 generalizes). Requests outside the
@@ -32,6 +33,7 @@ catalog are refused host-side; the guest cannot mint categories.
   (litmus:service-catalog-allowlist-shape)
 
 ### Requirement: Published services join the enclave by fixed name
+<!-- req-id: 28666097 -->
 
 A catalog service runs on the enclave network as
 `tillandsias-<project>-<category>` (e.g. `tillandsias-myapp-web`) so the
@@ -45,6 +47,7 @@ never an agent-chosen name or share.
   `tillandsias-p-web` and the operator receives the friendly https URL
 
 ### Requirement: Public routes drop auth deliberately, never by default
+<!-- req-id: aba568d1 -->
 
 A catalog route carries `public: false` unless explicitly published; only an
 explicitly `public` route is rendered as a bare reverse_proxy with no

@@ -29,6 +29,7 @@ How Tillandsias runs a persistent OpenCode Web server per project, maps it to a 
 ## Requirements
 
 ### Requirement: OpenCode Web is the default session agent
+<!-- req-id: 3ba22f9b -->
 
 The system SHALL treat `SelectedAgent::OpenCodeWeb` as the default value of `AgentConfig::selected` when no explicit choice is present in the user's configuration.
 
@@ -43,6 +44,7 @@ The system SHALL treat `SelectedAgent::OpenCodeWeb` as the default value of `Age
 - **AND** the default flip does not override it
 
 ### Requirement: Per-project persistent web container
+<!-- req-id: 8c5e76e7 -->
 
 The system SHALL run at most one web-mode container per project at a time, named exactly `tillandsias-<project>-forge`, launched detached and kept alive until explicit Stop or Tillandsias shutdown.
 
@@ -62,6 +64,7 @@ The system SHALL run at most one web-mode container per project at a time, named
 - **AND** the tray menu still offers "Stop" for that project
 
 ### Requirement: Host port bound to 127.0.0.1 only
+<!-- req-id: 1203fe31 -->
 
 The system MUST publish the forge container's port 4096 to the host by binding explicitly to the loopback interface `127.0.0.1`. Binding to `0.0.0.0`, `::`, or any non-loopback interface is forbidden for web-mode containers.
 
@@ -75,6 +78,7 @@ The system MUST publish the forge container's port 4096 to the host by binding e
 - **THEN** the connection is refused at the socket layer
 
 ### Requirement: Unique host port per concurrent web container
+<!-- req-id: 6288dfe6 -->
 
 The system SHALL allocate a unique, unused TCP host port for each running web container, drawn from an ephemeral high range, and record it in `ContainerInfo.port_range` as a degenerate `(p, p)` pair.
 
@@ -84,6 +88,7 @@ The system SHALL allocate a unique, unused TCP host port for each running web co
 - **AND** neither binding collides with ports already in use on the host
 
 ### Requirement: WebviewWindow launch contract
+<!-- req-id: 712dc740 -->
 
 The system SHALL open a Tauri `WebviewWindow` pointing at `http://127.0.0.1:<host_port>/` for each "Attach Here" click in web mode. Windows MUST have unique labels and a title identifying the project and allocated genus.
 
@@ -99,6 +104,7 @@ The system SHALL open a Tauri `WebviewWindow` pointing at `http://127.0.0.1:<hos
 - **AND** each has a distinct `WebviewWindow::label`
 
 ### Requirement: Stop tears down the web container
+<!-- req-id: 4cad72c1 -->
 
 The system SHALL expose a per-project "Stop" tray menu action that stops the web container, removes it from `TrayState::running`, and releases its host port. Any open webview windows attached to that container MUST also be closed.
 
@@ -109,6 +115,7 @@ The system SHALL expose a per-project "Stop" tray menu action that stops the web
 - **AND** the allocated host port is returned to the pool
 
 ### Requirement: Shutdown stops all web containers and closes all webviews
+<!-- req-id: b49d3c9e -->
 
 The system SHALL stop every running web-mode container and close every open webview window as part of `shutdown_all()`.
 
@@ -120,6 +127,7 @@ The system SHALL stop every running web-mode container and close every open webv
 
 
 ### Requirement: OpenCode Web defaults to dark theme
+<!-- req-id: 123eface -->
 
 The forge image SHALL ship a config-overlay file `tui.json` that sets the OpenCode UI theme to a built-in dark theme (`tokyonight`). Project-specific overrides via the user's own `~/.config/opencode/tui.json` (mounted from the project workspace) SHALL continue to win over the overlay default.
 
@@ -134,6 +142,7 @@ The forge image SHALL ship a config-overlay file `tui.json` that sets the OpenCo
 - **AND** the user's chosen theme is rendered
 
 ### Requirement: Webview close does not terminate the tray
+<!-- req-id: c8d04374 -->
 
 Closing a `WebviewWindow` whose label starts with `web-` SHALL close only that window. The tray icon, scanner, event loop, and all running containers SHALL remain alive.
 

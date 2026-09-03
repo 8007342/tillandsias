@@ -30,6 +30,7 @@ Nothing in this spec may be implemented in Python.
 ## Requirements
 
 ### Requirement: PROBE-1 — Structured capability document replaces the string tier
+<!-- req-id: 0efe269e -->
 
 The host MUST emit a machine-readable capability document (`capabilities.json`)
 carrying an integer `schema_version`, a device inventory, an engine inventory,
@@ -70,6 +71,7 @@ interpreter.
   downgrades today
 
 ### Requirement: PROBE-2 — Device enumeration is explicit and vendor-resolved
+<!-- req-id: 984d7178 -->
 
 The probe MUST enumerate, on Linux:
 
@@ -121,6 +123,7 @@ NPU list and a successful probe.
 - **AND** the probe MUST exit successfully, not error
 
 ### Requirement: PROBE-3 — Engine inventory gates usability
+<!-- req-id: 5e5d39a6 -->
 
 Every device record MUST carry a boolean `usable`. `usable` MUST be `false`
 unless the probe can name at least one engine lane that is (a) actually
@@ -158,6 +161,7 @@ anywhere in the document.
 - **THEN** `usable` MUST remain `false`
 
 ### Requirement: PROBE-4 — Memory bandwidth is recorded as a first-class quantity
+<!-- req-id: 809da1db -->
 
 Because token decode converges toward `memory_bandwidth / model_bytes` on
 shared-memory systems, the document MUST record `memory_bandwidth_gbps` with a
@@ -175,6 +179,7 @@ router treat bandwidth as unavailable.
   from a guess
 
 ### Requirement: PROBE-5 — Microbenchmarks are bounded, one-time, and degrade gracefully
+<!-- req-id: a44518e5 -->
 
 The probe MAY run at most one microbenchmark per (device, engine) pair. Each
 microbenchmark MUST be bounded to 60 seconds of wall-clock time, MUST be
@@ -201,6 +206,7 @@ unavailable.
 - **AND** the throughput fields MUST still be recorded
 
 ### Requirement: PROBE-6 — Roofline sanity check flags degraded lanes
+<!-- req-id: 8190ccf9 -->
 
 When bandwidth is known, the probe MUST compute a roofline decode ceiling of
 `memory_bandwidth_bytes_per_second / model_bytes` and compare it against the
@@ -226,6 +232,7 @@ research counter-example in which an immature NPU backend delivered 4.1 t/s at
 - **THEN** no `degraded` verdict may be derived from a roofline comparison
 
 ### Requirement: PROBE-7 — The probe runs on the host and records per-lane reachability
+<!-- req-id: d3cc6a84 -->
 
 The capability probe MUST execute on the HOST, not inside a forge or inference
 container. For every device the document MUST record which execution lanes can
@@ -255,6 +262,7 @@ ANE natively and the in-VM Venus path caps materially below native.
 - **AND** `container` MUST NOT appear in their lane list
 
 ### Requirement: PROBE-8 — The capability cache is derived, ephemeral, and self-invalidating
+<!-- req-id: 129a6973 -->
 
 `capabilities.json` is a DERIVED cache, not user data. It MUST live under the
 application cache directory. Deleting it MUST be safe and MUST cause a
@@ -288,6 +296,7 @@ else.
   identical between the two documents
 
 ### Requirement: PROBE-9 — The document names the host it describes
+<!-- req-id: 4c0de31e -->
 
 The capability document MUST carry a `host_id` identifying the machine it
 describes, and a `host_id_source` recording how that identifier was obtained

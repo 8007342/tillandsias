@@ -9,6 +9,7 @@ active
 TBD - created by archiving change remote-project-clone. Update Purpose after archive.
 ## Requirements
 ### Requirement: Fetch remote repository list
+<!-- req-id: 5ea3866d -->
 
 The application SHALL fetch the authenticated user's GitHub repositories using the `gh` CLI inside the git image. When credentials are missing or the API call fails, the failure SHALL be reflected in the contextual status line at the top of the tray menu (per `tray-app` spec) — there SHALL NOT be a disabled placeholder row inside `Remote Projects ▸`.
 
@@ -28,6 +29,7 @@ The application SHALL fetch the authenticated user's GitHub repositories using t
 - **AND** the contextual status line at the top of the menu MAY surface the network/auth condition (e.g., `GitHub unreachable — using cached list` when the cause is a network failure with cached projects available)
 
 ### Requirement: Filter against local projects
+<!-- req-id: 2ea8a1f5 -->
 The remote repository list SHALL exclude repositories that already exist as local directories under the scanner's watched directory.
 
 #### Scenario: Repo exists locally
@@ -39,6 +41,7 @@ The remote repository list SHALL exclude repositories that already exist as loca
 - **THEN** "new-project" appears in the Remote Projects submenu
 
 ### Requirement: Cache remote repository list
+<!-- req-id: 159839f9 -->
 The fetched repository list SHALL be cached in memory with a 5-minute TTL to avoid repeated API calls.
 
 #### Scenario: Cache fresh
@@ -58,6 +61,7 @@ The fetched repository list SHALL be cached in memory with a 5-minute TTL to avo
 - **THEN** the remote repo cache is invalidated and refreshed on next submenu open
 
 ### Requirement: Clone remote project
+<!-- req-id: 10f4e69c -->
 Clicking a remote project in the submenu SHALL clone it into the scanner's watched directory using the git image.
 
 #### Scenario: Successful clone
@@ -75,6 +79,7 @@ Clicking a remote project in the submenu SHALL clone it into the scanner's watch
 - **THEN** an error is logged and the menu reverts to the normal remote project list
 
 ### Requirement: Loading state
+<!-- req-id: 0a13b9e3 -->
 The Remote Projects submenu SHALL show a loading indicator while fetching the repository list.
 
 #### Scenario: Fetching in progress

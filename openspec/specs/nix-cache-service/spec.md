@@ -27,6 +27,7 @@ which is what makes one image behave differently across platforms.
 ## Requirements
 
 ### Requirement: The cache is a first-class enclave service
+<!-- req-id: 24b8db69 -->
 
 The system MUST serve the binary cache from a container attached to the
 `tillandsias-enclave` network under the network alias `nix-cache`, reachable by
@@ -55,6 +56,7 @@ writing to the same store concurrently with no shared mutable state.
 - **THEN** no host nix store path may be bind-mounted into it as a consequence of this service
 
 ### Requirement: The cache hostname bypasses the enclave proxy
+<!-- req-id: 4ecd56d1 -->
 
 The system MUST include `nix-cache` in the enclave `no_proxy`/`NO_PROXY` set.
 The cache's transport is HTTPS, which consults `https_proxy`; without the name
@@ -70,6 +72,7 @@ matched against the hostname as written rather than the address it resolves to.
 - **AND** the request MUST succeed
 
 ### Requirement: Transport trust and content trust are BOTH enforced
+<!-- req-id: a8d47aec -->
 
 The system MUST satisfy two independent trust properties. They are different
 properties and neither substitutes for the other.
@@ -111,6 +114,7 @@ exported to any other host without an explicit operator decision (order
 - **THEN** the binary-cache secret key MUST NOT be present in it
 
 ### Requirement: An unreachable cache degrades to silence, not to failure
+<!-- req-id: 35d091e6 -->
 
 When the cache is not answering, the system MUST emit no substituter flags at
 all. A dead substituter in a build's flag list is worse than no substituter,
@@ -125,6 +129,7 @@ behaviour exactly as it was before the service existed.
 - **AND** MUST exit successfully
 
 ### Requirement: A running but untrusted cache is a violation, not a skip
+<!-- req-id: 287020a3 -->
 
 Verification MUST distinguish "the service is absent" from "the service is
 running but its trust properties fail". The former MAY skip; the latter MUST

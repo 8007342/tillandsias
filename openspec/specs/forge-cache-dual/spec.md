@@ -13,6 +13,7 @@ Define the live cache discipline for forge containers: shared Nix store populate
 - `tools-overlay-fast-reuse` — Process-lifetime overlay snapshot proposal (not kept as live contract)
 ## Requirements
 ### Requirement: Forge containers see exactly four path categories
+<!-- req-id: b00a299b -->
 
 The "Ephemeral" category MUST carry kernel-enforced size caps on `/tmp` (256 MB)
 and `/run/user/1000` (64 MB). These paths were previously unbounded (defaulting
@@ -52,6 +53,7 @@ Writes beyond the cap MUST fail with ENOSPC inside the container.
   driver — subject to host disk quota, not RAM quota
 
 ### Requirement: Per-language env vars resolve into the per-project cache
+<!-- req-id: 2175befb -->
 
 `lib-common.sh` MUST export the following environment variables on every forge entrypoint, ALL pointing into subdirectories of the per-project cache mount (`/home/forge/.cache/tillandsias-project/`):
 
@@ -81,6 +83,7 @@ Old paths (e.g., `CARGO_HOME=~/.cache/tillandsias/cargo` from before this change
 - **AND** the `bytes_downloaded_at_runtime` metric for the second build MUST report close to zero
 
 ### Requirement: Shared cache uses nix as the single entry point
+<!-- req-id: 6aaddaca -->
 
 The shared cache (`/nix/store/`) MUST be populated only by nix-managed processes. Other tools (Maven, Gradle, npm, cargo registry, etc.) MUST NOT write to the shared cache — their downloads MUST land in the per-project cache instead. This makes the shared cache conflict-free by construction (nix's content-addressed storage rules out trampling).
 
@@ -95,6 +98,7 @@ The shared cache (`/nix/store/`) MUST be populated only by nix-managed processes
 - **AND** no bytes MUST be written under `/nix/store/` (the mount is `:ro`)
 
 ### Requirement: Project workspace is the user's git repo, not a cache
+<!-- req-id: cd271de6 -->
 
 The project workspace bind-mount (`<watch_path>/<project>/` → `/home/forge/src/<project>/`) MUST contain ONLY source code under the user's control. Build artifacts that are expensive to rebuild MUST be written to the per-project cache, NOT to the project workspace.
 
@@ -110,6 +114,7 @@ This means: `target/`, `node_modules/`, `build/`, `dist/`, `.gradle/`, `.dart_to
 - **THEN** it MUST clearly state that build artifacts under the project workspace (e.g., `node_modules/` for projects that don't redirect via tooling) are an anti-pattern, AND it MUST list which tools have native env-var redirection support
 
 ### Requirement: cache_version file lifecycle
+<!-- req-id: 66690043 -->
 
 The `cache_version` file in `init_cache_dir()` records the binary version that last successfully initialized state. It is the ONLY mechanism for detecting version mismatches.
 

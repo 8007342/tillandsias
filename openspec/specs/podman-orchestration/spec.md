@@ -6,6 +6,7 @@ active
 ## Requirements
 
 ### Requirement: Rootless user-session ownership
+<!-- req-id: 4f82ac0b -->
 - **ID**: podman-orchestration.runtime.user-session-owned@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -21,6 +22,7 @@ Interactive Linux launches SHALL run inside a real logind-managed user session w
 - **THEN** the launcher SHALL fail fast with an actionable error
 
 ### Requirement: Security-hardened container defaults
+<!-- req-id: 673c0046 -->
 - **ID**: podman-orchestration.container.security-hardened-defaults@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -40,6 +42,7 @@ Every container launched by Tillandsias SHALL include non-negotiable security fl
 - **THEN** the additional restrictions are applied on top of the non-negotiable defaults
 
 ### Requirement: FUSE file descriptor sanitization before container launch
+<!-- req-id: dedbd827 -->
 - **ID**: podman-orchestration.container.fuse-fd-sanitization@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -67,6 +70,7 @@ All podman command constructors (`podman_cmd_sync()` and `podman_cmd()`) SHALL c
 - **THEN** crun SHALL NOT need to call `close_range()` for FD cleanup AND the default seccomp profile's syscall restrictions SHALL NOT cause container startup failures
 
 ### Requirement: Rootless networking backend
+<!-- req-id: 99b215df -->
 - **ID**: podman-orchestration.network.rootless-backend@v1
 - **Modality**: SHOULD
 - **Measurable**: true
@@ -82,6 +86,7 @@ Rootless containers SHALL use the platform-default networking backend. As of Pod
 - **THEN** networking uses slirp4netns as the default backend
 
 ### Requirement: Volume mount strategy
+<!-- req-id: 5e234efa -->
 - **ID**: podman-orchestration.mounts.secure-volume-strategy@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -106,6 +111,7 @@ Container volume mounts SHALL follow a secure, minimal strategy with configurabl
 
 
 ### Requirement: Detached web-mode launch profile
+<!-- req-id: 38debeb5 -->
 - **ID**: podman-orchestration.web.detached-launch-profile@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -120,6 +126,7 @@ The orchestration layer SHALL provide a launch profile that runs web-mode contai
 - **AND** still contains `--cap-drop=ALL`, `--security-opt=no-new-privileges`, `--userns=keep-id`
 
 ### Requirement: Deterministic forge-container name
+<!-- req-id: a801bc4b -->
 - **ID**: podman-orchestration.container.deterministic-forge-name@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -134,6 +141,7 @@ The orchestration layer SHALL name persistent OpenCode Web containers exactly `t
 - **AND** the name never collides with a concurrently-running `tillandsias-my-app-web` static-httpd container
 
 ### Requirement: Launchers build argv directly
+<!-- req-id: 655fa860 -->
 - **ID**: podman-orchestration.launch.direct-argv@v1
 - **Modality**: MUST
 - **Measurable**: true

@@ -20,6 +20,7 @@ This spec ensures:
 ## Requirements
 
 ### Requirement: Enclave-internal routing
+<!-- req-id: 91b9ca2d -->
 
 The reverse proxy MUST route all enclave-internal traffic (no external routing).
 
@@ -44,6 +45,7 @@ The reverse proxy MUST route all enclave-internal traffic (no external routing).
 - **AND** MUST log `route_not_found = true, requested_path = "/unknown"`
 
 ### Requirement: SSL termination with ephemeral CA
+<!-- req-id: bfdac36e -->
 
 The proxy MUST terminate HTTPS connections using certificates issued by the ephemeral CA.
 
@@ -75,6 +77,7 @@ The proxy MUST terminate HTTPS connections using certificates issued by the ephe
 - **AND** containers MUST never mount a half-written cert or key
 
 ### Requirement: Request/response logging
+<!-- req-id: ac8ce213 -->
 
 All traffic through the proxy MUST be logged in a structured format.
 
@@ -104,6 +107,7 @@ All traffic through the proxy MUST be logged in a structured format.
 - **AND** large responses MUST be truncated to the first 1 KB with `...truncated` marker
 
 ### Requirement: Caching for performance
+<!-- req-id: 2bd0bdec -->
 
 The proxy SHOULD cache responses to reduce backend load and latency.
 
@@ -135,6 +139,7 @@ The proxy SHOULD cache responses to reduce backend load and latency.
 - **AND** the proxy MUST log `cache_eviction = true, reason = "size limit"`
 
 ### Requirement: Ephemeral cache and state
+<!-- req-id: 6d80df6d -->
 
 Cache and all proxy state MUST be stored in tmpfs and MUST be destroyed on shutdown.
 
@@ -156,6 +161,7 @@ Cache and all proxy state MUST be stored in tmpfs and MUST be destroyed on shutd
 - **AND** only summary statistics SHOULD remain in the tray's logs
 
 ### Requirement: Access control and authentication
+<!-- req-id: e8c59930 -->
 
 The proxy SHOULD enforce authentication and authorization for upstream services.
 
@@ -176,6 +182,7 @@ The proxy SHOULD enforce authentication and authorization for upstream services.
 - **AND** SHOULD log `access_denied = true, reason = "missing credentials"`
 
 ### Requirement: Litmus test — reverse-proxy-internal lifecycle
+<!-- req-id: 45a12c65 -->
 
 Critical verification paths:
 

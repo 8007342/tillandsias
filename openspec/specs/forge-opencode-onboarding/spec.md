@@ -9,6 +9,7 @@ The OpenCode onboarding bundle SHALL define the live launch-time contract for ne
 
 ## Requirements
 ### Requirement: First-turn environment discovery
+<!-- req-id: 6eb33f4c -->
 The onboarding bundle SHALL surface discovery guidance before work begins in a freshly attached forge container.
 
 #### Scenario: Agent discovers available tools
@@ -21,6 +22,7 @@ The onboarding bundle SHALL surface discovery guidance before work begins in a f
 - **THEN** the agent MUST run `which <tool>` or check inventory instead of guessing
 
 ### Requirement: Modularized instruction files
+<!-- req-id: 3f8b1363 -->
 The OpenCode `config.json` instruction list SHALL keep the first-turn bundle modular: `methodology.md` as the index plus `forge-discovery.md`, `cache-discipline.md`, `nix-first.md`, and `openspec-workflow.md` as the first five stable files. Additional specialized instruction files MAY follow after those five.
 
 #### Scenario: Agent receives methodology.md as first-turn context
@@ -37,6 +39,7 @@ The OpenCode `config.json` instruction list SHALL keep the first-turn bundle mod
 - **THEN** the agent MUST consult `/home/forge/.config-overlay/opencode/instructions/forge-discovery.md` for first-turn steps
 
 ### Requirement: OpenCode bootstrap seeds /startup and OpenSpec init
+<!-- req-id: d685c454 -->
 The launcher SHALL apply the OpenCode config overlay, run `openspec init --tools opencode` for the active project, and seed a synthetic `/startup` prompt before handing control to OpenCode.
 
 #### Scenario: Launcher initializes the project on attach

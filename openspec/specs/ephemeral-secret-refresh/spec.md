@@ -7,6 +7,7 @@ Tillandsias tray ensures podman secrets (CA certificates, tokens) are refreshed 
 ## Requirements
 
 ### Requirement: Stale secrets are automatically refreshed on startup
+<!-- req-id: 8c24e0b7 -->
 The system SHALL check for existing podman secrets before creation. If a secret exists from a prior unclean shutdown, it SHALL be removed and recreated with fresh content.
 
 #### Scenario: Clean startup (no stale secrets)
@@ -24,6 +25,7 @@ The system SHALL check for existing podman secrets before creation. If a secret 
 - **AND** no accumulation of secret artifacts
 
 ### Requirement: Secret removal failures are reported and propagate
+<!-- req-id: 6dc5a57f -->
 The system SHALL treat secret removal failures as configuration errors (not ignorable). If podman secret rm fails (e.g., permission denied), startup SHALL fail with a clear error message.
 
 #### Scenario: Permission denied on secret removal

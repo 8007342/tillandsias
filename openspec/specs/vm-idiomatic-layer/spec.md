@@ -32,6 +32,7 @@ Cross-references:
 ## Requirements
 
 ### Requirement: `VmRuntime` trait is the only public surface
+<!-- req-id: 20e80274 -->
 - **ID**: vm-idiomatic-layer.api.vm-runtime-trait@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -65,6 +66,7 @@ allocation, rootfs caching paths) SHALL be `pub(crate)` or private.
 - **THEN** it SHALL return a `LocalLinuxRuntime` fake (no-op provision; useful for Phase 2 integration tests)
 
 ### Requirement: `WslRuntime` is the only place `wsl.exe` is invoked
+<!-- req-id: 3c03a2fb -->
 - **ID**: vm-idiomatic-layer.discipline.wsl-encapsulation@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -88,6 +90,7 @@ through the trait. This mirrors the discipline already enforced for podman by
 - **AND** none of these helpers SHALL build the wsl command line via raw string concatenation — `std::process::Command::args` SHALL be used
 
 ### Requirement: `VzRuntime` is the only place Virtualization.framework symbols are touched
+<!-- req-id: d0a430fa -->
 - **ID**: vm-idiomatic-layer.discipline.vz-encapsulation@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -110,6 +113,7 @@ trait.
 - **AND** no VZ types SHALL appear in the trait's public method signatures
 
 ### Requirement: `exec` propagates stdio and exit code with TTY support
+<!-- req-id: 834b704f -->
 - **ID**: vm-idiomatic-layer.api.exec-tty-passthrough@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -138,6 +142,7 @@ generic failure" lossy translation).
 - **THEN** the host SHALL receive `ExitStatus { code: 137, … }` (not a generic "1")
 
 ### Requirement: `wait_ready` is event-driven, not polling
+<!-- req-id: 5012f384 -->
 - **ID**: vm-idiomatic-layer.api.wait-ready-event-driven@v1
 - **Modality**: MUST
 - **Measurable**: true

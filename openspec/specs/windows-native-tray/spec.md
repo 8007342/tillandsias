@@ -31,6 +31,7 @@ Cross-references:
 ## Requirements
 
 ### Requirement: Win32 NotifyIcon is the only tray surface
+<!-- req-id: d7c291f4 -->
 - **ID**: windows-native-tray.ui.notify-icon-only@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -60,6 +61,7 @@ there is no window.
 - **THEN** the loaded module list SHALL NOT contain `WebView2Loader.dll`, `WebView2.dll`, or any Tauri runtime DLL
 
 ### Requirement: Menu items match the host-shell parity contract
+<!-- req-id: 4b9555b3 -->
 - **ID**: windows-native-tray.ui.menu-parity@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -89,6 +91,7 @@ groups SHALL match the Linux tray contract: `status_text`, `projects`,
 - **AND** SHALL exit the message loop only after the shell reports `ShutdownComplete` (or after a 30s wall)
 
 ### Requirement: WSL2 distro lifecycle is owned by this binary
+<!-- req-id: 7cfb5e51 -->
 - **ID**: windows-native-tray.lifecycle.wsl-distro-registration@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -120,6 +123,7 @@ layer.
 - **AND** the tray crate itself SHALL contain zero such matches
 
 ### Requirement: WSLg passthrough enables in-VM Chromium on supported hosts
+<!-- req-id: 5e6d6391 -->
 - **ID**: windows-native-tray.ui.wslg-chromium-passthrough@v1
 - **Modality**: SHOULD
 - **Measurable**: true
@@ -144,6 +148,7 @@ be disabled with the reason "Requires Windows 11 + WSLg".
 - **AND** the tooltip SHALL read "Requires Windows 11 + WSLg"
 
 ### Requirement: Terminal attach routes through Windows Terminal via `vm-exec`
+<!-- req-id: 396b5401 -->
 - **ID**: windows-native-tray.lifecycle.terminal-attach@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -172,6 +177,7 @@ otherwise. The implementation SHALL NOT use SSH.
 - **THEN** zero matches SHALL be found
 
 ### Requirement: `--diagnose` CLI mode emits a stable bundled health report
+<!-- req-id: b001bd78 -->
 - **ID**: windows-native-tray.diagnose.cli-health-report@v1
 - **Modality**: MUST
 - **Measurable**: true

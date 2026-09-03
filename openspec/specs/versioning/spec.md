@@ -17,6 +17,7 @@ release row's milestone clause.
 ## Requirements
 
 ### Requirement: Epoch-anchored version scheme
+<!-- req-id: d5cf4636 -->
 The full version SHALL be four dot-separated decimal fields:
 `<years_since_epoch>.<month>.<day>.<build>` — UTC year minus 1970, UTC month
 and day without zero padding, and a build counter (e.g. 2026-08-31 daily
@@ -39,6 +40,7 @@ bumps always produce a build of at least 1.
 - **THEN** every comparator (field-wise compare, `sort -V`, git version sort) orders it later, because field one resolves the comparison (56 > 0) before any field that could invert
 
 ### Requirement: VERSION file as source of truth
+<!-- req-id: 772a2089 -->
 The project SHALL maintain a `VERSION` file at the repository root containing
 the full 4-part version. Every build artifact, tag, and release derives its
 version from this file — including per-store derivations (the MSIX manifest
@@ -51,6 +53,7 @@ version.
 - **THEN** it is derived from the `VERSION` file, not hardcoded elsewhere
 
 ### Requirement: Monotonic version increments
+<!-- req-id: 26f9afad -->
 Every released version SHALL be strictly greater than all previous versions
 when compared component-by-component left to right, enforced by
 `scripts/verify-version-monotonic.sh` against tags reachable from HEAD.
@@ -60,6 +63,7 @@ when compared component-by-component left to right, enforced by
 - **THEN** its version compares strictly greater than the newest reachable release tag
 
 ### Requirement: Milestones are decoupled from versions
+<!-- req-id: d158baaf -->
 The version SHALL carry no milestone or minor field. Release milestones live
 in the plan ledger's `desired_release` values, which are ORDERED PLANNING
 BUCKETS (the historical tokens `v0.4`…`v0.8` remain valid bucket labels and
@@ -73,6 +77,7 @@ WHEN.
 - **THEN** it remains in the fifth ordered milestone bucket with no repointing, regardless of artifact version shape
 
 ### Requirement: Cargo semver derivation
+<!-- req-id: 1067a6c0 -->
 Cargo.toml files SHALL use 3-part semver equal to the first three fields of
 VERSION verbatim (`years.month.day`, e.g. `56.8.31`), which is numerically
 monotonic and greater than every legacy `0.x.*` crate version at the major
@@ -83,6 +88,7 @@ field.
 - **THEN** all workspace Cargo.toml files contain `version = "56.8.31"`
 
 ### Requirement: Immutable version tags
+<!-- req-id: 7f145186 -->
 Git tags for specific versions (`v56.8.31.5`) SHALL be immutable and MUST NOT
 be force-pushed or deleted. Legacy `v0.x.*` tags remain in history unchanged;
 the cutover requires no tag rewrite.
@@ -92,6 +98,7 @@ the cutover requires no tag rewrite.
 - **THEN** the CI pipeline MUST NOT overwrite or delete it
 
 ### Requirement: Rolling channel tags
+<!-- req-id: 4ba5ad9d -->
 The `unstable` rolling tag SHALL be force-pushed by the release workflow to
 track the newest daily; stable channel resolution uses the newest
 non-prerelease release. Channel resolution survives the scheme cutover
@@ -102,6 +109,7 @@ because every epoch-anchored tag sorts after every legacy tag.
 - **THEN** the `unstable` tag points at it and `/releases/download/unstable/<asset>` serves its assets
 
 ### Requirement: Automated version bump script
+<!-- req-id: 17ce54a2 -->
 `scripts/bump-version.sh` SHALL atomically update all version locations
 (VERSION, workspace Cargo.toml files) and SHALL refuse retired operations
 loudly (`--bump-minor` names where milestones now live). Same-day re-syncs

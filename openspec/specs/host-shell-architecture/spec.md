@@ -34,6 +34,7 @@ Cross-references:
 ## Requirements
 
 ### Requirement: Host filesystem scanner enumerates `~/src/` projects
+<!-- req-id: 9641c39c -->
 - **ID**: host-shell-architecture.scanner.local-project-discovery@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -70,6 +71,7 @@ the VM only sees a virtio-fs / WSL `\\wsl$` projection of it.
 - **AND** the menu SHALL show "No projects yet — create one in ~/src/"
 
 ### Requirement: Portable `MenuStructure` is the single source of truth for menu paint
+<!-- req-id: 75fd171a -->
 - **ID**: host-shell-architecture.menu.portable-state-model@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -102,6 +104,7 @@ text.
 - **AND** the macOS backend SHALL render the item greyed out with the reason as the tooltip
 
 ### Requirement: vsock client lifecycle is owned by the host shell
+<!-- req-id: fdc30da4 -->
 - **ID**: host-shell-architecture.transport.vsock-client-lifecycle@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -133,6 +136,7 @@ and SHALL NOT poll synchronously.
 - **AND** CPU usage of the host process SHALL remain below 0.5% during the wait
 
 ### Requirement: VM orchestration is delegated to `tillandsias-vm-layer`
+<!-- req-id: af30c2e5 -->
 - **ID**: host-shell-architecture.lifecycle.vm-orchestration-delegation@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -165,6 +169,7 @@ This mirrors the existing `tillandsias-podman` discipline established in
 - **AND** invoke `VmRuntime::stop(force=true)` only after the 30s wall
 
 ### Requirement: Host shell never holds long-lived credentials
+<!-- req-id: c639406d -->
 - **ID**: host-shell-architecture.security.no-host-credentials@v1
 - **Modality**: MUST
 - **Measurable**: true

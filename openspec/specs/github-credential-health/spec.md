@@ -8,6 +8,7 @@ status: active
 TBD - created by archiving change tray-responsiveness-and-startup-gating. Update Purpose after archive.
 ## Requirements
 ### Requirement: Credential health probe distinguishes "down" from "unauthenticated"
+<!-- req-id: 98e5e9d5 -->
 
 The tray SHALL run a GitHub credential health probe on startup and cache its classified result. The probe MUST classify every failure into exactly one of these states:
 
@@ -46,6 +47,7 @@ The classification SHALL drive downstream UI gating:
 - **AND** GitHub login is offered as the only actionable menu item (plus Exit/Language)
 
 ### Requirement: Probe runs off the event loop with a bounded timeout
+<!-- req-id: c33e363b -->
 
 The probe MUST execute on a spawned task with a 10-second budget. Timeouts reclassify as `GithubUnreachable`, not `CredentialInvalid`.
 
@@ -57,6 +59,7 @@ The probe MUST execute on a spawned task with a 10-second budget. Timeouts recla
 - **AND** Quit/Language responded normally during the probe
 
 ### Requirement: Result is cached per process lifetime but invalidated on explicit sign-in / sign-out
+<!-- req-id: 09fcfb2f -->
 
 The probe result SHALL be cached for the tray process's lifetime and only re-run on:
 

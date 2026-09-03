@@ -6,6 +6,7 @@ active
 ## Requirements
 
 ### Requirement: Five-state tray icon lifecycle
+<!-- req-id: 33d3c0b6 -->
 - **ID**: tray-icon-lifecycle.icon.five-state-enum@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -44,6 +45,7 @@ The `TrayIconState` enum SHALL define exactly five variants mapping the full til
 - **AND** the icon displays the Ionantha dried PNG (withered — unrecoverable)
 
 ### Requirement: Build-time tray icon rendering for all 5 states
+<!-- req-id: cf543f34 -->
 - **ID**: tray-icon-lifecycle.build.icon-rendering-pipeline@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -60,6 +62,7 @@ The `build.rs` icon pipeline SHALL render 5 tray icon PNGs from Ionantha SVG sou
 - **THEN** `tray_icon_png()` returns non-empty bytes starting with PNG magic for all five `TrayIconState` variants
 
 ### Requirement: compute_icon_state reflects full lifecycle
+<!-- req-id: 582d39cf -->
 - **ID**: tray-icon-lifecycle.state.compute-icon-state-logic@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -79,6 +82,7 @@ The `TrayState::compute_icon_state()` method SHALL return the correct `TrayIconS
 - **THEN** `compute_icon_state()` returns `TrayIconState::Mature`
 
 ### Requirement: TrayIconState enum variants renamed
+<!-- req-id: 4c1fac36 -->
 - **ID**: tray-icon-lifecycle.enum.variant-renames@v2
 - **Modality**: MUST
 - **Measurable**: true
@@ -94,6 +98,7 @@ The `TrayIconState` enum variant names SHALL use plant lifecycle terminology ins
 - **THEN** it SHALL reference `TrayIconState::Dried`
 
 ### Requirement: Initial tray state is Pup
+<!-- req-id: d04871f8 -->
 - **ID**: tray-icon-lifecycle.initialization.pup-on-startup@v2
 - **Modality**: MUST
 - **Measurable**: true

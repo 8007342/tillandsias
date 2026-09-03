@@ -10,6 +10,7 @@ active
 Structured logging system with compact formatting, accountability windows for sensitive operations, and spec traceability via `@trace` links.
 ## Requirements
 ### Requirement: Logging is observational only
+<!-- req-id: 5b606dad -->
 The logging system SHALL not change business logic, control flow, or success criteria. Logging MAY be disabled, redirected, or fail independently of the operation it observes.
 
 #### Scenario: Sink failure does not alter outcomes
@@ -18,6 +19,7 @@ The logging system SHALL not change business logic, control flow, or success cri
 - **AND** logging failures SHALL remain observational, not gating
 
 ### Requirement: Logging transport is non-blocking and failure-tolerant
+<!-- req-id: e46bf06c -->
 The logging system MUST use a non-blocking writer path for file output and MUST NOT make business operations depend on sink success.
 
 #### Scenario: Stderr closes during terminal launch
@@ -33,6 +35,7 @@ The logging system MUST use a non-blocking writer path for file output and MUST 
 - **AND** any buffering guard MUST stay alive until shutdown so buffered events can flush
 
 ### Requirement: Terminal log output when launched from CLI
+<!-- req-id: feb92883 -->
 The application MUST output structured logs to stderr when launched from a terminal, using a custom compact format that separates accountability metadata from regular event fields.
 
 #### Scenario: CLI launch
@@ -52,6 +55,7 @@ The application MUST output structured logs to stderr when launched from a termi
 - **AND** one `@trace spec:name URL` indented line MUST appear per spec name if the event has a `spec` field
 
 ### Requirement: File log output always
+<!-- req-id: 366b03e5 -->
 The application MUST always write logs to a file at the platform-appropriate state directory, using the same custom compact format as stderr but without ANSI escape codes.
 
 #### Scenario: Log file location
@@ -67,6 +71,7 @@ The application MUST always write logs to a file at the platform-appropriate sta
 - **THEN** the application MUST create a new one on next run with no data loss or errors
 
 ### Requirement: Modular log filtering via environment variable
+<!-- req-id: 8df3d5c9 -->
 The application MUST support `TILLANDSIAS_LOG` environment variable for module-level log filtering.
 
 #### Scenario: Default log level
@@ -78,6 +83,7 @@ The application MUST support `TILLANDSIAS_LOG` environment variable for module-l
 - **THEN** only the podman crate MUST log at debug level
 
 ### Requirement: Container lifecycle logging
+<!-- req-id: b3b8ea9a -->
 All container lifecycle operations MUST emit structured log events with relevant context fields.
 
 #### Scenario: Container start logged
@@ -93,6 +99,7 @@ All container lifecycle operations MUST emit structured log events with relevant
 - **THEN** an error-level event MUST be emitted with the operation, container name, and error details
 
 ### Requirement: Spec trace links in all accountability events
+<!-- req-id: 2dff0c43 -->
 Accountability events MUST include GitHub code search URLs linking to the `@trace spec:` annotations in source code.
 
 #### Scenario: Single spec trace link
@@ -104,6 +111,7 @@ Accountability events MUST include GitHub code search URLs linking to the `@trac
 - **THEN** the formatted output MUST include one `@trace` line per spec name
 
 ### Requirement: Accountability metadata excluded from inline fields
+<!-- req-id: 391cc1ee -->
 Accountability tagging fields MUST NOT appear as inline key=value pairs in the log output.
 
 #### Scenario: Fields filtered from output
@@ -112,6 +120,7 @@ Accountability tagging fields MUST NOT appear as inline key=value pairs in the l
 - **AND** any other fields (e.g., `container`, `error`) SHOULD appear in the suffix
 
 ### Requirement: No PII in logs
+<!-- req-id: 98a0b247 -->
 The logging system MUST NOT emit personally identifiable information unless a separate spec explicitly requires a redacted accountability window and the field is necessary for the contract.
 
 #### Scenario: PII is omitted or redacted
@@ -120,6 +129,7 @@ The logging system MUST NOT emit personally identifiable information unless a se
 - **AND** the event MUST keep only the minimum information needed to diagnose the behavior
 
 ### Requirement: Proxy accountability window
+<!-- req-id: e8ee7916 -->
 The system MUST provide a `--log-proxy` accountability flag that enables a curated view of proxy operations. Events MUST include domain, request size, allow/deny status, and cache hit/miss. No request content, credentials, or context parameters MUST appear in proxy logs. Each event MUST include a clickable `@trace spec:proxy-container` link.
 
 @trace spec:runtime-logging, spec:proxy-container
@@ -135,6 +145,7 @@ The system MUST provide a `--log-proxy` accountability flag that enables a curat
 - **AND** only domain, size, status (allow/deny), and cache status SHOULD be included
 
 ### Requirement: Enclave accountability window
+<!-- req-id: 1f55a30b -->
 The system MUST provide a `--log-enclave` accountability flag that enables a curated view of enclave lifecycle operations. Events MUST include network creation/removal, container attachment/detachment, and health check results. Each event MUST include a clickable `@trace spec:enclave-network` link.
 
 @trace spec:runtime-logging, spec:enclave-network
@@ -150,6 +161,7 @@ The system MUST provide a `--log-enclave` accountability flag that enables a cur
 - **THEN** the output MUST show `[enclave] Network created: tillandsias-enclave`
 
 ### Requirement: Git accountability window
+<!-- req-id: a6b74479 -->
 The system MUST provide a `--log-git` accountability flag that enables a curated view of git mirror operations. Events MUST include mirror creation/update, clone/push from forge, and remote push results. No credentials MUST appear in logs. Each event MUST include a clickable `@trace spec:git-mirror-service` link.
 
 @trace spec:runtime-logging, spec:git-mirror-service
@@ -164,6 +176,7 @@ The system MUST provide a `--log-git` accountability flag that enables a curated
 - **THEN** the output MUST show the failure at WARN level with the error message
 
 ### Requirement: All enclave accountability windows emit real events
+<!-- req-id: 504e3545 -->
 The `--log-proxy`, `--log-enclave`, and `--log-git` accountability windows MUST emit structured events for all enclave operations. Events MUST use the `accountability = true` field and include `@trace spec:<name>` links.
 
 @trace spec:runtime-logging
@@ -177,6 +190,7 @@ The `--log-proxy`, `--log-enclave`, and `--log-git` accountability windows MUST 
 - **THEN** the output MUST show the push event and remote push result
 
 ### Requirement: External-tier logging
+<!-- req-id: 85e3787a -->
 
 Tillandsias MUST distinguish two log tiers per container: INTERNAL (existing per-container `ContainerLogs` mount, RW at owner, never visible to siblings) and EXTERNAL (hand-curated files declared in the producer's `external-logs.yaml` manifest, RO-visible to every consumer in the enclave). The two-tier model enforces a contract: what a service publishes externally is its versioned API for cross-container observability.
 
@@ -208,6 +222,7 @@ Tillandsias MUST distinguish two log tiers per container: INTERNAL (existing per
 - **AND** agents reading external logs SHOULD be able to `grep` or `jq` them without a deserialiser dep
 
 ### Requirement: Schema versioning for log entry evolution
+<!-- req-id: 2ac7446b -->
 
 All log entries MUST include an immutable `schema_version` field to enable backwards-compatible schema evolution. This field enables:
 - Migration of old logs to new schemas
@@ -241,6 +256,7 @@ All log entries MUST include an immutable `schema_version` field to enable backw
 - **AND** all new logs MUST include the current schema version
 
 ### Requirement: Secret rotation event logging (OBS-021)
+<!-- req-id: 59cbbafc -->
 
 All secret rotation and refresh operations MUST emit structured audit events with complete metadata.
 
@@ -272,6 +288,7 @@ All secret rotation and refresh operations MUST emit structured audit events wit
 - **AND** filtering by `rotation_status` (e.g., `rotation_status="failure"`) MUST work
 
 ### Requirement: Image build event logging (OBS-022)
+<!-- req-id: fdf7ba1c -->
 
 All image build operations MUST emit structured audit events with performance metrics.
 

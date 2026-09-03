@@ -21,6 +21,7 @@ same router/session gate as OpenCode Web.
 
 
 ### Requirement: Reverse-proxy container and binding
+<!-- req-id: 0eca9cfe -->
 A new reverse-proxy container (Caddy 2.x) MUST publish exactly one host address, and it MUST be loopback-only:
 
 1. `127.0.0.1:<host_port>` on the host, where `<host_port>` is chosen by `select_router_host_port()` from the fallback chain `80 -> 8080 -> --port`. The IN-CONTAINER listener is `:8080` and does not vary.
@@ -38,6 +39,7 @@ The container MUST be named `tillandsias-router` and MUST be created alongside t
 - **AND** external port scanning MUST find no listening socket on any `0.0.0.0` address
 
 ### Requirement: Dynamic routing table from Caddyfile
+<!-- req-id: ff23dff7 -->
 
 The tray MUST generate a dynamic Caddyfile at `$XDG_RUNTIME_DIR/tillandsias/router/dynamic.Caddyfile` with one stanza per service at each attach. It is bind-mounted read-write at `/run/router/dynamic.Caddyfile` and MERGED with the image's `base.Caddyfile` inside the container; it is not the whole config. (Filename corrected 2026-09-02: the spec said `Caddyfile`, the runtime writes `dynamic.Caddyfile`.) The stanza maps `<service>.<project>.localhost:80` to an internal container port using Caddy's `reverse_proxy` directive.
 
@@ -69,6 +71,7 @@ Service-to-port conventions:
 - **AND** OpenCode and Flutter MAY route to the forge container while Observatorium routes to its project web container
 
 ### Requirement: Forward-proxy integration
+<!-- req-id: 7e5a112d -->
 
 Squid MUST be configured to recognize `.localhost` domains and forward them to the reverse-proxy sibling at `proxy:80`. From inside a forge, `curl http://project.service.localhost/` MUST be transparently routed via `HTTP_PROXY=http://proxy:3128` to the reverse proxy.
 
@@ -80,6 +83,7 @@ Squid MUST be configured to recognize `.localhost` domains and forward them to t
 - **AND** the agent MUST see the response as if directly connected
 
 ### Requirement: No container port publication
+<!-- req-id: 7c1f07da -->
 
 Container service ports (e.g., `flutter run` binding `0.0.0.0:8080` inside the container) MUST NOT be published to the host via `-p`. The router is the sole host-side listener on port `80`.
 
@@ -91,6 +95,7 @@ Container service ports (e.g., `flutter run` binding `0.0.0.0:8080` inside the c
 - **AND** the application MUST be unreachable from the host without going through the router
 
 ### Requirement: Caddyfile reload via the in-container reload script
+<!-- req-id: 130d8ae0 -->
 
 The tray MUST reload the router's configuration by executing
 `/usr/local/bin/router-reload.sh` inside the `tillandsias-router` container,
@@ -121,6 +126,7 @@ the launch, since a stale config is detected by subsequent operations.
 - **AND** the Caddy admin port MUST NOT be published to the host
 
 ### Requirement: Agent instructions for service binding
+<!-- req-id: 5e60f941 -->
 
 A new cheatsheet file `config-overlay/opencode/instructions/web-services.md` MUST instruct agents:
 
