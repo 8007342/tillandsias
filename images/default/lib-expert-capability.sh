@@ -40,7 +40,7 @@
 # state):
 #
 #   expert_capability: now=<csv|none|stale-binary> after_relaunch=<csv|none> \
-#                      skew=<none|pending-build|relaunch-required|relaunch-regresses> \
+#                      skew=<none|pending-build|relaunch-required|relaunch-regresses|rebuild-required|unknown-currency> \
 #                      blocked_capabilities=<csv|-> lost_on_relaunch=<csv|->
 #
 # FIELD VOCABULARIES (all CLOSED):
@@ -230,6 +230,67 @@ tillandsias_expert_capability() {
     elif [ "$TILLANDSIAS_EXPERT_CAP_LOST" != "-" ] \
         && [ "$TILLANDSIAS_EXPERT_CAP_AFTER" != "none" ]; then
         TILLANDSIAS_EXPERT_CAP_SKEW="relaunch-regresses"
+    fi
+
+    # ── ORDER 984-i4k2: BEHAVIOUR, NOT ONLY CAPABILITY ────────────────────
+    #
+    # Everything above compares two SUBCOMMAND SETS. A subcommand present in
+    # both the running binary and the checkout is invisible to it however much
+    # its behaviour changed, and `skew=none` is then truthful and useless at
+    # the same time.
+    #
+    # MEASURED 2026-09-03. Forges whose binaries predated 823e3ac0d kept
+    # writing `append-event` output straight into plan/index.yaml instead of a
+    # fragment — on FOUR hosts (lenovinha-tillandsias-forge,
+    # pirria-tillandsias-forge, macuahuitl-tillandsias-forge, yolanda) — while
+    # this line reported `skew=none` on every one. `append-event` existed in
+    # both versions, so the sets matched exactly.
+    #
+    # So compare the BUILD IDENTITY too: what the running binary was compiled
+    # from (`build-id`, baked by build.rs) against what a rebuild from this
+    # checkout would produce (`source-revision`, the same hash code). Only the
+    # revision half is new; the capability comparison above is untouched and
+    # its verdicts still win, because a missing subcommand is a bigger fact
+    # than a stale one.
+    #
+    # A HOST THAT CANNOT ESTABLISH ITS OWN CURRENCY SAYS SO. That is the whole
+    # point: `unknown-currency` is louder than `none` and is the honest answer
+    # for a binary too old to have `build-id` at all — which is exactly the
+    # 2026-09-03 population. A truthful-but-inapplicable green is what this
+    # defect is made of, so the absence of an answer must not render as one.
+    if [ "$TILLANDSIAS_EXPERT_CAP_SKEW" = "none" ] && [ -n "$_tec_bin" ]; then
+        _tec_running_id="$("$_tec_bin" build-id 2>/dev/null | head -1)" || _tec_running_id=""
+        _tec_checkout_id=""
+        if [ -n "$_tec_checkout" ] \
+            && [ -f "$_tec_checkout/crates/tillandsias-plan/src/main.rs" ]; then
+            _tec_checkout_id="$("$_tec_bin" source-revision \
+                "$_tec_checkout/crates/tillandsias-plan" 2>/dev/null | head -1)" \
+                || _tec_checkout_id=""
+        fi
+        case "$_tec_running_id" in
+            *+*)
+                # Both sides answered: a mismatch is a real behaviour skew.
+                if [ -n "$_tec_checkout_id" ] \
+                    && [ "$_tec_running_id" != "$_tec_checkout_id" ]; then
+                    TILLANDSIAS_EXPERT_CAP_SKEW="rebuild-required"
+                fi
+                ;;
+            *)
+                # No build-id. Either the binary predates it (the measured
+                # population) or the probe could not run it. Both are "I cannot
+                # tell", and neither is `none`.
+                #
+                # THIS ARM IS ABOUT THE BINARY, NOT THE COMPARISON. A checkout
+                # with no sources to compare against is a different situation:
+                # there is nothing to be current WITH, the binary is fine, and
+                # `after_relaunch` already reports what the checkout provided.
+                # Criterion 3 asks that a host unable to establish ITS OWN
+                # currency say so; it does not ask for an alarm when the
+                # comparison target is absent, and raising one there would fire
+                # on every partial mount and every manifest-only fixture.
+                TILLANDSIAS_EXPERT_CAP_SKEW="unknown-currency"
+                ;;
+        esac
     fi
 
     _tillandsias_expert_capability_emit
@@ -451,6 +512,12 @@ tillandsias_expert_capability_advice() {
             ;;
         relaunch-regresses)
             printf 'DO NOT RELAUNCH YET: the running binary provides MORE than the mounted checkout, so a relaunch would REMOVE capability. Move the checkout to a base that carries the expert sources first.\n'
+            ;;
+        rebuild-required)
+            printf 'BEHAVIOUR SKEW: the running binary has every subcommand the checkout declares, but was compiled from DIFFERENT sources — so a subcommand can exist in both and do something else. This is the 984-i4k2 case: four hosts kept writing append-event output into plan/index.yaml instead of a fragment while the skew line read `none`. Rebuild: cargo build --release -p tillandsias-plan && install -m0755 target/release/tillandsias-plan "$HOME/.local/bin/tillandsias-plan".\n'
+            ;;
+        unknown-currency)
+            printf 'CURRENCY UNKNOWN: this binary cannot report which sources it was built from (no `build-id`), so whether its subcommands still BEHAVE as the checkout expects cannot be established. Treat writes as suspect until it is rebuilt. A binary this old predates 823e3ac0d, which is the population that wrote to the wrong ledger channel silently.\n'
             ;;
         *)
             printf 'No capability skew: everything the mounted checkout provides is already available in this session.\n'

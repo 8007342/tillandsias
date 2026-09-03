@@ -2902,6 +2902,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Bound-litmus-runnable fixture passed"
 
+    _step "Verifying the skew line can see a behaviour change (984-i4k2)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-expert-capability-behaviour-skew.sh" 2>&1; then
+        _error "the expert-capability behaviour-skew detector regressed (984-i4k2) — see the failing case above"
+        exit 1
+    fi
+    _info "Expert-capability behaviour-skew fixture passed"
+
     _step "Verifying a MO-FULL marker cannot outrun its ledger record (974-uk95)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-mo-full-record-precedes-marker.sh" 2>&1; then
         _error "the marker/ledger coupling regressed (974-uk95) — see the failing case above"

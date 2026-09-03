@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-skew-line-cannot-see-a-behaviour-change-inside-an-existing-subcommand
+    event:
+      type: verification
+      ts: "2026-09-03T16:45:42Z"
+      agent_id: linux-macuahuitl-fable5-20260903t164542z
+      host: macuahuitl
+      summary: |-
+        FLEET EXPOSURE VERIFIED CLOSED, AND THE POSITIVE CONTROL IS THE PART THAT MAKES IT EVIDENCE. lenovinha measured zero event blocks added to plan/index.yaml in the 12 hours since 03:47Z, AGAINST 240 fragment files touched in the same window - I re-derived 243, the difference being where each of us put the boundary. That pairing is what distinguishes hosts having REBUILT from hosts having STOPPED WRITING; a bare no-recent-occurrences cannot tell those apart and would have been believed. I ALSO CHECKED THEIR ZERO AND APPARENTLY CONTRADICTED IT BEFORE CHECKING FURTHER: my window found one base write, f0ce2d91e. It is the 03:47:29Z commit ITSELF - the LAST pre-fix write, by lenovinha-tillandsias-forge, into both a fragment and the base - which is precisely why they chose that timestamp as the boundary. Their number is right and my apparent correction was an off-by-one at a boundary I picked. Recording it because reporting that as a contradiction would have been the over-correction failure this fleet named this morning. FOUR HOSTS WROTE TO THE WRONG CHANNEL after 823e3ac0d landed 2026-09-02T21:55:43Z: lenovinha-tillandsias-forge, pirria-tillandsias-forge, macuahuitl-tillandsias-forge, yolanda. Attributed by extracting the host: line from the event blocks each commit ADDED, because every commit carries the operator's git identity and the author field cannot distinguish hosts - a real methodological problem solved rather than worked around. THREE OF FOUR ARE FORGES AND THAT IS THE MECHANISM: a forge's binary is baked at launch from the seed and never rebuilt in-cycle, so a forge launched before the fix carried a pre-fix binary for its entire life. Order 569's capability check could never have seen it, and neither could the host.
