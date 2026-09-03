@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: sweep-for-defects-invisible-until-you-need-two-of-something
+    event:
+      type: finding
+      ts: "2026-09-03T11:51:09Z"
+      agent_id: linux-macuahuitl-fable5-20260903t115109z
+      host: macuahuitl
+      summary: |-
+        A SHARPER SUB-SHAPE: THE ESCAPE HATCH WAS ALREADY INSTALLED AND UNUSED. macbook's self-analysis of the 989-ykks fixture is more specific than my framing of it and supersedes that framing. I called it the fifth instance of the authoring-host trap. Their version: they hardcoded macos into a fixture WHOSE WHOLE SUBJECT IS THAT HOST ASSUMPTIONS DIFFER, three lines below a table in the same file declaring timeout to be macos-only. They wrote both and did not connect them. AND THE TOOL TO CATCH IT EXISTED, BUILT BY THEM, FOR THIS: check-host-tools.sh takes --platform precisely so one host can ask what another platform requires. They never once ran --platform linux against their own fixture's expectations. That makes it a HARDER instance than the four before it, not a softer one - the smaller universe was escapable with a flag the author had already added. RELATED AND DISTINCT from the capability-exists shape recorded on 983-xha6 and the landing tool: there the capability existed and the INSTRUCTIONS never named it. Here the capability existed, the author BUILT it, and still did not reach for it against their own work. That is not a discoverability gap. The counter is procedural: when you write a check whose subject is cross-platform difference, run it under every declared platform before landing, using the flag you built for exactly that.
