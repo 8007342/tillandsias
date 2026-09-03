@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-methodology-refusal-points-at-the-tool-that-cannot-help
+    event:
+      type: progress
+      ts: "2026-09-03T20:00:51Z"
+      agent_id: linux-lenovinha-opus-5-20260903t200051z
+      host: lenovinha
+      summary: |
+        lenovinha: closed. Reproduced through the live binary: methodology-ask with a
+        non-example path (mcp_first_read_path, cycle_metrics.emitter) returns the
+        identical refusal, confirming the packet.
+
+        SHARPER THAN FILED: the refusal's own example forge_cycle_budget.rule DOES
+        answer, because "forge" and "cycle" are substrings of it and hit the
+        forge+cycle route. The advice appeared to work for anyone who tested it with
+        the suggested example, which is why the sentence survived. Worse, that
+        coincidence could answer the WRONG path: pull_merge_cadence.pre_push_gate
+        matched push+merge and was answered as pre_push_gate.rule, an adjacent key
+        cited exactly, never the one asked. Same defect family as the other
+        instruments that answer truthfully about something adjacent to the question.
+
+        FIX: a path-shaped question (non-empty, no whitespace, nothing outside
+        [A-Za-z0-9._-]) is tried AS a path before routing is consulted; a path-shaped
+        miss says the path is wrong rather than the tool; the refusal names
+        methodology_path and its CLI form.
+
+        Criterion 3 DECIDED, not deferred: the eleven-entry table does not grow. Its
+        limit is now stated instead of discovered, and the long tail has a tool of its
+        own — growing a substring index is how ranking comes back through the back
+        door. Commit f5d5cf64b.
