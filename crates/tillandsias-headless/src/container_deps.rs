@@ -964,4 +964,51 @@ mod tests {
             "vault never died and must not be listed"
         );
     }
+
+    /// ORDER 994-8r3w. The health check cannot derive what SHOULD exist from
+    /// what DOES exist, so the expectation is declared in
+    /// `images/default/enclave-services.txt`. This is the guard that stops that
+    /// declaration drifting from the graph that actually launches things.
+    ///
+    /// SCOPE IS A JUDGEMENT, NOT AN INVENTORY, and the test encodes it: only
+    /// services expected to be persistently RUNNING belong in the file. Listing
+    /// a transient one (GitLogin) or an optional one (NixCache) would
+    /// manufacture false absents on correctly-configured hosts, and a check that
+    /// cries wolf gets switched off — which is the failure mode the original gap
+    /// already demonstrated from the other direction.
+    #[test]
+    fn expected_services_file_matches_the_persistent_services() {
+        const MANIFEST: &str = include_str!("../../../images/default/enclave-services.txt");
+        let declared: Vec<&str> = MANIFEST
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty() && !l.starts_with('#'))
+            .collect();
+
+        // The persistent enclave containers, named from the same enum the
+        // orchestration dispatches on.
+        let persistent = [Service::Vault, Service::Proxy];
+        for s in persistent {
+            assert!(
+                declared.contains(&s.name()),
+                "{} is a persistent enclave service but is absent from \
+                 images/default/enclave-services.txt — the health check will \
+                 report it as healthy when it does not exist (994-8r3w)",
+                s.name()
+            );
+        }
+
+        // And nothing ELSE, so a well-meaning addition of a transient or
+        // optional service cannot start redding healthy hosts.
+        let allowed: Vec<&str> = persistent.iter().map(|s| s.name()).collect();
+        for d in &declared {
+            assert!(
+                allowed.contains(d),
+                "'{d}' is declared expected-running but is not a persistent \
+                 enclave service — a transient (GitLogin) or optional \
+                 (NixCache) service listed here manufactures false absents \
+                 (994-8r3w)"
+            );
+        }
+    }
 }
