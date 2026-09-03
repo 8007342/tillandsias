@@ -110,6 +110,7 @@
 # live in $STATE_DIR/service-restarts-<name> as "epoch count", windowed, so a
 # flapper goes quiet at the cap instead of being fought forever.
 
+_HEALTH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 set -uo pipefail
 
 PREFIX="${TILLANDSIAS_ENCLAVE_SERVICE_PREFIX:-tillandsias-}"
@@ -316,6 +317,48 @@ if [ "$ACT" -eq 1 ] && [ -n "${down_list:-}" ]; then
 "
             continue
         fi
+        # ORDER 975-rsgm. RESTORE THE PRECONDITION BEFORE STARTING THE PROXY,
+        # because `podman start` alone is what CREATES the second failure.
+        #
+        # The proxy is served its certificate from a bind mount and its private
+        # key from the podman secret `tillandsias-ca-key`.
+        # `ensure_proxy_ca_key_secret` refreshes that secret with `--replace`
+        # immediately before every launch — on the LAUNCH path only. This
+        # self-heal, and the REMEDY line this script prints, both use plain
+        # `podman start`, which bypasses it. So after any CA regeneration the
+        # heal "succeeds", squid comes up, and dies:
+        #
+        #   WARNING: '/etc/squid/certs/intermediate.key' X509_check_private_key() failed
+        #   FATAL: No valid signing certificate configured for HTTP_port [::]:3128
+        #
+        # MEASURED on yoga over five cycles: the restart reported
+        # `fix:enclave-service-restarted:...:action=started` and the container
+        # was dead seconds later, with a message naming neither file. The heal
+        # was reporting success for an action that could not work.
+        #
+        # Refreshing the secret from the current bundle is exactly what the
+        # launch path does, so this is not a new policy — it is the same
+        # precondition, applied on the path that was missing it. It runs ONLY
+        # for the proxy and ONLY when the pair actually disagrees, so a healthy
+        # host pays one modulus comparison and nothing is rotated needlessly.
+        _ca_check="${TILLANDSIAS_CA_CONSISTENCY_CHECK:-$_HEALTH_DIR/check-enclave-ca-consistency.sh}"
+        if [ "$name" = "tillandsias-proxy" ] && [ -x "$_ca_check" ]; then
+            if ! bash "$_ca_check" >/dev/null 2>&1; then
+                _cadir="${TILLANDSIAS_CA_DIR:-/tmp/tillandsias-ca}"
+                if [ -r "$_cadir/intermediate.key" ] \
+                   && _run podman secret create --replace tillandsias-ca-key "$_cadir/intermediate.key" >/dev/null 2>&1; then
+                    details="${details}fix:enclave-ca-key-rotated:service=${name}:action=secret-replaced
+"
+                else
+                    # Say so rather than starting into a certain death. A start
+                    # that reports `started` and dies is worse than a refusal
+                    # that names the reason.
+                    details="${details}fail:enclave-ca-desync-unrepaired:service=${name}:action=operator
+"
+                    continue
+                fi
+            fi
+        fi
         if _run podman start "$name" >/dev/null 2>&1; then
             [ "$_cepoch" -eq 0 ] && _cepoch="$now"
             _ccount=$((_ccount + 1))
@@ -357,7 +400,14 @@ if [ -n "$details" ]; then
         echo "  NOTE: health=stale-healthy means podman still reports the LAST healthcheck result for a container that is no longer running. The service is dead; the word 'healthy' beside it is podman's stale record, not a reading." >&2
     fi
     echo "  CAUSE: an enclave service exited and nothing restarted it. rc>128 means it died of signal rc-128 (143=SIGTERM, 137=SIGKILL, 139=SIGSEGV); the in-container supervisors (767-es4w proxy, 767-nkkq forge harness) can only speak while their container lives, so a stopped container is silent by construction." >&2
-    echo "  REMEDY: 'podman logs <service>' for the last words, then 'podman start <service>' or re-run the enclave orchestration. If it exits again immediately, that is a crash loop and belongs in a packet, not a restart." >&2
+    echo "  REMEDY: 'podman logs <service>' for the last words, then RE-RUN THE ENCLAVE" >&2
+    echo "  ORCHESTRATION rather than 'podman start <service>'. Order 975-rsgm: a bare" >&2
+    echo "  'podman start' skips the preconditions the launch path establishes — for the" >&2
+    echo "  proxy that is the CA key secret, and starting without it produces a DIFFERENT" >&2
+    echo "  failure (squid: X509_check_private_key() failed) whose message names neither" >&2
+    echo "  the certificate nor the key, sending the reader at the wrong subsystem." >&2
+    echo "  If it exits again immediately, that is a crash loop and belongs in a packet," >&2
+    echo "  not a restart." >&2
 fi
 
 if [ "$down" -gt 0 ] || [ "$absent" -gt 0 ]; then

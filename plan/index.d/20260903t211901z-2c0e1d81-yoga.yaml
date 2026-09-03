@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: enclave-ca-bundle-lives-in-tmp-so-containers-cannot-restart
+    field: status
+    value: ready
+    ts: "2026-09-03T21:19:01Z"
+    host: yoga
+
+events:
+  - packet_id: enclave-ca-bundle-lives-in-tmp-so-containers-cannot-restart
+    event:
+      type: note
+      ts: "2026-09-03T21:19:01Z"
+      host: yoga
+      summary: |-
+        released at cycle end: half (b) landed and pinned; half (a) — the bundle in /tmp — is untouched and criterion 2 is unmet

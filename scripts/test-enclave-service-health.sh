@@ -48,6 +48,12 @@ case "$1" in
         eval "h=\"\${HEALTH_${key}:-}\"; l=\"\${LABEL_${key}:-}\""
         printf '%s|%s\n' "$h" "$l"
         ;;
+    secret)
+        # 975-rsgm: the CA key rotation the proxy's self-heal now performs
+        # before starting. STUB_SECRET_FAIL exercises the refusal branch —
+        # a rotation that cannot happen must NOT become a hopeful start.
+        exit "${STUB_SECRET_FAIL:-0}"
+        ;;
     start)
         # 878-79b5 acting arm: record the attempt so tests can assert an
         # operator stop was NOT fought; START_RC forces a failed start.
@@ -394,6 +400,44 @@ else
     esac
     unset HEALTH_tillandsias_vault
 fi
+
+
+# --------------------------------------------------------------- scenario 20
+# ORDER 975-rsgm. A DOWN PROXY WHOSE CA PAIR IS DESYNCED MUST NOT BE STARTED.
+#
+# `podman start` on that proxy "succeeds" and squid dies seconds later with
+# X509_check_private_key() — a message naming neither the certificate nor the
+# key. The self-heal previously reported
+# `fix:enclave-service-restarted:...:action=started` for an action that could
+# not work. It must now either repair the precondition or refuse and say why;
+# what it must never do is report success into a certain death.
+#
+# The consistency check is stubbed to FAIL and the secret rotation is stubbed to
+# FAIL too, so this arm exercises the refusal branch specifically.
+export PS_OUT="tillandsias-vault|running|0|$((now - 7200))|0|0
+tillandsias-proxy|exited|143|$((now - 7200))|$((now - 3600))|0"
+cat > "$BIN/check-enclave-ca-consistency.sh" <<'STUB'
+#!/usr/bin/env bash
+echo "desync:enclave-ca-key-secret"
+exit 1
+STUB
+chmod +x "$BIN/check-enclave-ca-consistency.sh"
+_prev_secret_behaviour="${STUB_SECRET_FAIL:-}"
+export STUB_SECRET_FAIL=1
+_fresh_state="$(mktemp -d "$TMP/state-ca.XXXXXX")"
+out="$(PATH="$BIN:$REALPATH_DIRS" TILLANDSIAS_CA_CONSISTENCY_CHECK="$BIN/check-enclave-ca-consistency.sh" TILLANDSIAS_CYCLE_STATE_DIR="$_fresh_state" bash "$GUARD" --act 2>"$TMP/err")"
+case "$(cat "$TMP/err")$out" in
+    *enclave-ca-desync-unrepaired*)
+        case "$(cat "$TMP/err")$out" in
+            *fix:enclave-service-restarted:service=tillandsias-proxy*)
+                bad "a desynced proxy was reported as restarted anyway" ;;
+            *) ok "a desynced proxy refuses with its own reason instead of a false restart" ;;
+        esac ;;
+    *) bad "desynced proxy did not produce enclave-ca-desync-unrepaired: $(cat "$TMP/err")$out" ;;
+esac
+rm -f "$BIN/check-enclave-ca-consistency.sh"
+unset STUB_SECRET_FAIL
+[ -n "$_prev_secret_behaviour" ] && export STUB_SECRET_FAIL="$_prev_secret_behaviour"
 
 echo "---"
 echo "enclave-service-health: ${pass} passed, ${fail} failed"
