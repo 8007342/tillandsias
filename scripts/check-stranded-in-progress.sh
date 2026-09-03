@@ -159,7 +159,9 @@ total=0
 # hardest, and diluted the genuine strandings in the same list.
 #
 # `tillandsias-plan plan-events <pid>` folds base and overlay the way every
-# other reader already does. A second grep against plan/index.yaml would be the
+# other reader already does. NOTE (992-w7ds): this script no longer CALLS it —
+# 946-pdpi moved the classification to `expire-claims` aged output — so the
+# paragraph below describes a design, not this script's current behaviour. A second grep against plan/index.yaml would be the
 # same defect one storage location later (704-zcgi: the copy has to go, not
 # just the instance). When the binary is unavailable the loop DECLINES to
 # classify rather than guessing from half the ledger — an unreadable history is
