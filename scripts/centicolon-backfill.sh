@@ -77,13 +77,25 @@ while IFS=$'\t' read -r pid closure; do
         unscored=$((unscored + 1))
         continue
     fi
-    if ! printf '%s\n' "$known_tests" | grep -qx "$test_name"; then
-        # Named a test that does not exist. NOT scored — crediting it would
-        # credit a verification path that cannot run.
-        unresolvable=$((unresolvable + 1))
-        unscored=$((unscored + 1))
-        continue
-    fi
+    # ORDER 795-imz3: NOT `if ! printf … | grep -q …`. `grep -q` exits on its
+    # first match, the SIGPIPE reaches printf, and under `set -o pipefail` the
+    # pipeline's status can become the signal's — inverting the guard, so an
+    # unknown test would read as known. Match against the newline-delimited list
+    # with a case glob instead: no pipeline, no signal, no inversion.
+    case "
+$known_tests
+" in
+        *"
+$test_name
+"*) : ;;
+        *)
+            # Named a test that does not exist. NOT scored — crediting it would
+            # credit a verification path that cannot run.
+            unresolvable=$((unresolvable + 1))
+            unscored=$((unscored + 1))
+            continue
+            ;;
+    esac
 
     scored=$((scored + 1))
     printf '%s\t%s\n' "$pid" "$test_name" >> "$scored_rows"
