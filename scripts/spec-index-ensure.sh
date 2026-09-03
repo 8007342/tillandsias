@@ -368,8 +368,44 @@ _refuse_unwritable() {
     exit 1
 }
 
-work="$(mktemp -d "${TMPDIR:-/tmp}/spec-index-ensure.XXXXXX")" || {
-    echo "blocked:spec-index:no-tmpdir"; exit 1; }
+# ── ORDER 964-zedm: STAGE WHERE THE PAYLOAD FITS, NOT WHERE TMPDIR POINTS ────
+#
+# This was `mktemp -d "${TMPDIR:-/tmp}/..."`, and in a forge /tmp is a 256 MB
+# tmpfs while the index root sits on a 1.2 TB overlay. MEASURED on
+# lenovinha-tillandsias-forge 2026-09-02, a cold build of 22,645 chunks:
+#
+#     spec-index:delta reused=0 embed=22645 of 22645
+#     jq: error: writing output failed: No space left on device
+#     blocked:spec-index:payload-failed
+#     $ df -h /tmp /            ->  tmpfs 256M ... overlay 1.9T (1.2T avail)
+#
+# So the build died for want of space on a host with 1.2 TB free. The staged
+# payload is the same order of magnitude as the published index — this host
+# stages ~92 MB of vectors for a 22.7k-chunk corpus and the numbers grow
+# together — so the filesystem that can hold the RESULT is the one that can
+# hold the WORKING SET. Staging beside the index root makes that a property of
+# the code rather than of the ambient environment.
+#
+# WHY NOT native_scratch_dir(): it answers a different question. That helper
+# asks "is this worktree on a slow filesystem, and where should scratch live
+# for SPEED" — and by design it returns the caller's fallback on fast native
+# Linux, which is exactly the forge case here. Speed and capacity are different
+# properties and a helper that answers one must not be conscripted to answer
+# the other; on this host it would hand back /tmp and reproduce the bug.
+#
+# TILLANDSIAS_SPEC_INDEX_TMPDIR overrides, for an operator who knows better —
+# honoured on existence, never probed for size, the same rule the endpoint
+# derivation applies to an explicit endpoint (967-xq5e).
+_stage_parent="${TILLANDSIAS_SPEC_INDEX_TMPDIR:-$INDEX_ROOT}"
+mkdir -p "$_stage_parent" 2>/dev/null || true
+work="$(mktemp -d "$_stage_parent/.spec-index-ensure.XXXXXX" 2>/dev/null)" || {
+    # Fall back to the ambient TMPDIR rather than refusing: a host whose index
+    # root is momentarily unwritable is worse off with no build at all than
+    # with the pre-964-zedm behaviour.
+    work="$(mktemp -d "${TMPDIR:-/tmp}/spec-index-ensure.XXXXXX")" || {
+        echo "blocked:spec-index:no-tmpdir"; exit 1; }
+    echo "spec-index: staging in ${TMPDIR:-/tmp} — could not create a staging dir under $_stage_parent (964-zedm)" >&2
+}
 LOCK_DIR=""
 _cleanup() {
     rm -rf "$work"
@@ -623,7 +659,24 @@ for part in "$work"/b/part-*; do
     # default, which reproduces every historical measurement exactly.
     jq -sc --arg m "$EMBED_MODEL" --arg p "${TILLANDSIAS_EMBED_DOC_PREFIX:-}" \
         '{model:$m, input:[.[] | $p + .]}' "$part" > "$work/payload.json" || {
-        echo "blocked:spec-index:payload-failed"; exit 1; }
+        # ORDER 964-zedm: NAME THE DIRECTORY THAT RAN OUT. This printed
+        # `blocked:spec-index:payload-failed` and nothing else, and jq's own
+        # "No space left on device" went to stderr with no path attached — so
+        # the reader learned that a payload failed, not that a 256 MB tmpfs
+        # they never chose was full while the index root had 1.2 TB free. The
+        # verdict named the step; the cause was a filesystem two layers away.
+        # Same lesson as 965-sxec's refusal: a diagnosis that cannot be acted
+        # on is one nobody acts on.
+        echo "blocked:spec-index:payload-failed"
+        {
+            echo "  staging dir: $work"
+            echo "  free space:  $(df -Ph "$work" 2>/dev/null | awk 'NR==2{print $4" of "$2" ("$5" used) on "$6}')"
+            echo "  index root:  $INDEX_ROOT"
+            echo "  free space:  $(df -Ph "$INDEX_ROOT" 2>/dev/null | awk 'NR==2{print $4" of "$2" ("$5" used) on "$6}')"
+            echo "  If the staging dir is small and the index root is not, set"
+            echo "  TILLANDSIAS_SPEC_INDEX_TMPDIR to a directory with room (964-zedm)."
+        } >&2
+        exit 1; }
     # `-f` IS THE BUG THIS BLOCK KEEPS RE-LEARNING, so it is gone. curl's --fail
     # makes an HTTP 400 an exit-22 failure AND DISCARDS THE RESPONSE BODY — the
     # body being the only place the server says what was actually wrong. This

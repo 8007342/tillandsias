@@ -2737,6 +2737,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Archiver could-not-run channel check passed"
 
+    # 964-zedm: the index builder must stage where the payload FITS. It staged
+    # via the ambient TMPDIR, and in a forge /tmp is a 256 MB tmpfs while the
+    # index root is on a 1.2 TB overlay — so a cold 22,645-chunk build died on
+    # ENOSPC with 1.2 TB free. Wired here because the defect is invisible on any
+    # host with a roomy /tmp, which is every host that runs this gate.
+    _step "Checking the spec-index builder stages where the payload fits (964-zedm)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-spec-index-staging-capacity.sh" 2>&1; then
+        _error "the spec-index builder stages into the ambient TMPDIR (964-zedm) — see the verdict line above"
+        exit 1
+    fi
+    _info "Spec-index staging capacity check passed"
+
     # Order 881-29me. A `plan/issues/` audit cites its evidence and nothing
     # checked those citations still resolved. Measured in one document: every
     # factual claim re-verified TRUE while every `file:line` citation

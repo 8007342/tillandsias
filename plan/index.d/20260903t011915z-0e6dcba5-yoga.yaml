@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: spec-index-builder-stages-into-256mb-tmpfs
+    field: next_action
+    value: 'Landed and gate-wired on yoga; CRITERION 2 STILL WANTS A FORGE. I could not run this on a host whose /tmp is a real 256 MB tmpfs (creating one needs root), so I proved the MECHANISM instead: with TMPDIR pointed at a nonexistent directory the build completed (ok:spec-index:built:22867), which is exactly the condition that used to give blocked:spec-index:no-tmpdir. A forge should confirm the closure as written — a cold first-launch build publishing vectors.jsonl and experts-probe moving to l1=ready — and, if it still fails, the verdict now prints both directories with their free space and names TILLANDSIAS_SPEC_INDEX_TMPDIR as the remedy, so the next report will name the cause rather than the step.'
+    ts: "2026-09-03T01:19:15Z"
+    host: yoga
+
+events:
+  - packet_id: spec-index-builder-stages-into-256mb-tmpfs
+    event:
+      type: progress
+      ts: "2026-09-03T01:19:15Z"
+      host: yoga
+      summary: >
+        status 'Landed and gate-wired on yoga; CRITERION 2 STILL WANTS A FORGE. I could not run this on a host whose /tmp is a real 256 MB tmpfs (creating one needs root), so I proved the MECHANISM instead: with TMPDIR pointed at a nonexistent directory the build completed (ok:spec-index:built:22867), which is exactly the condition that used to give blocked:spec-index:no-tmpdir. A forge should confirm the closure as written — a cold first-launch build publishing vectors.jsonl and experts-probe moving to l1=ready — and, if it still fails, the verdict now prints both directories with their free space and names TILLANDSIAS_SPEC_INDEX_TMPDIR as the remedy, so the next report will name the cause rather than the step.' (not terminal) with evidence_refs: scripts/test-spec-index-staging-capacity.sh 6/6; live build with TMPDIR=/nonexistent
