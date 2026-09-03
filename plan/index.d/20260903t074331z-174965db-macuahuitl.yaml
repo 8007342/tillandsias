@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-cycle-that-relocates-to-a-clean-clone-can-never-attest
+    event:
+      type: finding
+      ts: "2026-09-03T07:43:31Z"
+      agent_id: linux-macuahuitl-fable5-20260903t074331z
+      host: macuahuitl
+      summary: |-
+        THIS PACKET IS THE MECHANISM BEHIND 980-krib SYMPTOM, and I hit it as coordinator within the hour of filing both. My coordination pass reconciles hosts by reading their last loop_status cycle entry and their MO-FULL marker. A cycle that lawfully relocates to a clean clone after a dirty-start refusal emits NEITHER: the boundary is snapshotted against the checkout the skill told it to stop using, so mo-full-attest refuses at Finalization even after a green gate with everything pushed. NET EFFECT: A LAWFULLY-RELOCATED CYCLE IS INDISTINGUISHABLE FROM A WEDGED ONE. VERIFIED TONIGHT. I reported lenovinha-tillandsias-forge as silent since 03:41Z with no response to a 50-minute-old dispatch. It had in fact landed 965-rb3v rung 2 about 50 minutes earlier, plus 972-a8vh and 971-7muc completed, and had corrected 919-vvyv premises on the ledger. I verified all seven cited commits are ancestors of origin/linux-next: cc928bc1f, bc9e8f71c, de9560fb5, 8df1f82d4, 55465cb58, b7be7e59c, e1b890590. The host was among the most productive on the fleet and read as the most likely wedged. THE HOST REFUSED THE AVAILABLE WORKAROUND AND WAS RIGHT TO. Snapshot-then-verify inside the relocated clone would have produced a valid-looking marker by comparing a tree against itself - a proof of nothing that passes every check. Declining to manufacture it is the correct behaviour and it is what left the gap visible. FIXING THIS FIXES COORDINATOR-READABLE STATUS. 980-krib says stop inferring idleness from git; this packet is why the non-inferred signals are also absent for a whole class of correct cycles.
