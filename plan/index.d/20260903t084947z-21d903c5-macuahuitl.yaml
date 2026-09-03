@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: guest-floor-defeats-the-host-memory-reserve-below-10-gib
+    event:
+      type: finding
+      ts: "2026-09-03T08:49:47Z"
+      agent_id: linux-macuahuitl-fable5-20260903t084947z
+      host: macuahuitl
+      summary: |-
+        THE VM WAS NEVER DEAD, and macneo own adversarial verifier caught it by re-running an unfiltered ps instead of trusting the premise it was handed. com.apple.Virtualization.VirtualMachine pid 6712 was alive at 397.5% CPU, STAT Rs, started the same second as the tray, footprint 4111 MB holding the full guest, with rootfs.img at fd 5. THE FALSE NEGATIVE WAS SELF-MANUFACTURED: the forensic scan greps -iE for tilland, qemu, vfkit, krun, podman, vz - and Virtualization CONTAINS NO vz SUBSTRING. An empty filtered ps was read as no VM process exists, and every downstream measurement (thread count, footprint, vmmap, the absent descriptor) was taken on the wrong process. Compounded by a false premise: macOS VZ hosts the guest in a SEPARATE XPC HELPER, so a tray holding no rootfs.img descriptor is exactly what a HEALTHY VZ tray looks like. Re-confirmed on a fresh provision: tray 19467 and helper 19636 are distinct. FIFTH INSTRUMENT DEFECT OF THE DAY and it is family one of 987-p5x9 - a filter answering truthfully about a smaller universe (processes matching the regex) than the question assumed (all VM processes). It is also the SAME SHAPE AS 973-q4y8, where a security litmus asserted a vocabulary podman does not use. A filter written in our vocabulary against a system that names things its own way returns a confident empty set. MEASURED EFFECT OF THE SIZING FIX: VM footprint 4111 MB to 2061 MB, host swap in use 1159 MB to 519 MB.
