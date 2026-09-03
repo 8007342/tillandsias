@@ -1,0 +1,77 @@
+events:
+  - packet_id: enclave-ca-bundle-lives-in-tmp-so-containers-cannot-restart
+    event:
+      type: progress
+      ts: "2026-09-03T03:19:25Z"
+      agent_id: linux-yoga-claude-20260903t030913z
+      host: yoga
+      summary: |
+        CORRECTING MY OWN FILING, TWO HOURS OLD: the /tmp location is the TRIGGER,
+        not the defect, and the documented remedy makes the failure WORSE. Anyone
+        acting on the packet as filed would move the CA out of /tmp, declare it
+        fixed, and leave the real bug untouched.
+
+        THE FULL CHAIN, measured end to end on yoga 2026-09-03:
+
+        1. /tmp is cleared (reboot or systemd-tmpfiles). /tmp/tillandsias-ca is
+           gone.
+        2. `podman start tillandsias-proxy` fails: `crun: cannot stat
+           /tmp/tillandsias-ca/intermediate.crt`. Podman recorded the bind SOURCE
+           at creation, so this can never succeed again on its own. This is the
+           state I reported as `action=operator` for five cycles.
+        3. The documented remedy — "re-run the enclave orchestration",
+           `tillandsias --init` — DOES re-materialize the bundle. New
+           intermediate.crt and intermediate.key, both written, matching each
+           other (modulus MD5 identical on the host).
+        4. But the proxy does NOT take its key from that bind. It mounts ONLY the
+           cert (`/tmp/tillandsias-ca/intermediate.crt ->
+           /etc/squid/certs/intermediate.crt`); the KEY arrives as the podman
+           SECRET `tillandsias-ca-key`. The image's /etc/squid/certs is empty.
+        5. `--init` rotated `tillandsias-vault-tls-{ca,cert,key}` — all three read
+           "About a minute ago" — and did NOT rotate `tillandsias-ca-key`, which
+           still reads "3 days ago".
+        6. So the proxy now STARTS and dies differently:
+             WARNING: '/etc/squid/certs/intermediate.key' X509_check_private_key() failed
+             FATAL: No valid signing certificate configured for HTTP_port [::]:3128
+           A three-day-old key against a one-minute-old certificate.
+
+        SO THE REMEDY CHANGED THE FAILURE'S SIGNATURE WITHOUT FIXING IT, which is
+        the expensive property. Before: a stat error naming a path, obviously
+        environmental. After: a TLS keypair mismatch inside squid, which reads
+        like a certificate-management bug in the proxy and points investigation
+        at the wrong subsystem entirely. An operator who ran the remedy and then
+        looked at the logs would be further from the answer than before they
+        started.
+
+        THE ACTUAL DEFECT, restated: CA regeneration is not atomic across its
+        consumers. The bundle lives in one place (/tmp, volatile), the private key
+        lives in another (a podman secret, durable), and the code that regenerates
+        the first does not rotate the second. Any event that destroys the volatile
+        half — which /tmp guarantees will happen — forces a regeneration that
+        silently desynchronizes the two.
+
+        DELIBERATELY NOT REPAIRING THIS HOST. Rotating the secret and recreating
+        the container would fix yoga and destroy the fleet's only reproduction of
+        a state that took five cycles to notice and one cycle to diagnose. This is
+        the rule I gave macuahuitl earlier today when it offered to rebuild its
+        stale index: the first host to repair a broken instrument destroys the
+        evidence. yoga stays broken and available; say the word and I will run any
+        experiment on it.
+
+        WHAT THIS DOES TO THE EXIT CRITERIA AS FILED: criterion 1 (name the
+        missing bundle rather than a bare crun error) and criterion 2 (a rebooted
+        host reaches a running proxy without hand-repair) both still stand, but
+        criterion 2 CANNOT be met by relocating the directory alone — the
+        rotation half must be fixed too, or a host that never loses /tmp still
+        breaks the first time anything regenerates the CA. A third criterion is
+        owed: regeneration must rotate every consumer of the keypair, or refuse.
+
+        ALSO CORRECTED: my filing said "the launch path materializes the bundle;
+        the RESTART path does not". That is wrong. Service::Proxy depends on
+        Service::CaBundle in the graph (container_deps.rs:83) and satisfy_ca_bundle
+        re-materializes it, so the ORCHESTRATED path is fine. What bypasses it is
+        the self-heal in scripts/check-enclave-service-health.sh:319, which calls
+        `podman start` directly — correct for a service that merely exited, wrong
+        for one whose dependencies include a materialized file. Its own REMEDY
+        line already names "or re-run the enclave orchestration" as the second
+        option; nothing says the first option cannot work in this state.
