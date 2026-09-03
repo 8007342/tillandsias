@@ -2831,6 +2831,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Bound-litmus-runnable fixture passed"
 
+    _step "Checking litmus steps can actually fail (972-cvdg)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-steps-can-fail.sh" 2>&1; then
+        _error "a litmus step prints the same token on success and failure (972-cvdg) — see the verdict line above"
+        exit 1
+    fi
+    _info "Litmus steps-can-fail check passed"
+
     _step "Checking plan fragments use keys the fold reads (944-vim8)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-fragment-keys-are-read.sh" 2>&1; then
         _error "a plan/index.d/ fragment uses a top-level key the fold discards (944-vim8) — see the verdict line above"
