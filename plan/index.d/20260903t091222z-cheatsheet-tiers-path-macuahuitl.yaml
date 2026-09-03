@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: check-cheatsheet-tiers-reports-cargo-missing-while-cargo-is-on-path
+    order: 990-u3xy
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [gate, portability, macos, fail-loud]
+    estimated_hours: 1
+    title: |
+      A gate phase prints "cargo: command not found" as a non-blocking error while cargo is demonstrably on PATH and every cargo phase of the same run succeeds.
+    context: |
+      FOUND by macneo-macos, who asked for a token rather than fixing it inside
+      an unrelated packet.
+      scripts/check-cheatsheet-tiers.sh line 57 emits cargo: command not found
+      during a run in which cargo is on PATH and every other cargo phase of the
+      SAME GATE succeeds. So it is a PATH assumption local to that script, not a
+      missing tool.
+      WHY IT IS WORSE THAN A MISSING TOOL despite being p3 and a two-line fix.
+      It fails QUIETLY, it is labelled NON-BLOCKING, and it therefore reads as
+      noise. It has presumably been printing on every macOS run for as long as
+      anyone has run one, and nobody investigated because the label said not to.
+      A non-blocking error that is always present trains readers to ignore the
+      channel it prints on.
+      DISTINCT FROM 988-7kxf, which was two genuinely absent tools. Here the
+      tool is present and the script cannot see it.
+    exit_criteria:
+      - the script finds cargo when cargo is on PATH, on macOS and linux
+      - if it genuinely cannot find it in some environment, it says which PATH it searched rather than printing a bare not-found
+      - the gate is checked for other always-present non-blocking errors; a warning nobody acts on is indistinguishable from one nobody should
