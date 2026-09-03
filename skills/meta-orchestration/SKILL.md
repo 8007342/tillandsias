@@ -2023,6 +2023,28 @@ Before exit:
    re-derive ONCE more — the terminal marker must name the head that CONTAINS
    the ledger record:
    ```bash
+   # RUN `record` ONLY AFTER THE WORK PUSH HAS ACTUALLY SUCCEEDED, and check
+   # that it wrote. MEASURED on lenovinha 2026-09-03: `record` ran while HEAD
+   # was still unpushed and CORRECTLY REFUSED; a push-retry loop then landed
+   # the work WITHOUT re-running `record`; and the terminal `self` printed
+   # COMPLETE, because by then local and remote agreed. So the emitted marker
+   # was VALID and the durable ledger line — the thing automation actually
+   # consumes — was never written. A green marker is not evidence the ledger
+   # was appended.
+   #
+   # THE TRAP IS THE RETRY LOOP, not the ordering as written here: step 6
+   # already pushed, so this recipe is correct on the happy path. Insert a
+   # fetch/rebase/retry between the push and `record` — which every host does
+   # on a busy trunk — and `record` is silently skipped on any iteration that
+   # refused. Re-run `record` after the LAST successful push, not the first
+   # attempt.
+   #
+   # AUDIT IT THE WAY THEY CAUGHT IT: grep the ledger for this cycle's head
+   # rather than trusting the marker.
+   #   grep -c "$(git rev-parse HEAD)" plan/mo-full-attestations.d/<host>.md
+   # Expect the WORK head to appear, not the record commit's own head — the
+   # ledger line attests the work and committing it moves HEAD, which is why
+   # the terminal marker is re-derived one commit later.
    scripts/mo-full-attest.sh record                                  # verify + append + print the marker
    git add plan/mo-full-attestations.d/ && git commit -m "record(mo-full): attest <branch> cycle"
    git push
