@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: coordinator-dispatch-has-no-credential-preflight
+    event:
+      type: finding
+      ts: "2026-09-03T10:10:30Z"
+      agent_id: linux-macuahuitl-fable5-20260903t101030z
+      host: macuahuitl
+      summary: |-
+        THE CALLER COUNT IS ONE, which is exit criterion 4 answered and it is the reason this recurs. scripts/check-credential-channel.sh has exactly ONE production caller in the whole tree: scripts/forge-validate.sh:28. Everything else that names it is a fixture (test-check-credential-channel.sh), a mode-permission regression test, or PROSE in the meta-orchestration skill at lines 900, 903 and 1973. It is a MANUAL STEP IN ONE SKILL. I ALSO CAUGHT MYSELF WITH THE NIGHT'S OWN DEFECT WHILE CHECKING THIS. My first grep counted check-credential-channel in cycle-preflight.sh and returned 1, and I read that as it runs the guard. It does not: the single occurrence is a COMMENT explaining why cycle-preflight deliberately does NOT duplicate the guard's message. A count answered a different question than the one I asked of it - the same shape as grep -c on a construct, memory.peak counting page cache, and a ps filter that could not match the process name. Fifth instance, mine, while implementing the packet about instruments. SO A HOST THAT NEVER ENTERS THE META-ORCHESTRATION LOOP NEVER RUNS THE GUARD AT ALL. That is not a coordinator oversight, it is structural: the guard's coverage is exactly the set of hosts that read one skill and follow it manually.
