@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: nine-hand-rolled-length-prefixed-framing-copies
+    event:
+      type: progress
+      ts: "2026-09-03T15:46:45Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260903t154645z
+      host: tlatoanis-macbook-air
+      summary: |-
+        MACOS SLICE DONE. pty_vsock_bridge.rs production framing is on the shared codec; ratchet lowered 5 to 4 and agrees at sites=17 files=10; gate green 199s.
+
+        WHAT LANDED, following the next_action exactly: framed ONCE at the split in connect_pty_bridge, and the SAME FramedRead that reads the HelloAck is moved into reader_task, buffer intact. Both tasks now take already-framed halves, so a second max_frame_length policy cannot appear on the path. spawn_pty_bridge_with_seq frames at its split too. The bound comes from control_frame_codec(), the shared constructor, rather than a per-site copy.
+
+        I BUILT THE REGRESSION GUARD THE HAZARD DESERVED, AND THEN PROVED IT CATCHES THE HAZARD. The packet says a per-call Framed may read ahead and drop pipelined bytes, silently. The three tests already in this file DO NOT SEE THAT — I verified by reintroducing the exact defect (frame the handshake, into_inner, hand the raw half to a fresh FramedRead):
+
+          pipelined_frame_behind_the_helloack_is_not_dropped ... FAILED (timeout)
+          writer_frames_outbound_messages_correctly ......... ok
+          connect_pty_bridge_does_handshake_then_starts_framing ok
+          reader_routes_inbound_pty_data .................... ok
+
+        Three of four pass WITH the data-loss bug present. The existing handshake test cannot catch it because it sends the HelloAck and then READS, so nothing is ever in flight behind the ack. The new test writes HelloAck and a PtyData in ONE burst before the host reads either, which is what the guest actually does. It also fails for the right reason — a timeout on the inbox, not a decode error, which is precisely why the bug is invisible in production. 4/4 with the correct threading.
+
+        TEST PEERS KEPT HAND-ROLLED, and the extension traits moved into the test module because production no longer needs them. Same reasoning the packet recorded for vsock_listener_e2e.rs: now that production reads through the codec, a peer that decodes u32-BE by hand is the only thing in the file still asserting the WIRE FORMAT rather than asserting the codec against itself.
+
+        ONE BEHAVIOURAL DIFFERENCE I KEPT DELIBERATELY. writer_task retains its explicit oversize check instead of leaving it to the codec: the check continues past one too-large message, whereas a codec error would break the session. A single outsized PtyData should not end a terminal. The inbound side does let the codec own the bound, since there the hand-rolled version also aborted the reader.
+
+        TWO FINDINGS THAT ARE NOT MINE:
+
+        1. THE RATCHET FLAGGED A FALSE POSITIVE and I dispositioned rather than migrated it. crates/tillandsias-vm-layer/src/qcow2.rs appeared as a new site: it uses u32::from_be_bytes to read a field out of a QCOW2 DISK HEADER. That is not a wire frame length — no stream, no length prefix, no maximum-frame policy to share — and LengthDelimitedCodec has nothing to offer it. Added as a keep with the reason at the site, per the baseline header rule. The detector counts u32::from_be_bytes and cannot tell disk-format parsing from control-wire framing, so this class will recur as the tree grows.
+
+        2. THE RATCHET IS NOT WIRED INTO ./build.sh --check. grep build.sh for check-framing-raw-decodes returns 0. It only runs inside litmus:one-length-delimited-framing-impl, and --check runs no litmus (748-tkjx). So when qcow2.rs landed, the ratchet went blocked and THE GATE STAYED GREEN — I found it only because I ran the check by hand while lowering my own row. That is the 865-n8vq orphaned-guard shape on the very ratchet this packet built to prevent drift.
+
+        REMAINING: Windows hvsocket.rs (2 decodes), which needs a Windows host. Exit criterion 1 is still unsatisfiable as written and the coordinator decision on the proposed restatement is still pending; I did not restate it.
