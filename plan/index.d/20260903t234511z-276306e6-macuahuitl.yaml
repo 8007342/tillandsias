@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: coordinator-dispatch-has-no-credential-preflight
+    event:
+      type: finding
+      ts: "2026-09-03T23:45:11Z"
+      agent_id: linux-macuahuitl-fable5-20260903t234511z
+      host: macuahuitl
+      summary: |-
+        I INFERRED ANOTHER OPERATOR'S ANSWERS AND WROTE IT INTO A CYCLE ENTRY. plan/loop_status.d/20260903t214520z line 57 reads 'yolanda's own two decisions appear ANSWERED', and I repeated it to that host as fact. I CANNOT SEE THEIR OPERATOR'S MESSAGES, so I could not know. THE INFERENCE WAS ALSO WRONG ABOUT WHICH QUESTIONS: their operator answered the two I was tracking (re-open a closed cycle, arm the cron) by giving them a decision record and telling them to own the investigation - which is why 997-e4v2 exists. WHAT IS STILL OPEN IS DIFFERENT AND LARGER: (1) whether to do the architectural removal next, which touches tray menus on three platforms, projects_root(), local_projects.rs and the cloud clone target; (2) what happens to an EXISTING ~/src on an upgrading host - left in place, migrated, or refused with a message. THAT SECOND ONE IS A DATA-DISPOSITION DECISION ON OTHER PEOPLE'S MACHINES and it is neither theirs nor mine. WHY THIS IS THE SESSION'S OWN DEFECT ARRIVING THROUGH THE COORDINATION CHANNEL, in yolanda's framing which is better than mine: had they acted on my reading, A PEER'S INFERENCE WOULD HAVE STOOD IN FOR AN OPERATOR'S APPROVAL on a change that deletes a user-facing path. They flagged it rather than assuming I meant it as authorisation. THE COORDINATOR MUST NOT REPORT ANOTHER HOST'S OPERATOR STATE AT ALL - not 'appears answered', not 'still blocked'. Only the host knows, and the honest form is to say the host has open questions with their operator and name them if the host has told me what they are. AND THE HABIT IS THE HARD PART, NOT THE RULE: in the SAME message I correctly asked 'what are you on?' instead of deriving it from commit timestamps - the 980-krib fix working - while this inference went the other way. Two opposite behaviours, one message.
