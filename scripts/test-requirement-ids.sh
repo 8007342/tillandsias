@@ -75,7 +75,7 @@ after="$(cat "$TMP/openspec/specs/alpha/spec.md" "$TMP/openspec/specs/beta/spec.
 [ "$before" = "$after" ] || fail "second run changed the corpus"
 
 # 4. NEVER REASSIGN: a hand-written identifier survives stamping untouched.
-sed -i 's/<!-- req-id: [0-9a-f]* -->/<!-- req-id: deadbeef -->/' "$TMP/openspec/specs/beta/spec.md"
+sed 's/<!-- req-id: [0-9a-f]* -->/<!-- req-id: deadbeef -->/' "$TMP/openspec/specs/beta/spec.md" > "$TMP/openspec/specs/beta/spec.md.tmp" && mv "$TMP/openspec/specs/beta/spec.md.tmp" "$TMP/openspec/specs/beta/spec.md"
 run_stamp >/dev/null
 grep -q 'req-id: deadbeef' "$TMP/openspec/specs/beta/spec.md" \
     || fail "an existing identifier was reassigned"
@@ -91,7 +91,14 @@ grep -q "$kept" "$TMP/openspec/specs/alpha/spec.md" || fail "stamping a new requ
 
 # 6. DUPLICATES ARE A VIOLATION, and worse than absence: a missing identifier is
 #    visibly absent, a duplicate silently merges two obligations into one row.
-sed -i '0,/<!-- req-id: [0-9a-f]* -->/s//<!-- req-id: deadbeef -->/' "$TMP/openspec/specs/alpha/spec.md"
+# FIRST occurrence only, in awk. `sed '0,/re/s//.../'` is a GNU extension twice
+# over — the 0 address and the empty-regex back-reference — and BSD sed applies
+# neither, so on macOS the file was left UNCHANGED, no duplicate was created,
+# and the arm failed claiming the validator had missed one. The fixture was
+# testing sed's dialect, not the validator.
+awk '!done && sub(/<!-- req-id: [0-9a-f]* -->/, "<!-- req-id: deadbeef -->") { done = 1 } { print }' \
+    "$TMP/openspec/specs/alpha/spec.md" > "$TMP/openspec/specs/alpha/spec.md.tmp" \
+    && mv "$TMP/openspec/specs/alpha/spec.md.tmp" "$TMP/openspec/specs/alpha/spec.md"
 out="$(run_check)"; rc=$?
 [ "$rc" = 1 ] || fail "a duplicate identifier should fail the validator (got rc=$rc)"
 case "$out" in *"violation:requirement-ids-duplicated:1"*) ;; *) fail "expected a duplicate verdict, got: $out" ;; esac
