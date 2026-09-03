@@ -1,0 +1,86 @@
+packets:
+  - packet_id: ca-bundle-path-is-written-in-sixteen-places
+    order: 998-qrwu
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: refactor
+    title: rung a1 — the CA bundle path is a literal in 16 files and 38 sites; make it one source before anything moves it
+    deliverable: 'one declaration of the enclave CA directory that Rust and shell both read, plus a guard that fails when a new literal appears — so relocating it later is one edit, not thirty-six'
+    pickup_role: linux
+    capability_tags: [enclave, refactor, one-copy]
+    estimated_hours: 3
+    verifiable_closure: |
+      scripts/check-ca-path-single-source.sh reports zero literal occurrences
+      outside the declaration, and reintroducing one anywhere makes it fail.
+    context: |
+      MEASURED 2026-09-03 while taking 975-rsgm half (a): `/tmp/tillandsias-ca`
+      appears as a LITERAL in 38 OCCURRENCES across 16 files — the first count taken was 36 and was a LINE count, which undercounts because a line can carry it twice; the unit that matters is the number of SITES that must move —
+      crates/tillandsias-macos-tray/src/diagnose.rs (8),
+      scripts/check-enclave-ca-consistency.sh (4), with-nix-builder.sh (3),
+      orchestrate-enclave.sh (3), check-nix-builder-e2e.sh (3),
+      tillandsias-headless/src/main.rs (3), and ten more with one or two each.
+
+      RELOCATING IT WHILE THAT IS TRUE WOULD GUARANTEE DRIFT. Half of the sites
+      would move and half would not, and the ones left behind would fail in the
+      quietest possible way: pointing at a directory that no longer exists, on a
+      path that only runs during a failure. That is the same one-copy defect
+      this repository has paid for repeatedly this week — a container name in
+      two places (967-6ax6), an endpoint derivation in three (967-xq5e), a
+      lattice order that would have been two.
+
+      `tillandsias-core` is a dependency of BOTH tillandsias-headless and
+      tillandsias-macos-tray, so it is where the constant belongs; the shell
+      side reads an env var with the same default.
+    exit_criteria:
+      - |
+          The path is declared ONCE, in tillandsias-core, and both the headless
+          and macos-tray crates read it from there rather than restating it
+      - |
+          Shell callers take it from a single environment default, not a literal
+      - |
+          A guard fails when a new literal `/tmp/tillandsias-ca` appears
+          anywhere outside the declaration, so the count cannot grow back
+
+  - packet_id: ca-bundle-moves-to-a-durable-directory
+    unscoreable: closure is a host-level reboot-and-recover observation — a reboot cannot be asserted from a test process, so no litmus or script verdict can stand in for it. Verified by a host, recorded as an event.
+    order: 998-3z6g
+    status: ready
+    desired_release: v0.5
+    priority: p0
+    kind: bug
+    depends_on: ca-bundle-path-is-written-in-sixteen-places
+    title: rung a2 — move the CA bundle off /tmp so a reboot stops making the proxy unrestartable
+    deliverable: 'the enclave CA bundle lives somewhere that survives a reboot and a tmpfiles sweep, and existing proxy containers are migrated rather than left binding a path that no longer exists'
+    pickup_role: linux
+    capability_tags: [enclave, containers, lifecycle]
+    estimated_hours: 3
+    verifiable_closure: |
+      After removing the old /tmp bundle directory and restarting the host's
+      enclave, the proxy reaches Running with no operator hand-repair —
+      975-rsgm's criterion 2, which remains unmet until this lands.
+    context: |
+      THE REMAINING HALF OF 975-rsgm, and the one criterion 2 depends on. /tmp
+      is volatile by design: a reboot or a systemd-tmpfiles sweep removes the
+      bundle, and podman recorded the bind SOURCE at container creation, so
+      `podman start` can never succeed again for a container that binds it.
+
+      THE MIGRATION IS THE HARD PART AND IT IS NOT A CONSTANT CHANGE. An
+      existing proxy container binds the OLD path in its stored definition.
+      Changing the constant makes new containers correct and leaves every
+      existing one binding a directory that will not be there — so this needs
+      the containers RECREATED, not restarted, and needs to detect that state
+      rather than assume a fresh host.
+
+      DO NOT START THIS BEFORE 998-qrwu. With the path written in 38 places,
+      moving it would move some and miss others, and the misses fail only on the
+      recovery path — which is where nobody is watching.
+    exit_criteria:
+      - |
+          The bundle's directory survives a reboot and a systemd-tmpfiles sweep
+      - |
+          A host whose proxy container binds the OLD path is detected and its
+          container RECREATED, not started into a missing mount
+      - |
+          975-rsgm criterion 2 passes: a rebooted host reaches a running proxy
+          with no operator hand-repair

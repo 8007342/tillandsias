@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: enclave-ca-bundle-lives-in-tmp-so-containers-cannot-restart
+    field: next_action
+    value: 'Half (b) is done and pinned. Half (a) is SPLIT: take 998-qrwu (single-source the path, 38 occurrences across 16 files) BEFORE 998-3z6g (relocate and migrate). Do not start the relocation first — moving a path written in 38 places moves some and misses others, and the misses fail only on the recovery path. A ratchet (scripts/check-ca-path-literals.sh, wired into --check) refuses any RISE in the literal count meanwhile, so the migration has a fixed target; lower its baseline as 998-qrwu removes literals, and never raise it. This row stays open until 998-3z6g lands, because criterion 2 depends on it.'
+    ts: "2026-09-03T23:18:58Z"
+    host: yoga
+
+events:
+  - packet_id: enclave-ca-bundle-lives-in-tmp-so-containers-cannot-restart
+    event:
+      type: progress
+      ts: "2026-09-03T23:18:58Z"
+      host: yoga
+      summary: |-
+        status 'Half (b) is done and pinned. Half (a) is SPLIT: take 998-qrwu (single-source the path, 38 occurrences across 16 files) BEFORE 998-3z6g (relocate and migrate). Do not start the relocation first — moving a path written in 38 places moves some and misses others, and the misses fail only on the recovery path. A ratchet (scripts/check-ca-path-literals.sh, wired into --check) refuses any RISE in the literal count meanwhile, so the migration has a fixed target; lower its baseline as 998-qrwu removes literals, and never raise it. This row stays open until 998-3z6g lands, because criterion 2 depends on it.' (not terminal) with evidence_refs: 998-qrwu + 998-3z6g filed; check-ca-path-literals.sh wired and mutation-verified
