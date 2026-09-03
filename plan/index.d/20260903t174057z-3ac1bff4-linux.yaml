@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: guest-floor-defeats-the-host-memory-reserve-below-10-gib
+    field: status
+    value: blocked
+    ts: "2026-09-03T17:40:57Z"
+    host: linux
+
+events:
+  - packet_id: guest-floor-defeats-the-host-memory-reserve-below-10-gib
+    event:
+      type: progress
+      ts: "2026-09-03T17:40:57Z"
+      host: linux
+      summary: |-
+        status 'blocked' (not terminal) with evidence_refs: Unclaimed-in-progress since 2026-09-03T08:52:59Z with no lease holder, so simultaneously unowned and excluded from the ready queue. Blocked on an operator decision carried in the coordinator queue: permission for macneo-macos to run a forge build on the operator's Mac for the 2 GiB criterion-4 measurement, which pegs that machine over an hour. macneo asked rather than spending it and has been silent ~8.5h. The technical hold is unchanged: do not re-derive HOST_RESERVED_MEMORY_BYTES from intuition, and test the emptiness hypothesis first.

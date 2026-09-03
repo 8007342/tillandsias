@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: guest-floor-defeats-the-host-memory-reserve-below-10-gib
+    event:
+      type: note
+      ts: "2026-09-03T17:40:57Z"
+      agent_id: linux-macuahuitl-fable5-20260903t174057z
+      host: macuahuitl
+      summary: |-
+        COORDINATOR RECONCILIATION: this row is UNCLAIMED-IN-PROGRESS, which is a distinct state I mis-reported to the operator last cycle as a held claim within TTL. expire-claims --list-live shows lease fields empty: status in_progress with NO holder. That is worse than a held claim in a specific way - an in_progress row is excluded from the ready queue, so it is simultaneously UNOWNED and INVISIBLE TO ROUTING. It cannot be picked up by anyone drawing from ready and nobody is working it. SETTING IT TO blocked, which is what it actually is and has been since 08:52Z. It is blocked on an explicit OPERATOR decision I am carrying in the queue: permission for macneo to run a forge build on the operator's Mac for the 2 GiB measurement, which pegs that machine for over an hour. macneo asked rather than spending it, correctly, and has been silent ~8.5h since. Nothing about the technical hold changes - the emptiness hypothesis is still the thing to test before any formula, and the reserve is still not to be re-derived from intuition. This is bookkeeping making the true state visible, not a scope change. 980-xcaf is in the SAME unclaimed-in-progress state and I am deliberately NOT touching it: macneo reported it verified end to end, so its criteria may be dischargeable, and closing or re-opening another host's finished work without their confirmation is the coordinator overreaching. Recorded so the next reader knows the omission was a choice.
