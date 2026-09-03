@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-forge-memory-ceiling-was-declared-closed-on-a-helper-nothing-calls
+    event:
+      type: progress
+      ts: "2026-09-03T07:08:46Z"
+      agent_id: linux-lenovinha-opus5-20260903t070407z
+      host: lenovinha
+      summary: |-
+        NOT IMPLEMENTED, AND THE REASON IS A MEASUREMENT: the spec's own formula would OOM-kill every forge in the fleet. Releasing to ready with the decision named, rather than shipping a compliant change that breaks the product.
+
+        THE DEFECT IS CONFIRMED, n=2, second host and different hardware. lenovinha (Ryzen 7 5800H, 13.8 GiB RAM, 8 GiB swap), live forge tillandsias-tillandsias-forge-claude:
+          memory.max = max      memory.high = max      pids.max = 4096
+          podman's own record:  Memory=0  MemorySwap=0
+        So pirria's finding reproduces exactly: no ceiling, swap escape wide open, PIDs the only bounded resource. Also confirmed independently: compute_memory_ceiling_mb has zero production callers (preflight.rs:307, referenced only at 459/465/475/488, all its own tests), and its doc comment says "the caller is responsible for emitting both args" — there is no caller.
+
+        WHY I STOPPED, and this is the whole finding. The spec's ceiling is sum(all tmpfs size_mb) + 256. The live forge's five tmpfs mounts total 330 MiB, so the spec ceiling is 586 MiB. Measured on the forge running on this host RIGHT NOW:
+          memory.current = 1809 MiB   (3.1x the spec ceiling)
+          memory.peak    = 4801 MiB   (8.2x the spec ceiling)
+        Implementing the MUST as written would have capped this container at 586 MiB and OOM-killed it repeatedly. Every gate would have gone green — the flags would be in the argv, equal, from the helper, exactly as criteria 1 and 2 demand — and the forge would be dead. That is a compliance change that breaks the product, and it is the same shape as the defect this packet exists to fix, one level up: an artifact that satisfies its check and does not do its job.
+
+        WHY THE FORMULA IS STALE RATHER THAN WRONG. The spec scenario reads "a forge profile carries four tmpfs mounts totalling 8 + budget + 256 + 64 MB" — it assumes a `budget` tmpfs sized from a memory budget. No such mount exists today; the five current mounts are /tmp 256m, /run/user/1000 64m, /opt/cheatsheets 8m, ~/.ssh 1m, ~/.config/gh 1m, and the workspace is a BIND MOUNT from the host (/var/home/forge/src), not tmpfs. So the formula's premise — that the forge's working data lives in tmpfs and therefore sum(tmpfs) dominates — was true of an architecture that has since changed, and the 256 MiB "working-set baseline" was never sized for a container that runs cargo with pids-limit 4096. The requirement is stale relative to the design it was written against.
+
+        THE DECISION THIS NEEDS, and why I am not making it. Picking the replacement ceiling is fleet policy with fleet blast radius: too low OOMs real work, too high preserves the swap-thrash this packet is about while looking done. I have two data points (a 13.8 GiB host peaking at 4.8 GiB, and pirria's 15.35 GiB floor host) and the fleet spans an 8 GiB macOS host upward. 978-juw4 already owns a host-memory-reserve policy for the macOS VM lane; a second, independently-invented ceiling policy here would be exactly the dual-source-of-truth this codebase keeps paying for (959-fpc5's pids-limit partial fix is cited in main.rs for precisely that). It wants either an operator ruling or a fleet-wide measurement pass, not my judgement at the end of a night shift.
+
+        A TRAP FOR WHOEVER IMPLEMENTS IT, which cost me most of the investigation and would silently waste the next agent's cycle. There are THREE forge-argv builders and only one is live:
+          - ContainerLauncher::build_container_spec (tillandsias-podman/src/launch.rs:26) — sets pids_limit(4096) and the tmpfs sizes, and its OWN comment says "this builder has no production callers today (2026-09-02 census)". A fix here changes nothing.
+          - build_launch_spec (tray/mod.rs:2217) — described in its own neighbours as the legacy path.
+          - build_stack_common_args (main.rs:3246, the --pids-limit=4096 that pirria actually measured) plus build_opencode_forge_args (main.rs:6618, which emits the tmpfs sizes), reached via build_forge_common_args (main.rs:6031). THIS is the live path.
+        I found it by asking which site emits the --pids-limit that is observably 4096 in the live cgroup, rather than by reading names. Adding the flags to either of the first two would produce a green gate, a passing argv assertion, and a forge still running unbounded — this packet's defect reproduced by its own fix.
+
+        EXIT CRITERION 5 IS DONE, since it was pure investigation and costs the next agent nothing to inherit: macOS and Windows have THE SAME GAP. build_stack_common_args, build_forge_common_args and build_opencode_forge_args carry no cfg attributes, and neither tillandsias-windows-tray/src nor tillandsias-macos-tray/src builds any forge argv of its own — grep for --pids-limit and --tmpfs in both returns nothing. All three lanes launch through the same unbounded builders, so one fix covers all three and no lane needs separate work.

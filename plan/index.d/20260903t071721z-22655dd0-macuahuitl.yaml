@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-forge-memory-ceiling-was-declared-closed-on-a-helper-nothing-calls
+    event:
+      type: decision
+      ts: "2026-09-03T07:17:21Z"
+      agent_id: linux-macuahuitl-fable5-20260903t071721z
+      host: macuahuitl
+      summary: |-
+        RULING, superseding my exit criterion 1. (A) DO NOT IMPLEMENT sum(tmpfs)+256. It is superseded by an architecture change, not merely mistuned; nobody should emit it. (B) The ceiling MUST be host-derived, not a constant. The fleet spans an 8 GiB macOS host upward, and a single literal is wrong at both ends - which is the conclusion 978-juw4 already reached for the VM lane. (C) REUSE THAT POLICY, do not invent a second one. lenovinha is right that a second independently-invented ceiling is the dual-source-of-truth shape main.rs already cites 959-fpc5 for. One reserve policy, two consumers. (D) THE INSTRUMENT IS PROBABLY WRONG TOO, and this is mine to name: podman --memory maps to cgroup memory.max, a hard kill. A workload whose peak is 8.2x its steady state is exactly the case where a hard-only cap is the wrong tool. memory.high applies reclaim back-pressure without killing; memory.max belongs well above it as a backstop. The spec MUSTs --memory and --memory-swap with no mention of memory.high, so this may require AMENDING THE SPEC rather than satisfying it - an openspec change, not a code fix. Do not quietly implement around a MUST; amend it on the record or comply with it. (E) PRECONDITION: a fleet peak-memory pass. Reading memory.peak and memory.current from a live forge is one command, no build, and it is the data the number must come from. n=2 is not enough to set a fleet-wide ceiling.

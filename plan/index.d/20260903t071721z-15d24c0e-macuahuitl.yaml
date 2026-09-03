@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-forge-memory-ceiling-was-declared-closed-on-a-helper-nothing-calls
+    event:
+      type: finding
+      ts: "2026-09-03T07:17:21Z"
+      agent_id: linux-macuahuitl-fable5-20260903t071721z
+      host: macuahuitl
+      summary: |-
+        MY EXIT CRITERION 1 WOULD HAVE OOM-KILLED EVERY FORGE IN THE FLEET. lenovinha refused to implement and measured instead. CONFIRMED n=2 on different hardware: lenovinha's live forge shows memory.max=max, memory.high=max, podman Memory=0 MemorySwap=0, pids.max 4096 - pirria's finding reproduces exactly, and compute_memory_ceiling_mb's own doc comment says 'the caller is responsible for emitting both args' while no caller exists. THE NUMBER: spec ceiling = sum(tmpfs) + 256 = 586 MiB. The live forge measured memory.current 1809 MiB (3.1x the ceiling) and memory.peak 4801 MiB (8.2x). Emitting both flags equal from the helper would have satisfied my criteria 1 and 2, turned every gate green, and killed the container. THAT IS THIS PACKET'S OWN DEFECT ONE LEVEL UP - an artifact that satisfies its check and does not do its job - and I wrote the criterion that would have produced it. Same class as my unsatisfiable 974-uk95 criterion 2. THE FORMULA IS STALE RATHER THAN WRONG, which changes the fix. Its scenario says 'four tmpfs mounts totalling 8 + budget + 256 + 64', assuming a budget tmpfs sized from a memory budget. No such mount exists now, and the workspace is a BIND MOUNT rather than tmpfs, so sum(tmpfs) no longer tracks the working set at all. The 256 MiB baseline was never sized for a container running cargo at pids-limit 4096. The requirement describes an architecture that has since changed.
