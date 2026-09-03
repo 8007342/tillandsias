@@ -24,8 +24,15 @@
 # gets switched off, which is the failure the sibling packet is about. So the
 # scope is NEW rows only.
 #
-# WHAT COUNTS AS SCORABLE. Either:
-#   * a `verifiable_closure` naming a `litmus:<test>` — the pin rung 4 used; or
+# WHAT COUNTS AS SCORABLE. Any of:
+#   * a `verifiable_closure` naming a `litmus:<test>` — the pin rung 4 used;
+#   * a closure naming a `scripts/<name>.sh` — a script verdict is as
+#     mechanical as a litmus test, and refusing it would push an honest author
+#     toward a dishonest `unscoreable:`. ADDED after this gate refused the very
+#     first real packet filed through it (994-8r3w), whose closure names a
+#     script; the refusal was correct about the letter and wrong about the
+#     intent, and a gate that makes the honest path harder than the escape
+#     hatch is worse than no gate;
 #   * an explicit `unscoreable: <reason>` — a STATED refusal.
 #
 # THE SECOND IS NOT A LOOPHOLE, IT IS THE POINT. Some rows genuinely close by
@@ -85,7 +92,7 @@ while IFS= read -r f; do
         pid="${block%%$'\x1f'*}"
         body="${block#*$'\x1f'}"
         case "$body" in
-            *litmus:*|*unscoreable:*)
+            *litmus:*|*unscoreable:*|*scripts/*.sh*)
                 # SCORABLE. Now the SECOND question, which is a different one:
                 # is the score it will produce COMPARABLE with the previous run?
                 # A row that tombstones an obligation changes the denominator

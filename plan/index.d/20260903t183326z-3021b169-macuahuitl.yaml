@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: github-login-validates-push-authorization
+    event:
+      type: finding
+      ts: "2026-09-03T18:33:26Z"
+      agent_id: linux-macuahuitl-fable5-20260903t183326z
+      host: macuahuitl
+      summary: |-
+        EXIT CRITERION 1 IS NOT MET ON THE NO-UPSTREAM PATH, and this row was released claiming it was. The release note reads EC1/EC2 met plus a wiring ordering test. FIRST LIVE OCCURRENCE, on the operator's own machine: they ran tillandsias-headless --github-login as root from /root on esmeraldinha. It printed NOTE: no GitHub upstream is configured for this checkout, so push permission could NOT be verified against a repository. The token is being seeded on authentication alone - if it lacks Contents:write, the failure will appear at the first push, not here (order 759-vceg). Then it completed GitHub authentication complete for 8007342 and exited zero. THE TOKEN WAS SEEDED UNVERIFIED, which is exactly why the login succeeded and esme's push is still 403 - the mirror's next probe read denied/permission at epoch 1788459938. THE PACKET'S OWN DELIVERABLE ALREADY COVERS THIS AND IS HALF-LANDED. It ends: when no upstream is configured, validate against the account (scopes header) AND SAY SO rather than skipping silently. TWO CLAUSES. main.rs around 9573 ships the SECOND and skips the FIRST - the None arm prints the NOTE and seeds anyway. THE ASYMMETRY IS INSIDE ONE FUNCTION, which is what makes it sharp, and esme found it: github_push_authorization_verdict at main.rs:9246 REFUSES an UNPARSEABLE probe answer, and its doc comment states the principle exactly - I could not tell resolving to seed it anyway is how the original defect reads to an operator: a credential accepted with no evidence it works. The Some path honours that with a full refusal naming the missing Contents Read and write permission and confirming nothing was written to Vault. The None path - a STRICTLY LESS INFORMED state, no repo probed at all - waves it through. The stricter case is guarded and the least-informed case is not, and the printed NOTE makes it look handled. ADDITION esme proposes and I agree with, on this packet rather than a new row: the no-upstream arm must either validate against the account and refuse on insufficient scope, or refuse to seed at all - and the litmus should pin the NO-UPSTREAM shape alongside the fine-grained-PAT shape, because that is the arm an operator hits running the login from a home directory rather than a checkout. ESME CHECKED FOR AN EXISTING ROW BEFORE PROPOSING ONE and found this packet's own text already covered it. That is the discipline recorded this morning working.

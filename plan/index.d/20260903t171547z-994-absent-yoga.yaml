@@ -1,0 +1,80 @@
+packets:
+  - packet_id: enclave-health-absent-detection-is-never-given-an-expectation
+    order: 994-8r3w
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: bug
+    title: the enclave health check counts absent services correctly and is never told what to expect, so a service REMOVED entirely reports as perfectly healthy
+    deliverable: 'a production caller supplies the expected enclave service set, so a missing service reads as absent instead of as up — the absent= counter stops being structurally zero'
+    pickup_role: linux
+    capability_tags: [enclave, health, fail-loud]
+    estimated_hours: 1
+    verifiable_closure: |
+      With the proxy container removed, scripts/check-enclave-service-health.sh
+      (as invoked in production, not with a hand-passed --expect) reports
+      absent=1 and names the service, rather than
+      ok:enclave-service-health:...:absent=0.
+    context: |
+      MEASURED on yoga 2026-09-03, immediately after removing the proxy
+      container while working 975-rsgm:
+
+          $ podman ps -a --format '{{.Names}}'
+          tillandsias-builder
+          tillandsias-dev-inference
+          tillandsias-vault            <- no tillandsias-proxy
+          $ scripts/check-enclave-service-health.sh
+          ok:enclave-service-health:services=3:up=3:down=0:dead=0:absent=0
+          $ scripts/cycle-preflight.sh
+          ok:cycle-preflight:...:services-ok:...
+
+      A service that has been REMOVED reports as perfectly healthy, and
+      preflight agrees. For five cycles this host reported the proxy as DOWN
+      (`fail:enclave-service-start-failed`); the moment it stopped existing, the
+      same check reported everything fine.
+
+      THE MECHANISM IS BUILT AND CORRECT AND INERT. The script has a full
+      absent-detection loop (check-enclave-service-health.sh:338-349) that
+      compares a list of expected services against what exists and emits
+      `fail:enclave-service-absent:service=<name>`. It is driven by
+      `EXPECTED="${TILLANDSIAS_ENCLAVE_EXPECTED_SERVICES:-}"` (line 116), which
+      DEFAULTS TO EMPTY — and grep finds no production caller that sets that
+      variable or passes `--expect`. The only caller that does is the script's
+      own test suite (test-enclave-service-health.sh:196).
+
+      So the loop runs over an empty expectation on every real invocation, and
+      `absent=0` is not a measurement — it is a structural constant. Proven both
+      directions on the same host, same moment:
+
+          (production form)                    -> ...absent=0   [ok]
+          --expect tillandsias-vault,tillandsias-proxy -> ...absent=1  [degraded]
+
+      WHY IT IS p1 RATHER THAN A NIT. The check derives its service list from
+      what EXISTS, so its health question is "are the containers I can see
+      running?" — which cannot fail for a container that is gone. That is the
+      one failure mode a supervisor exists to catch, and it is the one shape the
+      grammar already has a field for. An operator reading `absent=0` reasonably
+      concludes nothing is missing; the field is telling them only that nothing
+      was looked for.
+
+      SAME FAMILY AS THE REST OF THIS WEEK: a signal that reads as a measurement
+      and is a constant — the `measurements[]` dedup key that made every host
+      report Unmeasured, the daily-maintenance marker that existed only as prose,
+      the idempotence check that tested a strictly weaker property than its
+      citation. Here the machinery is not even wrong; nobody wired the input.
+    exit_criteria:
+      - |
+          A production invocation supplies the expected enclave service set, from
+          one source, so the list cannot drift from what the orchestration
+          actually launches
+      - |
+          With a service removed, the check reports absent>=1 and NAMES it,
+          rather than ok:...absent=0
+      - |
+          A test pins the production path, not just the --expect path — the
+          existing suite already proves --expect works, and that is exactly what
+          made the gap invisible
+    notes: |
+      Found while working 975-rsgm. Related: 975-rsgm (the proxy's own
+      unrestartable state, which this check reported for five cycles and then
+      stopped reporting when the container was removed).

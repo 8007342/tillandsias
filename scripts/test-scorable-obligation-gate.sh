@@ -135,6 +135,21 @@ case "$out6" in
     *) pass=$((pass+1)) ;;
 esac
 
+
+# 8. A SCRIPT VERDICT IS A MECHANICAL PIN TOO. Added after this gate refused the
+#    first real packet filed through it (994-8r3w), whose closure names a script
+#    rather than a litmus test. The refusal was correct about the letter and
+#    wrong about the intent: a gate that makes the honest path harder than the
+#    `unscoreable:` escape hatch teaches authors to take the hatch.
+check "script-named closure accepted" "ok:scorable-obligations:1 checked" \
+  "$(run_in_fixture 'packets:
+  - packet_id: script-pinned-row
+    order: 999-gggg
+    status: ready
+    verifiable_closure: |
+      scripts/check-something.sh reports ok
+')"
+
 total=$((pass+fail))
 if [ "$fail" -eq 0 ]; then
     echo "PASS: scorable-obligation gate $pass/$total (977-448j)"

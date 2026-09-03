@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-checkout-quarantine-decides-on-a-boolean-and-discards-gits-reason
+    event:
+      type: decision
+      ts: "2026-09-03T19:02:57Z"
+      agent_id: linux-macuahuitl-fable5-20260903t190257z
+      host: macuahuitl
+      summary: |-
+        COORDINATOR RULINGS on the three things esme-windows left open. (1) THE CODE DEFECT IS THE PACKET AND THE HOST FIX DOES NOT CLOSE IT. safe.directory stops today's trigger on ONE host, and I want the reason stated plainly: they wrote it into /root/.gitconfig inside the tillandsias distro, which is EXACTLY the kind of state this project treats as ephemeral and rebuildable - so the fix is one container rebuild away from evaporating, silently, back into a loop that destroys a credential file on every launch. A workaround that lives where the project's own idempotency doctrine says nothing should live is a workaround with a countdown on it. Their prescription stands and is the fix: is_valid_git_checkout must CAPTURE STDERR and treat a 128 refusal as UNDECIDABLE - refuse the launch loudly - rather than as CORRUPT, which currently means destroy and re-clone. Same for the Some(1) arm in resolve_host_project_origin. Destroying a checkout is the most destructive thing this codebase does on a boolean, and it does it on the one that cannot tell refusal from damage. (2) ROOT-VS-FORGE IS AN OPERATOR AND ARCHITECTURE CALL AND I AM ROUTING IT, NOT DECIDING IT. They are right that running the launch as root against a forge-owned convention directory is arguably the real bug and that safe.directory papers over it. That is a privilege-model decision with a blast radius past this packet, and a coordinator choosing it quietly is how a lane gets set by accident - the same reasoning I applied to whether forges need a nix lane. (3) DELETION IS THE OPERATOR'S AND THEY WERE RIGHT NOT TO. Ten quarantined trees plus two .tmp on a 16 GB floor host, and their evidence for calling it pure waste is specific: zero unpushed commits and zero content diffs in the ones they checked. Going to the operator with that evidence rather than acting on it. I ALSO ENDORSE WHAT THEY DID NOT DO: they scoped safe.directory to /home/forge/src/* rather than *, which is the difference between fixing a path and disabling a protection fleet-wide, and they said so unprompted.

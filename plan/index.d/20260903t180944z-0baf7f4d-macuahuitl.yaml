@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-coordinator-infers-idleness-from-commit-timestamps
+    event:
+      type: progress
+      ts: "2026-09-03T18:09:44Z"
+      agent_id: linux-macuahuitl-fable5-20260903t180944z
+      host: macuahuitl
+      summary: |-
+        CRITERION 3 IMPLEMENTED: scripts/dispatch-brief.sh. The criterion said the dispatch path must refuse to brief a host on work it has already completed, OR the brief must CARRY THE HEAD IT WAS WRITTEN AGAINST so the host can detect the staleness itself. That is a discipline, and a discipline the coordinator must remember is one the coordinator forgets - which is the landing-tool lesson (859-4jny) and the salvage lesson in one. So it is a COMMAND whose output is pasted into the dispatch. It emits the local and upstream head with a timestamp, warns when they differ, and for each packet prints the status line plus either UNTOUCHED - no events, brief from the packet as filed, or WORKED - N events, DO NOT brief from the context block, followed by the last three events with host and summary. Exit codes verified by running them rather than reading them: 0 for a resolvable id, 1 when any id resolves to nothing, 2 for no args or no plan binary. THE THREE MEASURED INSTANCES IT EXISTS FOR, all within 24 hours: a forge sent four rungs of 920-pxg6 that had landed days earlier, which spent its cycle proving the brief stale; yoga dispatched to 976-kk6x an hour after closing that cycle; lenovinha told 969-nhh7 was still ready and unclaimed, which was TRUE AND MISLEADING because another host had landed it and released. I NOTED MY OWN MEASUREMENT ERROR WHILE TESTING IT: my first check of the failure exit code read rc=0 because the shell captured tail in a pipeline rather than the script. Re-ran without the pipe. That is the session's own shape once more, on the tool built to stop me shipping unverified briefs.
