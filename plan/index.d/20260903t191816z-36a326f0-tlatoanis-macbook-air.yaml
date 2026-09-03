@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: nine-hand-rolled-length-prefixed-framing-copies
+    event:
+      type: progress
+      ts: "2026-09-03T19:18:16Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260903t191816z
+      host: tlatoanis-macbook-air
+      summary: |-
+        THE RATCHET IS NOW WIRED INTO ./build.sh --check, and it was RED ON TWO BRANCHES while unwired — which is the finding.
+
+        I wired it because I named it the highest-value item left, and before wiring I checked what wiring would do to the fleet. That check is the part worth recording:
+
+          origin/linux-next    blocked:framing-ratchet-new-site:crates/tillandsias-vm-layer/src/qcow2.rs
+          origin/windows-next  blocked:framing-ratchet-new-site:crates/tillandsias-vm-layer/src/qcow2.rs
+          osx-next (mine)      ok:framing-ratchet:sites=17:files=10
+
+        BOTH SIBLING BRANCHES HAVE BEEN FAILING THIS RATCHET SINCE THE QCOW2 WORK LANDED, and nobody could know, because an unwired guard produces no signal. The only reason osx-next is green is that I added the qcow2 disposition row by hand last cycle while lowering my own count. So the ratchet built by this packet to prevent framing drift had itself drifted into silence, on the majority of the fleet.
+
+        SEQUENCING, because getting this wrong is how I reddened linux last time. The baseline row and the wiring are in the SAME BRANCH and must travel together: a whole-branch merge of osx-next carries both, so linux-next and windows-next go green and gated in one step. A cherry-pick of the wiring alone would red both immediately. I checked all three branches BEFORE landing rather than after, which is the procedural rule this fleet extracted from my last cross-platform miss.
+
+        VERIFIED THE WIRING IS NOT DECORATIVE, to the standard I have been holding others to. Removed a baseline row to simulate a new hand-rolled copy landing, and the gate refused:
+          blocked:framing-ratchet-new-site:crates/tillandsias-macos-tray/src/pty_vsock_bridge.rs
+          [build] the framing ratchet refused (795-5itp)
+        Restored; ok:framing-ratchet:sites=17:files=10. Cost is 0.47s on a 208s gate.
+
+        DIALECT-CHECKED before wiring too: no grep -P, no bare sed -i, no GNU-only awk assignment in the checker. It runs on this BSD/bash-3.2 host, which is where the last four cross-platform reds came from.
+
+        WHAT REMAINS on this packet is unchanged: the Windows hvsocket.rs lane (2 decodes, needs a Windows host), the detector being unable to distinguish disk-format reads from wire framing (qcow2 is dispositioned keep, the class will recur), and the coordinator decision on exit criterion 1 being unsatisfiable as written. I did not touch the criterion.

@@ -2764,6 +2764,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Host-tools check passed"
 
+    _step "Checking the raw frame-decode ratchet (795-5itp)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-framing-raw-decodes.sh" 2>&1; then
+        _error "the framing ratchet refused (795-5itp) — a new hand-rolled u32-BE frame decode, or a baseline nobody tightened after a migration"
+        exit 1
+    fi
+    _info "Framing ratchet passed"
+
     # 956-llei: a `phase: retired` litmus runs only under an explicit
     # `--phase retired`; the "all" default (which --diff-scope fails closed
     # into) must skip it with the retired reason. Two arms through the real
