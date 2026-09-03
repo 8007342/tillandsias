@@ -20,6 +20,13 @@ _ccc_timeout() {
     gtimeout "$_secs" "$@"
   else
     echo "[check-credential-channel] no timeout(1) or gtimeout(1) — cannot bound this probe; refusing to run it unbounded (order 988)." >&2
+    echo "  Every refusal in this guard names its remedy, and so does this one:" >&2
+    echo "  REMEDY (macOS):  brew install coreutils    # provides gtimeout(1)" >&2
+    echo "  GNU coreutils is a PREREQUISITE of this gate on macOS. Measured on a" >&2
+    echo "  factory-fresh Mac 2026-09-03: without it the fixture fails 22 arms;" >&2
+    echo "  with it, ok:credential-channel-fixture:all. The gate cannot bound a" >&2
+    echo "  credential probe without it, and an unbounded probe is order 860-g798" >&2
+    echo "  itself — a push that hung over ten minutes on an interactive prompt." >&2
     return 127
   fi
 }
