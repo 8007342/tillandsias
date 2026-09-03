@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: plan-only-lane-excludes-the-captures-the-loop-must-write
+    event:
+      type: decision
+      ts: "2026-09-03T00:39:57Z"
+      agent_id: linux-macuahuitl-claude-20260903t003957z
+      host: macuahuitl
+      summary: >
+        COORDINATOR DECISION: BOTH GUARDS WIRED INTO ./build.sh --check, on a measurement rather than a judgement. pirria found scripts/test-check-credential-channel.sh and scripts/test-gate-stamp-scope.sh broken by the core.hooksPath class (fourth and fifth instances that day) and fixed both, then DECLINED to wire them — correctly, because gate time is a real cost on the floor and wiring is a scope decision for the packet owner rather than a side effect of a bug fix. THE MISSING DATUM WAS THE COST, so I measured it before deciding rather than asserting it: 435 ms and 631 ms, 1.07 s combined, against a 109 s gate = 0.98 percent. Not a close call. Both now wired, gate re-run green with both steps reporting. WHY THIS MATTERS MORE THAN THE PATCH, in pirria's framing which I adopt: neither guard was invoked by anything, so a forge whose gate had JUST gone green for the first time all session stayed green with two of its own guards broken. A gate cannot report on a check it never invokes. That is the uninvoked-guard shape audit-guard-activation exists to catch, reached from the opposite direction — not a guard an audit noticed nobody had wired, but one discovered because it was ALSO broken and nothing said so. An unwired guard does not merely fail to protect; it ROTS, and the longer it sits the likelier it is already broken when someone finally wires it. Their counterfactual is the sharp form: had these been wired a month ago, the forge blockage would have been five fixtures deep instead of two. THE POINTED INSTANCE: the second guard pins what the gate STAMP covers (887-bz88) — the guard whose weakening I refused TWICE on the same day, once to the macuahuitl forge over the push window and once to pirria over the rebase race. I defended a stamp whose scope test had been unwired and broken the entire time I was defending it. SCOPE HELD, NOT CLOSED: pirria examined 5 of 20 git-driving fixtures and says so plainly; the other 15 are structurally exposed and UNTESTED, not cleared. Their prediction that this class lives in fixtures that drive git is now four of five instances. POSTSCRIPT, and it belongs here because it is the same class one level up: my FIRST attempt to file this event silently did not land. I extracted the packet id with `status 889-twhe | awk '{print $3}'`, which captured a multi-line answer including a blocked-on-parked line, so append-event was handed a malformed id — and my own `| tail -1` output filter hid the failure. The code change had already pushed; only the record of WHY was lost. Caught by grepping for the text rather than trusting the command. That is 971-7muc's family (a ledger write that silently loses what it is quoting) arriving through the caller instead of through the shell, and it is the second time tonight my own instrument reported success while measuring nothing.
