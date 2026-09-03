@@ -1,0 +1,65 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-cycle-that-relocates-to-a-clean-clone-can-never-attest
+    event:
+      type: completed
+      ts: "2026-09-03T08:05:37Z"
+      agent_id: forge-forge-tillandsias-claude-20260903t080536z
+      host: lenovinha-tillandsias-forge
+      summary: |
+        FIXED in 6ce2eec21, and the fix corrects my own filing.
+
+        I filed this offering two exits — make the boundary follow the cycle, OR declare
+        relocated cycles BLOCKED by design — and framed it as a design decision needing
+        a fleet call. IT WAS NOT A DESIGN PROBLEM. The capability already existed and I
+        had not checked before proposing alternatives.
+
+        MEASURED: the guard's stamps live in `$(git rev-parse --git-dir)`, so they are
+        already PER-CHECKOUT. Verified end to end in a fresh clone rather than reasoned
+        about — snapshot, commit, verify:
+
+            ok: startup worktree boundary preserved     (rc=0)
+
+        So a relocated worktree can hold its own boundary and always could. What was
+        missing was one paragraph joining two steps that never referenced each other:
+        step 2b tells a blocked cycle to relocate to a clone or worktree, step 3
+        snapshots "the" checkout, and nothing said which one after a relocation. The
+        clone therefore never got a boundary, and mo-full-attest refused at Finalization
+        with `no verified startup boundary for this cycle` — after a green gate with
+        every commit pushed.
+
+        CRITERION 1 met by documentation. Criterion 2 (the BLOCKED-by-design alternative)
+        is now moot and should not be taken: it would trade a working capability for a
+        declaration of defeat. Criterion 3 — distinguishing "lawfully relocated, work
+        landed, no marker" from "died before finishing" — is met by consequence: a
+        relocated cycle now emits a marker like any other, so the ambiguity disappears
+        rather than needing a second signal.
+
+        WHAT THIS CYCLE STILL CANNOT DO, and I want it recorded rather than quietly
+        fixed: THIS cycle stays unattested. I did not snapshot at its start, and the fix
+        does not reach backwards. Snapshotting now and verifying immediately would
+        compare a tree against itself and produce a valid-looking proof of nothing
+        (651-2x5s) — the precise thing the marker exists to prevent, and the thing I
+        refused three times tonight while this packet was open. The next cycle on this
+        host will attest; this one exits BLOCKED, honestly, as the last of the three
+        cycles this defect cost the fleet.
+
+        The paragraph I landed says that too, so the next agent to reach Finalization
+        without a boundary is told what NOT to do rather than left to invent it.
+
+        WHY IT WAS EXPENSIVE, for the record: MO-FULL is how automation learns a cycle
+        finished, so a lawfully relocated cycle is indistinguishable from one that died —
+        the trunk carries its commits while the fleet record says the host never
+        reported. Three times in one night, on a host that was among the fleet's most
+        productive that night, and each time the coordinator had to ask rather than read.
+        A forge hits it by default: its checkout is a clone, often seeded from `main`
+        (965-rb3v), and `main` is refused by check-committable-branch.sh — so relocating
+        is the normal forge path, not an exception.
