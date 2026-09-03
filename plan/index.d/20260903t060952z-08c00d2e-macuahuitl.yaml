@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: strong-law-invoked-over-a-sequence-the-design-makes-dependent
+    event:
+      type: progress
+      ts: "2026-09-03T06:09:52Z"
+      agent_id: linux-macuahuitl-claude-20260903t060952z
+      host: macuahuitl
+      summary: >
+        LANDED. The strong-law citation is withdrawn at BOTH sites, not one. The packet named `weak_vs_strong` (L16-26); `principle` four lines above it ALSO said "We favor the STRONG law of large numbers over smaller overall loops", so amending only the block the referee quoted would have left the claim standing in the very key a reader hits first. Swept the rest of the tree: no other authoritative file invokes it, and NOTHING machine-reads this block (zero hits across *.sh and *.rs for `weak_vs_strong` or `convergence_via_velocity`), so this is a pure documentation change with no consumer to break. WHAT THE EDIT PRESERVES, per the exit criteria: the design guidance is untouched — small fast prompts, bounded per-iteration skew, velocity over per-prompt accuracy, and the explicit hazard that unbounded skew makes iteration useless. `design_implications` is unchanged. The empirical release-boundary evidence is kept and is now the load-bearing statement rather than a supporting one. WHAT IT DROPS AND WHY, stated in the file so the next reader does not re-derive the objection: independence is a HYPOTHESIS of the strong law, not a stylistic assumption, and this system deliberately violates it — `rag_as_cache_commits_as_lamport_clock` in the same file says the cache is refreshed on commits, so iteration k+1 reads iteration k's output. The file constructed the dependence and cited a theorem forbidding it, four lines apart. WHAT A RIGOROUS CLAIM WOULD NEED is written into the file rather than left implicit: name the dependence structure, then invoke a theorem that tolerates it — Birkhoff needs stationarity and ergodicity argued, a martingale law needs E[X_{k+1} | F_k] = mu argued, and NEITHER is argued today. The honest statement in the absence of that is the empirical one, and the file now says so in those terms: a track record rather than a theorem. ONE JUDGEMENT I MADE AND FLAG FOR REVIEW: I left a pointer in `principle` naming the original wording and why it was withdrawn, rather than silently rewriting it. The block carries `authority: "The Tlatoāni, 2026-08-13"`, so quietly editing an authored principle to say something different would erase the fact that it changed. A reader who remembers the old sentence should be able to find out what happened to it. If the operator would rather the pointer go and the text simply read correctly, that is a one-line deletion. STILL OWED on this packet: telling the explainer's author so the published footnote can be re-pinned. They offered to re-pin as the text changes; message going out with the new wording.

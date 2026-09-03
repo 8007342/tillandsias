@@ -1,0 +1,83 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-curl-installed-macos-host-cannot-publish-a-capability-row
+    order: 979-xyub
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [onboarding, capability-matrix, macos, release, fail-loud]
+    estimated_hours: 4
+    title: |
+      The joining gate requires a binary the macOS release does not ship, so a host that joins the way a real operator joins cannot publish a capability row at all.
+    context: |
+      FOUND by macneo-macos while trying to satisfy the joining gate on a
+      factory-fresh 8 GiB Mac, curl-installed from published release 56.9.2.1.
+      scripts/host-capability-probe.sh resolves its probe by RUNNING one of
+      $TILLANDSIAS_HEADLESS_BIN, ./target/release/tillandsias, or a
+      PATH `tillandsias`. That host has NONE and cannot get one: no Rust
+      toolchain (cargo and rustc both absent on a factory-fresh Mac), no
+      target/, and the published release ships ONLY Tillandsias.app — whose
+      payload is the tray binary plus two LINUX MUSL GUEST binaries. There is
+      no macOS-native host CLI in the release. tillandsias-plan is absent for
+      the same reason, so the host cannot mint an order token either.
+      THE GATE FAILS EXACTLY THE CASE IT EXISTS FOR. 850-bif2 makes publishing
+      a row a precondition for draining work, and the point is that a JOINING
+      host becomes visible to capability routing. A host that joins the
+      supported way — curl-install the release — is the case, and it is the
+      one that cannot comply.
+      NEITHER WORKAROUND IS ACCEPTABLE AND THE HOST REFUSED BOTH, correctly.
+      Hand-assembling a row is what check-capability-row.sh argues against at
+      length: a false row routes confidently and wrongly while a missing row
+      routes nothing (the yoga 2026-08-25 drift incident is the cited
+      precedent). Installing rustup to satisfy a metadata gate means putting a
+      1-2 GB toolchain and a heavy build on the operator's new 8 GiB machine
+      without consent.
+      RELATED BUT DISTINCT: 889-ewvt already covers a row going STALE. This is
+      a row that cannot be CREATED.
+    exit_criteria:
+      - a host with only the published macOS app can publish a valid capability row, by whatever mechanism is chosen (the release ships a host CLI, or the probe falls back to the installed tray, or the tray itself can emit the fragment)
+      - the fallback reports what it could NOT determine rather than defaulting those fields, so a partial row is distinguishable from a complete one and never routes as if complete
+      - a joining host with no toolchain is exercised end to end, not simulated - the defect is invisible on any host that has already built the tree
+      - the routing consumer treats a partial row as partial; a row that cannot state a capability must not read as that capability being absent
+
+  - packet_id: the-qemu-free-raw-image-path-exists-and-is-dead
+    order: 979-3kfb
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [macos, vm-layer, dead-code, host-dependency]
+    estimated_hours: 3
+    title: |
+      fetch_recipe_artifact is a complete qemu-free raw-image path whose doc comment claims the macOS tray calls it on first launch; nothing calls it but its own two unit tests.
+    context: |
+      FOUND by macneo-macos, VERIFIED HERE: vz.rs:377 defines it, and the only
+      call sites in the whole tree are vz.rs:3318 and :3343, both inside
+      #[test] functions. Its doc comment claims the macOS tray calls it on
+      first launch. The live path is action_host.rs -> fetch_fedora_cloud_image
+      (qcow2 + qemu-img).
+      THIS IS 606-r42f's OWN EXIT CRITERION, UNDISCHARGED. That order's criteria
+      include "dead wrapper and STALE HEADER CLAIMS are removed or the trait
+      delegates to the proven live implementation". It removed the legacy
+      VzLifecycle tarball path — which 598-kibt found dead AND PANICKING — and
+      pinned the qcow2 path with a source-scan guard. fetch_recipe_artifact is
+      a THIRD thing: dead but not panicking, so it survived a sweep aimed at
+      panics.
+      WHY THE GUARD MUST NOT BE READ AS A DECISION AGAINST RAW IMAGES, which is
+      the question macneo correctly refused to answer by guessing: the pin at
+      macos-tray/src/main.rs:635-656 says the legacy path was removed because
+      it was dead and panicking. It is a pin against RESURRECTING A PANICKING
+      TARBALL PATH, not a considered rejection of raw artifacts on publishing
+      or SHA-pinning grounds. So switching the live path is NOT forbidden by
+      606-r42f — but it is also not what this packet asks for.
+      DECIDE, do not drift: either delete the dead function, or make the doc
+      comment true. Resurrecting it as the live path is a THIRD option that
+      needs its own argument and should not happen as a side effect of fixing
+      a stale comment.
+    exit_criteria:
+      - either fetch_recipe_artifact is deleted with its tests, or its doc comment states what is actually true of it
+      - if it is retained, something other than its own tests exercises it, or the retention has a stated reason
+      - the 606-r42f source-scan guard still passes, and if the live path is deliberately changed that guard is updated with a NEW order rather than edited around

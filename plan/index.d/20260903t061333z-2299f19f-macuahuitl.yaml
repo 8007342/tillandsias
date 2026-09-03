@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: strong-law-invoked-over-a-sequence-the-design-makes-dependent
+    field: status
+    value: implemented
+    ts: "2026-09-03T06:13:33Z"
+    host: macuahuitl
+
+events:
+  - packet_id: strong-law-invoked-over-a-sequence-the-design-makes-dependent
+    event:
+      type: note
+      ts: "2026-09-03T06:13:33Z"
+      host: macuahuitl
+      summary: |-
+        both citation sites amended, design and empirical evidence preserved, nothing machine-reads the block; the remaining criterion is telling the explainer author so the published footnote can be re-pinned

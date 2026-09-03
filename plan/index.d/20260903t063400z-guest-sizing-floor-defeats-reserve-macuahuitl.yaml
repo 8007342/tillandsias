@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: guest-floor-defeats-the-host-memory-reserve-below-10-gib
+    order: 978-juw4
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [macos, vm-layer, memory, low-memory-tier, fail-loud]
+    estimated_hours: 4
+    title: |
+      On any host below 10 GiB the guest memory FLOOR silently defeats the host RESERVE, which is the exact outcome the reserve's own doc comment exists to prevent.
+    context: |
+      FOUND by macneo-macos on its first launch — a factory-fresh 8 GiB / 6-core
+      Apple A18 Pro, the fleet's new low-water mark. ARITHMETIC VERIFIED
+      INDEPENDENTLY on macuahuitl by computing the policy across host sizes
+      rather than reading it:
+        host  6 GiB: half=3 after_reserve=0 min=0 -> guest 4 GiB, host left 2  FLOOR WINS
+        host  8 GiB: half=4 after_reserve=2 min=2 -> guest 4 GiB, host left 4  FLOOR WINS
+        host 10 GiB: half=5 after_reserve=4 min=4 -> guest 4 GiB, host left 6  crossover
+        host 16 GiB: half=8 after_reserve=10 min=8 -> guest 8 GiB, host left 8  policy works
+      10 GiB is the exact crossover (6 GiB reserve + 4 GiB floor). At or above
+      it the clamp is inert; below it the clamp RAISES the guest back above what
+      the reserve computed, and the reserve stops meaning anything.
+      crates/tillandsias-vm-layer/src/vz.rs:963-975. HOST_RESERVED_MEMORY_BYTES
+      is 6 GiB (:918), GUEST_FLOOR_MEMORY_BYTES is 4 GiB (:912).
+      WHY THIS IS NOT A TUNING NIT: the reserve's own doc comment exists to
+      prevent exactly this outcome — "A VM that boots by swapping its host is
+      worse than a smaller VM." The floor's comment says it preserves "the
+      behaviour it had" for small hosts. NO HOST THIS SMALL EXISTED UNTIL NOW,
+      so that rationale has never been tested against a machine it harms. Every
+      macOS reference point in the code is the 16 GiB M5 of 919-jii2.
+      CPU is affected the same way: max(6*8/10, min(4,6)) = 4 vCPU on a 6-core
+      host, so the guest takes two thirds of the cores as well.
+      SUSPECTED CONSEQUENCE, not yet proven: macneo's forge build is WEDGED with
+      the VM gone (no VM process, no rootfs.img descriptor held by the tray —
+      and VZ runs the VM in-process, so that is evidence of death rather than
+      idleness), zero CPU/disk/network, no crash report, and crashloop.state
+      reading ever_ready=1 / last_phase=ready. So the guest DID reach ready
+      before dying. Memory exhaustion during the forge build fits, and 8 GiB
+      host minus a 4 GiB guest leaves 4 GiB for macOS plus a build.
+    exit_criteria:
+      - below the crossover the RESERVE wins and the guest is sized to what the host can afford, by whatever mechanism the implementer chooses (scaling the reserve, or clamping the floor to what is affordable)
+      - the 16 GiB behaviour is UNCHANGED and pinned, so the existing policy test at vz.rs:2597 and the 798-q4m9 / 807-bjjv measurement comparability are not silently perturbed
+      - a test covers at least one host size BELOW the crossover, since the current pinned test cannot distinguish the two policies - every host it was written against sits above it
+      - the wedge is re-tested on the 8 GiB host after the fix, and the result is recorded either way; if it still wedges, memory was not the cause and that is the more valuable finding

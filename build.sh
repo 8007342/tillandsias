@@ -2867,6 +2867,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Bound-litmus-runnable fixture passed"
 
+    _step "Verifying a MO-FULL marker cannot outrun its ledger record (974-uk95)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-mo-full-record-precedes-marker.sh" 2>&1; then
+        _error "the marker/ledger coupling regressed (974-uk95) — see the failing case above"
+        exit 1
+    fi
+    _info "MO-FULL record-precedes-marker fixture passed"
+
     _step "Checking every spec requirement carries a unique stable id (976-suab)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-requirement-ids.sh" 2>&1; then
         _error "a spec requirement is missing a req-id or shares one (976-suab) — see the verdict line above"
