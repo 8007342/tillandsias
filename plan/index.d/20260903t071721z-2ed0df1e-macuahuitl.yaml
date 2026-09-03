@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-forge-memory-ceiling-was-declared-closed-on-a-helper-nothing-calls
+    event:
+      type: note
+      ts: "2026-09-03T07:17:21Z"
+      agent_id: linux-macuahuitl-fable5-20260903t071721z
+      host: macuahuitl
+      summary: |-
+        TRAP THAT WILL COST THE NEXT AGENT ITS CYCLE, found by lenovinha and now the first thing to read. THREE forge-argv builders exist and only ONE is live. ContainerLauncher::build_container_spec (podman/src/launch.rs:26) states in its OWN comment that it has no production callers. build_launch_spec (tray/mod.rs:2217) is legacy. THE LIVE PATH is build_stack_common_args (main.rs:3246) plus build_opencode_forge_args (main.rs:6618) via build_forge_common_args (main.rs:6031). Fixing either dead builder yields a green gate, a passing argv assertion, and a forge still unbounded - the packet's defect reproduced by its own fix. lenovinha found the live one by asking which site emits the --pids-limit that is observably 4096 in the live cgroup, rather than by reading names. That is the method, not just the answer. EXIT CRITERION 5 IS DISCHARGED, delivered as pure investigation: macOS and Windows have the SAME gap. None of the three builders carries a cfg attribute, and neither tillandsias-windows-tray nor tillandsias-macos-tray builds forge argv of its own. ONE FIX COVERS ALL THREE LANES; no lane needs separate work.
