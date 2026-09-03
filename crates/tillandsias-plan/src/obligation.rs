@@ -89,6 +89,11 @@ impl ObligationState {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SpecState {
     obligations: BTreeMap<String, ObligationState>,
+    /// Obligation ids that have been TOMBSTONED — the requirement they named
+    /// changed meaning and was replaced by a new id (order 977-56fd, against
+    /// methodology/proximity.yaml:47). They are excluded from the comparison
+    /// domain entirely; see `aligned_ids`.
+    tombstoned: BTreeSet<String>,
 }
 
 impl SpecState {
@@ -124,13 +129,58 @@ impl SpecState {
         self.obligations.is_empty()
     }
 
-    /// The union of both ID sets — the domain a componentwise comparison runs
-    /// over. Comparing only the intersection would call two states equal while
-    /// one carried obligations the other had never heard of.
+    /// Mark `id` tombstoned: the requirement it named changed MEANING and was
+    /// replaced by a new id.
+    ///
+    /// THE OPERATOR'S RULE DECIDES WHAT THIS MUST NOT DO
+    /// (methodology/proximity.yaml:47, verbatim): "If the meaning changes and no
+    /// longer reflects the original intent then it's a tombstone plus a new id.
+    /// If the change is a refinement over the original text and the original
+    /// still stands then it's a stable id keeping."
+    ///
+    /// So a REFINEMENT keeps its identifier and needs nothing here — the state
+    /// travels with the key, which is why that case was never at risk. A
+    /// TOMBSTONE means the obligation is a DIFFERENT obligation, and evidence
+    /// gathered for the old meaning is not evidence for the new one. There is
+    /// therefore NO CARRY to the successor: the new id starts at `Absent`,
+    /// because it genuinely has no evidence yet.
+    ///
+    /// Carrying would launder a score across exactly the break the operator's
+    /// rule exists to mark. That is a decision, not an implementation detail,
+    /// and it is decided by the ruling rather than by convenience — carry and
+    /// refuse are not equivalent and the sentence picks refuse.
+    pub fn tombstone(&mut self, id: &str) {
+        self.tombstoned.insert(id.to_string());
+    }
+
+    pub fn is_tombstoned(&self, id: &str) -> bool {
+        self.tombstoned.contains(id)
+    }
+
+    /// The domain a componentwise comparison runs over: the union of both ID
+    /// sets, MINUS every id either side has tombstoned.
+    ///
+    /// THE DEFECT THIS FIXES, found by macuahuitl against 976-suab before rung 2
+    /// was written. A tombstoned id disappears from the map, and `get` returns
+    /// `Absent` for a missing key — so a legitimate identity change presented as
+    /// a regression to the chain's bottom. Two consequences and the second is
+    /// worse: the score silently dropped, and rung 2 would have reported a false
+    /// MONOTONICITY VIOLATION about `math.fixpoint.convergence-target@v1` that
+    /// was really an artifact of key handling. A finding about the methodology's
+    /// own claim, manufactured by my map.
+    ///
+    /// So absence is THREE cases, not two:
+    ///
+    /// * never recorded — `Absent`, in the domain, genuinely the bottom.
+    /// * tombstoned — OUT of the domain. The obligation ceased to exist, which
+    ///   is not the same as having no evidence.
+    /// * successor of a tombstone — a new id, in the domain, at `Absent`, with
+    ///   no carry.
     fn aligned_ids(&self, other: &SpecState) -> BTreeSet<String> {
         self.obligations
             .keys()
             .chain(other.obligations.keys())
+            .filter(|id| !self.tombstoned.contains(*id) && !other.tombstoned.contains(*id))
             .cloned()
             .collect()
     }
@@ -331,6 +381,68 @@ impl Refiner {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// THE DEFECT THIS RUNG WAS REOPENED FOR. Before the tombstone domain, an
+    /// id that was tombstoned and replaced vanished from the map, `get`
+    /// returned `Absent`, and the pair compared as a REGRESSION — which rung 2
+    /// would have reported as a monotonicity violation against
+    /// `math.fixpoint.convergence-target@v1`. A false finding about the
+    /// methodology's own claim, manufactured by key handling.
+    #[test]
+    fn tombstoned_id_is_not_a_regression() {
+        use std::cmp::Ordering;
+        let before = SpecState::new()
+            .with("req-old", ObligationState::RuntimeObserved)
+            .with("req-keep", ObligationState::Traced);
+
+        // The requirement's MEANING changed: tombstone + a new id, per
+        // methodology/proximity.yaml:47.
+        let mut after = SpecState::new()
+            .with("req-keep", ObligationState::Traced)
+            .with("req-new", ObligationState::Absent);
+        after.tombstone("req-old");
+
+        // NOT Less. The obligation ceased to exist; it did not lose evidence.
+        assert_eq!(before.partial_cmp(&after), Some(Ordering::Equal));
+        assert!(after.is_tombstoned("req-old"));
+    }
+
+    /// NO CARRY, and this is the decided half rather than the convenient one.
+    /// The successor starts at the bottom because it is a DIFFERENT obligation
+    /// — evidence for the old meaning is not evidence for the new one. Carrying
+    /// would launder a score across exactly the break the operator's rule marks.
+    #[test]
+    fn successor_starts_absent_with_no_carry() {
+        let mut s = SpecState::new().with("req-old", ObligationState::EvidenceBundled);
+        s.tombstone("req-old");
+        s.set("req-new", ObligationState::Absent);
+        assert_eq!(s.get("req-new"), ObligationState::Absent);
+    }
+
+    /// A REFINEMENT keeps its identifier, so the state travels with the key and
+    /// this case was never at risk. Pinned as the negative control: a "fix"
+    /// that tombstoned on every edit would break it.
+    #[test]
+    fn refinement_keeps_the_identifier_and_the_state() {
+        use std::cmp::Ordering;
+        let before = SpecState::new().with("req-a", ObligationState::Traced);
+        let after = SpecState::new().with("req-a", ObligationState::RuntimeObserved);
+        assert_eq!(before.partial_cmp(&after), Some(Ordering::Less));
+    }
+
+    /// A never-recorded id is still `Absent` and still IN the domain. The
+    /// tombstone exclusion must not swallow the ordinary bottom case, or
+    /// differing id sets would stop comparing at all.
+    #[test]
+    fn never_recorded_is_still_bottom_in_domain() {
+        use std::cmp::Ordering;
+        let fewer = SpecState::new().with("x", ObligationState::Traced);
+        let more = SpecState::new()
+            .with("x", ObligationState::Traced)
+            .with("y", ObligationState::Declared);
+        assert_eq!(fewer.partial_cmp(&more), Some(Ordering::Less));
+        assert!(!fewer.is_tombstoned("y"));
+    }
 
     /// The chain is the one the methodology declares, in that sequence. Asserted
     /// against the literal spellings rather than against ALL's own order, so a

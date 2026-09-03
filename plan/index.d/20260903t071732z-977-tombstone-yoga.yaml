@@ -1,0 +1,94 @@
+events:
+  - packet_id: obligation-lattice-model-in-rust
+    event:
+      type: progress
+      ts: "2026-09-03T07:17:32Z"
+      agent_id: linux-yoga-claude-20260903t070915z
+      host: yoga
+      summary: |
+        TOMBSTONE DOMAIN FIXED. Reopened through the closure ratchet with
+        falsifying evidence rather than patched quietly — the defect changes what
+        the model MEANS, and rung 2 has to be written against the corrected
+        version or its findings would be artifacts of key handling.
+
+        THE DEFECT, found by macuahuitl connecting 976-suab to this rung before
+        rung 2 existed. SpecState keys off stable ids and `get` returns Absent
+        for a missing key — deliberately, so states over different id sets align
+        through the chain's bottom. Under the operator's tombstone rule that is
+        wrong: an id whose requirement CHANGED MEANING is tombstoned and replaced,
+        so it disappears from the map and reads Absent. Two consequences, the
+        second worse than the first: a score silently drops, and rung 2 would
+        have reported a MONOTONICITY VIOLATION against
+        math.fixpoint.convergence-target@v1 that was really my map — a false
+        finding about the methodology's own claim, manufactured by key handling.
+        Exactly the confusion I said I would keep separate.
+
+        THE DECISION, AND IT IS DECIDED BY THE RULING RATHER THAN BY ME.
+        macuahuitl was right that carry-to-successor and refuse are NOT
+        equivalent and that choosing is a decision. methodology/proximity.yaml:47
+        (requirement_identity_across_edits) settles it, verbatim: "If the meaning
+        changes and no longer reflects the original intent then it's a tombstone
+        plus a new id. If the change is a refinement over the original text and
+        the original still stands then it's a stable id keeping."
+
+        So: a REFINEMENT keeps its identifier, the state travels with the key,
+        and that case was never at risk. A TOMBSTONE means the obligation is a
+        DIFFERENT obligation, and evidence gathered for the old meaning is not
+        evidence for the new one — therefore NO CARRY. The successor starts at
+        Absent because it genuinely has no evidence yet. Carrying would launder a
+        score across precisely the break the operator's rule exists to mark. I
+        did not have to refuse-and-surface: the sentence picks refuse.
+
+        ABSENCE IS NOW THREE CASES, not two:
+          never recorded            -> Absent, IN the domain, genuinely bottom
+          tombstoned                -> OUT of the domain; the obligation ceased
+                                       to exist, which is not the same as having
+                                       no evidence
+          successor of a tombstone  -> a new id, in the domain, at Absent, no carry
+
+        VERIFIED — 14 tests (up from 10), gate green:
+          tombstoned_id_is_not_a_regression      the reopening case: before/after
+                                                 an identity change compares Equal,
+                                                 not Less
+          successor_starts_absent_with_no_carry  the decided half
+          refinement_keeps_the_identifier...     NEGATIVE CONTROL — a "fix" that
+                                                 tombstoned on every edit breaks it
+          never_recorded_is_still_bottom...      the exclusion must not swallow the
+                                                 ordinary bottom case, or differing
+                                                 id sets would stop comparing at all
+
+        THE RATCHET DID ITS JOB AND IS WORTH NAMING: my first attempt to reclaim
+        this row was REFUSED — `implemented` does not go back to `in_progress`
+        without --reopen-evidence naming a falsifying observation (650-dq6u). That
+        is the guard working on the author of the row it is guarding. Reopened
+        with the proximity.yaml citation as the falsifier.
+
+  - packet_id: implement-the-obligation-lattice-and-wire-the-scorer
+    event:
+      type: note
+      ts: "2026-09-03T07:17:32Z"
+      agent_id: linux-yoga-claude-20260903t070915z
+      host: yoga
+      summary: |
+        THE PARENT NOW REFUSES A CLAIM RATHER THAN DESCRIBING ITSELF AS
+        UNCLAIMABLE. It read `ready` while carrying "do not claim this row, take
+        a child" in next_action, and `split-parents` returned nothing for it — so
+        the tooling actively contradicted the prose, and a coordinator
+        re-dispatched the row as unclaimed work on the strength of the status
+        field. Prose in next_action is not a machine-readable constraint
+        (750-zrt4).
+
+        Two changes, and the first is the one that bites: status -> blocked, the
+        sanctioned resolution for a fully-delegated parent, which actually
+        removes it from selection. And split_into landed as a FIELD naming all
+        five children, so the relationship is queryable rather than narrated.
+
+        ENFORCEMENT VERIFIED ON ALL THREE SURFACES rather than asserted —
+        "if a host can still claim it, the fix is not done":
+          tillandsias-plan ready            -> 0 matches
+          select-work-batch.sh linux        -> 0 matches
+          tillandsias-plan next linux       -> 0 matches
+
+        `split-parents` now correctly reports nothing for it, for the right
+        reason: that tool names READY parents competing with their own children,
+        and this one no longer is.
