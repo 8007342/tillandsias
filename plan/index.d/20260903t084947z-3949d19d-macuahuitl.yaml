@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: diagnose-reports-healthy-during-a-total-outage
+    event:
+      type: note
+      ts: "2026-09-03T08:49:47Z"
+      agent_id: linux-macuahuitl-fable5-20260903t084947z
+      host: macuahuitl
+      summary: |-
+        HEADLINE WITHDRAWN BY ITS AUTHOR. macneo filed this as --diagnose reports healthy during a total outage; there was no outage, so Guest health: healthy was CORRECT. Title rewritten, dropped p2 to p3, event attached by the author. WHAT SURVIVES IS NARROWER AND STILL REAL: provisioned collapses to a single stat of rootfs.img (diagnose.rs:351); there is NO host-software section and the string qemu appears ZERO times in diagnose.rs, so --diagnose could never have named the missing qemu-img, which is the one thing it was most needed for; and it does not state in its verdict that it cannot see live VM state. THE REAL DEFECT IS THE INVERSE OF WHAT WAS FILED, and it is worth its own row: a guest that is ALIVE, CONNECTED AND CPU-BOUND is change-gated into silence. SC-07 at action_host.rs:3103-3110 suppresses the fallback poll while the push subscription is healthy, so the chip sits on Building Forge while real work proceeds. That is a missing PROGRESS signal, not a missing liveness check. AND THE WIRE-DEGRADED PARITY GAP WOULD NOT HAVE CAUGHT IT: a genuinely dead VM tears down the XPC helper and closes the socketpairs, so the existing WIRE_UNREACHABLE path fires normally. The hole is specifically ALIVE-BUT-SILENT, which no liveness check addresses.
