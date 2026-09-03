@@ -1,0 +1,67 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Hand-authored (no tillandsias-plan on this host, order 979-xyub).
+status:
+  - packet_id: diagnose-reports-healthy-during-a-total-outage
+    field: title
+    value: |
+      `Guest health` in `--diagnose` is a disk read of crashloop.state, not a live probe — it prints "healthy" for a VM that is not running, and there is no host-software section to name a missing host tool.
+    ts: "2026-09-03T09:01:16Z"
+    host: macneo
+  - packet_id: diagnose-reports-healthy-during-a-total-outage
+    field: priority
+    value: p2
+    ts: "2026-09-03T09:01:16Z"
+    host: macneo
+
+events:
+  - packet_id: diagnose-reports-healthy-during-a-total-outage
+    event:
+      type: note
+      ts: "2026-09-03T09:01:16Z"
+      host: macneo
+      summary: >
+        I OVER-CORRECTED, and this restores the packet. I withdrew this headline
+        because my instance was false - there was no outage on macneo, the VM was
+        alive. But the DEFECT was true and I withdrew it along with my bad evidence.
+        macbook-macos then produced a correct instance on the 16 GiB reference host:
+        `--diagnose --with-metrics` printed "Guest health: healthy" with NO VM
+        process running at all for the full 70s they sampled, five days after their
+        crashloop.state was written (2026-08-30, ever_ready 1 / last_phase ready).
+        VERIFIED IN THE SOURCE MYSELF rather than taken on report:
+        crates/tillandsias-macos-tray/src/diagnose.rs:98-102, guest_health_verdict()
+        is CrashLoopDetector::load(&crashloop_state_path()).verdict().verdict() - a
+        pure disk read of crashloop.state with no live probe and no VM contact.
+        So "healthy" means "the last RECORDED phase was not a crash loop", never
+        "a guest is alive now", and the two cannot be distinguished. Priority
+        restored p2, title rewritten to the defect that is actually there.
+  - packet_id: diagnose-reports-healthy-during-a-total-outage
+    event:
+      type: note
+      ts: "2026-09-03T09:01:16Z"
+      host: macneo
+      summary: >
+        LESSON, recorded because the withdrawal was as wrong as the original filing.
+        A false instance does not make a claim false. I had two independent things -
+        a real defect in how the verdict is computed, and a wrong story about my own
+        host - and when the story collapsed I retracted both. The correct move was to
+        drop the instance and keep the claim, then go find evidence that actually
+        bears on it, which is what macbook-macos did in an afternoon. Note also that
+        in the withdrawal I wrote "Guest health: healthy was CORRECT". It was
+        coincidentally correct: it happened to agree with a live guest while being
+        incapable of observing one, which is not the same thing and should not have
+        been recorded as vindication of the tool.
+  - packet_id: diagnose-reports-healthy-during-a-total-outage
+    event:
+      type: note
+      ts: "2026-09-03T09:01:16Z"
+      host: macneo
+      summary: >
+        TWO OPERATOR-FACING GOTCHAS from the same 16 GiB session, worth carrying on
+        this packet because both look like guest failures and are not.
+        (1) `--diagnose --with-metrics` did NOT boot a VM despite documenting that it
+        does; it returned in seconds having staged nothing, warning "running outside
+        .app". (2) A bare `target/release/tillandsias-tray --exec-guest` dies with
+        "The process doesn't have the com.apple.security.virtualization entitlement" -
+        the entitlement is on the BUNDLE, so guest work must run through
+        dist/Tillandsias.app/Contents/MacOS/tillandsias-tray. Debugging either as a
+        boot failure would be debugging the wrong layer.
