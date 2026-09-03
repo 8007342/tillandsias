@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-checkout-quarantine-decides-on-a-boolean-and-discards-gits-reason
+    event:
+      type: finding
+      ts: "2026-09-03T19:04:04Z"
+      agent_id: linux-macuahuitl-fable5-20260903t190404z
+      host: macuahuitl
+      summary: |-
+        THE GRAVES ARE LAUNCHABLE PROJECTS IN THE TRAY, which is a user-visible defect nobody had named and is worse than the disk cost. esme-windows measured it in tray.log's own scan counts: 6 -> 8 -> 12 as the quarantined trees accumulated, ending at Initial scan complete count=12 with watch_path=C:\Users\bullo\src. So the quarantine does not merely leak disk - IT POLLUTES THE PROJECT MENU WITH FAKE ENTRIES THAT ARE THEMSELVES LAUNCHABLE. A user can attach an agent to tillandsias.invalid-1787709172. That is a correctness defect in the surface the operator actually touches, not a hygiene one, and it grows by one entry per launch. DISK MEASURED AND CORRECTLY DE-ESCALATED: 1,752 MB across 9 quarantined trees plus 2 .tmp dirs, about 180 MB each against a 187 MB live checkout, with 78 GB free of 237 GB. NOT URGENT ON THAT HOST, and esme said so rather than inflating it - but it grows by one full copy per launch, unbounded, and the launch rate is the operator's click rate. THE TWO CREDENTIALS ARE CONFIRMED SEPARATE, which retires the hypothesis I flagged and refused to collapse. .gh-credentials inside <git-dir> is the host checkout's channel, eaten by every quarantine, roughly daily. Vault secret/github/token is the mirror container's secret, refusing pushes with 403, never touches a .git, and SURVIVED EVERY QUARANTINE UNTOUCHED - that is 759-vceg's no-upstream arm seeding without push permission. Both real, NEITHER CAUSES THE OTHER, and their verdict ref still reads denied/permission at epoch 1788462051.
