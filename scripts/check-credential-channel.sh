@@ -2,6 +2,28 @@
 # freshness: refreshed 2026-07-24 forge-bigpickle-20260724
 set -uo pipefail
 
+# PORTABILITY (order 988, macneo 2026-09-03). GNU coreutils `timeout` does NOT
+# exist on macOS, and every bounded probe below depended on it. Without it the
+# `gh api user` discriminator returned 127, fell past the clean-401 case, and
+# reached the `busctl` arm — which is ALSO absent — so the guard answered
+# `unretrievable-no-service` on a host that has no secret-service bus by design.
+# A confident wrong verdict, from two missing tools, on every macOS host.
+# Homebrew installs GNU coreutils as `gtimeout`. If neither exists we must NOT
+# run the probe unbounded: an unbounded probe is the 860-g798 incident itself
+# (a push that hung >10 minutes on an interactive prompt). Return 127 so the
+# caller sees "could not run" rather than a fabricated answer.
+_ccc_timeout() {
+  local _secs="$1"; shift
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "$_secs" "$@"
+  elif command -v gtimeout >/dev/null 2>&1; then
+    gtimeout "$_secs" "$@"
+  else
+    echo "[check-credential-channel] no timeout(1) or gtimeout(1) — cannot bound this probe; refusing to run it unbounded (order 988)." >&2
+    return 127
+  fi
+}
+
 if grep -qi "microsoft" /proc/version 2>/dev/null && pwd | grep -q '^/mnt/[c-z]/'; then
   echo "[check-credential-channel] WARNING: Running in WSL but directory is on Windows host. Host credentials may be unavailable. On Windows, use Git Bash instead." >&2
 fi
@@ -121,7 +143,7 @@ fi
 forge_upstream_auth_verdict() {
   local auth_src="$1"
   local auth_lines _sha refname rest state epoch reason middle best_state best_reason best_epoch now age max_age
-  auth_lines="$(timeout 10 git ls-remote "$auth_src" 'refs/tillandsias/upstream-auth/*' 2>/dev/null || true)"
+  auth_lines="$(_ccc_timeout 10 git ls-remote "$auth_src" 'refs/tillandsias/upstream-auth/*' 2>/dev/null || true)"
   best_state=""
   best_reason=""
   best_epoch=-1
@@ -328,7 +350,7 @@ credential_channel_verdict() {
     # checkouts is exactly when it must not lie.
     _probe_cmd="${TILLANDSIAS_CRED_PROBE_CMD:-git push --dry-run origin HEAD}"
     if GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=never GIT_ASKPASS=/bin/false \
-       timeout 45 $_probe_cmd >/dev/null 2>&1; then
+       _ccc_timeout 45 $_probe_cmd >/dev/null 2>&1; then
       echo "ok:gh-keyring-push-verified"
       return 0
     fi
@@ -370,7 +392,7 @@ credential_channel_verdict() {
     # below.
     if [ -z "${TILLANDSIAS_CRED_PROBE_CMD:-}" ]; then
       if GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=never GIT_ASKPASS=/bin/false \
-         timeout 45 git push --dry-run --no-verify origin HEAD >/dev/null 2>&1; then
+         _ccc_timeout 45 git push --dry-run --no-verify origin HEAD >/dev/null 2>&1; then
         # The credential authenticated. The refusal was ours.
         echo "  note: the push probe was refused by this checkout's own pre-push" >&2
         echo "  hook, not by the remote — the credential authenticated fine with" >&2
@@ -429,7 +451,7 @@ credential_channel_verdict() {
     if [ -z "${TILLANDSIAS_CRED_PROBE_CMD:-}" ]; then
       _cred_probe_ref="refs/tillandsias/cred-probe/$(hostname -s 2>/dev/null | tr "A-Z" "a-z" || echo host)-$$"
       if GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=never GIT_ASKPASS=/bin/false \
-         timeout 45 git push --dry-run --no-verify origin "HEAD:$_cred_probe_ref" >/dev/null 2>&1; then
+         _ccc_timeout 45 git push --dry-run --no-verify origin "HEAD:$_cred_probe_ref" >/dev/null 2>&1; then
         # The credential authenticated. The refusal was this branch's ref state.
         echo "  note: the push probe was refused by the REMOTE's ref state, not by" >&2
         echo "  the credential — a create to a fresh ref authenticated fine. Usually" >&2
@@ -494,7 +516,7 @@ credential_channel_verdict() {
       # Does GitHub accept the stored credential? This is the discriminator and
       # nothing else is.
       local _api_err _api_rc=0
-      _api_err="$(GH_PROMPT_DISABLED=1 timeout 20 gh api user 2>&1 >/dev/null)" || _api_rc=$?
+      _api_err="$(GH_PROMPT_DISABLED=1 _ccc_timeout 20 gh api user 2>&1 >/dev/null)" || _api_rc=$?
       if [ "$_api_rc" -eq 0 ]; then
         printf 'accepted'
         return 0
@@ -506,6 +528,16 @@ credential_channel_verdict() {
       esac
       # Not accepted, not a clean 401. Now — and only now — is the keyring worth
       # asking about, because "could not retrieve" is the remaining shape.
+      # A platform with no busctl(1) has no org.freedesktop.secrets BY DESIGN
+      # (macOS stores credentials in the Keychain). Answering
+      # "no secret-service on the bus" there is a confident wrong verdict about
+      # a question this guard was never taught to ask on that platform, so say
+      # so instead (order 988, macneo 2026-09-03).
+      if ! command -v busctl >/dev/null 2>&1; then
+        echo "[check-credential-channel] no busctl(1): this guard cannot inspect the credential store on this platform (order 988). Reporting indeterminate rather than guessing." >&2
+        printf 'indeterminate'
+        return 0
+      fi
       if ! busctl --user list 2>/dev/null | grep -q 'org\.freedesktop\.secrets'; then # sigpipe-ok: safe pipeline
         printf 'unretrievable-no-service'
         return 0
@@ -614,7 +646,7 @@ credential_channel_verdict() {
       echo "ok:forge-git-mirror"
       return 0
     fi
-    if timeout 10 git ls-remote "$effective_origin" HEAD >/dev/null 2>&1; then
+    if _ccc_timeout 10 git ls-remote "$effective_origin" HEAD >/dev/null 2>&1; then
       # Order 756-2jnj: reachability is only HALF the channel. The 2026-08-15
       # incident reached this exact point with a mirror whose credential
       # GitHub 403'd — 'ok' here let a forge accrete commits it could never
