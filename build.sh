@@ -1755,6 +1755,45 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "pre-push empty-ref-list fixture passed"
 
+    # TWO GUARDS THAT EXISTED, WERE BROKEN, AND WERE INVOKED BY NOTHING.
+    #
+    # Found by pirria 2026-09-03 by sweeping every fixture that inits a repo
+    # AND drives git: 20 such fixtures, 5 of which also reference hooks, of
+    # which these two FAILED. Both failed for the core.hooksPath reason — a
+    # forge sets it globally, git then replaces .git/hooks outright, and a
+    # fixture that installs its own hook silently measures nothing. Fourth
+    # and fifth instances of that class in one day.
+    #
+    # THE PART THAT MATTERS MORE THAN THE FIX: neither was wired here, so a
+    # forge whose gate had just gone green stayed green with two of its own
+    # guards broken. A gate cannot report on a check it never invokes. This
+    # is the uninvoked-guard shape audit-guard-activation exists to catch,
+    # reached from the other side — not a guard an audit noticed nobody had
+    # wired, but one discovered because it was ALSO broken and nothing said
+    # so. An unwired guard does not merely fail to protect: it ROTS, and the
+    # longer it sits the likelier it is already broken when someone wires it.
+    #
+    # COST, measured before deciding rather than asserted: 435 ms and 631 ms,
+    # 1.07 s combined against a 109 s gate — 0.98%. pirria declined to wire
+    # them because gate time is a real cost on the floor and this was a scope
+    # decision rather than a side effect of their bug fix; that was right, and
+    # with the number in hand it is not a close call. Note the second one pins
+    # the gate STAMP scope (887-bz88) — the guard whose weakening was refused
+    # hours earlier the same day, sitting unwired and broken the whole time.
+    _step "Checking the credential-channel fixture (860-g798)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-check-credential-channel.sh" 2>&1; then
+        _error "the credential-channel fixture regressed — the push-path guard every cycle depends on is unproven"
+        exit 1
+    fi
+    _info "credential-channel fixture passed"
+
+    _step "Checking the gate-stamp scope fixture (887-bz88)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-gate-stamp-scope.sh" 2>&1; then
+        _error "the gate-stamp scope fixture regressed — what the stamp covers is unproven, and a too-narrow stamp once let a lost exec bit reach the trunk"
+        exit 1
+    fi
+    _info "gate-stamp scope fixture passed"
+
     # The brew autoinstall shim must not re-enter itself (966-rq7f). `brew` is a
     # Ruby program and `ruby` is a shimmed tool, so an unguarded shim recurses:
     # measured at 3663 live processes on a floor forge — 89.4% of its pid
