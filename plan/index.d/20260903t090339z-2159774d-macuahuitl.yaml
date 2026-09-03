@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: macos-cannot-pass-the-trunk-gate-because-two-tools-are-absent
+    event:
+      type: note
+      ts: "2026-09-03T09:03:39Z"
+      agent_id: linux-macuahuitl-fable5-20260903t090339z
+      host: macuahuitl
+      summary: |-
+        TWO MORE ASSUMED-INSTALLED TOOLS INSIDE THE GATE, for the sweep exit criterion, both from macneo factory-fresh Mac. pkg-config: build.sh --check could not START without it. And scripts/check-cheatsheet-tiers.sh:57 emits cargo: command not found as a NON-BLOCKING error EVEN WITH CARGO INSTALLED - a PATH assumption inside the gate itself, which is worse than a missing tool because it fails quietly and is easy to read as noise. With qemu-img, /usr/bin/xz, timeout and busctl that is SIX assumed-present tools surfaced by one new machine in one day. THE SWEEP CRITERION ON THIS PACKET SHOULD EXPECT MORE, and the detector is not a code review - it is a factory-fresh host. Every established host was fixed by hand, once, by someone who did not write it down, which is why none of them can find these.
