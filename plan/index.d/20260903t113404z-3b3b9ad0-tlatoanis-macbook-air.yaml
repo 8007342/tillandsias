@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: readme-release-ledger-wiring
+    event:
+      type: progress
+      ts: "2026-09-03T11:34:04Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260903t113404z
+      host: tlatoanis-macbook-air
+      summary: |-
+        CRITERION 3 DELIVERED. Criterion 1 assessed on evidence and NOT counted; a defect in its mechanism found and reported rather than fixed.
+
+        CRITERION 3 — 'distillation policy documented; oldest rows distilled once >10 rows'. Both halves:
+        * DISTILLED: the ten v0.3.x rows (2026-07-12 → 07-24, the v0.4 stabilization run) collapse into ONE span row. 6432 chars → 882, and the README is SMALLER overall (54181 → ~50KB) despite gaining the policy. What the series delivered is preserved at series level — Windows lane to CODE-COMPLETE, the git-mirror Vault auto-auth relay (424), the MCP publish tunnel (363), CA-trust convergence, the first CI-gated release PR that caught four latent type errors on its maiden run — with per-release detail left in the git tags and loop_status.
+        * POLICY WRITTEN, in the README beside the table: detailed rows for the current series and anything the install commands still reach; collapse the oldest series once the table passes ~10 detailed rows; a distilled row must NAME ITS SPAN and say it is distilled; nothing is deleted, only compressed; one row per release.
+
+        AND THE POLICY IMMEDIATELY FALSIFIED ITSELF, which is the part worth reading. I wrote that a distilled span lets the smoke tell 'no row for this tag' from 'covered by a distilled span'. THE EXTRACTOR COULD NOT DO THAT. I tested it: after distillation, v0.3.260719.1 returned , which §2b of the smoke skill defines as a FINDING meaning the release skill did not append or the artifact is undescribed. So my own distillation would have fired a false finding on every release old enough to be compressed, and the policy would have been prose claiming behaviour the code did not have — the exact class this fleet has been repairing all night. Extractor now has a second arm that matches a DISTILLED span and labels the row series-level. Verified in all four states: exact row, tag inside the span, span endpoint, and a genuinely absent tag still reporting NO LEDGER ROW.
+
+        CRITERION 1 — 'appends a row every release (verified by the next two releases)'. Rows exist for both releases since the hook landed (v56.8.31.3 and v56.9.2.1), so on a literal reading it is met. I am NOT counting it, because the same check found the mechanism is NOT IDEMPOTENT: v0.4.260826.1 and v0.4.260817.1 EACH APPEAR TWICE. The pairs are not copies — diffing them, the second of each is a later and richer rewrite (it adds the 401/zero-refs context, marks a guard as 'a guard, not the fix', and adds a destructor caveat). So the append ran again over a release that already had a row instead of editing it.
+
+        I DID NOT DEDUPLICATE, deliberately. Resolving a pair means deleting ~3.3KB of prose someone wrote, on a human-facing README, on my own judgement, in a packet that did not ask for it. The policy now states the one-row rule going forward AND names the two pre-existing pairs as unresolved and tracked here, so the table does not silently contradict its own stated rule. Which description survives is the ledger owner's call.
+
+        Gate green (193s).
