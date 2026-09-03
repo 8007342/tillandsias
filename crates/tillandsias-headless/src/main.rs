@@ -3877,6 +3877,90 @@ fn report_seed_resolved(project_path: &Path, seed: &str) {
     );
 }
 
+/// ORDER 965-rb3v, second rung. Does this project USE platform branches?
+///
+/// Gated on the project rather than hardcoded, because order 501's contract is
+/// that an ordinary project — one that is not this repo, and may not be a git
+/// checkout at all — is forged with no seed logic visible to the user. Warning
+/// every project that its branch is not named `*-next` would export a
+/// Tillandsias naming convention onto everyone else's repository, which
+/// `methodology/multi-host-development.yaml:21-27` says explicitly is NOT a
+/// runtime convention of the product.
+///
+/// So the question asked here is a fact about the checkout, not a policy: does
+/// it carry any `*-next` branch, local or remote? If it does not, this project
+/// does not use them and nothing is warned.
+fn project_has_platform_branches(project_path: &Path) -> bool {
+    std::process::Command::new("git")
+        .arg("-C")
+        .arg(project_path)
+        .args([
+            "for-each-ref",
+            "--format=%(refname:short)",
+            "refs/heads/*-next",
+            "refs/remotes/*/*-next",
+        ])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .is_some_and(|s| s.split_whitespace().any(|l| !l.is_empty()))
+}
+
+/// ORDER 965-rb3v, second rung. The seed resolved to a NON-platform branch on a
+/// project that has platform branches.
+///
+/// MEASURED ON A SECOND HOST (lenovinha, 2026-09-03), which is what promotes
+/// this from a macuahuitl-specific eight-checkout accident to a fleet defect.
+/// A tray-launched forge there arrived with `TILLANDSIAS_FORGE_SEED_BRANCH=main`
+/// and a guest clone whose HEAD was a release merge into `main`, while the work
+/// of that session — and its sibling bare-metal session — was on `linux-next`,
+/// by then ~205 commits ahead.
+///
+/// THE COST IS NOT ABSTRACT AND IT IS NOT "an old tree". `main` is not
+/// committable by contract: `scripts/check-committable-branch.sh` returns
+/// `blocked:committable-cycle-on-main`, and direct pushes to `main` are
+/// forbidden outright. So a forge seeded from `main` cannot commit ANYTHING
+/// from its own checkout. That is the whole cycle lost unless the agent notices
+/// and clones a platform branch by hand, which is exactly what the lenovinha
+/// session had to do.
+///
+/// And the guest cannot discover this for itself: `base_state` compares the
+/// clone against the seed, so a wrong seed agrees with itself and reads `ok`
+/// (`base_state=ok base_actual=main base_expected=main`, observed). The host is
+/// the only possible observer, which is why the warning belongs here.
+///
+/// WARN, NOT REFUSE, deliberately — the same reasoning the coordinator accepted
+/// for the unresolved case (965-rb3v decision, 2026-09-02T21:40Z): a hard
+/// refusal here would break the 501 contract for projects this launcher is
+/// shared with, and refuse-vs-warn is an operator decision, not a side effect.
+fn format_seed_not_platform_branch(project_display: &str, seed: &str) -> String {
+    format!(
+        "[tillandsias] [forge-launch] SEED NOT A PLATFORM BRANCH: {project_display} is on \
+         `{seed}`, but this project uses `*-next` platform branches and `{seed}` is not one. \
+         The forge will be created from `{seed}`, and if that is `main` it CANNOT COMMIT — \
+         `main` takes changes only through a PR, so the guest's own checkout is unusable for \
+         work. The guest cannot detect this: base_state compares the clone against this seed, \
+         so a wrong seed agrees with itself and reads ok. If you meant to work on a platform \
+         branch, switch this checkout to it and relaunch."
+    )
+}
+
+/// Emit [`format_seed_not_platform_branch`] when it applies. Split from the
+/// formatter for the same reason as its two siblings: the wording stays
+/// unit-testable without a repo, and the call site stays one line.
+fn report_seed_not_platform_branch(project_path: &Path, seed: &str) {
+    if seed.ends_with("-next") {
+        return;
+    }
+    if !project_has_platform_branches(project_path) {
+        return;
+    }
+    eprintln!(
+        "{}",
+        format_seed_not_platform_branch(&project_path.display().to_string(), seed)
+    );
+}
 /// Emit [`format_seed_unresolved`] for a project path whose HEAD did not
 /// resolve. Separated from the formatter so the wording is testable and the
 /// call sites stay one line.
@@ -6831,6 +6915,10 @@ fn build_opencode_forge_args(
         // launcher is shared fleet-wide — a hard default here would change
         // sibling hosts' behavior unattended).
         report_seed_resolved(project_path, &seed);
+        // 965-rb3v second rung. Seeding from a non-platform branch is never
+        // intended on a project that has them, and `main` in particular yields
+        // a forge that cannot commit at all.
+        report_seed_not_platform_branch(project_path, &seed);
         report_seed_staleness(project_path, &seed);
         args.push("--env".into());
         args.push(format!("TILLANDSIAS_FORGE_SEED_BRANCH={seed}"));
@@ -21456,6 +21544,84 @@ mod tests {
             notice.contains("SEED "),
             "the notice needs a greppable token: {notice}"
         );
+    }
+
+    /// ORDER 965-rb3v, second rung. The non-platform-branch warning must say
+    /// the thing that actually costs a cycle: that a `main` seed yields a forge
+    /// which CANNOT COMMIT. Naming the branch alone is not enough — `main` reads
+    /// like a reasonable default until you know it is refused by contract.
+    #[test]
+    fn seed_non_platform_notice_says_the_forge_cannot_commit() {
+        let notice = format_seed_not_platform_branch("/home/op/src/tillandsias", "main");
+        assert!(
+            notice.contains("main"),
+            "the warning must name the seed branch: {notice}"
+        );
+        assert!(
+            notice.contains("/home/op/src/tillandsias"),
+            "the warning must name WHICH CHECKOUT — same reason as the resolved \
+             notice: {notice}"
+        );
+        assert!(
+            notice.contains("CANNOT COMMIT"),
+            "the warning must state the CONSEQUENCE, not just the fact: a forge \
+             seeded from main is refused by check-committable-branch.sh and the \
+             whole cycle is lost unless the agent notices: {notice}"
+        );
+        assert!(
+            notice.contains("base_state"),
+            "the warning must say why the GUEST cannot detect this itself — a \
+             wrong seed agrees with itself and reads ok: {notice}"
+        );
+    }
+
+    /// ORDER 965-rb3v, second rung. THE NEGATIVE CONTROL, and the reason the
+    /// check is gated on the project rather than the branch name.
+    ///
+    /// Order 501's contract is that an ordinary project — not this repo, maybe
+    /// not even a git checkout — is forged with no seed logic visible. Warning
+    /// every project whose branch is not named `*-next` would export a
+    /// Tillandsias naming convention onto everyone else's repository, which
+    /// `methodology/multi-host-development.yaml:21-27` says explicitly is not a
+    /// runtime convention of the product. A repo with no `*-next` branches must
+    /// therefore stay silent, however its branch is named.
+    #[test]
+    fn a_project_without_platform_branches_is_never_warned() {
+        let tmp = std::env::temp_dir().join(format!(
+            "tillandsias-965-rb3v-noplat-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).expect("tmp");
+        let git = |args: &[&str]| {
+            std::process::Command::new("git")
+                .arg("-C")
+                .arg(&tmp)
+                .args(args)
+                .output()
+                .expect("git")
+        };
+        git(&["init", "--initial-branch=master", "-q"]);
+        git(&["config", "user.email", "t@example.invalid"]);
+        git(&["config", "user.name", "t"]);
+        std::fs::write(tmp.join("f"), b"x").expect("write");
+        git(&["add", "f"]);
+        git(&["commit", "-qm", "c"]);
+
+        assert!(
+            !project_has_platform_branches(&tmp),
+            "a repo with only `master` has no platform branches"
+        );
+
+        // And the positive control, so the predicate cannot pass by always
+        // answering false — a check that never fires is not a check.
+        git(&["branch", "linux-next"]);
+        assert!(
+            project_has_platform_branches(&tmp),
+            "a repo carrying `linux-next` DOES have platform branches"
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 
     /// Order 965-rb3v: the unresolved case must NAME ITSELF. It injects no
