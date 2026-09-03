@@ -1284,6 +1284,44 @@ another. Reads fold it in automatically — the packet is queryable immediately.
 Fragments are IMMUTABLE: to change something, write a new fragment, never edit an
 existing one (that is what makes the fold order-independent).
 
+### Prose NEVER passes through argv (order 971-7muc)
+
+```bash
+tillandsias-plan append-event <ref> <type> --summary-file NOTE.md --host <host>
+tillandsias-plan append-event <ref> <type> --summary-file -  --host <host> <<'EOF'
+...prose...
+EOF
+```
+
+**Note the QUOTED heredoc delimiter — `<<'EOF'`, never `<<EOF`.** An unquoted
+delimiter expands backticks and `$(...)` inside the body, which is one of the two
+ways this defect actually happened.
+
+WHY, and it is worth the four lines because every instrument we have says the
+write succeeded. Prose passed as a shell argument is rewritten by the shell
+*before* `tillandsias-plan` starts, and the damage is unrecoverable by then:
+
+```text
+"the `accel_mem_budget_gb` field"   ->   argv receives:   "the  field"
+```
+
+Both backticks and the word between them are gone. Two hosts lost the SUBJECT of
+a sentence to this on one evening (964-r98h, 970-7fqk), and `validate-yaml`,
+`tillandsias-plan check`, the fragment-keys guard and `./build.sh --check` all
+passed the result — because valid YAML carrying plausible prose is exactly what
+the corruption produces. It bites hardest on the most valuable writes: prose that
+quotes an identifier is prose explaining *why* something is named what it is, and
+backticks are how anyone writes that.
+
+`--summary-file` is read by the process itself, so no shell ever sees the bytes.
+The argv path still exists and now REFUSES text carrying expansion residue (an
+unbalanced backtick, a literal `$(`) — but understand what that can and cannot
+do: a *balanced* substitution leaves no trace at all, so the refusal is a
+backstop, not a guarantee. The file is the guarantee.
+
+Pinned by `scripts/test-ledger-prose-roundtrip.sh`, which asserts byte-identity
+for text containing backticks, `$(...)` and `$VAR`.
+
 **Never compute "the next free order" yourself.** That number comes from a
 ledger snapshot which is stale the moment another host commits, so two hosts
 filing in the same window pick the SAME number deterministically. It happened
@@ -2038,6 +2076,18 @@ Before exit:
    # on a busy trunk — and `record` is silently skipped on any iteration that
    # refused. Re-run `record` after the LAST successful push, not the first
    # attempt.
+   #
+   # THIS IS NOW ENFORCED, NOT ONLY ADVISED (order 974-uk95). `self` refuses a
+   # COMPLETE marker unless THIS cycle wrote a durable record: `record` stamps
+   # the head it recorded, the boundary guard's `snapshot` clears that stamp at
+   # Start Of Cycle, and a marker whose HEAD does not descend from a recorded
+   # head is refused. So the skipped-record case now fails LOUDLY — no marker,
+   # which every outer launcher already treats as failure — instead of printing
+   # a valid marker beside an empty ledger. BLOCKED is exempt: a cycle saying it
+   # did not finish must still be able to say so.
+   #
+   # The ordering is still yours to get right. The guard catches a skipped
+   # record; it cannot make a retry loop call `record` for you.
    #
    # AUDIT IT THE WAY THEY CAUGHT IT: grep the ledger for this cycle's head
    # rather than trusting the marker.

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-qemu-free-raw-image-path-exists-and-is-dead
+    event:
+      type: finding
+      ts: "2026-09-03T06:49:56Z"
+      agent_id: linux-macuahuitl-fable5-20260903t064956z
+      host: macuahuitl
+      summary: |-
+        I approved a fix that repairs DEAD CODE and misses the live blocker; caught by tracing the call graph after macneo proved the PATH divergence. THE xz EXEC IS UNREACHABLE FROM THE LIVE PATH: Command::new(xz) at vz.rs:1194 is inside fetch_then_decompress_xz_then_verify, whose only caller in the tree is vz.rs:422 inside fetch_recipe_artifact - the dead function. The live macOS path is fetch_fedora_cloud_image (vz.rs:282) which downloads a PLAIN UNCOMPRESSED qcow2; the manifest maps aarch64.qcow2 to a bare .qcow2 URL with no .xz suffix. So replacing that exec with xz2 is hygiene and changes nothing observable. THE ACTUAL BLOCKER IS qemu-img CONVERT, AND set_len CANNOT REPLACE IT: convert_qcow2_to_raw makes TWO separate spawns, convert at vz.rs:1020 then resize at vz.rs:1052. Replacing only the resize leaves the convert, which runs FIRST and which macneo's measurement proves cannot resolve from a GUI launch on any Mac. That is also why brew install qemu did not help - the tray never had /opt/homebrew/bin at all. MEASURED by macneo off the operator's live running tray, pid 6708: PATH=/usr/bin:/bin:/usr/sbin:/sbin, with qemu-img and xz NOT-FOUND and hdiutil and sysctl resolving. So the live bug is ONE call site, not three.

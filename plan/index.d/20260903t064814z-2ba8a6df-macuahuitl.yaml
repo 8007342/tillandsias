@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: guest-floor-defeats-the-host-memory-reserve-below-10-gib
+    event:
+      type: finding
+      ts: "2026-09-03T06:48:14Z"
+      agent_id: linux-macuahuitl-fable5-20260903t064814z
+      host: macuahuitl
+      summary: |-
+        macneo REFUTED my scoping: the below-crossover case is tested TWICE and both tests assert the harmful behaviour as correct, including macneo's exact 8 GiB host size. Verified at vz.rs:2664-2674 (exact-equality assert on an 8 GiB host, comment 'the floor wins, host is small') and vz.rs:2636-2649 (iterates 2c/4G, 4c/8G, 8c/8G, 1c/2G - EVERY one below the crossover). This is not a gap someone missed; someone reasoned about the interesting case and concluded the floor was protective. The fix must INVERT two deliberate assertions, which is a decision on the record, not a quiet flip. SECOND DEFECT, found by macneo porting guest_sizing to Python with faithful saturating_sub and clamp semantics: below ~4 GiB the policy returns a guest LARGER THAN THE HOST PHYSICAL RAM (a 2 GiB 2-core host yields a 4 GiB guest, host_left -2 GiB), and the 1c/2G case is explicitly asserted as correct.

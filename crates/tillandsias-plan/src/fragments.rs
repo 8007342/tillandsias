@@ -754,7 +754,18 @@ pub fn set_field_fragment_body(
             body.push_str(&format!("      type: {etype}\n"));
             body.push_str(&format!("      ts: \"{ts}\"\n"));
             body.push_str(&format!("      host: {host}\n"));
-            body.push_str(&format!("      summary: >\n        {summary}\n"));
+            // ORDER 971-7muc. A FOLDED scalar (`>`) collapses every newline into a
+            // space, and writing multi-line prose after a single indent puts the
+            // continuation lines at the wrong column entirely. Multi-paragraph
+            // reasoning — which is most of what an event summary IS — came back
+            // as one run-on line with its paragraph breaks gone.
+            //
+            // Caught by the byte-identity round-trip (971-7muc criterion 2), not
+            // by any existing check: a folded scalar is valid YAML and the text
+            // stays plausible, which is the same signature as the argv mangling
+            // this order was filed for. lib.rs:1738 already wrote `|` here; the
+            // two writers simply disagreed, and only one of them was tested.
+            body.push_str(&format!("      summary: {}", block_scalar(summary, 8)));
         }
     }
     body

@@ -905,12 +905,22 @@ fn model_cache_dir() -> std::path::PathBuf {
         .join("Library/Caches/tillandsias/models")
 }
 
-/// Guest floor — never allocate less than the 689-eux9 pinned policy gave.
-/// A 4 GiB / 4 vCPU guest is what every macOS host ran until 919-jii2, so a
-/// host too small for the headroom policy keeps exactly the behaviour it had
-/// rather than being handed a guest smaller than any previously shipped.
-const GUEST_FLOOR_MEMORY_BYTES: u64 = 4 * 1024 * 1024 * 1024;
-const GUEST_FLOOR_CPU_COUNT: usize = 4;
+/// Smallest guest we will BOOT. Not a floor that raises the allocation — the
+/// distinction is the whole of 978-juw4. The old `GUEST_FLOOR_MEMORY_BYTES`
+/// was applied as the lower bound of a `clamp()`, so on any host below 10 GiB
+/// (6 GiB reserve + 4 GiB floor) it silently raised the guest back ABOVE what
+/// `HOST_RESERVED_MEMORY_BYTES` had just computed, defeating the reserve on
+/// exactly the hosts the reserve exists to protect. Its rationale was that a
+/// small host "keeps exactly the behaviour it had" — but no host below 10 GiB
+/// had ever run this code (macneo, 8 GiB, was the first), so it preserved
+/// continuity for a population of size zero while over-committing a real
+/// machine into swap.
+///
+/// This constant instead makes the reserve authoritative and turns an
+/// unaffordable host into a LOUD REFUSAL rather than a quiet over-allocation:
+/// below this the forge cannot run, and saying so beats booting a guest that
+/// dies under its first container build.
+const GUEST_MIN_VIABLE_MEMORY_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 
 /// RAM left to the host: macOS itself, the tray, WindowServer, and whatever the
 /// operator is actually doing on the machine they are also running a forge on.
@@ -953,23 +963,29 @@ fn host_memory_bytes() -> u64 {
 /// (798-q4m9 / 807-bjjv comparability, preserved without re-pinning the size).
 ///
 /// MEMORY: half the host, less whatever `HOST_RESERVED_MEMORY_BYTES` demands,
-/// clamped into `[GUEST_FLOOR_MEMORY_BYTES, GUEST_MAX_MEMORY_BYTES]` and
-/// rounded down to a whole GiB. On the 16 GiB M5 of 919-jii2 that is 8 GiB —
-/// the allocation the packet asks for, reached by policy rather than hardcoded.
+/// capped at `GUEST_MAX_MEMORY_BYTES` and rounded down to a whole GiB. On the
+/// 16 GiB M5 of 919-jii2 that is 8 GiB — the allocation the packet asks for,
+/// reached by policy rather than hardcoded. The RESERVE IS AUTHORITATIVE: it
+/// is never overridden upward, which is what 978-juw4 fixed. The result may
+/// therefore come out below `GUEST_MIN_VIABLE_MEMORY_BYTES` on a host that is
+/// simply too small; `start()` refuses loudly in that case rather than booting.
 ///
-/// CPU: 80% of logical cores, never below the 4 the pinned policy gave (or the
-/// host's core count if it has fewer than 4). On a 10-core host that is 8.
+/// CPU: 80% of logical cores, always leaving the host at least one core where
+/// there is one to leave. On a 10-core host that is 8, unchanged. The old vCPU
+/// floor of 4 had the same defect as the memory floor — on a 4-core host it
+/// handed the guest every core the host had.
 fn guest_sizing(host_cores: usize, host_memory: u64) -> (usize, u64) {
     let half = host_memory / 2;
     let after_reserve = host_memory.saturating_sub(HOST_RESERVED_MEMORY_BYTES);
-    let memory = half
-        .min(after_reserve)
-        .clamp(GUEST_FLOOR_MEMORY_BYTES, GUEST_MAX_MEMORY_BYTES);
+    // No lower clamp: the reserve wins (978-juw4). `min` with the cap only.
+    let memory = half.min(after_reserve).min(GUEST_MAX_MEMORY_BYTES);
     let memory = memory / (1024 * 1024 * 1024) * (1024 * 1024 * 1024);
 
     let scaled = host_cores * 8 / 10;
-    let floor = GUEST_FLOOR_CPU_COUNT.min(host_cores.max(1));
-    let cpus = scaled.max(floor).max(1);
+    // Leave the host a core wherever there is one to leave; a 1-core host
+    // still gets 1 rather than 0.
+    let ceiling = host_cores.saturating_sub(1).max(1);
+    let cpus = scaled.max(1).min(ceiling);
     (cpus, memory)
 }
 
@@ -1780,6 +1796,24 @@ impl VmRuntime for VzRuntime {
             host_logical_cores(),
             host_memory_bytes() / (1024 * 1024 * 1024),
         );
+
+        // 978-juw4: the reserve is authoritative, so a host too small to fund
+        // a usable guest now produces a number rather than being silently
+        // rounded up to a floor it cannot afford. Refuse LOUDLY here instead of
+        // booting a guest that dies under its first container build — the
+        // failure this replaces was a wedged forge with no error anywhere.
+        if guest_memory_bytes < GUEST_MIN_VIABLE_MEMORY_BYTES {
+            return Err(VmError::from(format!(
+                "host too small to run a forge: {} GiB of RAM leaves {} GiB for the guest after \
+                 the {} GiB host reserve, below the {} GiB minimum. Tillandsias needs about {} GiB \
+                 of physical memory on macOS.",
+                host_memory_bytes() / (1024 * 1024 * 1024),
+                guest_memory_bytes / (1024 * 1024 * 1024),
+                HOST_RESERVED_MEMORY_BYTES / (1024 * 1024 * 1024),
+                GUEST_MIN_VIABLE_MEMORY_BYTES / (1024 * 1024 * 1024),
+                (HOST_RESERVED_MEMORY_BYTES + GUEST_MIN_VIABLE_MEMORY_BYTES) / (1024 * 1024 * 1024),
+            )));
+        }
 
         // MEASUREMENT SEAM — NOT a scaling knob (798-q4m9 criterion 3).
         //
@@ -2629,22 +2663,63 @@ mod tests {
         );
     }
 
-    /// The floor is the whole reason a small host is safe under 919-jii2: it
-    /// must never hand out less than the 4 GiB / 4 vCPU every macOS host ran
-    /// under the pinned policy.
+    /// 978-juw4 REPLACES `guest_sizing_never_drops_below_the_pinned_floor`.
+    ///
+    /// That test asserted `mem >= GUEST_FLOOR_MEMORY_BYTES` across (2c,4GiB),
+    /// (4c,8GiB), (8c,8GiB) and (1c,2GiB) — every one of them BELOW the 10 GiB
+    /// crossover. So the small-host case was never untested; it was tested and
+    /// pinned in the wrong direction, which is why the defect survived. The
+    /// floor's premise was that it preserved "the behaviour it had" for a small
+    /// host, but no host below 10 GiB had ever run this code.
+    ///
+    /// Below the crossover the RESERVE now wins. These are the cases the old
+    /// policy could not express.
     #[test]
-    fn guest_sizing_never_drops_below_the_pinned_floor() {
-        for (cores, gib) in [(2usize, 4u64), (4, 8), (8, 8), (1, 2)] {
-            let (cpus, mem) = guest_sizing(cores, gib * 1024 * 1024 * 1024);
+    fn guest_sizing_lets_the_reserve_win_below_the_crossover() {
+        let gib = 1024 * 1024 * 1024;
+        // 8 GiB / 6 cores — macneo, the host this order was filed from.
+        let (cpus, mem) = guest_sizing(6, 8 * gib);
+        assert_eq!(mem, 2 * gib, "8 GiB host: the 6 GiB reserve leaves 2 GiB");
+        assert_eq!(cpus, 4, "6-core host: 80% is 4, and the host keeps 2");
+        // 9 GiB: pre-clamp 3 GiB, which the old floor raised to 4.
+        let (_, mem) = guest_sizing(6, 9 * gib);
+        assert_eq!(mem, 3 * gib);
+        // 10 GiB: the crossover itself, where the old clamp was already inert.
+        // Identical under both policies — which is precisely why no test that
+        // only looked here could tell them apart.
+        let (_, mem) = guest_sizing(8, 10 * gib);
+        assert_eq!(mem, 4 * gib);
+    }
+
+    /// The policy must never hand the guest more memory than the host has.
+    /// The old floor did exactly that below ~4 GiB: a 2 GiB host was sized to a
+    /// 4 GiB guest, and the replaced test asserted that (1c, 2GiB) case was
+    /// correct. An unsatisfiable allocation is a different failure from an
+    /// unkind one.
+    #[test]
+    fn guest_sizing_never_exceeds_the_host() {
+        let gib = 1024 * 1024 * 1024;
+        for n in 1u64..=64 {
+            let (cpus, mem) = guest_sizing(4, n * gib);
             assert!(
-                mem >= GUEST_FLOOR_MEMORY_BYTES,
-                "{cores}c/{gib}GiB host must not go below the 4 GiB floor, got {mem}"
+                mem <= n * gib,
+                "{n} GiB host was sized to a {mem}-byte guest — more than it has"
             );
-            assert!(
-                cpus >= GUEST_FLOOR_CPU_COUNT.min(cores.max(1)),
-                "{cores}c host must not go below the vCPU floor, got {cpus}"
-            );
+            assert!(cpus >= 1, "{n} GiB host must still get at least one vCPU");
         }
+    }
+
+    /// vCPU had the same shape of defect as memory: the old floor of 4 handed a
+    /// 4-core host every core it owned. Leave the host one wherever there is
+    /// one to leave. The 919-jii2 10-core case is unchanged.
+    #[test]
+    fn guest_sizing_leaves_the_host_a_core() {
+        let gib = 1024 * 1024 * 1024;
+        assert_eq!(guest_sizing(10, 16 * gib).0, 8, "919-jii2 host: unchanged");
+        assert_eq!(guest_sizing(6, 8 * gib).0, 4, "macneo: 80% of 6");
+        assert_eq!(guest_sizing(4, 8 * gib).0, 3, "was 4 — the whole host");
+        assert_eq!(guest_sizing(2, 8 * gib).0, 1, "was 2 — the whole host");
+        assert_eq!(guest_sizing(1, 8 * gib).0, 1, "a 1-core host still boots");
     }
 
     /// The host of 919-jii2 — Mac17,3 / M5 / 10 cores / 16 GiB — is the case
@@ -2665,9 +2740,13 @@ mod tests {
         // 12 GiB: half is 6, but the host reserve allows only 6 — both agree.
         let (_, mem) = guest_sizing(8, 12 * 1024 * 1024 * 1024);
         assert_eq!(mem, 6 * 1024 * 1024 * 1024);
-        // 8 GiB: half is 4, reserve allows 2 — the floor wins, host is small.
+        // 8 GiB: half is 4, reserve allows 2 — the RESERVE wins (978-juw4).
+        // This assertion was INVERTED by that order. It previously pinned
+        // GUEST_FLOOR_MEMORY_BYTES here, i.e. it asserted the over-allocation
+        // itself was correct, with a comment that narrated the defect
+        // accurately ("the floor wins, host is small") and accepted it.
         let (_, mem) = guest_sizing(8, 8 * 1024 * 1024 * 1024);
-        assert_eq!(mem, GUEST_FLOOR_MEMORY_BYTES);
+        assert_eq!(mem, 2 * 1024 * 1024 * 1024);
         // 128 GiB: half is 64, well past what a forge uses — capped.
         let (_, mem) = guest_sizing(24, 128 * 1024 * 1024 * 1024);
         assert_eq!(mem, GUEST_MAX_MEMORY_BYTES);

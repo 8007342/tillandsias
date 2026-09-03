@@ -8,22 +8,43 @@ philosophy:
   convergence_via_velocity:
     authority: "The Tlatoāni, 2026-08-13 (fleet-restart directive)"
     principle: >
-      Convergence is won by ITERATION VELOCITY, not per-iteration accuracy. We
-      favor the STRONG law of large numbers over smaller overall loops: instead
-      of one huge model looping for hours, combine MANY tiny, super-fast models
-      whose fast iterations converge to the same result quality orders of
-      magnitude faster.
+      Convergence is won by ITERATION VELOCITY, not per-iteration accuracy.
+      Instead of one huge model looping for hours, combine MANY tiny,
+      super-fast models whose fast iterations reach the same result quality
+      orders of magnitude faster. (This principle was originally stated as
+      "we favor the STRONG law of large numbers"; see weak_vs_strong below
+      for why the DESIGN is unchanged and the CITATION was withdrawn.)
     weak_vs_strong: >
       A single prompt is one finite sample: it converges to the answer with a
       SKEW (WEAK LLN — convergence in probability, biased at finite N). Do NOT
       fight to make one prompt maximally accurate; that fights its own weak-LLN
       skew. Instead make each prompt SMALL and FAST with a CONTROLLED, BOUNDED
-      skew, then iterate — the STRONG LLN (almost-sure convergence) makes the
-      stream of iterations converge hard. The hazard is uncontrolled skew
-      sneaking in at the END of every individual prompt: if a prompt's skew is
-      not bounded, infinite iterations do NOT converge hard. So the one thing to
-      wrangle carefully is per-prompt controlled skew (its weak-LLN form); the
-      iteration loop then supplies the strong-LLN convergence.
+      skew, then iterate. The hazard is uncontrolled skew sneaking in at the END
+      of every individual prompt: if a prompt's skew is not bounded, iterating
+      does not help. So the one thing to wrangle carefully is per-prompt
+      controlled skew, and the iteration loop is what turns many small bounded
+      results into a good one. THE DESIGN GUIDANCE ABOVE IS UNCHANGED AND IS
+      SUPPORTED BY THE RELEASE-BOUNDARY EVIDENCE; what follows is a correction
+      to the MATHEMATICS CITED FOR IT, not to the practice.
+      CITATION WITHDRAWN (order 976-bd3n, external review 2026-09-03). This
+      block previously claimed the STRONG LLN — almost-sure convergence — for
+      the stream of iterations. INDEPENDENCE IS A HYPOTHESIS OF THAT THEOREM,
+      NOT A STYLISTIC ASSUMPTION, and this system deliberately violates it:
+      `rag_as_cache_commits_as_lamport_clock` below states that the RAG cache
+      is refreshed on commits, so iteration k+1 READS ITERATION k'S OUTPUT.
+      The design constructs the dependence and the citation forbade it, four
+      lines apart in the same file. So the almost-sure claim is not available
+      as stated and is withdrawn rather than weakened.
+      WHAT A RIGOROUS CLAIM WOULD REQUIRE, so a future author knows the shape
+      of the work rather than re-deriving the objection: name the dependence
+      structure the cache-on-commits design creates, then invoke a theorem that
+      TOLERATES it. Birkhoff's ergodic theorem needs stationarity and
+      ergodicity argued; a martingale convergence law needs
+      E[X_{k+1} | F_k] = mu argued. NEITHER IS ARGUED HERE, and neither should
+      be asserted until it is. Absent that, the honest statement is the
+      empirical one: bounded per-iteration skew plus high velocity has
+      measurably converged at release boundaries, and that is a track record
+      rather than a theorem.
     design_implications:
       - "Make each loop as SMALL as possible; raise iteration velocity, not individual-prompt accuracy."
       - "Split large work into small ASYNCHRONOUS work (cheap). Monolith -> async microservices: one huge slow model -> many tiny fast RAG experts an agent COMPOSES."

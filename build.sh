@@ -2086,6 +2086,19 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Enclave network internal check passed"
 
+    # Order 971-7muc. A ledger write that silently deletes the words it is
+    # quoting, while producing valid YAML and plausible prose, is invisible to
+    # every other check here — validate-yaml, the ledger check and the
+    # fragment-keys guard all pass the corrupted text. Only byte-identity sees
+    # it, so this asserts it directly, and its negative control reproduces the
+    # shell mangling that started the order.
+    _step "Checking ledger prose round-trips byte-identically (971-7muc)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-ledger-prose-roundtrip.sh" 2>&1; then
+        _error "a ledger write alters the prose it was given — the record cannot be trusted to say what its author wrote"
+        exit 1
+    fi
+    _info "Ledger prose round-trip passed"
+
     # The DEPLOYED half is host state, so it is REPORTED and never fatal: a
     # network created before this fix reds no build, because the repair is
     # `podman network rm`, not a code change, and failing here would make one
@@ -2853,6 +2866,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Bound-litmus-runnable fixture passed"
+
+    _step "Verifying a MO-FULL marker cannot outrun its ledger record (974-uk95)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-mo-full-record-precedes-marker.sh" 2>&1; then
+        _error "the marker/ledger coupling regressed (974-uk95) — see the failing case above"
+        exit 1
+    fi
+    _info "MO-FULL record-precedes-marker fixture passed"
 
     _step "Checking every spec requirement carries a unique stable id (976-suab)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-requirement-ids.sh" 2>&1; then
