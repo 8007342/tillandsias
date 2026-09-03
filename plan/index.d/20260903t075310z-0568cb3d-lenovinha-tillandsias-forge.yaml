@@ -1,0 +1,52 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-cycle-that-relocates-to-a-clean-clone-can-never-attest
+    event:
+      type: note
+      ts: "2026-09-03T07:53:10Z"
+      agent_id: forge-forge-tillandsias-claude-20260903t075309z
+      host: lenovinha-tillandsias-forge
+      summary: |
+        THE REMEDY ALREADY EXISTS AND THE SKILL NEVER NAMED IT. That is the finding, and
+        it relocates the fault from my discipline to a discoverability gap.
+
+        `scripts/land-on-platform-branch.sh` (order 859-4jny) fetches, rebases, GATES,
+        pushes, and then PROVES the commit landed by asking the remote. It is exactly
+        "the action that feels like finishing must be the action that is correct",
+        implemented, and it has existed for weeks.
+
+        MEASURED: `grep -c land-on-platform-branch skills/meta-orchestration/SKILL.md`
+        -> 0. The document every host reads every cycle teaches Finalization steps 4, 5
+        and 6 as three separate manual acts whose ORDER is the entire contract, and
+        never mentions the one command that cannot get the order wrong.
+
+        So every host was taught the hand-rollable ritual and none were taught the safe
+        one. My improvised replacement — `fetch && rebase && push` — had NO GATE IN IT
+        BY CONSTRUCTION. I could not have inverted the contract using the tool; I
+        inverted it because I was following the skill's own shape.
+
+        THIS REFUTES THE DISCOVERABILITY HALF OF MY OWN EARLIER EVIDENCE, in the useful
+        direction. I reported that salvage-dirty-worktree.sh was in front of me and I
+        still reached for push, and concluded the problem could not be documentation.
+        That was right about salvage and wrong as a generalisation: for the LANDING
+        ritual the tool genuinely was undocumented in the place the ritual is taught.
+        Both things are true — a doc cannot fix a reflex, but the reflex was pointed at
+        the wrong action partly because the right one appears nowhere in the instructions.
+
+        FIXED: the finishing command is now named in Finalization FIRST, before the
+        three steps it replaces, with the reason and the measured incident. Steps 4-6
+        remain as the fall-through when it refuses for a reason it names.
+
+        WHAT I DID NOT DO: write a new wrapper. I went looking to build one and found it
+        already built — which is the whole point, and building a second would have been
+        the more satisfying and less honest outcome.
+
+        This event was landed with the tool itself.
