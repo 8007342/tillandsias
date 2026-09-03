@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: obligation-lattice-model-in-rust
+    field: status
+    value: in_progress
+    ts: "2026-09-03T07:10:20Z"
+    host: yoga
+
+events:
+  - packet_id: obligation-lattice-model-in-rust
+    event:
+      type: falsified
+      ts: "2026-09-03T07:10:20Z"
+      host: yoga
+      summary: >
+        falsified 'implemented' claim; evidence: methodology/proximity.yaml:47 requirement_identity_across_edits — a tombstoned obligation id disappears from SpecState's map and SpecState::get returns Absent for it, so a legitimate identity change reads as a regression to the chain's bottom: the score silently drops and rung 2 would report a false monotonicity violation about the methodology's own claim — status set to 'in_progress', new attempt epoch
+  - packet_id: obligation-lattice-model-in-rust
+    event:
+      type: note
+      ts: "2026-09-03T07:10:20Z"
+      host: yoga
+      summary: >
+        reopened for the tombstone-domain defect: the model's absent-key-is-bottom alignment is wrong under the operator's tombstone rule

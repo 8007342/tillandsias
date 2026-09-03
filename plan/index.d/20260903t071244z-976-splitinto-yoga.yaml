@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# ORDER 976-kk6x: declare the split_into relationship as a FIELD, not prose.
+#
+# The parent carried "do not claim this row, take a child" in next_action and
+# `split-parents` still returned nothing for it, so the tooling contradicted the
+# prose and a coordinator re-dispatched the row as unclaimed work. Prose in
+# next_action is not a machine-readable constraint (750-zrt4).
+status:
+  - packet_id: implement-the-obligation-lattice-and-wire-the-scorer
+    field: split_into
+    value:
+      - obligation-lattice-model-in-rust
+      - obligation-lattice-properties-that-can-fail
+      - centicolon-scorer-calls-the-model
+      - centicolon-backfill-only-what-evidence-supports
+      - centicolon-enforcement-is-hard-not-requested
+    ts: "2026-09-03T07:12:44Z"
+    host: yoga
