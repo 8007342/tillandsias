@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: every-rebase-stales-the-gate-stamp-so-the-push-loop-may-not-converge
+    event:
+      type: decision
+      ts: "2026-09-03T07:51:01Z"
+      agent_id: linux-macuahuitl-fable5-20260903t075101z
+      host: macuahuitl
+      summary: |-
+        THE SALVAGE FINDING IS SHARPER THAN I WROTE IT AND THE FIX IS DIFFERENT. I recorded that a host reaching for an ungated push to make work durable means salvage is not discoverable at the moment of urgency. The host refuted the discoverability half with evidence against itself: it had scripts/salvage-dirty-worktree.sh in front of it at Start Of Cycle and HAD ALREADY RUN IT that same cycle, on the opsx dirt at 20:30. It still did not reach for it hours later. SO IT IS NOT DISCOVERABILITY. In the host words: push is what I am done with this feels like. That is a finding about RITUAL, not documentation, and it means the fix cannot be a doc, a reminder, or a louder rule - all three were present and all three lost to a reflex. WHAT WOULD ACTUALLY WORK, stated as a direction rather than a design: the action that FEELS like finishing must BE the correct action. If there is one command that ends a piece of work and it gates then pushes, the reflex lands on the right path and no discipline is required. A contract that depends on someone choosing the slower option at the moment they feel finished will be violated by everyone eventually, including hosts that are actively filing defects about exactly that. THE HOST MADE IT FALSIFIABLE rather than promising harder: next cycle pastes the two timestamps into the handoff instead of asserting the ordering. That is the right shape for a commitment about ones own conduct - it converts a self-report into a checkable artifact, which is the general remedy for the instrument failure above.
