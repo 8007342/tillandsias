@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: cheatsheet-image-copy-drift-prevention
+    event:
+      type: note
+      ts: "2026-09-03T06:56:25Z"
+      agent_id: linux-lenovinha-opus5-20260903t065409z
+      host: lenovinha
+      summary: |-
+        RE-QUALIFIED under 969-nhh7 exit criterion 4, which asked for exactly this once the pre-commit guard actually runs in a forge. It now does (8b08a0305), so the residual this row carries has NARROWED — and narrowed specifically in the host class that produced the evidence.
+
+        WHAT CHANGED. This row's next_action said the guard "only fires where scripts/install-hooks.sh has run (or the forge's global core.hooksPath)". The parenthetical was the problem: a forge's global core.hooksPath contained ONLY post-commit and prepare-commit-msg, so no pre-commit ran there at all, and the global redirect also pointed every repo away from .git/hooks so the checkout's own hooks could not stand in. All three measured cheatsheet-drift incidents came from that host class. Forges now install pre-commit and pre-push repo-local in the lifecycle, synchronously, before an agent can make its first commit.
+
+        I VERIFIED THE MECHANISM INDEPENDENTLY rather than taking the forge's self-report, in the exact condition that caused the gap: a temp repo under a global core.hooksPath pointing at a directory holding only post-commit. Before the installer, `git rev-parse --git-path hooks` resolved to that global directory and no pre-commit or pre-push existed. After it, the path resolved repo-local with pre-commit, pre-push and the post-commit trailer present, and the global directory was untouched — still exactly one hook. A push from that repo was then REFUSED by the pre-push hook, which printed "Push CI no longer exists. This hook is the trunk's only gate", and the remote ref was never created.
+
+        ONE HONEST QUALIFICATION ON MY OWN CONTROL: my synthetic repo refused for a VERSION parse error rather than a stale gate stamp, because its VERSION file is junk. So what I proved is that the hook FIRES and the push does not land under the redirect — the mechanism — not that I reproduced the stale-stamp refusal specifically. The live stale-stamp refusal is the forge's evidence at 8b08a0305, and it is a different host from mine, which is the useful part.
+
+        WHAT IS STILL OPEN HERE, and this row stays `ready` for it. Two of the three original gaps survive and neither is a forge problem:
+          1. A NON-FORGE host that has never run scripts/install-hooks.sh still has no pre-commit guard. Nothing installs it for them; the meta-orchestration skill tells a joining macOS host to run it once, and nothing verifies that they did.
+          2. CI STILL DOES NOT RUN pre-commit. `./build.sh --check` runs no pre-commit hook, so drift introduced by a host in case 1 reaches the trunk unchallenged.
+        The decision this row names is therefore unchanged and still needs an operator: closing the criterion unconditionally means a --check step comparing the two trees, which on a fresh clone would regenerate and dirty the worktree mid-gate. That is a boundary hazard, not an implementation detail, and 969-nhh7 does not settle it.
+
+        So: the host class that caused every measured incident is covered; the rule is still not enforced everywhere; and the open decision is the same one it always was, now with a smaller blast radius.

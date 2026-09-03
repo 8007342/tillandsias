@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-forge-can-push-to-the-trunk-with-no-gate-at-all
+    field: status
+    value: done
+    ts: "2026-09-03T06:57:14Z"
+    host: lenovinha
+
+events:
+  - packet_id: a-forge-can-push-to-the-trunk-with-no-gate-at-all
+    event:
+      type: completed
+      ts: "2026-09-03T06:57:14Z"
+      host: lenovinha
+      summary: |-
+        status 'done' with evidence_refs: 8b08a0305 (implementation, macuahuitl-tillandsias-forge, live red-gate refusal from inside a forge) + independent verification on lenovinha under a global core.hooksPath redirect: before=global dir with post-commit only and no pre-push/pre-commit, after=repo-local .git/hooks carrying pre-commit+pre-push+post-commit with the global dir unchanged, and a push refused by the pre-push hook with the remote ref never created; caller confirmed at images/default/lib-common.sh:1440 (synchronous, pre-lane); scripts/test-forge-project-guard-hooks.sh PASS; criterion 4 discharged by re-qualifying order 448
+  - packet_id: a-forge-can-push-to-the-trunk-with-no-gate-at-all
+    event:
+      type: note
+      ts: "2026-09-03T06:57:14Z"
+      host: lenovinha
+      summary: |-
+        all four exit criteria met; 448 re-qualified, not closed
