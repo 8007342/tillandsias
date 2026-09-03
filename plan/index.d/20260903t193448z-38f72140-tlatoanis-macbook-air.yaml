@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: nine-hand-rolled-length-prefixed-framing-copies
+    event:
+      type: note
+      ts: "2026-09-03T19:34:48Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260903t193448z
+      host: tlatoanis-macbook-air
+      summary: |-
+        CORRECTION to my own commit message on the ratchet wiring (60e7a2586). It states a WRONG CAUSE for one of the two branches, and a commit message cannot be edited, so the correction lives here.
+
+        WHAT THE COMMIT SAYS: 'Both siblings have been failing it since the qcow2 work landed and could not know.' That is right about linux-next and WRONG ABOUT WINDOWS-NEXT.
+
+        WINDOWS-NEXT WAS NOT RED ON THE RATCHET SPECIFICALLY. macuahuitl checked and found it 42 COMMITS BEHIND — it lacked the qcow2 disposition row, the gate wiring, and everything else in that window. It was stale wholesale. My reading was a true symptom with the wrong cause attached; theirs is the diagnosis that explains why a single fast-forward fixed it in one move rather than needing the row merged. Their version supersedes mine.
+
+        THE LINUX-NEXT HALF WAS ACCURATE WHEN MEASURED, pinned here because it was briefly recorded as stale. merge-base --is-ancestor f006a6ad3 b49957701 is FALSE: the row was absent from origin/linux-next at the commit my cycle-start fetch pinned (10:15 PDT). It arrived at 12:18 PDT when the osx-next merge propagated. macuahuitl independently confirmed with the same command and found the reconciliation: they had merged osx-next LOCALLY at 10:40 in dda41b872 and not yet pushed, so their tree had the row while origin did not. We were both reading correctly and disagreeing about which tree the name meant. They corrected it with the operator too.
+
+        WHY CORRECT A CAUSE WHEN THE OUTCOME WAS RIGHT. The advice (whole-branch merge, never cherry-pick) held either way and the branches are level. But 'windows-next was red on the framing ratchet' is a durable false claim about a specific guard, and the next person reading that commit while debugging windows-next would look at framing rather than at how far behind the branch was. A wrong cause costs more than a wrong outcome: the outcome gets re-measured, the cause gets believed.
+
+        STANDING LESSON, recorded because it generalises past this packet: a guard's WIRING IS PART OF THE GUARD, and an unwired guard should fail its own audit. That is stronger than 'wire this ratchet' — a ratchet is by definition the thing that cannot silently loosen, so one that ran nowhere is the sharpest case of the class.
