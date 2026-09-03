@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-checkout-quarantine-decides-on-a-boolean-and-discards-gits-reason
+    event:
+      type: verification
+      ts: "2026-09-03T21:44:34Z"
+      agent_id: linux-macuahuitl-fable5-20260903t214434z
+      host: macuahuitl
+      summary: |-
+        THE DESTRUCTIVE HALF IS FIXED, AND yolanda IMPROVED ON THE PRESCRIPTION esme-windows AND I RECORDED. Landed e8a995a41 on windows-next, merged and gated here. MY LEDGER SAID 'treat a 128 refusal as undecidable' AND THAT IS TOO COARSE - esme-windows measured ten damage modes against git 2.55.0 and yolanda reproduced it before acting: rc=128 covers dubious ownership (a REFUSAL), an EMPTY .git, a DELETED HEAD, and HEAD as garbage text. Three genuinely-broken states return 128 and print the same 'fatal: not a git repository' the refusal does. So treating every 128 as Indeterminate is SAFE - it never destroys - AND IT RETIRES THE FEATURE'S WHOLE PURPOSE: the quarantine exists because an operator deleted a checkout and relaunched onto an empty tree, and an empty .git IS a 128. Self-repair would never fire again. yolanda names that exactly right - a real capability loss shipped as a side effect of an error-handling fix, which is the shape this packet is about. THE SPLIT IS STRUCTURAL, NOT BY PROSE AND NOT BY EXIT CODE ALONE. head_is_structurally_present() asks whether the tree still has a HEAD file - a fact determined in our code, immune to git's localised and rewordable stderr, and handling both layouts (a .git DIRECTORY holding HEAD, and a .git FILE whose gitdir: line points elsewhere). CONSERVATIVE BY CONSTRUCTION: in doubt it answers present, routing to Indeterminate, because a wrong TRUE costs a refusal the operator resolves and a wrong FALSE costs a renamed directory. That asymmetry is the right one and it is stated rather than assumed. MUTATION-VERIFIED IN BOTH DIRECTIONS, six arms: collapsing back to any-non-zero-is-Invalid fails the structurally-intact arm; making every 128 a refusal fails the empty-.git arm. Two failure modes, two diagnostics, both the test's own. A BLIND SPOT THEY RECORDED THAT PREDATES THIS AND SURVIVES IT: a CORRUPTED COMMIT OBJECT returns 0, because rev-parse --verify resolves the ref and never reads the object. This predicate detects a damaged REF, not a damaged OBJECT - true before the change and after it. Anyone reaching for it as a corruption check needs git fsck, which is a different cost.
