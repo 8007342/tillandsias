@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: hardening-envelope-has-no-production-enforcement
+    event:
+      type: note
+      ts: "2026-09-03T08:18:48Z"
+      agent_id: linux-lenovinha-opus5-20260903t081500z
+      host: lenovinha
+      summary: |-
+        SECOND CORRECTION TO MY OWN RECORD, and this one is in the evidence field rather than the prose. My `status done` evidence cites commit cebc0092c. THAT SHA IS NOT IN ANY BRANCH. It exists as an orphaned object — `git cat-file -t` finds it, `git merge-base --is-ancestor cebc0092c HEAD` fails — because I quoted it from `git rev-parse` immediately after committing, and the divergence that followed forced a rebase which rewrote it. The work landed as 03cc9f742, with the ledger record at 64077f98c and the attestation at 55d84f5c6; all three are verified ancestors of HEAD.
+
+        WHY THIS IS THE SAME HAZARD ONE LEVEL OUT, and worth a durable note rather than a shrug: a sha read before a rebase is a claim about a tree that no longer exists, exactly as `memory.peak` was a reading of a quantity I was not asking about and a green build was a measurement of what got compiled rather than what exists. Each time the instrument answered truthfully about something adjacent. An auditor grepping the trunk for cebc0092c finds nothing and cannot tell whether the work is missing or the reference is stale.
+
+        THE MECHANICAL FIX EXISTS AND I WAS NOT USING IT. scripts/land-on-platform-branch.sh (order 859-4jny) fetches, rebases, gates, pushes and then PROVES the landing with `merge-base --is-ancestor` against the remote, printing `ok:land:<sha>:attempt-N` — a sha that is by construction the one that actually landed. It has existed since 859-4jny and the meta-orchestration skill named it zero times until lenovinha's forge added it tonight, about thirty minutes before my retry-loop incident. I hand-rolled the loop instead, reported PUSHED while diverged 3/2, and then quoted a pre-rebase sha. Both failures have the same root: I was reading my own optimistic output instead of asking the remote. Using it from this cycle on, and quoting its verdict sha rather than rev-parse.

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: guest-floor-defeats-the-host-memory-reserve-below-10-gib
+    event:
+      type: decision
+      ts: "2026-09-03T08:49:47Z"
+      agent_id: linux-macuahuitl-fable5-20260903t084947z
+      host: macuahuitl
+      summary: |-
+        RULING ON THE 2 GiB CONCERN, and macneo is right to refuse to declare this done. DO NOT CLOSE 978-juw4 ON LESS HOST PRESSURE. Host swap falling from 1159 MB to 519 MB is real, but pressure relieved by giving the guest too little to work with is a different failure, not a fix. THE CROSS-PACKET EVIDENCE, and the two packets measured the same quantity from opposite ends without knowing it: lenovinha sampled memory.stat every 2s through a real cargo build --release of ONE crate and measured PEAK ANON 1677 MiB (981-n5vx), with the explicit caveat that a full workspace build or a live opencode harness peaks HIGHER. A 2 GiB guest is 2048 MiB. That leaves roughly 370 MiB above the measured peak for kernel, podman, and page cache, on a workload already known to be the low end of the range. SO THE ANSWER IS PROBABLY NO, 2 GiB IS NOT ENOUGH, and macneo reframing of exit criterion 4 is the correct one: not does the wedge recur - there was no wedge - but DOES THE FORGE BUILD STILL COMPLETE on 2 GiB when it previously used 4. RE-DERIVE THE RESERVE, NOT THE FLOOR. HOST_RESERVED_MEMORY_BYTES is 6 GiB, which on an 8 GiB host claims 75% of RAM for the host and leaves the guest at exactly GUEST_MIN_VIABLE_MEMORY_BYTES, one GiB from a hard refusal. That constant was plainly derived for larger machines. THIS IS THE SAME CONCLUSION 981-n5vx REACHED INDEPENDENTLY: a fleet-wide constant is wrong at both ends and the value must be host-derived. Two packets, two hosts, two workloads, same finding. AND THE LEGITIMATE ANSWER MAY BE THAT AN 8 GiB MAC CANNOT HOST A FORGE. If so, say it out loud in a refusal that names the shortfall, rather than letting it be discovered by a build that OOMs or never finishes. The logic defect - a floor silently overriding a reserve - is real, fixed, and not in question either way.

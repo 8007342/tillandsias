@@ -85,7 +85,17 @@ pub struct ContainerSpec {
     pull_never: bool,
     userns_keep_id: bool,
     cap_drop_all: bool,
-    cap_add: Vec<String>,
+    // ORDER 972-6vaj: there is deliberately no `cap_add`. The field existed as
+    // an unvalidated pass-through — any string, straight onto the podman
+    // command line, re-granting whatever `--cap-drop=ALL` had just removed —
+    // and it had ZERO production callers; the only use in the tree was one
+    // test granting SYS_CHROOT. The exit criterion offered "validated against
+    // an allowlist or the field is removed", and removal is the stronger and
+    // cheaper of the two: an allowlist is a policy to maintain and a place for
+    // an exception to be argued, while an absent field cannot be misused and
+    // needs no guard. Re-adding it means re-adding the escape hatch, so if a
+    // real need appears, add the capability to the profile that needs it with
+    // its own justification rather than restoring a general-purpose bypass.
     no_new_privileges: bool,
     label_disable: bool,
     pids_limit: Option<u32>,
@@ -116,7 +126,6 @@ impl ContainerSpec {
             pull_never: false,
             userns_keep_id: true,
             cap_drop_all: true,
-            cap_add: Vec::new(),
             no_new_privileges: true,
             label_disable: true,
             pids_limit: None,
@@ -229,11 +238,6 @@ impl ContainerSpec {
         self
     }
 
-    pub fn cap_add(mut self, value: impl Into<String>) -> Self {
-        self.cap_add.push(value.into());
-        self
-    }
-
     pub fn publish(mut self, spec: impl Into<String>) -> Self {
         self.publish.push(spec.into());
         self
@@ -295,10 +299,6 @@ impl ContainerSpec {
         }
         if self.cap_drop_all {
             args.push("--cap-drop=ALL".to_string());
-        }
-        for cap in &self.cap_add {
-            args.push("--cap-add".to_string());
-            args.push(cap.clone());
         }
         if self.no_new_privileges {
             args.push("--security-opt=no-new-privileges".to_string());
@@ -374,14 +374,27 @@ impl ContainerSpec {
         args
     }
 
-    pub fn build_run_argv(&self) -> Vec<String> {
+    /// Serialize to `podman run` argv, REFUSING an argv that violates the
+    /// immutable hardening envelope (order 972-6vaj).
+    ///
+    /// THIS WAS A `debug_assert!` AND THEREFORE NOTHING. `debug_assert!` is
+    /// compiled out of release builds, so the only non-test reference to
+    /// `validate_launch_argv` in the entire tree evaporated in every shipped
+    /// binary: the validator had zero production call sites, and the envelope
+    /// the spec calls "immutable" was enforced by nobody at runtime.
+    ///
+    /// It returns `Result` rather than logging and continuing on purpose. An
+    /// argv that has lost a hardening flag is not a degraded launch to be
+    /// reported, it is a container that must not be created — and a warning
+    /// printed beside a successful launch is the "fail safe-looking" outcome
+    /// this project keeps paying for. The caller decides what to do with the
+    /// refusal; it cannot silently ignore one.
+    // @trace order:972-6vaj, spec:podman-orchestration, spec:security-privacy-isolation
+    pub fn build_run_argv(&self) -> Result<Vec<String>, crate::policy::LaunchArgvError> {
         let mut argv = vec!["run".to_string()];
         argv.extend(self.build_run_args());
-        debug_assert!(
-            crate::policy::validate_launch_argv(&argv).is_ok(),
-            "ContainerSpec must serialize to policy-valid podman run argv"
-        );
-        argv
+        crate::policy::validate_launch_argv(&argv)?;
+        Ok(argv)
     }
 }
 
@@ -477,12 +490,65 @@ mod tests {
         assert!(args.contains(&"--init".to_string()));
     }
 
+    /// ORDER 972-6vaj, EXIT CRITERION 2: this must hold in the RELEASE profile,
+    /// which is exactly what the `debug_assert!` it replaces could not do.
+    ///
+    /// The gate runs `cargo test --release`, so this test executes with
+    /// `debug_assertions` OFF. Under the old code the validator call vanished
+    /// there and the argv was returned unchecked; a test asserting the old
+    /// behaviour would have passed in debug and proved nothing about any
+    /// shipped binary. Asserting on the RETURNED VALUE rather than on a panic
+    /// is what makes the check profile-independent.
+    #[test]
+    // @trace order:972-6vaj, spec:podman-orchestration
+    fn the_hardening_envelope_is_enforced_in_release_not_only_in_debug() {
+        // The negative control first: if this ever passes, the enforcement is
+        // gone and every assertion below is vacuous.
+        let stripped = vec![
+            "run".to_string(),
+            "--rm".to_string(),
+            "example:v1".to_string(),
+        ];
+        assert!(
+            crate::policy::validate_launch_argv(&stripped).is_err(),
+            "an argv with no hardening flags must not validate"
+        );
+
+        // A spec built through the public API carries the whole envelope and
+        // serializes successfully.
+        let spec = ContainerSpec::new("example:v1").name("probe");
+        let argv = spec
+            .build_run_argv()
+            .expect("a spec built through the public builder must be policy-valid");
+        for flag in crate::policy::MANDATORY_HARDENING_FLAGS {
+            assert!(argv.iter().any(|a| a == flag), "argv lost {flag}: {argv:?}");
+        }
+
+        // AND THE PROOF THAT THE CHECK IS LIVE IN THIS PROFILE: strip a flag
+        // from a real serialization and confirm the validator rejects it. This
+        // is the case a `debug_assert!` could not observe in release at all.
+        let without_cap_drop: Vec<String> = argv
+            .iter()
+            .filter(|a| *a != "--cap-drop=ALL")
+            .cloned()
+            .collect();
+        assert!(
+            crate::policy::validate_launch_argv(&without_cap_drop).is_err(),
+            "removing --cap-drop=ALL must be refused, in every profile"
+        );
+
+        // Say out loud which profile actually ran, so a green result cannot be
+        // mistaken for coverage it does not have.
+        if cfg!(debug_assertions) {
+            eprintln!("note: ran with debug_assertions ON; the gate also runs this --release");
+        }
+    }
+
     #[test]
     fn browser_flags_can_be_expressed_in_the_typed_spec() {
         let spec = ContainerSpec::new("example:v1")
             .pull_never()
             .read_only()
-            .cap_add("SYS_CHROOT")
             .tmpfs("/tmp:size=256m")
             .tmpfs("/dev/shm:size=256m")
             .device("/dev/dri/renderD128")
@@ -491,8 +557,17 @@ mod tests {
 
         assert!(args.contains(&"--pull=never".to_string()));
         assert!(args.contains(&"--read-only".to_string()));
-        assert!(args.contains(&"--cap-add".to_string()));
-        assert!(args.contains(&"SYS_CHROOT".to_string()));
+        // ORDER 972-6vaj: this used to assert `--cap-add SYS_CHROOT`, and it
+        // was the ONLY place in the tree that granted a capability — no
+        // production caller ever did. The assertion is inverted rather than
+        // deleted so the removal is pinned: nothing may re-grant, through this
+        // type, a capability that `--cap-drop=ALL` just removed. A profile that
+        // genuinely needs one adds it with its own justification; it does not
+        // get a general-purpose bypass back.
+        assert!(
+            !args.iter().any(|a| a == "--cap-add"),
+            "the cap_add escape hatch must stay removed: {args:?}"
+        );
         assert!(args.contains(&"--tmpfs".to_string()));
         assert!(args.contains(&"/tmp:size=256m".to_string()));
         assert!(args.contains(&"--device".to_string()));
@@ -533,7 +608,9 @@ mod tests {
     #[test]
     fn build_run_argv_prefixes_run() {
         let spec = ContainerSpec::new("example:v1");
-        let argv = spec.build_run_argv();
+        // Order 972-6vaj: build_run_argv now REFUSES a policy-invalid argv
+        // instead of asserting only in debug, so the happy path unwraps.
+        let argv = spec.build_run_argv().expect("policy-valid");
         assert_eq!(argv.first().map(|s| s.as_str()), Some("run"));
         assert!(crate::policy::validate_launch_argv(&argv).is_ok());
     }

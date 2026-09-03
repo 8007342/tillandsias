@@ -2478,7 +2478,16 @@ fn run_root_terminal(root: &Path, version: &str) -> Result<(), String> {
         full_name: None,
     };
     let spec = build_launch_spec(&project, LaunchKind::Maintenance, &image);
-    launch_in_terminal("Tillandsias - Root", "podman", &spec.build_run_argv())
+    // ORDER 972-6vaj: REFUSE rather than launch. `build_run_argv` validates the
+    // immutable hardening envelope in every profile now; before this it was a
+    // `debug_assert!`, compiled out of release, so a root maintenance shell
+    // whose argv had lost `--cap-drop=ALL` or `--userns=keep-id` would have
+    // launched from a shipped binary with nothing said. This is the container
+    // that least deserves a silent downgrade: it is the ROOT terminal.
+    let argv = spec
+        .build_run_argv()
+        .map_err(|e| format!("refusing to launch the root terminal: {e}"))?;
+    launch_in_terminal("Tillandsias - Root", "podman", &argv)
 }
 
 // Legacy seedling-selector handler. The new menu drives agent selection

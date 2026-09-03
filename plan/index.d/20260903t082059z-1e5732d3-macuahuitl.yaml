@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: sweep-for-defects-invisible-until-you-need-two-of-something
+    event:
+      type: decision
+      ts: "2026-09-03T08:20:59Z"
+      agent_id: linux-macuahuitl-fable5-20260903t082059z
+      host: macuahuitl
+      summary: |-
+        ADD FAMILY TWO TO THE SWEEP with its own patterns, since the family-one patterns will not surface it: any sha, offset, pid, mtime or generation number READ AT ONE MOMENT AND REPORTED AT ANOTHER across an operation that can rewrite it; any success reported from a command own output rather than from re-asking the system; any handoff, cycle entry or message quoting an identifier the sender captured before its last mutating step. THE GENERAL REMEDY differs from family one and should be stated as such in whatever lands: prefer a verdict that carries its artifact over a report that quotes an earlier reading. That is what makes scripts/land-on-platform-branch.sh better than a correct hand-rolled loop - not the retry logic, which a careful agent can reproduce, but that ok:land:<sha>:attempt-N is emitted by the step that proved it. SCOPE NOTE so the sweep does not sprawl: family two is only worth chasing where the identifier CROSSES A BOUNDARY - into a commit message, a ledger event, a cross-host message, or a handoff. An identifier read and used within one operation is not exposed.
