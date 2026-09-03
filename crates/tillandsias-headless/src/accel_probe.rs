@@ -1936,7 +1936,7 @@ where
 ///
 /// CORRECTED 2026-09-02, MEASURED BY YOGA, and the correction is the point.
 /// This was a single hardcoded `"tillandsias-inference"` while
-/// `scripts/dev-inference-ensure.sh:102` creates `tillandsias-dev-inference`
+/// `scripts/dev-inference-ensure.sh` creates `tillandsias-dev-inference`
 /// on every dev host. So the producer execed into a container that does not
 /// exist there, got nothing, and reported the bottom of the scale on a machine
 /// where the lane demonstrably works — devices passed, `/api/ps` answering from
@@ -1952,6 +1952,12 @@ where
 /// `TILLANDSIAS_INFERENCE_CONTAINER` is that hook: the lane that CREATES the
 /// container can name it, and then there is one source rather than a list this
 /// file has to keep in sync with a shell script.
+/// KEPT IN SYNC BY A GUARD, not by care:
+/// `scripts/check-inference-container-name-agreement.sh` (967-6ax6) fails the
+/// build if the name `dev-inference-ensure.sh` CREATES is absent from this
+/// list. The env hook below is the real single source, but it only reaches
+/// processes that script spawned — a probe run from the tray or a cron falls
+/// back to this list, so the two literals still have to agree.
 const INFERENCE_CONTAINER_CANDIDATES: [&str; 2] =
     ["tillandsias-inference", "tillandsias-dev-inference"];
 
@@ -1975,19 +1981,35 @@ fn resolve_inference_container() -> Option<String> {
             .map(|o| o.status.success())
             .unwrap_or(false)
     };
-    if let Ok(name) = std::env::var("TILLANDSIAS_INFERENCE_CONTAINER")
-        && !name.trim().is_empty()
-    {
-        // An EXPLICIT name is the caller naming the container, not a candidate
-        // to be judged — the same rule plan-binary-probe.sh applies to
-        // TILLANDSIAS_PLAN_BIN, and for the same reason: probing an override
-        // collapses "you named the wrong one" into "there is none".
-        return Some(name.trim().to_string());
+    if let Some(name) = inference_container_override(
+        std::env::var("TILLANDSIAS_INFERENCE_CONTAINER")
+            .ok()
+            .as_deref(),
+    ) {
+        return Some(name);
     }
     INFERENCE_CONTAINER_CANDIDATES
         .iter()
         .find(|n| exists(n))
         .map(|n| n.to_string())
+}
+
+/// The override half of [`resolve_inference_container`], split out so it can be
+/// tested without a podman on the host.
+///
+/// An EXPLICIT name is the caller NAMING the container, not a candidate to be
+/// judged — the same rule `plan-binary-probe.sh` applies to
+/// `TILLANDSIAS_PLAN_BIN`, and for the same reason: probing an override
+/// collapses "you named the wrong one" into "there is none", which is the
+/// distinction 967-6ax6 exists to preserve.
+///
+/// Blank is NOT an override. An exported-but-empty variable is the shape a
+/// shell produces from an unset expansion (`export X="${X:-}"`), and treating
+/// it as a name would make the probe exec into `""` and report nothing found —
+/// reintroducing the silent under-claim through the very hook added to fix it.
+fn inference_container_override(raw: Option<&str>) -> Option<String> {
+    let name = raw?.trim();
+    (!name.is_empty()).then(|| name.to_string())
 }
 
 /// Run one bounded, read-only command inside the resolved inference container.
@@ -3756,6 +3778,67 @@ fn slug(raw: &str) -> String {
         return "-".to_string();
     }
     out.chars().take(48).collect()
+}
+
+#[cfg(test)]
+mod inference_container_resolution_tests {
+    use super::*;
+
+    /// The override is taken VERBATIM, never probed. 967-6ax6: probing an
+    /// explicit name would collapse "you named the wrong one" into "there is
+    /// none", which is the exact conflation that made a working lane report the
+    /// bottom of the scale.
+    #[test]
+    fn an_explicit_name_is_honoured_as_given() {
+        assert_eq!(
+            inference_container_override(Some("tillandsias-dev-inference")),
+            Some("tillandsias-dev-inference".to_string())
+        );
+        // Surrounding whitespace is a shell artefact, not part of a name.
+        assert_eq!(
+            inference_container_override(Some("  tillandsias-inference \n")),
+            Some("tillandsias-inference".to_string())
+        );
+    }
+
+    /// NEGATIVE CONTROL. Blank is not a name.
+    ///
+    /// This is DEFENSIVE, not a defect observed in the tree: today
+    /// `dev-inference-ensure.sh` writes
+    /// `export TILLANDSIAS_INFERENCE_CONTAINER="${…:-$DEV_CONTAINER}"`, which
+    /// always carries a real name. The hazard is that an exported-but-empty
+    /// variable arrives as `Some("")` rather than `None`, so any future caller
+    /// that exports the bare `"${X:-}"` shape would make the probe exec into
+    /// `""`, find nothing, and report `accel_proof=-` on a working host —
+    /// reintroducing 967-6ax6's silent under-claim through the very hook added
+    /// to fix it. Cheap to hold; the failure it prevents is invisible.
+    #[test]
+    fn blank_is_not_an_override_and_falls_through_to_the_candidates() {
+        for raw in [None, Some(""), Some("   "), Some("\t\n")] {
+            assert_eq!(
+                inference_container_override(raw),
+                None,
+                "blank override {raw:?} must fall through, not name an empty container"
+            );
+        }
+    }
+
+    /// The compiled candidates must contain the name the dev lane creates.
+    /// `scripts/check-inference-container-name-agreement.sh` ratchets this
+    /// across the language boundary; this pins the Rust half so a rename here
+    /// fails in the crate's own tests too, not only in the shell guard.
+    #[test]
+    fn candidates_include_both_the_product_and_dev_lane_containers() {
+        assert!(
+            INFERENCE_CONTAINER_CANDIDATES.contains(&"tillandsias-inference"),
+            "the product container must remain a candidate"
+        );
+        assert!(
+            INFERENCE_CONTAINER_CANDIDATES.contains(&"tillandsias-dev-inference"),
+            "the dev lane's container must remain a candidate — dropping it is \
+             precisely the 967-6ax6 defect, and it fails SILENTLY"
+        );
+    }
 }
 
 #[cfg(test)]
