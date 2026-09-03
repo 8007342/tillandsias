@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: accel-proof-probes-a-container-name-dev-hosts-do-not-run
+    field: next_action
+    value: |-
+      CRITERION 1 IS DONE AND RATCHETED — do not re-implement it. The resolution (env hook + candidate list + None-vs-empty) already existed from 793-zumy's merge; what was missing was that nothing compared the two literals across the shell/Rust boundary. scripts/check-inference-container-name-agreement.sh now fails the build on drift, with a 6-arm fixture and three unit tests pinning the Rust half.
+
+      WHAT REMAINS is criterion 2 only, and macOS cannot provide the host — no container inference lane exists here (Metal is host-native only, PROBE-7).
+
+      CARRIED FORWARD FROM THE PREVIOUS next_action, still current: both halves were landing on windows-next (owner: yolanda). YOGA'S REMAINING STEP: after the merge, rebuild tillandsias-headless and re-run --capabilities there; expect accel_proof=reachable with a renderD128 row at vantage=container (1002:1114, amdgpu), or 'unknown' if tillandsias-dev-inference is down. Reproduce the original miss with: podman exec tillandsias-inference true (no such container) while podman exec tillandsias-dev-inference ls /dev/dri succeeds.
+
+      BEFORE CLOSING, note the packet also reserves a semantic decision to 793-zumy's owner — whether a dev-lane container may earn Reachable at all, or whether the rung is about the product runtime only. Criterion 2's wording depends on that answer, so get it first; a host that merely verifies the mechanism cannot settle what the rung MEANS.
+    ts: "2026-09-03T07:51:53Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: accel-proof-probes-a-container-name-dev-hosts-do-not-run
+    event:
+      type: note
+      ts: "2026-09-03T07:51:53Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        restoring yolanda/yoga verification detail I had overwritten, alongside the criterion-1 closure

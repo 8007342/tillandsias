@@ -2729,6 +2729,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Litmus kill-time adjudicator check passed"
 
+    _step "Checking the accel-proof and dev-inference lanes agree on the container name (967-6ax6)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-inference-container-name-agreement.sh" 2>&1; then
+        _error "the accel-proof producers and dev-inference-ensure.sh name different containers (967-6ax6) — the rung silently reads the bottom of the scale on a working host"
+        exit 1
+    fi
+    _info "Inference-container name agreement passed"
+
     # 956-llei: a `phase: retired` litmus runs only under an explicit
     # `--phase retired`; the "all" default (which --diff-scope fails closed
     # into) must skip it with the retired reason. Two arms through the real
