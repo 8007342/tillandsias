@@ -30,6 +30,7 @@ CHECK="$ROOT/scripts/check-host-tools.sh"
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/host-tools.XXXXXX")"
 trap 'rm -rf "$tmp"' EXIT
 pass=0; fail=0; unverified=0
+_spec="$(awk '/cat <<.SPEC.$/{f=1;next} /^SPEC$/{f=0} f' "$CHECK")"
 check() {
     if [ "$1" = ok ]; then pass=$((pass + 1)); printf 'ok   %s\n' "$2"
     else fail=$((fail + 1)); printf 'FAIL %s\n' "$2"; [ -n "${3:-}" ] && printf '     %s\n' "$3"; fi
@@ -122,6 +123,71 @@ if grep -q 'check-host-tools.sh\|test-host-tools.sh' "$ROOT/build.sh"; then
 else
     check FAIL "build.sh consults the host-tools check"
 fi
+
+# 6. EVERY DECLARED PLATFORM, FROM ANY HOST — commissioned by macuahuitl after
+#    arm 2's macOS-only expectations took the linux gate red.
+#
+#    Arm 2 is correct and still SINGLE-PLATFORM: it verifies whichever host runs
+#    it. The defect it could not have caught was that this fixture's idea of a
+#    platform's required set was never compared against the probe's, for any
+#    platform but the live one — and `--platform` existed on the probe, added by
+#    the same author, precisely so one host can ask what another requires. It
+#    was never pointed at this file's own expectations.
+#
+#    THE PROPERTY, and it holds from any host without that platform's tools:
+#    for each declared platform, what the probe REPORTS must exactly partition
+#    what the spec DECLARES for that platform — every declared tool either
+#    counted present or named missing, and nothing else named.
+#
+#    That is checkable on macOS for linux and windows, because a tool this host
+#    lacks simply lands in the `missing:` list instead of the present count.
+for _p in $(printf '%s\n' "$_spec" | awk -F'|' '{print $2}' | tr ',' '\n' | sort -u); do
+    [ -n "$_p" ] || continue
+    _declared="$(printf '%s\n' "$_spec" \
+        | awk -F'|' -v p="$_p" '$2 ~ "(^|,)" p "(,|$)" {print $1}' | sort -u)"
+    _n_declared="$(printf '%s\n' "$_declared" | grep -c .)"
+    _out="$(PATH="$PATH" "$CHECK" --platform "$_p" 2>/dev/null)"
+    case "$_out" in
+        ok:host-tools:$_p:*) _reported_missing=""; _n_present="$(printf '%s' "$_out" | sed -E 's/.*:([0-9]+) required present/\1/')" ;;
+        missing:host-tools:$_p:*) _reported_missing="$(printf '%s' "$_out" | sed -E 's/^missing:host-tools:[a-z]+://' | tr ',' '\n')"; _n_present="" ;;
+        *) check FAIL "--platform $_p returns a well-formed verdict" "out=[$_out]"; continue ;;
+    esac
+    # Nothing may be named that the spec did not declare for this platform.
+    _stray=""
+    for _m in $_reported_missing; do
+        printf '%s\n' "$_declared" | grep -qx "$_m" || _stray="${_stray:+$_stray,}$_m"
+    done
+    # present + missing must account for every declared tool, exactly once.
+    _n_missing="$(printf '%s\n' "$_reported_missing" | grep -c .)"
+    _n_seen=$(( ${_n_present:-0} + _n_missing ))
+    if [ -n "$_stray" ]; then
+        check FAIL "--platform $_p names only tools it declares" "stray=[$_stray]"
+    elif [ "$_n_seen" -ne "$_n_declared" ]; then
+        check FAIL "--platform $_p accounts for every declared tool" "declared=$_n_declared seen=$_n_seen out=[$_out]"
+    else
+        check ok "--platform $_p partitions its $_n_declared declared tool(s) exactly"
+    fi
+done
+
+# 7. THE FALSIFIABLE HALF, and arm 6 needs it because arm 6 alone is close to
+#    tautological: the probe and this fixture read the SAME spec with equivalent
+#    filters, so the partition holds almost by construction. MEASURED — a
+#    deliberately loosened filter in the probe (substring instead of exact
+#    membership) passed arm 6 unchanged.
+#
+#    So assert something the spec cannot satisfy by agreeing with itself: a
+#    platform name that is a SUBSTRING of a declared one must select NOTHING.
+#    With exact membership `os` selects zero; with the loosened filter it
+#    matches every `macos` row. That is the actual bug class in a
+#    comma-delimited membership test, and it is what makes arm 6 worth running.
+for _bogus in os mac inux; do
+    _out="$("$CHECK" --platform "$_bogus" 2>/dev/null)"
+    if printf '%s' "$_out" | grep -qE "^ok:host-tools:[a-z]*:0 required present$"; then
+        check ok "--platform $_bogus selects nothing (substring must not match)"
+    else
+        check FAIL "--platform $_bogus selects nothing" "out=[$_out]"
+    fi
+done
 
 total=$((pass + fail))
 [ "$unverified" -gt 0 ] && printf 'note: %d required entr(y/ies) have no cheap prover; the gate itself is their evidence\n' "$unverified"
