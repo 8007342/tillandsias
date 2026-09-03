@@ -47,7 +47,7 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
     echo "land: attempt $attempt/$ATTEMPTS — fetch + integrate onto origin/$BRANCH"
     git fetch -q origin "$BRANCH" || { echo "land:fetch-failed" >&2; exit 4; }
 
-    # WHICH INTEGRATION (order 991, macbook 2026-09-03). methodology
+    # WHICH INTEGRATION (order 991-85bh, macbook 2026-09-03). methodology
     # integration_strategy case 1 sanctions REBASE for same-branch catch-up, and
     # that is right when your unpushed commits are ordinary ones. But
     # pull_merge_cadence.pre_push_gate REQUIRES merging origin/linux-next before
