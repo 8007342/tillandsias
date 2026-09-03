@@ -5450,8 +5450,41 @@ fn main() {
             }
         }
         "ready" => {
+            // ORDER 992-w7ds. `ready` is THE roll-call view, and it read
+            // identically for a row nobody has ever touched and one that was
+            // claimed, worked and deliberately RELEASED with a carry-forward.
+            // Measured on the live ledger 2026-09-03: 216 of 424 ready rows
+            // carry events — 51% of the queue a coordinator reads as unstarted
+            // is not. I dispatched two hosts onto finished work that day and
+            // briefed a third on rungs that had landed days earlier.
+            //
+            // The marker is appended, never substituted: `line()` already
+            // appends ARCHIVED conditionally as a trailing field, and the
+            // callers that parse this take field 2 (status), so a further
+            // trailing field is additive. Deliberately NOT a second command —
+            // criterion 1 says the distinction must be in the view the roll
+            // call already uses, because a check you must know to run is one
+            // nobody runs.
+            //
+            // `worked:<n>@<host>` names the count and WHO last touched it, so a
+            // coordinator can read the events or ask that host rather than
+            // re-deriving. An untouched row prints nothing extra and still
+            // looks exactly as it always did.
             for p in ledger.ready(args.get(1).map(String::as_str)) {
-                emit(&line(&ledger, p));
+                let mut out = line(&ledger, p);
+                if let Some(seq) = p
+                    .get("events")
+                    .and_then(serde_yaml::Value::as_sequence)
+                    .filter(|s| !s.is_empty())
+                {
+                    let who = seq
+                        .last()
+                        .and_then(|e| e.get("host"))
+                        .and_then(serde_yaml::Value::as_str)
+                        .unwrap_or("-");
+                    out.push_str(&format!("\tworked:{}@{}", seq.len(), who));
+                }
+                emit(&out);
             }
         }
         "burndown" => {

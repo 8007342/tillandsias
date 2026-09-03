@@ -1,0 +1,66 @@
+events:
+  - packet_id: centicolon-backfill-only-what-evidence-supports
+    event:
+      type: progress
+      ts: "2026-09-03T13:17:01Z"
+      agent_id: linux-yoga-claude-20260903t130918z
+      host: yoga
+      summary: |
+        RUNG 4 LANDED, AND THE COVERAGE IS 2.6%. scripts/centicolon-backfill.sh:
+        scored=16 unscored=584 total=600 ceiling=traced unresolvable-closures=4.
+        The ruling predicted sparse and accepted it in advance; this is how
+        sparse.
+
+        WHAT CAN HONESTLY BE PINNED, WHICH IS LESS THAN THE PACKET ASSUMED.
+        Measured on the folded ledger: 125 rows carry evidence_refs, but those
+        are FREE TEXT — "plan/issues/network-architecture-audit-2026-07-09.md
+        (DRAFT v1 section)" — and reading a state out of prose is exactly the
+        inference the ruling forbids. Only ~10 carry a machine-shaped token at
+        all. The one structured source is `verifiable_closure`: 112 rows have
+        one, 25 of those name a `litmus:<test>` over 22 distinct tests.
+
+        AND NAMING A TEST IS NOT PASSING IT. This distinction decides the whole
+        rung, and it is one layer below the error the ruling already rejected. A
+        closure naming a RESOLVABLE litmus test establishes that a verification
+        path exists and resolves — that is `traced`. It does NOT establish
+        `positively_tested`, because the ledger carries the closure's NAME and
+        not the test's RESULT. Crediting a declared closure as a passing one
+        would score the DECLARATION while presenting it as evidence.
+
+        So the retroactive ceiling is `traced`, stated PER ROW rather than
+        globally, so a later source that can genuinely pin `positively_tested`
+        does not silently inherit this one's meaning.
+
+        THE 4 UNRESOLVABLE CLOSURES ARE NOT SCORED. `declared-closures` reports
+        rows naming a litmus test that no test declares; crediting those would
+        credit a verification path that cannot run. They count as unscored, and
+        the verdict reports them separately so they read as a defect rather than
+        as absence.
+
+        UNSCORED IS ABSENCE, NOT ZERO. The emitted fragment contains only the 16
+        scored rows. The other 584 are deliberately ABSENT rather than present
+        with a zero, because a defaulted zero is indistinguishable from a
+        measured nothing — which is the objection this rung answers. A consumer
+        reading only the data sees 16 rows each carrying `derivation=` and
+        `ceiling=`, and sees nothing at all for the rest.
+
+        CRDT-STYLE, as the operator required: one NEW fragment keyed by
+        packet_id, never a read-modify-write of a shared file. Two concurrent
+        backfills write two fragments and the fold takes both. No lock is needed
+        for it to be correct.
+
+        VERIFIED: 16 events emitted, `fragment-event-packets` resolves all 16
+        with none dropped, `check` ok at 635 packets, gate green.
+
+        THE COVERAGE FIGURE IS THE RESULT, not a shortfall. 2.6% says the ledger
+        can currently evidence only the tracing rung retroactively, for one row
+        in forty. A number that starts there and rises is a measurement; a dense
+        inferred one would have started at something nobody could audit and never
+        improved, because there would be nothing to improve toward.
+
+        SCOPE NOT CLAIMED: the scores are not yet consumed by anything. Rung 3's
+        scorer reads CI check results, not these backfilled states, and wiring
+        the two together is not in this rung's criteria. Nor did I re-run the 22
+        named litmus tests — doing so would raise the ceiling to
+        positively_tested for the ones that pass, and that is a real and cheap
+        follow-up, but it is a different derivation and must be tagged as one.

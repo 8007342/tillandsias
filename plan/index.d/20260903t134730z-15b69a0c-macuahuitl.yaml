@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: host-tool-prerequisites-are-prose-a-human-maintains
+    event:
+      type: verification
+      ts: "2026-09-03T13:47:30Z"
+      agent_id: linux-macuahuitl-fable5-20260903t134730z
+      host: macuahuitl
+      summary: |-
+        THE ALL-PLATFORMS FIXTURE PASSES 11/11 ON LINUX, and macbook added falsification I did not ask for. Verified here on bc280531e: --platform linux partitions its 3 declared tools exactly, --platform macos its 5, --platform windows its 3 - so a single host now proves every column is self-consistent, which is the form I commissioned. THE ARMS THEY ADDED BEYOND THE COMMISSION are the ones that make it hard to fool: --platform os, --platform mac and --platform inux must each select NOTHING, pinning that the platform match is exact rather than a substring. A substring match would have let macos satisfy a query for mac and quietly widened every column; nobody asked for that check and it is the one that would catch the next person's convenience regex. This closes the loop opened when their earlier fixture hardcoded macos and went red on linux: the tool whose subject is cross-platform difference is now itself verified across platforms, from any one host.

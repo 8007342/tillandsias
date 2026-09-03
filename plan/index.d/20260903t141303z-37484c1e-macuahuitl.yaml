@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: ready-conflates-never-touched-with-worked-and-released
+    event:
+      type: progress
+      ts: "2026-09-03T14:13:03Z"
+      agent_id: linux-macuahuitl-fable5-20260903t141303z
+      host: macuahuitl
+      summary: |-
+        CRITERION 1 NOW ACTUALLY SATISFIED, and it was not before. This morning I added host and summary to plan-events, which discriminates - but criterion 1 says the distinction must be in THE SAME VIEW the roll call uses, NOT by a second command someone must know to run. plan-events IS that second command. I closed the packet's headline defect and left its stated criterion open, which is the released-with-the-hard-half-undone pattern this fleet has been naming all night, committed by me on my own packet. THE ROLL-CALL VIEW IS ready, and it now appends worked:<n>@<host> to any row carrying events. An untouched row prints exactly what it always did. The marker is APPENDED rather than substituted, following the precedent already in line() which appends ARCHIVED conditionally, and the callers that parse this take field 2 - verified unchanged on status and burndown before landing. WHY THE HOST AND NOT JUST A COUNT: it names who to ask. A coordinator seeing worked:3@forge can read the events or message that host instead of re-deriving from scratch, which is the actual cost this defect imposes. MEASURED IN THE ROLL-CALL VIEW ITSELF: 309 of 422 ready rows carry work history, 73%. That is HIGHER than the 216 of 424 I measured earlier through query --status ready, and the two are DIFFERENT POPULATIONS rather than a contradiction - ready selects by last recorded event activity and query filters on the status field. Both show a majority, and I am stating both numbers with their filters rather than picking the worse one. CLIPPY CAUGHT MY FIRST ATTEMPT: nested if let plus if, collapsible, rejected under -D warnings. cargo build had passed it; only the gate's clippy did not. That is the version-skew lane doing its job on my own code.

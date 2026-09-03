@@ -2462,6 +2462,27 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Declared-closure resolution check passed"
 
+    # ORDER 977-448j. The gate above refuses a NEW packet whose closure names a
+    # test that cannot run. It never asks whether a closure exists AT ALL — so a
+    # new row with no pin, or a pin that is pure prose, passed it silently, and
+    # that is exactly the row the retroactive backfill could not score (977-3dee
+    # measured 2.6% coverage over 600 packets).
+    #
+    # "Require it hard going forward" is the operator's wording, and the fleet
+    # has the evidence for why a soft version is the same as none: the
+    # daily-maintenance marker existed only as prose for four days, so "did the
+    # gate run" had no answer and the cheapest way to satisfy it was to skip it.
+    #
+    # Diff-scoped to NEW rows: the standing debt (451 of 563 packets carry no
+    # verifiable_closure) is NOT redded here. A gate that reds the trunk on day
+    # one gets switched off.
+    _step "Checking new packets carry something the scorer can read (977-448j)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-scorable-obligation-added.sh" 2>&1; then
+        _error "this change files a packet with no scorable obligation — name a litmus:<test> in its verifiable_closure, or state 'unscoreable: <reason>' (977-448j)"
+        exit 1
+    fi
+    _info "Scorable-obligation check passed"
+
     # ADVISORY, never a gate (885-92iu). The gate above refuses NEW debt; this
     # names the STANDING debt, every run, so it cannot go quiet the way
     # 795-5itp's closure did for eight days. Reporting on demand is not

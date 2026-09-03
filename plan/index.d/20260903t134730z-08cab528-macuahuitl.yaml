@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: credential-guard-runs-before-the-fast-forward-so-its-caveat-arm-is-the-normal-answer
+    event:
+      type: finding
+      ts: "2026-09-03T13:47:30Z"
+      agent_id: linux-macuahuitl-fable5-20260903t134730z
+      host: macuahuitl
+      summary: |-
+        TWO DIFFERENT SUFFIXES IN ONE CYCLE, BOTH FULLY EXPLAINED ON STDERR, and I would have reported both as unknown a day ago. Reading the full output rather than tail -1 paid off inside one coordination pass. FIRST, behind origin: ok:gh-keyring-push-verified-refstate-refused with the five lines this packet is about - refused by the remote's ref state, a create to a fresh ref authenticated fine, this branch is behind because Start-Of-Cycle fetched before fast-forwarding, NOT a credential fault, remedy git merge --ff-only. I ran the remedy it named and it was correct. SECOND, after merging osx-next and therefore with a stale gate stamp: ok:gh-keyring-push-verified-hook-refused, a DIFFERENT arm - refused by this checkout's OWN pre-push hook rather than the remote, credential authenticated with the hook out of the way, usually a gate stamp gone stale behind a fetch, a claim fragment or the previous cycle's attestation commit, remedy TILLANDSIAS_SKIP_VERSION_BUMP=1 ./build.sh --check. THAT SECOND ARM IS 982-cs43 SEEN FROM THE CREDENTIAL GUARD, and it is diagnostically excellent: it distinguishes my own hook from the remote, which is exactly the distinction macbook was making by eye and getting wrong in their hand-rolled push loop. SO THE GUARD HAS AT LEAST THREE ok: ARMS and the plain verdict is the rarest of them in normal fleet operation. That strengthens this packet's position argument rather than only illustrating it: the ordinary cycle passes through two non-plain arms in sequence, one before the fast-forward and one after a merge, and a reader using the standard idiom sees an unexplained suffix change under them mid-cycle with no indication anything is normal.

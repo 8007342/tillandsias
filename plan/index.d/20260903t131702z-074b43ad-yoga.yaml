@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: centicolon-backfill-only-what-evidence-supports
+    field: next_action
+    value: 'Rung 4 landed at 2.6% coverage (16/600, ceiling=traced). 977-448j (enforcement) is next and MUST NOT inherit this coverage as evidence it works — that is why the two were split. TWO CHEAP FOLLOW-UPS, both different derivations that must be tagged as such rather than folded into this one: (a) RUN the 22 named litmus tests and raise the ceiling to positively_tested for those that pass — the ledger carries the closure''s name, not its result, which is the only reason the ceiling is traced; (b) wire rung 3''s scorer to consume these backfilled states, which is not in either rung''s criteria today. ALSO: the 4 unresolvable closures (declared-closures reports them) are a real defect, not absence — a row naming a litmus test no test declares has a verification path that cannot run.'
+    ts: "2026-09-03T13:17:02Z"
+    host: yoga
+
+events:
+  - packet_id: centicolon-backfill-only-what-evidence-supports
+    event:
+      type: progress
+      ts: "2026-09-03T13:17:02Z"
+      host: yoga
+      summary: |-
+        status 'Rung 4 landed at 2.6% coverage (16/600, ceiling=traced). 977-448j (enforcement) is next and MUST NOT inherit this coverage as evidence it works — that is why the two were split. TWO CHEAP FOLLOW-UPS, both different derivations that must be tagged as such rather than folded into this one: (a) RUN the 22 named litmus tests and raise the ceiling to positively_tested for those that pass — the ledger carries the closure's name, not its result, which is the only reason the ceiling is traced; (b) wire rung 3's scorer to consume these backfilled states, which is not in either rung's criteria today. ALSO: the 4 unresolvable closures (declared-closures reports them) are a real defect, not absence — a row naming a litmus test no test declares has a verification path that cannot run.' (not terminal) with evidence_refs: scripts/centicolon-backfill.sh; 16 events emitted; fragment-event-packets resolves all 16
