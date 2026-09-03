@@ -1,0 +1,84 @@
+packets:
+  - packet_id: windows-gpu-memory-model-from-dxgi
+    release_target: stable-milestone-v1
+    order: 968-mp4e
+    milestone: 718-rtnh
+    status: ready
+    desired_release: v0.6
+    kind: enhancement
+    pickup_role: windows
+    priority: p3
+    tags:
+      - accel
+      - probe
+      - windows
+      - memory
+      - capability-envelope
+      - v0.6
+    title: |
+      The Windows arm classifies a GPU's memory model from a DXGI heap, and specifically not from Win32_VideoController.AdapterRAM, which is a plausible wrong number.
+    context: |
+      964-r98h landed the Linux evidence ladder: a device now carries
+      `memory_model` (unified | discrete | None), derived from amdgpu VRAM
+      visibility and PCI aperture size. Windows has no arm, so every Windows
+      row reports `None` and the envelope renders
+      `accel_mem_model=unobservable-from-this-side`.
+
+      I ASSUMED THE VALUE WAS ALREADY TO HAND AND IT IS NOT. yolanda checked
+      rather than agreed: `windows_gpus()` enumerates
+      `Get-CimInstance Win32_VideoController` selecting Name, PNPDeviceID and
+      DriverVersion, and sets `memory_bandwidth_gbps: None` and
+      `system_ram_gb: None`. The 7.58 GiB DEVICE_LOCAL heap measured during
+      793-zumy's research came from a Vulkan/dxgi enumeration run by hand and
+      nothing in the probe reaches it. So this is a NEW EVIDENCE SOURCE, closer
+      in size to the Linux ladder than to a field assignment.
+
+      DO NOT REACH FOR `Win32_VideoController.AdapterRAM`, WHICH IS WHAT THAT
+      CIM CLASS OFFERS AND WHAT MAKES THIS TRAP LOAD-BEARING. It is a uint32
+      that saturates at 4 GiB, so an 8 GiB discrete board reports 4095 MB; on
+      an integrated part it reports a shared-memory reservation rather than a
+      dedicated heap. A number that is PRESENT, PLAUSIBLE, and answers a
+      different question. Classifying `discrete` from it would be a proxy
+      standing in for the placement — the family 793-zumy exists to close —
+      arriving through the vendor's own API, which is the hardest place to see
+      it.
+
+      The honest source is a DXGI adapter's DEVICE_LOCAL heap or
+      `DXGI_ADAPTER_DESC.DedicatedVideoMemory`. Until something queries one of
+      those, `None` on a Windows host is the CORRECT answer and not a gap to
+      fill.
+
+      The WSL2 guest cannot help: a paravirtual GPU on `/dev/dxg` exposes no
+      DRM sysfs, so the Linux ladder can never run there. That row stays
+      `unobservable-from-this-side` permanently unless the Windows-host arm
+      supplies the value — which is the whole reason this packet is
+      `pickup_role: windows` rather than `any`.
+    exit_criteria:
+      - |
+          A Windows host's GPU DeviceRecord carries `memory_model` derived from
+          a DXGI DEVICE_LOCAL heap or DedicatedVideoMemory, and a discrete board
+          larger than 4 GiB reports its real size rather than a saturated one.
+
+      - |
+          `Win32_VideoController.AdapterRAM` is not used as the classifier's
+          input anywhere, and a test or comment records why — the uint32
+          saturation and the integrated-part shared-memory reservation.
+
+      - |
+          A Windows host where the DXGI query is unavailable still reports
+          `None` rather than a vendor-derived or AdapterRAM-derived guess.
+    events:
+      - type: note
+        ts: "2026-09-03T00:14:00Z"
+        agent_id: "linux-lenovinha-opus5-20260902t235009z"
+        host: lenovinha
+        summary: |
+          Filed from yolanda's correction of my own premise, and their
+          framing is kept nearly verbatim because the trap is the whole
+          packet. I had scoped this as "populate a field the probe already
+          fetches"; they read the code and found the probe fetches nothing of
+          the kind, then named the wrong-but-plausible number a future
+          implementer will find first. Both halves came from checking rather
+          than agreeing, which is the reason this is a packet with a warning
+          in it instead of a one-line TODO someone would have satisfied with
+          AdapterRAM.
