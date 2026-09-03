@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: hardening-envelope-has-no-production-enforcement
+    event:
+      type: progress
+      ts: "2026-09-03T08:02:57Z"
+      agent_id: linux-lenovinha-opus5-20260903t074141z
+      host: lenovinha
+      summary: |-
+        IMPLEMENTED AND CLOSED at cebc0092c. All three exit criteria met, and the packet's own diagnosis needed two corrections that I verified rather than assumed.
+
+        CONFIRMED FIRST: validate_launch_argv (policy.rs:110) has zero production call sites — every other occurrence is test code, and the one non-test reference is a debug_assert! in build_run_argv, compiled out of release. The shipped binary validated nothing.
+
+        CORRECTION 1, AND IT MAKES THE GAP WIDER RATHER THAN NARROWER. The packet says the single non-test reference guards ContainerSpec. It does, but the only PRODUCTION caller of build_run_argv is tray/mod.rs:2481, and `mod tray` sits behind #[cfg(feature = "tray")] — which the default build EXCLUDES. So a plain `cargo build` does not even type-check that path. I discovered this because my signature change compiled cleanly when it should not have; a default-featured build was silently not compiling the caller. I rebuilt with --features tray, got the expected E0308, and fixed it there. A change that "compiles" is not evidence when the code is behind a feature nobody enables by default.
+
+        CORRECTION 2, WHICH NARROWS IT. The packet says the four flags are "settable false". They are not, from outside the crate: the fields are private, `new()` sets all four true, and there is NO builder method that disables any of them. So the envelope is already immutable to every external caller and the exposure is regression risk inside the crate, not a live bypass. I checked for the setters rather than trusting the sentence.
+
+        AND THE LIVE FORGE NEVER TOUCHES THIS PATH AT ALL, which is the finding worth carrying and which no exit criterion covers. The forge argv is built as a plain Vec<String> by build_stack_common_args (main.rs:3246) and build_opencode_forge_args (main.rs:6702) via build_forge_common_args (main.rs:6115), and handed to run_agent_container_attached (main.rs:11498). It never constructs a ContainerSpec, so validate_launch_argv could not have covered it even if it had been called. I verified the flags ARE all present in those builders (2 occurrences each) and that the live container is genuinely hardened — podman reports UsernsMode private, the expanded CapDrop set, and SecurityOpt no-new-privileges + label=disable. So the forge is correct today and is protected by nothing but the literals in main.rs.
+
+        WHAT I SHIPPED. build_run_argv returns Result and validates in every profile. It REFUSES rather than logging and continuing, deliberately: an argv that has lost a hardening flag is not a degraded launch to report, it is a container that must not be created, and a warning beside a successful launch is the fail-safe-looking outcome this fleet keeps paying for. The root maintenance terminal — the container that least deserves a silent downgrade — now returns an error instead of launching.
+
+        cap_add REMOVED, not allowlisted, taking the criterion's second option. It was an unvalidated pass-through that could re-grant whatever --cap-drop=ALL had just removed, and it had zero production callers; the only use in the tree was one test granting SYS_CHROOT. An allowlist is a policy to maintain and a place for an exception to be argued; an absent field cannot be misused and needs no guard. That test's assertion is INVERTED rather than deleted, so the removal is pinned and a future re-add fails a test rather than passing quietly.
+
+        CRITERION 2, THE RELEASE-PROFILE PROOF, and the design detail that makes it real: the new test asserts on the RETURNED VALUE rather than on a panic. A test that asserted the old debug_assert fired would have passed in debug and proved nothing about any shipped binary — the assertion did not exist in release. It carries its own negative control (an argv with no hardening flags must fail to validate, so a vacuous pass is visible) and it strips --cap-drop=ALL from a real serialization to prove the refusal is live in the profile the gate runs.
+
+        NOT DONE, AND NOT MINE TO DECIDE: wiring validation into the live forge path at run_agent_container_attached. It is a four-call-site change and it would be the first real enforcement on the container that matters most — but it is also the choke point for every attached agent launch, and refusing there on a false positive takes the forge down. That wants its own packet and a deliberate decision about refuse-versus-log at that specific site, not a rider on this one. Filed as 983-vk2m.
