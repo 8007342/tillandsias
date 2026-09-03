@@ -6192,7 +6192,42 @@ fn main() {
                         .get("ts")
                         .and_then(serde_yaml::Value::as_str)
                         .unwrap_or("-");
-                    println!("{ty}\t{ts}");
+                    // ORDER 992-w7ds. `<type>\t<ts>` could not tell a CLAIM from
+                    // a RELEASE — both are `note` — so a row that was claimed,
+                    // worked and deliberately released reads exactly like one
+                    // nobody has ever touched. Measured on the live ledger
+                    // 2026-09-03: 216 of 424 `ready` rows carry events, so 51%
+                    // of the queue a coordinator reads as unstarted is not.
+                    // Two hosts were dispatched onto finished work that night.
+                    // The host and the summary's FIRST LINE are what
+                    // discriminate, so they are appended rather than replacing
+                    // anything. Safe by measurement, not by assumption: this
+                    // format has NO runtime consumer anywhere in the tree — only
+                    // the dispatch arm, the usage string, capabilities.txt, and
+                    // one comment in check-stranded-in-progress.sh describing a
+                    // call 946-pdpi already moved to `expire-claims`.
+                    let host = ev
+                        .get("host")
+                        .and_then(serde_yaml::Value::as_str)
+                        .unwrap_or("-");
+                    // Truncated on CHARACTER boundaries, not bytes — a summary
+                    // may carry non-ASCII and a byte slice would panic. Capped
+                    // because this view is scanned, not read: an uncapped line
+                    // is a paragraph, and a roll call over a few hundred rows
+                    // stops being legible, which is the job it was widened for.
+                    let raw = ev
+                        .get("summary")
+                        .and_then(serde_yaml::Value::as_str)
+                        .unwrap_or("")
+                        .lines()
+                        .next()
+                        .unwrap_or("");
+                    let summary: String = if raw.chars().count() > 100 {
+                        format!("{}…", raw.chars().take(100).collect::<String>())
+                    } else {
+                        raw.to_string()
+                    };
+                    println!("{ty}\t{ts}\t{host}\t{summary}");
                 }
             }
             log_cli_usage(&subcommand, "answered", start_time.elapsed().as_millis());

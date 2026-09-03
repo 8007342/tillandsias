@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: coordinator-dispatch-has-no-credential-preflight
+    event:
+      type: progress
+      ts: "2026-09-03T10:10:30Z"
+      agent_id: linux-macuahuitl-fable5-20260903t101030z
+      host: macuahuitl
+      summary: |-
+        COORDINATOR HALF IMPLEMENTED. skills/coordinate-multihost-work/SKILL.md now requires every dispatch to carry the credential preflight, in the Shape and Assign Actionable Work section beside the other per-assignment obligations - the place a coordinator is actually reading when composing a dispatch, rather than a place they would have to already know to look. It names the command, states that a blocked verdict means stop and report rather than work-then-discover, records the measured cost (one floor host, ninety minutes, output that had to be relayed by hand because the host could not push), and states the structural reason: one production caller, cycle-preflight does not run it, so a host outside the loop never runs it. THE OTHER HALF REMAINS OPEN and is esme's alternative: a one-off task runs the guard itself rather than depending on the dispatch message to say so. That is the more durable half, because it does not depend on the coordinator remembering - and the whole lesson of tonight is that the action which feels like starting must BE the correct action. Exit criteria 1 and 4 are satisfied; 2 (verified by dispatching to a host with a known-refused upstream) and 3 (the coordinator path is covered too) need the next real dispatch to a blocked host to confirm.

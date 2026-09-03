@@ -120,6 +120,34 @@ To guarantee convergence in finite time, the orchestrator MUST track and enforce
 -   A host waiting for remote integration MUST be assigned an independent
     fallback unless all eligible work is blocked.
 -   **Assign Stable Work Items**: Each assignment must specify: `id`, `owner_host`, `status`, dependencies, owned files, next concrete action, expected evidence, and `agent_status_packet` expectations.
+-   **Every dispatch MUST carry the credential preflight** (order 982-sguu). A
+    dispatched task is an entry path into committable work that does NOT pass
+    through the meta-orchestration loop, so it skips that loop's Start-of-Cycle
+    credential check. Name this in the message and require it before the host
+    starts:
+
+    ```bash
+    scripts/check-credential-channel.sh    # blocked:* -> stop and report, do not work
+    ```
+
+    WHY THIS IS HERE AND NOT LEFT TO THE HOST. On 2026-09-03 I dispatched a
+    floor host a diagnosis ask and told it to skip the loop as a one-off. It
+    spent about ninety minutes producing measurements and discovered by a FAILED
+    PUSH, after all the work was done, that its upstream refuses writes. Every
+    layer of 756-2jnj behaved correctly; the host simply never went through the
+    door the guard is nailed to. That is the 2026-08-15 "detection too late"
+    shape the guard was built to eliminate, reproduced through a different entry
+    path, and the coordinator caused it.
+
+    The guard has ONE production caller in the whole tree
+    (`scripts/forge-validate.sh`) and is otherwise a manual step named only in
+    the meta-orchestration skill. `scripts/cycle-preflight.sh` does NOT run it —
+    it only mentions it in a comment explaining why it does not duplicate the
+    message. So a host that never enters the loop never runs it at all.
+
+    A `blocked:*` verdict means STOP AND REPORT, not work-then-discover. The
+    cost of skipping this is one host-cycle of finished work that cannot be
+    landed, and the coordinator then has to relay it by hand.
 
 ---
 
