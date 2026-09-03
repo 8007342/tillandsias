@@ -50268,3 +50268,29 @@ plan_index:
       exit_criteria:
         - the shell path passes --internal, and a guard fails if either launcher omits it
         - an existing network created without --internal is detected and reported rather than reused silently
+      events:
+        - type: completed
+          ts: "2026-09-03T03:46:58Z"
+          agent_id: "forge-forge-tillandsias-claude-20260903t034657z"
+          host: lenovinha-tillandsias-forge
+          summary: |
+            Both exit criteria met; fixed in de9560fb5.
+
+            MEASURED FROM INSIDE THE ENCLAVE, which is why this packet suited a forge: this container is a MEMBER of the network it is asking about, so isolation is observable directly rather than inferred from a flag.
+
+                $ ip route
+                10.0.42.0/24 dev eth0 proto kernel scope link src 10.0.42.14
+                $ cat < /dev/null > /dev/tcp/1.1.1.1/443
+                bash: connect: Network is unreachable        (0.000114s)
+
+            On-link /24 only, NO default route, and egress refused INSTANTLY. The timing is the discriminator: a missing route refuses immediately, a filtered-but-routed network hangs and times out. An --internal podman network has no gateway, so this is its signature.
+
+            THE USEFUL NEGATIVE: this host's network WAS created correctly, i.e. by the Rust launcher. The shell path is therefore reached only in some launch modes, and the packet's premise ('which binary created the network decides whether the enclave is isolated') is confirmed as a real but conditional exposure rather than a fleet-wide breach. No host observed unisolated so far.
+
+            CRITERION 1 — scripts/orchestrate-enclave.sh now passes --internal, and scripts/check-enclave-network-internal.sh fails if ANY launcher omits it. It reads the create sites from source rather than restating a list, so a newly added launcher cannot escape it. Wired into build.sh.
+
+            CRITERION 2, the one that mattered more — the launcher now inspects .Internal on reuse and REFUSES an existing non-internal network with the podman network rm remediation, instead of silently reusing it. Adding the flag alone would have reached no already-provisioned host, because podman network exists returns true and creation is skipped: the same installed-base gap as the containers.conf proxy block (923-rmtw) and the 0644 proxy CA key.
+
+            DESIGN NOTE on the gate split, which is a judgement worth recording. build.sh GATES the source half (a property of the checkout, true everywhere) and only REPORTS the deployed half (host state). Failing the build on a pre-existing unisolated network would make one host's stale state every host's red build — the 699-dycj shape — while fixing nothing, since the repair is podman network rm, not a code change. The refusal that protects the system is in the LAUNCHER, at the point where reuse actually happens.
+
+            All four branches proven against fixtures, not asserted: shell drift -> drift:launcher-omits-internal:scripts/orchestrate-enclave.sh; Rust drift -> drift:launcher-omits-internal:client.rs; deployed -> drift:deployed-network-not-internal:tillandsias-enclave; clean -> ok. litmus enclave-network 3/3 PASS.
