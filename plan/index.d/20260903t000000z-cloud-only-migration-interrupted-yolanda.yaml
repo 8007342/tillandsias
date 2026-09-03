@@ -1,0 +1,147 @@
+packets:
+  - packet_id: cloud-only-migration-interrupted-local-src-still-load-bearing
+    order: 997-e4v2
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: windows
+    release_target: stable-milestone-v1
+    capability_tags:
+      - forge
+      - windows
+      - wsl2
+      - architecture
+      - fail-loud
+      - untracked-work
+    estimated_hours: 8
+    title: |
+      The cloud-only migration stopped half-done and nothing recorded it: /home/forge/src is spec'd as a per-launch tmpfs, is actually a persistent drvfs mount of the Windows host's ~/src, and every forge launch quarantines a checkout because of it.
+    deliverable: |
+      The interrupted migration is TRACKED, its two halves are named, and the
+      destructive symptom is stopped: a checkout whose validity CANNOT BE
+      EVALUATED is never quarantined. The architectural half (delete the local
+      ~/src path, make Cloud the only path, ephemeral GitHub->GitMirror->Forge)
+      is scoped here and sequenced, not attempted in one move.
+    context: |
+      OPERATOR CONTEXT, 2026-09-02, and it is the reason this packet exists at
+      all: sharing the host and guest checkout on Windows required hacky
+      synchronization artifacts, so the fleet DECIDED to drop the host checkout
+      completely and go cloud-only — remove the local ~/src menu, keep the Cloud
+      menu, and have Cloud > Project > Agent launch a forge on an ephemeral
+      [GitHub -> GitMirror -> Forge] path with no host disk in it. The dual path
+      was to be kept only until cloud-only worked. Keeping local ~/src collided
+      with the operator's own home checkouts on .git and .config and accreted
+      hacks to support both. That decision is in nobody's ledger. This packet is
+      the record.
+
+      MEASURED ON YOLANDA 2026-09-02, four facts, each falsifiable:
+
+      1. THE SPEC SAYS EPHEMERAL. openspec/specs/forge-hot-cold-split/spec.md
+         mandates four HOT paths mounted as kernel tmpfs at container start,
+         and names /home/forge/src among them, sized per-launch by
+         compute_hot_budget() from the git MIRROR's pack size. Scenario:
+         "All four hot paths are mounted as tmpfs on every forge launch".
+
+      2. THREE OF THE FOUR SHIP. container_profile.rs:278 lists
+         /tmp, /run/user/1000 and /opt/cheatsheets. /home/forge/src is ABSENT.
+         The spec's own scenario is unmet, three of four.
+
+      3. THE SIZING FUNCTION IS INERT. compute_hot_budget() and
+         parse_size_pack_kb() in tillandsias-core/src/config.rs have ZERO
+         callers outside config.rs's own unit tests — 18 references, all in
+         that one file. Built, tested, documented with @trace to the spec, and
+         called by nothing. The change that introduced it was ARCHIVED as
+         complete on 2026-04-27 (openspec/changes/archive/2026-04-27-forge-hot-cold-split).
+         The same inert-model shape as 793-zumy's proof rungs, one layer up:
+         there the model did no work, here the spec's own hot path was never
+         wired and the archive says it was.
+
+      4. WHAT ACTUALLY OCCUPIES THE PATH IS THE OPPOSITE OF EPHEMERAL.
+         tillandsias-windows-tray/src/wsl_lifecycle.rs:1814 injects a systemd
+         unit home-forge-src.mount: a PERSISTENT drvfs (9p) mount of the host's
+         %USERPROFILE%\src at /home/forge/src. Confirmed live on yolanda:
+         findmnt shows `C:\Users\bullo\src -> /home/forge/src 9p`, with
+         wsl.conf automount DISABLED, so this mount is deliberate and targeted.
+         projects_root() (headless main.rs:5761) prefers /home/forge/src
+         whenever it is a dir, so it wins on every host that has the unit.
+
+      AND THE CLOUD PATH IS NOT A SEPARATE PATH. The mount unit's own comment
+      says so in as many words: "Cloud checkouts (tillandsias-headless --cloud
+      owner/repo) land here, i.e. directly in the host's ~/src, and the forge
+      container volume-mounts the per-project subdir". So Cloud and Local are
+      the same host directory reached through two menus. The migration did not
+      stall before starting; it stalled after the ephemeral half was built and
+      before anything called it.
+
+      THE DESTRUCTIVE SYMPTOM, measured independently on esmeraldinha the same
+      night and root-caused jointly. That drvfs mount reports every file as uid
+      1000 (forge) while the headless runs as ROOT, so
+      `git -C <path> rev-parse --quiet --verify HEAD` exits 128 with "detected
+      dubious ownership in repository". is_valid_git_checkout (main.rs:5761 ff)
+      reads any non-zero exit as INVALID and quarantine_invalid_checkout
+      (main.rs:5687) renames the tree to <name>.invalid-<epoch> so a fresh clone
+      can take the path. esmeraldinha accumulated TEN quarantined trees between
+      Aug 25 and Sep 2, with 9/9 correlation between quarantine stamps and tray
+      menu clicks, on BOTH Local and Cloud scope.
+
+      THE TREES WERE NOT BROKEN, and this is the part that makes it a defect
+      rather than a cleanup: `git fsck` exits 0 on every quarantined tree, all
+      have complete worktrees, and the 554 "modified" files are 77 symlinks plus
+      477 exec-bit entries with ZERO content differences. Every launch judged a
+      healthy checkout bad on arrival.
+
+      AND IT DESTROYS THE CREDENTIAL CHANNEL AS A SIDE EFFECT.
+      scripts/check-credential-channel.sh:294 accepts <git-dir>/.gh-credentials,
+      a REPO-LOCAL store inside .git. Nothing in the tree writes or reseeds it —
+      that path is referenced by the checker and its own test and by nothing
+      else. So each quarantine takes the credential with the old .git and
+      nothing restores it, which is why the host reported "git login broken
+      after re-clone" as a second, apparently unrelated symptom. It is the same
+      bug.
+
+      THE PREDICATE'S ERROR HANDLING IS THE 965-sxec SHAPE, filed hours earlier
+      today on a different tool. is_valid_git_checkout maps Err(_) -> true, but
+      that arm covers only a git binary that cannot SPAWN (the git-less VM
+      rootfs lane). A git that spawns and exits non-zero is read as a
+      substantive verdict about the tree. "I could not evaluate this" and "this
+      is invalid" are different facts, and here the second one RENAMES THE
+      USER'S DIRECTORY. Of the two, quarantining on could-not-evaluate is the
+      worse direction: it mutates state on the strength of a question that was
+      never answered.
+    exit_criteria:
+      - |
+          A checkout whose validity cannot be EVALUATED is never quarantined.
+          Dubious ownership, a lock file, or any other non-zero exit that is not
+          a truthful "this is not a checkout" leaves the tree alone and reports
+          the instrument, exactly as 923-ws3r's could-not-run channel does for
+          the archiver. Pinned by a test that distinguishes the two exits.
+      - |
+          The interrupted migration is recorded where a future reader will find
+          it: the spec's unmet scenario (3 of 4 hot paths), the inert
+          compute_hot_budget, and the archived change that says it landed.
+      - |
+          The architectural half is SEQUENCED rather than attempted wholesale:
+          which platforms, which menus, what replaces projects_root(), and what
+          happens to an existing ~/src on an upgrading host. Nothing is deleted
+          before that sequence is written down and the operator has agreed it.
+      - |
+          No host in the fleet quarantines a healthy checkout on launch, on
+          either Local or Cloud scope, verified on a host that reproduced it.
+    verifiable_closure: |
+      A test asserting is_valid_git_checkout distinguishes could-not-evaluate
+      from invalid, red against today's predicate and green after; plus a
+      re-run on esmeraldinha showing zero new .invalid-* directories across
+      repeated launches.
+    notes: |
+      Filed by yolanda after the operator supplied the missing decision record.
+      esmeraldinha (esme-windows) root-caused the ownership half independently
+      and is the validation host — low-end device, so heavy work belongs on
+      yolanda and esme validates.
+
+      DO NOT "FIX" THIS WITH safe.directory ALONE. esmeraldinha applied a scoped
+      /root/.gitconfig safe.directory entry to unblock itself and that was the
+      right call for one blocked host. As a fleet remedy it entrenches the mount
+      the migration exists to delete, and it leaves the predicate still treating
+      could-not-evaluate as a verdict — so the next cause that makes rev-parse
+      exit non-zero quarantines trees again.

@@ -182,7 +182,19 @@ _archiver_cleanup() {
     # armed before SCRATCH is assigned on some paths and an unbound expansion
     # under `set -u` would turn a cleanup into a second failure.
     local _s="${SCRATCH:-$REPO_ROOT}"
-    rm -rf "$_s"/plan_tmp "$_s"/plan_tmp_bak scripts/archive-plan-packets-check.rb "$_s"/plan_tmp_*.txt
+    # AND IT MUST NOT BE ABLE TO FAIL (997-e4v2). Under `set -e` a failing
+    # command in an EXIT trap rewrites the script's exit code to 1 — measured
+    # by esme-windows in the VM with a genuine EACCES, across every ending form
+    # and for function traps as well as inline ones. This script promises that
+    # 3 means COULD-NOT-RUN and 1 means the ready-set invariant was violated
+    # (923-ws3r, 965-sxec), so a cleanup that cannot delete a temp file would
+    # silently convert "I could not run" into "the plan archiver would CHANGE
+    # THE READY SET" — the exact false substantive verdict 965-sxec was filed
+    # to remove, reintroduced through the tidying.
+    #
+    # A leaked temp dir is a housekeeping cost; a false invariant violation
+    # sends every reader to audit a ledger that is fine.
+    rm -rf "$_s"/plan_tmp "$_s"/plan_tmp_bak scripts/archive-plan-packets-check.rb "$_s"/plan_tmp_*.txt 2>/dev/null || true
 }
 
 # ORDER 965-sxec. IS THERE A RUBY THIS SCRIPT CAN ACTUALLY RUN?

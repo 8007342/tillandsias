@@ -2772,7 +2772,26 @@ fn handle_launch_cloud_project(service: Arc<TrayService>, cloud: ProjectEntry, k
             // Quarantine anything invalid (rename aside, never delete — the
             // dir may hold user data) so the clone below re-materializes a
             // real checkout; refuse the launch loudly if even that fails.
-            if target_path.exists() && !crate::is_valid_git_checkout(&target_path) {
+            // 997-e4v2: only a TRUTHFUL "this is not a checkout" may rename the
+            // user's directory. An unanswerable question refuses the launch and
+            // leaves the tree alone.
+            if target_path.exists()
+                && let verdict = crate::classify_git_checkout(&target_path)
+                && verdict != crate::CheckoutVerdict::Valid
+            {
+                if let crate::CheckoutVerdict::Indeterminate(why) = &verdict {
+                    eprintln!(
+                        "error: cloud launch refused for '{}': cannot evaluate the checkout at {}: {why}. Leaving it untouched.",
+                        cloud.name,
+                        target_path.display()
+                    );
+                    let _ = futures::executor::block_on(service_for_emit.set_status(
+                        format!("🥀 Cannot evaluate checkout for {}: not touched", cloud.name),
+                        TrayIconState::Dried,
+                        None,
+                    ));
+                    return;
+                }
                 match crate::quarantine_invalid_checkout(&target_path) {
                     Ok(aside) => eprintln!(
                         "[tillandsias] cloud: {} was not a valid git checkout; moved aside to {} and re-cloning",
