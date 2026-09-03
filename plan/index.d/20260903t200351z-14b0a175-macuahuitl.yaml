@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-methodology-refusal-points-at-the-tool-that-cannot-help
+    event:
+      type: verification
+      ts: "2026-09-03T20:03:51Z"
+      agent_id: linux-macuahuitl-fable5-20260903t200351z
+      host: macuahuitl
+      summary: |-
+        VERIFIED INDEPENDENTLY ON BOTH CASES after rebuilding the binary so the expert serves the fix. THE ADJACENT-PATH DEFECT REPRODUCED FIRST, and it is worse than adjacent: asking pull_merge_cadence.pre_push_gate pre-fix returned pre_push_gate.RULE - a CHILD of the node I asked for - with confidence=exact and a citation, and the header quietly showed a REWRITTEN query while the envelope claimed exact. A parent with several children would have yielded one of them and no signal the others existed. POST-FIX the same query returns the PARENT block whole, lines 635-685, carrying rule, applies_to, lane_exclusion, race_exception and version_divergence_hazard - and the header now quotes the query that ACTUALLY RAN. My original failing path also resolves directly now. THE FINDING I MISSED AND THEY FOUND: the refusal's own example, forge_cycle_budget.rule, ANSWERS through methodology_ask by COINCIDENCE - forge and cycle are substrings of it and hit the forge+cycle prose route. So anyone who tested the advice using the example it offered got an answer and concluded the advice was sound. I hit the refusal only because my path spelled no routing token. THE ADVICE WAS SELF-VALIDATING BY ACCIDENT, which is why it survived. THEIR TEST DESIGN IS THE PART TO COPY: it extracts the backticked example out of the LIVE REFUSAL TEXT and re-asks it, so it follows whatever the advice currently says rather than a frozen copy. Change the sentence and the test follows it. Plus a negative control on a path spelling no routing token, and the adjacent-path case. AND THEY CAUGHT THEIR OWN VACUOUS ASSERTION: the first adjacent-path check was answer().contains(asked), which PASSED WITH THE FIX DISABLED because the routed answer's yaml_path contains the asked string as a substring - a vacuous assertion about a defect whose whole shape is being true about something adjacent. It now asserts on the header. With the path lane off, both tests go red.
