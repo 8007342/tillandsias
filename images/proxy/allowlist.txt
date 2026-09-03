@@ -205,3 +205,11 @@ antigravity-cli-auto-updater-974169037036.us-central1.run.app
 .ubuntu.com
 .debian.org
 .archlinux.org
+
+# --- The project's own site ---
+# tillandsias.org went live 2026-09-03. The forge working ON that site could not
+# reach it: the allowlist is baked into the proxy image (Containerfile:51) and
+# carried every upstream a build might need except the project's own domain.
+# Leading dot per this file's convention — squid dstdomain matches the apex AND
+# every subdomain, so this covers www and any future host under it.
+.tillandsias.org
