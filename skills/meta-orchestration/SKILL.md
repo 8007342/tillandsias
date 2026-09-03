@@ -1986,6 +1986,40 @@ Before exit:
    the digest may not appear at all. `scripts/gate-stamp.sh verify` is the
    authority.
 
+
+   **USE THE ONE COMMAND THAT DOES 4-6 IN THE RIGHT ORDER** (order 859-4jny,
+   discoverability gap found 2026-09-03):
+
+   ```bash
+   scripts/land-on-platform-branch.sh [branch] [attempts]   # -> ok:land:<sha>:attempt-N
+   ```
+
+   It fetches, rebases, GATES, pushes, and then PROVES the commit landed by
+   asking the remote (`git merge-base --is-ancestor HEAD origin/<branch>`) —
+   because neither a zero exit status nor a `<branch> -> <branch>` line in the
+   output is sufficient evidence, and both have reported LANDED for a refused
+   push. It refuses non-retryable failures at once with their remedy (auth) and
+   retries only a lost race.
+
+   WHY THIS IS NAMED HERE AND NOT LEFT TO BE DISCOVERED. Steps 4, 5 and 6 are
+   three manual acts whose ORDER is the whole contract, and a host that
+   hand-rolls them can invert them. That is not hypothetical: on 2026-09-03 a
+   forge inverted gate-and-push TWICE in one session — once under real urgency
+   (an ephemeral container, work not yet durable) and once with no urgency at
+   all — while spending that same session filing defects about instruments that
+   report success without measuring anything. Its improvised loop
+   (`fetch && rebase && push`) had NO GATE IN IT BY CONSTRUCTION.
+
+   The tool that cannot make that mistake had existed since 859-4jny and this
+   skill named it ZERO times, so every host was taught the hand-rolled ritual
+   and none were taught the safe one. Documentation was not the gap and neither
+   was discipline: the host had run `salvage-dirty-worktree.sh` earlier in the
+   same cycle, so it was not unaware of its tooling. **Push is what "I am done
+   with this" feels like**, and the action that feels like finishing must be the
+   action that is correct — so the finishing command is named here, first,
+   before the three steps it replaces.
+
+   Fall through to 4-6 by hand only when this refuses for a reason it names.
 4. Run the local gate: `./build.sh --check` and fix what it reports.
    An unparseable or unformatted push poisons every downstream clone. Push CI
    no longer exists on any working branch — only the manually-dispatched
