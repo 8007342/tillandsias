@@ -61,6 +61,9 @@ pub mod methodology;
 /// spec and project states, and the refinement operator that
 /// `methodology/math-foundations.yaml` describes and nothing implemented.
 pub mod obligation;
+/// Order 977-dpbj — properties over the lattice, plus the deliberately wrong
+/// model the suite must reject.
+pub mod obligation_props;
 /// Adversarial decomposition pipeline: decompose → tier trim → concurrent
 /// dispatch → CRDT collection.
 pub mod pipeline;

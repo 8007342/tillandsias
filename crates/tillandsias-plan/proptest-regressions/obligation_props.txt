@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 84e7d37469b270f290847f547a5d7298ad32b3fd10946f5e06877ccab81c07c3 # shrinks to (x, y) = (SpecState { obligations: {"req-a": Declared, "req-b": Absent, "req-c": Absent}, tombstoned: {} }, SpecState { obligations: {"req-a": Traced, "req-b": Absent, "req-c": Absent}, tombstoned: {} })

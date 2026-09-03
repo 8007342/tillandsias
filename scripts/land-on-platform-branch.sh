@@ -44,13 +44,47 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
 fi
 
 for attempt in $(seq 1 "$ATTEMPTS"); do
-    echo "land: attempt $attempt/$ATTEMPTS — fetch + rebase onto origin/$BRANCH"
+    echo "land: attempt $attempt/$ATTEMPTS — fetch + integrate onto origin/$BRANCH"
     git fetch -q origin "$BRANCH" || { echo "land:fetch-failed" >&2; exit 4; }
-    if ! git rebase "origin/$BRANCH" >/dev/null 2>&1; then
-        git rebase --abort >/dev/null 2>&1
-        echo "refused:land:rebase-conflict — resolve by hand" >&2
-        exit 2
+
+    # WHICH INTEGRATION (order 991-85bh, macbook 2026-09-03). methodology
+    # integration_strategy case 1 sanctions REBASE for same-branch catch-up, and
+    # that is right when your unpushed commits are ordinary ones. But
+    # pull_merge_cadence.pre_push_gate REQUIRES merging origin/linux-next before
+    # EVERY push of a non-linux-next branch, so a platform branch's unpushed set
+    # routinely CONTAINS MERGE COMMITS by mandate. Rebasing those onto a moved
+    # remote conflicts immediately: measured on osx-next diverged 35/3 with two
+    # macOS hosts landing concurrently, `refused:land:rebase-conflict` every time,
+    # while a plain merge landed first try. The two rules are each correct alone
+    # and compose badly. So: merge when the unpushed set carries a merge commit,
+    # rebase otherwise, and fall back to merge rather than refusing.
+    _unpushed_merges="$(git rev-list --merges --count "origin/$BRANCH..HEAD" 2>/dev/null || echo 0)"
+    _integrated=0
+    if [ "${_unpushed_merges:-0}" -gt 0 ]; then
+        echo "land: attempt $attempt — unpushed set has $_unpushed_merges merge commit(s); MERGING (rebase would replay them)"
+        if git merge --no-edit "origin/$BRANCH" >/dev/null 2>&1; then
+            _integrated=1
+        else
+            git merge --abort >/dev/null 2>&1
+            echo "refused:land:merge-conflict — resolve by hand" >&2
+            exit 2
+        fi
+    else
+        if git rebase "origin/$BRANCH" >/dev/null 2>&1; then
+            _integrated=1
+        else
+            git rebase --abort >/dev/null 2>&1
+            echo "land: attempt $attempt — rebase conflicted; retrying as a merge before refusing" >&2
+            if git merge --no-edit "origin/$BRANCH" >/dev/null 2>&1; then
+                _integrated=1
+            else
+                git merge --abort >/dev/null 2>&1
+                echo "refused:land:rebase-and-merge-conflict — resolve by hand" >&2
+                exit 2
+            fi
+        fi
     fi
+    [ "$_integrated" -eq 1 ] || { echo "refused:land:not-integrated" >&2; exit 2; }
 
     echo "land: attempt $attempt — gate (./build.sh --check)"
     if ! ./build.sh --check >/dev/null 2>&1; then
