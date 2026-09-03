@@ -241,6 +241,33 @@ if [ -x "$ROOT/scripts/check-enclave-service-health.sh" ]; then
 fi
 plan_verdict="${plan_verdict}+services-${services_report}"
 
+# ORDER 975-rsgm. The service check answers "are the containers running?" and
+# cannot see a proxy that will START and then DIE because its certificate and
+# its private key no longer match. That is a real state this host sat in: five
+# cycles of `fail:enclave-service-start-failed:...:action=operator`, where the
+# cause was a CA regenerated without rotating the `tillandsias-ca-key` secret,
+# and squid's own last words named neither file.
+#
+# ADVISORY, never a gate — a desynced CA degrades egress, it does not make the
+# cycle unsafe, and a preflight that refuses on it would strand a host that can
+# still do most of its work.
+ca_report="skip"
+if [ -x "$ROOT/scripts/check-enclave-ca-consistency.sh" ]; then
+    _ca_err="$(mktemp)"
+    ca_line="$(bash "$ROOT/scripts/check-enclave-ca-consistency.sh" 2>"$_ca_err" | tail -1)"
+    case "$ca_line" in
+        ok:enclave-ca-consistent) ca_report="ok" ;;
+        desync:*|absent:*)
+            ca_report="${ca_line%%:*}"
+            cat "$_ca_err" >&2
+            ;;
+        skip:*) ca_report="skip" ;;
+        *) ca_report="no-verdict" ;;
+    esac
+    rm -f "$_ca_err"
+fi
+[ "$ca_report" = "ok" ] || [ "$ca_report" = "skip" ] && : || plan_verdict="${plan_verdict}+ca-${ca_report}"
+
 # Host-state security migration (order 791-swxt). Runs SILENTLY and never
 # touches this script's verdict line, so the pinned arity is unaffected.
 #
