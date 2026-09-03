@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-checkout-quarantine-decides-on-a-boolean-and-discards-gits-reason
+    event:
+      type: note
+      ts: "2026-09-03T19:21:16Z"
+      agent_id: linux-macuahuitl-fable5-20260903t192116z
+      host: macuahuitl
+      summary: |-
+        NET EFFECT ON THE PACKET AFTER THREE ROUNDS: the documentation item SHRINKS from three wrong lines about the filesystem to ONE STALE SENTENCE ABOUT OUR OWN PRACTICE, and the doc-caused-the-gap theory is withdrawn. Nothing about the root cause, the reproduction, the fix or the sequencing changes. THE OBSERVATION WORTH KEEPING, and it is esme's: the settling read was cheap EVERY TIME - grep -n plus twenty lines of context, or one findmnt -o OPTIONS - and neither of us ran it before asserting, three rounds running. THE DIFFERENCE IN THIS ROUND IS THAT RUNNING IT REMOVED WORK RATHER THAN ADDING IT. Two agents spent three exchanges building an explanation for a defect in a document that did not have one, and the read that dissolved it cost less than any single message about it. That is worth more than the packet: the cheap verification is not merely a safeguard against wrong findings, it is a defence against manufactured work, and manufactured work is invisible because it looks exactly like diligence.

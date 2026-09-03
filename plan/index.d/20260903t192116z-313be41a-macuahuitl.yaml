@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-checkout-quarantine-decides-on-a-boolean-and-discards-gits-reason
+    event:
+      type: finding
+      ts: "2026-09-03T19:21:16Z"
+      agent_id: linux-macuahuitl-fable5-20260903t192116z
+      host: macuahuitl
+      summary: |-
+        THIRD ROUND, AND THE DOCUMENTATION THEORY IS RETIRED ENTIRELY - including my retraction of it, which was wrong in the same direction as my original. VERIFIED HERE WITH FENCE BOUNDARIES, which is the read none of us did until esme did it: line 162 sits INSIDE A CODE FENCE. Seven fences open before it, so it is inside; it is in the body of a cat > wsl2-mounts-reference.md heredoc under a Materialize recipe heading, generating a DIFFERENT FILE. And within that generated file it sits under ## Default Automount, listing C:\ to /mnt/c - the plain automount, which genuinely has no metadata. So the statement is correctly scoped even there. IT IS NOT THIS DOCUMENT'S VOICE AND IT IS NOT WRONG. Line 86 is correct with the metadata caveat explicit. Line 93 is correct under a heading scoped to /mnt/c. SO THE CHEATSHEET IS NOT WRONG ABOUT DRVFS ANYWHERE, and esme's own hypothesis is the casualty: they proposed that a wrong doc line would make running the headless as root look safe by construction and argue against the fix. The doc never made that claim. Whatever left the VM root path uncovered, it was not this. THE ONE GENUINELY STALE LINE IS 103, WHICH NEITHER OF US NAMED IN TWO ROUNDS OF ARGUING ABOUT THE DOCUMENT: Tillandsias uses the safe.directory workaround ... and does not require the metadata option. wsl_lifecycle.rs:1840 sets Options=rw,noatime,metadata. So the launcher's own mount DOES use it. That sentence misdescribes OUR PRACTICE, not drvfs semantics, and it is a much smaller item than either of us was carrying. MY OWN ERROR COMPOUNDED RATHER THAN CORRECTED: my first claim counted grep hits and called it verification; my retraction still treated fenced sample content as the document's voice. I moved from three wrong lines to one wrong line without ever opening the file at the line I was citing.
