@@ -76,17 +76,51 @@ fi
 log_step "Setting up enclave network..."
 
 # Check if network exists
+# @trace spec:enclave-network, order:972-a8vh
+# --internal is a MUST in the enclave-network spec ("THEN the system MUST create
+# it with `podman network create tillandsias-enclave --internal`"), and it is what
+# makes the enclave an enclave: without it podman attaches a gateway and every
+# member gets NAT egress, so the proxy stops being the only way out. The three
+# Rust paths pass it (tillandsias-podman/src/client.rs, tillandsias-podman-cli,
+# tillandsias-headless); this shell path did not, so WHICH BINARY created the
+# network decided whether the isolation existed.
 if ! podman network exists "$ENCLAVE_NET" 2>/dev/null; then
-    log_info "Creating network: $ENCLAVE_NET ($ENCLAVE_SUBNET)"
+    log_info "Creating network: $ENCLAVE_NET ($ENCLAVE_SUBNET, internal)"
     podman network create \
         --driver bridge \
+        --internal \
         --subnet "$ENCLAVE_SUBNET" \
         "$ENCLAVE_NET" || {
         log_error "Failed to create network"
         exit 1
     }
 else
-    log_info "Network already exists: $ENCLAVE_NET"
+    # REUSE IS NOT UNCONDITIONAL (order 972-a8vh, second exit criterion).
+    # Adding the flag above fixes NEW networks and reaches no host that already
+    # has one: `podman network exists` returns true, creation is skipped, and an
+    # unisolated network survives every future launch. That is the same
+    # installed-base gap as the proxy CA key left 0644 on hosts provisioned
+    # before its fix — the code change does not reach what is already deployed.
+    # The spec's "MUST be reused if already present" is about not churning the
+    # network, not about reusing one that fails the isolation MUST.
+    _net_internal="$(podman network inspect "$ENCLAVE_NET" \
+        --format '{{.Internal}}' 2>/dev/null || echo unknown)"
+    case "$_net_internal" in
+        true)
+            log_info "Network already exists: $ENCLAVE_NET (internal)"
+            ;;
+        false)
+            log_error "Network $ENCLAVE_NET EXISTS BUT IS NOT INTERNAL — it was created without --internal, so every member has NAT egress and the proxy is not the only way out (order 972-a8vh, spec:enclave-network)."
+            log_error "This is not repaired by relaunching: recreate it with"
+            log_error "    podman network rm $ENCLAVE_NET && podman network create --driver bridge --internal --subnet $ENCLAVE_SUBNET $ENCLAVE_NET"
+            log_error "Stop every container attached to it first. Refusing to reuse an unisolated enclave network."
+            exit 1
+            ;;
+        *)
+            log_error "Could not determine whether $ENCLAVE_NET is internal (podman network inspect returned '$_net_internal'). Refusing to assume isolation."
+            exit 1
+            ;;
+    esac
 fi
 
 # ===========================================================================
