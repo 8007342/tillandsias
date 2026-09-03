@@ -533,9 +533,16 @@ do not** (851-gpb5, learned by the first Mac to join). Your branch is
 `origin/linux-next` into it — methodology's pre-push gate
 (`pull_merge_cadence.pre_push_gate`; Finalization step 6). Run
 `scripts/install-hooks.sh` once so the v5 pre-push hook actually enforces that
-merge on your checkout. `./build.sh --check`/`--test` work natively (host
-tools: Xcode Command Line Tools for gcc, `brew install pkg-config`, rustup
-with the rustfmt and clippy components), but `--install` is REFUSED by design
+merge on your checkout. `./build.sh --check`/`--test` work natively, but **run
+`scripts/check-host-tools.sh` FIRST — it prints every missing host tool with its
+`brew install` line** (order 989-ykks). That replaces the list of host tools this
+paragraph used to carry, and the replacement is not tidying: the list was wrong
+in two ways in one week (it omitted `coreutils`, a hard requirement of the
+credential gate per 988-7kxf, and `pkg-config`, without which `--check` cannot
+start), and a list is only ever written by someone whose machine already works.
+The host that HAS a tool cannot detect that it is undocumented; it reports `ok:`
+and lands all night while the host that lacks it debugs an unrelated failure
+hours later. A probe cannot drift that way. `--install` is REFUSED by design
 (723-whrx): the macOS build path is `scripts/build-macos-tray.sh` — wrapped by
 `/build-macos-tray`, which also files findings to
 `plan/issues/macos-build-findings-<DATE>.md` — and local-build e2e

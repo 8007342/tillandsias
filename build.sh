@@ -2736,6 +2736,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Inference-container name agreement passed"
 
+    _step "Checking this host has the tools the gate needs (989-ykks)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-host-tools.sh" 2>&1; then
+        _error "a required host tool is missing, or a required-tool claim is unfalsifiable (989-ykks) — see the verdict above"
+        exit 1
+    fi
+    _info "Host-tools check passed"
+
     # 956-llei: a `phase: retired` litmus runs only under an explicit
     # `--phase retired`; the "all" default (which --diff-scope fails closed
     # into) must skip it with the retired reason. Two arms through the real
