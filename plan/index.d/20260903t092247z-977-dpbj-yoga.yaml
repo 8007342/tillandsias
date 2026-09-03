@@ -1,0 +1,74 @@
+events:
+  - packet_id: obligation-lattice-properties-that-can-fail
+    event:
+      type: progress
+      ts: "2026-09-03T09:22:47Z"
+      agent_id: linux-yoga-claude-20260903t090920z
+      host: yoga
+      summary: |
+        RUNG 2 LANDED, AND BOTH ANTI-VACUITY ARMS WERE MUTATION-TESTED RATHER
+        THAN ASSERTED. crates/tillandsias-plan/src/obligation_props.rs, proptest
+        1.11, 22 tests green, gate green.
+
+        THE GAP THIS CLOSES. math.fixpoint.convergence-target@v1 cites
+        tarski_1955 and kleene_1952 and validates with
+        `refine(refine(state)) == refine(state)`. Knaster-Tarski needs MONOTONE;
+        the constructive finite-stabilisation argument needs MONOTONE AND
+        INFLATIONARY. Idempotence implies neither. All three are now asserted
+        SEPARATELY, so a model satisfying one and failing another is
+        distinguishable — which the single original check could not do.
+
+        MEASURED, NOT PROMISED — the two mutations, run and observed:
+
+        (1) POINTED THE MONOTONICITY PROPERTY AT THE WRONG RULE SET. It FAILED,
+        with a readable shrunk counterexample:
+            req-a Declared -> req-b RuntimeObserved
+            req-a Traced   -> req-b Absent
+        A higher input producing a lower output. So the property can fail, and
+        the green above is not a tautology.
+
+        (2) DEGRADED THE GENERATOR to return `y == x` — still comparable, so
+        every property would have kept passing. The anti-vacuity arm caught it:
+            "only 0/256 generated pairs were STRICTLY ordered — the monotonicity
+             property is passing over a sample that mostly witnesses nothing"
+        That arm counts STRICT orderings, not merely comparable ones, because
+        `x == y` satisfies the precondition while testing nothing about order.
+
+        THE WRONG MODEL IS COMMITTED, not improvised: non_monotone_rules() uses
+        an EQUALITY predicate (`== Declared`) rather than a threshold, so raising
+        req-a stops the rule firing. That is the shape a real validator acquires
+        by accident — "only run this check when the requirement is newly
+        declared" — rather than a contrived break. Its counterexample search runs
+        EXHAUSTIVELY over 27 states rather than randomly, because a fixture whose
+        job is to fail must fail deterministically, not with probability
+        depending on a seed. And the same search has a POSITIVE CONTROL asserting
+        it ACCEPTS the real model, so a search returning Some unconditionally
+        cannot satisfy the wrong-model test.
+
+        THE GENERATOR BUILDS COMPARABLE PAIRS BY CONSTRUCTION — draw x, draw a
+        per-component non-negative increment, apply it — because independent
+        draws over a product order are almost always incomparable, the
+        precondition fails, cases are discarded, and proptest reports thousands
+        of passes over an empty sample. There is also an arm asserting the
+        generator's own precondition holds, so a broken generator fails before
+        the properties do.
+
+        FAILING-SEED CORPUS COMMITTED: proptest-regressions/obligation_props.txt
+        carries the shrunk minimal pair from mutation (1). It is re-run before
+        novel cases on every future run, so that reproduction survives the run
+        that found it.
+
+        THE ANSWER TO THE OPEN QUESTION: refine IS monotone on the real rule set
+        — the property passes and the exhaustive search finds no counterexample.
+        So this is NOT a finding against the methodology's claim; the operator's
+        model holds for the rules as written. What was wrong was the VALIDATION,
+        which tested a strictly weaker property and would have passed for a
+        non-monotone operator too. I did not have to invoke the
+        report-before-touching-refine rule, and refine is unchanged from rung 1.
+
+        SCOPE NOT CLAIMED: monotonicity is established for the RULE SETS IN THIS
+        FILE, not for arbitrary future validators. The predicate mechanism
+        deliberately allows non-monotone rules (rung 1's design decision), so a
+        rule added later can break it — which is why the property is a standing
+        test rather than a one-time proof. A future author adding a conditional
+        rule should expect this suite to be the thing that catches them.
