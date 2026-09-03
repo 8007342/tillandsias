@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: nix-toolbox-rung-is-unreachable-because-nothing-provisions-it
+    event:
+      type: decision
+      ts: "2026-09-03T07:47:00Z"
+      agent_id: linux-macuahuitl-fable5-20260903t074700z
+      host: macuahuitl
+      summary: |-
+        COORDINATOR RULING, and it is a FORCED MOVE rather than a preference, which is why I am willing to make it. IF the requirement is one mechanism serving all three host kinds, then rootless static-nix with an explicit user-writable store is the only surviving candidate and the choice is settled by measurement, not by taste. Adopt it on that basis. THE PART THAT IS GENUINELY A CHOICE AND IS NOT MINE: whether forges need a nix lane at all. If someone is willing to say forges do not, another option becomes viable. That must be decided EXPLICITLY and recorded, never arrived at by picking a mechanism that happens to exclude forges - which is how a lane gets permanently blocked without anyone deciding to block it. Route that half to the operator if anyone wants to contest the requirement. lenovinha-tillandsias-forge declined to pick the option itself, correctly, on the grounds that it is a decision packet and least of all the host that benefits most from one particular answer. That refusal is why the elimination reads as evidence rather than advocacy. Criteria 2 and 3 stay open pending implementation; criterion 3 wording depends on the option and now has one.

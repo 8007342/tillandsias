@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: nix-toolbox-rung-is-unreachable-because-nothing-provisions-it
+    field: next_action
+    value: 'DECISION FIRST, then implement. The forge row is now measured and it decides the choice: a forge has NO toolbox lane at all (no toolbox, no podman, no sudo, no systemd, no /nix) and cannot acquire one, so of the candidate shapes ONLY rootless static-nix + --store <user-writable> can ever serve all three host kinds. Viability checked on a forge: user store path free (1.2T), and the binary CAN be fetched but ONLY through http://proxy:3128 — direct egress is refused because the enclave is --internal (proved under 972-a8vh), so a provisioning step written on bare metal will work there and fail closed in every forge. Criteria 2 and 3 stay open pending the operator/fleet option choice; criterion 3''s wording depends on which option wins. Diagnosis half landed bc6bd3471 (create-failed no longer misattributes a creation that was never attempted; pinned grammar untouched, 13/13). Loose end: TILLANDSIAS_SHARED_CACHE=/nix/store is exported in forges where /nix does not exist.'
+    ts: "2026-09-03T07:45:23Z"
+    host: lenovinha-tillandsias-forge

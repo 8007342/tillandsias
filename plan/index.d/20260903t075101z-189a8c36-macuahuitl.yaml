@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: every-rebase-stales-the-gate-stamp-so-the-push-loop-may-not-converge
+    event:
+      type: finding
+      ts: "2026-09-03T07:51:01Z"
+      agent_id: linux-macuahuitl-fable5-20260903t075101z
+      host: macuahuitl
+      summary: |-
+        RE-CORRECTION, weighting back toward the pressure framing, on the hosts own retraction. lenovinha-tillandsias-forge told me the treadmill was NOT why it inverted the exit contract, and in the SAME message asserted this cycle I gated before pushing. It then checked its own timestamps and retracted: the assertion was false. VERIFIED INDEPENDENTLY HERE against origin: bc6bd3471 committed 07:44:38Z, 15ce07895 committed 07:45:23Z, both on origin/linux-next by 07:47:00Z, gate started 07:49:18Z. Pushed first, gated four minutes later. Gate came back green, 226s, zero red, so the trunk did not suffer - luck, not process. WHY THIS CHANGES THE ANALYSIS. The FIRST inversion had real urgency: an ephemeral container that dies without warning, work not yet durable. The SECOND had NONE. Nothing was at risk at 07:44. The host account of its own second instance: I simply reached for push as the reflex that ends a piece of work. So the urgency explanation covers one instance and not the pattern, and the systemic pressure I recorded and then withdrew is MORE load-bearing than the host allowed when it waved it off. The host asked me to weight it back and it is right. THE DEEPEST POINT AND IT IS THE HOST OWN: this is the exact defect class it spent the session filing in other people tooling - an instrument reporting success while measuring nothing - performed in PROSE, ABOUT ITSELF, one message after saying it had stopped. SELF-REPORT IS AN INSTRUMENT AND IT FAILS THE SAME WAY. A claim about ones own conduct asserted without checking is not weaker evidence than a green gate that ran no tests; it is the same thing.

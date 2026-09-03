@@ -1,0 +1,73 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: routing-asks-the-container-question-about-host-native-inference
+    order: 985-mkes
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [inference, routing, capability-matrix, macos, measurement]
+    estimated_hours: 5
+    title: |
+      accel_envelope derives device state from the container lane, so a host whose GPU wins decode 1.27-1.64x and prefill 3.2-3.8x is routed entirely to its CPU.
+    context: |
+      FOUND by macbook-macos while measuring 793-qc6q, and DELIBERATELY LEFT
+      UNFIXED because redefining the routing question under a measurement ticket
+      would have been the wrong move. Filed separately on their behalf.
+      THE CONFLATION. accel_envelope derives device state from the CONTAINER
+      lane.  is CORRECT for the question "can a forge
+      container get this GPU" - macOS Metal is host-native only, PROBE-7. It is
+      WRONG for host-native inference, which is where the 793-qc6q numbers come
+      from. One field is answering two different questions and only one of them
+      truthfully.
+      THE COST IS NOW MEASURED, not hypothesised: routing says cpu on a host
+      where Metal wins decode 1.27x at 0.5B, 1.53x at 3B, 1.64x at 7B, and
+      prefill by 3.2-3.8x throughout. Arms verified by residency rather than
+      intent, GPU utilisation 100% peak against 2% on the CPU lane.
+      MeasurementRecord.locus is ALREADY THE AXIS this needs; nothing new has to
+      be invented, the consumer just has to ask the question it means.
+      SAME FAMILY as 980-krib and 984-i4k2: a signal that is true about the
+      thing it measures and false about the question being asked of it. Third
+      instance in one day.
+    exit_criteria:
+      - routing distinguishes "can a container get this device" from "can host-native inference use this device", using the existing locus axis
+      - the macOS host routes decode and prefill to Metal, and the change is verified by residency (gpu-resident:N/N) rather than by config intent
+      - a host that cannot determine locus says so rather than defaulting to the container answer, which is what silently produced this
+      - no OTHER consumer of accel_envelope is silently inheriting the container answer for a host-native question; check them and record the sweep
+
+  - packet_id: minus-d-warnings-makes-a-newer-clippy-a-fleet-push-blocker
+    order: 985-an42
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [toolchain, ci, multi-host, gate, coordination]
+    estimated_hours: 3
+    title: |
+      The fleet is not on one Rust toolchain, and -D warnings turns any host's clippy upgrade into a push blocker for code that landed green everywhere else.
+    context: |
+      FOUND by macbook-macos. macneo's 980-xcaf qcow2 work landed GREEN on its
+      author's host and failed on macbook against two clippy lints new in rustc
+      1.96.1: manual_checked_ops and manual_is_multiple_of. Fixed equivalently
+      there, but the class is what matters.
+      THE MECHANISM.  promotes every lint to an error. A newer
+      clippy knows more lints. So the first host to upgrade becomes unable to
+      push code that every other host considers clean, and the failure appears
+      to be about the code rather than about the toolchain spread. It gets worse
+      as the fleet upgrades unevenly, and it is silent until someone is blocked.
+      RELATED AND DISTINCT from the shell-dialect problem: macbook also reported
+      TWO MORE GNU-only idioms this cycle - a sed label followed by ';' in
+      check-enclave-network-internal.sh, which made that guard report DRIFT
+      against a compliant launcher, and bare  plus the  address
+      form in test-requirement-ids.sh. FIVE IN FIVE DAYS, and one was a REPEAT
+      of an idiom fixed the day before IN A NEW FILE. That repeat is the
+      argument that 964-zgga must be a RATCHET rather than a cleanup: fixing
+      instances does not stop the class, because the next file starts fresh.
+      Recorded there with the full list.
+    exit_criteria:
+      - the fleet's toolchain spread is observable - which host is on which rustc/clippy - rather than discovered when someone cannot push
+      - a lint that is new in a newer clippy does not silently block a host; either the toolchain is pinned fleet-wide, or the gate distinguishes "your code is wrong" from "your clippy is newer"
+      - whichever is chosen is recorded as a decision, because pinning has its own cost and drifting has this one
+      - 964-zgga is confirmed as a ratchet that rejects a NEW instance of a known-bad idiom, not a list of fixed files; the repeat-in-a-new-file case is the test

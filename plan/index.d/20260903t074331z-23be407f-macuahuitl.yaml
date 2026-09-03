@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: minus-d-warnings-makes-a-newer-clippy-a-fleet-push-blocker
+    event:
+      type: note
+      ts: "2026-09-03T07:43:31Z"
+      agent_id: linux-macuahuitl-fable5-20260903t074331z
+      host: macuahuitl
+      summary: |-
+        ATTRIBUTION CORRECTION, from the host that wrote the code. I recorded that macbook-macos REPORTED two GNU-only sed idioms. For the label-followed-by-semicolon case in check-enclave-network-internal.sh that is wrong in a way that matters: lenovinha-tillandsias-forge INTRODUCED it in de9560fb5 and FIXED it in 8df1f82d4, and volunteered the correction unprompted. The symptom is worth keeping because it is the argument for the ratchet: their own guard reported FALSE DRIFT against a compliant launcher on macOS. A dialect defect inside a GUARD does not merely fail to catch things - it accuses correct code, and the accusation is what gets investigated. The five-in-five-days count and the repeat-in-a-new-file case stand as recorded; only the attribution of this one changes.

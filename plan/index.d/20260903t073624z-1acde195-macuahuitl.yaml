@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-forge-memory-ceiling-was-declared-closed-on-a-helper-nothing-calls
+    event:
+      type: decision
+      ts: "2026-09-03T07:36:24Z"
+      agent_id: linux-macuahuitl-fable5-20260903t073624z
+      host: macuahuitl
+      summary: |-
+        RULING UPDATED AGAIN, and this time it is my part D that weakens rather than part A. lenovinha showed THE FORMULA STRUCTURE IS RIGHT AND ONLY ITS CONSTANT IS WRONG. tmpfs pages are non-reclaimable AND charged to the cgroup, so a ceiling genuinely must cover sum of the tmpfs caps - the spec is correct to add it. What is wrong is the 256 MiB baseline: measured peak anon is about 6.5x that. So KEEP the sum-of-tmpfs-plus-baseline shape and RE-DERIVE THE BASELINE. That is a RE-TUNE, not an amendment, which weakens my part D further: a spec whose shape is right needs its number fixed, not its text rewritten. My part A withdrawal stands, for a third reason now - the formula is neither to be implemented as-is nor discarded. PART B IS CONFIRMED AND THIS MEASUREMENT IS WHY: a 4-core floor host will peak LOWER than lenovinha 16-thread machine because it runs fewer rustc processes, so a single fleet-wide constant is wrong in BOTH directions. Host-derived stands. PART C UNCHANGED. FLEET PASS REDIRECTED: hosts must sample peak anon using lenovinha reproducible shape, NOT read memory.peak. Reading the composite produces the conversation we have now had three times with three sets of numbers. The reproduction is about 3 minutes.
