@@ -104,6 +104,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "split-parents",
     "experts-probe",
     "spec-envelope",
+    "score-checks",
     "spec-floor",
     "spec-index",
     "spec-retrieve",
@@ -404,6 +405,17 @@ const USAGE: &str = concat!(
     "                                     ORDER 547. Chunk the whole-spec corpus into <dir>/chunks.jsonl\n",
     "           spec-retrieve --index-dir <dir> --query-vec <f> [--k N]\n",
     "                                     network-free cosine top-k over caller-supplied embeddings\n",
+    "           score-checks\n",
+    "                                     ORDER 977-j6qu. THE centicolon scorer. Reads\n",
+    "                                     `<check-id> <weight> <pass|fail>` lines on stdin and\n",
+    "                                     prints {earned,denominator,residual,regime} — one\n",
+    "                                     ranking function over the obligation lattice, so\n",
+    "                                     local-ci.sh stops accumulating a second score under\n",
+    "                                     the same name. `regime` names when the score left the\n",
+    "                                     monotone band (a tombstone changes the denominator),\n",
+    "                                     because a bare number cannot say which side it is on.\n",
+    "                                     A malformed line REFUSES rather than scoring a partial\n",
+    "                                     denominator, which would raise the percentage.\n",
     "           spec-floor --chunks-json <f>\n",
     "                                     ORDER 821-73es. Apply the grounded pipeline's retrieval\n",
     "                                     floors (TILLANDSIAS_RETRIEVE_REFUSAL_FLOOR on the best\n",
@@ -3241,6 +3253,84 @@ fn main() {
             index_dir: None,
         };
         std::process::exit(tillandsias_plan::expert_serve::run_blocking(cfg));
+    }
+
+    if args[0] == "score-checks" {
+        // ORDER 977-j6qu. THE SHELL STOPS COMPUTING A SECOND SCORE.
+        //
+        // scripts/local-ci.sh accumulated `total_cc` itself — summing a
+        // weight per check — while methodology/math-foundations.yaml
+        // described a `centicolon_function` over the obligation lattice
+        // that nothing implemented. Two objects, one name. This routes
+        // the shell through the model so there is ONE ranking function.
+        //
+        // INPUT is one `<check-id> <weight> <pass|fail>` per line on
+        // stdin, which is what local-ci.sh already has in hand. Each
+        // check becomes an obligation: a PASS establishes
+        // PositivelyTested, a FAIL leaves it Absent.
+        //
+        // WHY PositivelyTested AND NOT THE TOP OF THE CHAIN, which is
+        // the honest part: a green check witnesses that a test passed.
+        // It says nothing about RuntimeObserved or EvidenceBundled, and
+        // scoring it as though it did would be the model agreeing with
+        // whatever the shell already believed. The numbers are
+        // UNCHANGED today because every weight is earned at exactly the
+        // bar a passing check reaches — so this wiring is verifiable
+        // against the previous behaviour rather than a silent
+        // re-definition of what percent_closed means.
+        use tillandsias_plan::obligation::{
+            ObligationState, Regime, SpecState, Weights, centicolon_function,
+        };
+        let mut state = SpecState::new();
+        let mut weights = Weights::new();
+        let mut malformed = 0usize;
+        let stdin = std::io::stdin();
+        let mut line = String::new();
+        loop {
+            line.clear();
+            match std::io::BufRead::read_line(&mut stdin.lock(), &mut line) {
+                Ok(0) | Err(_) => break,
+                Ok(_) => {}
+            }
+            let t = line.trim();
+            if t.is_empty() {
+                continue;
+            }
+            let parts: Vec<&str> = t.split_whitespace().collect();
+            if parts.len() != 3 {
+                malformed += 1;
+                continue;
+            }
+            let Ok(w) = parts[1].parse::<u64>() else {
+                malformed += 1;
+                continue;
+            };
+            weights = weights.with(parts[0], w, ObligationState::PositivelyTested);
+            if parts[2] == "pass" {
+                state.set(parts[0], ObligationState::PositivelyTested);
+            }
+        }
+        // A MALFORMED LINE IS NOT A ZERO. Silently dropping it would
+        // shrink the denominator and RAISE the percentage, which is the
+        // direction nobody audits.
+        if malformed > 0 {
+            eprintln!(
+                "blocked:score-checks:malformed-input:{malformed} line(s) were not \
+                     `<id> <weight> <pass|fail>` — refusing rather than scoring a \
+                     partial denominator"
+            );
+            std::process::exit(2);
+        }
+        let score = centicolon_function(&state, &weights);
+        let regime = match &score.regime {
+            Regime::Monotone => "monotone".to_string(),
+            Regime::Broken(why) => format!("broken:{why}"),
+        };
+        println!(
+            "{{\"earned\":{},\"denominator\":{},\"residual\":{},\"regime\":\"{}\"}}",
+            score.earned, score.denominator, score.residual, regime
+        );
+        return;
     }
 
     // ORDER 394c. The methodology corpus is a DIFFERENT corpus from the plan

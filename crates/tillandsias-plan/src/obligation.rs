@@ -597,3 +597,198 @@ mod tests {
         );
     }
 }
+
+// ── ORDER 977-j6qu (rung 3): the ranking function ────────────────────────────
+
+/// A score over a [`SpecState`]: what was EARNED, out of what was possible, and
+/// what remains.
+///
+/// The three travel together because the methodology requires the denominator
+/// and residual to be reported SEPARATELY (math-foundations.yaml:37-42) — a
+/// single "score" hides whether 40 means "40 of 50" or "40 of 4000", and a
+/// percentage hides both. `local-ci.sh` already had this shape and it was the
+/// half it got right.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Score {
+    pub earned: u64,
+    pub denominator: u64,
+    pub residual: u64,
+    /// Whether this score may be compared with another (see [`Regime`]).
+    pub regime: Regime,
+}
+
+/// Whether a score is inside the band where the methodology says the ranking
+/// function is monotone.
+///
+/// math-foundations.yaml:37-42 qualifies `centicolon_function` explicitly: it
+/// "is monotone only for evidence transitions that preserve obligation IDs and
+/// do not introduce penalties, ambiguity, or denominator scope changes". A
+/// scorer that reports a number without saying which side of that line it is on
+/// invites exactly the comparison the qualifier forbids — and a reader has no
+/// way to know, because both sides look like a number.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Regime {
+    /// Obligation IDs preserved and the denominator unchanged: this score is
+    /// comparable with the previous one.
+    Monotone,
+    /// Outside the band, with the reason NAMED rather than implied. A consumer
+    /// must not read a rise or fall across this boundary as progress or
+    /// regress.
+    Broken(&'static str),
+}
+
+/// The weight of each obligation, and the state at which it counts as earned.
+///
+/// `earned_at` exists because a binary check cannot witness the whole chain: a
+/// CI check that passes establishes `PositivelyTested` and says nothing about
+/// `RuntimeObserved` or `EvidenceBundled`. Making the bar explicit per
+/// obligation keeps that honest instead of quietly treating "the check passed"
+/// as "every kind of evidence exists".
+#[derive(Debug, Clone)]
+pub struct Weights {
+    weights: BTreeMap<String, (u64, ObligationState)>,
+}
+
+impl Default for Weights {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Weights {
+    pub fn new() -> Self {
+        Weights {
+            weights: BTreeMap::new(),
+        }
+    }
+
+    pub fn with(mut self, id: &str, weight: u64, earned_at: ObligationState) -> Self {
+        self.weights.insert(id.to_string(), (weight, earned_at));
+        self
+    }
+
+    pub fn ids(&self) -> impl Iterator<Item = &str> {
+        self.weights.keys().map(|s| s.as_str())
+    }
+}
+
+/// The ranking function: sum the weights of obligations that reached their bar.
+///
+/// TOMBSTONED OBLIGATIONS ARE EXCLUDED FROM BOTH HALVES — they leave the
+/// numerator AND the denominator. Dropping them from the numerator alone would
+/// make a legitimate identity change look like lost ground, which is the
+/// 977-56fd defect one layer up; leaving them in the denominator would make the
+/// project permanently unable to reach its own total. Excluding them from both
+/// is a DENOMINATOR SCOPE CHANGE, which the methodology names as leaving the
+/// monotone band — so the returned [`Regime`] says so rather than letting a
+/// consumer compare across it silently.
+pub fn centicolon_function(state: &SpecState, weights: &Weights) -> Score {
+    let mut earned = 0u64;
+    let mut denominator = 0u64;
+    let mut tombstoned_any = false;
+
+    for (id, (weight, earned_at)) in &weights.weights {
+        if state.is_tombstoned(id) {
+            tombstoned_any = true;
+            continue; // out of the numerator AND the denominator
+        }
+        denominator += weight;
+        if state.get(id) >= *earned_at {
+            earned += weight;
+        }
+    }
+
+    let regime = if tombstoned_any {
+        Regime::Broken("denominator scope changed: an obligation was tombstoned")
+    } else {
+        Regime::Monotone
+    };
+
+    Score {
+        earned,
+        denominator,
+        residual: denominator.saturating_sub(earned),
+        regime,
+    }
+}
+
+#[cfg(test)]
+mod score_tests {
+    use super::*;
+
+    fn weights() -> Weights {
+        Weights::new()
+            .with("a", 100, ObligationState::PositivelyTested)
+            .with("b", 60, ObligationState::PositivelyTested)
+    }
+
+    #[test]
+    fn earned_denominator_and_residual_are_separate_and_consistent() {
+        let s = SpecState::new()
+            .with("a", ObligationState::PositivelyTested)
+            .with("b", ObligationState::Declared);
+        let score = centicolon_function(&s, &weights());
+        assert_eq!(score.earned, 100);
+        assert_eq!(score.denominator, 160);
+        assert_eq!(score.residual, 60);
+        assert_eq!(score.regime, Regime::Monotone);
+    }
+
+    /// A state ABOVE the bar still earns — the bar is a threshold, not an
+    /// equality. An equality here is the exact defect rung 2's wrong-model
+    /// fixture encodes.
+    #[test]
+    fn exceeding_the_bar_still_earns() {
+        let s = SpecState::new()
+            .with("a", ObligationState::EvidenceBundled)
+            .with("b", ObligationState::RuntimeObserved);
+        let score = centicolon_function(&s, &weights());
+        assert_eq!(score.earned, 160);
+        assert_eq!(score.residual, 0);
+    }
+
+    /// THE REGIME IS NAMED, NOT IMPLIED. A tombstone changes the denominator,
+    /// which the methodology says leaves the monotone band, so the score must
+    /// say so rather than presenting a comparable-looking number.
+    #[test]
+    fn a_tombstone_leaves_the_monotone_regime_and_says_so() {
+        let mut s = SpecState::new().with("a", ObligationState::PositivelyTested);
+        s.tombstone("b");
+        let score = centicolon_function(&s, &weights());
+        assert_eq!(score.earned, 100);
+        assert_eq!(
+            score.denominator, 100,
+            "tombstoned weight leaves the denominator too"
+        );
+        assert!(matches!(score.regime, Regime::Broken(_)));
+    }
+
+    /// The score rises with evidence, within the regime — the property the
+    /// methodology's qualifier actually promises.
+    #[test]
+    fn score_is_monotone_within_the_regime() {
+        let lo = SpecState::new()
+            .with("a", ObligationState::Declared)
+            .with("b", ObligationState::Declared);
+        let hi = SpecState::new()
+            .with("a", ObligationState::PositivelyTested)
+            .with("b", ObligationState::Declared);
+        assert!(lo <= hi);
+        let (a, b) = (
+            centicolon_function(&lo, &weights()),
+            centicolon_function(&hi, &weights()),
+        );
+        assert!(a.earned <= b.earned);
+        assert_eq!(a.denominator, b.denominator);
+    }
+
+    /// An obligation with no recorded state is Absent and earns nothing, but
+    /// still counts toward the denominator — otherwise a project could raise
+    /// its percentage by forgetting to record obligations.
+    #[test]
+    fn unrecorded_obligations_still_count_against_the_total() {
+        let score = centicolon_function(&SpecState::new(), &weights());
+        assert_eq!(score.earned, 0);
+        assert_eq!(score.denominator, 160);
+    }
+}

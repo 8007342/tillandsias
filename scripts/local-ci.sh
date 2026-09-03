@@ -534,6 +534,66 @@ write_convergence_artifacts() {
         fi
     done
 
+
+    # ── ORDER 977-j6qu: THE SCORE COMES FROM THE MODEL, NOT FROM THIS LOOP ────
+    #
+    # The loop above still classifies each check and builds the residual detail
+    # (which spec failed, why, at what weight) — that is reporting, and it stays
+    # here. What LEFT is the arithmetic: earned/denominator/residual are now
+    # computed by `tillandsias-plan score-checks`, which runs
+    # obligation::centicolon_function over a SpecState.
+    #
+    # WHY THIS MATTERS beyond tidiness. methodology/math-foundations.yaml
+    # describes a centicolon_function over the obligation lattice; this script
+    # accumulated `total_cc` itself. Two objects under one name, and the
+    # methodology's qualifier — monotone ONLY while obligation IDs are preserved
+    # and the denominator scope is unchanged — had nowhere to live, because a
+    # bare integer cannot say which side of that line it is on.
+    #
+    # THE NUMBERS ARE UNCHANGED TODAY, deliberately, and that is the evidence
+    # this wiring is faithful rather than a redefinition: a passing check
+    # establishes PositivelyTested, each weight is earned at exactly that bar,
+    # so the model reproduces what the loop computed. A green check witnesses
+    # that a test passed — it says nothing about RuntimeObserved or
+    # EvidenceBundled, and scoring it as though it did would be the model
+    # agreeing with whatever the shell already believed.
+    #
+    # FAIL LOUD, NEVER FALL BACK. An unavailable or refusing scorer must not
+    # silently restore the local arithmetic: that would be two scorers again,
+    # with the second one invisible and only reachable on the unhappy path.
+    local _score_json _score_rc=0
+    local _plan_bin=""
+    if [[ -f "$REPO_ROOT/scripts/plan-binary-probe.sh" ]]; then
+        # shellcheck source=scripts/plan-binary-probe.sh
+        . "$REPO_ROOT/scripts/plan-binary-probe.sh" 2>/dev/null || true
+    fi
+    if ! command -v resolve_plan_binary &>/dev/null || ! _plan_bin="$(resolve_plan_binary)" || [[ -z "$_plan_bin" ]]; then
+        echo "blocked:local-ci:no-plan-binary — the centicolon scorer lives in tillandsias-plan (977-j6qu); refusing to compute a second score here" >&2
+        return 1
+    fi
+    _score_json="$(
+        for check_id in "${CHECK_IDS[@]}"; do
+            local _w _st
+            _w="$(check_weight "$check_id")"
+            if [[ " ${FAILED_CHECKS[*]} " == *" ${check_id} "* ]]; then _st=fail; else _st=pass; fi
+            printf '%s %s %s\n' "$check_id" "$_w" "$_st"
+        done | "$_plan_bin" score-checks
+    )" || _score_rc=$?
+    if [[ $_score_rc -ne 0 || -z "$_score_json" ]]; then
+        echo "blocked:local-ci:scorer-refused (rc=$_score_rc) — see the score-checks verdict above" >&2
+        return 1
+    fi
+    total_cc="$("$JQ" -r '.denominator' <<<"$_score_json")"
+    passed_cc="$("$JQ" -r '.earned' <<<"$_score_json")"
+    residual_cc="$("$JQ" -r '.residual' <<<"$_score_json")"
+    local cc_regime
+    cc_regime="$("$JQ" -r '.regime' <<<"$_score_json")"
+    # THE REGIME IS REPORTED, NOT IMPLIED. Outside the monotone band a rise or
+    # fall must not be read as progress or regress, and a consumer that only
+    # sees the number has no way to know.
+    if [[ "$cc_regime" != monotone ]]; then
+        echo "note:local-ci:centicolon-regime:$cc_regime — this score is NOT comparable with the previous run" >&2
+    fi
     local failed_reasons_json
     if [[ -s "$failed_reasons_file" ]]; then
         failed_reasons_json="$("$JQ" -sc '.' "$failed_reasons_file")"
