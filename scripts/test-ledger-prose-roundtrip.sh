@@ -34,19 +34,29 @@
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# Resolution goes through the SHARED probe (721-nyev), which the gate enforces.
+# The hand-rolled loop this replaces was written to respect CARGO_TARGET_DIR —
+# on a host that redirects it (every forge does) the in-tree target/ is absent
+# and falling through to the INSTALLED binary silently tests a different build,
+# which is how this test's first run reported five failures against a stale
+# artifact. That concern is exactly why the shared probe exists and it checks
+# CARGO_TARGET_DIR FIRST (783-jdeh), so nothing is lost by deferring to it and
+# one implementation cannot drift from the other.
 BIN="${TILLANDSIAS_PLAN_BIN:-}"
-# Respect CARGO_TARGET_DIR: on a host that redirects it (every forge does), the
-# in-tree target/ is absent and falling through to the INSTALLED binary would
-# silently test a different build than the one just compiled — which is how the
-# first run of this test reported five failures against a stale artifact.
 if [ -z "$BIN" ]; then
-    for cand in "${CARGO_TARGET_DIR:-$ROOT/target}/release/tillandsias-plan" \
-                "$ROOT/target/release/tillandsias-plan"; do
-        [ -x "$cand" ] && { BIN="$cand"; break; }
-    done
+    # shellcheck source=scripts/plan-binary-probe.sh
+    . "$(dirname "${BASH_SOURCE[0]}")/plan-binary-probe.sh"
+    BIN="$(resolve_plan_binary 2>/dev/null || true)"
+    # ABSOLUTE, because the probe may answer with a repo-relative path
+    # (./target/release/...) and the cases below run from a scratch directory,
+    # where that resolves to nothing. Measured: 5 of 6 cases failed with "No
+    # such file or directory" against a binary that was present and fresh.
+    case "$BIN" in
+        /*) ;;
+        ?*) BIN="$ROOT/${BIN#./}" ;;
+    esac
 fi
-[ -n "$BIN" ] && [ -x "$BIN" ] || BIN="$(command -v tillandsias-plan 2>/dev/null || true)"
-if [ ! -x "$BIN" ]; then
+if [ -z "$BIN" ] || [ ! -x "$BIN" ]; then
     echo "SKIP: no tillandsias-plan binary (build with: cargo build --release -p tillandsias-plan)"
     exit 0
 fi

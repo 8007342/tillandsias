@@ -5835,7 +5835,10 @@ fn main() {
                 body.push_str(&format!("      ts: \"{ts}\"\n"));
                 body.push_str(&format!("      agent_id: {agent}\n"));
                 body.push_str(&format!("      host: {host}\n"));
-                body.push_str(&format!("      summary: {}", prose_block_scalar(summary, 8)));
+                body.push_str(&format!(
+                    "      summary: {}",
+                    prose_block_scalar(summary, 8)
+                ));
                 if let Err(e) = std::fs::write(&path, body) {
                     eprintln!("error: write {}: {e}", path.display());
                     std::process::exit(1);
@@ -6751,6 +6754,123 @@ fn scalar_to_string(v: &serde_yaml::Value) -> String {
             .unwrap_or_default()
             .trim()
             .to_string(),
+    }
+}
+
+/// ORDER 971-7muc. Refuse prose that carries the RESIDUE of shell expansion.
+///
+/// ── WHAT THIS CAN AND CANNOT CATCH, stated plainly because the limit is the
+/// whole reason `--summary-file` exists ────────────────────────────────────────
+///
+/// By the time this program runs, the shell has finished. A BALANCED command
+/// substitution leaves no trace whatsoever:
+///
+///     "the `accel_mem_budget_gb` field"   ->   argv receives:  "the  field"
+///
+/// Both backticks and the word between them are gone before `main` is entered.
+/// No amount of inspection here can recover or even detect that. That is exactly
+/// how two hosts lost the subject of a sentence on one evening (964-r98h and
+/// 970-7fqk) while `validate-yaml`, `plan check`, the fragment-keys guard and
+/// `./build.sh --check` all passed the result: valid YAML, plausible prose.
+///
+/// So this is a residue detector, not a guarantee, and it must not be mistaken
+/// for one. What it CAN see:
+///
+///   - an UNBALANCED backtick — an odd count means one of a pair was consumed,
+///     which is positive evidence that an expansion already happened;
+///   - a literal `$(` — either an unexpanded substitution the author did not
+///     intend to store, or the visible half of one the shell partly ate.
+///
+/// Prose with BALANCED backticks passes, because that is what correct
+/// single-quoting delivers and refusing it would break every honest caller.
+///
+/// The real remedy is structural and lives one layer up: take the prose from a
+/// file so the shell never sees it. This check exists so the hazardous path
+/// fails loudly where it can, rather than staying silently available to whoever
+/// is in a hurry — which, per the packet, is precisely when this happens.
+fn reject_shell_mangled_prose(text: &str) {
+    let backticks = text.chars().filter(|c| *c == '`').count();
+    let unbalanced = backticks % 2 == 1;
+    let has_subst = text.contains("$(");
+    if !unbalanced && !has_subst {
+        return;
+    }
+    let mut reasons: Vec<&str> = Vec::new();
+    if unbalanced {
+        reasons
+            .push("an unbalanced backtick (odd count — one of a pair was consumed by the shell)");
+    }
+    if has_subst {
+        reasons.push("a literal `$(` (an unexpanded or partly-expanded command substitution)");
+    }
+    eprintln!(
+        "error: refusing to store prose passed through argv that carries {} \
+         — the shell has already rewritten this text and the damage is not \
+         recoverable here (971-7muc).\n\
+         \n\
+         Pass the prose through a file instead, so no shell ever sees it:\n\
+         \n    tillandsias-plan append-event <ref> <type> --summary-file NOTE.md ...\n\
+         \n  or from stdin:\n\
+         \n    tillandsias-plan append-event <ref> <type> --summary-file - ... <<'EOF'\n\
+         \n  Note the QUOTED heredoc delimiter ('EOF', not EOF): an unquoted one \
+         expands backticks in the body and reproduces the very defect this refuses.",
+        reasons.join(" and ")
+    );
+    std::process::exit(2);
+}
+
+/// ORDER 971-7muc. Render prose as a LITERAL block scalar, preserving newlines.
+///
+/// `append-event` previously wrote `summary: >` after `summary.replace('\n', " ")`
+/// — a folded scalar fed text whose line breaks had already been destroyed, so
+/// the two mechanisms agreed on discarding paragraph structure. A multi-paragraph
+/// event summary came back as one run-on line.
+///
+/// This is the SAME failure signature as the argv mangling this order was filed
+/// for, and it survived for the same reason: the result is valid YAML carrying
+/// plausible prose, so validate-yaml, `plan check`, the fragment-keys guard and
+/// `./build.sh --check` all pass it. Only a byte-identity assertion sees it, and
+/// nothing asserted byte identity until now.
+///
+/// `|` keeps the trailing newline, `|-` strips it, so an input either way
+/// round-trips exactly. Empty input degrades to `""` rather than emitting a
+/// dangling `summary: |` with no body, which the fold rejects.
+fn prose_block_scalar(s: &str, indent: usize) -> String {
+    if s.is_empty() {
+        return " \"\"\n".to_string();
+    }
+    let (chomp, body) = if s.ends_with('\n') {
+        ("|", s.strip_suffix('\n').unwrap_or(s))
+    } else {
+        ("|-", s)
+    };
+    let pad = " ".repeat(indent);
+    let mut out = format!("{chomp}\n");
+    for l in body.split('\n') {
+        if l.is_empty() {
+            out.push('\n');
+        } else {
+            out.push_str(&pad);
+            out.push_str(l);
+            out.push('\n');
+        }
+    }
+    out
+}
+
+/// ORDER 971-7muc. Read prose from a file, or from stdin when the path is `-`.
+///
+/// The point is not convenience. Prose that reaches this program through argv
+/// has already been rewritten by the shell, and the rewrite is not recoverable
+/// here — see [`reject_shell_mangled_prose`]. Reading the bytes ourselves is the
+/// only way to guarantee that what the author wrote is what the ledger stores.
+fn read_prose_source(path: &str) -> std::io::Result<String> {
+    if path == "-" {
+        let mut buf = String::new();
+        std::io::Read::read_to_string(&mut std::io::stdin(), &mut buf)?;
+        Ok(buf)
+    } else {
+        std::fs::read_to_string(path)
     }
 }
 
@@ -7770,120 +7890,4 @@ mod tests {
         assert!(ts.contains('T'));
         assert_eq!(ts.len(), 20);
     }
-}
-
-/// ORDER 971-7muc. Read prose from a file, or from stdin when the path is `-`.
-///
-/// The point is not convenience. Prose that reaches this program through argv
-/// has already been rewritten by the shell, and the rewrite is not recoverable
-/// here — see [`reject_shell_mangled_prose`]. Reading the bytes ourselves is the
-/// only way to guarantee that what the author wrote is what the ledger stores.
-fn read_prose_source(path: &str) -> std::io::Result<String> {
-    if path == "-" {
-        let mut buf = String::new();
-        std::io::Read::read_to_string(&mut std::io::stdin(), &mut buf)?;
-        Ok(buf)
-    } else {
-        std::fs::read_to_string(path)
-    }
-}
-
-/// ORDER 971-7muc. Refuse prose that carries the RESIDUE of shell expansion.
-///
-/// ── WHAT THIS CAN AND CANNOT CATCH, stated plainly because the limit is the
-/// whole reason `--summary-file` exists ────────────────────────────────────────
-///
-/// By the time this program runs, the shell has finished. A BALANCED command
-/// substitution leaves no trace whatsoever:
-///
-///     "the `accel_mem_budget_gb` field"   ->   argv receives:  "the  field"
-///
-/// Both backticks and the word between them are gone before `main` is entered.
-/// No amount of inspection here can recover or even detect that. That is exactly
-/// how two hosts lost the subject of a sentence on one evening (964-r98h and
-/// 970-7fqk) while `validate-yaml`, `plan check`, the fragment-keys guard and
-/// `./build.sh --check` all passed the result: valid YAML, plausible prose.
-///
-/// So this is a residue detector, not a guarantee, and it must not be mistaken
-/// for one. What it CAN see:
-///
-///   - an UNBALANCED backtick — an odd count means one of a pair was consumed,
-///     which is positive evidence that an expansion already happened;
-///   - a literal `$(` — either an unexpanded substitution the author did not
-///     intend to store, or the visible half of one the shell partly ate.
-///
-/// Prose with BALANCED backticks passes, because that is what correct
-/// single-quoting delivers and refusing it would break every honest caller.
-///
-/// The real remedy is structural and lives one layer up: take the prose from a
-/// file so the shell never sees it. This check exists so the hazardous path
-/// fails loudly where it can, rather than staying silently available to whoever
-/// is in a hurry — which, per the packet, is precisely when this happens.
-fn reject_shell_mangled_prose(text: &str) {
-    let backticks = text.chars().filter(|c| *c == '`').count();
-    let unbalanced = backticks % 2 == 1;
-    let has_subst = text.contains("$(");
-    if !unbalanced && !has_subst {
-        return;
-    }
-    let mut reasons: Vec<&str> = Vec::new();
-    if unbalanced {
-        reasons.push("an unbalanced backtick (odd count — one of a pair was consumed by the shell)");
-    }
-    if has_subst {
-        reasons.push("a literal `$(` (an unexpanded or partly-expanded command substitution)");
-    }
-    eprintln!(
-        "error: refusing to store prose passed through argv that carries {} \
-         — the shell has already rewritten this text and the damage is not \
-         recoverable here (971-7muc).\n\
-         \n\
-         Pass the prose through a file instead, so no shell ever sees it:\n\
-         \n    tillandsias-plan append-event <ref> <type> --summary-file NOTE.md ...\n\
-         \n  or from stdin:\n\
-         \n    tillandsias-plan append-event <ref> <type> --summary-file - ... <<'EOF'\n\
-         \n  Note the QUOTED heredoc delimiter ('EOF', not EOF): an unquoted one \
-         expands backticks in the body and reproduces the very defect this refuses.",
-        reasons.join(" and ")
-    );
-    std::process::exit(2);
-}
-
-/// ORDER 971-7muc. Render prose as a LITERAL block scalar, preserving newlines.
-///
-/// `append-event` previously wrote `summary: >` after `summary.replace('\n', " ")`
-/// — a folded scalar fed text whose line breaks had already been destroyed, so
-/// the two mechanisms agreed on discarding paragraph structure. A multi-paragraph
-/// event summary came back as one run-on line.
-///
-/// This is the SAME failure signature as the argv mangling this order was filed
-/// for, and it survived for the same reason: the result is valid YAML carrying
-/// plausible prose, so validate-yaml, `plan check`, the fragment-keys guard and
-/// `./build.sh --check` all pass it. Only a byte-identity assertion sees it, and
-/// nothing asserted byte identity until now.
-///
-/// `|` keeps the trailing newline, `|-` strips it, so an input either way
-/// round-trips exactly. Empty input degrades to `""` rather than emitting a
-/// dangling `summary: |` with no body, which the fold rejects.
-fn prose_block_scalar(s: &str, indent: usize) -> String {
-    if s.is_empty() {
-        return " \"\"\n".to_string();
-    }
-    let (chomp, body) = if s.ends_with('\n') {
-        ("|", s.strip_suffix('\n').unwrap_or(s))
-    } else {
-        ("|-", s)
-    };
-    let pad = " ".repeat(indent);
-    let mut out = format!("{chomp}\n");
-    for l in body.split('\n') {
-        if l.is_empty() {
-            out.push('\n');
-        } else {
-            out.push_str(&pad);
-            out.push_str(l);
-            out.push('\n');
-        }
-    }
-    out
 }
