@@ -53,6 +53,18 @@ git init -q --bare "$W/bare.git"
 git init -q -b linux-next "$W/wc"
 cd "$W/wc" || exit 2
 git remote add origin "$W/bare.git"
+# core.hooksPath is GLOBAL and OVERRIDES .git/hooks — pin it per scratch repo.
+# A forge provisions core.hooksPath=~/.cache/tillandsias/git-hooks in
+# ~/.gitconfig, and git's rule is that a set core.hooksPath replaces the
+# per-repo hooks directory outright. The seeding `git push -u origin linux-next`
+# below would then run the REAL forge hooks against this scratch tree, fail, and
+# leave refs/remotes/origin/linux-next unset — so every arm that needs a remote
+# base reported "remote base origin/linux-next is not present locally" and the
+# fixture read 6 passed / 4 failed on EVERY forge in the fleet, for a reason
+# entirely outside the behaviour under test. Same defect, same day, as the one
+# fixed in test-pre-push-empty-ref-list.sh: a fixture that drives git must pin
+# core.hooksPath or the ambient config silently substitutes its own hooks.
+git config core.hooksPath .git/hooks
 # The guard must sit at scripts/hooks/ in the scratch tree too: it sources
 # ../plan-binary-probe.sh relative to itself, so a flattened copy silently
 # loses its validator and every lane arm fails on a missing tool.
