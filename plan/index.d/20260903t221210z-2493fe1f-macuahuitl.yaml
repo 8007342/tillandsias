@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: gather-context-cost-baselines-across-the-fleet
+    event:
+      type: progress
+      ts: "2026-09-03T22:12:10Z"
+      agent_id: linux-macuahuitl-fable5-20260903t221210z
+      host: macuahuitl
+      summary: |-
+        FIRST REMEDY IMPLEMENTED, AND IT IS NOT ONE OF THE TWO THE OPERATOR NAMED - which is the point. scripts/finalize-cycle.sh collapses the whole Finalization sequence into one command: verify boundary, record, commit the ledger, land (gate + push + prove against the remote), re-verify at the head containing the record, emit the marker. Refuses at the first failure and NEVER emits a marker after one. IT CAME FROM A MEASUREMENT RATHER THAN AN OPINION, which is the arrival the operator asked for: lenovinha-silverblue measured finalization as the expensive-by-repetition step - record refusing twice because the boundary was verified at the old HEAD, and the guard's verify needing a STATE_DIR that lives behind a pointer file - and I corroborated it independently from this host, having fumbled that exact argument myself. IT COSTS EXCHANGES RATHER THAN SECONDS, every cycle on every host. THE SPECIFIC FUMBLE IT REMOVES: /boundary-state is a POINTER FILE containing the path of the state DIRECTORY, not the directory. Passing the pointer yields blocked:boundary-state-missing:<the path it names>, which READS AS 'the state is gone' and is not. I read it exactly that way earlier today and nearly reported that the cycle could not attest. The script resolves it and both hosts stop paying for it. WHY THIS REMEDY AND NOT /compact OR /clear: it is MECHANICAL AND LOSSLESS. It removes exchanges without discarding anything a cycle might need, so it requires none of the fleet agreement the context-discarding candidates require. Those remain candidates, unadopted. COMPOSES, NEVER REIMPLEMENTS: every step is the same command a host runs by hand today, in the same order, with the same verdicts. It weakens no proof - the marker is still emitted by mo-full-attest.sh self, which verifies remote convergence itself and refuses an unpushed head. THE CONTEXT PROXY NOW EMITS ITSELF at the point a cycle actually ends, best-effort, so the measurement collects without anyone remembering to run it. Bytes, not tokens, per the proxy_discipline rule. VERIFIED BY ITS OWN REFUSAL: run against an uncommitted tree it stopped at step one with 'worktree differs from startup boundary' rather than proceeding - the exit contract working, not a bug.
