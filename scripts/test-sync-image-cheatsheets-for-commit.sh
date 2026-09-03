@@ -16,7 +16,14 @@ set -euo pipefail
 ROOT="$(git rev-parse --show-toplevel)"
 GUARD="$ROOT/scripts/sync-image-cheatsheets-for-commit.sh"
 W="$(mktemp -d "${TMPDIR:-/tmp}/cheatsheet-sync.XXXXXX")"
-trap 'rm -rf "$W"' EXIT
+# A CLEANUP MUST NOT DECIDE A VERDICT. Measured on yolanda 2026-09-03: this
+# trap's `rm -rf` intermittently fails on Windows/MSYS with "Directory not
+# empty" on the temp repo's .git (an open handle, antivirus or git's own
+# background process), and because it is the LAST thing to run its status
+# becomes the script's exit code -- turning a printed PASS into a red gate
+# step. The suite had already printed all 7 oks. Swallow it: a leaked temp
+# dir under TMPDIR is a housekeeping cost, a false red is a blocked host.
+trap 'rm -rf "$W" 2>/dev/null || true' EXIT
 fail=0
 
 # A throwaway repo with the same SHAPE: an authored tree, a derived copy, and

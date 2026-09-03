@@ -5780,24 +5780,172 @@ fn projects_root() -> PathBuf {
 /// On git-less hosts (the VM rootfs deliberately ships no `git`) this
 /// degrades to the presence of `.git` — the strongest signal available there,
 /// and exactly the old behavior for that lane.
-#[cfg(any(feature = "tray", feature = "listen-vsock"))]
-pub(crate) fn is_valid_git_checkout(path: &Path) -> bool {
-    if !path.join(".git").exists() {
+/// HOW FAR THE EVIDENCE ABOUT A CHECKOUT ACTUALLY GOES (order 997-e4v2).
+///
+/// Three states, not two, and the third one is the whole point: the caller
+/// QUARANTINES on a negative verdict — it renames the user's directory aside —
+/// so "I could not evaluate this" must never arrive as "this is invalid".
+///
+/// MEASURED, which is why this is a type and not a bool. On esmeraldinha
+/// 2026-09-02 the in-VM `/home/forge/src` is a drvfs mount reporting uid 1000
+/// while the headless runs as root, so `git rev-parse` exits 128 with
+/// "detected dubious ownership in repository". The old predicate read any
+/// non-zero exit as invalid, and ten healthy checkouts were renamed aside
+/// between Aug 25 and Sep 2 — `git fsck` exits 0 on every one of them, all
+/// have complete worktrees, and their only "modifications" are symlink and
+/// exec-bit entries with zero content differences. Nine of nine quarantines
+/// correlate with a tray menu click. Every launch judged a healthy tree bad on
+/// arrival, and each one also destroyed that checkout's repo-local
+/// `.git/.gh-credentials`, which nothing in the tree reseeds.
+///
+/// This is 965-sxec's shape with the polarity that matters more: there a gate
+/// that could not RUN asserted what it would have FOUND, and cost a reader an
+/// hour. Here the same confusion MUTATES STATE.
+// Deliberately NOT feature-gated, unlike its callers: this decides whether a
+// user's directory gets renamed, so it must be compiled and TESTED on every
+// host, including the ones that build neither tray nor listen-vsock. The
+// allow(dead_code) is the same shape this file already uses for
+// physical_core_count on non-Linux.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum CheckoutVerdict {
+    /// A git worktree whose HEAD resolves to a commit.
+    Valid,
+    /// Evaluated, and it is genuinely not a usable checkout: no `.git`, or a
+    /// HEAD that does not verify (an unborn branch, an interrupted clone).
+    /// This is the ONLY verdict that may quarantine.
+    Invalid,
+    /// The question could not be answered here. Git refused to operate —
+    /// dubious ownership, a held lock, a corrupt index. Says NOTHING about the
+    /// tree, so the tree is left exactly where it is.
+    Indeterminate(String),
+}
+
+/// Ground-truth checkout classification (fresh-checkout invariant, 2026-07-20;
+/// third state added by 997-e4v2).
+///
+/// EXIT CODES RATHER THAN MESSAGE TEXT, deliberately: git's stderr is localised
+/// and rewordable, and a classifier keyed on English prose would silently start
+/// quarantining again under a translated git. With `--quiet`, `rev-parse
+/// --verify` returns 1 for a ref that does not verify — a real answer.
+///
+/// 128 IS NOT RESERVED FOR REFUSAL, and an earlier version of this comment said
+/// it was. Measured by esme-windows against git 2.55.0 and reproduced here:
+///
+///   rc=0    healthy                        rc=1    unborn HEAD
+///   rc=128  dubious ownership (a REFUSAL)  rc=128  `.git` present but empty
+///   rc=128  HEAD deleted                   rc=128  HEAD is garbage text
+///   rc=1    HEAD -> nonexistent ref        rc=0    COMMIT OBJECT CORRUPTED
+///
+/// All four 128s print the same "fatal: not a git repository" for three of them
+/// and a different fatal for the fourth, so the code alone cannot separate a
+/// refusal from real damage. Treating every 128 as a refusal would be safe —
+/// it never destroys — but it would retire the feature's whole purpose: the
+/// 2026-07-20 scenario is an operator who deleted the checkout and relaunched,
+/// and an empty `.git` is exactly a 128. Self-repair would never fire again.
+///
+/// So a 128 is split STRUCTURALLY, not by prose. `head_is_structurally_present`
+/// asks whether the repository still has a HEAD file at all — a fact about the
+/// tree, in our code, immune to translation. Missing HEAD is real damage and
+/// may quarantine; HEAD present with git still refusing means something about
+/// the ENVIRONMENT is wrong (on the fleet, the tree is owned by uid 1000
+/// because the containerized `gh` clone wrote it while the headless evaluates
+/// as root), and the tree is left alone.
+///
+/// WHAT THIS PREDICATE STILL CANNOT SEE, recorded because the quarantine is
+/// named for it: a CORRUPTED COMMIT OBJECT returns 0. `rev-parse --verify`
+/// resolves the ref and never reads the object, so genuine corruption reads as
+/// Valid — before this change and after it. Three-stating the error handling
+/// does not touch that, and anyone relying on this to detect a damaged
+/// repository should know it detects a damaged *ref*, not a damaged object.
+///
+/// On git-less hosts (the VM rootfs deliberately ships no `git`) this degrades
+/// to the presence of `.git` — the strongest signal available there, and
+/// exactly the old behavior for that lane.
+/// Does this repository still have a HEAD file at all?
+///
+/// The structural half of the 128 split (997-e4v2). A fact about the tree,
+/// determined by OUR code rather than by parsing git's localised stderr, so it
+/// answers the same way under any locale.
+///
+/// Handles both layouts: a `.git` DIRECTORY holds `HEAD` directly; a `.git`
+/// FILE is a gitfile whose `gitdir:` line points at the real directory (the
+/// worktree and submodule layout). A gitfile we cannot read or parse is itself
+/// damage — there is no repository to find — so it answers false.
+///
+/// Conservative by construction: when in doubt this returns TRUE, which routes
+/// to Indeterminate and leaves the tree alone. The cost of a wrong true is a
+/// refusal the operator must resolve; the cost of a wrong false is a renamed
+/// directory.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub(crate) fn head_is_structurally_present(path: &Path) -> bool {
+    let dot_git = path.join(".git");
+    let meta = match std::fs::metadata(&dot_git) {
+        Ok(m) => m,
+        // Nothing to inspect. The caller only reaches this with `.git`
+        // existing, so a metadata failure is a permissions or race condition:
+        // refuse rather than quarantine.
+        Err(_) => return true,
+    };
+    if meta.is_dir() {
+        return dot_git.join("HEAD").exists();
+    }
+    // Gitfile: `gitdir: <path>`, absolute or relative to the worktree.
+    let Ok(body) = std::fs::read_to_string(&dot_git) else {
+        return true;
+    };
+    let Some(rest) = body.lines().find_map(|l| l.trim().strip_prefix("gitdir:")) else {
+        // A `.git` file that is not a gitfile is not a repository.
         return false;
+    };
+    let target = PathBuf::from(rest.trim());
+    let resolved = if target.is_absolute() {
+        target
+    } else {
+        path.join(target)
+    };
+    resolved.join("HEAD").exists()
+}
+
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub(crate) fn classify_git_checkout(path: &Path) -> CheckoutVerdict {
+    if !path.join(".git").exists() {
+        // No `.git` at all is a real, evaluated answer about the tree.
+        return CheckoutVerdict::Invalid;
     }
     match std::process::Command::new("git")
         .arg("-C")
         .arg(path)
         .args(["rev-parse", "--quiet", "--verify", "HEAD"])
         .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
+        .output()
     {
-        Ok(status) => status.success(),
+        Ok(out) if out.status.success() => CheckoutVerdict::Valid,
+        Ok(out) if out.status.code() == Some(1) => CheckoutVerdict::Invalid,
+        Ok(out) => {
+            // Real damage, not a refusal: a repository with no HEAD file has
+            // nothing to lose and is exactly the deleted-checkout case the
+            // quarantine exists for (2026-07-20).
+            if !head_is_structurally_present(path) {
+                return CheckoutVerdict::Invalid;
+            }
+            let detail = String::from_utf8_lossy(&out.stderr)
+                .lines()
+                .find(|l| !l.trim().is_empty())
+                .unwrap_or("git refused to evaluate this repository")
+                .trim()
+                .to_string();
+            CheckoutVerdict::Indeterminate(format!(
+                "git rev-parse exited {}: {detail}",
+                out.status
+                    .code()
+                    .map(|c| c.to_string())
+                    .unwrap_or_else(|| "by signal".to_string())
+            ))
+        }
         // No git binary on this host: `.git` presence is the best available
         // ground truth (git-less VM lane).
-        Err(_) => true,
+        Err(_) => CheckoutVerdict::Valid,
     }
 }
 
@@ -5849,13 +5997,29 @@ fn resolve_cloud_project_checkout(nwo: &str, debug: bool) -> Result<String, Stri
     // `exists()` accepted empty/partial/broken checkouts and launched agents
     // onto them. Quarantine anything invalid (rename aside, never delete —
     // the dir may hold user data), then materialize fresh below.
-    if target.exists() && !is_valid_git_checkout(&target) {
-        let aside = quarantine_invalid_checkout(&target)?;
-        eprintln!(
-            "[tillandsias] cloud: {} was not a valid git checkout; moved aside to {} and re-cloning",
-            target.display(),
-            aside.display()
-        );
+    if target.exists() {
+        match classify_git_checkout(&target) {
+            CheckoutVerdict::Valid => {}
+            CheckoutVerdict::Invalid => {
+                let aside = quarantine_invalid_checkout(&target)?;
+                eprintln!(
+                    "[tillandsias] cloud: {} was not a valid git checkout; moved aside to {} and re-cloning",
+                    target.display(),
+                    aside.display()
+                );
+            }
+            // 997-e4v2: REFUSE, do not quarantine. Renaming a tree we could not
+            // evaluate is a mutation on the strength of an unanswered question,
+            // and it is how ten healthy checkouts were moved aside on one host.
+            CheckoutVerdict::Indeterminate(why) => {
+                return Err(format!(
+                    "cannot evaluate the checkout at {}: {why}. Leaving it untouched — this says \
+                     nothing about the tree, and the instrument is what needs repair. If this is \
+                     a uid mismatch on a mounted project root, that mount is the defect (997-e4v2).",
+                    target.display()
+                ));
+            }
+        }
     }
     if !target.exists() {
         eprintln!(
@@ -16396,6 +16560,161 @@ pub(crate) async fn service_stop(
 
 #[cfg(test)]
 mod tests {
+    /// ORDER 997-e4v2. THE VERDICT THAT RENAMES A DIRECTORY MUST BE EARNED.
+    ///
+    /// Four arms, and the fourth is the one this order exists for. The caller
+    /// quarantines — it renames the user's tree aside — so a question git
+    /// REFUSED to answer must never arrive as an answer about the tree. Ten
+    /// healthy checkouts were moved aside on esmeraldinha between Aug 25 and
+    /// Sep 2 because the old predicate collapsed exit 128 into "invalid";
+    /// `git fsck` exits 0 on every one of them.
+    ///
+    /// The `.git`-is-a-garbage-file arm doubles as the INDETERMINATE fixture,
+    /// because it is the one condition that reproduces a 128 without needing a
+    /// uid mismatch, which no portable test can arrange. That it also covers a
+    /// genuinely broken tree is deliberate and is a real behaviour change worth
+    /// stating: an interrupted clone whose `.git` git cannot parse is now
+    /// REFUSED rather than silently re-cloned. Refusing mutates nothing and
+    /// names the path; quarantining guesses and moves data. A structurally
+    /// valid repo with an unborn HEAD still quarantines (exit 1), which is the
+    /// case where there is provably nothing to lose.
+    #[test]
+    fn only_an_evaluated_verdict_may_quarantine_a_checkout() {
+        use super::{CheckoutVerdict, classify_git_checkout, head_is_structurally_present};
+
+        fn copy_tree(from: &std::path::Path, to: &std::path::Path) {
+            std::fs::create_dir_all(to).expect("dst");
+            for e in std::fs::read_dir(from).expect("read src").flatten() {
+                let (src, dst) = (e.path(), to.join(e.file_name()));
+                if src.is_dir() {
+                    copy_tree(&src, &dst);
+                } else {
+                    let _ = std::fs::copy(&src, &dst);
+                }
+            }
+        }
+        use std::process::Command;
+
+        let root = std::env::temp_dir().join(format!("tz-checkout-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("temp root");
+
+        let git_ok = Command::new("git").arg("--version").output().is_ok();
+        if !git_ok {
+            // The git-less lane is its own documented behaviour; without a git
+            // binary this test would assert the fallback, not the classifier.
+            return;
+        }
+
+        // ARM 1 — no `.git` at all: an EVALUATED answer about the tree.
+        let bare = root.join("no-git");
+        std::fs::create_dir_all(&bare).expect("bare dir");
+        assert_eq!(classify_git_checkout(&bare), CheckoutVerdict::Invalid);
+
+        // ARM 2 — a real repo with a commit: Valid.
+        let good = root.join("good");
+        std::fs::create_dir_all(&good).expect("good dir");
+        let git = |args: &[&str], cwd: &std::path::Path| {
+            Command::new("git")
+                .arg("-C")
+                .arg(cwd)
+                .args(args)
+                .output()
+                .expect("git runs")
+        };
+        git(&["init", "-q"], &good);
+        git(&["config", "user.email", "t@example.invalid"], &good);
+        git(&["config", "user.name", "t"], &good);
+        std::fs::write(good.join("f"), b"x").expect("file");
+        git(&["add", "f"], &good);
+        git(&["commit", "-qm", "c"], &good);
+        assert_eq!(
+            classify_git_checkout(&good),
+            CheckoutVerdict::Valid,
+            "a worktree whose HEAD resolves is valid"
+        );
+
+        // ARM 3 — a structurally valid repo with an UNBORN head: Invalid, and
+        // it is safe to quarantine because there are no commits to lose.
+        let unborn = root.join("unborn");
+        std::fs::create_dir_all(&unborn).expect("unborn dir");
+        git(&["init", "-q"], &unborn);
+        assert_eq!(
+            classify_git_checkout(&unborn),
+            CheckoutVerdict::Invalid,
+            "rev-parse --quiet returns 1 for a ref that does not verify — a real answer"
+        );
+
+        // ARM 4 - REAL DAMAGE THAT ALSO EXITS 128. Measured by esme-windows
+        // against git 2.55.0 and reproduced here: an empty `.git`, a deleted
+        // HEAD and a garbage HEAD all return 128 with the same fatal text as a
+        // refusal. These have no HEAD to lose and are the 2026-07-20
+        // deleted-checkout case, so they MUST stay quarantinable - treating
+        // every 128 as a refusal would be safe but would retire self-repair
+        // entirely, which is a decision, not a side effect.
+        let emptygit = root.join("emptygit");
+        std::fs::create_dir_all(emptygit.join(".git")).expect("empty .git");
+        assert_eq!(
+            classify_git_checkout(&emptygit),
+            CheckoutVerdict::Invalid,
+            "an empty .git has no HEAD to lose - self-repair must still fire"
+        );
+
+        let delhead = root.join("delhead");
+        copy_tree(&good, &delhead);
+        std::fs::remove_file(delhead.join(".git").join("HEAD")).expect("rm HEAD");
+        assert_eq!(
+            classify_git_checkout(&delhead),
+            CheckoutVerdict::Invalid,
+            "a deleted HEAD is damage, not a refusal"
+        );
+
+        // A `.git` file that names no repository is damage too - there is
+        // nothing to find, so nothing is lost by re-cloning.
+        let bogus = root.join("bogus-gitfile");
+        std::fs::create_dir_all(&bogus).expect("bogus dir");
+        std::fs::write(bogus.join(".git"), b"not a gitfile\n").expect("bogus .git");
+        assert_eq!(classify_git_checkout(&bogus), CheckoutVerdict::Invalid);
+
+        // ARM 5 - THE ONE THAT MATTERS. A structurally intact tree must never
+        // be called damage, because that verdict renames the user's directory.
+        // This is the signal separating esmeraldinha's ten healthy trees (HEAD
+        // present, git refusing on ownership) from every case above.
+        assert!(
+            head_is_structurally_present(&good),
+            "a healthy tree must read as structurally present"
+        );
+        assert!(
+            !head_is_structurally_present(&emptygit) && !head_is_structurally_present(&delhead),
+            "damage must read as structurally absent, or a refusal and a broken \
+             tree become indistinguishable again"
+        );
+
+        // And the VERDICT itself, not just the signal. A tree whose HEAD is
+        // intact but whose config git cannot parse exits 128 exactly like the
+        // damage above, and must still be REFUSED rather than renamed. It
+        // stands in for esmeraldinha's dubious-ownership 128, which no portable
+        // test can arrange because that needs two uids. Without this arm
+        // nothing asserts the classifier ever RETURNS Indeterminate, and a
+        // mutation collapsing it back into Invalid would pass.
+        let refused = root.join("refused");
+        copy_tree(&good, &refused);
+        std::fs::write(refused.join(".git").join("config"), b"this is not [valid\n")
+            .expect("bad config");
+        assert!(head_is_structurally_present(&refused));
+        match classify_git_checkout(&refused) {
+            CheckoutVerdict::Indeterminate(why) => assert!(
+                !why.is_empty(),
+                "an indeterminate verdict must name what refused, or the operator cannot repair the instrument"
+            ),
+            other => panic!(
+                "a structurally intact repository git REFUSED to evaluate must never be reported as {other:?} - that verdict renames the user's directory (997-e4v2)"
+            ),
+        }
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
     /// ORDER 986-ahnc. THE REAL FORGE ARGV MUST PASS THE CHECK THAT NOW GUARDS
     /// IT, so a false positive fails the GATE rather than a launch.
     ///
