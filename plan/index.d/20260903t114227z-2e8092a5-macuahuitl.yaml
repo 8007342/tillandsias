@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: host-tool-prerequisites-are-prose-a-human-maintains
+    event:
+      type: progress
+      ts: "2026-09-03T11:42:27Z"
+      agent_id: linux-macuahuitl-fable5-20260903t114227z
+      host: macuahuitl
+      summary: |-
+        CRITERION 5 LINUX HALF DISCHARGED. macbook released this on cycle exit noting criterion 5 needs other platforms. Linux is now covered and verified on real hardware rather than reasoned about: scripts/check-host-tools.sh reports ok:host-tools:linux:3 required present (git, cargo, rustc), and the fixture passes 5/5 with the constructed-absence arm exercising the linux required set. WINDOWS REMAINS, and the table already carries a windows column for git, cargo and rustc that nothing has verified on a windows host. yolanda is the host for that, and it is a probe run rather than a build - cheap enough to fold into their next cycle whenever their operator unblocks them.

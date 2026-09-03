@@ -59,18 +59,36 @@ fi
 
 # 2. CONSTRUCTED ABSENCE — the criterion. Hide a required tool and require the
 #    check to NAME it. Uses the farm, so only that one tool differs.
-farm "$tmp/farm" timeout gtimeout
+#
+#    PLATFORM-AWARE (order 989-ykks follow-up, macuahuitl 2026-09-03). This arm
+#    used to hide `timeout`/`gtimeout` and grep for a literal
+#    `missing:host-tools:macos:`. Both halves are macOS-only: `timeout` is
+#    REQUIRED on macos and not on linux, so hiding it on linux correctly changes
+#    nothing, and the verdict names the live platform rather than `macos`. On
+#    linux the arm therefore read rc=0 / "3 required present" and failed, taking
+#    ./build.sh --check red for every linux host.
+#
+#    That is this packet's OWN thesis turned on its fixture: the authoring host's
+#    build is a smaller universe than the fleet's. Hide something the CURRENT
+#    platform actually requires, and assert the CURRENT platform's verdict.
+case "$(uname -s)" in
+    Darwin) _absent_tool=timeout; _absent_extra=gtimeout ;;
+    *)      _absent_tool=cargo;   _absent_extra=cargo ;;
+esac
+_plat="$(uname -s | tr 'A-Z' 'a-z' | sed 's/darwin/macos/')"
+case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) _plat=windows ;; esac
+farm "$tmp/farm" "$_absent_tool" "$_absent_extra"
 out="$(PATH="$tmp/farm" "$CHECK" 2>/dev/null)"; rc=$?
-if [ "$rc" -eq 1 ] && printf '%s' "$out" | grep -q '^missing:host-tools:macos:.*timeout'; then
-    check ok "a genuinely absent required tool is named, exit 1"
+if [ "$rc" -eq 1 ] && printf '%s' "$out" | grep -q "^missing:host-tools:${_plat}:.*${_absent_tool}"; then
+    check ok "a genuinely absent required tool is named, exit 1 ($_plat/$_absent_tool)"
 else
-    check FAIL "a genuinely absent required tool is named" "rc=$rc out=[$out]"
+    check FAIL "a genuinely absent required tool is named ($_plat/$_absent_tool)" "rc=$rc out=[$out]"
 fi
 
 # 3. NEGATIVE CONTROL FOR THE ISOLATION ITSELF. If the farm did not actually
 #    hide the tool, arm 2 would pass for the wrong reason — and that is not
 #    hypothetical, it is what the shim approach did. Assert the absence is real.
-if PATH="$tmp/farm" command -v timeout >/dev/null 2>&1; then
+if PATH="$tmp/farm" command -v "$_absent_tool" >/dev/null 2>&1; then
     check FAIL "the farm actually hides the tool (arm 2 would be vacuous)"
 else
     check ok "the farm actually hides the tool, so arm 2 means what it says"
