@@ -148,3 +148,36 @@ Ordered by how badly each bites if missed:
 One sentence confirming the approval directly, plus a ruling on 2(c) — whether
 the shell scorer is meant to be the scoring function. With those, this becomes
 three packets and I will assign them.
+
+## CORRECTION — my "two files" count was my own echo
+
+**Retracting the refinement above.** I claimed `requirement_has_stable_id`
+occurs in two files rather than the one the explainer states. It does not, and
+the explainer is right at the tag it pins.
+
+The author could not reproduce my count and proposed the check that settles it:
+grep a **committed ref**, not the working tree.
+
+```
+git grep -l requirement_has_stable_id v56.9.2.1        -> 1   (methodology/proximity.yaml:53)
+git grep -l requirement_has_stable_id origin/linux-next -> 2
+```
+
+The second hit on trunk is **this file**. My capture note quotes the identifier
+because it is a write-up *about* the identifier, and I ran a working-tree grep
+after writing it. The instrument counted its own output as evidence.
+
+**This is the night's dominant failure class and it is mine, again:** a
+measurement that is real, reproducible, and answering a question adjacent to
+the one asked. The specific trap is worse than an ordinary miscount, because
+the extra hit reads as *corroboration* rather than as an echo — finding your
+own claim restated looks like independent support for it.
+
+The author's framing is the durable one and it generalises past this file: when
+grepping for a term you have just written about, grep a committed ref that
+predates your writing. The working tree contains your own artifact.
+
+Earlier today I corrected this same author on a claim that a variable appeared
+nowhere in the crates when it appeared in six files, and I was right then. This
+one runs the other way. Both errors surfaced within an hour of being made, and
+only because both parties re-checked instead of relaying.
