@@ -74,18 +74,25 @@ download cache.
      after `scripts/promote-stable.sh` promotes a release, to prove the
      promoted artifact installs; then routine runs go back to `daily`.
    ```bash
-   CHANNEL="${SMOKE_CHANNEL:-daily}"
-   read -r RES < <(scripts/resolve-smoke-release.sh "$CHANNEL")
-   echo "$RES"   # channel:<c> tag:<vX> base:<url>
-   SMOKE_TAG="$(printf '%s' "$RES" | sed -E 's/.* tag:([^ ]+) .*/\1/')"
-   # `[^ ]+`, NOT `\S`. `\S` is a GNU sed extension: BSD sed does not match it,
-   # so on macOS this substitution silently fails and SMOKE_BASE becomes the
-   # WHOLE line — `channel:daily tag:… base:https://…` — and every curl below
-   # is built from a malformed URL. The TAG line directly above already uses the
-   # portable form; the two were written at different times and only one lane
-   # ever ran them. Caught by dry-running step 0 on macOS before the first real
-   # macOS smoke, 2026-08-26.
-   SMOKE_BASE="$(printf '%s' "$RES" | sed -E 's/.* base:([^ ]+)$/\1/')"
+   awk -v tag="${SMOKE_TAG}" '
+       # 1. An exact row for this tag.
+       $0 ~ "^\\| " tag "( |\\()" { print; found=1; next }
+       # 2. A DISTILLED SPAN covering it (order 380). Old series are collapsed
+       #    into one `first … last` row, so a tag inside that range HAS been
+       #    described — just not individually. Without this arm a distilled tag
+       #    is indistinguishable from an undescribed one, and the finding below
+       #    fires falsely on every release old enough to have been compressed.
+       /^\| v[0-9].* … v[0-9].*DISTILLED/ {
+           split($0, c, "|"); split(c[2], span, "…")
+           lo = span[1]; hi = span[2]
+           gsub(/[^0-9A-Za-z.]/, "", lo); gsub(/ .*/, "", hi); gsub(/[^0-9A-Za-z.]/, "", hi)
+           if (tag >= lo && tag <= hi) { print; found=1; distilled=1 }
+       }
+       END {
+           if (!found) print "NO LEDGER ROW for " tag
+           else if (distilled) print "(row is a DISTILLED span, not a per-release row — claims are series-level)"
+       }
+   ' README.md | tee target/smoke-e2e/00-ledger-row.txt
    ```
    Note the tag — every filed finding cites it so issues are attributable to a
    specific published artifact AND channel.
@@ -95,8 +102,23 @@ download cache.
 
    ```bash
    awk -v tag="${SMOKE_TAG}" '
-       $0 ~ "^\\| " tag "( |\\()" { print; found=1 }
-       END { if (!found) print "NO LEDGER ROW for " tag }
+       # 1. An exact row for this tag.
+       $0 ~ "^\\| " tag "( |\\()" { print; found=1; next }
+       # 2. A DISTILLED SPAN covering it (order 380). Old series are collapsed
+       #    into one `first … last` row, so a tag inside that range HAS been
+       #    described — just not individually. Without this arm a distilled tag
+       #    is indistinguishable from an undescribed one, and the finding below
+       #    fires falsely on every release old enough to have been compressed.
+       /^\| v[0-9].*DISTILLED/ {
+           row = $0
+           sub(/^\| /, "", row); split(row, parts, " … ")
+           lo = parts[1]; hi = parts[2]; sub(/ .*$/, "", hi)
+           if (tag >= lo && tag <= hi) { print; found=1; distilled=1 }
+       }
+       END {
+           if (!found) print "NO LEDGER ROW for " tag
+           else if (distilled) print "(DISTILLED span — claims are series-level, not per-release)"
+       }
    ' README.md | tee target/smoke-e2e/00-ledger-row.txt
    ```
 

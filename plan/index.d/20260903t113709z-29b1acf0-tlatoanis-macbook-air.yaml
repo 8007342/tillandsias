@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: readme-release-ledger-wiring
+    field: next_action
+    value: |-
+      CRITERION 3 IS DONE (v0.3.x collapsed to one span row; policy written beside the table in README.md). CRITERION 2 was done 2026-08-26.
+
+      CRITERION 1 IS THE ONLY ONE LEFT AND IT NEEDS A DECISION, NOT WORK. Rows exist for both releases since the hook landed, so it is literally met — but the same check found the append is NOT IDEMPOTENT: v0.4.260826.1 and v0.4.260817.1 each appear TWICE, and the pairs are not copies (the second of each is a later, richer rewrite that adds real content). The append ran again over a release that already had a row instead of editing it.
+
+      TWO THINGS FOR WHOEVER TAKES THIS. (a) Decide which description of each duplicated release survives — that means deleting prose someone wrote on a human-facing README, which is why an unattended host did not do it. The README policy names both pairs as unresolved and tracked here, so the table does not silently contradict its own one-row rule. (b) Fix the append in skills/merge-to-main-and-release so a re-cut or re-promotion EDITS the existing row; until then criterion 1 will keep being satisfiable while producing duplicates.
+
+      DO NOT re-distil: the extractor in the smoke skill now understands a DISTILLED span, and it did not before — a distilled tag returned the same NO LEDGER ROW string that the skill defines as a finding, so any further distillation without that arm fires false findings on old releases.
+    ts: "2026-09-03T11:37:09Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: readme-release-ledger-wiring
+    event:
+      type: note
+      ts: "2026-09-03T11:37:09Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        criterion 3 delivered; criterion 1 needs an owner decision on duplicates
