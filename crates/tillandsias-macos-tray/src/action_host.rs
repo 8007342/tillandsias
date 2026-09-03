@@ -1552,9 +1552,18 @@ async fn run_start(
         vz.fetch_fedora_cloud_image(&manifest, on_phase)
             .await
             .map_err(|e| {
+                // NO LONGER TELLS THE OPERATOR TO INSTALL QEMU (980-xcaf).
+                // That advice could never have worked from a GUI launch: the
+                // tray's PATH is /usr/bin:/bin:/usr/sbin:/sbin, so a
+                // Homebrew-installed qemu-img was never reachable, and the
+                // operator who followed it hit the identical failure and
+                // reasonably concluded the install had not taken. Conversion
+                // is in-process now, so any failure here is ours.
                 format!(
                     "Fedora Cloud image fetch failed: {e}\n\n\
-                     Install qemu (`brew install qemu`) if conversion failed, \
+                     This is a download or disk-space problem, not a missing \
+                     tool — image conversion no longer needs anything \
+                     installed on the host. Check connectivity and free space, \
                      then retry Start VM."
                 )
             })?;

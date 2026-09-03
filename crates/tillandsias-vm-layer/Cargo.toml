@@ -15,6 +15,15 @@ name = "materialize-cli"
 path = "src/bin/materialize-cli.rs"
 required-features = ["materialize"]
 
+# Drives the pure-Rust qcow2 reader from the command line so its output can be
+# diffed byte-for-byte against `qemu-img convert` (order 980-xcaf). Declared
+# rather than auto-discovered because it touches the `download`-gated module,
+# and an auto-discovered example is built by a featureless `cargo test`.
+[[example]]
+name = "qcow2-expand"
+path = "examples/qcow2-expand.rs"
+required-features = ["download"]
+
 [dependencies]
 tokio = { workspace = true, features = ["process", "io-util", "rt", "time"] }
 tokio-util = { workspace = true }

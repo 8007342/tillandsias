@@ -1033,50 +1033,39 @@ fn convert_qcow2_to_raw(
 ) -> Result<(), String> {
     on_phase("Converting Fedora Cloud image");
     let raw_part = raw_dest.with_extension("img.partial");
-    let status = std::process::Command::new("qemu-img")
-        .arg("convert")
-        .arg("-f")
-        .arg("qcow2")
-        .arg("-O")
-        .arg("raw")
-        .arg(qcow2_path)
-        .arg(&raw_part)
-        .status()
-        .map_err(|e| {
-            format!(
-                "spawn qemu-img: {e} (install qemu, e.g. `brew install qemu`, to convert Fedora Cloud qcow2)"
-            )
-        })?;
-    if !status.success() {
+
+    // PURE RUST, NO `qemu-img` (order 980-xcaf). This used to spawn
+    // `qemu-img convert` and then `qemu-img resize`, both as bare PATH
+    // lookups. A macOS .app started by LaunchServices gets
+    // PATH=/usr/bin:/bin:/usr/sbin:/sbin — measured with `ps eww` on a live
+    // tray, not assumed — so neither could ever resolve from a GUI launch, on
+    // any Mac, no matter what the operator had installed. First launch died
+    // with "missing qemu" and STAYED dead after `brew install qemu`, because
+    // Homebrew's prefix was never on the tray's PATH to begin with.
+    //
+    // The expander also GROWS the disk, which is what the resize did, and for
+    // the reason recorded at GUEST_DISK_SIZE_BYTES: the ~5 GB Fedora Cloud
+    // default is the hard wall every agent attach hit on 2026-07-11. The raw
+    // image stays sparse, so a 250 GiB virtual disk costs nothing until
+    // written — measured here at 11 GiB actual on a fresh provision.
+    let expanded = crate::qcow2::expand_to_raw(
+        qcow2_path,
+        &raw_part,
+        GUEST_DISK_SIZE_BYTES,
+        &|done, total| {
+            if total > 0 {
+                on_phase(&format!(
+                    "Converting Fedora Cloud image ({}%)",
+                    done * 100 / total
+                ));
+            }
+        },
+    );
+    if let Err(e) = expanded {
         let _ = std::fs::remove_file(&raw_part);
-        return Err(format!("qemu-img convert failed: exit {status}"));
+        return Err(format!("expand qcow2 -> raw: {e}"));
     }
-    // Grow the raw disk before first boot. The Fedora Cloud qcow2 is a ~5 GB
-    // virtual disk — nowhere near enough once the forge-base image builds its
-    // full dev toolchain (558 packages: gcc, valgrind, delve, gopls, rust,
-    // node, python…) on top of the base OS, podman's overlay store for every
-    // enclave image, and a cloned project. Symptom before this fix
-    // (2026-07-11 operator session): EVERY agent/maintenance attach opened a
-    // PTY, streamed the forge-base package downloads, then died with
-    // 'installing package … needs NNN MB more space on the / filesystem' →
-    // 'Error: building at STEP "RUN microdnf install …"' → PtyClose code=1,
-    // i.e. a blank terminal that "times out". Fedora Cloud's cloud-init
-    // (cc_growpart + cc_resizefs) grows the root partition/filesystem to fill
-    // the disk on first boot, so simply enlarging the raw file here is enough.
-    // The raw image stays sparse, so a 64 GiB virtual disk does not consume
-    // 64 GiB on the host until actually written.
-    let resize = std::process::Command::new("qemu-img")
-        .arg("resize")
-        .arg("-f")
-        .arg("raw")
-        .arg(&raw_part)
-        .arg(GUEST_DISK_SIZE)
-        .status()
-        .map_err(|e| format!("spawn qemu-img resize: {e}"))?;
-    if !resize.success() {
-        let _ = std::fs::remove_file(&raw_part);
-        return Err(format!("qemu-img resize failed: exit {resize}"));
-    }
+
     std::fs::rename(&raw_part, raw_dest).map_err(|e| {
         let _ = std::fs::remove_file(&raw_part);
         format!(
@@ -1091,11 +1080,15 @@ fn convert_qcow2_to_raw(
 
 /// Virtual size the Fedora Cloud raw disk is grown to before first boot so
 /// the forge-base toolchain + podman overlay store + project checkouts fit.
-/// A string like "250G" for `qemu-img resize`. The raw image stays SPARSE,
-/// so this costs no host disk until actually written — the original ~5 GB
-/// disk was the hard wall every agent attach hit (2026-07-11). Generous by
-/// operator direction; trim later if needed. See `convert_qcow2_to_raw`.
-const GUEST_DISK_SIZE: &str = "250G";
+/// The raw image stays SPARSE, so this costs no host disk until actually
+/// written — the original ~5 GB disk was the hard wall every agent attach hit
+/// (2026-07-11). Generous by operator direction; trim later if needed.
+///
+/// BYTES, not a `"250G"` string, since 980-xcaf replaced `qemu-img resize`
+/// with `File::set_len` and there is no longer a command line to format for.
+/// See `convert_qcow2_to_raw`.
+const GUEST_DISK_SIZE_GIB: u64 = 250;
+const GUEST_DISK_SIZE_BYTES: u64 = GUEST_DISK_SIZE_GIB * 1024 * 1024 * 1024;
 
 /// Fetch the xz-compressed asset at `xz_url` to `xz_temp_dest`,
 /// decompress to `final_dest` via `xz -d`, then SHA-256-verify the
@@ -1203,22 +1196,52 @@ async fn fetch_then_decompress_xz_then_verify(
             .map_err(|e| format!("flush {}: {e}", xz_temp_dest.display()))?;
     }
 
-    // Step 2: decompress via `xz -d -c <temp>` → final_dest.
+    // Step 2: decompress in-process → final_dest.
+    //
+    // HYGIENE, NOT THE 980-xcaf FIX (this path is not reached by the live
+    // macOS provisioning route, which fetches a plain qcow2). Recorded as its
+    // own thing so the two are not confused. It was a bare-name subprocess
+    // spawn of the xz binary, which DOES NOT EXIST on macOS 26.6 —
+    // /usr/bin/xz is absent, and the only xz on the host that found this came
+    // from Homebrew as a transitive dependency of qemu, which is how the defect
+    // stayed masked. `xz2` was already a dependency of this crate and already
+    // used in pure Rust two files away (fetch.rs, materialize/oci.rs), so this
+    // was never a dependency — only an inconsistency.
     on_phase("Decompressing rootfs");
-    let final_out = std::fs::File::create(final_dest)
-        .map_err(|e| format!("create {}: {e}", final_dest.display()))?;
-    let xz_status = std::process::Command::new("xz")
-        .arg("-d")
-        .arg("-c")
-        .arg(xz_temp_dest)
-        .stdout(std::process::Stdio::from(final_out))
-        .stderr(std::process::Stdio::piped())
-        .status()
-        .map_err(|e| format!("spawn xz: {e} (is `xz` on $PATH?)"))?;
-    if !xz_status.success() {
-        let _ = std::fs::remove_file(final_dest);
-        let _ = std::fs::remove_file(xz_temp_dest);
-        return Err(format!("xz -d failed: exit {xz_status}"));
+    {
+        use std::io::{Read, Write};
+        let src = std::fs::File::open(xz_temp_dest)
+            .map_err(|e| format!("open {}: {e}", xz_temp_dest.display()))?;
+        let mut dec = xz2::read::XzDecoder::new(std::io::BufReader::with_capacity(1 << 20, src));
+        let final_out = std::fs::File::create(final_dest)
+            .map_err(|e| format!("create {}: {e}", final_dest.display()))?;
+        let mut out = std::io::BufWriter::with_capacity(1 << 20, final_out);
+        let mut buf = vec![0u8; 1 << 20];
+        loop {
+            let n = match dec.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => n,
+                Err(e) => {
+                    let _ = std::fs::remove_file(final_dest);
+                    let _ = std::fs::remove_file(xz_temp_dest);
+                    return Err(format!("xz decompress: {e}"));
+                }
+            };
+            if let Err(e) = out.write_all(&buf[..n]) {
+                let _ = std::fs::remove_file(final_dest);
+                let _ = std::fs::remove_file(xz_temp_dest);
+                return Err(format!("write {}: {e}", final_dest.display()));
+            }
+        }
+        // BufWriter::drop discards write errors, so a full disk on the last
+        // partial buffer would otherwise be reported as a SUCCESSFUL
+        // decompression and surface later as a SHA mismatch blaming the
+        // download — the same trap the fetch step above already names.
+        if let Err(e) = out.flush() {
+            let _ = std::fs::remove_file(final_dest);
+            let _ = std::fs::remove_file(xz_temp_dest);
+            return Err(format!("flush {}: {e}", final_dest.display()));
+        }
     }
     let _ = std::fs::remove_file(xz_temp_dest);
 
@@ -2567,39 +2590,98 @@ mod tests {
         );
     }
 
+    /// 980-xcaf, THE GENERAL RULE. The qemu-img failure was one instance of a
+    /// class, so pin the class rather than the instance.
+    ///
+    /// A macOS `.app` launched by LaunchServices does not inherit the user's
+    /// shell PATH. Measured with `ps eww` on the live tray of a factory-fresh
+    /// Mac (macOS 26.6), it receives exactly:
+    ///
+    /// ```text
+    /// PATH=/usr/bin:/bin:/usr/sbin:/sbin
+    /// ```
+    ///
+    /// So a bare-name spawn of anything Homebrew provides can NEVER resolve on
+    /// a GUI launch, on any Mac, no matter what the operator installs. That is
+    /// why `brew install qemu` did not fix the reported failure and why the
+    /// shell-invoked `--provision` worked: two different PATHs, one binary.
+    ///
+    /// `/usr/bin/xz` does not exist on macOS either, which the same class of
+    /// bug hid until this host found it. Needs NO GUI to check: the assertion
+    /// is purely about what the provisioning path may name.
+    #[test]
+    fn provisioning_never_spawns_a_binary_absent_from_the_minimal_path() {
+        let source = include_str!("vz.rs");
+        // Ships with macOS and resolves under the minimal PATH. Verified on
+        // this host rather than assumed; anything added here must be too.
+        const RESOLVES_BARE: &[&str] = &["hdiutil"];
+        const MINIMAL_PATH_DIRS: &[&str] = &["/usr/bin/", "/bin/", "/usr/sbin/", "/sbin/"];
+
+        // Concatenated so this scan cannot match its own source.
+        let needle = format!("Command::{}(\"", "new");
+        let mut offenders = Vec::new();
+        for part in source.split(&needle).skip(1) {
+            let Some(binary) = part.split('"').next() else {
+                continue;
+            };
+            let ok = RESOLVES_BARE.contains(&binary)
+                || MINIMAL_PATH_DIRS.iter().any(|d| binary.starts_with(d));
+            if !ok {
+                offenders.push(binary.to_string());
+            }
+        }
+        assert!(
+            offenders.is_empty(),
+            "these spawns name binaries that a LaunchServices-started .app cannot resolve \
+             (PATH=/usr/bin:/bin:/usr/sbin:/sbin): {offenders:?}. Use an absolute system path, \
+             or do the work in-process. A Homebrew prefix is never on that PATH, so \
+             \"tell the operator to install it\" is not a fix."
+        );
+    }
+
     /// 2026-07-11: the raw disk MUST be grown past the ~5 GB Fedora Cloud
     /// default before first boot, or the forge-base image build runs the
     /// root filesystem out of space and every agent attach dies with a
-    /// blank timing-out terminal. Pin the resize (source scan — the resize
-    /// runs in the download-gated convert path) so it can't silently
-    /// regress, and require a roomy target.
+    /// blank timing-out terminal.
+    ///
+    /// RE-ANCHORED BY 980-xcaf, and the re-anchoring is the point rather than a
+    /// workaround. This guard used to assert the growth by pinning the spawn of
+    /// the qemu-img binary and its resize argument, so removing the subprocess
+    /// necessarily turns it red. What it was defending is the INVARIANT — the
+    /// disk is grown to a roomy size before first boot — not the mechanism, so
+    /// it now pins the invariant against whatever performs the growth.
+    ///
+    /// The no-subprocess needle is built by CONCATENATION so this scan cannot
+    /// match its own source, the same guard the placeholder scan above uses. A
+    /// self-matching needle here would have made the assertion permanently and
+    /// invisibly true.
     #[test]
     fn convert_grows_raw_disk_before_first_boot() {
         let source = include_str!("vz.rs");
         assert!(
-            source.contains("const GUEST_DISK_SIZE: &str"),
+            source.contains("const GUEST_DISK_SIZE_BYTES: u64"),
             "the guest disk-size constant must exist"
         );
         assert!(
-            source.contains("\"qemu-img\"")
-                && source.contains(".arg(\"resize\")")
-                && source.contains(".arg(GUEST_DISK_SIZE)"),
-            "convert_qcow2_to_raw must qemu-img resize the raw disk to GUEST_DISK_SIZE \
-             before first boot (else forge-base build fills the ~5 GB default)"
+            source.contains("GUEST_DISK_SIZE_BYTES,"),
+            "convert_qcow2_to_raw must grow the raw disk to GUEST_DISK_SIZE_BYTES before \
+             first boot (else the forge-base build fills the ~5 GB default)"
         );
-        // The size string must parse as a generous GiB value (>= 32 GiB).
-        let size = source
-            .split("const GUEST_DISK_SIZE: &str =")
+        let spawned_qemu = format!("\"qemu-{}\"", "img");
+        assert!(
+            !source.contains(&spawned_qemu),
+            "provisioning must not shell out to qemu-img: it cannot resolve under the \
+             minimal PATH a LaunchServices-started .app receives (980-xcaf)"
+        );
+        let gib: u64 = source
+            .split("const GUEST_DISK_SIZE_GIB: u64 =")
             .nth(1)
-            .and_then(|t| t.split('"').nth(1))
-            .expect("GUEST_DISK_SIZE literal");
-        let gib: u64 = size
-            .trim_end_matches(['G', 'g'])
-            .parse()
-            .expect("GUEST_DISK_SIZE must be an <N>G literal");
+            .and_then(|t| t.split(';').next())
+            .and_then(|t| t.trim().parse().ok())
+            .expect("GUEST_DISK_SIZE_GIB must be a plain integer literal");
         assert!(
             gib >= 32,
-            "guest disk must be >= 32 GiB for the forge toolchain + overlay store, got {size}"
+            "guest disk must be >= 32 GiB for the forge toolchain + overlay store, got {gib}"
         );
     }
 
