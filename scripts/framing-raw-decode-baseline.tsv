@@ -21,7 +21,8 @@
 1	crates/tillandsias-headless/tests/vsock_listener_e2e.rs	keep
 1	crates/tillandsias-host-shell/src/provisioning.rs	keep
 2	crates/tillandsias-host-shell/src/vsock_client.rs	keep
-5	crates/tillandsias-macos-tray/src/pty_vsock_bridge.rs	pending
+4	crates/tillandsias-macos-tray/src/pty_vsock_bridge.rs	keep
+1	crates/tillandsias-vm-layer/src/qcow2.rs	keep
 2	crates/tillandsias-windows-tray/src/hvsocket.rs	pending
 #
 # KEEP REASONS, recorded here as well as at each site (795-5itp events

@@ -42,9 +42,11 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use futures_util::{SinkExt, StreamExt};
+use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::task::JoinHandle;
 
+use tillandsias_control_wire::transport::control_frame_codec;
 use tillandsias_control_wire::{
     ControlEnvelope, ControlMessage, MAX_MESSAGE_BYTES, WIRE_VERSION, decode, encode,
 };
@@ -113,9 +115,15 @@ where
 {
     let (transport, rx) = ChannelPtyTransport::new(capacity);
     let (read_half, write_half) = tokio::io::split(stream);
+    // Framed once at the split, same as `connect_pty_bridge` (order 795-5itp).
+    // This entry point does no handshake, so there is no earlier read whose
+    // buffer could be stranded — but the tasks take framed halves either way,
+    // which is what keeps a second codec policy from appearing on this path.
+    let framed_read = tokio_util::codec::FramedRead::new(read_half, control_frame_codec());
+    let framed_write = tokio_util::codec::FramedWrite::new(write_half, control_frame_codec());
 
-    let writer = tokio::spawn(writer_task(write_half, rx, starting_seq));
-    let reader = tokio::spawn(reader_task(read_half, router));
+    let writer = tokio::spawn(writer_task(framed_write, rx, starting_seq));
+    let reader = tokio::spawn(reader_task(framed_read, router));
 
     (transport, BridgeJoin { writer, reader })
 }
@@ -142,7 +150,29 @@ pub async fn connect_pty_bridge<S>(
 where
     S: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
-    let (mut read_half, mut write_half) = tokio::io::split(stream);
+    // ORDER 795-5itp. FRAME ONCE, HERE, AND THREAD THE FRAMED HALVES INTO THE
+    // TASKS — never a `Framed` per call.
+    //
+    // THIS SEAM IS THE MEASURED HAZARD, not a theoretical one. The HelloAck
+    // read below and `reader_task`'s loop are two reads on ONE stream. A
+    // `FramedRead` built here for the handshake and then dropped, handing the
+    // raw half onward, would take any bytes it had already buffered past the
+    // HelloAck with it — the guest pipelines PtyData immediately after the
+    // HelloAck, so those are session bytes, and their loss is silent. The
+    // packet records this as measured on the exec control path: "a per-call
+    // Framed/FramedRead may read ahead and drop pipelined bytes when it is
+    // dropped. That is a silent data-loss bug, not a compile error."
+    //
+    // So the codec is constructed once per half and the SAME `Framed` that
+    // read the HelloAck is what `reader_task` keeps reading from. Its buffer is
+    // never dropped, so there is nothing to lose.
+    //
+    // `control_frame_codec()` is the shared constructor (also 795-5itp), which
+    // is where `max_frame_length` = MAX_MESSAGE_BYTES lives — one bound for the
+    // whole tree rather than a copy per site.
+    let (read_half, write_half) = tokio::io::split(stream);
+    let mut framed_read = tokio_util::codec::FramedRead::new(read_half, control_frame_codec());
+    let mut framed_write = tokio_util::codec::FramedWrite::new(write_half, control_frame_codec());
 
     // Send Hello (seq=1).
     let hello = ControlEnvelope {
@@ -170,24 +200,24 @@ where
             ),
         ));
     }
-    write_half
-        .write_all(&(bytes.len() as u32).to_be_bytes())
-        .await?;
-    write_half.write_all(&bytes).await?;
-    write_half.flush().await?;
+    // The codec writes the length prefix; `send` also flushes.
+    framed_write.send(bytes.into()).await?;
 
-    // Read HelloAck.
-    let mut len_buf = [0u8; 4];
-    read_half.read_exact(&mut len_buf).await?;
-    let len = u32::from_be_bytes(len_buf) as usize;
-    if len > MAX_MESSAGE_BYTES {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            format!("HelloAck frame too large ({len} > {MAX_MESSAGE_BYTES})"),
-        ));
-    }
-    let mut body = vec![0u8; len];
-    read_half.read_exact(&mut body).await?;
+    // Read HelloAck from the SAME framed half that reader_task will keep.
+    // The oversize check the hand-rolled version performed here is now the
+    // codec's `max_frame_length`, which surfaces as an InvalidData io::Error —
+    // one bound, enforced before the body is ever allocated, rather than after
+    // a length is read and trusted enough to size a Vec.
+    let body = match framed_read.next().await {
+        Some(Ok(frame)) => frame,
+        Some(Err(e)) => return Err(e),
+        None => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "stream closed before HelloAck",
+            ));
+        }
+    };
     let envelope =
         decode(&body).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
     let wire_version = match envelope.body {
@@ -225,14 +255,18 @@ where
     // back into a single `S` (tokio::io::split is one-way), so we
     // spawn writer/reader directly with the halves we already have.
     let (transport, rx) = ChannelPtyTransport::new(capacity);
-    let writer = tokio::spawn(writer_task(write_half, rx, 2));
-    let reader = tokio::spawn(reader_task(read_half, router));
+    // The framed halves are MOVED, buffers intact — see the note at the split.
+    let writer = tokio::spawn(writer_task(framed_write, rx, 2));
+    let reader = tokio::spawn(reader_task(framed_read, router));
 
     Ok((transport, BridgeJoin { writer, reader }, wire_version))
 }
 
+/// Takes the ALREADY-FRAMED write half (order 795-5itp), rather than a raw
+/// `AsyncWrite` it frames itself. Constructing the codec here would put a
+/// second `max_frame_length` policy on the same stream as the handshake's.
 async fn writer_task<W>(
-    mut writer: W,
+    mut writer: tokio_util::codec::FramedWrite<W, tokio_util::codec::LengthDelimitedCodec>,
     mut rx: tokio::sync::mpsc::Receiver<ControlMessage>,
     starting_seq: u64,
 ) where
@@ -260,43 +294,39 @@ async fn writer_task<W>(
             );
             continue;
         }
-        if writer
-            .write_all(&(bytes.len() as u32).to_be_bytes())
-            .await
-            .is_err()
-        {
-            break;
-        }
-        if writer.write_all(&bytes).await.is_err() {
-            break;
-        }
-        if writer.flush().await.is_err() {
+        // `send` writes the length prefix and flushes. The explicit
+        // oversize check above is KEPT rather than left to the codec: it
+        // `continue`s past one too-large message, whereas the codec's error
+        // would arrive as a stream error and break the session. A single
+        // outsized PtyData should not end the terminal.
+        if writer.send(bytes.into()).await.is_err() {
             break;
         }
     }
 }
 
-async fn reader_task<R>(mut reader: R, router: Arc<PtyRouter>)
-where
+/// Takes the ALREADY-FRAMED read half (order 795-5itp) — the same one that read
+/// the HelloAck, buffer intact. Framing here instead would drop whatever the
+/// handshake's reader had buffered past the HelloAck; see the note at the split
+/// in `connect_pty_bridge`.
+async fn reader_task<R>(
+    mut reader: tokio_util::codec::FramedRead<R, tokio_util::codec::LengthDelimitedCodec>,
+    router: Arc<PtyRouter>,
+) where
     R: AsyncRead + Unpin + Send + 'static,
 {
     loop {
-        let mut len_buf = [0u8; 4];
-        if reader.read_exact(&mut len_buf).await.is_err() {
-            break; // EOF or vsock dropped
-        }
-        let len = u32::from_be_bytes(len_buf) as usize;
-        if len > MAX_MESSAGE_BYTES {
-            eprintln!(
-                "[pty-vsock-bridge] inbound frame too large ({} > {}); aborting reader",
-                len, MAX_MESSAGE_BYTES
-            );
-            break;
-        }
-        let mut body = vec![0u8; len];
-        if reader.read_exact(&mut body).await.is_err() {
-            break;
-        }
+        // An oversize frame is now the codec's InvalidData error rather than a
+        // length this loop bounds itself; either way the reader stops, which is
+        // the same disposition the hand-rolled bound had.
+        let body = match reader.next().await {
+            Some(Ok(frame)) => frame,
+            Some(Err(e)) => {
+                eprintln!("[pty-vsock-bridge] inbound framing error: {e}; aborting reader");
+                break;
+            }
+            None => break, // EOF or vsock dropped
+        };
         let envelope = match decode(&body) {
             Ok(e) => e,
             Err(e) => {
@@ -344,6 +374,16 @@ where
 mod tests {
     use super::*;
     use tillandsias_host_shell::pty::PtyTransport;
+    // The test PEERS stay hand-rolled on purpose (order 795-5itp). Production
+    // now reads and writes through the shared codec, so a peer that decodes
+    // `[u32 BE][body]` by hand is the only thing in this file still asserting
+    // the WIRE FORMAT rather than asserting the codec against itself. Migrating
+    // them would make these tests tautological — the same reasoning the packet
+    // recorded when it kept `vsock_listener_e2e.rs` hand-rolled.
+    //
+    // Which is why these extension traits are imported HERE and not at the top:
+    // production no longer needs them, and a top-level import would now be dead.
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     /// Writer task encodes a `ControlMessage::Hello` into the
     /// expected `[len BE][postcard payload]` framing.
@@ -473,6 +513,92 @@ mod tests {
         peer.await.expect("peer task finishes cleanly");
         drop(transport);
         join.join().await;
+    }
+
+    /// REGRESSION GUARD for the hazard order 795-5itp calls measured, not
+    /// argued: a `Framed` built for the handshake and dropped takes whatever it
+    /// buffered past the HelloAck with it, and those bytes are session data.
+    ///
+    /// The existing handshake test cannot catch it — it sends the HelloAck and
+    /// then READS, so nothing is ever in flight behind the ack. This one writes
+    /// the HelloAck AND a PtyData frame in a single burst before the host has
+    /// read either, which is what the guest actually does: it pipelines. If
+    /// `connect_pty_bridge` ever frames per call again, the PtyData is consumed
+    /// into a dropped buffer and this times out.
+    ///
+    /// It fails for the right reason too — a lost frame is a timeout on the
+    /// inbox, not a decode error, which is exactly why the bug is silent in
+    /// production.
+    #[tokio::test]
+    async fn pipelined_frame_behind_the_helloack_is_not_dropped() {
+        let (host_side, peer_side) = tokio::io::duplex(8192);
+        let router = Arc::new(PtyRouter::new());
+        let mut inbox = router.register(9);
+
+        let peer = tokio::spawn(async move {
+            let (mut r, mut w) = tokio::io::split(peer_side);
+            // Consume the Hello.
+            let mut len_buf = [0u8; 4];
+            r.read_exact(&mut len_buf).await.expect("read hello len");
+            let len = u32::from_be_bytes(len_buf) as usize;
+            let mut buf = vec![0u8; len];
+            r.read_exact(&mut buf).await.expect("read hello body");
+
+            // HelloAck and PtyData, back to back, ONE flush. The host has not
+            // read anything yet, so both land in its socket buffer together —
+            // and a handshake-scoped reader would take the second with it.
+            let ack = ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: 1,
+                body: ControlMessage::HelloAck {
+                    wire_version: WIRE_VERSION,
+                    server_caps: vec!["pty.attach@v1".into()],
+                    build_version: None,
+                },
+            };
+            use tillandsias_control_wire::PtyDirection;
+            let data = ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: 2,
+                body: ControlMessage::PtyData {
+                    session_id: 9,
+                    direction: PtyDirection::ToHost,
+                    bytes: b"pipelined".to_vec(),
+                },
+            };
+            let mut burst = Vec::new();
+            for env in [&ack, &data] {
+                let b = encode(env).expect("encode");
+                burst.extend_from_slice(&(b.len() as u32).to_be_bytes());
+                burst.extend_from_slice(&b);
+            }
+            w.write_all(&burst).await.expect("write burst");
+            w.flush().await.expect("flush burst");
+            // Hold the peer open; dropping here would race the assertion.
+            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+        });
+
+        let (_transport, join, _wire) = connect_pty_bridge(
+            host_side,
+            router,
+            8,
+            "test-host".to_string(),
+            vec!["pty.attach@v1".to_string()],
+        )
+        .await
+        .expect("handshake succeeds");
+
+        use tillandsias_host_shell::pty::SessionEvent;
+        let ev = tokio::time::timeout(std::time::Duration::from_secs(2), inbox.recv())
+            .await
+            .expect("the frame pipelined behind the HelloAck must still arrive")
+            .expect("inbox not closed");
+        match ev {
+            SessionEvent::Data(bytes) => assert_eq!(bytes, b"pipelined"),
+            other => panic!("expected Data, got {other:?}"),
+        }
+        peer.abort();
+        let _ = join;
     }
 
     /// Reader task decodes a framed `PtyData` and dispatches it

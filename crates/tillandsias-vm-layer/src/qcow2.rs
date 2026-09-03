@@ -61,6 +61,14 @@ pub struct Qcow2Info {
     pub l1_table_offset: u64,
 }
 
+/// ORDER 795-5itp, recorded `keep`. The framing ratchet
+/// (`scripts/check-framing-raw-decodes.sh`) counts `u32::from_be_bytes` and so
+/// counts this line, but this is NOT a wire frame length: it reads a
+/// big-endian field out of a QCOW2 DISK HEADER, whose layout is defined by the
+/// image format and cannot be renegotiated. `LengthDelimitedCodec` has nothing
+/// to offer a disk structure — there is no stream, no length prefix, and no
+/// maximum-frame policy to share. The ratchet's heuristic cannot tell the two
+/// apart, which is why this carries a disposition instead of a migration.
 fn be32(b: &[u8], at: usize) -> u32 {
     u32::from_be_bytes([b[at], b[at + 1], b[at + 2], b[at + 3]])
 }
