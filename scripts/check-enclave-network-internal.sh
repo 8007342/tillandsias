@@ -92,7 +92,7 @@ offenders=""
 # 1. The shell launcher. The create call is multi-line; join continuations first.
 sh_launcher="$ROOT/scripts/orchestrate-enclave.sh"
 if [ -r "$sh_launcher" ]; then
-    if sed ':a;N;$!ba;s/\\\n/ /g' "$sh_launcher" \
+    if awk '{ while (sub(/\\$/, "")) { if ((getline nxt) > 0) $0 = $0 " " nxt; else break } print }' "$sh_launcher" \
         | grep -E 'podman[[:space:]]+network[[:space:]]+create' \
         | grep -qv -- '--internal'; then
         offenders="${offenders},scripts/orchestrate-enclave.sh"
