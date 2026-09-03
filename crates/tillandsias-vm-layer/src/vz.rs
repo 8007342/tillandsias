@@ -1053,11 +1053,12 @@ fn convert_qcow2_to_raw(
         &raw_part,
         GUEST_DISK_SIZE_BYTES,
         &|done, total| {
-            if total > 0 {
-                on_phase(&format!(
-                    "Converting Fedora Cloud image ({}%)",
-                    done * 100 / total
-                ));
+            // checked_div rather than a `total > 0` guard around the division:
+            // clippy::manual_checked_ops (new in the 1.96 toolchain) refuses the
+            // guarded form, and the two are exactly equivalent here — a zero
+            // total yields None and reports no percentage, same as before.
+            if let Some(pct) = (done * 100).checked_div(total) {
+                on_phase(&format!("Converting Fedora Cloud image ({pct}%)"));
             }
         },
     );

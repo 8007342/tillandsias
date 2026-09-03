@@ -27,7 +27,7 @@ fn main() {
 
     let started = std::time::Instant::now();
     let progress = |done: u64, total: u64| {
-        if total > 0 && (done == total || done % 16 == 0) {
+        if total > 0 && (done == total || done.is_multiple_of(16)) {
             eprint!("\r[qcow2-expand] L1 {done}/{total}");
         }
     };
