@@ -461,11 +461,36 @@ pub fn record_measurement(m: MeasurementRecord) -> Result<(), String> {
         // host does can be to record a measurement.
         Err(_) => run_probe(crate::effective_inference_tier()),
     };
-    match doc
-        .measurements
-        .iter_mut()
-        .find(|e| e.device == m.device && e.engine == m.engine)
-    {
+    // THE KEY INCLUDES THE MODEL SIZE, and omitting it made the crossover
+    // underivable on every host in the fleet (order 793-qc6q).
+    //
+    // `decode_crossover_b` needs SEVERAL sizes per device to find the point
+    // where the GPU overtakes the CPU. Keying only on (device, engine) meant
+    // the second size benchmarked OVERWROTE the first, so the document could
+    // hold at most one row per device no matter how many models were measured —
+    // and the derivation, needing two or more, answered `Unmeasured` forever.
+    // MEASURED on tlatoanis-macbook-air 2026-09-03: benchmarking 0.5B, 3B and
+    // 7B on both lanes, six recordings, left exactly two rows, both 7B.
+    //
+    // That is why the field has looked unused since order 480. Not because
+    // nobody ran the benchmark — because the store could not keep what the
+    // benchmark produced.
+    //
+    // Two sizes on one device are DIFFERENT measurements, not a re-measurement;
+    // re-running the SAME size still replaces, which is the freshness behaviour
+    // this always had. `None` params keeps the old behaviour exactly, so a
+    // recorder that sends no size still gets one slot per (device, engine)
+    // rather than accumulating unbounded anonymous rows.
+    let same_size = |a: Option<f64>, b: Option<f64>| match (a, b) {
+        (Some(x), Some(y)) => (x - y).abs() < 1e-9,
+        (None, None) => true,
+        _ => false,
+    };
+    match doc.measurements.iter_mut().find(|e| {
+        e.device == m.device
+            && e.engine == m.engine
+            && same_size(e.model_params_b, m.model_params_b)
+    }) {
         Some(slot) => *slot = m,
         None => doc.measurements.push(m),
     }

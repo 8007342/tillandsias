@@ -51,6 +51,12 @@ set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 LANE=""
+# --force-lane: ask the SERVER for the lane rather than only labelling the run.
+# Off by default so existing two-server callers (the Linux+Vulkan shape this
+# script was written for) are unchanged.
+FORCE_LANE=0
+# --model-params-b: override the size parsed from the model tag.
+MODEL_PARAMS_B=""
 ENDPOINT="${TILLANDSIAS_BENCH_ENDPOINT:-http://127.0.0.1:11434}"
 # Order 801-a2by moved the index out of tmpfs into the durable, content-
 # addressed tier, so the old /dev/shm literal now names a path nothing writes.
@@ -99,6 +105,16 @@ GEN_TOKENS=64
 while [ $# -gt 0 ]; do
     case "$1" in
         --lane) LANE="${2:-}"; shift 2 ;;
+        # ORDER 793-qc6q. Make `--lane cpu` MEAN something on a host whose
+        # accelerator is the default. On Linux+Vulkan the two lanes are
+        # different SERVERS, so the label alone distinguished them. On macOS
+        # there is one server and Metal is always on, so `--lane cpu` and
+        # `--lane gpu` produced byte-identical runs, both GPU-resident — two
+        # samples of one lane, reported as a comparison. That is the same
+        # "labelled by intent" failure the offload check below exists to catch,
+        # one level up: the ARM was mislabelled rather than the observation.
+        --force-lane) FORCE_LANE=1; shift ;;
+        --model-params-b) MODEL_PARAMS_B="${2:-}"; shift 2 ;;
         --record) RECORD=1; shift ;;
         --endpoint) ENDPOINT="${2:-}"; shift 2 ;;
         --chunks) CHUNKS="${2:-}"; shift 2 ;;
@@ -117,6 +133,30 @@ done
 [ -s "$CHUNKS" ] || { echo "bench-accel-lane: no chunk corpus at $CHUNKS (build it with scripts/spec-index-ensure.sh)" >&2; exit 2; }
 curl -fsS --max-time 10 "$ENDPOINT/api/tags" >/dev/null 2>&1 \
     || { echo "bench-accel-lane: endpoint $ENDPOINT did not answer" >&2; exit 2; }
+
+# The per-request options that make a lane real. `num_gpu` is the number of
+# layers offloaded, so 0 is a genuine CPU run on the same server — no restart,
+# no second endpoint, and both arms therefore share one model cache and one
+# build. Only `cpu` is forceable: there is no request-level knob that turns an
+# accelerator ON where the runtime did not already choose it, so `--lane gpu
+# --force-lane` deliberately sends nothing extra and still relies on the
+# observation below to confirm what actually ran.
+#
+# SCOPE, stated because the asymmetry is invisible otherwise: this reaches the
+# GENERATE arm only. The embed arm posts to /v1/embeddings, the OpenAI-compatible
+# endpoint, which has no options field to carry num_gpu — so under --force-lane
+# the generate numbers are a real per-lane measurement and the embed numbers are
+# whatever the runtime chose, in BOTH arms. The observation below reports what
+# actually ran, so this does not become a silent mislabel; but do not read a
+# forced run's embed column as a CPU-vs-GPU comparison.
+LANE_OPTS='{}'
+if [ "$FORCE_LANE" -eq 1 ]; then
+    case "$LANE" in
+        cpu) LANE_OPTS='{"num_gpu":0}' ;;
+        gpu|npu) LANE_OPTS='{}' ;;
+        *) echo "bench-accel-lane: --force-lane does not know lane '$LANE'" >&2; exit 2 ;;
+    esac
+fi
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/bench-accel.XXXXXX")" || exit 2
 trap 'rm -rf "$work"' EXIT
@@ -144,6 +184,28 @@ _req_ms() {
     [ -n "$secs" ] || { echo "-1"; return 0; }
     awk -v s="$secs" 'BEGIN { printf "%d\n", (s * 1000) + 0.5 }'
 }
+
+# ── evict the generate model before the run (--force-lane only) ─────────────
+# A loaded model KEEPS THE CONFIGURATION IT WAS LOADED WITH. Ask the same server
+# for the cpu lane and then the gpu lane inside the keep-alive window and the
+# second run silently reuses the first one's placement — so the numbers are one
+# lane measured twice and `/api/ps` reports the STALE residency, confirming the
+# label rather than checking it.
+#
+# MEASURED on tlatoanis-macbook-air 2026-09-03 while wiring this: after a
+# num_gpu:0 run, a default (Metal) request came back still reporting
+# size_vram=0. Evicting first, the same request reports
+# size_vram=479954205 == size, i.e. fully resident. Same server, same request,
+# opposite conclusions — decided entirely by what was cached.
+#
+# keep_alive:0 unloads immediately. Only under --force-lane: the two-server
+# callers this script was written for have nothing to evict.
+if [ "$FORCE_LANE" -eq 1 ]; then
+    jq -nc --arg m "$GEN_MODEL" '{model:$m, keep_alive:0}' > "$work/evict.json"
+    curl -fsS --max-time 30 "$ENDPOINT/api/generate" -H 'Content-Type: application/json' \
+        -d @"$work/evict.json" >/dev/null 2>&1 || true
+    sleep 2
+fi
 
 # ── warm-up, discarded ──────────────────────────────────────────────────────
 head -1 "$work/sample.jsonl" | while IFS= read -r t; do
@@ -181,8 +243,22 @@ gen_tps=""
 gen_ptps=""
 rep=1
 while [ "$rep" -le "$REPS" ]; do
-    jq -nc --arg m "$GEN_MODEL" --arg p "$GEN_PROMPT" --argjson n "$GEN_TOKENS" \
-        '{model:$m, prompt:$p, stream:false, options:{num_predict:$n}}' > "$work/gen.json"
+    # A DISTINCT PROMPT PER REP, or the prefill column is fiction. The server
+    # caches the processed prompt, so an identical prompt on rep 2 skips prefill
+    # almost entirely and prompt_eval_duration collapses. MEASURED on
+    # tlatoanis-macbook-air 2026-09-03 with the fixed prompt: rep1 521 prefill
+    # tok/s, rep2 6274 — a 12x "speedup" that is the cache, not the hardware,
+    # and it would have been averaged into a routing decision. Decode is
+    # unaffected (nothing caches generated tokens), which is why only this half
+    # needed changing.
+    #
+    # The prefix keeps every rep the same TOKEN LENGTH and the same shape, so
+    # the reps stay comparable to each other and across hosts; only the cache
+    # key differs.
+    _rep_prompt="rep $rep of $REPS. $GEN_PROMPT"
+    jq -nc --arg m "$GEN_MODEL" --arg p "$_rep_prompt" --argjson n "$GEN_TOKENS" \
+        --argjson lo "$LANE_OPTS" \
+        '{model:$m, prompt:$p, stream:false, options:({num_predict:$n} + $lo)}' > "$work/gen.json"
     if curl -fsS --max-time 300 "$ENDPOINT/api/generate" -H 'Content-Type: application/json' \
         -d @"$work/gen.json" > "$work/gen-resp.json" 2>/dev/null; then
         tps="$(jq -r 'if (.eval_duration // 0) > 0 then ((.eval_count // 0) / (.eval_duration / 1000000000)) else 0 end' "$work/gen-resp.json" 2>/dev/null)"
@@ -202,12 +278,42 @@ done
 # ── what the lane REPORTED, not what we asked for ───────────────────────────
 # The arm is labelled by observation. An intent-labelled arm is exactly how a
 # failed-to-start GPU server got recorded as a GPU result.
+# ASK ABOUT THE GENERATE MODEL, NOT ABOUT WHATEVER IS LOADED. This used to take
+# `max` over every resident model, which on a one-server host answers about the
+# EMBED model — nomic-embed-text, loaded by the embed arm moments earlier and
+# GPU-resident regardless of the lane under test. Measured while wiring
+# --force-lane on 2026-09-03: a genuine CPU run (num_gpu:0, the generate model
+# at size_vram=0) reported `gpu-resident:370031984`, which is the embedder.
+#
+# So the check that exists to refuse an intent-labelled arm was itself answering
+# about a different model, and it failed toward "gpu" — the direction that
+# confirms the label. Selecting by name makes it answer the question it claims
+# to: the arm is labelled by observing THE MODEL THE ARM MEASURED.
+#
+# `residency` reports both halves, because size_vram alone cannot distinguish
+# "no offload" from "not loaded", and a partial offload is a third state that a
+# boolean would hide.
 observed="unknown"
 if ps_json="$(curl -fsS --max-time 10 "$ENDPOINT/api/ps" 2>/dev/null)"; then
-    vram="$(printf '%s' "$ps_json" | jq -r '[.models[]?.size_vram // 0] | max // 0' 2>/dev/null)"
-    case "$vram" in
-        ''|0) observed="cpu-or-unloaded" ;;
-        *) observed="gpu-resident:${vram}" ;;
+    vram="$(printf '%s' "$ps_json" \
+        | jq -r --arg m "$GEN_MODEL" '[.models[]? | select(.name == $m or .model == $m) | .size_vram // 0] | max // 0' 2>/dev/null)"
+    total="$(printf '%s' "$ps_json" \
+        | jq -r --arg m "$GEN_MODEL" '[.models[]? | select(.name == $m or .model == $m) | .size // 0] | max // 0' 2>/dev/null)"
+    case "${vram:-0}" in
+        ''|0)
+            if [ "${total:-0}" = "0" ]; then
+                observed="unloaded"
+            else
+                observed="cpu-resident:0/${total}"
+            fi
+            ;;
+        *)
+            if [ "${vram}" = "${total}" ]; then
+                observed="gpu-resident:${vram}/${total}"
+            else
+                observed="gpu-partial:${vram}/${total}"
+            fi
+            ;;
     esac
 fi
 
@@ -236,10 +342,34 @@ if [ "${RECORD:-0}" = "1" ]; then
     # never used.
     _bench_degraded=false
     _bench_reason=null
-    case "$LANE:$observed" in
-        gpu:cpu-or-unloaded)
-            _bench_degraded=true
-            _bench_reason='"requested gpu but the runner reported no VRAM-resident model"'
+    # The observation vocabulary changed with --force-lane (cpu-resident /
+    # gpu-resident / gpu-partial / unloaded), so this matches on PREFIX rather
+    # than on the single old literal `cpu-or-unloaded`, which no longer occurs
+    # and would have silently stopped ever marking a run degraded.
+    #
+    # gpu-partial is degraded too, and that is not pedantry: a model half on the
+    # GPU is neither device's number, and recording it as a clean `gpu` result
+    # would move a crossover threshold on the strength of a split placement.
+    case "$LANE" in
+        gpu)
+            case "$observed" in
+                cpu-resident:*|unloaded|unknown)
+                    _bench_degraded=true
+                    _bench_reason='"requested gpu but the runner reported no VRAM-resident model"'
+                    ;;
+                gpu-partial:*)
+                    _bench_degraded=true
+                    _bench_reason='"requested gpu but the model was only partially offloaded"'
+                    ;;
+            esac
+            ;;
+        cpu)
+            case "$observed" in
+                gpu-resident:*|gpu-partial:*)
+                    _bench_degraded=true
+                    _bench_reason='"requested cpu but the runner offloaded to the GPU"'
+                    ;;
+            esac
             ;;
     esac
     # An unset locus is sent as JSON null rather than omitted, so the payload
@@ -249,11 +379,32 @@ if [ "${RECORD:-0}" = "1" ]; then
     [ -n "$LOCUS" ] && _bench_locus="$(jq -n --arg l "$LOCUS" '$l')"
     # Older binaries ignore unknown fields (serde default), so sending these to
     # a release that predates schema_version 2 is a no-op rather than a break.
+    # THE PARAMETER AXIS, without which the crossover cannot be derived at all
+    # (order 793-qc6q). `decode_crossover_b` skips any record whose
+    # `model_params_b` is None, so every number recorded before this line was
+    # usable for reporting and invisible to routing — the reason every host in
+    # the fleet read `Unmeasured` while measurements existed.
+    #
+    # Parsed from the model tag rather than passed by hand: the tag is what the
+    # caller already types, and a hand-passed size is a second source of truth
+    # that can disagree with the model actually benchmarked. Ollama's convention
+    # is `<family>:<size>b` (qwen2.5:0.5b, qwen2.5:7b), so the size is IN the
+    # name; --model-params-b overrides for a tag that does not carry one.
+    if [ -z "$MODEL_PARAMS_B" ]; then
+        MODEL_PARAMS_B="$(printf '%s' "$GEN_MODEL" \
+            | tr 'A-Z' 'a-z' \
+            | sed -n 's/.*:\([0-9][0-9]*\(\.[0-9][0-9]*\)*\)b.*/\1/p')"
+    fi
+    # Absent stays ABSENT, never 0: a 0 would be a claim that the model has no
+    # parameters, and it would sort below every real size in the crossover scan.
+    _bench_params=null
+    [ -n "$MODEL_PARAMS_B" ] && _bench_params="$MODEL_PARAMS_B"
     jq -nc --arg d "$LANE" --arg e "ollama" \
         --argjson p "${_bench_prefill:-0}" --argjson dec "${_bench_decode:-0}" \
         --argjson deg "$_bench_degraded" --argjson reason "$_bench_reason" \
         --arg suite "$WORKLOAD_SUITE" --argjson locus "$_bench_locus" \
-        '{device:$d, engine:$e, prefill_tps:$p, decode_tps:$dec, joules_per_token:null, degraded:$deg, degraded_reason:$reason, workload_suite:$suite, locus:$locus}' \
+        --arg model "$GEN_MODEL" --argjson params "$_bench_params" \
+        '{device:$d, engine:$e, prefill_tps:$p, decode_tps:$dec, joules_per_token:null, degraded:$deg, degraded_reason:$reason, workload_suite:$suite, locus:$locus, model:$model, model_params_b:$params}' \
         | "$_bench_tillandsias" --record-measurement - >&2 || \
         echo "note:bench-accel-lane:record-failed (numbers still on stdout)" >&2
 fi
