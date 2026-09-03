@@ -217,6 +217,34 @@ fi
 # block that disagrees with the summary beside it.
 services_report="skipped"
 if [ -x "$ROOT/scripts/check-enclave-service-health.sh" ]; then
+    # ORDER 994-8r3w. TELL THE CHECK WHAT TO EXPECT, or its absent= counter is a
+    # structural constant. The absent-detection loop has always been correct and
+    # has never been given an expectation: EXPECTED defaults to empty and no
+    # production caller set it, so a service that had ceased to exist reported as
+    # healthy. MEASURED here 2026-09-03 with the proxy removed:
+    # `ok:enclave-service-health:services=3:up=3:down=0:dead=0:absent=0`.
+    #
+    # The list is DECLARED (images/default/enclave-services.txt) because a health
+    # check cannot derive what should exist from what does — that is circular.
+    # A Rust test keeps it in step with the dependency graph that launches them.
+    _expected_file="$ROOT/images/default/enclave-services.txt"
+    # ONLY EXPECT SERVICES ON A HOST THAT HAS AN ENCLAVE AT ALL. A machine that
+    # has never provisioned one is not missing anything, and reporting it as
+    # absent would be the cry-wolf failure this file's own header warns about —
+    # a check that fires on correctly-configured hosts gets switched off, which
+    # is how the original gap survived.
+    #
+    # Vault is the anchor: every other persistent service depends on it in the
+    # graph, so its presence is what distinguishes "provisioned and degraded"
+    # from "never provisioned".
+    if [ -r "$_expected_file" ] && podman container exists tillandsias-vault 2>/dev/null; then
+        TILLANDSIAS_ENCLAVE_EXPECTED_SERVICES="$(
+            grep -v '^[[:space:]]*#' "$_expected_file" \
+              | grep -v '^[[:space:]]*$' \
+              | tr '\n' ',' | sed 's/,$//'
+        )"
+        export TILLANDSIAS_ENCLAVE_EXPECTED_SERVICES
+    fi
     _svc_err="$(mktemp "${TMPDIR:-/tmp}/cycle-preflight-services.XXXXXX")"
     # --act (878-79b5): the unattended cycle is exactly the caller that must
     # FIX what it can prove needs fixing — four yoga cycles re-noted one

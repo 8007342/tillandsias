@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: enclave-health-absent-detection-is-never-given-an-expectation
+    field: next_action
+    value: 'Landed and verified: preflight now reports services-down0-absent1 and names tillandsias-proxy. REMAINING, and it is a host/operator action rather than code: the proxy is genuinely absent on yoga and cannot be recreated from this checkout because --github-login needs a terminal and --list-cloud-projects is feature-gated out of the default build. Do NOT hand-craft a podman run for it — that bypasses ensure_proxy_ca_key_secret and recreates the CA desync of 975-rsgm. Restore it through the installed product or a vault+tray-featured build. Criterion 3 (a test pins the PRODUCTION path, not just the --expect path) is NOT met: the Rust drift test pins the manifest against the enum, and preflight is verified by observation, but nothing yet fails if a future edit stops preflight exporting the variable.'
+    ts: "2026-09-03T19:20:39Z"
+    host: yoga
+
+events:
+  - packet_id: enclave-health-absent-detection-is-never-given-an-expectation
+    event:
+      type: progress
+      ts: "2026-09-03T19:20:39Z"
+      host: yoga
+      summary: |-
+        status 'Landed and verified: preflight now reports services-down0-absent1 and names tillandsias-proxy. REMAINING, and it is a host/operator action rather than code: the proxy is genuinely absent on yoga and cannot be recreated from this checkout because --github-login needs a terminal and --list-cloud-projects is feature-gated out of the default build. Do NOT hand-craft a podman run for it — that bypasses ensure_proxy_ca_key_secret and recreates the CA desync of 975-rsgm. Restore it through the installed product or a vault+tray-featured build. Criterion 3 (a test pins the PRODUCTION path, not just the --expect path) is NOT met: the Rust drift test pins the manifest against the enum, and preflight is verified by observation, but nothing yet fails if a future edit stops preflight exporting the variable.' (not terminal) with evidence_refs: images/default/enclave-services.txt + container_deps.rs drift test + preflight wiring; live verdict services-down0-absent1

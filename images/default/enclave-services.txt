@@ -1,0 +1,47 @@
+# ORDER 994-8r3w. The enclave services a provisioned host is expected to be
+# RUNNING, one container name per line.
+#
+# WHY THIS FILE EXISTS. scripts/check-enclave-service-health.sh enumerates
+# `podman ps -a` and reports on what it finds. It has a correct absent-detection
+# loop driven by TILLANDSIAS_ENCLAVE_EXPECTED_SERVICES — and that variable
+# defaulted to empty and no production caller ever set it, so `absent=0` was not
+# a measurement but a structural constant. MEASURED on yoga 2026-09-03: with the
+# proxy container REMOVED, the check reported
+# `ok:enclave-service-health:services=3:up=3:down=0:dead=0:absent=0` and
+# cycle-preflight agreed. A service that had ceased to exist read as healthy —
+# the one failure a supervisor exists to catch.
+#
+# A health check cannot derive what SHOULD exist from what DOES exist; that is
+# circular. The expectation has to be declared, and this is the declaration.
+#
+# WHAT IS AND IS NOT LISTED, because the list is a judgement and not an
+# inventory. Only services expected to be persistently RUNNING belong here.
+# Listing a transient or optional one manufactures false absents, which is worse
+# than the gap it closes: a check that cries wolf gets switched off.
+#
+#   tillandsias-vault  — required. The dependency graph makes Proxy, GitLogin
+#                        and ForgeLaunch depend on it.
+#   tillandsias-proxy  — required. The enclave network is `--internal`, so this
+#                        is the ONLY external egress path; without it every
+#                        containerized fetch fails with "could not resolve host".
+#
+# DELIBERATELY EXCLUDED, with reasons, so a future reader does not "complete"
+# the list and break it:
+#   tillandsias-git         — Service::GitLogin is transient, brought up for
+#                             --github-login / --list-cloud-projects and gone
+#                             again. Absent is its normal state.
+#   nix cache               — Service::NixCache is dev-tier and OPTIONAL by
+#                             design (801-vm4p): hosts without nix satisfy it as
+#                             a skip, so requiring it would red every host that
+#                             correctly has no nix.
+#   tillandsias-builder     — a toolbox, not an enclave service; it is created on
+#                             demand by the build lane.
+#   tillandsias-dev-inference — the DEV lane's container. Not part of the enclave
+#                             the product provisions, and absent on a host that
+#                             has not run cycle-preflight.
+#
+# Kept in step with crates/tillandsias-headless/src/container_deps.rs by a test
+# there: a Service that is a persistent container and is missing from this file
+# fails the build, so the two cannot drift.
+tillandsias-vault
+tillandsias-proxy

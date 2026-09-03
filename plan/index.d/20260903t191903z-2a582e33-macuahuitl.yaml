@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-checkout-quarantine-decides-on-a-boolean-and-discards-gits-reason
+    event:
+      type: decision
+      ts: "2026-09-03T19:19:03Z"
+      agent_id: linux-macuahuitl-fable5-20260903t191903z
+      host: macuahuitl
+      summary: |-
+        THE PRIVILEGE QUESTION IS PROMOTED FROM ALTERNATIVE TO THE ACTUAL FIX, and esme's correction is what does it. I had recorded safe.directory as the remedy and the privilege model as a separate design call. THAT FRAMING IS NOW WRONG: this is not a mount quirk being papered over. It is TWO COMPONENTS DISAGREEING ABOUT WHO OWNS THE TREE, with the filesystem faithfully reporting the disagreement. Make the writer and the reader the same identity - clone as root, or evaluate as forge - AND THE CONDITION CANNOT ARISE AT ALL. safe.directory then becomes belt-and-braces rather than the fix. THIS STRENGTHENS THE SEQUENCING RULING RATHER THAN CHANGING IT: shipping the injection first would land a permanent exception for a condition the real fix removes. The packet still waits on the operator, and now waits on it for a better reason. A TRAP NAMED BEFORE ANYONE WALKS INTO IT, and it is the kind that looks like the obvious fix: chown genuinely works here because metadata is on, so chown -R 0:0 /home/forge/src is available and would appear to solve it. IT WOULD BREAK THE FORGE CONTAINER, which runs as 1000 and needs write access to that tree. The two identities are both load-bearing; unifying them means choosing WHICH, not chowning to whichever is convenient. That is precisely why it is the operator's call.

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-checkout-quarantine-decides-on-a-boolean-and-discards-gits-reason
+    event:
+      type: finding
+      ts: "2026-09-03T19:19:03Z"
+      agent_id: linux-macuahuitl-fable5-20260903t191903z
+      host: macuahuitl
+      summary: |-
+        MECHANISM CORRECTED, AND I MUST RETRACT MY OWN VERIFICATION - I asserted something as verified here that is not true. WHAT esme CORRECTED IN THEMSELVES: they told me the mount reports a fixed uid regardless of who wrote the tree and that a clone cannot change what drvfs reports. FALSE. The mount unit at wsl_lifecycle.rs sets Options=rw,noatime,METADATA, and with metadata ownership is REAL AND PERSISTED PER FILE. Measured: the mount point is root:root uid=0, the checkout is forge:forge uid=1000, 722 entries forge against 3 root inside it, and a file root touches there persists as root:root. So a clone run by root WOULD produce root-owned files and would NOT fail. The tree is forge-owned because the CONTAINERIZED gh CLONE FLOW wrote it as uid 1000, exactly as resolve_cloud_project_checkout's own doc comment says. The determinism is still real for a different reason: the WRITER is always the container (1000) and the EVALUATOR is always root (0). Not because the filesystem lies. MY OWN ERROR, WHICH IS WORSE THAN REPEATING THEIRS: I wrote that the cheatsheet asserts in three places that drvfs reports all files as root:root and called that VERIFIED HERE as a factual error regardless. IT IS NOT. Line 86 reads Always reports root:root UNLESS METADATA OPTION IS SET - the caveat is explicit and I quoted past it. Line 93 sits under a heading scoped to /mnt/c, the plain automount, which has no metadata. Only line 162's summary bullet drops the caveat. THE DOC IS SUBSTANTIALLY CORRECT AND DESCRIBES A DIFFERENT MOUNT THAN THE LAUNCHER CREATES, which is esme's fairer reading and is more useful than my three wrong lines. I ran a grep for root:root, counted three hits, and reported a count as a verification - the exact instrument failure this session has recorded six times, committed while correcting someone else's version of it.
