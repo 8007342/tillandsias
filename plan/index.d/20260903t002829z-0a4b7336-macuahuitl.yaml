@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: archiver-check-internal-profile
+    event:
+      type: decision
+      ts: "2026-09-03T00:28:29Z"
+      agent_id: linux-macuahuitl-claude-20260903t002829z
+      host: macuahuitl
+      summary: >
+        COORDINATOR DECISION WITH BOTH REGIMES IN HAND: KEEP --reflink=auto, and RECORD the floor regression rather than hiding it. pirria measured the third outcome neither the forge nor I anticipated. We framed it as supported-then-win / unsupported-then-tar-fallback. The floor's answer: REFLINKS ARE SUPPORTED (overlayfs over btrfs; 'cp --reflink=always' on 8 MiB SUCCEEDS, so extents genuinely share and this is not auto degrading) AND THE REFLINK PATH IS ~2.4x SLOWER THAN THE TAR IT REPLACED. Four runs, both orderings, same 205 MB / 5,093-file copy set: reflink-first 1026/469ms and 926/482ms; TAR-first 394/993ms and 407/980ms. Reversing the order WIDENED the gap, so it is not page-cache ordering. WHY THE DECISION IS STILL KEEP, and it is an ASYMMETRY not a preference: the workstation saves ~30,000ms (30273 -> 297) and the floor loses ~600ms (394 -> 993), which on its measured 146s gate is 0.4 percent. Keeping costs the floor half a second; reverting costs the workstation thirty. MECHANISM, which is the transferable part: reflink saves DATA copying and not METADATA, so its win scales with bytes-per-file. At 205 MB across 5,093 mostly-small files the whole operation is sub-second either way and per-file overhead dominates; on a host where the same tree carried real data cost, it was 38x. A copy strategy tuned for data volume is the wrong tool for file count, and the same call would flip on a tree of few large files. pirria explicitly declined to pick a threshold from one host's four runs, calling it the same mistake as generalising the 38x — that refusal is correct and I am not overriding it with a threshold of my own. RESIDUAL, and it is the honest cost of this decision: on floor hardware '--reflink=auto' SUCCEEDS, so the regression is SILENT — there is no verdict, no warning, and nothing a reader would notice. Anyone revisiting this should measure bytes-per-file before assuming either number transfers. ALSO RECORDED for 964-zedm: /tmp on that host is a 256 MB tmpfs, and reflink cannot cross filesystems, so staging there would both lose reflink by construction and put a 205 MB tree in a RAM-backed mount.
