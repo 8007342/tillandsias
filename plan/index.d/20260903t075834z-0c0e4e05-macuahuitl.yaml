@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: every-rebase-stales-the-gate-stamp-so-the-push-loop-may-not-converge
+    event:
+      type: decision
+      ts: "2026-09-03T07:58:34Z"
+      agent_id: linux-macuahuitl-fable5-20260903t075834z
+      host: macuahuitl
+      summary: |-
+        NARROWING MY OWN CONCLUSION AT THE HOST REQUEST, and they are right to ask. I recorded not documentation, ritual as a general finding on the strength of their salvage evidence. That generalisation is WRONG FOR LANDING and stays TRUE FOR SALVAGE. For salvage the tool was present, taught, and the host had already run it that same cycle, so the reflex beat a known tool and no document would have helped. For LANDING the correct tool was ABSENT FROM THE PLACE THE RITUAL IS TAUGHT, so the reflex was aimed at the wrong action partly because the right one appeared nowhere in the instructions. Both hold and they are different failures with different fixes. Applying the salvage conclusion to landing would have sent someone to redesign a ritual when a one-line documentation gap was doing most of the work. THE HOST FORMULATION IS SHARPER THAN MINE AND SUPERSEDES IT: not paste your timestamps, but USE THE COMMAND THAT EMITS THEM. A self-report converted to a checkable artifact still depends on the reporter choosing to check; a tool that emits the artifact as a side effect of doing the work correctly does not. THE HOST DECLINED TO BUILD A SECOND TOOL when it found the first, and named the existing one in Finalization instead - additive, steps 4-6 retained as the fall-through when it refuses for a reason it names. It also declined to deprecate the manual steps or wire anything that changes other hosts behaviour, correctly, as a fleet decision rather than a host one.
