@@ -136,17 +136,29 @@ apply_fragment_status_overlay() {
     if [ -n "$status_map" ]; then
         # One awk pass joins the map against the orders on stdin. A packet
         # absent from the map is KEPT, exactly as an empty `status` result was.
-        awk -F'\t' -v map="$status_map" '
-            BEGIN { n = split(map, rows, "\n")
-                    for (i = 1; i <= n; i++) {
-                        if (split(rows[i], kv, "\t") == 2) st[kv[1]] = kv[2]
-                    } }
+        #
+        # THE MAP TRAVELS AS A FILE, NOT AS `-v map=…`. A `-v` assignment is a
+        # STRING LITERAL: gawk tolerates embedded newlines in one, BSD awk —
+        # every macOS host — rejects it outright with `awk: newline in string`.
+        # The pass then produced nothing, every row read as naming no live
+        # packet, and the gate reported `stale=28` out of 28 on a tree where
+        # linux-next reported `ok:…28 live packets listed`. That is the
+        # decoy this function's own comment above warns about, arriving
+        # through the parser instead of through an empty query (measured on
+        # tlatoanis-macbook-air 2026-09-02). `-v` also expands backslash
+        # escapes, so it is the wrong channel for data on every platform.
+        local map_file
+        map_file="$(mktemp "${TMPDIR:-/tmp}/long-running-map.XXXXXX")" || return 1
+        printf '%s\n' "$status_map" > "$map_file"
+        awk -F'\t' '
+            NR == FNR { if (NF == 2) st[$1] = $2; next }
             { order = $1
               if (order == "") next
               s = (order in st) ? st[order] : ""
               if (s == "done" || s == "obsoleted" || s == "superseded" \
                   || s == "completed" || s == "failed" || s == "cancelled") next
-              print order }'
+              print order }' "$map_file" -
+        rm -f "$map_file"
         return 0
     fi
 
