@@ -201,6 +201,54 @@ if [ "${1:-}" = "--emit-timing" ]; then
     exit 0
 fi
 
+# ── --emit-context: append one CONTEXT-GROWTH PROXY record ───────────────────
+# OPERATOR DIRECTIVE 2026-09-03 (become token-conscious), methodology
+# agent_observability_protocol.cycle_metrics.context_cost_metrics.
+#
+# THESE ARE PROXIES AND THE FIELD NAMES SAY SO. `transcript_bytes` is BYTES of
+# the harness transcript, not tokens. The bytes-per-token ratio is model- and
+# content-dependent and this project does NOT assume one; a caller converting
+# this to a token estimate must cite the measurement that established the
+# conversion. A proxy reported as a token count is the defect the whole
+# observability protocol exists to prevent.
+#
+# Best-effort by construction, exactly like --emit-timing and --emit-flow: a
+# metrics write may never fail the cycle it measures. Always exits 0. An absent
+# transcript is recorded as 0, which the reporter renders `absent` — never
+# guessed, never omitted.
+if [ "${1:-}" = "--emit-context" ]; then
+    shift
+    ec_host="-"; ec_cycle="-"; ec_transcript="-"
+    ec_bytes=0; ec_lines=0; ec_tools=0; ec_compactions=0
+    for tok in "$@"; do
+        case "$tok" in
+            host=*)        ec_host="${tok#host=}" ;;
+            cycle=*)       ec_cycle="${tok#cycle=}" ;;
+            transcript=*)  ec_transcript="${tok#transcript=}" ;;
+            tools=*)       ec_tools="${tok#tools=}" ;;
+            compactions=*) ec_compactions="${tok#compactions=}" ;;
+        esac
+    done
+    # Measure the transcript here rather than trusting a passed-in number: the
+    # caller reporting its own size is a self-report, and a self-report is an
+    # instrument (993-yqie / the 2026-09-03 session's most repeated lesson).
+    if [ -f "$ec_transcript" ]; then
+        ec_bytes="$(wc -c <"$ec_transcript" 2>/dev/null | tr -d ' ')"
+        ec_lines="$(wc -l <"$ec_transcript" 2>/dev/null | tr -d ' ')"
+    fi
+    for v in ec_bytes ec_lines ec_tools ec_compactions; do
+        eval "case \"\$$v\" in ''|*[!0-9]*) $v=0 ;; esac"
+    done
+    {
+        ec_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
+        printf '{"ts":"%s","host":"%s","cycle":"%s","transcript_bytes":%s,"transcript_lines":%s,"tool_calls":%s,"compactions":%s}\n' \
+            "$ec_ts" "$ec_host" "$ec_cycle" \
+            "$ec_bytes" "$ec_lines" "$ec_tools" "$ec_compactions" \
+            >>"${TILLANDSIAS_CONTEXT_LOG:-${TMPDIR:-/tmp}/tillandsias-context.jsonl}"
+    } 2>/dev/null || true
+    exit 0
+fi
+
 # ── --emit-timing-batch: append MANY duration records in ONE spawn (765-dfry)
 # stdin lines, tab-separated: step<TAB>phase<TAB>duration_ms<TAB>exit<TAB>host
 # Rationale: each spawn of this script costs ~10-20ms; a --check run closes
