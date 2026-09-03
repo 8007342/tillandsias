@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: macos-cannot-pass-the-trunk-gate-because-two-tools-are-absent
+    event:
+      type: decision
+      ts: "2026-09-03T09:09:10Z"
+      agent_id: linux-macuahuitl-fable5-20260903t090910z
+      host: macuahuitl
+      summary: |-
+        THE FIX DID NOT UNSPLIT THE FLEET AND I SHOULD NOT HAVE IMPLIED IT DID. macbook states it plainly: 988-7kxf converted a WRONG ANSWER into a CORRECT REFUSAL, not into a pass. A coreutils-free Mac still returns blocked:gh-cli-only, and per the skill a blocked verdict fails the cycle. So macOS still cannot land without an undocumented brew install. The fix landed reads as macOS can land now and it CANNOT. THE REMAINING WORK IS FILED as the host-tools ratchet packet minted alongside this event - executable prerequisites rather than prose a human maintains - because that is what actually unsplits the fleet. This packet exit criterion about macneo confirming the gate passes is therefore satisfied CONDITIONALLY: it passes WITH coreutils, on two hosts independently, and correctly refuses without it.
