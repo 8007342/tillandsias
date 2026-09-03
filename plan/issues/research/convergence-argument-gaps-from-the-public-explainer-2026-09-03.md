@@ -92,9 +92,10 @@ capture, verified here rather than taken on report.
 | `requirement_has_stable_id` | a scoring weight of **0.10** at `methodology/proximity.yaml:53`, computed by nothing |
 | The strong-law invocation | present verbatim: "the STRONG LLN (almost-sure convergence) makes the stream of iterations converge hard" |
 
-One refinement to the author's report: the identifier occurs in **two** files,
-not one. Both are declarations; neither is a computation.
-
+**RETRACTED — see "CORRECTION" at the end of this file.** I claimed the
+identifier occurs in **two** files rather than one. It does not: at the tag the
+explainer pins there is exactly ONE, and my second hit was this very file
+quoting the identifier it is about. The explainer is correct as published.
 ## 1. Strong law — a documentation edit
 
 `methodology/philosophy.yaml`, `convergence_via_velocity.weak_vs_strong`
