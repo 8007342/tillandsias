@@ -1,5 +1,67 @@
 # Forensics: first-ever launch of a sub-10-GiB macOS host (macneo), captured before reset
 
+> ## CORRECTION 2026-09-03T08:00Z — THE CENTRAL CLAIM OF THIS FILE WAS WRONG
+>
+> **This document originally asserted the VM was DEAD. It was not. It was alive
+> and pegged at ~400% CPU for over an hour.**
+>
+> The error was a false premise: I wrote that macOS Virtualization.framework
+> runs the VM *in-process*, and concluded from `lsof -p 6708` holding no
+> `rootfs.img` descriptor that the VM must therefore be gone. **VZ hosts the
+> guest in a separate XPC helper**,
+> `com.apple.Virtualization.VirtualMachine.xpc`. A tray with no `rootfs.img`
+> descriptor is exactly what a HEALTHY VZ tray looks like.
+>
+> Caught by an adversarial verifier that re-ran an unfiltered `ps` and measured
+> the live host: pid **6712**, `STAT Rs`, started 23:01:19 — the same second as
+> tray 6708 — **397.5% CPU** (~4 of 6 cores pegged), CPU time advancing ~20 s
+> per 5 s of wall clock, `footprint` 4111 MB (the full 4 GiB guest), holding
+> `rootfs.img` at fd 5, `cidata.iso` at fd 6, `console.log` at fd 4.
+>
+> **Why my own evidence missed it, verified after the fact:** the process scan
+> below greps `-iE 'tilland|qemu|vfkit|krun|podman|vz'`. The string
+> `com.apple.Virtualization.VirtualMachine` matches NONE of those alternatives —
+> `Virtualization` contains no `vz` substring. I confirmed this directly:
+>
+> ```
+> $ echo 'com.apple.Virtualization.VirtualMachine' | grep -iE 'tilland|qemu|vfkit|krun|podman|vz'
+> (no match)
+> ```
+>
+> A filtered `ps` returning nothing was read as "no VM process exists". It was a
+> false negative produced by my own filter, and every downstream inference —
+> the thread count, the footprint, the `vmmap`, the absent descriptor — was
+> measuring the wrong process.
+>
+> **INDEPENDENTLY RE-CONFIRMED** on this host at 00:47 local on a fresh
+> provision: tray pid 19467 and helper pid 19636
+> (`com.apple.Virtualization.VirtualMachine`) are distinct processes.
+>
+> ### What this changes
+>
+> - **The forge was never wedged. It was building**, slowly, on a 4 GiB guest
+>   using 4 of 6 cores. The operator's "no CPU activity" reading and my
+>   "stalled" conclusion were both wrong; the machine was saturated.
+> - **`--diagnose` reporting `Guest health: healthy` was CORRECT**, not a lie.
+>   Order 980-ja2m was filed on the false premise and is corrected separately.
+> - The real defect is the opposite of the one filed: a guest that is ALIVE,
+>   CONNECTED and CPU-bound is change-gated into silence, so the chip sits on
+>   "Building Forge" indefinitely while real work proceeds. That is a missing
+>   progress signal, not a missing liveness check.
+>
+> ### What survives unchanged
+>
+> - The qemu-img / minimal-PATH diagnosis (980-xcaf) — proven separately by
+>   `ps eww` on the live tray, and since fixed and verified end-to-end.
+> - The `guest_sizing` arithmetic (978-juw4) — verified independently three ways.
+> - `/usr/bin/xz` not existing on macOS 26.6, masked by a Homebrew qemu
+>   dependency.
+> - Everything below this box is raw captured command output and is accurate as
+>   captured. **Only the interpretation headed "Proof the VM is DEAD, not idle"
+>   is wrong**, and it is left in place rather than deleted so the reasoning
+>   error stays legible.
+
+
 - Date: 2026-09-03 (UTC); operator-local 2026-09-02 PDT (UTC-7)
 - Host: macneo-macos — NEW HARDWARE TIER, first host in the fleet below 10 GiB RAM
 - Class: forensic capture (perishable state), filed ahead of order 978-juw4
@@ -119,7 +181,7 @@ Kernel 6.19.10-300.fc44.aarch64 on aarch64 (hvc0)^M
 enp0s1: 192.168.64.3 fd30:8063:8854:ae7d:3cdf:a8ff:fe09:f1e8^M
 tillandsias-vm login: ```
 
-## Proof the VM is DEAD, not idle
+## Proof the VM is DEAD, not idle  <!-- WRONG: see CORRECTION at the top -->
 
 macOS Virtualization.framework runs the VM IN-PROCESS: there is no separate
 helper process, and the VM's disk is held as an open file descriptor by the
