@@ -1,0 +1,59 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-checkout-quarantine-decides-on-a-boolean-and-discards-gits-reason
+    order: 996-bcjx
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [checkout, git, fail-loud, multi-host, disk]
+    estimated_hours: 4
+    title: |
+      A checkout is quarantined and re-cloned whenever one git command exits non-zero, with git's stderr null-routed, so "git said no" and "the checkout is corrupt" are indistinguishable — and the copies are never cleaned up.
+    context: |
+      FOUND by esme-windows, a new bare-metal host on ESMERALDINHA, the same
+      physical machine that runs esme-tillandsias-wsl2. FIRST EVIDENCE, before
+      any analysis, which is why it is trustworthy: TEN quarantined checkouts in
+      ~/src/ spanning 2026-08-25 to 2026-09-02 -
+      tillandsias.invalid-1787709172 through .invalid-1788460322, plus
+      tillandsias.org.invalid-1787784572 and two .tmp. trees. Something detects
+      the checkout as invalid, renames it aside, re-clones, AND THE FRESH CLONE
+      RE-CORRUPTS WITHIN ROUGHLY A DAY. That is a reproducing loop, not a
+      one-off.
+      THEY ASKED WHETHER A SHARED LAUNCHER MAKES IT FLEET-WIDE. VERIFIED HERE,
+      AND IT IS WORSE: it is not a script, it is the shared headless binary.
+      quarantine_invalid_checkout at crates/tillandsias-headless/src/main.rs:5819,
+      gated on #[cfg(any(feature = "tray", feature = "listen-vsock"))]. Every
+      host running a tray or a vsock listener carries it.
+      THE TEST IS ONE COMMAND AND ITS REASON IS THROWN AWAY:
+        git -C <path> rev-parse --quiet --verify HEAD
+        Ok(status) => status.success()
+        Err(_)     => true            // no git binary: assume valid
+        .stderr(std::process::Stdio::null())
+      So the caller sees a BOOLEAN. "Invalid" means "git exited non-zero", which
+      is NOT the same as corrupt: dubious-ownership refusal, an unborn HEAD from
+      an interrupted clone, a stale lock, or a permission error all produce it on
+      a healthy or trivially recoverable tree. THE STDERR THAT WOULD SAY WHICH IS
+      NULL-ROUTED. Same shape as 993-yqie one level worse - there the guard
+      printed its reason and the caller's `tail -1` discarded it; here nothing
+      prints it at all.
+      A LEADING HYPOTHESIS, HANDED TO esme-windows AS A MULTI-OUTCOME TEST RATHER
+      THAN A CONCLUSION, because it is a guess and their host is the one that can
+      settle it: git refuses a tree whose owner differs from the caller with
+      "detected dubious ownership", and on a box where WSL2 and Windows both
+      touch ~/src/ the UID mapping alone would trigger it - healthy repo,
+      quarantined anyway, reproducing every time the other side touches it first.
+      The other three outcomes point elsewhere and one of them (real corruption)
+      would mean the quarantine is behaving correctly.
+      SECOND DEFECT, INDEPENDENT OF THE CAUSE: nothing cleans the quarantined
+      trees up. Ten full repo copies on a 16 GB low-end floor host. The code
+      comment explains the never-delete choice - "the dir may contain user data
+      (an aborted clone can coexist with unrelated files)" - which is CORRECT and
+      leaves the accumulation unowned by anyone.
+    exit_criteria:
+      - the quarantine records WHY git refused, in a form a reader sees; a boolean cannot distinguish corrupt from dubious-ownership from an unborn HEAD
+      - a tree that git refuses for a recoverable reason is recovered or reported, not quarantined - and the distinguishing test is run on a real refusing tree, not reasoned about
+      - the reproducing loop on ESMERALDINHA stops, verified by the absence of a new .invalid- tree over a period longer than the ~1 day recurrence
+      - quarantined trees have an owner: retention, cleanup, or an explicit statement that they accumulate forever and why; ten copies on a small-disk host is the current answer by default
+      - check whether any other host is quarantining silently; the loop was only visible here because someone looked at ~/src/, and the binary is fleet-wide
