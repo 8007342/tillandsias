@@ -92,7 +92,16 @@ offenders=""
 # 1. The shell launcher. The create call is multi-line; join continuations first.
 sh_launcher="$ROOT/scripts/orchestrate-enclave.sh"
 if [ -r "$sh_launcher" ]; then
-    if sed ':a;N;$!ba;s/\\\n/ /g' "$sh_launcher" \
+    # The join is awk, not `sed ':a;N;$!ba;s/\\\n/ /g'`. GNU sed accepts a `;`
+    # after a label; BSD sed — every macOS host — does not, and errored with
+    # `unused label 'a;N;$!ba;...'`. sed then emitted NOTHING, the grep chain
+    # found no create call at all, and the check reported
+    # `drift:launcher-omits-internal` against a launcher that carries the flag
+    # on its very first line. A guard that fails toward "drift" on one platform
+    # is louder than one that fails toward "ok", but it is still wrong, and it
+    # blocks that platform's pushes (measured on tlatoanis-macbook-air
+    # 2026-09-03).
+    if awk '{ while (sub(/\\$/, "")) { if ((getline nxt) > 0) $0 = $0 " " nxt; else break } print }' "$sh_launcher" \
         | grep -E 'podman[[:space:]]+network[[:space:]]+create' \
         | grep -qv -- '--internal'; then
         offenders="${offenders},scripts/orchestrate-enclave.sh"
