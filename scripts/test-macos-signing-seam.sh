@@ -101,6 +101,37 @@ else
     bad "notarization must be gated and must say so when skipped"
 fi
 
+# 7. THE CONTAINER IS SIGNED TOO (order 935-6fzk). The .app was signed and
+#    stapled while the DMG holding it shipped unsigned, and the DMG is what the
+#    user downloads — Gatekeeper assesses the IMAGE before anyone reaches the
+#    signed app inside.
+DMG="$ROOT/scripts/build-macos-dmg.sh"
+if [ -f "$DMG" ] && grep -q 'codesign --force --sign "$DMG_SIGN_IDENTITY"' "$DMG"; then
+    ok "the DMG itself is signed, not just the app inside it"
+else
+    bad "build-macos-dmg.sh must sign the DMG container"
+fi
+
+# 8. Same credential gating as the tray script. Identity absent => the build is
+#    byte-for-byte what it was; the release path must not change shape on the
+#    day a credential appears in someone's keychain.
+if grep -q 'codesign dmg: SKIPPED' "$DMG" && grep -q 'notarize dmg: SKIPPED' "$DMG"; then
+    ok "DMG signing and notarization are gated and announce when skipped"
+else
+    bad "DMG signing/notarization must be gated and must say so when skipped"
+fi
+
+# 9. THE SHA IS TAKEN AFTER SIGNING. Both codesign and stapler rewrite the DMG
+#    in place, so hashing first publishes a SHA256SUMS line describing a file
+#    nobody ships — green everywhere, and wrong for every user who verifies it.
+sign_line="$(grep -n 'codesign --force --sign "\$DMG_SIGN_IDENTITY"' "$DMG" | head -1 | cut -d: -f1)"
+sha_line="$(grep -n '^DMG_SHA=' "$DMG" | head -1 | cut -d: -f1)"
+if [ -n "$sign_line" ] && [ -n "$sha_line" ] && [ "$sign_line" -lt "$sha_line" ]; then
+    ok "the DMG hash is computed after signing, not before"
+else
+    bad "DMG_SHA must be computed after signing (sign_line=$sign_line sha_line=$sha_line)"
+fi
+
 # NOT COVERED, said out loud: signing with a real Developer ID identity,
 # notarytool submission and stapler both need a credential this host lacks.
 # Their first real exercise is the day enrollment completes.

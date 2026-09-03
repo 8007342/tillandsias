@@ -145,11 +145,22 @@ apply_fragment_status_overlay() {
         # One awk pass joins the map against the orders on stdin and classifies
         # each: KEEP (live per the map), dropped (terminal per the map), or MISS
         # (absent from the live fold — may be archived, so it must be re-asked).
-        classified="$(awk -F'\t' -v map="$status_map" '
-            BEGIN { n = split(map, rows, "\n")
-                    for (i = 1; i <= n; i++) {
-                        if (split(rows[i], kv, "\t") == 2) st[kv[1]] = kv[2]
-                    } }
+        #
+        # THE MAP TRAVELS AS A FILE, NOT AS `-v map=…` (order 935-6fzk cycle).
+        # A `-v` assignment is a STRING LITERAL: gawk tolerates embedded
+        # newlines in one, BSD awk — every macOS host — rejects it outright with
+        # `awk: newline in string`. The pass then produced NOTHING, every row
+        # classified as neither KEEP nor MISS, and the gate reported `stale=28`
+        # of 28 on a tree where linux-next reported `ok:…28 live packets
+        # listed`. That is this function's own decoy failure, arriving through
+        # the parser instead of through an empty query. `-v` also expands
+        # backslash escapes, so it is the wrong channel for data on EVERY
+        # platform, not only BSD.
+        local map_file
+        map_file="$(mktemp "${TMPDIR:-/tmp}/long-running-map.XXXXXX")" || { cat; return 0; }
+        printf '%s\n' "$status_map" > "$map_file"
+        classified="$(awk -F'\t' '
+            NR == FNR { if (NF == 2) st[$1] = $2; next }
             { order = $1
               if (order == "") next
               if (order in st) {
@@ -159,7 +170,8 @@ apply_fragment_status_overlay() {
                   print "KEEP\t" order
               } else {
                   print "MISS\t" order
-              } }')"
+              } }' "$map_file" -)"
+        rm -f "$map_file"
         printf '%s\n' "$classified" | while IFS="$(printf '\t')" read -r cls o; do
             [ -n "$o" ] || continue
             if [ "$cls" = "KEEP" ]; then
