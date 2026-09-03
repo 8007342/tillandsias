@@ -18,10 +18,20 @@
 # usage: scripts/dispatch-brief.sh <order|packet_id> [more...]
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PLAN="${TILLANDSIAS_PLAN_BIN:-$ROOT/target/release/tillandsias-plan}"
 
 [ $# -ge 1 ] || { echo "usage: dispatch-brief.sh <order|packet_id> [more...]" >&2; exit 2; }
-[ -x "$PLAN" ] || { echo "refused:dispatch-brief:no-plan-binary:$PLAN" >&2; exit 2; }
+
+# The shared probe, not a hardcoded target/ path (721-nyev, 751-vega): an
+# executable bit is a claim, RUNNING the binary is evidence. The gate caught my
+# first version doing exactly what it forbids — the same violation lenovinha hit
+# in the 972-6vaj fixture hours earlier, so this is the second instance today
+# and the guard found both.
+# shellcheck source=scripts/plan-binary-probe.sh
+. "$(dirname "${BASH_SOURCE[0]}")/plan-binary-probe.sh"
+PLAN="$(resolve_plan_binary)" || {
+    echo "refused:dispatch-brief:no-runnable-plan-binary — run scripts/cycle-preflight.sh" >&2
+    exit 2
+}
 
 head="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 remote="$(git -C "$ROOT" rev-parse --short '@{u}' 2>/dev/null || echo unknown)"
