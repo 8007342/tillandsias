@@ -68,6 +68,7 @@ query
 ready
 # "ready" only ever meant "the build finished", never "the binary can answer".
 # relaunch" sets can never drift apart the way a hardcoded list in the wrapper
+score-checks
 select-rows
 set-field
 spec-envelope
