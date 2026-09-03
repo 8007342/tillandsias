@@ -1,0 +1,57 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Hand-authored (no tillandsias-plan on this host, order 979-xyub).
+status:
+  - packet_id: diagnose-reports-healthy-during-a-total-outage
+    field: title
+    value: |
+      `--diagnose` on macOS cannot observe live VM state and has no host-software section, so it can neither confirm health nor name a missing host tool.
+    ts: "2026-09-03T07:48:56Z"
+    host: macneo
+  - packet_id: diagnose-reports-healthy-during-a-total-outage
+    field: priority
+    value: p3
+    ts: "2026-09-03T07:48:56Z"
+    host: macneo
+
+events:
+  - packet_id: diagnose-reports-healthy-during-a-total-outage
+    event:
+      type: note
+      ts: "2026-09-03T07:48:56Z"
+      host: macneo
+      summary: >
+        CORRECTION BY THE FILER. This packet was filed on a FALSE PREMISE and its
+        headline is withdrawn. I claimed --diagnose reported healthy during a total
+        outage. There was no outage: the VM was alive the whole time in the
+        Virtualization.framework XPC helper (pid 6712, ~397% CPU, 4111 MB footprint,
+        holding rootfs.img at fd 5, running since 23:01:19). "Guest health: healthy"
+        was CORRECT. My proof of death rested on the premise that VZ runs the guest
+        in-process, which is wrong, and on a ps filter
+        (-iE 'tilland|qemu|vfkit|krun|podman|vz') that cannot match the string
+        com.apple.Virtualization.VirtualMachine - a false negative I produced and
+        then reasoned from. Re-confirmed on a fresh provision at 00:47: tray 19467
+        and helper 19636 are distinct processes. Priority dropped p2 -> p3 and the
+        title rewritten to what actually survives.
+  - packet_id: diagnose-reports-healthy-during-a-total-outage
+    event:
+      type: note
+      ts: "2026-09-03T07:48:56Z"
+      host: macneo
+      summary: >
+        WHAT SURVIVES, narrower but real and still worth doing: (a) `provisioned`
+        collapses to a single stat of rootfs.img at diagnose.rs:351 even though the
+        report already collects kernel_present/initrd_present; (b) there is NO
+        host-software section - the string qemu appears zero times in diagnose.rs -
+        so --diagnose could not have named the missing qemu-img at any point during
+        the first-launch failure, which is the one thing it was most needed for;
+        (c) macOS --diagnose structurally cannot read live VM phase
+        (diagnose.rs:13-28, no AF_VSOCK) and does not say so in its verdict.
+        The exit criterion about distinguishing "checked and healthy" from "could
+        not check" stands. The one about reconciling displayed phase against VM
+        liveness does NOT belong here - see the corrected framing on the real
+        defect: a live, connected, CPU-bound guest that is change-gated into
+        silence, which is a missing PROGRESS signal rather than a missing liveness
+        check. Note also that the proposed exit-code fix is unimplementable as
+        written: scripts/install-macos.sh:249-255 treats exit 2 as the expected
+        first-install state and dies only on exit 1, so a distinct code or a
+        JSON-field check is required.
