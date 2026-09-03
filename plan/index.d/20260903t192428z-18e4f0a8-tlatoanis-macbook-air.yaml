@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: nine-hand-rolled-length-prefixed-framing-copies
+    field: next_action
+    value: |-
+      RATCHET IS NOW GATED (this cycle) and the macOS lane is DONE (previous cycle). Do not redo either.
+
+      CRITICAL SEQUENCING NOTE FOR WHOEVER MERGES: when this landed, origin/linux-next and origin/windows-next were BOTH red on the ratchet (blocked:framing-ratchet-new-site, qcow2.rs), because the qcow2 disposition row exists only on osx-next. The row and the gate wiring are in the SAME BRANCH deliberately — a whole-branch merge carries both and the siblings go green and gated in one step. A cherry-pick of the wiring alone reds them immediately.
+
+      WINDOWS IS THE ONLY LANE LEFT: hvsocket.rs (2 decodes), same shape as the macOS slice — frame ONCE and thread the Framed, never per call; see 828-r2ek for the bounded-write half. Needs a Windows host.
+
+      TWO NON-LANE ITEMS, both still open:
+      (1) THE DETECTOR CANNOT TELL DISK FORMATS FROM WIRE FRAMING. It counts u32::from_be_bytes, so a QCOW2 disk-header read registered as a framing site and is dispositioned keep. The class recurs with any big-endian header. Narrowing it to a decode that FEEDS a length-bounded body read would separate framing from parsing. I did not change the detector while using it to gate — changing a guard and relying on it in the same cycle leaves nothing to check the change.
+      (2) COORDINATOR DECISION STILL PENDING on exit criterion 1 being unsatisfiable as written. Untouched by me, twice now, for the same reason: a host that just migrated a slice should not rewrite the criterion it was measured against.
+
+      WHEN CLOSING, note that criterion 2 (one named constant cited by every site) is already met by control_frame_codec(), which is where max_frame_length lives.
+    ts: "2026-09-03T19:24:28Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: nine-hand-rolled-length-prefixed-framing-copies
+    event:
+      type: note
+      ts: "2026-09-03T19:24:28Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        ratchet gated; windows lane and detector-narrowing remain
