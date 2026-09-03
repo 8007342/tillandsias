@@ -1,0 +1,46 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: ready-conflates-never-touched-with-worked-and-released
+    order: 992-w7ds
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [plan-ledger, coordination, observability, fail-loud]
+    estimated_hours: 3
+    title: |
+      A row that was claimed, worked and deliberately released is indistinguishable from one nobody has ever touched, and the coordinator roll call reads both as unstarted.
+    context: |
+      FOUND by lenovinha-tillandsias-forge, correcting my status check. I asked
+      why 814-5avq still read `ready` after they said they were taking it, and
+      listed three readings: claim not yet on the trunk, started and blocked,
+      or cycle ended. THEY NAMED A FOURTH I HAD NOT: they RELEASED it, on
+      purpose, with a carry-forward, after doing the work.
+      VERIFIED. plan-events 814-5avq shows note 07:42:52 (claim), progress
+      07:45:08 (the forge row and decision proposal), note 07:45:22 (release) -
+      all three on the trunk in 15ce07895, with the code half in bc6bd3471.
+      expire-claims correctly shows no live claim, because they gave it back.
+      IT IS WORSE THAN THEY STATED. I went looking for a genuinely untouched
+      `ready` row to contrast against and picked 919-vvyv - which turns out to
+      be ANOTHER released row, worked and released by the same host hours
+      earlier. Two rows, identical `ready` status, both carrying real work, and
+      I could not tell either apart from unstarted. I did not have an untouched
+      example to hand, which is itself the demonstration.
+      WHY THE OBVIOUS FIX IS NOT ENOUGH. Their suggested discriminator -
+      plan-events <order> | tail -3, where a released row has a release note and
+      a fresh one has nothing - is directionally right but the CURRENT OUTPUT
+      CARRIES ONLY EVENT TYPE AND TIMESTAMP. Both a claim and a release print as
+      `note`. The distinguishing content is in the summary, which that view does
+      not show, so the check as described does not actually discriminate.
+      THIS IS THE SESSION'S RECURRING SHAPE seen in the ledger itself: a signal
+      that is true about what it measures and false about the question asked of
+      it. `ready` truthfully means "claimable now". It is read as "unstarted".
+      CONSEQUENCE ALREADY PAID: I dispatched two hosts onto work that had
+      already been done, twice tonight, and briefed one of them on rungs that
+      had landed days earlier.
+    exit_criteria:
+      - a released row is distinguishable from an untouched one in the SAME view a coordinator uses for the roll call, not by a second command someone must know to run
+      - whatever view answers it carries enough to decide - a bare event type does not, since a claim and a release both print as `note`
+      - the carry-forward a releasing host writes is surfaced with the row, because that is the thing the next taker needs and it is currently invisible until asked for
+      - the fix does not require the releasing host to do anything extra; they already recorded the release correctly and the gap is on the reading side
