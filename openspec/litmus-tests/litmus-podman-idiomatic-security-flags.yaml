@@ -53,7 +53,7 @@ preconditions:
 
 critical_path:
   - step: "verify podman rootless mode active"
-    command: "podman info --format='{{.Security.Rootless}}'"
+    command: "podman info --format='{{.Host.Security.Rootless}}'"
     timeout_ms: 5000
     expected_behavior: "true"
 
@@ -63,7 +63,7 @@ critical_path:
     expected_behavior: "ENVELOPE_COMPLETE"
 
   - step: "launch a container using the product's declared envelope, not fixture literals"
-    command: "FORGE_IMAGE=$(podman images --format '{{.Repository}}:{{.Tag}}' | grep '^tillandsias-forge:' | head -1); if [ -z \"$FORGE_IMAGE\" ]; then echo 'NO_FORGE_IMAGE'; elif [ ! -s /tmp/tillandsias-security-test-flags.txt ]; then echo 'NO_DECLARED_ENVELOPE'; else FLAGS=$(cat /tmp/tillandsias-security-test-flags.txt); CONTAINER_ID=$(podman run -d --label tillandsias-test=security-flags --rm $FLAGS \"$FORGE_IMAGE\" sleep 300 2>/dev/null); if [ -n \"$CONTAINER_ID\" ]; then echo \"$CONTAINER_ID\" > /tmp/tillandsias-security-test-container.id; echo \"CONTAINER_LAUNCHED $CONTAINER_ID\"; else echo 'LAUNCH_FAILED'; fi; fi"
+    command: "FORGE_IMAGE=$(podman images --format '{{.Repository}}:{{.Tag}}' | grep -E '(^|/)tillandsias-forge:' | head -1); if [ -z \"$FORGE_IMAGE\" ]; then echo 'NO_FORGE_IMAGE'; elif [ ! -s /tmp/tillandsias-security-test-flags.txt ]; then echo 'NO_DECLARED_ENVELOPE'; else FLAGS=$(cat /tmp/tillandsias-security-test-flags.txt); CONTAINER_ID=$(podman run -d --label tillandsias-test=security-flags --rm $FLAGS \"$FORGE_IMAGE\" sleep 300 2>/dev/null); if [ -n \"$CONTAINER_ID\" ]; then echo \"$CONTAINER_ID\" > /tmp/tillandsias-security-test-container.id; echo \"CONTAINER_LAUNCHED $CONTAINER_ID\"; else echo 'LAUNCH_FAILED'; fi; fi"
     timeout_ms: 15000
     expected_behavior: "CONTAINER_LAUNCHED"
 
