@@ -597,6 +597,7 @@ fixture() {
             local rname="$1" rstamp="$2" rrc_want="$3" rrc=0
             rm -f "$ledger_path"
             MO_FULL_BOUNDARY_STAMP="$rstamp" \
+            MO_FULL_RECORD_STAMP="$work/record-stamp-scratch" \
             MO_FULL_REMOTE_PROBE="printf '${live_head}'" \
                 "$0" record "$ledger_path" 2 >"$work/record-out" 2>&1 || rrc=$?
             if [ "$rrc" -ne "$rrc_want" ]; then
