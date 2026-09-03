@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Hand-authored (no tillandsias-plan on this host, order 979-xyub).
+events:
+  - packet_id: provisioning-spawns-binaries-absent-from-the-gui-launch-path
+    event:
+      type: note
+      ts: "2026-09-03T09:07:11Z"
+      host: macneo
+      summary: >
+        THE VERIFICATION METHOD MATTERS, and `open -a` is not a valid test of this
+        packet - it MASKS the bug. Measured on this host with `ps eww` against two
+        trays of the same bundle. The tray the operator launched from the GUI
+        (pid 6708) had PATH=/usr/bin:/bin:/usr/sbin:/sbin. A tray started with
+        `open -a Tillandsias` from a terminal (pid 83334) had
+        /Users/tlatoani/.local/bin:/usr/local/bin:...:/usr/bin:/bin:/usr/sbin:/sbin:...:/opt/homebrew/bin
+        - i.e. open(1) PROPAGATES THE CALLING SHELL'S PATH to the launched app,
+        while Finder/Dock/Spotlight do not. Both are ".app launches"; only one
+        reproduces the failure. Anyone confirming this fix by typing
+        `open -a Tillandsias` gets a false pass, and so would any smoke script
+        that launches the app that way.
+  - packet_id: provisioning-spawns-binaries-absent-from-the-gui-launch-path
+    event:
+      type: note
+      ts: "2026-09-03T09:07:11Z"
+      host: macneo
+      summary: >
+        Consequence for the regression guard, and why the one landed in cadbd0e57 is
+        the right shape. A behavioural test that LAUNCHES the app cannot be trusted
+        unless it also pins the environment, because the launch mechanism silently
+        decides the answer. The guard added instead is a source scan asserting that
+        no spawn in the provisioning path names a binary absent from
+        /usr/bin:/bin:/usr/sbin:/sbin - environment-independent, GUI-independent, and
+        feature-independent by construction. Where a live check IS wanted, drive the
+        installed binary under `env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin` (which is
+        how the end-to-end verification on this host was actually run) rather than
+        through open(1). This is the same family as everything else on this host
+        today: the instrument, not the system, decided the result.
