@@ -300,6 +300,52 @@ self_attest() {
         return 1
     fi
 
+    # ORDER 974-uk95. THE MARKER MUST NOT OUTRUN THE DURABLE RECORD.
+    #
+    # MEASURED on lenovinha 2026-09-03: `record` ran while HEAD was still
+    # unpushed and correctly refused; the cycle's fetch/rebase/retry loop then
+    # landed the work WITHOUT re-running it; and `self` printed COMPLETE,
+    # because by then local and remote genuinely agreed. Every tool was correct
+    # in isolation. The result was a verified transcript marker beside a ledger
+    # that had no line for the cycle at all — and the ledger is the half
+    # automation consumes, so an auditor reading it sees a cycle that never
+    # happened while the transcript shows a clean COMPLETE. That is 651-2x5s
+    # arriving through a different door: not a fabricated marker, a real one
+    # whose durable counterpart is missing.
+    #
+    # WHY NOT "REFUSE IF THE LEDGER HAS NO LINE FOR THIS HEAD", which is the
+    # obvious coupling and is UNSATISFIABLE BY CONSTRUCTION. The ledger line
+    # attests the WORK head; committing that line MOVES HEAD; the terminal
+    # marker is then re-derived one commit later, by design (Finalization step
+    # 9). So at the moment `self` prints the final marker, the ledger will never
+    # contain a line naming the head being attested — a literal reading refuses
+    # every correct cycle. This is the same trap the packet's own caveat warns
+    # an auditor about, one level down in the implementation.
+    #
+    # So the check is against the CYCLE, not the head: `record` stamps the head
+    # it recorded, the boundary guard's `snapshot` clears that stamp because a
+    # new cycle has recorded nothing yet, and a marker is refused unless this
+    # cycle recorded something that HEAD descends from. Same shape as the
+    # startup-boundary precondition above, and it fails in the same loud
+    # direction: no marker.
+    #
+    # BLOCKED is exempt. A blocked cycle already reports incompleteness, and
+    # requiring a record there would refuse the one marker whose job is to say
+    # the work did not finish.
+    if [ "$disp" = "COMPLETE" ] && [ -z "${MO_FULL_RECORDING:-}" ]; then
+        local rec_stamp recorded
+        rec_stamp="${MO_FULL_RECORD_STAMP:-$(git rev-parse --git-dir 2>/dev/null)/mo-full-recorded}"
+        recorded="$(cat "$rec_stamp" 2>/dev/null | tr -d '[:space:]')"
+        if [ -z "$recorded" ]; then
+            echo "MO-FULL: FAIL this cycle wrote no durable ledger record — run 'scripts/mo-full-attest.sh record' AFTER the work push succeeds, then commit and push the ledger; do NOT emit a marker"
+            return 1
+        fi
+        if ! git merge-base --is-ancestor "$recorded" "$local_sha" 2>/dev/null; then
+            echo "MO-FULL: FAIL the ledger record names $recorded, which HEAD $local_sha does not descend from — the recorded work is not in this history; do NOT emit a marker"
+            return 1
+        fi
+    fi
+
     if actual="$(converge_remote "$branch" "$local_sha" "$timeout_s")"; then
         printf 'MO-FULL: %s %s %s %s\n' "$disp" "$local_sha" "$branch" "$local_sha"
         return 0
@@ -331,7 +377,9 @@ record_attest() {
     fi
 
     out="$(mktemp "${TMPDIR:-/tmp}/mo-full-record.XXXXXX")"
-    "$0" self "$timeout_s" >"$out" 2>&1
+    # MO_FULL_RECORDING marks the ONE call that legitimately precedes the
+    # stamp: record cannot require a record that record is about to write.
+    MO_FULL_RECORDING=1 "$0" self "$timeout_s" >"$out" 2>&1
     local rc=$?
     if [ "$rc" -ne 0 ]; then
         cat "$out" >&2
@@ -363,6 +411,15 @@ record_attest() {
             "# Gate: scripts/check-mo-full-attestations.sh (./build.sh --check)." >>"$ledger"
     fi
     printf '\n## %s %s\n%s\n' "$ts" "$host" "$marker" >>"$ledger"
+
+    # Order 974-uk95: the cycle has now written its durable record, so the
+    # terminal marker is permitted. Written AFTER the ledger append, so a failed
+    # or partial write never leaves a stamp claiming a record that is not there.
+    local rec_stamp
+    rec_stamp="${MO_FULL_RECORD_STAMP:-$(git rev-parse --git-dir 2>/dev/null)/mo-full-recorded}"
+    if [ -n "$rec_stamp" ]; then
+        printf '%s\n' "$local_sha" > "$rec_stamp" 2>/dev/null || true
+    fi
 
     # The cycle is now attested; tell the checkout lock so the host's NEXT fire
     # is not refused by this cycle's own leftover lock (order 899-q9di).
@@ -479,10 +536,20 @@ fixture() {
     live_head="$(git rev-parse HEAD 2>/dev/null || true)"
     if [ -n "$live_head" ] && [ -n "$live_branch" ] && [ "$live_branch" != "main" ] && [ "$live_branch" != "HEAD" ]; then
         self_cases=3
+        # Order 974-uk95 added a SECOND precondition to a COMPLETE marker: this
+        # cycle must have written its durable ledger record. These scenarios
+        # exist to exercise the BOUNDARY precondition, so they satisfy the
+        # record one by default and scenario 12b below drives it directly.
+        # Leaving it unsatisfied here would make every boundary scenario fail
+        # for a reason it was not written to test — which is how a fixture stops
+        # measuring the thing it names.
+        printf '%s\n' "$live_head" >"$work/record-stamp"
+
         run_self_case() {
             # run_self_case <name> <stamp-file> <expect-exit> <verdict-substring>
             local sname="$1" sstamp="$2" src_want="$3" swant="$4" src=0
             MO_FULL_BOUNDARY_STAMP="$sstamp" \
+            MO_FULL_RECORD_STAMP="${5:-$work/record-stamp}" \
             MO_FULL_REMOTE_PROBE="printf '${live_head}'" \
                 "$0" self 2 >"$work/self-out" 2>&1 || src=$?
             if [ "$src" -ne "$src_want" ]; then
@@ -511,6 +578,14 @@ fixture() {
         printf '%s\n' "$live_head" >"$work/good-stamp"
         run_self_case "self-verified-boundary" "$work/good-stamp" 0 \
             "MO-FULL: COMPLETE $live_head $live_branch $live_head"
+
+        # 10b. ORDER 974-uk95: the same cycle, boundary verified at the attested
+        #      head, everything pushed — and NO durable ledger record. This is
+        #      the measured incident: record refused on an unpushed HEAD, the
+        #      retry loop landed the work without re-running it, and the marker
+        #      printed a verified COMPLETE beside an empty ledger. Refuse.
+        run_self_case "self-no-ledger-record" "$work/good-stamp" 1 \
+            "wrote no durable ledger record" "$work/absent-record-stamp"
 
         # 11-12. record mode — the durable-ledger path (651-2x5s). record runs
         #    self internally, so these use the same live-repo gating and must
@@ -558,7 +633,7 @@ fixture() {
         echo "PASS: mo-full-attest fixture 9/9 check scenarios green (no-marker, no-marker-but-refused, no-marker-prose-only, malformed, unpushed-commit, branch-mismatch, remote-head-mismatch, clean-pass, fabricated-sha); self/record boundary scenarios SKIPPED — not attestable from branch '${live_branch:-none}'"
         return 0
     fi
-    echo "PASS: mo-full-attest fixture 14/14 scenarios green (no-marker, no-marker-but-refused, no-marker-prose-only, malformed, unpushed-commit, branch-mismatch, remote-head-mismatch, clean-pass, fabricated-sha, self-no-boundary, self-stale-boundary, self-verified-boundary, record-verified-boundary, record-no-boundary)"
+    echo "PASS: mo-full-attest fixture 15/15 scenarios green (no-marker, no-marker-but-refused, no-marker-prose-only, malformed, unpushed-commit, branch-mismatch, remote-head-mismatch, clean-pass, fabricated-sha, self-no-boundary, self-stale-boundary, self-verified-boundary, self-no-ledger-record, record-verified-boundary, record-no-boundary)"
     return 0
 }
 
