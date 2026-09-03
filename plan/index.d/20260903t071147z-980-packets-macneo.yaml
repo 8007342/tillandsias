@@ -1,0 +1,127 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Hand-authored with a QUOTED heredoc (no tillandsias-plan binary on this host,
+# order 979-xyub). Order tokens were MINTED BY macuahuitl-fedora and recorded at
+# plan/index.d/20260903t064956z-1d22c835-macuahuitl.yaml; this fragment declares
+# the packets they were minted for.
+packets:
+  - packet_id: provisioning-spawns-binaries-absent-from-the-gui-launch-path
+    order: 980-xcaf
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [macos, vm-layer, provisioning, first-launch, zero-host-deps, fail-loud]
+    estimated_hours: 6
+    title: |
+      A macOS .app launched by LaunchServices gets PATH=/usr/bin:/bin:/usr/sbin:/sbin, so every bare-name spawn in the provisioning path is unreachable from a GUI launch on every Mac.
+    context: |
+      FOUND by macneo-macos on the first-ever launch of a factory-fresh Mac.
+      Symptom chain the operator reported: GUI launch failed claiming qemu was
+      missing; `brew install qemu` DID NOT FIX IT; `tillandsias-tray --provision`
+      from a shell then succeeded.
+      MEASURED, NOT INFERRED. `ps eww` on the operator's own running tray:
+        PATH=/usr/bin:/bin:/usr/sbin:/sbin
+      and under that exact PATH, qemu-img and xz are NOT-FOUND while hdiutil and
+      sysctl resolve. So the failure is structural: a Homebrew prefix is never on
+      that PATH, and "tell the operator to install it" could never have worked.
+      The tray's own error message said exactly that, so an operator who followed
+      it hit the identical failure and reasonably concluded the install had not
+      taken.
+      THE GENERAL RULE is the finding; qemu-img was the instance. vz.rs made four
+      bare-name spawns: hdiutil (safe), qemu-img (two sites), xz. macbook-macos
+      independently found the xz site and documented the class at
+      plan/issues/macos-gui-launch-bare-path-execs-2026-09-03.md. Note vz.rs
+      already used an absolute /usr/sbin/sysctl, so the pattern was known in that
+      exact file and simply not applied.
+      AN ABSOLUTE PATH IS NOT THE FIX FOR qemu-img: Homebrew is /opt/homebrew on
+      ARM and /usr/local on Intel, so there is no correct path to hardcode. That
+      is an argument for removing the dependency, which is what was done.
+    exit_criteria:
+      - provisioning spawns no binary absent from /usr/bin:/bin:/usr/sbin:/sbin
+      - a regression guard pins the GENERAL rule, not the qemu-img instance, and needs no GUI to run
+      - the operator-facing error stops advising a `brew install` that cannot help
+      - first launch from a GUI on a machine with no qemu installed reaches a booted guest
+
+  - packet_id: diagnose-reports-healthy-during-a-total-outage
+    order: 980-ja2m
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [macos, diagnostics, observability, platform-parity, fail-loud]
+    estimated_hours: 5
+    title: |
+      `--diagnose` on macOS reports PROVISIONED / healthy / exit 0 while the VM is dead and the forge is wedged — the support tool lies at the exact moment someone reaches for it.
+    context: |
+      CAPTURED LIVE by macneo-macos during a real outage, verbatim in
+      plan/issues/macneo-first-launch-forensics-2026-09-03.md. At the moment of
+      capture the tray displayed "building forge", no VM process existed, the
+      tray held ZERO rootfs.img file descriptors (VZ runs the VM in-process, so
+      that is proof of death rather than idleness), there was no crash report,
+      and crashloop.state read ever_ready=1 / last_phase=ready.
+      `--diagnose` printed: "Guest health: healthy", "Status: PROVISIONED —
+      first-launch materialization complete.", exit code 0.
+      THE STRUCTURAL REASON IS ALREADY DOCUMENTED IN THE CODE, at
+      crates/tillandsias-macos-tray/src/diagnose.rs:13-28: Apple's vsock is
+      per-VM-handle and macOS has no AF_VSOCK, so a standalone --diagnose process
+      cannot reach a separately-running tray's VM. It therefore reports
+      static/filesystem health only. That is an honest limitation, but the OUTPUT
+      does not carry it into its verdict: it says "healthy" and exits 0 rather
+      than saying it cannot see the live VM.
+      PLATFORM PARITY: the Windows tray reaches its live wire and has crashloop
+      detection plus an auto-reset policy (windows-tray/src/notify_icon.rs:
+      note_crashloop_observation, reset_crashloop_state, AutoResetPolicy). macOS
+      writes crashloop.state but the macOS tray has no equivalent consumer, which
+      is why this stall was silent rather than reported.
+      A missing verdict routes nobody; a false "healthy" routes confidently and
+      wrongly — the same argument check-capability-row.sh makes about false rows.
+    exit_criteria:
+      - a report that cannot observe live VM state SAYS SO and does not print an unqualified healthy verdict
+      - exit code distinguishes "checked and healthy" from "could not check"
+      - the tray reconciles displayed phase against actual VM liveness, so a dead VM cannot present as a phase still in progress
+      - decide whether macOS gets a crashloop-state consumer, or whether writing the file without acting on it should stop
+
+  - packet_id: github-login-glibc-error-originates-inside-the-guest
+    order: 980-7rng
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: unassigned
+    capability_tags: [guest-rootfs, github-login, zero-host-deps]
+    estimated_hours: 4
+    title: |
+      GitHub Login failed once with a GLIBC error and succeeded after a tray restart; the host side is cleared, so the fault is inside the guest.
+    context: |
+      OWNER MAY NOT BE macos — filed with pickup_role unassigned deliberately. A
+      packet that names the wrong owner is better than one that hides the
+      question, but this one can be routed correctly from the start.
+      Reported by the operator on macneo: first GitHub Login attempt failed with
+      a GLIBC error; they terminated the tray, relaunched, and it succeeded. They
+      also ran `brew install gh git` in between, which made it look like a host
+      dependency.
+      THE HOST SIDE IS CLEARED, WITH CITATIONS. The macOS login is a
+      GithubLoginStatusRequest over the in-VM control wire
+      (macos-tray/src/action_host.rs:769-782, virtio-vsock), and the only
+      host-side Command::new calls in the tray crate are security, osascript,
+      open and stty — no gh, no git. Traced by macbook-macos and confirmed
+      independently by macneo. So the mid-debug `brew install gh git` masked
+      NOTHING on this path, and the zero-host-dependency premise holds on the
+      host side.
+      THEREFORE THE GLIBC ERROR CAME FROM INSIDE THE GUEST. The app bundle ships
+      only musl-linked guest binaries
+      (Resources/guest/tillandsias-headless-{aarch64,x86_64}-unknown-linux-musl),
+      and musl binaries cannot emit a GLIBC version error — so the failing
+      binary is something else the guest execs for the device-code flow.
+      THE RESTART-FIXES-IT SHAPE SUGGESTS A READINESS RACE rather than a missing
+      library: on this host the guest reached a login prompt twice, and the model
+      preload completed at 23:11 while the first login attempt was earlier. Check
+      whether the login action waits for a ready phase or fires optimistically
+      (see vm-layer/src/readiness.rs).
+    exit_criteria:
+      - the glibc-linked binary in the guest login path is identified by name and by how it gets there
+      - the login action gates on guest readiness instead of firing optimistically, or the race is ruled out with evidence
+      - the operator sees a real error rather than a raw linker message
+      - the packet is re-routed to the role that owns the guest rootfs once identified
