@@ -81,6 +81,12 @@ pub mod fake;
 #[cfg(feature = "download")]
 pub mod fetch;
 
+/// Pure-Rust qcow2 -> raw expansion, so first-run provisioning needs no
+/// `qemu-img` on the host (order 980-xcaf). Behind `download` because that is
+/// what carries `flate2`, which the compressed-cluster path needs.
+#[cfg(feature = "download")]
+pub mod qcow2;
+
 /// Shared (co-owned) Recipefile + manifest.toml parser for the recipe
 /// materializer (vm-recipe-provisioning §2). Behind the `recipe` feature.
 #[cfg(feature = "recipe")]
