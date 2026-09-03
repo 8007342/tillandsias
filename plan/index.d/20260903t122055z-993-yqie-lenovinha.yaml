@@ -1,0 +1,80 @@
+packets:
+  - packet_id: credential-guard-runs-before-the-fast-forward-so-its-caveat-arm-is-the-normal-answer
+    order: 993-yqie
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [meta-orchestration, fail-loud, signal-hygiene, credentials]
+    estimated_hours: 1
+    title: |
+      The credential guard's ref-state caveat fires on almost every cycle, because the skill runs it before the fast-forward — so the suffixed verdict is the normal one and carries no information.
+    context: |
+      NOTICED by macuahuitl, who put it exactly right without filing it: an
+      `ok:` with an unexplained suffix is how a real signal gets normalised
+      into background noise. The verdict in question is
+      `ok:gh-keyring-push-verified-refstate-refused`, seen on at least two
+      hosts.
+
+      IT IS NOT UNEXPLAINED. It is documented at
+      scripts/check-credential-channel.sh:78 and emitted deliberately by order
+      886-qmdz: the push probe was refused by the REMOTE'S ref state rather
+      than by the credential, and a create to a fresh unique ref under
+      refs/tillandsias/cred-probe/ authenticated fine. The guard also prints a
+      five-line explanation. That explanation goes to STDERR, and every
+      invocation in the skill and in practice is `... 2>&1 | tail -1` or
+      `2>/dev/null | tail -1`, which discards it and leaves only the opaque
+      token. A signal that explains itself in a channel the standard idiom
+      throws away is, in effect, unexplained.
+
+      MEASURED ON lenovinha, same host, same credential, seconds apart, with
+      ref state as the only variable:
+        one commit behind origin  -> ok:gh-keyring-push-verified-refstate-refused
+        level with origin         -> ok:gh-keyring-push-verified
+      So the suffix is entirely a function of ref state and says nothing about
+      credentials.
+
+      THE CAUSE IS POSITION, NOT THE GUARD. The meta-orchestration skill runs
+      the credential guard at Start Of Cycle step 2, immediately after
+      `git fetch`, and fast-forwards the branch at step 5. Between those two
+      steps the branch is behind origin by construction whenever a sibling has
+      pushed — which in this fleet is most cycles. So the caveat arm is the
+      DEFAULT answer, and the plain verdict is the exception. This host's own
+      transcripts show it: every Start-Of-Cycle run returned the suffixed
+      verdict and every Finalization `reverify`, which happens level with
+      origin, returned the plain one.
+
+      WHY IT MATTERS RATHER THAN BEING COSMETIC. A verdict that is always the
+      same carries no information, so nobody reads it — and the arm it is
+      crowding out is a real one. If a host ever hits the ref-state arm while
+      genuinely level with origin, that is a different and interesting
+      condition, and it will look exactly like every other cycle.
+    exit_criteria:
+      - the credential guard runs where the branch is already level with origin, so the plain verdict is the common case and the suffixed one is rare
+      - the ordering change does not weaken the guard's purpose - it must still run BEFORE any committable work, so a host learns it cannot push before it does the work
+      - a host that is genuinely behind when the guard runs still gets the caveat rather than a blocked verdict, since that arm is correct and must survive
+      - the guard's stderr explanation reaches a reader who uses the standard `| tail -1` idiom, or the verdict token alone is sufficient to act on
+    events:
+      - type: note
+        ts: "2026-09-03T12:30:00Z"
+        agent_id: "linux-lenovinha-opus5-20260903t114617z"
+        host: lenovinha
+        summary: |
+          Filed after macuahuitl flagged the suffix as unexplained and neither
+          of us had looked. Looking cost about two minutes and the answer is
+          the opposite of the suspicion: the guard is correct, documented, and
+          explains itself — and the explanation is destroyed by the way
+          everyone invokes it.
+
+          The controlled test is the part worth keeping: same host, same
+          credential, seconds apart, ref state the only variable. One commit
+          behind gives the suffix, level gives the plain verdict. That takes
+          the question from "what does this suffix mean" to "why is it always
+          on", which is a different and answerable question.
+
+          NOT proposing to remove the caveat arm. It is right, it distinguishes
+          a ref-state refusal from a credential failure, and 886-qmdz exists
+          because conflating them hard-stopped cycles with an inert remedy. The
+          problem is only that the skill asks the question at the one moment
+          the answer is guaranteed to be the caveat.

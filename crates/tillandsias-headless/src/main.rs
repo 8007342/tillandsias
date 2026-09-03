@@ -11503,6 +11503,53 @@ async fn run_agent_container_attached(
     debug: bool,
     delegated: Option<&DelegatedRunConfig>,
 ) -> Result<(), String> {
+    // ORDER 986-ahnc. THE FORGE ARGV IS VALIDATED HERE OR NOWHERE.
+    //
+    // 972-6vaj put the hardening envelope behind a real check on the
+    // ContainerSpec path. The forge does not take that path: its argv is a
+    // plain Vec<String> from build_stack_common_args + build_opencode_forge_args
+    // via build_forge_common_args, so `validate_launch_argv` could not have
+    // covered the container that matters most even when it was being called.
+    // This is the choke point every attached agent launch passes through.
+    //
+    // "run" is PREPENDED because `run_container_attached_observed` adds it
+    // downstream (client.rs: `let mut full_args = vec!["run".to_string()]`),
+    // so `args` alone is not what podman receives and the validator — which
+    // requires the run subcommand — would reject every launch on a
+    // technicality. Validate the argv podman actually gets, not the fragment
+    // this function was handed.
+    //
+    // REFUSE RATHER THAN LOG, and this was the open decision the packet named.
+    // The worry was that a false positive here stops every forge on the host,
+    // which is real: this function serves every attached agent launch. Three
+    // things settle it. There are exactly TWO production call sites and both
+    // are forge launches that already carry the whole envelope (verified on
+    // the live container: private userns, expanded CapDrop, no-new-privileges,
+    // label=disable). The function already returns Result and both callers
+    // already handle the error, so refusing costs no new plumbing. And a test
+    // below asserts the REAL builders produce a validating argv, so a false
+    // positive fails the gate rather than a launch. Given that, the only way
+    // to reach this refusal is for someone to remove a hardening flag from the
+    // builders — which is precisely the regression the check exists to stop,
+    // and letting it through with a log would be the fail-safe-looking outcome
+    // this fleet keeps paying for.
+    {
+        let mut full = Vec::with_capacity(args.len() + 1);
+        full.push("run".to_string());
+        full.extend_from_slice(args);
+        if let Err(err) = tillandsias_podman::policy::validate_launch_argv(&full) {
+            eprintln!(
+                "[security] refusing to launch {container_name}: {err}\n\
+                 [security] the launch argv lost part of the immutable hardening \
+                 envelope; see crates/tillandsias-podman/src/policy.rs \
+                 MANDATORY_HARDENING_FLAGS (order 986-ahnc)"
+            );
+            return Err(format!(
+                "refusing to launch {container_name}: hardening envelope violation: {err}"
+            ));
+        }
+    }
+
     let Some(config) = delegated else {
         return client
             .run_container_attached_observed(stage, container_name, args, debug)
@@ -16349,6 +16396,60 @@ pub(crate) async fn service_stop(
 
 #[cfg(test)]
 mod tests {
+    /// ORDER 986-ahnc. THE REAL FORGE ARGV MUST PASS THE CHECK THAT NOW GUARDS
+    /// IT, so a false positive fails the GATE rather than a launch.
+    ///
+    /// This is the test the refuse-versus-log decision rests on. Refusing at
+    /// `run_agent_container_attached` is only safe because the argv the real
+    /// builders produce is known to validate; without this, the first proof
+    /// would be a forge failing to start on someone's machine.
+    ///
+    /// It builds through `build_opencode_forge_args` — the LIVE path, not one
+    /// of the two dead builders (`ContainerLauncher::build_container_spec` and
+    /// the legacy tray `build_launch_spec`, both of which have no production
+    /// callers and either of which would give a green assertion and change
+    /// nothing).
+    #[test]
+    // @trace order:986-ahnc, order:972-6vaj, spec:security-privacy-isolation
+    fn the_live_forge_argv_satisfies_the_hardening_envelope() {
+        let argv = build_opencode_forge_args(
+            std::path::Path::new("/tmp/probe-project"),
+            "probe-project",
+            None,
+            None,
+            std::path::Path::new("/tmp/probe-certs"),
+            "0.0.0-test",
+            ForgeMode::Cli,
+            None,
+            false,
+            false,
+        );
+
+        // `run` is prepended downstream by run_container_attached_observed, so
+        // validate what podman actually receives.
+        let mut full = vec!["run".to_string()];
+        full.extend_from_slice(&argv);
+
+        assert_eq!(
+            tillandsias_podman::policy::validate_launch_argv(&full),
+            Ok(()),
+            "the live forge argv must satisfy the envelope the choke point enforces: {full:?}"
+        );
+
+        // NEGATIVE CONTROL: without it, this test would still pass if
+        // validate_launch_argv were ever weakened to accept anything, and the
+        // assertion above would be decoration.
+        let stripped: Vec<String> = full
+            .iter()
+            .filter(|a| *a != "--cap-drop=ALL")
+            .cloned()
+            .collect();
+        assert!(
+            tillandsias_podman::policy::validate_launch_argv(&stripped).is_err(),
+            "removing a mandatory flag from the real forge argv must be refused"
+        );
+    }
+
     use super::*;
     use std::path::PathBuf;
     use tillandsias_podman::{CommandFailure, CommandOutput, FakeBackend, RetryClass};
