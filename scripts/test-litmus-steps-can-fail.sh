@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @trace spec:litmus-testing
+# @trace spec:litmus-framework, spec:methodology-accountability
 # @trace order:972-cvdg
 #
 # Fixture for scripts/check-litmus-steps-can-fail.sh.
@@ -29,12 +29,15 @@ expect() {
         failures=$((failures + 1))
         return
     fi
-    if ! printf '%s' "$out" | grep -qF "$want_grep"; then
-        echo "FAIL: $name — output does not contain '$want_grep'"
-        echo "  output: $out"
-        failures=$((failures + 1))
-        return
-    fi
+    case "$out" in
+        *"$want_grep"*) ;;
+        *)
+            echo "FAIL: $name — output does not contain '$want_grep'"
+            echo "  output: $out"
+            failures=$((failures + 1))
+            return
+            ;;
+    esac
     echo "ok: $name"
 }
 

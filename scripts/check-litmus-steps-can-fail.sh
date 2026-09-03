@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @trace spec:litmus-testing
+# @trace spec:litmus-framework, spec:methodology-accountability
 # @trace order:972-cvdg
 #
 # ORDER 972-cvdg. Refuse a litmus step whose success and failure branches print
