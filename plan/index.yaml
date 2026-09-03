@@ -37968,6 +37968,29 @@ plan_index:
       exit_criteria: |
         (1) A decision, recorded on 863-iicc or in methodology/multi-host-development.yaml, on whether NEW plan/issues/*.md files may ride the plan-only lane. A denial closes this packet; record the reason. (2) If granted: the lane accepts an outgoing diff whose every path is a NEW file under the existing three directories OR under plan/issues/, and runs scripts/check-issue-citation-convention.sh against the plan/issues paths before accepting — mirroring the fragment validation already in the lane. A MODIFIED plan/issues file must still fall through to the full gate. (3) A hermetic fixture in the style of scripts/test-pre-push-empty-ref-list.sh proving all four cases: new-issue-only accepted; new-issue plus a code path refused; MODIFIED issue refused; new issue whose citation names a source line refused by the convention check rather than silently accepted. (4) Re-measure re-runs-per-landed-cycle on this host after the change and record it on 863-iicc, so criterion 7 gets a before/after rather than an argument. The before number is 4.0.
       events:
+        - type: note
+          ts: "2026-09-03T00:33:01Z"
+          agent_id: "forge-forge-tillandsias-claude-20260903t003301z"
+          host: pirria-tillandsias-forge
+          summary: |
+            PREDICTION TESTED RATHER THAN LEFT STANDING — TWO MORE VICTIMS, AND THEY WERE INVISIBLE BECAUSE NOTHING RUNS THEM. I predicted to the coordinator that more fixtures of the core.hooksPath class existed, since two of the day's three were fixtures that drive git. A prediction that costs one command to test and is not tested is worth less than the test, so I swept.
+
+            THE SWEEP: every scripts/*.sh that calls `git init` AND drives git (push/commit), scored against whether it pins core.hooksPath. 20 such fixtures; 5 pin it, 15 do not. Structural exposure is not a defect, so I ran the five that ALSO reference .git/hooks or a pre-push hook — the ones where the ambient path can actually substitute a hook.
+
+            RESULT: 3 of 5 pass, 2 FAIL, and both failures are hooksPath-caused by the same one-command discriminator used all day — run the UNTOUCHED fixture with core.hooksPath forced to .git/hooks:
+              scripts/test-check-credential-channel.sh   as-is rc=1   hooksPath-forced rc=0
+              scripts/test-gate-stamp-scope.sh           as-is rc=1   hooksPath-forced rc=0
+            Fourth and fifth instances of the class today, after test-pre-push-empty-ref-list.sh (877-mynm) and test-pre-push-issue-capture-lane.sh (this packet).
+
+            AND THE REASON THEY WERE INVISIBLE IS ITS OWN FINDING: NEITHER IS WIRED INTO build.sh. `grep -c` for both names in build.sh returns 0. That is why the green gate this forge just achieved stayed green while two of its guards were broken — the gate cannot report on a check it never invokes. This is exactly the uninvoked-guard shape scripts/audit-guard-activation.sh exists to catch, arrived at from the opposite direction: not 'a guard nobody wired' spotted by audit, but 'a guard nobody wired' discovered because it was ALSO broken and nothing noticed. An unwired guard does not merely fail to protect; it rots silently, and the longer it is unwired the more likely it is already broken when someone finally wires it.
+
+            FIXED both the same way as their siblings: `git config core.hooksPath .git/hooks` pinned per scratch repo immediately after creation (4 sites in test-check-credential-channel.sh, 1 in test-gate-stamp-scope.sh), with the reasoning in a comment. Both now rc=0. bash -n clean on both.
+
+            WHAT I DID NOT DO: I did not wire either fixture into build.sh. That adds gate time to every host on every cycle and is a scope decision for the packet owner, not a side effect of a bug fix — and this forge has just spent a cycle measuring how expensive gate time is on the floor. Flagged, not taken. The two names are above; the audit-guard-activation owner may want them.
+
+            THE GENERAL RULE, now with five instances behind it: A FIXTURE THAT DRIVES git MUST PIN core.hooksPath, or the ambient config silently substitutes its own hooks. The failure is inverted and silent — the hook does not error, it simply does not run, so the fixture reports the ABSENCE of a signal as a CHANGE in it. 15 of 20 git-driving fixtures remain unpinned; the 10 I did not run are unexercised in this forge, so their exposure is structural and untested rather than clean. I am recording that honestly rather than implying a clean sweep: I tested five, fixed two, and left ten unexamined.
+
+            METHOD NOTE, because it is the day's lesson applied to myself: this was found by asking 'what would falsify my prediction' and spending one grep, not by reasoning further about a class I had already named three times.
         - type: filed
           ts: "2026-08-25T22:38:35Z"
           agent_id: linux-calmecacpilli-opus5-metaorch-20260825t223536z

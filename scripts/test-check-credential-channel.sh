@@ -42,6 +42,12 @@ chmod +x "$W/bin-noauth/gh"
 scratch() {
     local d="$W/repo-$1"
     git init -q -b main "$d"
+    # core.hooksPath is GLOBAL and REPLACES .git/hooks (a forge sets it in
+    # ~/.gitconfig), so an unpinned scratch repo runs the REAL forge hooks
+    # instead of this fixture's. Pin it per repo. Same defect as 889-twhe
+    # and 877-mynm; found by sweeping for the class rather than by being
+    # blocked, because neither of these fixtures is wired into build.sh.
+    git -C "$d" config core.hooksPath .git/hooks
     git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m x
     printf '%s' "$d"
 }
@@ -136,6 +142,7 @@ with_remote() { # with_remote <name> <hook-body> ; echoes the repo path
     local d="$W/hookrepo-$1" bare="$W/bare-$1.git"
     git init -q --bare "$bare"
     git init -q -b main "$d"
+    git -C "$d" config core.hooksPath .git/hooks
     git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m x
     git -C "$d" remote add origin "$bare"
     git -C "$d" push -q origin main 2>/dev/null
@@ -203,6 +210,7 @@ behind_repo() { # behind_repo <name>; echoes a repo whose branch is behind origi
     local d="$W/behindrepo-$1" bare="$W/bare-behind-$1.git"
     git init -q --bare -b main "$bare"
     git init -q -b main "$d"
+    git -C "$d" config core.hooksPath .git/hooks
     git -C "$d" remote add origin "$bare"
     git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m base
     git -C "$d" push -q origin main
@@ -346,6 +354,7 @@ layer_case() { # layer_case <name> <gh-api-user-rc> <gh-api-user-stderr>
     local d="$W/layer-$name" bin="$W/layerbin-$name"
     rm -rf "$d" "$bin"; mkdir -p "$bin"
     git init -q -b main "$d"
+    git -C "$d" config core.hooksPath .git/hooks
     git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m x
     git -C "$d" remote add origin "$W/does-not-exist.git"   # push always fails
     cat >"$bin/gh" <<GHEOF
