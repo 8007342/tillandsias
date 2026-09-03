@@ -27,6 +27,42 @@
 # enforcement steps then fail. That makes the fixture observe a product
 # decision rather than its own literals.
 #
+# THE THIRD DEFECT WAS ONLY REACHABLE ONCE THE FIRST TWO WERE GONE, and the
+# stacking is the lesson (order 973-q4y8, diagnosed by macuahuitl on a host with
+# the image). Step 1 called `{{.Security.Rootless}}`, a path podman 5.8.4 does
+# not have, and the runner abandons a test at its first failing step — so NO
+# security step in this file had ever executed, and the tautologies below were
+# never even reached. With that repaired, the image lookup anchored
+# `^tillandsias-forge:` while podman reports `localhost/tillandsias-forge:...`,
+# finding nothing on a host holding 34 images. Only with BOTH fixed did the
+# assertions run, and they were wrong too: they expected a vocabulary podman
+# does not use. Three independent faults, each hiding the ones below it.
+#
+# MEASURED on lenovinha, on a correctly hardened container:
+#   UsernsMode  = "private"                     <- not the string "keep-id"
+#   CapDrop     = ["CAP_CHOWN","CAP_DAC_OVERRIDE",...]   <- the EXPANDED set
+#   SecurityOpt = ["no-new-privileges","label=disable"]  <- recorded verbatim
+#
+# So each flag is now asserted with the STRONGEST EVIDENCE AVAILABLE FOR IT,
+# rather than all three through one inspect:
+#
+#   --cap-drop=ALL      behaviourally, by steps 5 and 6 (no file capabilities
+#                       survive, a privileged operation is refused). Asserting
+#                       podman's expanded CapDrop list would add nothing and
+#                       would break on the next podman that expands differently.
+#   --userns=keep-id    behaviourally, by bind-mounting a host-owned file and
+#                       checking its owner INSIDE. `UsernsMode` reads "private"
+#                       for any private userns and cannot identify keep-id.
+#   no-new-privileges   by declaration, because nothing here can observe it —
+#   label=disable       and podman records both verbatim, unambiguously.
+#
+# A WARNING FOR WHOEVER TOUCHES THE KEEP-ID STEP: comparing the container's own
+# `id -u` against the host's looks like the obvious test and is a FALSE PASS on
+# any host whose uid matches the image's USER. Measured here: with keep-id and
+# without it, `id -u` returns 1000 both times. The bind-mounted file
+# discriminates — 1000 with keep-id, 0 without — which is why the probe mount
+# exists.
+#
 # WHAT IT STILL DOES NOT COVER, stated because the title would otherwise imply
 # it: that every production launch site actually APPLIES the envelope. The
 # validator that would answer this — `validate_launch_argv` in the same module —
@@ -63,7 +99,7 @@ critical_path:
     expected_behavior: "ENVELOPE_COMPLETE"
 
   - step: "launch a container using the product's declared envelope, not fixture literals"
-    command: "FORGE_IMAGE=$(podman images --format '{{.Repository}}:{{.Tag}}' | grep -E '(^|/)tillandsias-forge:' | head -1); if [ -z \"$FORGE_IMAGE\" ]; then echo 'NO_FORGE_IMAGE'; elif [ ! -s /tmp/tillandsias-security-test-flags.txt ]; then echo 'NO_DECLARED_ENVELOPE'; else FLAGS=$(cat /tmp/tillandsias-security-test-flags.txt); CONTAINER_ID=$(podman run -d --label tillandsias-test=security-flags --rm $FLAGS \"$FORGE_IMAGE\" sleep 300 2>/dev/null); if [ -n \"$CONTAINER_ID\" ]; then echo \"$CONTAINER_ID\" > /tmp/tillandsias-security-test-container.id; echo \"CONTAINER_LAUNCHED $CONTAINER_ID\"; else echo 'LAUNCH_FAILED'; fi; fi"
+    command: "FORGE_IMAGE=$(podman images --format '{{.Repository}}:{{.Tag}}' | grep -E '(^|/)tillandsias-forge:' | head -1); if [ -z \"$FORGE_IMAGE\" ]; then echo 'NO_FORGE_IMAGE'; elif [ ! -s /tmp/tillandsias-security-test-flags.txt ]; then echo 'NO_DECLARED_ENVELOPE'; else FLAGS=$(cat /tmp/tillandsias-security-test-flags.txt); rm -rf /tmp/tillandsias-security-test-probe; mkdir -p /tmp/tillandsias-security-test-probe; echo probe > /tmp/tillandsias-security-test-probe/owned-by-host; CONTAINER_ID=$(podman run -d --label tillandsias-test=security-flags --rm $FLAGS -v /tmp/tillandsias-security-test-probe:/probe:ro \"$FORGE_IMAGE\" sleep 300 2>/dev/null); if [ -n \"$CONTAINER_ID\" ]; then echo \"$CONTAINER_ID\" > /tmp/tillandsias-security-test-container.id; echo \"CONTAINER_LAUNCHED $CONTAINER_ID\"; else echo 'LAUNCH_FAILED'; fi; fi"
     timeout_ms: 15000
     expected_behavior: "CONTAINER_LAUNCHED"
 
@@ -82,10 +118,20 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "EPERM_CONFIRMED"
 
-  - step: "verify podman recorded keep-id, cap-drop ALL and no-new-privileges on the running container"
-    command: "CONTAINER_ID=$(cat /tmp/tillandsias-security-test-container.id 2>/dev/null); if [ -z \"$CONTAINER_ID\" ]; then echo 'NO_CONTAINER'; else SPEC=$(podman inspect \"$CONTAINER_ID\" --format='{{json .HostConfig.UsernsMode}} {{json .HostConfig.CapDrop}} {{json .HostConfig.SecurityOpt}}' 2>/dev/null); MISSING=''; printf '%s' \"$SPEC\" | grep -q 'keep-id' || MISSING=\"$MISSING userns\"; printf '%s' \"$SPEC\" | grep -q 'ALL' || MISSING=\"$MISSING cap-drop\"; printf '%s' \"$SPEC\" | grep -q 'no-new-privileges' || MISSING=\"$MISSING no-new-privileges\"; if [ -n \"$MISSING\" ]; then echo \"HARDENING_NOT_APPLIED:$MISSING\"; else echo 'HARDENING_APPLIED'; fi; fi"
+  - step: "verify --userns=keep-id actually maps the host user (behavioural, not a label)"
+    command: "CONTAINER_ID=$(cat /tmp/tillandsias-security-test-container.id 2>/dev/null); if [ -z \"$CONTAINER_ID\" ]; then echo 'NO_CONTAINER'; else HOST_UID=$(id -u); SEEN=$(podman exec \"$CONTAINER_ID\" stat -c '%u' /probe/owned-by-host 2>/dev/null); if [ -z \"$SEEN\" ]; then echo 'PROBE_UNREADABLE'; elif [ \"$SEEN\" = \"$HOST_UID\" ]; then echo 'KEEP_ID_MAPS_HOST_USER'; else echo \"KEEP_ID_NOT_MAPPING:host=$HOST_UID seen=$SEEN\"; fi; fi"
     timeout_ms: 5000
-    expected_behavior: "HARDENING_APPLIED"
+    expected_behavior: "KEEP_ID_MAPS_HOST_USER"
+
+  - step: "verify no-new-privileges and label=disable are recorded (the two flags nothing else can observe)"
+    command: "CONTAINER_ID=$(cat /tmp/tillandsias-security-test-container.id 2>/dev/null); if [ -z \"$CONTAINER_ID\" ]; then echo 'NO_CONTAINER'; else OPTS=$(podman inspect \"$CONTAINER_ID\" --format='{{json .HostConfig.SecurityOpt}}' 2>/dev/null); MISSING=''; printf '%s' \"$OPTS\" | grep -q 'no-new-privileges' || MISSING=\"$MISSING no-new-privileges\"; printf '%s' \"$OPTS\" | grep -q 'label=disable' || MISSING=\"$MISSING label=disable\"; if [ -n \"$MISSING\" ]; then echo \"SECURITY_OPT_MISSING:$MISSING\"; else echo 'SECURITY_OPT_RECORDED'; fi; fi"
+    timeout_ms: 5000
+    expected_behavior: "SECURITY_OPT_RECORDED"
+
+  - step: "cleanup the probe container"
+    command: "CONTAINER_ID=$(cat /tmp/tillandsias-security-test-container.id 2>/dev/null); if [ -n \"$CONTAINER_ID\" ]; then podman kill \"$CONTAINER_ID\" >/dev/null 2>&1; fi; rm -rf /tmp/tillandsias-security-test-probe /tmp/tillandsias-security-test-container.id /tmp/tillandsias-security-test-flags.txt; echo 'CLEANED'"
+    timeout_ms: 10000
+    expected_behavior: "CLEANED"
 
 observability:
   traces:
