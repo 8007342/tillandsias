@@ -1,0 +1,62 @@
+packets:
+  - packet_id: forge-launch-argv-is-validated-by-nothing
+    order: 986-ahnc
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [security, podman, forge, fail-loud]
+    estimated_hours: 3
+    title: |
+      The forge argv never passes through validate_launch_argv — it is a plain Vec<String>, so the container that matters most is the one the hardening validator cannot see.
+    context: |
+      FOUND while closing 972-6vaj, which enforced the envelope on the
+      ContainerSpec path. That fix is real and it does not reach the forge.
+
+      MEASURED. The live forge argv is built as a plain Vec<String> by
+      build_stack_common_args (main.rs:3246) and build_opencode_forge_args
+      (main.rs:6702), assembled by build_forge_common_args (main.rs:6115), and
+      handed to run_agent_container_attached (main.rs:11498). It never
+      constructs a ContainerSpec, so validate_launch_argv could not have
+      covered it even when it was called — 972-6vaj closed a gap on a
+      different path.
+
+      THE FORGE IS CORRECT TODAY AND PROTECTED BY NOTHING. All four flags are
+      present in those builders (two occurrences each), and the running
+      container is genuinely hardened: podman reports UsernsMode "private",
+      the expanded CapDrop set, and SecurityOpt ["no-new-privileges",
+      "label=disable"]. So this is regression protection for a correct
+      envelope, not a live bypass — the cheaper diagnosis, and it should stay
+      that way. Do not redesign the envelope; wire the check.
+
+      WHY IT IS ITS OWN PACKET RATHER THAN A RIDER ON 972-6vaj.
+      run_agent_container_attached is the choke point for EVERY attached agent
+      launch, with four call sites. Refusing there on a false positive takes
+      the forge down for the whole fleet, and refuse-versus-log at that
+      specific site is a deliberate decision rather than a mechanical
+      extension of the ContainerSpec fix. 972-6vaj chose refuse for the root
+      terminal because a single interactive launch failing loudly is cheap;
+      the same choice at the forge choke point is not obviously right.
+    exit_criteria:
+      - the argv handed to run_agent_container_attached is validated against MANDATORY_HARDENING_FLAGS before podman is spawned, in a release build
+      - the refuse-versus-loudly-log decision at this site is made explicitly and its reasoning recorded, since a false positive here stops every forge on the host
+      - the check is proven by removing a flag from a real forge launch and observing the refusal or the log, not by a unit test alone
+      - no second copy of the flag list — the check reads policy::MANDATORY_HARDENING_FLAGS, so the envelope keeps one definition
+    events:
+      - type: note
+        ts: "2026-09-03T08:03:00Z"
+        agent_id: "linux-lenovinha-opus5-20260903t074141z"
+        host: lenovinha
+        summary: |
+          Split out of 972-6vaj rather than absorbed into it. The tempting move
+          was to wire the validator into the forge path in the same cycle and
+          call the packet fully discharged; that would have put a
+          fleet-stopping refusal into a choke point as a rider on a packet
+          about a different code path, decided by nobody.
+
+          Correcting my own reference: the 972-6vaj closing event cites this
+          follow-up as "983-vk2m". That token was written before it was minted
+          and does not exist — the real order is 986-ahnc. The event is an
+          immutable fragment, so the correction lives here rather than as an
+          edit there.
