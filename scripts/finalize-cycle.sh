@@ -77,7 +77,24 @@ scripts/meta-orchestration-worktree-guard.sh verify "$SD" || {
     exit 3
 }
 
-_step "record the attestation (attests the WORK head)"
+# ORDER MATTERS AND I GOT IT WRONG THE FIRST TIME. `record` attests the WORK
+# head and REFUSES unless that head is already durably on the remote — so the
+# work must LAND BEFORE the record, not after. My first composition ran
+# verify->record->commit->land and refused at `record` with "local HEAD ... is
+# not durably on origin/<branch>". The refusal was correct and the script was
+# wrong; it caught its own author on first use, which is why it was run against
+# a real cycle before being trusted.
+_step "land the work head (gate + push + prove)"
+scripts/land-on-platform-branch.sh "$BRANCH" 4 || {
+    echo "refused:finalize:work-land-failed — the marker is NOT emitted; a marker may never follow an unpushed commit." >&2
+    exit 6
+}
+
+_step "re-verify boundary after landing"
+scripts/meta-orchestration-worktree-guard.sh verify "$SD" || {
+    echo "refused:finalize:boundary-verify-failed-post-land" >&2; exit 3; }
+
+_step "record the attestation (attests the now-landed WORK head)"
 rec="$(scripts/mo-full-attest.sh record 2>&1)"; rc=$?
 printf '%s\n' "$rec"
 [ "$rc" -eq 0 ] && printf '%s' "$rec" | grep -q '^MO-FULL: COMPLETE' || {
@@ -96,9 +113,9 @@ if ! git diff --quiet -- plan/mo-full-attestations.d 2>/dev/null; then
     fi
 fi
 
-_step "land (gate + push + prove against the remote)"
+_step "land the ledger record"
 scripts/land-on-platform-branch.sh "$BRANCH" 4 || {
-    echo "refused:finalize:land-failed — the marker is NOT emitted; a marker may never follow an unpushed commit." >&2
+    echo "refused:finalize:ledger-land-failed — the record is committed but unpushed; do NOT emit a marker." >&2
     exit 6
 }
 

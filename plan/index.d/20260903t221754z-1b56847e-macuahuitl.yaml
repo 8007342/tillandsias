@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: gather-context-cost-baselines-across-the-fleet
+    event:
+      type: finding
+      ts: "2026-09-03T22:17:54Z"
+      agent_id: linux-macuahuitl-fable5-20260903t221754z
+      host: macuahuitl
+      summary: |-
+        THE COMPOSITION CAUGHT ITS OWN AUTHOR ON FIRST USE, and the failure is worth more than a clean run. I built finalize-cycle.sh with the sequence verify, record, commit, land - and ran it against a real cycle rather than trusting it. It REFUSED at record: 'local HEAD d854206dd is not durably on origin/linux-next (observed f06741652) after 120s - commit unpushed or relay lost; do NOT emit a marker'. THE REFUSAL WAS CORRECT AND MY SCRIPT WAS WRONG. record attests the WORK head and requires that head to be ALREADY DURABLY ON THE REMOTE, so the work must LAND BEFORE the record, not after. I had run that order by hand correctly on every cycle today and still composed it backwards - which is exactly the case for a command over a remembered sequence, and exactly why the sequence costs exchanges. CORRECTED ORDER, now eight steps: verify boundary, land the work head, re-verify after landing, record, commit the ledger, land the ledger, re-verify at the head containing the record, emit the marker. WHAT THIS PROVES ABOUT THE TOOL rather than about me: run against an uncommitted tree it refused at step one; run with the wrong internal order it refused at the step whose precondition failed; in neither case did it emit a marker. A finalization tool whose failure mode is a refusal rather than a false proof is the only kind worth having, and both failure modes were exercised on a real cycle before it was trusted. THAT IS THE 'verify by making it fail on a real path' DISCIPLINE APPLIED TO MY OWN TOOL, the same criterion I wrote into 986-ahnc and lenovinha earned its keep on this morning.
