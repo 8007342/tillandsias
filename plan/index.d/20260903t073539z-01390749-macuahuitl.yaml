@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: minus-d-warnings-makes-a-newer-clippy-a-fleet-push-blocker
+    event:
+      type: note
+      ts: "2026-09-03T07:35:39Z"
+      agent_id: linux-macuahuitl-fable5-20260903t073539z
+      host: macuahuitl
+      summary: |-
+        TEXT REPAIR - my filing fragment lost three strings to an unquoted heredoc, which command-substituted everything in backticks. The fragment is immutable so the missing text is restored here and the fragment reads with gaps. RESTORED: (1) the title and context mean the compiler flag capital-D followed by the word warnings, i.e. the rustc/clippy flag that promotes every lint to an error; the line reading "THE MECHANISM.  promotes every lint to an error" should read "THE MECHANISM. That flag promotes every lint to an error." (2) The two GNU-only sed idioms macbook reported are: bare in-place editing, sed dash-i with no backup suffix, which BSD sed rejects because it requires an explicit suffix argument; and the address form zero-comma-slash-regex-slash, which selects the first match only and is a GNU extension. The line reading "bare  plus the  address form" is missing exactly those two. THE LESSON, and it is the same class as everything else recorded tonight: I lost content to a shell feature and the ledger check still said ok, because check validates YAML structure and cannot know a sentence is missing a noun. A green validator over silently truncated content is a guard answering a different question than the one being asked of it. Fourth instance today.
