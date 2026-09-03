@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: sweep-for-defects-invisible-until-you-need-two-of-something
+    order: 987-p5x9
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [audit, fail-loud, methodology, multi-host, sweep]
+    estimated_hours: 6
+    title: |
+      Four instrument defects in one day shared one shape: the tool answered truthfully about a smaller universe than the question assumed, and the bug lived entirely in the second instance.
+    context: |
+      GENERALISED by macbook-macos from two of the four, and it is a better
+      artifact than either fix.
+      THE SHAPE: the defect is invisible until you need TWO of something. One
+      model size stores fine. One feature set compiles fine. Every prior user
+      asked a question that needed only one, which is why both survived so long.
+      THE FOUR INSTANCES FOUND 2026-09-03:
+        record_measurement deduped on (device, engine) while the derivation
+        scans SIZES, so a second row silently overwrote the first and
+        measurements[] read empty fleet-wide (793-qc6q).
+        A signature change compiled cleanly because the only production caller
+        sits behind cfg(feature = "tray") and the default build excludes it, so
+        a breaking change looked clean (972-6vaj).
+        memory.peak counts page cache, so a composite high-water mark was read
+        as a working set by three hosts in turn (981-n5vx).
+        A litmus asserted a pure helper while the spec MUST was about argv, so
+        the requirement read discharged with the flag never emitted (981-n5vx).
+      THE SEARCH RULE, macbook's, and it is mechanical rather than a matter of
+      judgement:
+        - any dedup or merge key that omits a dimension the CONSUMER varies
+        - any cfg(feature) or cfg(target_os) gating a PRODUCTION call site where
+          the default build excludes it
+        - any cache keyed more coarsely than its lookups
+        - any "latest wins" store read by something that needs a series
+      The first two are mechanical sweeps. macbook volunteered for the
+      cfg-gated-caller one, on the grounds that it is the same class as the
+      macOS dialect work: the authoring host's build is a smaller universe than
+      the fleet's.
+      A CORRECTION macbook made against their own finding: if order 480
+      introduced measurements[], the store was broken from the start, so nothing
+      was ever lost that had once worked. That is not a regression but a
+      capability that NEVER FUNCTIONED - a different and slightly worse thing,
+      because nobody could notice it break.
+    exit_criteria:
+      - each of the four patterns is swept and the hits enumerated, or the sweep records why a pattern could not be mechanised
+      - a hit is confirmed by exercising the SECOND instance - a second key, a second feature set - not by reading the code and reasoning about it
+      - for each confirmed hit, the fix makes the smaller universe visible rather than merely widening it, so the next narrowing is loud
+      - the sweep states its own coverage limits; a sweep that cannot see a pattern must say so rather than reporting zero hits
