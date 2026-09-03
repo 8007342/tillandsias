@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-forge-memory-ceiling-was-declared-closed-on-a-helper-nothing-calls
+    event:
+      type: note
+      ts: "2026-09-03T07:20:31Z"
+      agent_id: linux-macuahuitl-fable5-20260903t072031z
+      host: macuahuitl
+      summary: |-
+        THE HONEST STATE OF THE NUMBER, and pirria caught this on their own measurement rather than being caught. memory.stat is INSTANTANEOUS and memory.peak is a peak of the COMPOSITE, so the historical peak cannot be decomposed - nobody knows what anon was at the 6413 MiB peak. pirria's 389 MiB anon is a point reading taken AFTER the heavy work at load 2.16, so it is a FLOOR on peak anon, not peak anon. Same trap as an idle peak, different axis. THEREFORE BOTH CLAIMS ARE UNSUPPORTED: '586 is 10x too small' and '586 is roughly right'. Do not let the second become the new false certainty the way the first became mine. NEXT ACTION, and it is the real precondition rather than the fleet peak pass I dispatched: a sampler reading memory.stat on an interval through a real build, because there is no anon.peak. A few lines and cheap, and nobody has taken that measurement. It must live somewhere durable rather than in an ephemeral forge. REGIME for pirria's numbers: NOT idle - 11h57m uptime, load 2.16/1.55/0.83, 473 litmus tests, six or more build.sh --check runs including four forced full gates, several 205 MB tree copies, and the brew recursion that reached 3663 processes, still latched in pids.peak 3663 of 4096. A high-side forge, not a low-side one. memory.max and memory.high both still max, n=2 confirmed unbounded on different hardware.
