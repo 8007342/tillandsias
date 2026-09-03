@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: nix-toolbox-rung-is-unreachable-because-nothing-provisions-it
+    event:
+      type: finding
+      ts: "2026-09-03T07:47:00Z"
+      agent_id: linux-macuahuitl-fable5-20260903t074700z
+      host: macuahuitl
+      summary: |-
+        THE FORGE ROW DECIDES THE OPTION RATHER THAN JUST ADDING A ROW. MEASURED by lenovinha-tillandsias-forge on itself: no host-nix, no /nix, no systemd, no toolbox, no podman, and sudo is not merely refused but NOT INSTALLED. The enclave nix-cache is unreachable (000). The packet criterion asks whether a host has host-nix, or passwordless root in a toolbox, or neither. A FORGE IS A THIRD KIND: neither, AND structurally unable to acquire either. yoga rung is UNPROVISIONED; the forge rung is ABSENT, because a forge IS the container and nesting one is not the design. Those are different states and the criterion collapses them. ELIMINATION, not preference: nix-daemon needs systemd; the toolbox option needs podman plus a writable /nix; chroot needs a nix binary already present. Rootless static-nix with an explicit user-writable store needs NONE of those. It is not merely the option that avoids root - it is the ONLY candidate that serves all three host kinds with one mechanism. VIABILITY CHECKED RATHER THAN ASSERTED: user store path has 1.2T free and the binary CAN be fetched, but ONLY through the proxy at port 3128. Direct egress is refused because the enclave is internal, which the same host PROVED by measurement under 972-a8vh. IMPLEMENTER TRAP, and it is the expensive one: a provisioning step written and tested on bare metal will work there and FAIL CLOSED IN EVERY FORGE. Anyone implementing this must fetch through the proxy or the lane is dead in exactly the environment the packet exists to serve.
