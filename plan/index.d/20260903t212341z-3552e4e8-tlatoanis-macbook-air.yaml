@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: windows-tray-argv-reparse-workarounds-deletable
+    field: status
+    value: completed
+    ts: "2026-09-03T21:23:41Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: windows-tray-argv-reparse-workarounds-deletable
+    event:
+      type: completed
+      ts: "2026-09-03T21:23:41Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: c3f6591a1 (function deletion) + wsl.rs wsl_root_sh --exec invocation; verified on osx-next at HEAD by scripts/check-exec-argv-vector-workarounds.sh -> 'ok:exec-argv-workarounds-absent:2 checked' rc=0, and by reading the --exec argv construction in a module macOS compiles (pub mod wsl, no cfg gate); no exit_criteria beyond the deliverable, no split_into, no dependents
+  - packet_id: windows-tray-argv-reparse-workarounds-deletable
+    event:
+      type: note
+      ts: "2026-09-03T21:23:41Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        both deliverable halves verified against the tree

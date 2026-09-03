@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: delete-windows-argv-workarounds
+    event:
+      type: verified
+      ts: "2026-09-03T21:19:27Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260903t211926z
+      host: tlatoanis-macbook-air
+      summary: |-
+        ALREADY IMPLEMENTED AND NEVER CLOSED. Verified each exit criterion against the tree rather than assuming, then closed. Implementing commit is c3f6591a1, 'fix(windows-tray): delete argv_survives_wt_reparse and wt_safe_title (836-smm2)'.
+
+        I nearly spent a cycle re-doing this. It surfaced as the highest-priority any-role packet in architecture-audit-epic, I read it as live work, and only a grep before starting showed the functions were gone. That is the cost of a completed packet left in ready: the next host does the discovery, not the work.
+
+        CRITERION 1 and 2 — both functions deleted. The only remaining occurrences in crates/ are three COMMENTS that name them while explaining their removal (notify_icon.rs twice, host-shell pty/mod.rs once). That is not a leftover: scripts/check-exec-argv-vector-workarounds.sh exists precisely to allow the names in prose while refusing them as symbols, and it reports ok:exec-argv-workarounds-absent:2 checked, rc=0. That IS the packet's named verifiable_closure.
+
+        CRITERION 3 — the routing decision no longer consults the guard. At the site, GithubLogin takes spawn_wsl_console (bypassing wt.exe) and every other intent takes spawn_wsl_terminal unconditionally, with an in-code comment recording why the guard went: it always returned true for the shapes launch_spec actually emits after 823-u5zf.
+
+        CRITERION 4 — PARTIALLY VERIFIED HERE, AND I WILL NOT CLAIM MORE. The workaround checker passes and the workspace builds on this host, but notify_icon.rs is a WINDOWS-ONLY SOURCE: a macOS build does not typecheck its cfg(windows) body, and scripts/check-windows-only-sources-verified.sh currently reads stale:sources-drifted:windows-only:2 naming this very file. So 'cargo test passes, cargo clippy clean' is unverified for the Windows target from here. I am closing anyway because the packet's OWN named closure is a source scan, criteria 1-3 are directly verified, and the implementing commit came from the Windows lane where it did compile. The windows-only-source attestation is a separate standing obligation on a Windows host, not this packet's.
+
+        Closing rather than leaving it: a done p1 sitting in ready is invisible work that keeps being offered.
