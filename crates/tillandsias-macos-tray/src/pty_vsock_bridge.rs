@@ -416,11 +416,7 @@ mod tests {
             let env = decode(&buf).expect("decode hello");
             assert_eq!(env.seq, 1);
             match env.body {
-                ControlMessage::Hello {
-                    from,
-                    build_version: _,
-                    ..
-                } => assert_eq!(from, "test-host"),
+                ControlMessage::Hello { from, .. } => assert_eq!(from, "test-host"),
                 other => panic!("expected Hello, got {other:?}"),
             }
 
