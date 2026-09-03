@@ -1,0 +1,99 @@
+packets:
+  - packet_id: ledger-prose-never-passes-through-argv
+    release_target: stable-milestone-v1
+    order: 971-7muc
+    milestone: 718-rtnh
+    status: ready
+    desired_release: v0.5
+    kind: enhancement
+    pickup_role: any
+    priority: p2
+    tags:
+      - plan-ledger
+      - tooling
+      - correctness
+      - silent-corruption
+      - v0.5
+    title: |
+      A ledger write takes its prose from a file or stdin, never from argv, so the shell cannot delete the words the prose is quoting while every check still passes.
+    context: |
+      TWO HOSTS, ONE EVENING, INDEPENDENTLY, SAME MECHANISM, BOTH CAUGHT BY
+      LUCK. That is what makes this a row rather than a note.
+
+      INSTANCE 1 (lenovinha, 2026-09-02, closing 964-r98h). The event summary
+      was passed to `tillandsias-plan append-event --summary` as a
+      double-quoted bash argument. Four backtick-quoted tokens in the prose
+      were command-substituted away, and bash printed four "command not found"
+      lines that scrolled past under the successful write. The stored text
+      read "only  licenses reading accel_mem_budget_gb as the whole machine"
+      and "A non-resizable-BAR NVIDIA card will therefore read , and that is
+      the correct answer" — the SUBJECT of each sentence silently deleted.
+
+      INSTANCE 2 (macuahuitl, same evening, filing 970-7fqk). The packet body
+      was written through an UNQUOTED heredoc. A backtick-quoted token in the
+      prose was command-substituted away and the exit criterion landed as
+      "computed the same way  computes the digest". Caught only by re-reading
+      the line just written.
+
+      WHY THIS IS WORSE THAN AN ORDINARY QUOTING BUG, and it is the reason for
+      the priority: THE CORRUPTION PRODUCES VALID YAML AND PLAUSIBLE PROSE.
+      `validate-yaml` passes it. `tillandsias-plan check` passes it. The
+      fragment-keys guard passes it. `./build.sh --check` passes it. Every
+      instrument we have reports success, because each is measuring something
+      adjacent to the thing that broke — the same family as tonight's fixture
+      findings and the vacuous-verification case. A ledger write that silently
+      deletes exactly the words it is quoting, while satisfying every check, is
+      indistinguishable from a correct one to every reader downstream.
+
+      It bites hardest on the most valuable writes. Prose that quotes an
+      identifier is prose explaining WHY something is named what it is, which
+      is precisely the content the ledger exists to carry — and backticks are
+      how anyone writes that.
+
+      THE REMEDY IS TO STOP PASSING PROSE THROUGH ARGV AT ALL: read the summary
+      from a file (`--summary-file`) or from stdin, so the shell never sees the
+      text. That also fixes the ergonomics that made both hosts reach for a
+      heredoc in the first place — a multi-paragraph summary is genuinely
+      awkward as a shell argument, and the awkwardness is what routed both of
+      us into the hazard.
+
+      Both hosts repaired their own fragment before pushing, on the same
+      reasoning: the file was unpushed and had never been seen by another host,
+      so fragment immutability had nothing to protect — nothing can fold a file
+      that never left the disk. Neither repair depended on anything but a human
+      re-reading a line, which is not a control.
+    exit_criteria:
+      - |
+          `append-event` and the packet-filing path accept their prose from a
+          file or stdin, and the meta-orchestration skill's recipes use that
+          path rather than a shell-quoted argument.
+
+      - |
+          A test writes a summary containing backticks, `$(...)`, and `$VAR`
+          through the sanctioned path and asserts the stored text is
+          byte-identical to the input — including the backticks.
+
+      - |
+          The argv path either rejects prose containing an unbalanced backtick
+          or `$(`, or is removed. A write that silently loses characters must
+          become a write that fails loudly; passing the corrupted text through
+          is what every existing check already does.
+    events:
+      - type: note
+        ts: "2026-09-03T00:30:00Z"
+        agent_id: "linux-lenovinha-opus5-20260902t235009z"
+        host: lenovinha
+        summary: |
+          Filed with two instances at macuahuitl's request, and the second
+          instance is what changed my mind about the shape. Alone, mine looked
+          like a mistake I made and should stop making — a note in a loop
+          status. Two hosts hitting the identical mechanism the same evening,
+          through two DIFFERENT syntaxes (a double-quoted argument and an
+          unquoted heredoc), says the hazard is in the interface rather than
+          in either agent's carefulness.
+
+          Deliberately NOT filed as "agents should quote more carefully". That
+          remedy is a suggestion an attentive agent honours, which the
+          reduction discipline names as the thing to avoid: both of us WERE
+          being careful, and both were caught by luck. The interface has to
+          stop offering the hazard.

@@ -2147,6 +2147,27 @@ const DISCRETE_BAR_FLOOR_BYTES: u64 = 1024 * 1024 * 1024;
 /// 2. A prefetchable BAR >= 1 GiB => DISCRETE. The resizable-BAR case, where
 ///    rung 1 goes quiet because the whole of VRAM became CPU-visible.
 ///
+///    THIS RUNG DEPENDS ON FIRMWARE, NOT ON SILICON, and the distinction was
+///    yolanda's (2026-09-03) after I had already written "this is how the 3070
+///    is classified" as though it were a fact about the card. Resizable BAR is
+///    firmware and driver state: with it ON, a discrete card exposes its whole
+///    VRAM as one large aperture and this rung fires; with it OFF — still the
+///    default on plenty of boards, and the historical PCIe behaviour — the same
+///    card exposes the legacy 256 MiB aperture and this rung does not.
+///
+///    MEASURED HERE, and it confirms their model rather than mine:
+///    `lspci -vv -s 01:00.0` reports `Region 1: 64-bit, prefetchable [size=8G]`
+///    on this RTX 3070, so ReBAR is enabled on this host. What the discrete arm
+///    has been demonstrated against is therefore ONE FIRMWARE CONFIGURATION of
+///    one card, not the card.
+///
+///    The same 3070 with ReBAR disabled exports no `mem_info_vram_total`
+///    (rungs 1 and 3 need one) and has no aperture at or above the floor
+///    (rung 2), so it reaches NO rung and lands on `undetermined`. That is the
+///    ladder failing SAFE — the mislabel would have been `unified` — and it is
+///    pinned by `a_non_rebar_discrete_card_lands_on_undetermined_not_unified`
+///    rather than left as a property someone has to notice.
+///
 /// 3. `vram` known, fully CPU-visible, and NO large aperture => UNIFIED. All of
 ///    the device's memory is reachable through a small window, which is what a
 ///    UMA carve-out looks like and what dedicated VRAM never looks like. This
@@ -6247,6 +6268,8 @@ mod tests {
             largest_prefetchable_bar: Some(256 * 1024 * 1024),
         };
         assert_eq!(memory_model_from_evidence(&small_bar_only), None);
+        // That case has a NAME, and naming it is the point — see
+        // `a_non_rebar_discrete_card_lands_on_undetermined_not_unified`.
         // A zero VRAM total is a driver quirk, not a machine with no memory.
         let zero_vram = GpuMemoryEvidence {
             vram_total: Some(0),
@@ -6254,6 +6277,54 @@ mod tests {
             largest_prefetchable_bar: Some(256 * 1024 * 1024),
         };
         assert_eq!(memory_model_from_evidence(&zero_vram), None);
+    }
+
+    #[test]
+    // @trace order:964-r98h, spec:accel-capability-probe
+    /// THE ARM I OVERSTATED, made falsifiable rather than fortunate.
+    ///
+    /// yolanda's question, 2026-09-03: the BAR rung depends on resizable BAR
+    /// being ENABLED, which is firmware and driver state rather than a property
+    /// of the silicon. Measured on this host, `lspci -vv -s 01:00.0` reports
+    /// `Region 1: 64-bit, prefetchable [size=8G]` — ReBAR is on here, so the
+    /// discrete arm has been demonstrated against ONE FIRMWARE CONFIGURATION of
+    /// the 3070, not against the card.
+    ///
+    /// The same card with ReBAR disabled: no `mem_info_vram_total` (the
+    /// proprietary driver never exports it, so rungs 1 and 3 cannot fire) and a
+    /// legacy 256 MiB aperture (below rung 2's floor). It reaches no rung.
+    ///
+    /// THE FAILURE IS BENIGN AND THAT IS WHAT THIS TEST PINS: it lands on
+    /// `undetermined`, which is honest, NOT on `unified`, which would be the
+    /// mislabel — and emphatically not on a vendor fallback, which would answer
+    /// for it free and correctly and would be the exact trade 964-r98h refused.
+    /// The ladder is allowed to be incomplete; it is not allowed to guess.
+    fn a_non_rebar_discrete_card_lands_on_undetermined_not_unified() {
+        let rtx3070_without_rebar = GpuMemoryEvidence {
+            vram_total: None,
+            vis_vram_total: None,
+            largest_prefetchable_bar: Some(256 * 1024 * 1024),
+        };
+        assert_eq!(
+            memory_model_from_evidence(&rtx3070_without_rebar),
+            None,
+            "a discrete card the ladder cannot reach must refuse, never guess unified"
+        );
+
+        let mut d = doc_on_side(
+            "native-linux",
+            vec![
+                device("cpu", "cpu", &["container"], None),
+                device("gpu", "NVIDIA GeForce RTX 3070", &["container"], None),
+            ],
+        );
+        d.devices[1].vendor = "nvidia".to_string();
+        d.devices[1].memory_model = None;
+        assert_eq!(
+            field(&accel_envelope(&d), "accel_mem_model"),
+            "undetermined",
+            "and the envelope says the classifier RAN and refused, not that it could not look"
+        );
     }
 
     #[test]
