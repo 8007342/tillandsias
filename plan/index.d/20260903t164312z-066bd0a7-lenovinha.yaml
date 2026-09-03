@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-skew-line-cannot-see-a-behaviour-change-inside-an-existing-subcommand
+    event:
+      type: progress
+      ts: "2026-09-03T16:43:12Z"
+      agent_id: linux-lenovinha-opus5-20260903t154142z
+      host: lenovinha
+      summary: |-
+        IMPLEMENTED AND CLOSED at c42095568. All four exit criteria met. The fleet criterion is measured rather than asserted, and two of my own bugs were caught by things other than my judgement.
+
+        CRITERION 4 FIRST, because it gated closing and because you were right that it might be the whole packet. FOUR HOSTS wrote append-event output straight into plan/index.yaml after the fragment fix landed at 823e3ac0d (2026-09-02T21:55Z): lenovinha-tillandsias-forge, pirria-tillandsias-forge, macuahuitl-tillandsias-forge, and yolanda. I attributed them by extracting the `host:` line from the event blocks each commit added, because every commit carries the operator's git identity and the author field cannot distinguish hosts. Three of the four are FORGES, which is the mechanism: a forge's binary is baked at launch from the seed branch and never rebuilt in-cycle, so a forge launched before 21:55Z carried a pre-fix binary for its whole life.
+
+        THE EXPOSURE IS CLOSED, and here is the evidence rather than an absence of news. Zero commits have added an event block to plan/index.yaml since 03:47Z — twelve hours. In that same window 240 fragment files were touched. So the channel is heavily in use and none of it is landing in the base; the silence is hosts having rebuilt, not hosts having stopped writing. A bare "no recent occurrences" would not have distinguished those two, which is why the positive control matters.
+
+        CRITERION 1, the detector. build.rs bakes the revision of the sources it compiles into the binary (`build-id`), and `source-revision <dir>` computes what a rebuild from a checkout would produce. ONE hash implementation, `include!`d by build.rs and used by the crate at runtime, because two implementations could drift and a drifted comparison reports skew forever or never — this order's own defect arriving through its fix. The capability comparison is untouched and its verdicts still win: a missing subcommand is a bigger fact than a stale one.
+
+        CRITERION 2. HEAD's sources hash to 61ec32cc16e974ca and the pre-21:55Z crate extracted from 823e3ac0d^ hashes to 25380f5e846ea354 — distinguishable. And the sharper point: a pre-fix binary has no `build-id` subcommand at all, so it cannot answer, which lands it in the loud state below rather than in a green one.
+
+        CRITERION 3. A binary that cannot report its identity reads `unknown-currency`, never `none`. I scoped that arm to the BINARY's inability deliberately: a checkout with no sources to compare against is a different situation — nothing to be current WITH, the binary is fine, and `after_relaunch` already says what the checkout provided. Alarming there would fire on every partial mount. And both new verdicts got their own advice arm, because the existing `*)` fallback prints "No capability skew" and without them a non-green machine field would have sat beside reassuring prose — the defect one layer out, in the text.
+
+        TWO BUGS OF MINE, NEITHER FOUND BY READING. The `source-revision` arm read `args.get(2)` where `args` is already shifted (`args.first()` IS the subcommand), so it always hashed the default directory and returned a valid, matching, plausible answer for every input — including `/definitely/not/a/dir`, with rc=0. I found it because the pre-fix and HEAD trees returned the SAME hash, which cannot be true of trees differing by four files, and I refused to accept a matching value from a detector whose whole job is to distinguish. An off-by-one that reports success is this family exactly.
+
+        The second is better. My first version compared revisions whenever the checkout had a `crates/tillandsias-plan` directory — and litmus:expert-capability-skew-honesty builds a MANIFEST-ONLY fixture checkout, which satisfies that test while containing no sources. So the detector reported `rebuild-required` for a synthetic in-sync scenario. THE LITMUS CAUGHT THAT, NOT ME, and it is the first time tonight an existing test found a false positive in something I had just written rather than the reverse. Requiring `src/main.rs` is the honest test for "there are sources here to be current with".
+
+        A PROCESS SLIP, recorded because attribution is a standing requirement and the commit is pushed: c42095568's message omits the Co-Authored-By and Claude-Session trailers. I wrote the message through a heredoc and left them out. Cannot be corrected in place; noted here instead, and present on the rest of the cycle's commits.
+
+        NOT DONE: the pre-existing `embed-endpoint-discoverable` step of that same litmus fails, verified identically on a stashed clean tree. Not mine and not touched.
