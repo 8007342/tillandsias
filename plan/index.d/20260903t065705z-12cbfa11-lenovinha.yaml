@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-forge-can-push-to-the-trunk-with-no-gate-at-all
+    event:
+      type: progress
+      ts: "2026-09-03T06:57:05Z"
+      agent_id: linux-lenovinha-opus5-20260903t065409z
+      host: lenovinha
+      summary: |-
+        CLOSING. The implementation landed at 8b08a0305 by macuahuitl-tillandsias-forge; what remained was exit criterion 4, and I did that plus an INDEPENDENT verification of criteria 1-3 rather than closing on another host's self-report.
+
+        I DID NOT REDO THE WORK, and I want that explicit because the dispatch described this row as though it were unstarted. Its events already carried a passed live negative control and a released claim; the context block is a filing-time snapshot and reads as though nothing exists. Reading the events first is what stopped me rebuilding a landed fix — the coordinator said so in the dispatch and it was the right instruction.
+
+        WHAT I VERIFIED MYSELF, in the exact condition that caused the defect rather than a convenient approximation. I built a repo under a GLOBAL core.hooksPath pointing at a directory holding only post-commit — the measured forge shape, where the global redirect also steers every repo away from .git/hooks so the checkout's own hooks cannot stand in.
+
+          BEFORE the installer: `git rev-parse --git-path hooks` resolved to the global
+            directory; contents were `post-commit` alone. No pre-push. No pre-commit.
+          AFTER:  the path resolved repo-local to .git/hooks, carrying pre-commit,
+            pre-push AND the post-commit trailer; the GLOBAL directory was byte-for-byte
+            unchanged, still exactly one hook.
+          PUSH:   refused. The pre-push hook fired and printed "Push CI no longer
+            exists. This hook is the trunk's only gate.", and `git ls-remote` on the
+            bare remote returned NOTHING — the ref was never created.
+
+        THE HONEST QUALIFICATION ON MY OWN CONTROL, because "green is not proof" cuts both ways: my synthetic repo refused for a VERSION parse error, not a stale gate stamp, since its VERSION file is junk. So I proved the hook FIRES and the push DOES NOT LAND under the redirect — the mechanism and the property that matters — not that I reproduced the stale-stamp refusal specifically. That one is the forge's evidence at 8b08a0305, on a different host, which is the more useful half of the pair. Two hosts, two conditions, same conclusion.
+
+        THE CALLER, since a gate nothing runs is not a gate (651-2x5s): install_project_guard_hooks is invoked at images/default/lib-common.sh:1440, in the forge lifecycle, SYNCHRONOUSLY before the background lane. That ordering is load-bearing and the original author called it out — installing in the lane leaves a race where a fast agent commits and pushes through a checkout that has no gate yet, which is the exact condition being fixed. I checked the call site rather than the definition, because the definition existing is what a grep proves and it is not the question.
+
+        CRITERION 4 DONE: order 448 re-qualified with an event and a rewritten next_action. Its guard is a PRE-COMMIT hook, and forges were the host class that produced all three measured cheatsheet-drift incidents while having no pre-commit at all. That class is now covered. 448 STAYS `ready`, deliberately: two gaps survive and neither is a forge problem — a non-forge host that never ran install-hooks.sh still has no guard and nothing verifies that it did, and ./build.sh --check still runs no pre-commit. The operator decision 448 names is unchanged, now with a smaller blast radius. Re-qualifying is not closing, and the criterion asked for the former.
+
+        OVERLAP CHECKED, as asked, and they are NOT the same defect. 965-rb3v is TILLANDSIAS_FORGE_SEED_BRANCH resolving to main in the launcher; this row is hook installation in the lifecycle. Both leave a forge unable to commit correctly and both are in the launch path, but they are different code, different fixes, and fixing either leaves the other. Taking both as one would have produced exactly the two half-fixes the dispatch warned against.
+
+        NOT CLAIMED HERE, and it is the more interesting residual: the forge's own closing note records that with the gate now actually enforcing in forges, the push loop is fetch -> rebase -> gate -> push, the gate costs ~90s on that host and 276s on the slowest, and every rebase stales the stamp so the gate MUST re-run. Exposure is gate duration times fleet push rate. I hit precisely this tonight — a push loop reported PUSHED while I was still two commits ahead, and it took three rebase-gate-push rounds to land. Their note says it needs a decision rather than an implementation and is not filed as a row; after tonight I think it has earned one, but filing it is a judgement about queue discipline that belongs to the coordinator, so I am flagging rather than filing.

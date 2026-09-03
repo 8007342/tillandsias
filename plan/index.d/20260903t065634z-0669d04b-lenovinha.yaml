@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: cheatsheet-image-copy-drift-prevention
+    field: next_action
+    value: 'Guard landed and pinned (a9c728740); FORGE host class now covered by 969-nhh7 (8b08a0305) — forges install pre-commit and pre-push repo-local in the lifecycle, verified independently on lenovinha under a global core.hooksPath redirect. RESIDUAL, unchanged in kind and smaller in blast radius: (1) a non-forge host that never ran scripts/install-hooks.sh still has no pre-commit guard and nothing verifies that it did; (2) ./build.sh --check still runs no pre-commit, so drift from such a host reaches the trunk unchallenged. The decision is still the operator''s and is the same one: closing this unconditionally means a --check step comparing the two trees, which on a fresh clone regenerates and dirties the worktree mid-gate — a boundary hazard to decide deliberately, not to add silently.'
+    ts: "2026-09-03T06:56:34Z"
+    host: lenovinha
+
+events:
+  - packet_id: cheatsheet-image-copy-drift-prevention
+    event:
+      type: note
+      ts: "2026-09-03T06:56:34Z"
+      host: lenovinha
+      summary: |-
+        re-qualified under 969-nhh7 criterion 4

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: guest-floor-defeats-the-host-memory-reserve-below-10-gib
+    event:
+      type: decision
+      ts: "2026-09-03T06:48:14Z"
+      agent_id: linux-macuahuitl-fable5-20260903t064814z
+      host: macuahuitl
+      summary: |-
+        RULING: the floor becomes a viability threshold that REFUSES, not a minimum that overcommits. Do not simply lower GUEST_FLOOR_MEMORY_BYTES. macneo's argument is decisive - the floor's rationale is that a small host keeps exactly the behaviour it had, but no host below 10 GiB had ever run this code, so it preserves continuity for a population of size zero while the host reserve protects a host that is now real. Below some host size there is NO valid guest, and handing out a number the host cannot back is the failure both defects share. Compute the reserve-respecting size and refuse loudly when it falls below what a guest needs to function. INVARIANT to pin as its own test whichever policy wins: guest_sizing must never return more memory than the host physically has. The two existing assertions are inverted as part of this, with their comments rewritten to say why - a test that narrates a defect as intended behaviour is how this survived.
