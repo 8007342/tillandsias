@@ -1,0 +1,68 @@
+events:
+  - packet_id: enclave-ca-bundle-lives-in-tmp-so-containers-cannot-restart
+    event:
+      type: progress
+      ts: "2026-09-03T21:19:01Z"
+      agent_id: linux-yoga-claude-20260903t210919z
+      host: yoga
+      summary: |
+        HALF (b) FIXED: the self-heal no longer PRODUCES the desync, and the
+        remedy no longer recommends it. Half (a) — the bundle in /tmp — is
+        untouched and still open.
+
+        THE SELF-HEAL WAS THE SECOND FAILURE'S AUTHOR. The proxy takes its
+        certificate from a bind mount and its private key from the podman secret
+        `tillandsias-ca-key`. `ensure_proxy_ca_key_secret` refreshes that secret
+        with `--replace` immediately before every launch — on the LAUNCH path
+        only. check-enclave-service-health.sh:319 used a bare `podman start`,
+        which bypasses it, so after any CA regeneration the heal reported
+        `fix:enclave-service-restarted:...:action=started` and squid was dead
+        seconds later with X509_check_private_key(). The heal was reporting
+        SUCCESS for an action that could not work.
+
+        NOW: for the proxy only, and only when the pair actually disagrees, the
+        heal refreshes the secret from the current bundle before starting — the
+        same precondition the launch path establishes, applied on the path that
+        was missing it. If the rotation cannot happen it emits
+        `fail:enclave-ca-desync-unrepaired:...:action=operator` and does NOT
+        start. A start that reports `started` and dies is worse than a refusal
+        that names the reason.
+
+        THE PRINTED REMEDY WAS ALSO WRONG AND IS REWRITTEN. It said "then
+        'podman start <service>' or re-run the enclave orchestration" — offering
+        the harmful action FIRST. It now names the orchestration and says why a
+        bare start is not equivalent: it skips the preconditions, and for the
+        proxy that produces a different failure whose message names neither the
+        certificate nor the key.
+
+        PINNED, AND THE PIN IS MUTATION-TESTED. Scenario 20 in
+        test-enclave-service-health.sh: a dead proxy whose CA pair is desynced
+        and whose rotation fails must refuse with its own reason and must NOT
+        also report a restart. 20/20. Removing the `continue` so the refusal
+        falls through to `podman start` makes it FAIL with "a desynced proxy was
+        reported as restarted anyway" — so the arm has teeth.
+
+        FOUR PRECONDITIONS THE SCENARIO HAD TO SATISFY, worth recording because
+        each one silently made the assertion vacuous until it was met: the
+        service must be dead-of-signal (a clean rc=0 stop is a `note` the ladder
+        deliberately never fights), aged past ACT_GRACE_S (1800s), with at least
+        one OTHER service UP (whole-stack-down refuses to act), and a fresh
+        state dir (a previous scenario's operator hold marker persists). My
+        first four attempts each passed the wrong thing for a different one of
+        those reasons.
+
+        AND MY FIRST MUTATION LANDED ON THE WRONG LINE — it replaced the string
+        terminator rather than the `continue`, the suite stayed green, and I
+        nearly recorded "mutation-tested" on the strength of it. A mutation that
+        does not change behaviour proves exactly as much as no mutation.
+
+        A TESTABILITY SEAM ADDED DELIBERATELY: TILLANDSIAS_CA_CONSISTENCY_CHECK
+        overrides the checker path, defaulting to the sibling script. Without it
+        the guard resolves the real checker beside itself, which on a healthy
+        host answers `ok` — so the desync branch was unreachable from a test and
+        the scenario passed while exercising nothing.
+
+        STILL OPEN, AND CRITERION 2 REMAINS UNMET: the bundle still lives in
+        /tmp, so the TRIGGER recurs on every reboot or tmpfiles sweep. This
+        cycle removed the amplifier, not the cause — a host that loses /tmp
+        still cannot start its proxy until something re-materializes the bundle.

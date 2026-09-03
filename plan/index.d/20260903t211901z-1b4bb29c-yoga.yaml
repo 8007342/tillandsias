@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: enclave-ca-bundle-lives-in-tmp-so-containers-cannot-restart
+    field: next_action
+    value: 'Half (b) is DONE: the self-heal refreshes the CA key secret before starting the proxy, refuses loudly when it cannot, and the printed remedy no longer recommends a bare podman start. Pinned by scenario 20 in test-enclave-service-health.sh (20/20), mutation-verified. HALF (a) IS ALL THAT REMAINS and criterion 2 depends on it: the bundle still lives in /tmp, so the trigger recurs on every reboot or tmpfiles sweep. Move it somewhere durable, or make the restart path re-materialize before starting. NOTE the bind SOURCE is recorded in each container at creation, so relocating the directory means existing proxy containers must be RECREATED, not restarted — a migration step, not a constant change. CA_DIR is in crates/tillandsias-headless/src/main.rs (ensure_ca_bundle) and the mount is written in the proxy launch args.'
+    ts: "2026-09-03T21:19:01Z"
+    host: yoga
+
+events:
+  - packet_id: enclave-ca-bundle-lives-in-tmp-so-containers-cannot-restart
+    event:
+      type: progress
+      ts: "2026-09-03T21:19:01Z"
+      host: yoga
+      summary: |-
+        status 'Half (b) is DONE: the self-heal refreshes the CA key secret before starting the proxy, refuses loudly when it cannot, and the printed remedy no longer recommends a bare podman start. Pinned by scenario 20 in test-enclave-service-health.sh (20/20), mutation-verified. HALF (a) IS ALL THAT REMAINS and criterion 2 depends on it: the bundle still lives in /tmp, so the trigger recurs on every reboot or tmpfiles sweep. Move it somewhere durable, or make the restart path re-materialize before starting. NOTE the bind SOURCE is recorded in each container at creation, so relocating the directory means existing proxy containers must be RECREATED, not restarted — a migration step, not a constant change. CA_DIR is in crates/tillandsias-headless/src/main.rs (ensure_ca_bundle) and the mount is written in the proxy launch args.' (not terminal) with evidence_refs: check-enclave-service-health.sh scenario 20; 20/20; mutation caught the fall-through
