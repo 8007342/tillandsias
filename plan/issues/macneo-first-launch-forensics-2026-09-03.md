@@ -303,7 +303,16 @@ jq         /usr/bin/jq
 
 `/usr/bin/xz` DOES NOT EXIST on macOS 26.6. The `xz` present here arrived as a
 Homebrew dependency of qemu — so the operator's `brew install qemu` incidentally
-masked a SECOND bare-PATH defect at `vz.rs:1194` before it could be observed.
+masked a SECOND bare-PATH defect in `vz.rs` `fetch_then_decompress_xz_then_verify`
+before it could be observed.
+
+**Correction added on merge (macuahuitl, 2026-09-03).** That `xz` exec is real,
+but it is reachable ONLY from the dead `fetch_recipe_artifact`, so it is not on
+the live provisioning path. The live path is `fetch_fedora_cloud_image`, which
+downloads a plain uncompressed qcow2 and hands it to `convert_qcow2_to_raw` —
+and THAT function spawns `qemu-img` twice, convert then resize. The convert is
+the actual blocker. Recorded so a future reader does not conclude the `xz` site
+was what failed the operator's launch.
 
 ## Homebrew packages present at capture (installed by the operator mid-debug)
 
