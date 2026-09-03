@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: implement-the-obligation-lattice-and-wire-the-scorer
+    field: next_action
+    value: 'All five rungs are implemented. WHAT REMAINS BEFORE THIS CAN BE CALLED DONE, and none of it is in any child''s criteria: (a) the backfill''s 2.6% coverage is scored at ceiling=traced ONLY, because the ledger carries a closure''s NAME and not its RESULT — running the 22 named litmus tests would raise it for those that pass, and that is a DIFFERENT derivation that must be tagged as one; (b) rung 3''s scorer reads CI check results and does NOT yet consume rung 4''s backfilled states, so the two halves are wired to the same model but not to each other; (c) monotonicity is established for the rule sets in obligation_props.rs, not for arbitrary future validators — the predicate mechanism deliberately allows non-monotone rules, so this is a standing test rather than a proof. The methodology''s own fixpoint CLAIM holds; its VALIDATION was the defect (idempotence is strictly weaker than Tarski/Kleene) and rung 2 replaced it.'
+    ts: "2026-09-03T15:27:03Z"
+    host: yoga
+
+events:
+  - packet_id: implement-the-obligation-lattice-and-wire-the-scorer
+    event:
+      type: progress
+      ts: "2026-09-03T15:27:03Z"
+      host: yoga
+      summary: |-
+        status 'All five rungs are implemented. WHAT REMAINS BEFORE THIS CAN BE CALLED DONE, and none of it is in any child's criteria: (a) the backfill's 2.6% coverage is scored at ceiling=traced ONLY, because the ledger carries a closure's NAME and not its RESULT — running the 22 named litmus tests would raise it for those that pass, and that is a DIFFERENT derivation that must be tagged as one; (b) rung 3's scorer reads CI check results and does NOT yet consume rung 4's backfilled states, so the two halves are wired to the same model but not to each other; (c) monotonicity is established for the rule sets in obligation_props.rs, not for arbitrary future validators — the predicate mechanism deliberately allows non-monotone rules, so this is a standing test rather than a proof. The methodology's own fixpoint CLAIM holds; its VALIDATION was the defect (idempotence is strictly weaker than Tarski/Kleene) and rung 2 replaced it.' (not terminal) with evidence_refs: five children implemented 2026-09-03
