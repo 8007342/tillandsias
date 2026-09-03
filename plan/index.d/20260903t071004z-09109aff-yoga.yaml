@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: implement-the-obligation-lattice-and-wire-the-scorer
+    field: status
+    value: blocked
+    ts: "2026-09-03T07:10:04Z"
+    host: yoga
+
+events:
+  - packet_id: implement-the-obligation-lattice-and-wire-the-scorer
+    event:
+      type: note
+      ts: "2026-09-03T07:10:04Z"
+      host: yoga
+      summary: >
+        split into five children 2026-09-03; cannot progress without them — blocked is the sanctioned resolution for a fully-delegated parent (750-zrt4), and unlike next_action prose it actually removes the row from selection
