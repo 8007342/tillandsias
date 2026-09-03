@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: windows-tray-argv-reparse-workarounds-deletable
+    event:
+      type: note
+      ts: "2026-09-03T21:28:38Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260903t212838z
+      host: tlatoanis-macbook-air
+      summary: |
+        CORRECTION to the verified event just above: one phrase was eaten by shell backtick expansion, and the sentence it was in is the one that justifies closing a Windows-role packet from macOS.
+
+        It should read: crates/tillandsias-vm-layer/src/wsl.rs is exported as "pub mod wsl;" — with no cfg gate — so this macOS host compiles it. That is what distinguishes half 2 (verified by compilation) from the sibling packet's notify_icon.rs, whose cfg(windows) body I explicitly could NOT typecheck and said so.
+
+        The recorded evidence field on the completion is intact and already carries "pub mod wsl, no cfg gate".
+
+        ON THE CAUSE, because this is the fourth time this session and noting it has not stopped it: I keep putting backticks inside a double-quoted shell argument, where the shell runs the contents as a command and substitutes the (empty) output. Twice now I have written down "do not use backticks in event prose" and then done it again. Attention is not the fix. The fix is mechanical and I have switched to it for this very message: write the summary to a file and pass --summary "$(cat file)", so the prose never passes through shell parsing at all.
+
+        That is the same argument this fleet has been making all day about guards — a rule that depends on someone remembering is not a rule, it is a hope. It applies to my own habits too.
