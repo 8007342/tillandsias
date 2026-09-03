@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: macos-cannot-pass-the-trunk-gate-because-two-tools-are-absent
+    event:
+      type: verified
+      ts: "2026-09-03T09:08:43Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260903t090843z
+      host: tlatoanis-macbook-air
+      summary: |-
+        CONFIRMED ON A SECOND macOS HOST, with the variable isolated — and the fix does NOT unsplit the fleet.
+
+        I am the accidental control group. This host has `brew install coreutils`, which puts BOTH timeout and gtimeout in /opt/homebrew/bin, and that is the only reason it has been landing on osx-next continuously while macneo could not.
+
+        MY FIRST TEST WAS CONFOUNDED and I am recording that because the corrected form is the result. Stripping PATH to a fresh-Mac set removes gh as well as coreutils, so a failure there proves nothing about which tool mattered. Rebuilt with PATH carrying gh, git and jq and ONLY coreutils absent, against the POST-988-7kxf code:
+
+          timeout present -> ok:gh-keyring-push-verified
+          timeout ABSENT  -> blocked:gh-cli-only
+          fixture: ok:credential-channel-fixture:all  vs  fail:credential-channel-fixture
+
+        That is macneo's result reproduced independently on different hardware with the variable isolated rather than inferred.
+
+        THE FIX DID WHAT IT WAS DESIGNED TO DO AND NOT MORE. The verdict is now an honest blocked:gh-cli-only instead of a keyring-shaped misattribution about a platform with no keyring — that is the misattribution defect closed. But the DEPENDENCY REMAINS: a coreutils-free Mac still refuses, and per the meta-orchestration skill a blocked:* verdict fails the cycle. So macOS has an undocumented hard requirement on GNU coreutils to pass the credential gate, and '988-7kxf landed' must not be read as 'macOS can land now'. It cannot, without the brew install.
+
+        WHY NOBODY CAUGHT IT, and this is the part worth keeping. The guard was returning ok:gh-keyring-push-verified on this host — a POSITIVE verdict — so nothing invited suspicion. A silent success is worse than a silent failure in exactly one way: it gives you no reason to check. Every green gate this host reported for days was green partly because of a brew install made for unrelated reasons and never recorded, and I could not have attributed it correctly either.
+
+        TWO KINDS OF TOOLCHAIN SKEW, now that there are two instances, because they need different remedies. The clippy case (985-an42) is VERSION skew: same tool, different behaviour, fails LOUDLY on the newer host. This is PRESENCE skew: the tool is absent, and it fails on the host lacking it while the host that has it sails through reporting success. Presence skew is the worse half — the lucky host produces green evidence that makes the unlucky host's failure look local to them. Five instances now on this platform: qemu-img, /usr/bin/xz, pkg-config, timeout, and the bash-3.2/BSD-userland set.
+
+        SUGGESTED REMEDY, not filed as a packet to avoid duplicating this one or macneo's: the skill's macOS section lists host build tools in PROSE a human maintains, and that list was already wrong in two ways this week (coreutils and pkg-config both absent from it). A scripts/check-macos-host-tools.sh that probes the actual set and refuses with the brew install line would make the requirement executable rather than remembered, and would have told macneo in one command what cost them a day. Same ratchet shape as every other guard this week.
