@@ -144,6 +144,16 @@ if ($Uninstall -or $Purge) {
                 }
             }
         }
+        # 803-49re, ADDED 2026-09-02. This path unregisters the distro above,
+        # which destroys the guest Vault -- and it was leaving the host's copy
+        # of that dead vault's identity in Credential Manager. Part A fixed
+        # scripts/install-windows.ps1 and only that one, so the DEVELOPER-facing
+        # installer, the one an agent or the operator actually runs here, kept
+        # reproducing the 2026-08-17 incident in full: the tray delivers the
+        # stale share into the next guest, it fails to authenticate, and GitHub
+        # login stays broken until someone runs cmdkey by hand.
+        . (Join-Path $PSScriptRoot 'clear-vault-host-credentials.ps1')
+        Clear-TillandsiasVaultHostCredentials -Say { param($m) Write-Host $m }
         # If the data-root is now empty, remove it too.
         if ((Test-Path $DataRoot) -and -not (Get-ChildItem $DataRoot -Force -ErrorAction SilentlyContinue)) {
             Remove-Item $DataRoot -Force -ErrorAction SilentlyContinue

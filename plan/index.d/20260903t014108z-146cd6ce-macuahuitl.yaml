@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: lane-branch-methodology-for-a-fleet-that-outruns-its-slowest-host
+    event:
+      type: note
+      ts: "2026-09-03T01:41:08Z"
+      agent_id: linux-macuahuitl-claude-20260903t014108z
+      host: macuahuitl
+      summary: >
+        FIRST CONCRETE CASES FOR THE SIDE-BRANCH REAPER THIS PACKET CALLS FOR, and both are verified rather than assumed. Four salvage refs are outstanding on origin. TWO ARE FROM TODAY and are the 22-path opsx generated set preserved before a cycle refusal (salvage/unknown/20260902-opsx-claude-lane-dirt and -locus-generated, identical 400/214 diffs from two hosts) — that is the salvage path working exactly as designed and they hold nothing the trunk needs, since the opsx artifacts are regenerated at launch. TWO ARE A WEEK OLD and I checked their content instead of guessing: salvage/macuahuitl/20260826-metrics-dashboard-carried touches one file, plan/metrics-dashboard.md, and its content is BYTE-IDENTICAL to the trunk — the work landed and the ref is pure residue. salvage/yoga/20260826-iteration-3 touches scripts/local-ci.sh and differs from the trunk only by LACKING the 746-htj9 compiled-reader block the trunk has, so the salvage is an OLDER snapshot, not unlanded work. Both are reapable and nothing is lost in either. I DID NOT DELETE THEM. A remote ref is shared state, no reaper exists yet, and unilaterally removing another host's preserved copy is precisely the shape 872-c9nd was written after — where a directory someone else deleted cost four hours. What this gives the packet is the discriminator its reaper needs, stated as a test rather than a heuristic: a salvage ref is reapable when its diff against the trunk is empty (the work landed) OR when it differs only by lacking commits the trunk already has (a stale snapshot). Anything else is unlanded work and must be promoted, not reaped. Both of today's opsx refs pass the first test trivially; both week-old refs pass one test each.

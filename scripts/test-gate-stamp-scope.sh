@@ -33,6 +33,12 @@ make_repo() {
     local d="$1"
     mkdir -p "$d/work"
     git init -q -b main "$d/work"
+    # core.hooksPath is GLOBAL and REPLACES .git/hooks (a forge sets it in
+    # ~/.gitconfig), so an unpinned scratch repo runs the REAL forge hooks
+    # instead of this fixture's. Pin it per repo. Same defect as 889-twhe
+    # and 877-mynm; found by sweeping for the class rather than by being
+    # blocked, because neither of these fixtures is wired into build.sh.
+    git -C "$d/work" config core.hooksPath .git/hooks
     (
         cd "$d/work" || exit 1
         git config user.email f@t

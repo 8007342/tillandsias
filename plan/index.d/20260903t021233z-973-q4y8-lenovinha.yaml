@@ -1,0 +1,84 @@
+packets:
+  - packet_id: security-litmus-asserts-a-vocabulary-podman-does-not-use
+    release_target: stable-milestone-v1
+    order: 973-q4y8
+    milestone: 718-rtnh
+    status: ready
+    desired_release: v0.5
+    kind: enhancement
+    pickup_role: any
+    priority: p2
+    tags:
+      - litmus
+      - podman
+      - security
+      - testing
+      - v0.5
+    title: |
+      The hardening litmus asserts each flag with the strongest evidence available for it, instead of asking podman to confirm three flags in a vocabulary it does not use.
+    context: |
+      The third of three stacked faults in
+      litmus-podman-idiomatic-security-flags.yaml, and it was only REACHABLE
+      once the first two were gone — which is the finding.
+
+      FAULT A: step 1 called `podman info --format='{{.Security.Rootless}}'`.
+      podman 5.8.4 needs `{{.Host.Security.Rootless}}` and errors on the old
+      path. The runner abandons a test at its first failing step, so NO
+      security step in this file had ever executed in its life. 972-cvdg's
+      tautological steps were never even reached.
+
+      FAULT B: the image lookup anchored `grep '^tillandsias-forge:'` while
+      podman reports `localhost/tillandsias-forge:...`, finding no image on a
+      host holding 34. Both diagnosed and fixed by macuahuitl at 0e12c3b3b.
+
+      FAULT C, this packet: with A and B repaired the test finally reached the
+      declaration step, which reported `HARDENING_NOT_APPLIED: userns cap-drop`
+      ON A CORRECTLY HARDENED CONTAINER. MEASURED on lenovinha:
+
+        UsernsMode  = "private"                      not the string "keep-id"
+        CapDrop     = ["CAP_CHOWN","CAP_DAC_OVERRIDE",...]   the EXPANDED set
+        SecurityOpt = ["no-new-privileges","label=disable"]  recorded verbatim
+
+      The assertions expected a vocabulary podman does not use. `UsernsMode`
+      reads "private" for ANY private userns and cannot identify keep-id at
+      all; `CapDrop` is expanded, so grepping for "ALL" can never match and
+      matching the expanded list would break on the next podman that expands
+      differently.
+
+      THE STACKING IS THE LESSON. Removing the tautology did not reveal the
+      wrong assertions — it COULD NOT, because nothing was running. A test that
+      cannot fail, sitting under assertions that were wrong anyway, sitting
+      under a step that aborted before either mattered. Each fault hid the ones
+      below it, and every one of the three was individually invisible.
+    exit_criteria:
+      - |
+          Each mandatory flag is asserted with the strongest evidence available
+          for it: --cap-drop=ALL behaviourally, --userns=keep-id behaviourally,
+          and no-new-privileges / label=disable by declaration because nothing
+          in the fixture can observe them.
+
+      - |
+          The keep-id assertion is falsifiable against a real container: it
+          passes on one launched with the envelope and fails on one launched
+          without it, demonstrated rather than asserted.
+
+      - |
+          No assertion depends on podman's expanded CapDrop list or on
+          UsernsMode's spelling, so a podman upgrade cannot turn a correctly
+          hardened container into a failing test.
+    events:
+      - type: note
+        ts: "2026-09-03T02:20:00Z"
+        agent_id: "linux-lenovinha-opus5-20260903t014457z"
+        host: lenovinha
+        summary: |
+          Filed and closed in one cycle because macuahuitl diagnosed it with
+          measured evidence and deliberately stopped at the design call,
+          handing it back rather than guessing. The diagnosis was the expensive
+          half; the decision took one measurement.
+
+          Their reason for stopping is worth keeping: steps 4, 5 and 6 already
+          verify the BEHAVIOUR, and the declaration step was the only one
+          asserting the LABEL — so whether to re-express it or drop it as
+          redundant is the same boundary question as declining to turn this
+          fixture into a call-site audit, not a mechanical repair.

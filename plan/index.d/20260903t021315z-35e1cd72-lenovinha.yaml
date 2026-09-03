@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: security-litmus-asserts-a-vocabulary-podman-does-not-use
+    field: status
+    value: done
+    ts: "2026-09-03T02:13:15Z"
+    host: lenovinha
+
+events:
+  - packet_id: security-litmus-asserts-a-vocabulary-podman-does-not-use
+    event:
+      type: completed
+      ts: "2026-09-03T02:13:15Z"
+      host: lenovinha
+      summary: >
+        status 'done' with evidence_refs: 5c3103011: litmus:podman-idiomatic-security-flags runs 9/9 end to end on a host with the forge image; keep-id step verified falsifiable (KEEP_ID_NOT_MAPPING:host=1000 seen=0 on a container launched without the flag); no assertion depends on podman's expanded CapDrop or UsernsMode spelling; TILLANDSIAS_FORCE_CHECK=1 ./build.sh --check green
+  - packet_id: security-litmus-asserts-a-vocabulary-podman-does-not-use
+    event:
+      type: note
+      ts: "2026-09-03T02:13:15Z"
+      host: lenovinha
+      summary: >
+        all three exit criteria met and demonstrated on real containers

@@ -1755,6 +1755,45 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "pre-push empty-ref-list fixture passed"
 
+    # TWO GUARDS THAT EXISTED, WERE BROKEN, AND WERE INVOKED BY NOTHING.
+    #
+    # Found by pirria 2026-09-03 by sweeping every fixture that inits a repo
+    # AND drives git: 20 such fixtures, 5 of which also reference hooks, of
+    # which these two FAILED. Both failed for the core.hooksPath reason — a
+    # forge sets it globally, git then replaces .git/hooks outright, and a
+    # fixture that installs its own hook silently measures nothing. Fourth
+    # and fifth instances of that class in one day.
+    #
+    # THE PART THAT MATTERS MORE THAN THE FIX: neither was wired here, so a
+    # forge whose gate had just gone green stayed green with two of its own
+    # guards broken. A gate cannot report on a check it never invokes. This
+    # is the uninvoked-guard shape audit-guard-activation exists to catch,
+    # reached from the other side — not a guard an audit noticed nobody had
+    # wired, but one discovered because it was ALSO broken and nothing said
+    # so. An unwired guard does not merely fail to protect: it ROTS, and the
+    # longer it sits the likelier it is already broken when someone wires it.
+    #
+    # COST, measured before deciding rather than asserted: 435 ms and 631 ms,
+    # 1.07 s combined against a 109 s gate — 0.98%. pirria declined to wire
+    # them because gate time is a real cost on the floor and this was a scope
+    # decision rather than a side effect of their bug fix; that was right, and
+    # with the number in hand it is not a close call. Note the second one pins
+    # the gate STAMP scope (887-bz88) — the guard whose weakening was refused
+    # hours earlier the same day, sitting unwired and broken the whole time.
+    _step "Checking the credential-channel fixture (860-g798)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-check-credential-channel.sh" 2>&1; then
+        _error "the credential-channel fixture regressed — the push-path guard every cycle depends on is unproven"
+        exit 1
+    fi
+    _info "credential-channel fixture passed"
+
+    _step "Checking the gate-stamp scope fixture (887-bz88)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-gate-stamp-scope.sh" 2>&1; then
+        _error "the gate-stamp scope fixture regressed — what the stamp covers is unproven, and a too-narrow stamp once let a lost exec bit reach the trunk"
+        exit 1
+    fi
+    _info "gate-stamp scope fixture passed"
+
     # The brew autoinstall shim must not re-enter itself (966-rq7f). `brew` is a
     # Ruby program and `ruby` is a shimmed tool, so an unguarded shim recurses:
     # measured at 3663 live processes on a floor forge — 89.4% of its pid
@@ -2260,20 +2299,58 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # inputs (scripts/archiver-check-memo.sh). A hit repeats a verdict the same
     # bytes earned; any change to plan/index.yaml, plan/archive, a fragment,
     # the archiver, its checker or the plan binary is a miss and runs it.
+    # 965-sxec: the output is TEED rather than swallowed, because the exit-3
+    # branch below has to read one token out of it while the operator still
+    # needs to see the whole thing. `_run` stays in the path — it carries the
+    # phase timing and the cd into SCRIPT_DIR, and a capture that dropped it
+    # would silently stop this step being profiled.
+    _archiver_log="$(mktemp "${TMPDIR:-/tmp}/tillandsias-archiver.XXXXXX")"
     if _archiver_memo="$(bash "$SCRIPT_DIR/scripts/archiver-check-memo.sh" check 2>/dev/null)"; then
         _info "$_archiver_memo — ledger and archiver unchanged since the last pass; check not re-run"
     else
-        _run bash "$SCRIPT_DIR/scripts/archive-plan-packets.sh" --check 2>&1 || _archiver_rc=$?
+        _run bash "$SCRIPT_DIR/scripts/archive-plan-packets.sh" --check 2>&1             | tee "$_archiver_log" || true
+        _archiver_rc="${PIPESTATUS[0]}"
         [ "$_archiver_rc" -eq 0 ] && bash "$SCRIPT_DIR/scripts/archiver-check-memo.sh" record >/dev/null 2>&1 || true
     fi
     if [ "$_archiver_rc" -eq 3 ]; then
-        _error "the plan archiver's check COULD NOT RUN (exit 3) — this says nothing about the ready set; the instrument is what needs repair (923-ws3r)"
-        exit 1
+        # ORDER 965-sxec. A forge ships NO ruby by design, so the archiver's
+        # worker cannot run there and the whole forge lane could not reach a
+        # verdict on ./build.sh --check at all — a p0 blocker, filed by an agent
+        # it stopped. Named as a SKIP here rather than a failure, and the skip is
+        # narrow twice over: only inside a forge, and only for the one cause the
+        # script tokenises. A stale plan binary or an unreadable fragment also
+        # exit 3 and still stop the gate, because those are repairable in the
+        # locus that hit them and waving them through would trade a false
+        # substantive verdict for a false green.
+        #
+        # It is LOUD on purpose. The ready set went unverified on this run; a
+        # reader has to be able to see that in the log, which is the 796-4ydb
+        # posture — say what was not checked rather than make one environment's
+        # missing package every host's red build.
+        if [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ]            && grep -q 'could-not-run:no-usable-ruby' "$_archiver_log" 2>/dev/null; then
+            _warn "SKIPPED the plan archiver check: no usable ruby in this forge (965-sxec). The ready set was NOT verified on this run — the archiver's ruby worker never executed. This is not a statement about the ledger."
+        else
+            _error "the plan archiver's check COULD NOT RUN (exit 3) — this says nothing about the ready set; the instrument is what needs repair (923-ws3r)"
+            exit 1
+        fi
     elif [ "$_archiver_rc" -ne 0 ]; then
         _error "the plan archiver would CHANGE THE READY SET, orphan events, or leave archived rows unanswerable — do not sweep"
         exit 1
     fi
+    rm -f "$_archiver_log"
     _info "Plan archiver check passed"
+
+    # Order 965-sxec. The fixture for the branch just above. It pins the VERDICT
+    # TEXT, not the exit code alone: build.sh failed either way before this, and
+    # what was wrong was what it SAID — "the plan archiver would CHANGE THE READY
+    # SET" on a run where the check never executed. A test that checked only the
+    # code would have stayed green through the whole incident.
+    _step "Checking a check that could not run never claims what it would have found (965-sxec)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-archiver-could-not-run-verdict.sh" 2>&1; then
+        _error "the archiver's could-not-run path regressed (965-sxec) — a gate that cannot RUN a check must never assert what the check would have FOUND"
+        exit 1
+    fi
+    _info "Archiver could-not-run verdict fixture passed"
 
     # Order 698-7n6q. The sibling of the check above: that one catches a
     # fragment whose declared status the fold DISCARDS; this one catches a
@@ -2646,6 +2723,32 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Archiver-check memo check passed"
 
+    # 965-sxec: a missing or unusable ruby must read as COULD-NOT-RUN (exit 3),
+    # never as a claim about the ready set. Inside a forge `command -v ruby`
+    # finds a brew shim that cannot install one, exits 127, and the caller's
+    # `-ne 0` arm then asserted "the plan archiver would CHANGE THE READY SET" —
+    # a substantive ledger claim from a command that never executed. Wired here
+    # because the defect is invisible on any host that HAS ruby, which is every
+    # host that runs this gate; only the stub-PATH arms exercise it.
+    _step "Checking a missing ruby reads as could-not-run, not as a ledger verdict (965-sxec)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-archiver-ruby-could-not-run.sh" 2>&1; then
+        _error "an absent ruby does not route to the could-not-run channel (965-sxec) — see the verdict line above"
+        exit 1
+    fi
+    _info "Archiver could-not-run channel check passed"
+
+    # 964-zedm: the index builder must stage where the payload FITS. It staged
+    # via the ambient TMPDIR, and in a forge /tmp is a 256 MB tmpfs while the
+    # index root is on a 1.2 TB overlay — so a cold 22,645-chunk build died on
+    # ENOSPC with 1.2 TB free. Wired here because the defect is invisible on any
+    # host with a roomy /tmp, which is every host that runs this gate.
+    _step "Checking the spec-index builder stages where the payload fits (964-zedm)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-spec-index-staging-capacity.sh" 2>&1; then
+        _error "the spec-index builder stages into the ambient TMPDIR (964-zedm) — see the verdict line above"
+        exit 1
+    fi
+    _info "Spec-index staging capacity check passed"
+
     # Order 881-29me. A `plan/issues/` audit cites its evidence and nothing
     # checked those citations still resolved. Measured in one document: every
     # factual claim re-verified TRUE while every `file:line` citation
@@ -2728,6 +2831,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Bound-litmus-runnable fixture passed"
 
+    _step "Checking litmus steps can actually fail (972-cvdg)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-steps-can-fail.sh" 2>&1; then
+        _error "a litmus step prints the same token on success and failure (972-cvdg) — see the verdict line above"
+        exit 1
+    fi
+    _info "Litmus steps-can-fail check passed"
+
     _step "Checking plan fragments use keys the fold reads (944-vim8)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-fragment-keys-are-read.sh" 2>&1; then
         _error "a plan/index.d/ fragment uses a top-level key the fold discards (944-vim8) — see the verdict line above"
@@ -2805,6 +2915,20 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "wsl.exe single-constructor check passed"
+
+    # Order 803-49re. A purge that destroys the guest must also clear the host's
+    # copy of that guest's Vault identity. Part A landed the clearing in ONE of
+    # the two installers and the packet read as fixed; the other one went on
+    # unregistering the distro and clearing nothing for six days, reproducing the
+    # 2026-08-17 GitHub-login incident in full on the developer-facing path. The
+    # guard is here rather than a third careful edit because "one copy fixed, one
+    # copy missed" is the defect this project repeats most.
+    _step "Checking every guest-destroying purge clears the host vault credentials (803-49re)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-purge-clears-vault-credentials.sh" 2>&1; then
+        _error "a script unregisters the tillandsias distro without clearing the host's copy of that guest's Vault identity (803-49re) — call Clear-TillandsiasVaultHostCredentials from scripts/clear-vault-host-credentials.ps1"
+        exit 1
+    fi
+    _info "Purge credential-clearing check passed"
 
     # Order 716-f5kc. REPORT, not refusal. A Linux build of the Windows tray
     # compiles src/stubs/ and goes green without ever parsing the edited file,

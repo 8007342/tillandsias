@@ -3838,6 +3838,45 @@ fn format_seed_unresolved(project_display: &str) -> String {
     )
 }
 
+/// The RESOLVED counterpart, order 965-rb3v. The unresolved case above is
+/// loud; the SUCCESS case was silent, and on a developer host silence is
+/// where the defect lives.
+///
+/// MEASURED on macuahuitl 2026-09-02: the host carries EIGHT checkouts of
+/// this project (opencode/, claudia/, codex/, agy/, repeat/, src/ and two
+/// tillandsias.org trees), THREE of them on `main`, and the two plausible
+/// seed sources are stale abandoned trees last committed on 08-09 and
+/// 08-03. A forge launched there arrived seeded from `main` while the
+/// checkout being worked in sat on linux-next, and the guest's base_state
+/// still read `ok` because it compares the clone against the seed rather
+/// than against anyone's intent.
+///
+/// `read_host_project_current_branch` was NOT at fault and was ruled out by
+/// test from both sides (d4b764392). It resolved correctly — against a
+/// checkout nobody intended. So the defect is not a misread branch, it is
+/// an UNREPORTED PROJECT PATH, and the fix is to say which checkout was
+/// used, always, not only when reading it fails.
+fn format_seed_resolved(project_display: &str, seed: &str) -> String {
+    format!(
+        "[tillandsias] [forge-launch] SEED {seed} from {project_display} \
+         — this forge will be created from that branch of that checkout. If \
+         it is not the checkout you are working in, stop and relaunch from \
+         the right one: the guest cannot detect the difference, because \
+         base_state compares the clone against this seed rather than \
+         against your intent."
+    )
+}
+
+/// Emit [`format_seed_resolved`]. Split from the formatter for the same
+/// reason as its unresolved twin: the wording stays unit-testable without a
+/// repo and the call site stays one line.
+fn report_seed_resolved(project_path: &Path, seed: &str) {
+    eprintln!(
+        "{}",
+        format_seed_resolved(&project_path.display().to_string(), seed)
+    );
+}
+
 /// Emit [`format_seed_unresolved`] for a project path whose HEAD did not
 /// resolve. Separated from the formatter so the wording is testable and the
 /// call sites stay one line.
@@ -6791,6 +6830,7 @@ fn build_opencode_forge_args(
         // DEFAULT is the operator decision the packet holds open, and this
         // launcher is shared fleet-wide — a hard default here would change
         // sibling hosts' behavior unattended).
+        report_seed_resolved(project_path, &seed);
         report_seed_staleness(project_path, &seed);
         args.push("--env".into());
         args.push(format!("TILLANDSIAS_FORGE_SEED_BRANCH={seed}"));
@@ -21393,6 +21433,29 @@ mod tests {
                 "{lane} builder must NOT seed from the remote default: {args:?}"
             );
         }
+    }
+
+    /// ORDER 965-rb3v. The RESOLVED notice must name BOTH the branch and the
+    /// CHECKOUT, because naming only the branch is what made the original
+    /// defect invisible: on a host with eight checkouts of this project the
+    /// branch alone does not say which tree it came from, and three of those
+    /// eight sat on `main`.
+    #[test]
+    fn seed_resolved_notice_names_both_the_branch_and_the_checkout() {
+        let notice = format_seed_resolved("/home/op/src/tillandsias", "linux-next");
+        assert!(
+            notice.contains("linux-next"),
+            "the notice must name the seed branch: {notice}"
+        );
+        assert!(
+            notice.contains("/home/op/src/tillandsias"),
+            "the notice must name WHICH CHECKOUT it read — the branch alone is \
+             what hid 965-rb3v on a host carrying eight of them: {notice}"
+        );
+        assert!(
+            notice.contains("SEED "),
+            "the notice needs a greppable token: {notice}"
+        );
     }
 
     /// Order 965-rb3v: the unresolved case must NAME ITSELF. It injects no
