@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-skew-line-cannot-see-a-behaviour-change-inside-an-existing-subcommand
+    order: 984-i4k2
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [deployment, versioning, plan-ledger, fail-loud, multi-host]
+    estimated_hours: 4
+    title: |
+      Order 569's staleness signal is capability-based, so a fix that changes what an existing subcommand DOES is invisible to it, and every host on the old binary keeps writing to the wrong place while reporting skew=none.
+    context: |
+      FOUND by macuahuitl-tillandsias-forge on itself, recorded on 966-7umc.
+      WHAT HAPPENED. The forge ran append-event and it wrote 38 lines directly
+      into plan/index.yaml instead of emitting a fragment. Correct content,
+      wrong channel. Cause: PATH resolved to the binary installed at launch
+      19:09Z, while the fix that redirects those writes landed ~21:45Z. Under an
+      active pause the bad write would also have demanded a gate the host was
+      not authorised to run. It reverted cleanly (verified 38 added / 0 removed,
+      a pure append), redid it through the release binary, and landed a fragment.
+      WHY IT IS GENERAL AND NOT A ONE-OFF. Order 569 detects a stale binary by
+      comparing its embedded SUBCOMMAND CAPABILITY SET. That catches a binary
+      predating a new subcommand. It cannot catch a binary where the subcommand
+      EXISTS IN BOTH VERSIONS and only its BEHAVIOUR changed - here, its write
+      target. So  is truthful and useless at the same time: the
+      capability sets genuinely match, and the two binaries genuinely do
+      different things.
+      THE EXPOSURE IS THE OPPOSITE OF RARE. Every host still running a
+      pre-21:45Z binary keeps writing to index.yaml, and those are exactly the
+      hosts 966-7umc existed to protect. The fix is on the trunk and not in
+      effect where it was needed.
+      "LANDED ON TRUNK" AND "IN EFFECT ON THE HOSTS THAT NEED IT" ARE DIFFERENT
+      STATES, and only the first is observable from the trunk. That is the same
+      family as 980-krib and the memory.peak defect: a signal that is true about
+      the thing it measures and false about the question being asked of it.
+    exit_criteria:
+      - a behavioural change to an existing subcommand is detectable by the running host, not only a change to the capability set
+      - the detector is verified against the actual 2026-09-03 case - a pre-21:45Z and post-21:45Z plan binary must be distinguishable by it
+      - a host that cannot establish its own currency says so loudly rather than reporting skew=none, because a truthful-but-inapplicable green is what this defect is made of
+      - hosts still on stale binaries are enumerated or the ledger records that they cannot be; do not close this while writes may still be landing in the wrong channel unobserved
