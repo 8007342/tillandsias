@@ -2077,6 +2077,18 @@ Before exit:
    # refused. Re-run `record` after the LAST successful push, not the first
    # attempt.
    #
+   # THIS IS NOW ENFORCED, NOT ONLY ADVISED (order 974-uk95). `self` refuses a
+   # COMPLETE marker unless THIS cycle wrote a durable record: `record` stamps
+   # the head it recorded, the boundary guard's `snapshot` clears that stamp at
+   # Start Of Cycle, and a marker whose HEAD does not descend from a recorded
+   # head is refused. So the skipped-record case now fails LOUDLY — no marker,
+   # which every outer launcher already treats as failure — instead of printing
+   # a valid marker beside an empty ledger. BLOCKED is exempt: a cycle saying it
+   # did not finish must still be able to say so.
+   #
+   # The ordering is still yours to get right. The guard catches a skipped
+   # record; it cannot make a retry loop call `record` for you.
+   #
    # AUDIT IT THE WAY THEY CAUGHT IT: grep the ledger for this cycle's head
    # rather than trusting the marker.
    #   grep -c "$(git rev-parse HEAD)" plan/mo-full-attestations.d/<host>.md
