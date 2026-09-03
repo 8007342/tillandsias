@@ -14,6 +14,7 @@ Improve project submenu labels with explicit source cues and temporarily disable
 ## Requirements
 
 ### Requirement: Project List Label Updates
+<!-- req-id: 27fb3ebf -->
 
 The tray MUST update the top-level project submenu labels to include source cues: @trace spec:tray-projects-rename
 
@@ -33,6 +34,7 @@ Both labels MUST appear in all three locale files (en.toml, de.toml, es.toml) wi
 - **AND** they SHOULD immediately understand the source of each project group without reading documentation
 
 ### Requirement: Language Submenu Removal
+<!-- req-id: 03f21dbe -->
 
 The `Language ▸` submenu item MUST be hidden from the tray menu. The i18n framework (locale loading, `i18n::t` / `i18n::tf`, lazy reload on locale change) MUST be kept intact, but runtime behavior changes:
 
@@ -49,6 +51,7 @@ The `Language ▸` submenu item MUST be hidden from the tray menu. The i18n fram
 - **AND** re-enabling the submenu later SHOULD require only uncommenting one line
 
 ### Requirement: Code Hygiene — Dormant Infrastructure
+<!-- req-id: 552303fc -->
 
 The i18n infrastructure MUST be preserved:
 
@@ -67,6 +70,7 @@ This ensures the return path to full i18n support is simple and low-risk.
 - **AND** no orphaned code SHOULD need to be cleaned up
 
 ### Requirement: Tombstone Annotation
+<!-- req-id: 2c0b52dd -->
 
 The original locale-detection logic (the block that reads `$LANG` / `$LC_ALL` in `i18n::initialize`) MUST be kept as a comment with a `@tombstone superseded:tray-projects-rename` annotation:
 
@@ -82,6 +86,7 @@ The original locale-detection logic (the block that reads `$LANG` / `$LC_ALL` in
 This MUST preserve the original code path for three releases in case the team needs to restore it urgently.
 
 ### Requirement: Documentation Update
+<!-- req-id: 0ae4f319 -->
 
 The cheatsheet `cheatsheets/runtime/tray-state-machine.md` MUST be updated to reflect:
 

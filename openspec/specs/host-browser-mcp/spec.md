@@ -12,6 +12,7 @@ forge-side `host-browser.sh` stdio bridge, and it exists to launch isolated
 Chromium windows for mapped `<service>.<project>.localhost` routes.
 ## Requirements
 ### Requirement: Host MCP server exposes browser-control tools to forge agents
+<!-- req-id: 6ee1bc5a -->
 
 The tray application SHALL embed a host-resident MCP server
 (`tillandsias-browser-mcp`) implemented as a Rust module that runs in the
@@ -66,6 +67,7 @@ The eight v1 tools are:
 - **AND** the connection remains open for further requests
 
 ### Requirement: MCP reaches this server over the per-lane tool socket
+<!-- req-id: 0dcca596 -->
 
 The browser tool family is served over the per-lane MCP socket, whose
 contract — path shape, `0600` permissions, per-lane mount isolation,
@@ -103,6 +105,7 @@ that MUST keep refusing, not dead code to delete.
 - **AND** no MCP tool is dispatched from that connection
 
 ### Requirement: Browser provider is bundled Chromium only
+<!-- req-id: 9b03bb93 -->
 
 `browser.open` SHALL launch ONLY the bundled Chromium binary provisioned
 by `host-chromium-on-demand` at
@@ -139,6 +142,7 @@ without launching anything.
   `outcome = "browser-unavailable"`
 
 ### Requirement: Process-per-window with ephemeral profile
+<!-- req-id: ef6ab932 -->
 
 Each successful `browser.open(url)` call SHALL spawn a fresh Chromium
 process with the following non-negotiable flags:
@@ -183,6 +187,7 @@ windows into a single process.
 - **AND** an accountability log entry records the cleanup
 
 ### Requirement: Window survives MCP connection drop
+<!-- req-id: f80f3b14 -->
 
 A window opened by `browser.open` SHALL remain open and usable by the
 user until any of (a) `browser.close(window_id)` is called, (b) the
@@ -213,6 +218,7 @@ from the same project (rebound after reconnect) returns the window.
 - **AND** an accountability log entry records each window teardown
 
 ### Requirement: URL allowlist denies opencode-self and non-project hosts
+<!-- req-id: 60abc9f2 -->
 
 `browser.open(url)` SHALL parse `url` using `url::Url` and SHALL accept
 the request iff ALL of the following are true:
@@ -299,6 +305,7 @@ with the failing rule and the project label.
 - **AND** the rejection reason names the `userinfo` rule
 
 ### Requirement: Authorisation by Unix-socket peer credential
+<!-- req-id: db7f510c -->
 
 The tray SHALL authorise every MCP session by Unix-socket peer
 credential at first-`McpFrame` time. When a forge container connects to
@@ -349,6 +356,7 @@ under Open Question Q-OPEN-3 in `design.md`.
   `peer_pid = <pid>`
 
 ### Requirement: Per-(project,host) debounce on browser.open
+<!-- req-id: 16e408a7 -->
 
 The MCP server SHALL maintain an in-memory `(project_label, host) →
 Instant` table of the last successful `browser.open` per
@@ -385,6 +393,7 @@ note.
 - **AND** the `WindowRegistry` now has two entries for the host
 
 ### Requirement: browser.eval is disabled by default in v1
+<!-- req-id: 3c6ba78b -->
 
 In the v1 release, `browser.eval` SHALL appear in `tools/list` but
 every `tools/call` invocation SHALL return
@@ -413,6 +422,7 @@ change ships, no UX surface SHALL be added — per the project's
   description noting it is currently disabled
 
 ### Requirement: CDP method usage is pinned to stable 1.3 and the bundled-Chromium version
+<!-- req-id: 46cc64c6 -->
 
 The MCP server's CDP client SHALL use ONLY methods available in CDP
 stable channel 1.3 and SHALL pin the exact wire shape (parameter set,
@@ -445,6 +455,7 @@ re-run of the integration test suite before the new image ships.
   stable 1.3 schema
 
 ### Requirement: Per-call accountability log with redacted payloads
+<!-- req-id: 480392c6 -->
 
 Every `tools/call` invocation SHALL emit exactly one accountability log
 entry at level `info` with the following fields:
@@ -487,6 +498,7 @@ the rules above.
 - **AND** does NOT contain the substring `hunter2`
 
 ### Requirement: Per-message size cap and DoS protection
+<!-- req-id: 735d5c07 -->
 
 The `McpFrame` envelope payload SHALL be capped at 4 MiB
 (`4 * 1024 * 1024` bytes). A frame larger than the cap SHALL be

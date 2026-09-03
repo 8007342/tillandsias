@@ -6,6 +6,7 @@ active
 ## Requirements
 
 ### Requirement: Cosign bundle artifacts
+<!-- req-id: f9b69f81 -->
 Each signable release binary MUST have a corresponding `.cosign.bundle` file published alongside it in the GitHub Release. The bundle MUST contain the signature, Fulcio certificate, timestamp, and Rekor inclusion proof produced by Cosign keyless signing.
 
 #### Scenario: Artifact naming for bundles
@@ -22,6 +23,7 @@ Each signable release binary MUST have a corresponding `.cosign.bundle` file pub
 - **THEN** all `.cosign.bundle` files MUST be included as release assets alongside the binaries and `SHA256SUMS`
 
 ### Requirement: Cosign signing produces verifiable bundles
+<!-- req-id: 42b856cc -->
 All signable release artifacts MUST be signed with Cosign keyless mode and MUST be verifiable locally using the bundle format. The release workflow and verification docs MUST use `.cosign.bundle` for the release artifact contract.
 
 #### Scenario: Successful local verification
@@ -41,6 +43,7 @@ All signable release artifacts MUST be signed with Cosign keyless mode and MUST 
 - **THEN** the verification MUST succeed without additional configuration
 
 ### Requirement: Release verification instructions stay bundle-based
+<!-- req-id: 3bb3b55d -->
 The repository's release verification instructions MUST tell users to download the artifact together with its `.cosign.bundle` file and run `cosign verify-blob --bundle`. The verification helper script MUST enforce the same contract.
 
 #### Scenario: Verification script expects bundle format

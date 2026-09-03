@@ -19,6 +19,7 @@ This spec ensures:
 ## Requirements
 
 ### Requirement: On-demand MCP server startup
+<!-- req-id: 9870a2b2 -->
 
 MCP servers MUST NOT be started during container initialization. Instead, they are spawned lazily when an agent first invokes a server operation.
 
@@ -48,6 +49,7 @@ MCP servers MUST NOT be started during container initialization. Instead, they a
 - **AND** MUST NOT retry automatically; the next operation re-attempts
 
 ### Requirement: Multiple MCP servers coexist
+<!-- req-id: 86445bb9 -->
 
 If multiple MCP servers are configured, each MUST be started independently on-demand.
 
@@ -66,6 +68,7 @@ If multiple MCP servers are configured, each MUST be started independently on-de
 - **AND** agents MUST receive a "not available" response if they query it
 
 ### Requirement: Health check and readiness
+<!-- req-id: d9a6c03b -->
 
 Before accepting requests, an MCP server MUST pass a health check proving it is ready to accept connections.
 
@@ -88,6 +91,7 @@ Before accepting requests, an MCP server MUST pass a health check proving it is 
 - **AND** if malformed, MUST treat it as a failed check
 
 ### Requirement: Ephemeral lifecycle — servers destroyed on shutdown
+<!-- req-id: 06e99670 -->
 
 MCP servers are children of the container process. On container exit, all MCP servers MUST be terminated.
 
@@ -109,6 +113,7 @@ MCP servers are children of the container process. On container exit, all MCP se
 - **AND** no socket files or IPC state MUST persist
 
 ### Requirement: Browser tool variant — on-demand CLI instead of daemon
+<!-- req-id: cc286226 -->
 
 The browser MCP interaction pattern uses an on-demand CLI tool instead of a persistent daemon, optimizing for interactive use cases.
 
@@ -131,6 +136,7 @@ The browser MCP interaction pattern uses an on-demand CLI tool instead of a pers
 - **THEN** reject with error: `"Debug browser already running for <project>"`
 
 ### Requirement: MCP server communication channel
+<!-- req-id: 3c437e65 -->
 
 MCP servers MUST communicate with agents via a channel (socket, pipe, or stdio).
 
@@ -150,6 +156,7 @@ MCP servers MUST communicate with agents via a channel (socket, pipe, or stdio).
 - **AND** MUST NOT deadlock or drop requests
 
 ### Requirement: Litmus test — on-demand MCP lifecycle
+<!-- req-id: f34614f9 -->
 
 Critical verification paths:
 

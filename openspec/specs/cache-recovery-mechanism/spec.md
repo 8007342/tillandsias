@@ -13,6 +13,7 @@ Formalize the behavioral contract for fresh-start cache initialization. An absen
 ## Requirements
 
 ### Requirement: Fresh Start is NOT a Version Mismatch
+<!-- req-id: f837ffd7 -->
 
 An absent `cache_version` file indicates a fresh system state and MUST be treated as valid (not an error). The `check_cache_integrity()` function MUST distinguish between "file absent" (fresh start) and "file present but wrong version" (mismatch error).
 
@@ -44,6 +45,7 @@ The `unwrap_or(false)` semantic is **non-negotiable**. It MUST NOT be changed to
 - **AND** after completion, the cache directory and version file are created for future checks
 
 ### Requirement: Actual Mismatch Triggers Error (with Recovery Path)
+<!-- req-id: eb9af831 -->
 
 When `cache_version` file EXISTS but its content differs from the binary's `VERSION`, this IS a mismatch error and MUST block initialization unless the user opts-in to rebuild.
 
@@ -78,6 +80,7 @@ When `cache_version` file EXISTS but its content differs from the binary's `VERS
 - **AND** all images are rebuilt
 
 ### Requirement: Corruption Recovery
+<!-- req-id: 58b83229 -->
 
 When the `init-build-state.json` file exists but is corrupted (unreadable or invalid JSON), the cache recovery mechanism MUST detect the corruption, warn the user, delete the corrupted file, and allow initialization to proceed with a rebuilt state.
 
@@ -116,6 +119,7 @@ When the `init-build-state.json` file exists but is corrupted (unreadable or inv
 - **AND** initialization proceeds normally
 
 ### Requirement: Cache Directory Lifecycle and Paths
+<!-- req-id: b3f8d1a1 -->
 
 The cache directory location MUST follow XDG specifications. The `cache_version` file MUST be written only after successful initialization, creating a checkpoint for future staleness checks.
 
@@ -148,6 +152,7 @@ The cache directory location MUST follow XDG specifications. The `cache_version`
 - **AND** corruption of this file (bit flip, truncation, encoding error) triggers recovery (see Corruption Recovery requirement)
 
 ### Requirement: Version File Format and Semantics
+<!-- req-id: d531b657 -->
 
 The `cache_version` file MUST contain a single line: the current binary version (same as `VERSION` constant in code). No whitespace, metadata, or additional fields.
 

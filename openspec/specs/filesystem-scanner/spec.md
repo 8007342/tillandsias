@@ -6,6 +6,7 @@ status: active
 ## Requirements
 
 ### Requirement: OS-native event-driven watching
+<!-- req-id: 94d68143 -->
 The filesystem scanner MUST use OS-native file event mechanisms (inotify on Linux, FSEvents on macOS, ReadDirectoryChangesW on Windows) via the `notify` crate's `RecommendedWatcher` and MUST NOT use polling loops of any kind.
 
 #### Scenario: Project directory created on Linux
@@ -25,6 +26,7 @@ The filesystem scanner MUST use OS-native file event mechanisms (inotify on Linu
 - **THEN** the scanner MUST log a warning indicating the watch limit is exhausted and continue operating with existing watches. Depth-2 scanning minimizes the number of watches required, but systems with very low limits or many concurrent inotify consumers may still hit the cap.
 
 ### Requirement: Debounced event batching
+<!-- req-id: 6b29bf1f -->
 The scanner MUST debounce rapid filesystem events into batched project state updates with a configurable delay (project default: 2000ms). This default is a project choice, not a crate default.
 
 #### Scenario: Rapid file creation

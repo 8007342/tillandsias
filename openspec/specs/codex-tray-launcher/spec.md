@@ -9,6 +9,7 @@ active
 ## Requirements
 
 ### Requirement: Tray-launched Codex uses the forge entrypoint contract
+<!-- req-id: 8f33c209 -->
 
 The tray MUST launch Codex inside the forge container through the dedicated entrypoint so hot/cold environment setup, project paths, and agent instructions are applied consistently.
 

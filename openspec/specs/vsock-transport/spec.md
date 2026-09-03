@@ -32,6 +32,7 @@ Cross-references:
 ## Requirements
 
 ### Requirement: CID allocation contract
+<!-- req-id: 242a09ed -->
 - **ID**: vsock-transport.cid.host-and-guest-allocation@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -83,6 +84,7 @@ allocated by the hypervisor and is negotiable per backend:
 - **AND** the host shell SHALL connect to the same `(vm-cid, 42420)` tuple without rediscovery
 
 ### Requirement: Stable port `42420`
+<!-- req-id: 96270ad2 -->
 - **ID**: vsock-transport.port.stable-control-wire-port@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -108,6 +110,7 @@ as named constants.
 - **AND** no port collision SHALL occur (vsock port space is per-CID and isolated from TCP/UDP)
 
 ### Requirement: Framing and handshake are identical to the Unix-socket transport
+<!-- req-id: 010b23c5 -->
 - **ID**: vsock-transport.framing.protocol-unchanged@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -142,6 +145,7 @@ Unix-socket variant.
 - **AND** SHALL log the abort with `spec = "vsock-transport"`
 
 ### Requirement: New `ControlMessage` variants for VM lifecycle and remote enumeration
+<!-- req-id: cda66582 -->
 - **ID**: vsock-transport.messages.vm-lifecycle-additions@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -180,6 +184,7 @@ long-lived secrets — credentials remain inside the VM (see
 - **AND** the host shell SHALL detect completion by observing the vsock connection close
 
 ### Requirement: Error model surfaces transport failures explicitly
+<!-- req-id: 2bae49f5 -->
 - **ID**: vsock-transport.errors.explicit-error-types@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -204,6 +209,7 @@ emitted as a structured log event with `spec = "vsock-transport"`.
 - **AND** SHALL log `spec = "vsock-transport"` with the byte offset where decoding failed
 
 ### Requirement: Silent guest work remains live through capability-gated heartbeats
+<!-- req-id: f2f10dae -->
 - **ID**: vsock-transport.exec.heartbeat-liveness@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -235,6 +241,7 @@ values below 60 seconds SHALL fail loudly.
 
 
 ### Requirement: Platform transport matrix — the host side differs, the guest side does not
+<!-- req-id: d7a40e21 -->
 
 The host↔guest transport MUST be one of the three mechanisms below, chosen by
 host platform. The GUEST side is uniform on every platform: it listens on the

@@ -36,6 +36,7 @@ Nothing in this spec may be implemented in Python.
 ## Requirements
 
 ### Requirement: SLOT-1 — One stable enclave endpoint, selectable engine behind it
+<!-- req-id: eab26f7a -->
 
 Enclave consumers MUST continue to reach local inference at exactly one stable
 address. `OLLAMA_HOST=http://inference:11434` MUST remain a valid consumer
@@ -59,6 +60,7 @@ forge images, and MUST NOT require editing forge entrypoints.
   forge containers
 
 ### Requirement: SLOT-2 — Slot contract: OpenAI-compatible surface plus the existing readiness probe
+<!-- req-id: bc2875c6 -->
 
 Every slot MUST present an OpenAI-compatible HTTP surface exposing at minimum
 `/v1/models` and `/v1/chat/completions`.
@@ -89,6 +91,7 @@ catalogue source, lane (`container` or `host-native`), and readiness URL.
   be refused
 
 ### Requirement: SLOT-3 — Engine registry, default engine, and the NPU integration point
+<!-- req-id: 8205fb65 -->
 
 The registry of engine kinds MUST be `ollama`, `llama-server` (with a variant
 axis of `vulkan` | `cuda` | `rocm` | `cpu`), and `host-native-sidecar`.
@@ -113,6 +116,7 @@ router place work that can never execute.
 - **THEN** the registration MUST be refused with a reason
 
 ### Requirement: SLOT-4 — Vulkan via /dev/dri is the default Linux GPU lane
+<!-- req-id: e7e1f38f -->
 
 For container-resident slots on Linux, the default GPU lane MUST be Vulkan
 through `--device /dev/dri` with the Mesa userspace supplied by the inference
@@ -137,6 +141,7 @@ Absence of `/dev/dri` MUST degrade to the CPU lane, not fail the launch.
 - **AND** the launch MUST NOT fail
 
 ### Requirement: SLOT-5 — Device passthrough for container-resident slots is graceful and unprivileged
+<!-- req-id: 81f5e1ba -->
 
 When the capability probe reports a usable NPU and the selected slot is
 container-resident, the container run arguments MUST add the device node
@@ -171,6 +176,7 @@ rules are not guaranteed to be installed by distributions.
   access
 
 ### Requirement: SLOT-6 — Host-native sidecar slots are reachable only behind the enclave proxy
+<!-- req-id: 41088a79 -->
 
 A host-native sidecar is an inference server running as a host process. It
 exists because NPUs are structurally unreachable from WSL2, because AMD and
@@ -249,6 +255,7 @@ absolute:
 - **AND** no registration record may survive to the next run
 
 ### Requirement: SLOT-7 — The model tier table is data consumed by every engine
+<!-- req-id: e52fc9d8 -->
 
 The T0–T5 model tier table MUST live in a declarative, non-executable data
 file that container-resident and host-native slots both read. It MUST NOT
@@ -273,6 +280,7 @@ the table itself naming an engine-specific format for the shared rows.
   shell's own parser
 
 ### Requirement: SLOT-8 — Slot lifecycle is idempotent, ephemeral, and soft-failing
+<!-- req-id: 1ddd0ea2 -->
 
 `ensure slot` MUST be idempotent: invoking it twice MUST NOT create a second
 engine process or container, MUST NOT re-download an already-cached model, and

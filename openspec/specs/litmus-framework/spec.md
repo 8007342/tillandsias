@@ -9,6 +9,7 @@ active
 ## Requirements
 
 ### Requirement: Litmus bindings remain falsifiable
+<!-- req-id: 20a88a0a -->
 
 Specs that declare litmus coverage MUST bind to checks that are deterministic, reproducible, and capable of failing when the claimed behavior regresses.
 

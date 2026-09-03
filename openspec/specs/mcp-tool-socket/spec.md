@@ -27,6 +27,7 @@ the retired requirement was written.
 ## Requirements
 
 ### Requirement: Each lane is served by its own socket
+<!-- req-id: b82998a6 -->
 
 The tray SHALL create one socket per lane at
 `$XDG_RUNTIME_DIR/tillandsias/mcp/<project>-<instance>/mcp.sock` and bind-mount
@@ -52,6 +53,7 @@ The socket SHALL be created mode `0600` and its parent directory mode `0700`.
 - **THEN** the socket node is mode `0600` and its parent directory `0700`
 
 ### Requirement: Attribution is derived from the accepting listener
+<!-- req-id: 4e8be766 -->
 
 The project (and instance) a request acts on SHALL be derived from WHICH
 LISTENER accepted the connection. The tray SHALL NOT read the project from
@@ -80,6 +82,7 @@ sanitized into validity.
 - **THEN** the tray still serves the project the accepting listener owns
 
 ### Requirement: NDJSON framing with a bounded per-line payload
+<!-- req-id: 0b23150d -->
 
 The wire format SHALL be newline-delimited JSON: exactly one JSON-RPC object
 per line in each direction, with no envelope and no length prefix.
@@ -115,6 +118,7 @@ carrying the originating request's `id`.
 - **AND** the oversized payload is not written
 
 ### Requirement: One request in flight per connection
+<!-- req-id: d492651f -->
 
 The lane transport SHALL read one line, serve it to completion, and only then
 read the next. Responses therefore return in request order even when a client
@@ -134,6 +138,7 @@ where it can bind, and SHALL pin it with a test that observes a rejection.
 - **THEN** the tray answers them one per line in the order received
 
 ### Requirement: The socket carries both host-services and browser tools
+<!-- req-id: 046e350e -->
 
 `tools/list` on this socket SHALL advertise the host-services family
 (`publish_local`, `service_status`, `service_stop`) together with the browser

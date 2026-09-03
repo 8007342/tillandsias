@@ -50,6 +50,7 @@ from accessing credentials.
 ## Requirements
 
 ### Requirement: Ephemeral secrets created at tray startup
+<!-- req-id: d3268579 -->
 
 The tray process MUST create all ephemeral secrets during initialization, before
 any containers are launched. Secrets MUST be created once per tray session and
@@ -91,6 +92,7 @@ explicitly removed.
   `spec="podman-secrets-integration"`, `action="secret_create"`
 
 ### Requirement: Secrets mounted via `--secret` flag, never bind mounts
+<!-- req-id: 54790a9e -->
 
 All credential material MUST be mounted into containers using podman's `--secret`
 flag, which places secrets at `/run/secrets/<name>` inside the container (tmpfs,
@@ -151,6 +153,7 @@ MUST_NOT be used.
 - **AND** the terminal container MUST have zero credential mounts
 
 ### Requirement: Secrets readable at `/run/secrets/<name>` inside containers
+<!-- req-id: 759461ae -->
 
 Podman automatically mounts secrets at the read-only path `/run/secrets/<name>`.
 Container entrypoints MUST read secrets from this fixed location. The
@@ -178,6 +181,7 @@ implementation MUST NOT assume custom mount paths or symlinks.
   see secrets)
 
 ### Requirement: Secrets hidden from `podman inspect` and process environment
+<!-- req-id: bc2d766b -->
 
 The `podman inspect` command MUST NOT reveal secret values. Secrets MUST NOT
 appear in container environment variables, process `ps` listings, or container
@@ -209,6 +213,7 @@ logs.
   process args)
 
 ### Requirement: All secrets cleaned up on tray shutdown
+<!-- req-id: 02511966 -->
 
 The tray process MUST remove all ephemeral secrets on graceful shutdown. A Drop
 guard MUST ensure cleanup even in panic or signal-based termination. Cleanup
@@ -262,6 +267,7 @@ MUST be idempotent.
 - **THEN** the output MUST be empty (no secrets matching `tillandsias-*`)
 
 ### Requirement: Secrets creation uses podman filedriver (default)
+<!-- req-id: 24bbf52d -->
 
 The tray MUST use podman's default file driver (plaintext in podman storage) for
 all ephemeral secrets. No custom drivers (pass, shell) are required for this
@@ -282,6 +288,7 @@ capability.
 - **AND** no driver selection logic MUST be present in the implementation
 
 ### Requirement: Accountability logging for all secret operations
+<!-- req-id: ca3a6101 -->
 
 Every secret operation (creation, access, deletion) MUST be logged to the
 accountability system with at minimum `category="secrets"`,
@@ -311,6 +318,7 @@ MUST appear in logs.
   `spec="podman-secrets-integration"`
 
 ### Requirement: CA certificate generation is ephemeral and per-session
+<!-- req-id: bd6e7bf3 -->
 
 CA certificates MUST be generated anew at each tray startup, valid for 24 hours,
 and MUST NOT be persisted to disk. The cert and key MUST be created in-memory

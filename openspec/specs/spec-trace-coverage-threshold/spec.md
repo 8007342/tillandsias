@@ -9,6 +9,7 @@ active
 ## Requirements
 
 ### Requirement: Trace coverage checks report threshold status
+<!-- req-id: f619c914 -->
 
 Trace validation tooling MUST compute trace coverage and compare it to the configured threshold without mutating repository state.
 

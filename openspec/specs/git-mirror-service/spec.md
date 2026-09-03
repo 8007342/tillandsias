@@ -16,6 +16,7 @@ mirror acknowledges it locally. GitHub credentials arrive through the Phase
 push time via Vault CLI; the token never crosses into a forge container.
 ## Requirements
 ### Requirement: Bare mirror repository management
+<!-- req-id: 0ceaf9ee -->
 The system SHALL create and maintain a bare mirror repository for each project
 at `/srv/git/<project>` inside the git service container, backed by the named
 Podman volume `tillandsias-mirror-<project>`. The mirror SHALL be initialized
@@ -50,6 +51,7 @@ available, and SHALL survive git service container restarts.
   Tillandsias-owned hooks on every service start
 
 ### Requirement: Git daemon serves mirrors on enclave network
+<!-- req-id: c44c1dba -->
 The git service container SHALL run `git daemon` with `--export-all --enable=receive-pack` on the enclave network. Forge containers SHALL clone from `git://git-service/<project>` where `git-service` resolves via the enclave network DNS.
 
 @trace spec:git-mirror-service
@@ -93,6 +95,7 @@ replacement.
 - **AND** pushes from one SHALL be visible to the other after fetch
 
 ### Requirement: Existing-volume receive hardening
+<!-- req-id: cb3af92c -->
 On every service start, including when the named mirror volume already exists,
 the git service SHALL set `receive.denyNonFastForwards=true`,
 `receive.denyDeletes=true`, and `receive.fsckObjects=true`. Because receive-pack
@@ -166,6 +169,7 @@ is absent from `relay-refs.sh`.
 - **AND** the acknowledged push SHALL converge the mirror and upstream refs
 
 ### Requirement: Pre-receive relay verifies acknowledgement durability
+<!-- req-id: 6353649b -->
 The bare mirror SHALL preserve receive-pack's complete `oldsha newsha refname`
 transaction, validate local policy, and invoke the Tillandsias relay helper
 from `pre-receive`. The relay helper SHALL construct explicit refspecs for
@@ -226,6 +230,7 @@ the update as durable local-only state.
 - **AND** the user can refresh credentials via "GitHub Login" in the tray
 
 ### Requirement: Reconciliation fetch never clobbers exported refs
+<!-- req-id: 85f3a329 -->
 The mirror's startup reconciliation `git fetch origin` SHALL update remote-tracking refs
 (`refs/remotes/origin/*`) only and SHALL NOT map upstream branches or tags onto
 the mirror's exported `refs/heads/*` or `refs/tags/*`. The bare repo's
@@ -253,6 +258,7 @@ restored.
 - **AND** the stranded commit SHALL be forwarded to upstream
 
 ### Requirement: GitHub token delivery uses Vault AppRole
+<!-- req-id: 855fea8b -->
 The long-running git service container SHALL receive launch-scoped AppRole
 material for the dedicated `git-mirror-agent` role, which maps only to
 `git-mirror-policy`. The launcher SHALL mount that material as one Podman
@@ -306,6 +312,7 @@ deprecated `--legacy-keyring-secrets` fallback was removed in v0.3.
 - **AND** the token SHALL not appear in process arguments, environment variables, or logs
 
 ### Requirement: Git service container lifecycle
+<!-- req-id: b7e7e755 -->
 The git service container SHALL be started per-project when the first forge container launches and stopped when all forge containers for that project stop. The container name SHALL be `tillandsias-git-<project>`.
 
 @trace spec:git-mirror-service
@@ -320,6 +327,7 @@ The git service container SHALL be started per-project when the first forge cont
 - **THEN** the system SHALL stop `tillandsias-git-<project>`
 
 ### Requirement: Git accountability window
+<!-- req-id: b760fa84 -->
 All git mirror operations SHALL be logged to the `--log-git` accountability window. Events SHALL include mirror creation, fetch, clone, push, and remote push results. No credentials SHALL appear in logs.
 
 @trace spec:git-mirror-service, spec:runtime-logging
@@ -333,6 +341,7 @@ All git mirror operations SHALL be logged to the `--log-git` accountability wind
 - **THEN** the system SHALL log the redacted atomic relay result with `@trace spec:git-mirror-service`
 
 ### Requirement: Mirror → host working-copy auto-sync on push
+<!-- req-id: c2b3c49f -->
 
 The tray SHALL trigger a fast-forward attempt on the host working copy at `<watch_path>/<project>` for every successful push to the enclave bare mirror at `$CACHE_DIR/tillandsias/mirrors/<project>`. The sync MUST be event-driven by a filesystem watcher on the mirrors root; polling is forbidden in every trigger path (startup, watcher, shutdown). The first matching `scanner.watch_paths` entry wins.
 
@@ -361,6 +370,7 @@ The tray SHALL trigger a fast-forward attempt on the host working copy at `<watc
   not a timer
 
 ### Requirement: Mirror sync never clobbers user work
+<!-- req-id: 7bac5679 -->
 
 The sync SHALL be strictly non-destructive with respect to the user's
 host working copy. In every case below the sync SHALL skip, log the
@@ -399,6 +409,7 @@ lossy strategy (no `--hard`, no `--force-with-lease`, no rebase).
   they want a local checkout)
 
 ### Requirement: Tray startup sweeps all mirrors
+<!-- req-id: 558e844a -->
 
 On tray startup, the tray SHALL run one `sync_project` call for every
 directory found under `$CACHE_DIR/tillandsias/mirrors/`, iterating the
@@ -416,6 +427,7 @@ mirror receive and working-copy fast-forward).
 - **AND** the watcher is armed for subsequent event-driven syncs
 
 ### Requirement: Tray Quit triggers a final sync
+<!-- req-id: f390c9b5 -->
 
 `shutdown_all()` SHALL run a `sync_all_projects` sweep BEFORE stopping
 containers. This ensures any push that landed in the last ~500 ms
@@ -436,6 +448,7 @@ event" and "gone container".
 
 
 ### Requirement: Per-project transparency — no hardcoded project names
+<!-- req-id: b1ad9338 -->
 
 All code paths that reference the project's name in mirror paths, checkout
 paths, container names, volume names, or git config SHALL use a dynamic
@@ -463,6 +476,7 @@ GitHub project the host user has cloned, without source changes.
   or the proxy
 
 ### Requirement: Repository-local Git metadata is bidirectionally quarantined
+<!-- req-id: b78ddc0a -->
 
 For a host-mounted checkout, the forge SHALL use a writable forge-owned Git
 administration directory instead of the host checkout's `.git` directory.

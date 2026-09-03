@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: requirements-get-stable-random-identifiers
+    field: status
+    value: done
+    ts: "2026-09-03T03:48:49Z"
+    host: lenovinha
+
+events:
+  - packet_id: requirements-get-stable-random-identifiers
+    event:
+      type: completed
+      ts: "2026-09-03T03:48:49Z"
+      host: lenovinha
+      summary: >
+        status 'done' with evidence_refs: 8eb159983: 653 requirements stamped across 131 files (653 added lines, 0 removed, every added line a req-id comment); scripts/check-requirement-ids.sh + scripts/test-requirement-ids.sh (6/6) both wired into ./build.sh --check; idempotence proven on the real corpus (second run 0 new, 0 files rewritten, identical git diff); TILLANDSIAS_FORCE_CHECK=1 ./build.sh --check green
+  - packet_id: requirements-get-stable-random-identifiers
+    event:
+      type: note
+      ts: "2026-09-03T03:48:49Z"
+      host: lenovinha
+      summary: >
+        all six exit criteria met

@@ -9,6 +9,7 @@ active
 ## Requirements
 
 ### Requirement: Tray menu action failures are visible and bounded
+<!-- req-id: c7464894 -->
 
 Tray menu actions MUST convert command, process, and runtime failures into visible state or events without crashing the tray loop.
 

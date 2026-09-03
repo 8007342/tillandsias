@@ -19,6 +19,7 @@ Integration note: this spec governs how all other specs are *interpreted*. When 
 ## Requirements
 
 ### Requirement: Knowledge directory structure
+<!-- req-id: df1990b0 -->
 The project MUST maintain a `knowledge/` directory at the repository root containing project-agnostic technology cheatsheets organized by domain.
 
 #### Scenario: Directory layout
@@ -27,6 +28,7 @@ The project MUST maintain a `knowledge/` directory at the repository root contai
 - **AND** `cheatsheets/` MUST contain domain subdirectories: `infra/`, `lang/`, `frameworks/`, `packaging/`, `formats/`, `ci/`
 
 ### Requirement: Cheatsheet format
+<!-- req-id: f7965c63 -->
 Each cheatsheet MUST be a Markdown file with YAML frontmatter containing: `id`, `title`, `category`, `tags`, `upstream`, `version_pinned`, `last_verified`, and `authority`.
 
 #### Scenario: Cheatsheet structure
@@ -41,6 +43,7 @@ Each cheatsheet MUST be a Markdown file with YAML frontmatter containing: `id`, 
 - **AND** an agent MUST be able to load the entire file in a single context read
 
 ### Requirement: XML collection index
+<!-- req-id: 99d19635 -->
 The `knowledge/index.xml` file MUST provide a structured index of all cheatsheets organized by category and cross-referenced by tags.
 
 #### Scenario: Category querying
@@ -52,6 +55,7 @@ The `knowledge/index.xml` file MUST provide a structured index of all cheatsheet
 - **THEN** the index.xml MUST list all cheatsheet IDs tagged with that concept
 
 ### Requirement: Version tracking and freshness
+<!-- req-id: 0c3bc06c -->
 The `knowledge/manifest.toml` file MUST track the upstream source, pinned version, and last verification date for each cheatsheet.
 
 #### Scenario: Staleness detection
@@ -59,6 +63,7 @@ The `knowledge/manifest.toml` file MUST track the upstream source, pinned versio
 - **THEN** `scripts/verify-freshness.sh` MUST flag it as potentially stale
 
 ### Requirement: Project agnosticism
+<!-- req-id: dc75385c -->
 Knowledge cheatsheets MUST NOT contain references to Tillandsias, its codebase, its architecture, or any project-specific decisions.
 
 #### Scenario: Content independence
@@ -67,6 +72,7 @@ Knowledge cheatsheets MUST NOT contain references to Tillandsias, its codebase, 
 - **AND** it MUST NOT reference project-specific code paths, config files, or architectural choices
 
 ### Requirement: External debug source fetching
+<!-- req-id: f5b3139a -->
 The project MUST provide `scripts/fetch-debug-source.sh` for on-demand fetching of external dependency source code into a gitignored `vendor/debug/` directory.
 
 #### Scenario: Fetch external source
@@ -80,6 +86,7 @@ The project MUST provide `scripts/fetch-debug-source.sh` for on-demand fetching 
 - **AND** no external source code MUST be downloaded automatically
 
 ### Requirement: Authority hierarchy across artefact classes
+<!-- req-id: df17a888 -->
 
 When the same fact is recorded in multiple artefact classes, agents and humans MUST resolve apparent conflicts by descending the authority hierarchy from highest to lowest. The hierarchy is **code > specs > cheatsheets > docs**.
 
@@ -104,6 +111,7 @@ When the same fact is recorded in multiple artefact classes, agents and humans M
 - **AND** a spec proposal SHOULD be filed before any other artefact references the behaviour
 
 ### Requirement: CRDT-inspired monotonic convergence
+<!-- req-id: a2b3322c -->
 
 Knowledge artefacts SHALL behave as conflict-free replicated data types (CRDTs): updates SHALL be monotonic (additive), commutative when independent, and idempotent under replay. Two agents working on disjoint slices of the same artefact SHALL be able to merge their work without manual conflict resolution.
 
@@ -130,6 +138,7 @@ Knowledge artefacts SHALL behave as conflict-free replicated data types (CRDTs):
 - **AND** the final deletion SHALL be a separate commit at the end of the retention window
 
 ### Requirement: Spec-vs-code divergence resolution
+<!-- req-id: 4f3319b7 -->
 
 When code disagrees with the spec that governs it, the divergence SHALL be resolved by changing the code — not the spec. Specs converge toward *intent*, code converges toward *spec*. The only legitimate reason to change a spec in response to divergence is when the underlying intent itself changed; in that case the spec amendment SHALL precede the code change in the commit graph.
 
@@ -150,6 +159,7 @@ When code disagrees with the spec that governs it, the divergence SHALL be resol
 - **AND** the residual SHALL persist until either the code is corrected or an explicit OpenSpec amendment lands
 
 ### Requirement: Staleness detection via timestamp and content hash
+<!-- req-id: 73fc2dd3 -->
 
 Every authoritative artefact SHALL be observable for staleness through two independent signals: a wall-clock timestamp (`last_verified`, `last_updated`, or git mtime) and a content hash (sha-256 over the artefact body). Either signal alone is insufficient — a re-verified cheatsheet may carry the same content hash even though its provenance has been re-checked; a drifted artefact may carry a stale hash even though git mtime is fresh.
 
@@ -170,6 +180,7 @@ Every authoritative artefact SHALL be observable for staleness through two indep
 - **AND** the freshness check SHALL clear the staleness warning for the affected window
 
 ### Requirement: Convergence evidence bundles
+<!-- req-id: 63289c18 -->
 
 Every claim about convergence between code and spec SHALL be backed by an **evidence bundle**: a structured artefact that names the commit, the test runs that passed, and the trace annotations that link the two. Evidence bundles are append-only and are referenced by the CentiColon signature log.
 
@@ -189,6 +200,7 @@ Every claim about convergence between code and spec SHALL be backed by an **evid
 - **AND** the dashboard SHALL count the unfounded claim as residual cc rather than earned cc
 
 ### Requirement: Provenance is mandatory for every authoritative artefact
+<!-- req-id: 4a081c1a -->
 
 Specs, cheatsheets, and methodology files SHALL each declare provenance: at least one external high-authority URL (vendor, standards body, recognised community project) and a `Last updated:` date. Artefacts without provenance MUST NOT be cited as sources of truth.
 
@@ -203,6 +215,7 @@ Specs, cheatsheets, and methodology files SHALL each declare provenance: at leas
 - **AND** existing pre-convention specs are exempt until a retrofit sweep lands
 
 ### Requirement: Integration with downstream observability surfaces
+<!-- req-id: d941b9be -->
 
 This spec SHALL be the upstream input for every observability surface that reports on convergence. Downstream surfaces (dashboards, litmus reports, evidence bundles, trace indexes) SHALL cite this spec by name and SHALL respect the authority hierarchy, CRDT semantics, and divergence-resolution rules defined here.
 

@@ -9,6 +9,7 @@ active
 ## Requirements
 
 ### Requirement: Enclave TLS validation is explicit
+<!-- req-id: f4d946f1 -->
 
 Containers and host-side probes that participate in proxy-mediated HTTPS MUST use a known CA bundle path and MUST fail with diagnosable output when the expected CA material is missing or malformed.
 

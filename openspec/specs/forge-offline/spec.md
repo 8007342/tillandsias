@@ -12,6 +12,7 @@ Forge containers operate offline -- no credentials, no project mounts, no direct
 ## Requirements
 
 ### Requirement: Forge containers have zero credentials
+<!-- req-id: 8343173a -->
 Forge containers SHALL NOT have any credential mounts. No GitHub token file, no Claude directory, no D-Bus socket. Credentials are exclusively owned by the git service container.
 
 @trace spec:forge-offline
@@ -27,6 +28,7 @@ Forge containers SHALL NOT have any credential mounts. No GitHub token file, no 
 - **AND** the agent SHALL receive a "file not found" error
 
 ### Requirement: Forge containers have no direct project mount
+<!-- req-id: 125c928a -->
 Forge containers SHALL NOT have the host project directory mounted. Source code SHALL be obtained exclusively via `git clone` from the git mirror service. All changes MUST be committed to persist.
 
 @trace spec:forge-offline
@@ -43,6 +45,7 @@ Forge containers SHALL NOT have the host project directory mounted. Source code 
 - **AND** committed changes SHALL persist in the mirror
 
 ### Requirement: Forge containers are enclave-only
+<!-- req-id: fc6da12d -->
 Forge containers SHALL be attached to the `tillandsias-enclave` internal network only. They SHALL NOT have access to the default bridge network. All HTTP/HTTPS traffic SHALL go through the proxy.
 
 @trace spec:forge-offline, spec:enclave-network

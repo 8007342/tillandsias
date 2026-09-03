@@ -6,6 +6,7 @@ active
 ## Requirements
 
 ### Requirement: Build-time Nix only
+<!-- req-id: 7627de5c -->
 Nix SHALL be used only for build-time reproducibility and image-input materialization. It MUST NOT participate in user runtime launch paths, browser launch paths, or container lifecycle orchestration.
 
 #### Scenario: Build-time-only boundary stays intact
@@ -14,6 +15,7 @@ Nix SHALL be used only for build-time reproducibility and image-input materializ
 - **AND** it MUST NOT be referenced as part of `tillandsias --tray`, `--opencode-web`, or any runtime Podman launcher path
 
 ### Requirement: Git-tracked files for flake builds
+<!-- req-id: b276171d -->
 Nix flake builds MUST only see files that are tracked by git. The staleness check in `build-image.sh` MUST use `git ls-files` to enumerate source files, ensuring the staleness hash covers exactly the same files that the build inputs will include.
 
 #### Scenario: Staleness check matches Nix view
@@ -34,6 +36,7 @@ Nix flake builds MUST only see files that are tracked by git. The staleness chec
 - **THEN** the staleness check MUST fall back to `find`-based enumeration with a warning that untracked file detection is unavailable
 
 ### Requirement: dockerTools builder/attribute pairing
+<!-- req-id: 4d2fec95 -->
 The flake.nix image definitions MUST pass the image root through the parameter the builder actually declares: `dockerTools.buildLayeredImage` (a wrapper over `streamLayeredImage`) takes `contents`; only `dockerTools.buildImage` takes `copyToRoot`. nixpkgs-26.05 rejects `copyToRoot` in `buildLayeredImage` outright (first red: commit 9b0c27c1c, the 24.11 → 26.05 bump), so the previous requirement here — prefer `copyToRoot` in `buildLayeredImage` — pinned a parameter the builder does not accept.
 
 #### Scenario: Layered image definition uses contents

@@ -9,6 +9,7 @@ active
 ## Requirements
 
 ### Requirement: Headless Linux launcher is portable across common distros
+<!-- req-id: c598bd52 -->
 
 The default headless Tillandsias launcher for Linux MUST be buildable as a self-contained executable suitable for systems that do not have the project workspace or Rust toolchain installed.
 
@@ -19,6 +20,7 @@ The default headless Tillandsias launcher for Linux MUST be buildable as a self-
 - **AND** runtime prerequisites MUST be reported as user-facing setup requirements rather than hidden build-time coupling
 
 ### Requirement: Linux binary carries runtime image contexts
+<!-- req-id: f657c6e4 -->
 
 The Linux release binary MUST carry the runtime image contexts and helper scripts needed to initialize the user runtime without a Tillandsias source checkout. The binary MAY materialize those assets under `$XDG_DATA_HOME/tillandsias/runtime/<VERSION>` or the equivalent user data fallback before invoking Podman.
 
@@ -29,6 +31,7 @@ The Linux release binary MUST carry the runtime image contexts and helper script
 - **AND** it MUST NOT require `TILLANDSIAS_ROOT`, Rust, Cargo, Nix, or toolbox
 
 ### Requirement: Linux release artifact is the musl binary
+<!-- req-id: 442b1681 -->
 
 The release artifact for the Linux client runtime MUST be named
 `tillandsias-linux-x86_64` and MUST be the same musl-static binary installed by
@@ -61,6 +64,7 @@ release target is a portability regression and MUST be rejected.
 - **AND** a glibc-dynamic or otherwise host-coupled Linux release binary MUST NOT be published
 
 ### Requirement: Native tray builds may use host UI libraries
+<!-- req-id: 207a6edc -->
 
 Native tray and platform integrations MAY use platform libraries when they intentionally bind to host UI, status notifier, or credential APIs.
 

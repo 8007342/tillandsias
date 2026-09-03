@@ -9,6 +9,7 @@ status: active
 TBD - created by archiving change web-image. Update Purpose after archive.
 ## Requirements
 ### Requirement: Minimal Alpine-based container image
+<!-- req-id: 25d530d1 -->
 The web runtime image MUST be based on Alpine Linux and be under 10MB in total size. @trace spec:web-image
 
 #### Scenario: Image size
@@ -20,6 +21,7 @@ The web runtime image MUST be based on Alpine Linux and be under 10MB in total s
 - **THEN** the FROM instruction MUST reference `docker.io/library/alpine:3.20`
 
 ### Requirement: Static file serving via busybox httpd
+<!-- req-id: 80ac201c -->
 The image MUST serve static files from `/var/www` on port 8080 using busybox httpd with no additional packages or configuration.
 
 #### Scenario: Serving HTML files
@@ -41,6 +43,7 @@ The image MUST serve static files from `/var/www` on port 8080 using busybox htt
 - **THEN** HTTP GET to `http://localhost:8080/` MUST return a 404 response (no directory listing)
 
 ### Requirement: Port 8080 exposed
+<!-- req-id: f30e0d2d -->
 The image MUST expose port 8080 for HTTP traffic.
 
 #### Scenario: Container port
@@ -48,6 +51,7 @@ The image MUST expose port 8080 for HTTP traffic.
 - **THEN** the web server MUST be accessible at `http://localhost:8080` from the host
 
 ### Requirement: Entrypoint displays banner and serving URL
+<!-- req-id: f5d13090 -->
 The container entrypoint MUST print a human-readable banner with the project name and serving URL before starting httpd.
 
 #### Scenario: Startup banner
@@ -59,6 +63,7 @@ The container entrypoint MUST print a human-readable banner with the project nam
 - **THEN** it MUST use `exec` to replace itself with the httpd process so that signals are delivered directly to httpd
 
 ### Requirement: Graceful shutdown
+<!-- req-id: 5dd34586 -->
 The container MUST respond to SIGTERM by stopping httpd cleanly.
 
 #### Scenario: Podman stop
@@ -66,6 +71,7 @@ The container MUST respond to SIGTERM by stopping httpd cleanly.
 - **THEN** httpd MUST exit cleanly and the container MUST stop
 
 ### Requirement: Document root at /var/www
+<!-- req-id: b9944112 -->
 The container WORKDIR and httpd document root MUST be `/var/www`, where the project directory is mounted by Tillandsias.
 
 #### Scenario: Volume mount

@@ -9,6 +9,7 @@ active
 ## Requirements
 
 ### Requirement: Project selection is stable across tray operations
+<!-- req-id: af6ab2d4 -->
 
 Project state MUST use a canonical project label and workspace path so rapid switching, service launch, and browser routing target the selected project consistently.
 

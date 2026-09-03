@@ -12,6 +12,7 @@ Canonical idiomatic patterns for Podman usage in Tillandsias: event-driven conta
 ## Requirements
 
 ### Requirement: Event-driven container observation, never polling
+<!-- req-id: af07955b -->
 - **ID**: podman-idiomatic-patterns.events.no-polling@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -35,6 +36,7 @@ All Tillandsias code that monitors container state SHALL subscribe to `podman ev
 - **AND** the runtime MUST NOT immediately poll container state during the backoff window
 
 ### Requirement: Non-negotiable security flags on every container
+<!-- req-id: 006b4159 -->
 - **ID**: podman-idiomatic-patterns.security.mandatory-flags@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -55,6 +57,7 @@ Every container launched by Tillandsias SHALL include `--cap-drop=ALL`, `--secur
 - **THEN** those additional restrictions are applied on top of the non-negotiable defaults
 
 ### Requirement: Per-project storage isolation (enclave model)
+<!-- req-id: 41ca652f -->
 - **ID**: podman-idiomatic-patterns.storage.per-project-isolation@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -78,6 +81,7 @@ Each Tillandsias-managed project SHALL operate with its own isolated Podman grap
 - **AND** a container name collision in separate projects does NOT cause an error
 
 ### Requirement: Ephemeral secret mounting, never env vars or image layers
+<!-- req-id: 2c672358 -->
 - **ID**: podman-idiomatic-patterns.secrets.ephemeral-mount@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -153,6 +157,7 @@ which roles, policies, paths, TTLs, and mount options are allowed.
 - **AND** that lane MUST remain fully credential-free
 
 ### Requirement: Categorized error handling with retry discrimination
+<!-- req-id: 8171b594 -->
 - **ID**: podman-idiomatic-patterns.errors.retry-discrimination@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -181,6 +186,7 @@ Code that invokes Podman SHALL classify errors as transient (network unreachable
   retrying the same stale network allocation
 
 ### Requirement: Rootless-first execution with keep-id mapping
+<!-- req-id: 6433258d -->
 - **ID**: podman-idiomatic-patterns.rootless.keep-id-first@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -204,6 +210,7 @@ All Tillandsias container operations SHALL execute in rootless Podman mode. `--u
 - **AND** it has access only to `$HOME` and user-owned resources, not `/etc`, `/root`, or system directories
 
 ### Requirement: Enclave network with internal DNS and dynamic IPAM
+<!-- req-id: de8f939b -->
 - **ID**: podman-idiomatic-patterns.network.enclave-per-project@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -241,6 +248,7 @@ launches.
 - **AND** the shared enclave network MAY remain for tray/router reuse
 
 ### Requirement: Observed launch helpers produce actionable failures
+<!-- req-id: 34b6afb7 -->
 
 Container launches that are user-visible SHALL use observed Podman helpers so
 debug output reports the launch stage, container name, state transition, and a

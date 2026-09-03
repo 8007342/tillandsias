@@ -20,6 +20,7 @@ This spec ensures:
 ## Requirements
 
 ### Requirement: Unrestricted domain access
+<!-- req-id: 8eb9c8c5 -->
 
 All domains MUST be accessible from the debug-variant browser.
 
@@ -40,6 +41,7 @@ All domains MUST be accessible from the debug-variant browser.
 - **AND** no domain-level filtering MUST be applied at the browser level
 
 ### Requirement: DevTools and console access
+<!-- req-id: 393cad3c -->
 
 Chromium DevTools MUST be enabled for debugging and inspection.
 
@@ -60,6 +62,7 @@ Chromium DevTools MUST be enabled for debugging and inspection.
 - **AND** console errors and logs MUST be visible
 
 ### Requirement: Extensions and plugins allowed
+<!-- req-id: 57f84433 -->
 
 Third-party extensions and plugins MUST be enabled for testing.
 
@@ -79,6 +82,7 @@ Third-party extensions and plugins MUST be enabled for testing.
 - **AND** extension execution MUST NOT be restricted
 
 ### Requirement: Verbose network logging
+<!-- req-id: 4de41ff9 -->
 
 All network activity MUST be logged in detailed format for traffic analysis.
 
@@ -100,6 +104,7 @@ All network activity MUST be logged in detailed format for traffic analysis.
 - **AND** logs MUST be marked `debug_mode = true` for awareness
 
 ### Requirement: Ephemeral profile and cache
+<!-- req-id: f9a4c176 -->
 
 Like the safe variant, profile and cache MUST be tmpfs-backed and destroyed on shutdown.
 
@@ -125,6 +130,7 @@ Like the safe variant, profile and cache MUST be tmpfs-backed and destroyed on s
 - **AND** the user MUST re-enter credentials (or use a password manager outside the container)
 
 ### Requirement: Verbose logging to host
+<!-- req-id: 8c7f9b73 -->
 
 Debug events (DevTools connections, network requests, extension loads, crashes) MUST be logged to the host with full detail.
 
@@ -145,6 +151,7 @@ Debug events (DevTools connections, network requests, extension loads, crashes) 
 - **THEN** the container MUST log `crash = true, reason = "segfault"` with stack trace if available
 
 ### Requirement: Safe isolation (still ephemeral)
+<!-- req-id: 0844e947 -->
 
 Despite being unrestricted, the debug browser MUST still use ephemeral storage and container isolation.
 
@@ -159,6 +166,7 @@ Despite being unrestricted, the debug browser MUST still use ephemeral storage a
 - **AND** they MUST NOT share cookies, extensions, or history
 
 ### Requirement: Litmus test — chromium-debug-variant lifecycle
+<!-- req-id: 4ac8af08 -->
 
 Critical verification paths:
 

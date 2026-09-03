@@ -14,6 +14,7 @@ Provide application-layer authentication for OpenCode Web sessions launched from
 ## Requirements
 
 ### Requirement: Per-Attach OTP Generation and Delivery
+<!-- req-id: ddedbc2d -->
 
 On each "Attach Here" or "Attach Another" action, the tray MUST:
 
@@ -33,6 +34,7 @@ The OTP MUST **never** touch disk: not in logs, not in tray state files, not in 
 - **AND** the OTP MUST NOT be exposed in any log or menu state
 
 ### Requirement: Router-Side OTP Validation and Cookie Issuance
+<!-- req-id: daff0181 -->
 
 The router (Caddy) MUST:
 
@@ -53,6 +55,7 @@ All subsequent requests to `opencode.<project>.localhost/` MUST require a valid 
 - **AND** subsequent requests MUST carry the cookie automatically (opencode-web never sees the OTP)
 
 ### Requirement: Cookie Shape and Lifetime
+<!-- req-id: 3e90b37f -->
 
 The session cookie MUST have the following attributes:
 
@@ -73,6 +76,7 @@ A compromised OTP after consumption MUST NOT leak the session token because they
 - **AND** the attacker MUST NOT be able to replay the OTP (single-use)
 
 ### Requirement: Multi-Window Reattachment
+<!-- req-id: c3e7b887 -->
 
 When the user clicks "Attach Another" (opening a second window to the same project):
 
@@ -91,6 +95,7 @@ Multiple browser windows CAN have independent cookies for the same project sessi
 - **AND** the first window's cookie MUST remain valid and operational
 
 ### Requirement: Secrets Management Integration
+<!-- req-id: 665a94f0 -->
 
 OTP generation and validation MUST be governed by the `secrets-management` spec:
 
@@ -101,6 +106,7 @@ OTP generation and validation MUST be governed by the `secrets-management` spec:
 - MUST be evicted from memory immediately after use (single-use TTL)
 
 ### Requirement: Authenticated Readiness Probe
+<!-- req-id: ead52095 -->
 
 Before launching Chromium, the tray-side launcher MUST prove both sides of the
 auth boundary:

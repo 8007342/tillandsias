@@ -14,6 +14,7 @@ Replace the accreted, multi-submenu tray design with a minimal, static menu stru
 ## Requirements
 
 ### Requirement: Startup Menu Structure
+<!-- req-id: 5b25954e -->
 
 @trace spec:simplified-tray-ux
 
@@ -42,6 +43,7 @@ The status indicator is the only dynamic top-level item. No menu flicker; status
 - **AND** no flicker; single property toggle (`enabled = false` on status indicator, then `hidden = true`)
 
 ### Requirement: Five-Stage Static Menu Structure
+<!-- req-id: a87055b4 -->
 
 @trace spec:simplified-tray-ux
 
@@ -66,6 +68,7 @@ The version line (e.g., `v0.1.168.224`) and the signature `— by Tlatoāni` app
 - **AND** no menu rebuild, only property toggles
 
 ### Requirement: Home Menu ([<home> ~/src/ >])
+<!-- req-id: 3063c50d -->
 
 @trace spec:simplified-tray-ux
 
@@ -128,6 +131,7 @@ When authenticated, MUST show all local projects found in `~/.tillandsias/watch/
 - **AND** all sessions share the same project state and git history
 
 ### Requirement: Cloud Menu ([<cloud> Cloud >])
+<!-- req-id: 46c7b876 -->
 
 @trace spec:simplified-tray-ux
 
@@ -175,6 +179,7 @@ When authenticated and remote projects are readable from GitHub, MUST show all r
 - **AND** the project is NOT shown in Cloud menu (only in Home)
 
 ### Requirement: GitHub Login Menu ([<key> GitHub Login])
+<!-- req-id: 037a3e40 -->
 
 @trace spec:simplified-tray-ux
 
@@ -189,6 +194,7 @@ MUST be visible when the user is not authenticated or GitHub is unreachable.
 - During GitHubunreachable (NetIssue stage), this menu item displays but may use cached authentication state
 
 ### Requirement: Single Container Per Project
+<!-- req-id: dab3d050 -->
 
 - There MUST be at most ONE forge container (`tillandsias-<project>-<genus>`) per project per tray process
 - Container lifetime MUST be created on first "Launch" and MUST persist until tray Quit
@@ -202,6 +208,7 @@ MUST be visible when the user is not authenticated or GitHub is unreachable.
 - **AND** a second browser window opens against the existing session
 
 ### Requirement: CLI Behavior Unchanged
+<!-- req-id: 64550e22 -->
 
 Command-line invocation (`tillandsias <path>`) MUST preserve current defaults:
 

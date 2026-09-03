@@ -14,6 +14,7 @@ Ensure forge image staleness detection is driven by the source hash, always invo
 ## Requirements
 
 ### Requirement: Source-hash staleness file
+<!-- req-id: f1afb616 -->
 
 The forge staleness hash file MUST be keyed by image name and track the source hash only. The file MUST be named `.last-build-forge.sha256`.
 
@@ -27,6 +28,7 @@ Version bumps MUST NOT force a rebuild when the source hash is unchanged. Human-
 - **AND** only the human aliases are refreshed
 
 ### Requirement: Tray always invokes build script for staleness check
+<!-- req-id: cd73f074 -->
 
 The tray handler (`handlers.rs::ensure_forge_ready` or similar) MUST NOT short-circuit the build script when `podman image exists(tillandsias-forge:v<VERSION>)` returns true. Instead, the tray MUST ALWAYS invoke `scripts/build-image.sh forge`, which handles staleness detection internally.
 
@@ -49,6 +51,7 @@ The build script checks if the computed source hash matches `.last-build-forge.s
 - **AND** the attach proceeds with the cached image
 
 ### Requirement: Prune old forge images after successful build
+<!-- req-id: a29233f7 -->
 
 After a successful forge image build, the tray MUST prune all forge images except:
 
@@ -72,6 +75,7 @@ All other older forge images MUST be deleted via `podman rmi`.
 - **AND** freed disk space MUST be available for other operations
 
 ### Requirement: Forward-compatible newer image detection
+<!-- req-id: 1c8f112d -->
 
 If a forge image exists with a newer human alias than the current `VERSION` (e.g., the user downgraded or the binary is older), the tray MUST detect this and use the newer image with a logged warning.
 
@@ -91,6 +95,7 @@ If a forge image exists with a newer human alias than the current `VERSION` (e.g
 - **AND** the warning MUST surface the version mismatch for operator awareness
 
 ### Requirement: Staleness detection in init command
+<!-- req-id: 2720fc2c -->
 
 The `tillandsias --init` command MUST apply the same source-hash staleness and pruning logic when building the initial forge image.
 
@@ -102,6 +107,7 @@ The `tillandsias --init` command MUST apply the same source-hash staleness and p
 - **AND** old images from failed prior attempts MUST be pruned
 
 ### Requirement: Absent cache version file means fresh start, not a staleness signal
+<!-- req-id: e3d3a6e1 -->
 
 The staleness subsystem MUST NOT treat the absence of `~/.cache/tillandsias/cache_version` as a version mismatch or staleness violation. An absent file indicates a fresh environment — a valid state after `podman system reset`, first run, or ephemeral deployment.
 

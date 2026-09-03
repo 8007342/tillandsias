@@ -10,6 +10,7 @@ status: active
 Shared ollama inference container on the enclave network. Forge containers query it via OLLAMA_HOST. Models persist in a host-mounted cache volume. Downloads route through the proxy.
 ## Requirements
 ### Requirement: Local LLM inference via ollama
+<!-- req-id: 696141ee -->
 The system SHALL run an inference container with ollama on the enclave network. Forge containers SHALL access it via `OLLAMA_HOST=http://inference:11434`. The inference container SHALL use the proxy for model downloads.
 
 @trace spec:inference-container
@@ -25,6 +26,7 @@ The system SHALL run an inference container with ollama on the enclave network. 
 - **AND** the proxy SHALL allow traffic to ollama.com
 
 ### Requirement: Shared model cache
+<!-- req-id: d4397d01 -->
 Models SHALL be stored in a HOST DIRECTORY (a bind mount, NOT a named Podman volume) at `~/.cache/tillandsias/models/`, mounted into the inference container at `/home/ollama/.ollama/models/`.
 
 The distinction is the entire answer to whether `podman system reset` destroys the cache: it does not, because the reset clears Podman's own storage and named volumes and never touches an arbitrary host path. Calling this a "volume" cost an agent a wrong assertion to the operator (803-su4n, secondary finding); the mount is `-v "$HOME/.cache/tillandsias/models:/home/ollama/.ollama/models:rw"` in `scripts/orchestrate-enclave.sh`.
@@ -36,6 +38,7 @@ The distinction is the entire answer to whether `podman system reset` destroys t
 - **THEN** previously downloaded models SHALL be available immediately
 
 ### Requirement: Inference container lifecycle
+<!-- req-id: d4afa160 -->
 The inference container SHALL be started on-demand and shared across all projects. It SHALL be stopped on app exit.
 
 @trace spec:inference-container
@@ -49,6 +52,7 @@ The inference container SHALL be started on-demand and shared across all project
 - **THEN** the inference container SHALL be stopped
 
 ### Requirement: Inference NO_PROXY covers loopback + enclave peers
+<!-- req-id: c99f98c8 -->
 
 The inference container SHALL have `NO_PROXY` (and the lowercase `no_proxy`)
 env variable set to a value that includes `localhost,127.0.0.1,0.0.0.0,::1`
@@ -88,6 +92,7 @@ proxy and fail with `TCP_DENIED/403`, causing model load stalls.
 > is the canonical path.
 
 ### Requirement: Tier-tagged tool-capable model pre-pulls
+<!-- req-id: 00556b70 -->
 
 The inference container SHALL pre-pull a tier-tagged set of tool-capable
 ollama models bucketed by available CPU/GPU capacity. Tinyllama and
@@ -139,6 +144,7 @@ sidesteps Squid SSL-bump EOF issues (see: project_squid_ollama_eof.md).
   ARE present (T0 + T1 minimum)
 
 ### Requirement: CPU tier-S is the always-available terminal
+<!-- req-id: 728d1628 -->
 
 The CPU lane running the T0 model (`qwen2.5:0.5b`) is designated **tier-S**,
 the safety terminal. Tier-S SHALL be available on every host regardless of
@@ -157,6 +163,7 @@ change to this spec may remove tier-S or make it conditional.
 - **AND** the tier line SHALL still be logged
 
 ### Requirement: NPU tier rows are additive and engine-gated
+<!-- req-id: fcfdcc61 -->
 
 NPU execution SHALL be described by additional rows that supplement, and never
 replace, the T0–T5 rows above. A host with a usable NPU still resolves a
@@ -204,6 +211,7 @@ Binding rules for the N rows:
 - **THEN** no N row SHALL be attempted
 
 ### Requirement: Tier classification logged once at boot
+<!-- req-id: 5eb4ae46 -->
 
 On startup the inference entrypoint SHALL log a single line summarizing
 which tier was selected for runtime pulls based on detected CPU/GPU/RAM,
@@ -237,6 +245,7 @@ or `[inference] npu=intel_vpu:/dev/accel/accel0 usable=true`.
   device node
 
 ### Requirement: The engine behind the endpoint is a slot
+<!-- req-id: b08a752e -->
 
 The inference container is one engine slot behind the enclave inference
 endpoint, not the endpoint itself. `spec:inference-engine-slots` governs which

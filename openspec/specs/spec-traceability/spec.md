@@ -18,6 +18,7 @@ This spec ensures:
 ## Requirements
 
 ### Requirement: Code annotations link to specs and knowledge
+<!-- req-id: fb027df2 -->
 - **ID**: spec-traceability.annotation.trace-coverage@v1
 - **Modality**: SHOULD
 - **Measurable**: true
@@ -43,6 +44,7 @@ Critical code blocks and module headers SHALL have `// @trace` comments referenc
 - **AND** data types, tests, utilities, and plumbing code SHALL NOT be annotated
 
 ### Requirement: Structured spec field in tracing logs
+<!-- req-id: 02f88117 -->
 - **ID**: spec-traceability.logging.spec-field-instrumentation@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -62,6 +64,7 @@ Log events for operations a troubleshooting agent would encounter SHALL include 
 - **THEN** the `spec` field SHALL be directly usable as a path to `openspec/specs/<capability>/spec.md`
 
 ### Requirement: CRDT-like reference semantics
+<!-- req-id: b5eadf38 -->
 - **ID**: spec-traceability.annotation.crdt-references@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -83,6 +86,7 @@ Trace references SHALL be conflict-free, incremental, and advisory — never blo
 - **THEN** git merge SHALL handle the additions without conflict (comments on separate lines)
 
 ### Requirement: Specs SHOULD prefer non-DRAFT cheatsheets in Sources of Truth
+<!-- req-id: 5da3cd1e -->
 - **ID**: spec-traceability.cheatsheet.draft-warning@v1
 - **Modality**: SHOULD
 - **Measurable**: true
@@ -101,6 +105,7 @@ When a spec lists cheatsheets under its `## Sources of Truth` section, it SHOULD
 - **THEN** `openspec validate` SHALL emit no warning for that citation
 
 ### Requirement: @cheatsheet path annotation in code is a peer of @trace spec:
+<!-- req-id: 9f8bad32 -->
 - **ID**: spec-traceability.annotation.cheatsheet-code-citation@v1
 - **Modality**: SHOULD
 - **Measurable**: true
@@ -125,6 +130,7 @@ Together these form a navigable cheatsheet→code→spec→log graph that lets r
 - **THEN** the event SHALL include both `spec = "<name>"` and `cheatsheet = "<category>/<filename>.md"` as structured fields
 
 ### Requirement: Litmus chain references are explicit in updated specs
+<!-- req-id: e4d9f2cd -->
 - **ID**: spec-traceability.litmus.chain-reference@v1
 - **Modality**: SHOULD
 - **Measurable**: true
@@ -143,6 +149,7 @@ that resume the convergence loop without rediscovery.
 - **AND** the chain SHOULD be actionable by an agent without additional context
 
 ### Requirement: Rust source relevance queries gate opt-in litmus tests
+<!-- req-id: 650663f2 -->
 - **ID**: spec-traceability.litmus.rust-source-query@v1
 - **Modality**: SHOULD
 - **Measurable**: true

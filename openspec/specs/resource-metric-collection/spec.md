@@ -9,6 +9,7 @@ active
 ## Requirements
 
 ### Requirement: Resource samplers collect bounded measurements
+<!-- req-id: d70f718b -->
 
 Resource metric collection MUST sample CPU, memory, disk, and process/container data without blocking the runtime control path indefinitely.
 

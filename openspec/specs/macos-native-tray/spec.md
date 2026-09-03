@@ -33,6 +33,7 @@ Cross-references:
 ## Requirements
 
 ### Requirement: AppKit `NSStatusItem` is the only tray surface
+<!-- req-id: 436f5bf9 -->
 - **ID**: macos-native-tray.ui.nsstatusitem-only@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -62,6 +63,7 @@ no `WKWebView`). The status item SHALL be the sole user input surface.
 - **THEN** the loaded library list SHALL NOT contain `WebKit.framework`, `WKWebView` symbols, or any Tauri runtime dylib
 
 ### Requirement: Menu items match the host-shell parity contract
+<!-- req-id: f05ef12a -->
 - **ID**: macos-native-tray.ui.menu-parity@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -93,6 +95,7 @@ the reason "v2 — terminal-only in v1".
 - **AND** SHALL call `[NSApp terminate:nil]` only after the shell reports `ShutdownComplete` (or after a 30s wall)
 
 ### Requirement: Virtualization.framework guest lifecycle is owned by this binary
+<!-- req-id: 76ee2c2e -->
 - **ID**: macos-native-tray.lifecycle.vz-guest@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -148,6 +151,7 @@ machine" is a convergence signal to watch, not a dependency. Full evaluation:
   (no dependency on the `container` CLI, its XPC daemon, or a macOS-26 floor)
 
 ### Requirement: Terminal attach runs the tray's own attach client in the window
+<!-- req-id: 2f75cfaa -->
 - **ID**: macos-native-tray.lifecycle.terminal-attach@v2
 - **Modality**: MUST
 - **Measurable**: true
@@ -207,6 +211,7 @@ NOT use SSH.
 - **THEN** zero matches SHALL be found
 
 ### Requirement: GUI passthrough is explicitly deferred to v2
+<!-- req-id: cfca8b66 -->
 - **ID**: macos-native-tray.ui.gui-passthrough-v2@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -233,6 +238,7 @@ ship with `observatorium` and `opencode_web` menu items disabled and tagged
   SHALL document the M5 research findings
 
 ### Requirement: `--diagnose` CLI mode emits a stable bundled health report
+<!-- req-id: cadadf30 -->
 - **ID**: macos-native-tray.diagnose.cli-health-report@v1
 - **Modality**: MUST
 - **Measurable**: true

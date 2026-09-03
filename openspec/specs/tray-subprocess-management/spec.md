@@ -9,6 +9,7 @@ active
 ## Requirements
 
 ### Requirement: Tray-owned subprocesses are tracked and cleaned up
+<!-- req-id: 7243b420 -->
 
 The tray MUST track subprocesses it launches, capture failure status, and clean them up during shutdown or project teardown.
 

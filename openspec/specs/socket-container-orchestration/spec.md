@@ -9,6 +9,7 @@ active
 ## Requirements
 
 ### Requirement: Socket-based orchestration uses explicit readiness
+<!-- req-id: 84954c72 -->
 
 Containers launched for socket-facing services MUST expose deterministic socket paths, health checks, or readiness probes before callers depend on them.
 

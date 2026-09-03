@@ -9,6 +9,7 @@ active
 Define the interactive CLI contract for the shipped Tillandsias binary. The binary is a compiled runtime orchestrator: it may embed static assets and metadata, but it MUST NOT depend on repository shell scripts for user-facing runtime behavior.
 ## Requirements
 ### Requirement: CLI mode launches container from terminal
+<!-- req-id: f4fe0179 -->
 Running `tillandsias <path>` SHALL launch an interactive container for the project at the given path, with user-friendly terminal output.
 
 #### Scenario: Launch with project path
@@ -24,6 +25,7 @@ Running `tillandsias <path>` SHALL launch an interactive container for the proje
 - **THEN** usage information SHALL be printed and the process SHALL exit
 
 ### Requirement: Runtime paths are compiled Rust
+<!-- req-id: 8d223eb2 -->
 The user-facing runtime paths `--init`, `--status-check`, `--github-login`, `--opencode`, `--codex`, `--claude`, `--bash`, `--opencode-web`, and `--observatorium` SHALL be implemented in compiled Rust and SHALL invoke Podman or other stable Unix tools directly. They SHALL NOT shell out to repository scripts during normal runtime operation.
 
 On Linux desktop sessions, these runtime paths MUST run under the current user's logind-managed session and rootless Podman state. They MUST NOT create a synthetic `/run/user/<uid>` or rely on a helper runtime wrapper in production.
@@ -50,6 +52,7 @@ On Linux desktop sessions, these runtime paths MUST run under the current user's
 - **AND** after the attached forge exits, the project stack SHALL be cleaned up if no forge containers remain active
 
 ### Requirement: Observatorium project view
+<!-- req-id: 3baa1b06 -->
 The binary MUST accept `--observatorium <project>` as a user-facing launcher for the project Observatorium viewer. The runtime MUST launch the web container, router route, and safe browser directly from compiled Rust, without invoking the repo-local dev wrapper during normal runtime operation.
 
 #### Scenario: Observatorium launch alias
@@ -68,6 +71,7 @@ The binary MUST accept `--observatorium <project>` as a user-facing launcher for
 - **AND** stderr SHALL state that `--observatorium` requires a project path
 
 ### Requirement: OpenCode Web launch reuses the router when already present
+<!-- req-id: 3651405c -->
 The `--opencode-web` launch path SHALL reuse an already-running router container when one exists, and SHALL only probe host ports after confirming the router is not already published.
 
 #### Scenario: Existing router is reused
@@ -76,6 +80,7 @@ The `--opencode-web` launch path SHALL reuse an already-running router container
 - **AND** it SHALL not fail early on the host-port availability check
 
 ### Requirement: Image selection flag
+<!-- req-id: 77c92c6c -->
 The `--image` flag SHALL allow selecting which container image to use.
 
 #### Scenario: Default image
@@ -87,6 +92,7 @@ The `--image` flag SHALL allow selecting which container image to use.
 - **THEN** the `tillandsias-web:v<VERSION>` image for the running Tillandsias version SHALL be used
 
 ### Requirement: Debug flag
+<!-- req-id: 9c39b05a -->
 The `--debug` flag SHALL enable verbose output showing podman commands and internal details.
 
 #### Scenario: Normal mode
@@ -100,6 +106,7 @@ The `--debug` flag SHALL enable verbose output showing podman commands and inter
 - **AND** failure output SHALL include a short actionable next step before verbose redacted argv details
 
 ### Requirement: User-friendly output
+<!-- req-id: 26fa8b84 -->
 CLI mode SHALL print formatted progress messages using println!, not raw tracing output.
 
 #### Scenario: Image cached
@@ -119,6 +126,7 @@ CLI mode SHALL print formatted progress messages using println!, not raw tracing
 - **THEN** output SHALL show "Environment stopped."
 
 ### Requirement: Security flags are non-negotiable
+<!-- req-id: 710df347 -->
 CLI mode SHALL use the same security hardening flags as tray mode.
 
 #### Scenario: Security flags present
@@ -126,6 +134,7 @@ CLI mode SHALL use the same security hardening flags as tray mode.
 - **THEN** the podman command MUST include `--cap-drop=ALL`, `--security-opt=no-new-privileges`, `--userns=keep-id`, and `--security-opt=label=disable`
 
 ### Requirement: CLI modes are tray-aware
+<!-- req-id: 059231be -->
 
 `tillandsias --debug` and `tillandsias <path>` SHALL spawn the tray icon in addition to their CLI behaviour when `desktop_env::has_graphical_session()` returns `true`. Other CLI subcommands (`--init`, `--update`, `--clean`, `--stats`, `--uninstall`, `--version`, `--help`, `--github-login`) MUST retain their current single-purpose behaviour with no tray spawn.
 
@@ -149,6 +158,7 @@ CLI mode SHALL use the same security hardening flags as tray mode.
 - **AND** the command SHALL exit as it does today
 
 ### Requirement: SIGINT triggers clean shutdown on every CLI path
+<!-- req-id: 4e79eff6 -->
 
 Every CLI path that may have started enclave infrastructure MUST install a SIGINT handler that, on first Ctrl+C, calls `handlers::shutdown_all()`, prints a brief "stopping…" message, and exits with status 0. A second SIGINT during shutdown MAY fall through to default termination so the user can always force-quit.
 

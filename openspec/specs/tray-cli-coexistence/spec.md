@@ -13,6 +13,7 @@ Contract for running the Tillandsias tray icon concurrently with CLI modes, dete
 
 
 ### Requirement: Detect graphical session for tray-aware CLI
+<!-- req-id: d569e12e -->
 
 The system MUST provide a `desktop_env::has_graphical_session() -> bool` helper used by every CLI mode entry point to decide whether to spawn the tray icon alongside the CLI behaviour. @trace spec:tray-cli-coexistence
 
@@ -37,6 +38,7 @@ The system MUST provide a `desktop_env::has_graphical_session() -> bool` helper 
 - **THEN** `has_graphical_session()` MUST return `false`
 
 ### Requirement: CLI modes spawn the tray when a graphical session is available
+<!-- req-id: b047ece9 -->
 
 When a CLI subcommand starts and `has_graphical_session()` returns `true`, the system MUST spawn a detached child process running the tray (no positional arguments) before continuing the CLI behaviour. The child MUST detach from the parent's process group.
 
@@ -61,6 +63,7 @@ When a CLI subcommand starts and `has_graphical_session()` returns `true`, the s
 - **AND** the CLI parent MUST continue without surfacing an error to the user
 
 ### Requirement: Tray remains running after CLI session ends
+<!-- req-id: 3832b433 -->
 
 When the CLI parent finishes its foreground work (OpenCode TUI exit, `--debug` interrupted, etc.), the tray child MUST continue to run independently.
 
@@ -71,6 +74,7 @@ When the CLI parent finishes its foreground work (OpenCode TUI exit, `--debug` i
 - **AND** infrastructure containers (proxy, git-service, inference) MUST remain running
 
 ### Requirement: Broken stdout/stderr does not terminate the process
+<!-- req-id: 22c77278 -->
 
 The tracing/logging layer MUST tolerate `BrokenPipe` / `EPIPE` errors on the stderr writer by silently dropping the offending write. The file appender MUST continue to receive every event.
 

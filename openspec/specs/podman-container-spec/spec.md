@@ -14,6 +14,7 @@ unit-testable boundary between launch intent and runtime execution.
 ## Requirements
 
 ### Requirement: Launch specs are typed and directly serialized
+<!-- req-id: 3483c87d -->
 
 The runtime SHALL represent container launches as typed spec objects and SHALL
 serialize them directly to Podman argv vectors. The spec layer MUST NOT require
@@ -25,6 +26,7 @@ shell interpolation.
 - **AND** the argv vector can be asserted in a unit test without launching Podman
 
 ### Requirement: Security defaults are immutable
+<!-- req-id: c62bdef5 -->
 
 The spec layer SHALL enable the Tillandsias baseline hardening defaults by
 construction: `--init`, `--rm`, `--userns=keep-id`, `--cap-drop=ALL`,
@@ -36,6 +38,7 @@ construction: `--init`, `--rm`, `--userns=keep-id`, `--cap-drop=ALL`,
 - **AND** the builder does not expose a weakening path for those defaults
 
 ### Requirement: Spec layer supports launch-shape composition
+<!-- req-id: 09304743 -->
 
 The spec layer SHALL support detached mode, interactive mode, tty mode,
 environment variables, bind mounts, volume mounts, Podman options, publish

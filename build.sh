@@ -2070,6 +2070,29 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "containers.conf proxy-env fixture passed"
 
+    # Order 972-a8vh. --internal is what makes the enclave an enclave: without
+    # it podman attaches a gateway and every member gets NAT egress, so the
+    # proxy stops being the only way out. Three Rust paths passed the flag and
+    # scripts/orchestrate-enclave.sh did not, so WHICH BINARY created the
+    # network decided whether the isolation existed. The check covers the
+    # deployed half too, because adding the flag reaches no host that already
+    # has a network — creation is skipped for an existing one, so an unisolated
+    # network survives every future launch (the same installed-base gap as the
+    # containers.conf block above).
+    _step "Checking the enclave network is internal (972-a8vh)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-enclave-network-internal.sh" source 2>&1; then
+        _error "a launcher creates the enclave network without --internal — the proxy would not be the only way out"
+        exit 1
+    fi
+    _info "Enclave network internal check passed"
+
+    # The DEPLOYED half is host state, so it is REPORTED and never fatal: a
+    # network created before this fix reds no build, because the repair is
+    # `podman network rm`, not a code change, and failing here would make one
+    # host's stale network every host's red build (699-dycj). The launcher
+    # refuses to reuse it at the point where reuse would happen.
+    _run bash "$SCRIPT_DIR/scripts/check-enclave-network-internal.sh" check 2>&1 || true
+
     # Order 923-rmtw, shell half. A pasted copy of a Rust constant stops
     # tracking its source: run-forge-project.sh and orchestrate-enclave.sh each
     # carried their own no_proxy list, both frozen at pre-801-kqme values for
@@ -2830,6 +2853,20 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Bound-litmus-runnable fixture passed"
+
+    _step "Checking every spec requirement carries a unique stable id (976-suab)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-requirement-ids.sh" 2>&1; then
+        _error "a spec requirement is missing a req-id or shares one (976-suab) — see the verdict line above"
+        exit 1
+    fi
+    _info "Requirement-id check passed"
+
+    _step "Verifying the requirement-id generator stays idempotent (976-suab)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-requirement-ids.sh" 2>&1; then
+        _error "the requirement-id generator/validator fixture regressed (976-suab) — see the failing case above"
+        exit 1
+    fi
+    _info "Requirement-id fixture passed"
 
     _step "Checking litmus steps can actually fail (972-cvdg)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-steps-can-fail.sh" 2>&1; then

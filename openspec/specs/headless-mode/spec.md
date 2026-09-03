@@ -13,6 +13,7 @@ Define the contract for running Tillandsias without a graphical user interface. 
 ## Requirements
 
 ### Requirement: Headless binary invocation with --headless flag
+<!-- req-id: 271168ba -->
 
 The binary MUST accept the `--headless` flag to explicitly run in headless mode without attempting to initialize any graphical interface.
 
@@ -41,6 +42,7 @@ The binary MUST accept the `--headless` flag to explicitly run in headless mode 
 - **AND** the process MUST exit with code 0 on successful shutdown
 
 ### Requirement: Container status events and metrics reporting
+<!-- req-id: 9db538a6 -->
 
 During headless operation, the application MUST emit JSON events documenting container and system state at appropriate intervals.
 
@@ -60,6 +62,7 @@ During headless operation, the application MUST emit JSON events documenting con
 - **AND** optional additional fields MUST be documented in the event schema (e.g., `count`, `exit_code`)
 
 ### Requirement: No GTK dependency in headless path
+<!-- req-id: 5b2d011a -->
 
 The headless code path MUST NOT initialize GTK or attempt to interact with any display subsystem. This ensures the binary remains portable to headless environments.
 
@@ -79,6 +82,7 @@ The headless code path MUST NOT initialize GTK or attempt to interact with any d
 - **AND** the application MUST proceed with normal operation in headless mode
 
 ### Requirement: Status-check mode for initialization verification
+<!-- req-id: 18c2e89a -->
 
 The `--status-check` flag MUST enable a lightweight initialization verification mode that validates the runtime environment without running the full event loop.
 
@@ -100,6 +104,7 @@ The `--status-check` flag MUST enable a lightweight initialization verification 
 
 
 ### Requirement: Per-operation image ensure lists, and the Build-context vault
+<!-- req-id: fc3923e5 -->
 
 Every headless operation that starts containers MUST ensure the images it will
 start, before starting them. The lists are DELIBERATELY per-operation subsets,
