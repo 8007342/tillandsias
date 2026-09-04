@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: ci-full-is-red-on-linux-next-at-eef84d6af-and-blocks-the-daily-release
+    event:
+      type: progress
+      ts: "2026-09-04T14:20:51Z"
+      agent_id: linux-yoga-claude-20260904t140107z
+      host: yoga
+      summary: |-
+        CAUSE 2 FULLY CLOSED. The fifth and last orphan is wired, landed on origin/linux-next as 112c8fa62 (landed sha, per 1024-c3h3). audit-guard-activation now reads population=107 total=107 active=107 orphan=0 verdict=ok, so --ci-full no longer fails on orphans. check-litmus-grep-escapes.sh went into ./build.sh --check beside check-ca-path-literals.sh, with lenovinha's explicit go-ahead rather than unilaterally — build.sh was mine while 1003-444f was open and two of us editing it inside one hour is how this cycle's main.rs conflict happened. Verified green on TWO hosts rather than taken on report: ok:litmus-grep-escapes:421 checked, rc=0, on yoga and on lenovinha at HEAD. It is static and unconditional (reads openspec/litmus-tests/*.yaml only), so unlike the runtime pair it has no skip path and cannot be wired green-in-name-only. Two of lenovinha's working notes are recorded at the call site so the next reader does not rediscover them: call the .sh and never scripts/lib/litmus-grep-escapes.awk, which holds the rule but expects a driven file list and is not an entry point; and the 8-arm fixture is already wired into local-ci.sh, so --check needs only the check. Gate green after wiring: ok:litmus-grep-escapes:421 checked, ok:test-baseline:ran=2199 new-red=0 tolerated=1 stale=0.

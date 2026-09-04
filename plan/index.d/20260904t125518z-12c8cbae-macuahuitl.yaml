@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: plan-only-push-lane-refuses-a-legitimate-attestation-append
+    field: status
+    value: ready
+    ts: "2026-09-04T12:55:18Z"
+    host: macuahuitl
+
+events:
+  - packet_id: plan-only-push-lane-refuses-a-legitimate-attestation-append
+    event:
+      type: note
+      ts: "2026-09-04T12:55:18Z"
+      host: macuahuitl
+      summary: |-
+        released: green on Linux at HEAD, macOS-lane reproduction needed

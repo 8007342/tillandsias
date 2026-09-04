@@ -1,0 +1,50 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: build-sh-collapses-a-could-not-run-exit-into-a-fragment-events-violation
+    order: 1021-a944
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [build, gate, fail-loud, windows, low-end, plan]
+    estimated_hours: 1
+    owned_files:
+      - build.sh
+      - scripts/check-fragment-events-land.sh
+    title: |
+      build.sh:1657 wraps check-fragment-events-land.sh in `if ! _run`, so its could-not-run exit 2 (`blocked:fragment-events-land:no-fresh-plan-binary`) is reported as the exit-1 violation "an event is attached to no packet — invisible, not merely unfolded", and the floor gate reads an unearned RED
+    context: |
+      MEASURED by esme-windows on esmeraldinha 2026-09-04 (relayed by the
+      coordinator): the floor's ./build.sh --check ran 12:47:23Z to 13:05:52Z
+      and died with the two lines "blocked:fragment-events-land:no-fresh-plan-
+      binary" then "an event is attached to no packet — invisible, not merely
+      unfolded". The script distinguishes could-not-run (exit 2, first line)
+      from a real violation (exit 1) on purpose; _run (build.sh:1057-1067)
+      returns the true code; the call site's `if !` collapses both into one
+      branch with no `-eq 2` arm. The message is maximally misleading: it names
+      the silent-data-loss class the guard was written for after 851-gpb5, so
+      a reader chases a misfiled packet_id that does not exist. It violates
+      the project's own convention (check-daily-maintenance.sh's load-bearing
+      exit code; 965-sxec: an unusable tool reads as COULD-NOT-RUN). This is
+      the inverse of the day's three unearned greens: an unearned red.
+      NOT ESTABLISHED, deliberately: why the plan binary reads unfresh inside
+      the tillandsias-build WSL2 distro (the Windows-side artifact is
+      tillandsias-plan.exe while a 3.29 MB ELF tillandsias-plan also sits in
+      target/release); esme's reproduction attempts through wsl.exe returned
+      inconsistent results traceable to nested quoting, not to the code.
+      Whether a Windows floor host can EVER pass this check is a second
+      question this packet must answer or route.
+      Provenance: esme measured; filed by the coordinator.
+    exit_criteria:
+      - "build.sh distinguishes the check's exit 2 from exit 1: could-not-run is reported with the script's own verdict line and the remedy (rebuild the plan binary: scripts/cycle-preflight.sh), never as a violation; pre-fix result: FAILS (if ! _run collapses both)"
+      - "a fixture in scripts/test-*.sh drives the call site with a stub that exits 2 and asserts the gate's message names could-not-run; with a stub that exits 1 it asserts the violation text; pre-fix result: FAILS"
+      - "the gate's DISPOSITION on could-not-run is decided and written where the call site is: blocked (fail closed) with the honest message, or advisory, and the reason is stated; pre-fix result: FAILS (undecided, and the message lies either way)"
+      - "on esmeraldinha the check either passes inside the tillandsias-build distro or its verdict names why the binary is unfresh there; pre-fix result: FAILS"
+    unscoreable: |
+      No litmus in openspec/litmus-tests names check-fragment-events-land.sh
+      (grep at filing time: none), so naming one is the 885-92iu forward
+      reference. The pin is the deliverable: a fixture under scripts/test-*.sh
+      driving the build.sh call site with exit-2 and exit-1 stubs, bound as a
+      new litmus under the ci-release or methodology-accountability spec by the
+      claimer, who names it as the first act.

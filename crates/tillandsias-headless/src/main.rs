@@ -327,6 +327,8 @@ fn main() {
     let init = user_args.iter().any(|a| a == "--init");
     let force = user_args.iter().any(|a| a == "--force");
     let status_check = user_args.iter().any(|a| a == "--status-check");
+    // Order 1004-xw3q: the restore path the health guard's remedy names.
+    let ensure_enclave = user_args.iter().any(|a| a == "--ensure-enclave");
     let inference_tier = user_args.iter().any(|a| a == "--inference-tier");
     // Order 480 follow-up: make the capability probe observable from the host.
     // Until this flag existed the probe had no caller at all, so there was no
@@ -605,6 +607,7 @@ fn main() {
         "--fresh",
         "--record-measurement",
         "--status-check",
+        "--ensure-enclave",
         "--github-login",
         "--with-token",
         "--claude-login",
@@ -676,6 +679,7 @@ fn main() {
         || observatorium
         || init
         || status_check
+        || ensure_enclave
         || inference_tier
         || capabilities
         || github_login
@@ -907,6 +911,19 @@ fn main() {
     // @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
     if reset_guest {
         if let Err(e) = run_reset_guest(debug) {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+        return;
+    }
+
+    // Order 1004-xw3q: a standalone restore path. Top-level and returning, NOT
+    // nested under `if init` like `--status-check` is: the first draft mirrored
+    // that block, and `tillandsias --ensure-enclave` alone then fell through
+    // into the app's service path and sat idle until the shutdown handler tore
+    // Vault down (measured 2026-09-04, three runs, no podman call ever made).
+    if ensure_enclave {
+        if let Err(e) = run_cli_with_vault_credential_cleanup(debug, || run_ensure_enclave(debug)) {
             eprintln!("Error: {}", e);
             std::process::exit(1);
         }
@@ -1415,6 +1432,9 @@ fn print_usage(version: &str) {
          Destructive by design; you'll re-authenticate once"
     );
     println!("  --status-check Verify services are online through a representative stack smoke");
+    println!(
+        "  --ensure-enclave Bring the application-lifetime enclave services (network, Vault, egress proxy) up idempotently without launching a lane — the restore path after a reboot or a stopped proxy; --init only builds images"
+    );
     println!("  --github-login Authenticate GitHub and store the token in Vault");
     println!("  --with-token   Read a GitHub token from stdin; requires --github-login");
     println!(
@@ -6370,6 +6390,25 @@ const SHARED_STACK_SCOPES: &[(&str, SharedStackScope)] = &[
     ("tillandsias-inference", SharedStackScope::LaneScoped),
 ];
 
+/// The containers a shutdown phase may act on: RUNNING and OWNED. The
+/// graceful-stop phase has filtered by ownership since 936-kdev; the SIGKILL
+/// escalation below it re-listed every `tillandsias-` container and filtered
+/// on state alone, so the 5-second install-validation instance inside
+/// `./build.sh --install` SIGKILLed `tillandsias-builder` — the toolbox the
+/// build was running in — four seconds after "app.stopped", and the build
+/// died rc=137 with the live Vault and proxy (measured on macuahuitl
+/// 2026-09-04 at 01:09Z and 12:42:21Z; order 1019-ba6e). Both phases now
+/// share this one predicate, so ownership cannot be honoured in one loop and
+/// forgotten in the next.
+fn shutdown_escalation_targets(
+    containers: Vec<tillandsias_podman::ContainerListEntry>,
+) -> Vec<tillandsias_podman::ContainerListEntry> {
+    containers
+        .into_iter()
+        .filter(|c| c.state == "running" && is_stack_managed_name(&c.name))
+        .collect()
+}
+
 /// Is `name` a container THIS APPLICATION creates and therefore may stop?
 /// (936-kdev). The `tillandsias-` prefix alone is NOT ownership: the
 /// developer build toolbox (`tillandsias-builder`) and dev-substrate
@@ -8882,6 +8921,44 @@ fn run_cache_verify(debug: bool) -> Result<(), String> {
 /// Run the representative end-to-end stack smoke after images exist.
 ///
 /// @trace spec:dev-build, spec:enclave-network, spec:proxy-container, spec:git-mirror-service, spec:inference-container, spec:default-image, spec:observability-convergence
+/// `--ensure-enclave`: bring the application-lifetime enclave services up
+/// idempotently — the network, Vault, and the egress proxy (whose CA bundle and
+/// key secret `ensure_proxy_running` refreshes on the way) — WITHOUT launching a
+/// lane. This is the restore path the health guard's remedy names.
+///
+/// WHY IT EXISTS (order 1004-xw3q, measured on lenovinha and pirria
+/// 2026-09-04). Every remedy text said "re-run the enclave orchestration
+/// (`tillandsias --init`)", and `--init` exits 0 without creating or starting
+/// the proxy: its own help calls it "Pre-build container images". The real
+/// orchestration is `ensure_proxy_running`, reached only from a lane launch or
+/// a standalone login flow, so a host whose proxy died after a reboot had no
+/// command that would bring it back short of launching a forge — and the one
+/// script whose name says "orchestrate" (`scripts/orchestrate-enclave.sh`) is an
+/// e2e path that ends by removing the proxy. A remedy that names a command
+/// which does not do the thing is the 975-rsgm shape one level up.
+///
+/// Idempotent by construction: every step reuses what is already running.
+/// Litmus/fake podman mode skips Vault exactly as `--init` does.
+///
+/// @trace order:1004-xw3q
+fn run_ensure_enclave(debug: bool) -> Result<(), String> {
+    require_desktop_user_session("tillandsias --ensure-enclave")?;
+    report_runtime_lane("--ensure-enclave", debug);
+    ensure_enclave_network(debug)?;
+    #[cfg(feature = "vault")]
+    if std::env::var_os("LITMUS_PODMAN_MODE").is_none() {
+        vault_bootstrap::ensure_vault_running(debug)?;
+    }
+    ensure_proxy_running(debug)?;
+    let proxy = if crate::vault_bootstrap::container_running("tillandsias-proxy") {
+        "running"
+    } else {
+        "not-running"
+    };
+    println!("ok:enclave-ensured:proxy={proxy}");
+    Ok(())
+}
+
 fn run_status_check(debug: bool) -> Result<(), String> {
     require_desktop_user_session("tillandsias --status-check")?;
     report_runtime_lane("--status-check", debug);
@@ -14012,6 +14089,73 @@ fn forge_tool_cache_volume(project_name: &str) -> String {
     format!("tillandsias-forge-cache-{project_name}")
 }
 
+/// The `/home/forge/src` tmpfs spec for a clone-only forge launch — the FOURTH
+/// hot path, and until now the missing one.
+///
+/// ORDER 997-e4v2. `openspec/specs/forge-hot-cold-split` mandates four kernel
+/// tmpfs mounts at container start and names `/home/forge/src` among them,
+/// sized per launch by `compute_hot_budget()` from the git mirror's pack size.
+/// Three of the four shipped; this one did not, and `compute_hot_budget()` /
+/// `parse_size_pack_kb()` sat with ZERO callers outside their own unit tests in
+/// a change ARCHIVED AS COMPLETE on 2026-04-27. What actually occupied the path
+/// was its opposite: a PERSISTENT drvfs mount of the Windows host's `~/src`,
+/// injected by the tray. The mount cannot be removed before this exists, or a
+/// forge launches with no project source at all — hence tmpfs first, mount
+/// second, never mount-first.
+///
+/// Clone-only lanes ONLY. Under the opt-in host-mount lane the caller has
+/// already bind-mounted the host checkout at `/home/forge/src/<project>`, and a
+/// tmpfs over its parent would mask it.
+///
+/// @trace order:997-e4v2
+/// @trace spec:forge-hot-cold-split (Requirement: HOT tier — RAM-backed tmpfs
+///   for finely curated paths; Per-launch project source budget)
+fn forge_hot_src_tmpfs(project_name: &str) -> String {
+    let budget = tillandsias_core::config::compute_hot_budget(
+        forge_mirror_pack_size_kb(project_name),
+        &tillandsias_core::config::ForgeConfig::default(),
+    );
+    format!("/home/forge/src:size={budget}m,mode=0755")
+}
+
+/// The project mirror's `size-pack` in KiB, or 0 when it cannot be read.
+///
+/// 0 is not a guess dressed as a measurement: `compute_hot_budget` clamps it UP
+/// to `HOT_PATH_BUDGET_FLOOR_MB`, which is exactly the spec's "Empty mirror
+/// returns floor (256 MB)" scenario. A fresh project has no mirror yet, and
+/// fail-closing a launch on an unreadable pack size would break the first
+/// launch of every project to protect a number that only tunes a cap.
+///
+/// @trace order:997-e4v2
+/// @trace spec:forge-hot-cold-split (Requirement: Per-launch project source
+///   budget — step 1, the mirror's `git count-objects -v -H`)
+fn forge_mirror_pack_size_kb(project_name: &str) -> u64 {
+    let mut inspect = podman_command();
+    inspect.args([
+        "volume",
+        "inspect",
+        &format!("tillandsias-mirror-{project_name}"),
+        "--format",
+        "{{.Mountpoint}}",
+    ]);
+    let Ok(mountpoint) = podman_command_output(inspect, false) else {
+        return 0;
+    };
+    if mountpoint.is_empty() {
+        return 0;
+    }
+    let Ok(output) = Command::new("git")
+        .args(["-C", &mountpoint, "count-objects", "-v", "-H"])
+        .output()
+    else {
+        return 0;
+    };
+    if !output.status.success() {
+        return 0;
+    }
+    tillandsias_core::config::parse_size_pack_kb(&String::from_utf8_lossy(&output.stdout))
+}
+
 /// In-container mount point of the DURABLE spec-index tier (order 801-a2by).
 /// Injected as `FORGE_SPEC_INDEX_ROOT` so nothing inside the enclave ever
 /// shells out to podman to find it.
@@ -14144,7 +14288,15 @@ fn build_forge_agent_run_args_with_vault(
             MountMode::ReadWrite,
         )
     } else {
-        spec
+        // ORDER 997-e4v2: the fourth HOT path. forge-hot-cold-split mandates
+        // /home/forge/src be a per-launch kernel tmpfs sized by
+        // compute_hot_budget(); three of four hot paths shipped and this one
+        // never did, which is why the persistent drvfs mount could occupy the
+        // path unnoticed. Clone-only lane only — under host-mount the arm above
+        // has bind-mounted the host checkout at /home/forge/src/<project>, and
+        // a tmpfs over its parent would mask it.
+        // @trace order:997-e4v2, spec:forge-hot-cold-split
+        spec.tmpfs(forge_hot_src_tmpfs(project_name))
     };
     let spec = spec
         // Persistent per-project tool/package cache (order 179). lib-common points
@@ -16450,10 +16602,7 @@ pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
                 // stopper). Ownership is decided by is_stack_managed_name —
                 // the same vocabulary the teardown and reset scopes speak —
                 // never by prefix alone.
-                let running_at_start: Vec<_> = containers
-                    .iter()
-                    .filter(|c| c.state == "running" && is_stack_managed_name(&c.name))
-                    .collect();
+                let running_at_start = shutdown_escalation_targets(containers);
 
                 if !running_at_start.is_empty() {
                     info!(
@@ -16490,10 +16639,9 @@ pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
                     .await
                     {
                         Ok(Ok(remaining)) => {
-                            let running: Vec<_> = remaining
-                                .into_iter()
-                                .filter(|c| c.state == "running")
-                                .collect();
+                            // 1019-ba6e: ownership, not prefix — the same
+                            // predicate the stop phase applied.
+                            let running = shutdown_escalation_targets(remaining);
                             if running.is_empty() {
                                 debug!(
                                     "verification clean: zero running managed containers remain"
@@ -17934,10 +18082,12 @@ mod tests {
             main_window
                 .matches("run_cli_with_vault_credential_cleanup(debug")
                 .count(),
-            5,
-            "both status dispatches, OpenCode, forge-agent, and provider-login CLI \
-             dispatches must clean up (5 as of the provider-login dispatch; a new \
-             dispatch that wraps itself in the cleanup is compliance, not drift)"
+            6,
+            "both status dispatches, OpenCode, forge-agent, provider-login and \
+             --ensure-enclave CLI dispatches must clean up (6 as of the \
+             --ensure-enclave dispatch, 998-3z6g; a new dispatch that wraps \
+             itself in the cleanup is compliance, not drift — bump this count \
+             and name the dispatch, as 1003-444f's class requires)"
         );
         assert!(
             !main_window
@@ -18413,6 +18563,32 @@ mod tests {
         assert!(is_stack_managed_name("tillandsias-vault"));
         assert!(is_stack_managed_name("tillandsias-myproj-forge"));
         assert!(is_stack_managed_name("tillandsias-git-myproj"));
+    }
+
+    /// 1019-ba6e: the SIGKILL escalation must consult ownership exactly as
+    /// the graceful stop does. Before the fix it filtered on state alone and
+    /// killed the developer toolbox the build was running in.
+    #[test]
+    fn shutdown_escalation_targets_only_owned_running_containers() {
+        let entry = |name: &str, state: &str| tillandsias_podman::ContainerListEntry {
+            name: name.to_string(),
+            state: state.to_string(),
+            exit_code: 0,
+            exited_at: 0,
+            restarts: 0,
+        };
+        let targets = shutdown_escalation_targets(vec![
+            entry("tillandsias-builder", "running"),
+            entry("tillandsias-dev-inference", "running"),
+            entry("tillandsias-vault", "running"),
+            entry("tillandsias-proxy", "exited"),
+        ]);
+        let names: Vec<&str> = targets.iter().map(|c| c.name.as_str()).collect();
+        assert_eq!(
+            names,
+            vec!["tillandsias-vault"],
+            "only OWNED and RUNNING containers may be escalated to SIGKILL"
+        );
     }
 
     /// Order 477 (the packet's steady-state criterion): after the LAST lane
@@ -24619,6 +24795,77 @@ esac
         &tail[..end]
     }
 
+    /// ORDER 997-e4v2. The fourth HOT path is EMITTED, and by the spec's own
+    /// sizing function rather than a constant that merely looks like it.
+    ///
+    /// This is the test the archived 2026-04-27 change should have had.
+    /// `forge-hot-cold-split` mandates four tmpfs mounts and names
+    /// `/home/forge/src` among them; three shipped, and `compute_hot_budget()`
+    /// sat with ZERO non-test callers while the change was archived as
+    /// complete. An inert function with passing unit tests is exactly as green
+    /// as a wired one, so unit tests over `compute_hot_budget` could not have
+    /// caught this — only a test that reaches the LAUNCH PATH can.
+    ///
+    /// @trace order:997-e4v2, spec:forge-hot-cold-split
+    #[test]
+    fn forge_src_is_a_hot_tmpfs_sized_by_compute_hot_budget() {
+        let spec = forge_hot_src_tmpfs("a-project-with-no-mirror-on-this-host");
+
+        let (path, opts) = spec
+            .split_once(':')
+            .expect("tmpfs spec is <path>:<options>");
+        assert_eq!(path, "/home/forge/src", "the spec names this exact path");
+        assert!(
+            opts.contains("mode=0755"),
+            "spec table gives /home/forge/src mode 0755, got {opts:?}"
+        );
+
+        let size_mb: u32 = opts
+            .split(',')
+            .find_map(|o| o.strip_prefix("size="))
+            .and_then(|s| s.strip_suffix('m'))
+            .expect("every hot mount carries a kernel-enforced size cap")
+            .parse()
+            .expect("size cap is a plain MB integer");
+
+        // The bound, not a fixed number: this host may or may not have a
+        // mirror volume for the name above, and the assertion must be about
+        // the CLAMP the spec specifies, not about which arm ran.
+        let config = tillandsias_core::config::ForgeConfig::default();
+        assert!(
+            (tillandsias_core::config::HOT_PATH_BUDGET_FLOOR_MB..=config.hot_path_max_mb)
+                .contains(&size_mb),
+            "budget {size_mb} MB escaped the spec's [{}, {}] clamp",
+            tillandsias_core::config::HOT_PATH_BUDGET_FLOOR_MB,
+            config.hot_path_max_mb
+        );
+    }
+
+    /// The clone-only lane gets the tmpfs; the host-mount lane must NOT.
+    ///
+    /// A tmpfs on `/home/forge/src` would mask the bind mount its sibling arm
+    /// places at `/home/forge/src/<project>`, so the two are mutually
+    /// exclusive by construction. Pinned against the source because the arms
+    /// are chosen at launch by host configuration this test cannot set.
+    ///
+    /// @trace order:997-e4v2, spec:forge-hot-cold-split
+    #[test]
+    fn hot_src_tmpfs_is_clone_only_never_over_the_host_mount() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source_window(source, "let host_mount = forge_uses_host_mount();");
+
+        let call = window
+            .find("forge_hot_src_tmpfs(project_name)")
+            .expect("the clone-only lane must emit the /home/forge/src tmpfs");
+        let host_mount_bind = window
+            .find("format!(\"/home/forge/src/{project_name}\")")
+            .expect("the host-mount lane must still bind the host checkout");
+        assert!(
+            host_mount_bind < call,
+            "the tmpfs belongs to the ELSE arm; emitting it before or inside \
+             the host-mount arm would mask the bind mount"
+        );
+    }
     #[test]
     fn idiomatic_podman_launch_paths_do_not_bypass_shared_layer() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));

@@ -1,0 +1,58 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: guest-binary-staging-lives-under-home-src-and-dies-with-the-mount-997-e4v2-retires
+    order: 1019-ivia
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: any
+    capability_tags: [macos, windows, vm, guest-binary, staging, migration, fail-loud]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-macos-tray/src/vz.rs
+      - images/default/fetch-headless.sh
+    title: |
+      Guest-binary staging is delivered through the ~/src virtiofs share (vz.rs:692/725/1021, fetch-headless.sh reads /home/forge/src/.tillandsias/guest-bin), so 997-e4v2's mount half would remove binary delivery on macOS; relocate staging to the durable state dir first
+    context: |
+      MEASURED by tlatoanis-macbook-air 2026-09-04 while landing 997-e4v2 step 1
+      (a98ea0038). The share the packet retires carries TWO payloads: the
+      project path (which the operator ruled on 2026-09-03: an existing ~/src is
+      ignored and left to rot) and the guest-binary staging directory
+      /home/forge/src/.tillandsias/guest-bin/tillandsias-headless, which
+      fetch-headless.sh installs FROM and only falls back on when the share is
+      absent. Observed live: "[guest-binary] REFUSING to stage an OLDER guest
+      binary ... /Users/tlatoani/src/.tillandsias/guest-bin/...provenance.json".
+      Deleting the fstab line at vz.rs:692 with the pins at 725 and 1021
+      "moved" would silently drop delivery of the guest binary on macOS.
+      COORDINATOR RULING (macuahuitl, 2026-09-04T12:55Z), recorded as an
+      interpretation of the operator's decision and flagged to the operator as
+      such: the 2026-09-03 ruling is about ~/src AS A PROJECT PATH; it does not
+      license removing a subsystem that merely shares the parent, and it does
+      not license keeping the mount alive for that subsystem either, because
+      the mount is what 997-e4v2 exists to retire. So staging moves OFF ~/src
+      FIRST, to the durable per-user state dir the CA already moved to
+      (998-3z6g: ${HOME}/.local/state/tillandsias/...), delivered to the guest
+      by the mechanism the packet's own criteria name, and only then does the
+      vz.rs half of 997-e4v2 land. Those two pins are LOAD-BEARING for a
+      subsystem the packet does not cover, not stale: the inverse of the
+      morning's stale-pin class (803-49re), and from inside an edit the two are
+      indistinguishable; only reading what the pinned string is FOR separates
+      them.
+      NOT MEASURED: whether WSL2 delivers its guest binary through the drvfs
+      mount yolanda deleted in slice 2; yolanda greps before its next slice.
+      Provenance: macbookair measured; filed by the coordinator; the vz.rs half
+      of 997-e4v2 depends on this packet.
+    exit_criteria:
+      - "the guest-binary staging path is derived from the per-user state dir (the 998-3z6g declaration), not from ~/src, on macOS and on Windows, and fetch-headless.sh reads it there; pre-fix result: FAILS (vz.rs:725 and :1021 name /home/forge/src)"
+      - "a mutation control proves it: with the ~/src share absent, the guest still stages the host's newer binary (the REFUSING-older message is the negative control, observed live); pre-fix result: FAILS (fallback only)"
+      - "the two pins at vz.rs:725 and :1021 are repointed with a doc comment saying what they are FOR, so the next retirement does not read them as stale; pre-fix result: FAILS"
+      - "997-e4v2's vz.rs half declares depends_on this packet and does not land before it; pre-fix result: FAILS (no dependency recorded)"
+    unscoreable: |
+      The pin is the deliverable: the litmus that proves staging off ~/src does
+      not exist yet, and naming it produces the forward reference 885-92iu
+      refuses. Intended shape: an arm in the macOS build litmus lane
+      (litmus:macos-tray-* under the osx spec) that greps vz.rs for the state-dir
+      path and for the absence of /home/forge/src, plus the live REFUSING-older
+      negative control in the smoke runbook's macOS §3.

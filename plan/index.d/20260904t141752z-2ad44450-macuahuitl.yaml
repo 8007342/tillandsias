@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: ca-bundle-moves-to-a-durable-directory
+    event:
+      type: note
+      ts: "2026-09-04T14:17:52Z"
+      agent_id: linux-macuahuitl-claude-20260904t141752z
+      host: macuahuitl
+      summary: |
+        MIGRATION INSTANCE found by the guard yoga wired this hour (check-ca-bind-migration.sh, cause 2 of 1022-y7kc): on macuahuitl 2026-09-04T14:5xZ it read `migrate:ca-bind-stale:1` — tillandsias-inference (exited since the 04:44Z fleet-restart shutdown) still bound /tmp/tillandsias-ca/intermediate.crt while the declared directory is ${HOME}/.local/state/tillandsias/ca; `podman start` would have failed with the crun stat error 975-rsgm exists to remove. The proxy was already on the durable path (recreated by --ensure-enclave at 12:5xZ). Remedy applied as documented: the stale definition removed (model data is a named volume and survives), the launch path recreates the container with the declared bind; guard reads ok afterwards. Note for the fleet: the guard was orphaned until this hour, so every host that migrated its CA under 998-3z6g and has an inference container created before the move carries the same stale bind until its next launch or removal; the guard now says so.

@@ -27,8 +27,60 @@ use crate::spec_index::SpecIndexEntry;
 use std::path::PathBuf;
 use std::time::Duration;
 
-/// Retrieval width per variant. The same k=6 the shell spec_answer path uses.
-const RETRIEVE_K: usize = 6;
+/// Retrieval width per variant — THE ONE the grader must also use.
+///
+/// ORDER 917-6iwv, 2026-09-04. This was `6`, and groundtruth.rs carried its own
+/// literal `6` at its `spec::top_k` call. Two independent constants for one
+/// property, and nothing compared them: the grader could certify a retrieval
+/// width the product does not serve, in either direction, silently. That is the
+/// same two-carriers-that-drift shape as the spec-index resolution ladder
+/// (1003-v3dc), where the shell block was pinned across three files and a fourth
+/// carrier in Rust was invisible to the guard. It is now one constant, exported,
+/// and groundtruth.rs consumes it.
+///
+/// WHY 8 AND NOT 6, measured rather than tuned. Two committed groundtruth cases
+/// failed at k=6 — the two JOIN questions, whose `why` says no single spec
+/// answers them. For BOTH, the authoritative chunk was retrieved and ranked
+/// SEVENTH: openspec/specs/forge-offline/spec.md at 0.69702 against a sixth
+/// place of 0.69793, and crates/tillandsias-headless/src/main.rs:4447-4458 (the
+/// chunk holding `fn effective_inference_tier`) at 0.68981. Neither was a
+/// retrieval failure and neither was a stale expectation — both expected spans
+/// were verified present in the tree and present in the index. The cutoff was
+/// one short. Graded over the whole committed corpus: k=6 -> 31/33, k=7 ->
+/// 31/33, k=8 -> 33/33, k=12 -> 33/33.
+///
+/// The scores are FLAT — 0.727 down to 0.671 across the top twelve — so a
+/// cutoff at six is not separating signal from noise, it is cutting a
+/// continuum. That is the argument for widening; "it makes the tests pass" is
+/// not, and would be tuning to the instrument.
+///
+/// NOT MEASURED, and it is the cost side: more retrieved context means more
+/// prompt at synthesis time, and yolanda measured on the WSL2 floor that at a
+/// weak model tier the DANGEROUS outcome is synthesis SUCCEEDING — a confident
+/// wrong answer carrying real citations — rather than timing out. This change
+/// widens retrieval on every host including that one. I did not measure answer
+/// QUALITY at k=8 on a floor host, only the graded corpus on this one.
+pub const RETRIEVE_K: usize = 8;
+
+/// The measured floor, enforced at COMPILE time rather than by a test.
+///
+/// A test can be skipped, filtered, or deleted; this cannot — lowering
+/// `RETRIEVE_K` below 8 fails the build with the reason attached. That is the
+/// right strength for this particular number, because the cost of getting it
+/// wrong is two committed groundtruth cases going red and the daily release
+/// blocking, which is exactly what happened on 2026-09-04.
+///
+/// It pins the FLOOR, not the value: raising k needs no permission from here,
+/// lowering it past the measured evidence has to be a deliberate edit to this
+/// line.
+const _: () = assert!(
+    RETRIEVE_K >= 8,
+    "RETRIEVE_K is below the measured floor of 8. The two committed JOIN \
+     groundtruth cases rank their authoritative chunk SEVENTH, so the corpus \
+     grades 31/33 at k<=7 and 33/33 at k>=8 (lenovinha 2026-09-04, \
+     nomic-embed-text). Lowering this re-reds litmus:expert-groundtruth-harness \
+     and blocks the release."
+);
 
 /// Endpoint + model configuration for the converged OpenAI-compatible
 /// protocol (D6). Bases are `/v1` bases, exactly as the endpoint envs are

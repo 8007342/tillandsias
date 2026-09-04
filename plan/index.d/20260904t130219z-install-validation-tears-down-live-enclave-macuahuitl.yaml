@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-install-validation-instance-stops-the-operators-live-vault-and-proxy-on-every-headless-exit
+    order: 1020-iicv
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [headless, shutdown, podman, build, install, enclave, fail-loud]
+    estimated_hours: 2
+    owned_files:
+      - build.sh
+      - crates/tillandsias-headless/src/main.rs
+    title: |
+      ./build.sh --install's five-second headless validation is a full application by the shutdown sweep's definition, so its graceful-stop phase stops the host's LIVE tillandsias-vault and tillandsias-proxy (owned, application-lifetime) on every install, and the operator's enclave is down until someone runs --ensure-enclave
+    context: |
+      MEASURED on macuahuitl 2026-09-04, three times (01:09Z, 12:41:52Z and
+      13:00:20Z-13:00:46Z). With 1019-ba6e fixed, the SIGKILL escalation now
+      honours ownership and the builder survives, but the graceful phase still
+      stops every container is_stack_managed_name accepts: on the 13:00Z
+      install, tillandsias-proxy exited 0 and tillandsias-vault exited 137
+      while ./build.sh --install returned 0 and printed "Headless mode works".
+      That is ownership working as designed for a real application exit and
+      wrong for the install validation, whose only purpose is to prove the
+      binary starts and stops; it should never touch a stack it did not
+      start. The 998-3z6g residual (the CA check moved before the runtime)
+      and this morning's two enclave outages on this host are this defect's
+      cost: after every local build the coordinator has to run
+      `tillandsias --ensure-enclave` by hand, and a host that does not know
+      that reads the next check-enclave-service-health as a mystery outage.
+      Two fix shapes, the claimer decides with a measurement: (a) the
+      validation runs with an environment the sweep respects (e.g. the
+      LITMUS_PODMAN_MODE seam the vault bootstrap already honours, or a
+      TILLANDSIAS_VALIDATION_RUN flag that makes the sweep a no-op for
+      containers this instance did not start); (b) the sweep records which
+      containers THIS instance started (a launch-in-flight marker already
+      exists: LAUNCH_IN_FLIGHT_PREFIX) and stops only those, leaving
+      application-lifetime containers started by another instance alone.
+      Provenance: coordinator measured and files (order 1019-ba6e's sibling).
+    exit_criteria:
+      - "./build.sh --install on a host with a live enclave leaves tillandsias-vault and tillandsias-proxy in the state they were in before, measured by podman ps before and after with timestamps; pre-fix result: FAILS (proxy exit 0 at 13:00:20Z, vault exit 137 at 13:00:46Z, install rc=0)"
+      - "a real headless exit (not the validation) still stops what it started; the unit test on the sweep's predicate keeps 1019-ba6e's arm green; pre-fix result: PASSES for the real exit, so this criterion is a regression guard and says so"
+      - "check-enclave-service-health.sh reads ok on the coordinator host right after an install without a manual --ensure-enclave; pre-fix result: FAILS"
+    unscoreable: |
+      The pin is the deliverable: the litmus that runs an install validation
+      beside a live enclave does not exist and would need podman; naming it
+      up front is the 885-92iu forward reference. Intended shape: a hermetic
+      arm in scripts/test-enclave-service-health.sh's acting suite that
+      launches the validation with the chosen seam and asserts no stop/kill
+      call reaches a container the instance did not start.

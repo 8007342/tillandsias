@@ -1403,6 +1403,59 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
         archive_check_log "spec-index-repo-relative-rung" "skipped"
     fi
 
+    # Order 1003-v3dc. The durable tier's LIVENESS test and the rung it falls
+    # back to. Wired beside the two guards above because it fails in the same
+    # invisible way they do: rung 3 used `[ -d ]` on a podman mountpoint, which
+    # under rootless podman fails with EACCES on a volume that exists, so
+    # "not permitted" was read as "absent" and the index silently demoted to
+    # rung 4 — which was `target/`, which `cargo clean` removes wholesale.
+    # Measured on lenovinha 2026-09-04: 23,154 embeddings in a GC target with
+    # `--where` reporting serving-exists=yes the whole time. The fixture drives
+    # the block EXTRACTED from the real carrier under a stub podman, and its
+    # EACCES arm uses a genuinely unreadable directory rather than a missing
+    # one, because a missing one cannot tell the two failures apart — which was
+    # the entire defect.
+    if [[ -f "scripts/test-spec-index-durable-tier-demotion.sh" ]]; then
+        if bash scripts/test-spec-index-durable-tier-demotion.sh 2>&1 | tee /tmp/spec-index-durable-tier-demotion.log; then
+            log_pass "Spec-index durable tier: not-permitted is distinguishable from absent, and rung 4 is not target/"
+            archive_check_log "spec-index-durable-tier-demotion" "pass" /tmp/spec-index-durable-tier-demotion.log
+        else
+            log_fail_tracked "spec-index-durable-tier-demotion" "Spec-index durable-tier demotion regression (see /tmp/spec-index-durable-tier-demotion.log)"
+            archive_check_log "spec-index-durable-tier-demotion" "fail" /tmp/spec-index-durable-tier-demotion.log
+        fi
+    else
+        log_fail_missing_guard "spec-index-durable-tier-demotion" "scripts/test-spec-index-durable-tier-demotion.sh"
+        archive_check_log "spec-index-durable-tier-demotion" "skipped"
+    fi
+
+    # Order 901-jtvi. A litmus step matched a tab-separated projection with
+    # `grep -qE '^hardware\t...'`. GNU grep's ERE does not define \t: it warns
+    # "stray \ before t" to stderr — which a -q step discards — and matches the
+    # bare letter, so the pattern could never match. It failed in the runner and
+    # passed every hand-check, because an interactive shell resolves a `grep`
+    # FUNCTION (ugrep) that DOES interpret \t, on three of three Linux hosts.
+    # Shell functions are not exported, so `bash -c` honestly disagrees with the
+    # author's next command. Three of us then spent an afternoon measuring pipe
+    # buffers for a SIGPIPE that never happened.
+    #
+    # Wired here rather than trusted to review for the reason the two sibling
+    # spec-index guards are: the failure is invisible at the surface everyone
+    # checks. The allowlist is measured against /usr/bin/grep, not recalled —
+    # \s and \w ARE GNU extensions and refusing them would red-flag ten
+    # committed lines, which is how a guard gets switched off.
+    if [[ -f "scripts/test-litmus-grep-escapes.sh" ]]; then
+        if bash scripts/test-litmus-grep-escapes.sh 2>&1 | tee /tmp/litmus-grep-escapes.log; then
+            log_pass "Litmus grep patterns use escapes GNU grep actually defines"
+            archive_check_log "litmus-grep-escapes" "pass" /tmp/litmus-grep-escapes.log
+        else
+            log_fail_tracked "litmus-grep-escapes" "Litmus grep-escape regression (see /tmp/litmus-grep-escapes.log)"
+            archive_check_log "litmus-grep-escapes" "fail" /tmp/litmus-grep-escapes.log
+        fi
+    else
+        log_fail_missing_guard "litmus-grep-escapes" "scripts/test-litmus-grep-escapes.sh"
+        archive_check_log "litmus-grep-escapes" "skipped"
+    fi
+
     # Order 765-mza8. Wired here, literally, for the same reason as the two
     # above. A dead `inputs:` glob is silent by construction: it cannot make a
     # test run, only skip, so nothing else in this suite would ever go red for

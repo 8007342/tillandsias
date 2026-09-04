@@ -1,0 +1,93 @@
+# @trace spec:methodology-accountability
+# @trace order:1001-q3zf
+#
+# Pins the repeat:/recur:/skippable: lines of scripts/cycle-metrics.sh (order
+# 1001-q3zf): the operator's "detect repeated work that just wastes work every
+# cycle, and expensive work that may be cached or skipped" instrument. The
+# timing log already held the answer (one gate step ran 361 times at 13.9 s,
+# never failing, on macuahuitl); these lines are REPORTERS over that log and
+# nothing else — no new emitter, no new log.
+#
+# THE FAILURES THIS PREVENTS.
+#   * A reporter that prints the grammar with the wrong arithmetic — the last
+#     row, call volume, a mean where a total was promised — hands a host a
+#     number that does not mean what the skill says it means. The fixture
+#     drives the reporter against logs with KNOWN sums and asserts every
+#     field exactly, and this spec re-asserts one recur: line inline so a
+#     fixture rewrite cannot quietly loosen it.
+#   * A step name that contains colons (step:..., check:litmus-pre-build)
+#     breaks a naive left-to-right split of an entry. The pinned rule is
+#     parse FROM THE RIGHT: the trailing :key=value fields never contain a
+#     colon; the step is everything before the first `:runs=`. The fixture
+#     pins it with a two-colon step name.
+#   * saved_ms_upper quoted as a saving. It is total_ms - avg_ms, an UPPER
+#     BOUND: the log carries no input identity, so nothing here can say a run
+#     WOULD have hit a cache. The header and methodology name it a bound; the
+#     arithmetic pinned here is the bound, not a measured saving.
+#   * A missing log rendered as zeros with a path, or a guessed number. All
+#     three lines must read source=absent, and the reporter must still exit 0
+#     — a metric that fails the cycle it measures is worse than none.
+#
+# Behavioural, not grep-only: the fixture and the reporter are EXECUTED and
+# their output inspected, so a rewrite that keeps the words and changes the
+# arithmetic still turns red. Timestamps are minted with jq relative to now,
+# never with date(1), so the same steps run on BSD userland and Git Bash.
+name: litmus:cycle-metrics-recurrence-shape
+spec: methodology-accountability
+phase: pre-build
+description: >
+  Execute the cycle-metrics recurrence fixture and the reporter itself against
+  synthetic timing logs and assert that the repeat:, recur: and skippable:
+  lines carry the pinned grammar with exact arithmetic (including a
+  colon-bearing step name parsed from the right), and that a missing log
+  reads source=absent on all three lines with exit 0.
+severity: high
+size: instant
+# inputs: named individually (order 765-mza8), not scripts/**, so an unrelated
+# script edit does not drag this test back in.
+inputs:
+  - scripts/cycle-metrics.sh
+  - scripts/test-cycle-metrics-recurrence.sh
+  - scripts/metrics-log-path.sh
+
+preconditions:
+  - repository root contains scripts/cycle-metrics.sh
+  - repository root contains scripts/test-cycle-metrics-recurrence.sh
+  - jq >= 1.7 is available in PATH (fromdateiso8601, todate and now are used for windowing; jq 1.6 lacks strptime on Windows and shifts fromdateiso8601 by the local UTC offset, which the reporter cancels but does not require)
+  - shell utilities (grep, mktemp, cut, sed) are available in PATH
+
+critical_path:
+  - step: "the recurrence fixture is green: exact arithmetic on all three lines, colon-bearing step parsed from the right, boundaries, windows, absent log, malformed rows, experts-only silence, sanitised step keys, unparsed cycle-start"
+    command: "bash scripts/test-cycle-metrics-recurrence.sh 2>&1 | tail -1"
+    timeout_ms: 30000
+    expected_behavior: "ok:cycle-metrics-recurrence-fixture:37"
+
+  - step: "the recur: line computes runs/total_ms/avg_ms/fail_pct over the window, not the last row and not call volume (inline fixture, exact string)"
+    # step a: 100 + 300 -> runs=2 total=400 avg=200, no failures; step b runs once
+    # and is NOT recurring, but its record still counts toward runs=3.
+    command: "F=$(mktemp); N=$(jq -n -r 'now - 60 | todate'); printf '{\"ts\":\"%s\",\"host\":\"h\",\"step\":\"a\",\"phase\":\"p\",\"duration_ms\":100,\"exit\":0}\\n{\"ts\":\"%s\",\"host\":\"h\",\"step\":\"a\",\"phase\":\"p\",\"duration_ms\":300,\"exit\":0}\\n{\"ts\":\"%s\",\"host\":\"h\",\"step\":\"b\",\"phase\":\"p\",\"duration_ms\":50,\"exit\":0}\\n' \"$N\" \"$N\" \"$N\" > $F; out=$(TILLANDSIAS_TIMING_LOG=$F TILLANDSIAS_PLAN_BIN=/nonexistent TILLANDSIAS_CYCLE_START_TS= TILLANDSIAS_RECUR_WINDOW_DAYS=7 scripts/cycle-metrics.sh 2>/dev/null | grep '^recur:'); want=\"recur: window=7d runs=3 steps=1 top3=a:runs=2:total_ms=400:avg_ms=200:fail_pct=0 source=$F\"; rm -f $F; [ \"$out\" = \"$want\" ] && echo 'ok: recur arithmetic exact' || { echo \"observed=$out expected=$want\"; echo 'fail: recur arithmetic exact'; }"
+    timeout_ms: 20000
+    expected_behavior: "ok: recur arithmetic exact"
+
+  - step: "a missing timing log reads source=absent with zeros and top3=- on repeat:, recur: and skippable:, and the reporter still exits 0"
+    command: "F=$(mktemp -u); out=$(TILLANDSIAS_TIMING_LOG=$F TILLANDSIAS_PLAN_BIN=/nonexistent TILLANDSIAS_CYCLE_START_TS= TILLANDSIAS_RECUR_WINDOW_DAYS=7 TILLANDSIAS_SKIP_MIN_RUNS=5 TILLANDSIAS_SKIP_FLOOR_MS=2000 scripts/cycle-metrics.sh 2>/dev/null); rc=$?; r=$(printf '%s\\n' \"$out\" | grep '^repeat:'); c=$(printf '%s\\n' \"$out\" | grep '^recur:'); s=$(printf '%s\\n' \"$out\" | grep '^skippable:'); if [ $rc -eq 0 ] && [ \"$r\" = 'repeat: window=3h steps=0 top3=- source=absent' ] && [ \"$c\" = 'recur: window=7d runs=0 steps=0 top3=- source=absent' ] && [ \"$s\" = 'skippable: candidates=0 floor_ms=2000 min_runs=5 top3=- source=absent' ]; then echo 'ok: absent honest on all three lines'; else echo \"observed rc=$rc [$r] [$c] [$s]\"; echo 'fail: absent honest on all three lines'; fi"
+    timeout_ms: 20000
+    expected_behavior: "ok: absent honest on all three lines"
+
+observability:
+  traces:
+    - "@trace spec:methodology-accountability"
+  expected_log: "cycle-metrics reports repeat:/recur:/skippable: over the timing log with pinned grammar and exact arithmetic"
+  log_fields:
+    spec: "methodology-accountability"
+    test: "cycle-metrics-recurrence-shape"
+
+failure_modes:
+  - "a recur:/skippable: entry is split on the first colon and a step name containing colons is mis-parsed"
+  - "the reporter prints the grammar with wrong sums, a mean where a total was promised, or the last row"
+  - "saved_ms_upper is quoted as a saving rather than the upper bound it is"
+  - "a missing timing log renders as zeros with a path, or the reporter exits non-zero"
+
+rollback:
+  on_failure: "inspect the repeat/recur/skippable block of scripts/cycle-metrics.sh (order 1001-q3zf) and scripts/test-cycle-metrics-recurrence.sh for grammar or arithmetic drift"
+  command: "bash scripts/test-cycle-metrics-recurrence.sh"

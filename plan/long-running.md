@@ -36,6 +36,7 @@ cycle that changes a listed packet's phase, status, or verification tally.
 | 829-dkuc | `periodic-deslopification-sweep` | ready | not yet recorded | not yet recorded |
 | 917-6iwv | `local-expert-system-in-toolboxes-on-accelerated-hosts` | ready | not yet recorded | not yet recorded |
 | 917-zkge | `per-host-nix-cache-rollout` | accumulating (v0.6 attractor — slices only, never drained/closed) | operator's release cadence | forge cold-land wall-time metric (headline); per-host ensure+verify rows as they land |
+| 1004-pg9p | `floor-tier-release-smoke-and-metrics` | standing (one floor smoke per published release; esme works it unleased by coordinator assignment while its credential is dead) | operator login on ESMERALDINHA (ledger writes) | per-release floor smoke report on at least one floor host; the three recurrence lines in each floor host's newest loop-status entry |
 
 Protocol summary (canonical: `long_running_packets` in
 `methodology/distributed-work.yaml`):

@@ -128,6 +128,33 @@ pub struct DeviceRecord {
     pub driver: Option<String>,
     pub usable: bool,
     pub unusable_reason: Option<String>,
+
+    /// ORDER 1011-zp59 — WHY A DEVICE IS NOT SCHEDULED, when the answer is
+    /// POLICY rather than capability.
+    ///
+    /// `usable` answers "can our lanes drive it", and for AMD that means a ROCm
+    /// runtime reporting a gfx agent. lenovinha's Cezanne Vega has no ROCm, so
+    /// `usable` is false and `unusable_reason` is `rocm-runtime-missing` —
+    /// literally true, and carrying a FALSE implication. Measured 2026-09-04:
+    /// the device enumerates through Vulkan as RADV RENOIR, 8.7 GiB, and places
+    /// qwen2.5:0.5b and nomic-embed-text with size_vram == size. It is not
+    /// broken. It is deliberately not scheduled, because the discrete RTX 3070
+    /// beside it wins decode by 4.3-4.9x and embeddings by 3.1x.
+    ///
+    /// `present-unusable` says "cannot be used". `usable` would say "go ahead
+    /// and place work here" — and a scheduler that believed it would lose 3-4x.
+    /// Both are wrong, so this is a THIRD fact rather than a different value of
+    /// either: the capability reading stays exactly what was measured, and the
+    /// policy reading travels beside it.
+    ///
+    /// DELIBERATELY NOT SET BY FLIPPING `usable`. The probe cannot verify a
+    /// Vulkan lane — it reads sysfs and a ROCm runtime — so claiming usability
+    /// from a policy check would assert on every host a capability that was
+    /// measured on one. An AMD iGPU beside a discrete card on a host with no
+    /// Vulkan userspace at all would inherit a claim nobody made.
+    #[serde(default)]
+    pub policy_unscheduled: Option<String>,
+
     pub lanes: Vec<String>, // ["container", "host-native"], ["host-native"], or []
     pub memory_bandwidth_gbps: Option<f64>,
     pub memory_bandwidth_source: String, // "soc-table" | "measured" | "unknown"
@@ -790,6 +817,7 @@ fn enumerate_cpu() -> DeviceRecord {
         driver: None,
         usable: true,
         unusable_reason: None,
+        policy_unscheduled: None,
         lanes: vec!["container".to_string(), "host-native".to_string()],
         memory_bandwidth_gbps: None,
         memory_bandwidth_source: "unknown".to_string(),
@@ -909,6 +937,70 @@ fn amd_gpu_disposition(
         true,
         vec!["host-native".to_string()],
         Some("container-lane-unverified".to_string()),
+    )
+}
+
+/// ORDER 1011-zp59 — is THIS integrated GPU left unscheduled by POLICY?
+///
+/// Returns the reason string when a discrete GPU is present AND SCHEDULABLE
+/// beside an integrated one, else `None`.
+///
+/// KEYED ON "A DISCRETE GPU IS PRESENT AND SCHEDULABLE", NEVER ON `tier ==
+/// gpu-cuda`, and the difference is not pedantic. `effective_inference_tier()`
+/// DOWNGRADES gpu-cuda to cpu when no CDI spec exists, and on that host the
+/// integrated GPU is the only accelerator there is — the best lane available,
+/// not a rejected one. Keying on the tier label would stamp
+/// `policy:discrete-gpu-preferred` on a device that had just become the
+/// preferred device, which is a worse lie than the one this packet fixes: the
+/// current row at least fails toward "unusable", while that would fail toward
+/// "correctly deprioritised" on a host with nothing else. The second fixture
+/// arm exists for exactly that case.
+///
+/// "Schedulable" here means what the matrix means by it: usable, with at least
+/// one lane. A discrete card that is present and unusable — no driver, no CDI —
+/// does not get to deprioritise anything.
+/// The call-site half of the discriminator, extracted so it can be TESTED.
+///
+/// `igpu_policy_unscheduled_reason` takes a boolean, so "no discrete card" and
+/// "a discrete card that cannot be scheduled" collapse to the same input there
+/// and a test of that function cannot tell them apart. This is where they are
+/// actually distinguished, and therefore where the CDI-absent host has to be
+/// pinned — asserting it one level up would be a test that passes for a reason
+/// other than the one it names.
+///
+/// SCHEDULABLE, not merely present: usable AND carrying at least one lane. A
+/// discrete card with no driver, or one whose lanes are all unproven, is not a
+/// better option than the integrated part and does not get to deprioritise it.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn discrete_gpu_is_schedulable(gpus: &[DeviceRecord]) -> bool {
+    gpus.iter().any(|g| {
+        g.device_class == "gpu"
+            && g.usable
+            && !g.lanes.is_empty()
+            && g.memory_model.as_deref() == Some("discrete")
+    })
+}
+
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn igpu_policy_unscheduled_reason(
+    this_device_is_integrated: bool,
+    discrete_present_and_schedulable: bool,
+) -> Option<String> {
+    if !this_device_is_integrated || !discrete_present_and_schedulable {
+        return None;
+    }
+    // The reason carries the MEASUREMENT, not just the verdict, because a bare
+    // `policy:discrete-gpu-preferred` is the same unfalsifiable shape as the
+    // reason string it replaces: a reader could not tell a measured preference
+    // from an assumed one. The "fully resident" clause is load-bearing — it
+    // says the losing arm placed COMPLETELY (size_vram == size), so the ratio
+    // is a fair GPU-vs-GPU comparison and not the partial-offload artefact it
+    // would otherwise be mistaken for.
+    Some(
+        "policy:discrete-gpu-preferred; measured lenovinha 2026-09-04, \
+         both models fully resident size_vram==size: decode 4.3-4.9x, \
+         embed 3.1x in favour of the discrete card"
+            .to_string(),
     )
 }
 
@@ -2333,6 +2425,7 @@ fn enumerate_gpus() -> Vec<DeviceRecord> {
             driver: None,
             usable: true,
             unusable_reason: None,
+            policy_unscheduled: None,
             lanes: vec!["host-native".to_string()],
             memory_bandwidth_gbps: None,
             memory_bandwidth_source: "unknown".to_string(),
@@ -2390,6 +2483,7 @@ fn enumerate_gpus() -> Vec<DeviceRecord> {
                 driver: None,
                 usable: true,
                 unusable_reason,
+                policy_unscheduled: None,
                 lanes,
                 memory_bandwidth_gbps: None,
                 memory_bandwidth_source: "unknown".to_string(),
@@ -2418,6 +2512,19 @@ fn enumerate_gpus() -> Vec<DeviceRecord> {
                 ("0x1002", Some("amdgpu")) => {
                     let (usable, lanes, unusable_reason) =
                         amd_gpu_disposition(rocm_gfx, kfd, render_node.is_some());
+                    // ORDER 1011-zp59. Computed BEFORE the record is built so
+                    // the memory model is read once and used for both the
+                    // `memory_model` field and the integrated/discrete test.
+                    let this_mm = memory_model_from_evidence(&read_gpu_memory_evidence(&pci_addr))
+                        .map(|m| m.to_string());
+                    // "Discrete AND schedulable" is read off the records the
+                    // NVIDIA arm already pushed — usable, with at least one
+                    // lane. A present-but-unusable discrete card deprioritises
+                    // nothing.
+                    let policy_unscheduled = igpu_policy_unscheduled_reason(
+                        this_mm.as_deref() == Some("unified"),
+                        discrete_gpu_is_schedulable(&gpus),
+                    );
                     gpus.push(DeviceRecord {
                         device_class: "gpu".to_string(),
                         vendor: "amd".to_string(),
@@ -2428,16 +2535,14 @@ fn enumerate_gpus() -> Vec<DeviceRecord> {
                         driver: Some("amdgpu".to_string()),
                         usable,
                         unusable_reason,
+                        policy_unscheduled,
                         lanes,
                         memory_bandwidth_gbps: None,
                         memory_bandwidth_source: "unknown".to_string(),
                         cpu_flags: None,
                         cpu_cores: None,
                         system_ram_gb: None,
-                        memory_model: memory_model_from_evidence(&read_gpu_memory_evidence(
-                            &pci_addr,
-                        ))
-                        .map(|m| m.to_string()),
+                        memory_model: this_mm,
                     });
                 }
                 // Order 855-wrr3: Intel now has a disposition of its own
@@ -2455,6 +2560,7 @@ fn enumerate_gpus() -> Vec<DeviceRecord> {
                         driver,
                         usable,
                         unusable_reason,
+                        policy_unscheduled: None,
                         lanes,
                         memory_bandwidth_gbps: None,
                         memory_bandwidth_source: "unknown".to_string(),
@@ -2486,6 +2592,7 @@ fn enumerate_gpus() -> Vec<DeviceRecord> {
                         driver,
                         usable: true,
                         unusable_reason: None,
+                        policy_unscheduled: None,
                         lanes: vec!["container".to_string(), "host-native".to_string()],
                         memory_bandwidth_gbps: None,
                         memory_bandwidth_source: "unknown".to_string(),
@@ -2547,6 +2654,7 @@ fn enumerate_gpus() -> Vec<DeviceRecord> {
                 // today, and inflating the class would place GPU work on a host
                 // that cannot run it — the opposite failure, and the worse one.
                 unusable_reason: Some(wsl2_paravirtual_gpu_reason().to_string()),
+                policy_unscheduled: None,
                 // No lane: unreachable from the container AND from host-native
                 // code in the guest, because no Vulkan ICD is installed to
                 // translate onto the dxg path.
@@ -2659,6 +2767,7 @@ fn windows_gpus() -> Option<Vec<DeviceRecord>> {
                     // ENUMERATED, not reachable: see the doc comment.
                     usable: false,
                     unusable_reason: Some("host-native-only-not-container-reachable".to_string()),
+                    policy_unscheduled: None,
                     lanes: vec!["host-native".to_string()],
                     memory_bandwidth_gbps: None,
                     memory_bandwidth_source: "unknown".to_string(),
@@ -2726,6 +2835,7 @@ fn windows_npus() -> Option<Vec<DeviceRecord>> {
                     driver: None,
                     usable: false,
                     unusable_reason: Some(reason.to_string()),
+                    policy_unscheduled: None,
                     lanes: vec!["host-native".to_string()],
                     memory_bandwidth_gbps: None,
                     memory_bandwidth_source: "unknown".to_string(),
@@ -2808,6 +2918,7 @@ fn enumerate_npus() -> Vec<DeviceRecord> {
                     driver: driver_name,
                     usable: false,
                     unusable_reason: Some("engine-missing".to_string()),
+                    policy_unscheduled: None,
                     lanes: vec!["host-native".to_string()],
                     memory_bandwidth_gbps: None,
                     memory_bandwidth_source: "unknown".to_string(),
@@ -4536,6 +4647,7 @@ mod tests {
             driver: None,
             usable: true,
             unusable_reason: reason.map(|r| r.to_string()),
+            policy_unscheduled: None,
             lanes: lanes.iter().map(|l| l.to_string()).collect(),
             memory_bandwidth_gbps: None,
             memory_bandwidth_source: "unknown".to_string(),
@@ -5322,6 +5434,7 @@ mod tests {
             driver: driver.map(|s| s.to_string()),
             usable: false,
             unusable_reason: Some("engine-missing".to_string()),
+            policy_unscheduled: None,
             lanes: vec!["host-native".to_string()],
             memory_bandwidth_gbps: None,
             memory_bandwidth_source: "unknown".to_string(),
@@ -5344,6 +5457,7 @@ mod tests {
             driver: None,
             usable: true,
             unusable_reason: None,
+            policy_unscheduled: None,
             lanes: vec!["host-native".to_string()],
             memory_bandwidth_gbps: None,
             memory_bandwidth_source: "unknown".to_string(),
@@ -5663,6 +5777,113 @@ mod tests {
         let host_wins = enumerate_engines_with(|bin| bin == "ollama", || true);
         assert_eq!(host_wins.len(), 1);
         assert_eq!(host_wins[0].lanes, None);
+    }
+
+    /// ORDER 1011-zp59 — THE TWO-HOST ARM, plus the one that makes it mean
+    /// something.
+    ///
+    /// The packet names scripts/test-capability-row-check.sh as the home for
+    /// this. It is not: that fixture drives check-capability-row.sh and tests
+    /// whether a row is PRESENT and FRESH, which is a different property from
+    /// how a device is CLASSIFIED, and it cannot reach this decision without
+    /// fabricating a sysfs tree for the Rust probe to walk. The discriminator
+    /// is a pure function, so it is pinned where it lives. Recorded rather than
+    /// silently relocated.
+    ///
+    /// Arm 3 is the one I asked for and the reason the tier label is not the
+    /// key. `effective_inference_tier()` downgrades gpu-cuda to cpu when no CDI
+    /// spec exists; on that host the iGPU is the ONLY accelerator. Keying on
+    /// `tier == gpu-cuda` would stamp "deliberately not scheduled, the discrete
+    /// card is better" onto the best device the host has. Arm 3 fails against
+    /// that implementation and passes against this one, which is the only
+    /// reason arms 1 and 2 are worth having.
+    #[test]
+    // @trace order:1011-zp59, spec:accel-capability-probe
+    fn igpu_beside_a_schedulable_discrete_card_is_policy_unscheduled() {
+        // ARM 1 — lenovinha. Integrated part, discrete card present and
+        // schedulable: the policy reason fires and carries its measurement.
+        let r = igpu_policy_unscheduled_reason(true, true);
+        let reason = r.expect("an iGPU beside a schedulable discrete card is policy-unscheduled");
+        assert!(
+            reason.starts_with("policy:discrete-gpu-preferred"),
+            "the reason must name the policy first; got {reason}"
+        );
+        assert!(
+            reason.contains("size_vram==size"),
+            "the reason must carry the fully-resident clause, or the ratio reads \
+             as a partial-offload artefact rather than a fair comparison; got {reason}"
+        );
+
+        // ARM 2 — yoga. The integrated GPU is the ONLY GPU. Classification is
+        // unchanged: nothing better exists, so nothing deprioritises it.
+        assert_eq!(
+            igpu_policy_unscheduled_reason(true, false),
+            None,
+            "a host whose only GPU is integrated must be untouched by this rule"
+        );
+
+        // ARM 3 — the discrete card itself is never policy-unscheduled by its
+        // own presence.
+        assert_eq!(igpu_policy_unscheduled_reason(false, true), None);
+    }
+
+    /// ORDER 1011-zp59 — THE CDI-ABSENT HOST. This is the arm that
+    /// discriminates this implementation from a tier-keyed one, and it has to
+    /// live here rather than beside arms 1-3: `igpu_policy_unscheduled_reason`
+    /// takes a BOOLEAN, so "no discrete card" and "a discrete card that cannot
+    /// be scheduled" are the same input to it and asserting the case there
+    /// would be a test passing for a reason other than the one it names.
+    #[test]
+    // @trace order:1011-zp59, spec:accel-capability-probe
+    fn a_present_but_unschedulable_discrete_card_deprioritises_nothing() {
+        fn gpu(usable: bool, lanes: Vec<String>, mm: &str) -> DeviceRecord {
+            DeviceRecord {
+                device_class: "gpu".to_string(),
+                vendor: "nvidia".to_string(),
+                name: "test dGPU".to_string(),
+                device_node: None,
+                fw_version: None,
+                driver: None,
+                usable,
+                unusable_reason: None,
+                policy_unscheduled: None,
+                lanes,
+                memory_bandwidth_gbps: None,
+                memory_bandwidth_source: "unknown".to_string(),
+                cpu_flags: None,
+                cpu_cores: None,
+                system_ram_gb: None,
+                memory_model: Some(mm.to_string()),
+            }
+        }
+
+        // The positive control: a usable discrete card with a lane IS
+        // schedulable, or the negatives below would pass vacuously.
+        assert!(
+            discrete_gpu_is_schedulable(&[gpu(true, vec!["container".to_string()], "discrete")]),
+            "a usable discrete card with a lane must count as schedulable"
+        );
+
+        // THE CDI-ABSENT HOST. effective_inference_tier() downgrades gpu-cuda
+        // to cpu when no CDI spec exists. The card is PRESENT and unusable, so
+        // the integrated part is the best lane the host has and must not be
+        // labelled deliberately-deprioritised.
+        assert!(
+            !discrete_gpu_is_schedulable(&[gpu(false, vec!["container".to_string()], "discrete")]),
+            "a present-but-unusable discrete card must not deprioritise the iGPU"
+        );
+
+        // Usable but with no lane proven is equally not a better option.
+        assert!(
+            !discrete_gpu_is_schedulable(&[gpu(true, vec![], "discrete")]),
+            "a discrete card with no lane must not deprioritise the iGPU"
+        );
+
+        // And an integrated card never deprioritises another integrated card.
+        assert!(
+            !discrete_gpu_is_schedulable(&[gpu(true, vec!["container".to_string()], "unified")]),
+            "only a DISCRETE card may deprioritise the integrated one"
+        );
     }
 
     #[test]

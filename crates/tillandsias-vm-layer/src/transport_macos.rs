@@ -599,7 +599,11 @@ impl VsockAcceptDelegate {
 pub struct HostVsockListener {
     device: Retained<VZVirtioSocketDevice>,
     port: u32,
-    rx: std::sync::mpsc::Receiver<RawFd>,
+    /// Taken by `forward_to`, which moves it onto the relay thread. `Option`
+    /// rather than a clone because a second reader would silently steal half
+    /// the accepted connections — two drains on one channel is a coin flip
+    /// per connection, which is worse than a refusal.
+    rx: Option<std::sync::mpsc::Receiver<RawFd>>,
     /// Held so the delegate outlives the listener registration. VZ does NOT
     /// retain a listener's delegate strongly enough to rely on; dropping it
     /// while the port is still registered would leave the framework calling
@@ -649,7 +653,7 @@ impl HostVsockListener {
         Ok(Self {
             device,
             port,
-            rx,
+            rx: Some(rx),
             _delegate: delegate,
             _listener: listener,
         })
@@ -660,7 +664,7 @@ impl HostVsockListener {
     /// Non-blocking on purpose: the accept happens on VZ's own queue, so this
     /// is a drain of what has already been accepted rather than a wait.
     pub fn try_accept(&self) -> Option<RawFd> {
-        self.rx.try_recv().ok()
+        self.rx.as_ref()?.try_recv().ok()
     }
 
     /// Block for the next accepted connection, bounded.
@@ -670,7 +674,13 @@ impl HostVsockListener {
     /// to time out. Contrast the guest side, where an absent host listener
     /// fails in 2.0s on its own (Linux VSOCK_DEFAULT_CONNECT_TIMEOUT, measured).
     pub fn accept_timeout(&self, budget: Duration) -> io::Result<RawFd> {
-        self.rx.recv_timeout(budget).map_err(|_| {
+        let Some(rx) = self.rx.as_ref() else {
+            return Err(io::Error::other(
+                "this listener is forwarding; accepted connections go to the relay, \
+                 not to a caller",
+            ));
+        };
+        rx.recv_timeout(budget).map_err(|_| {
             io::Error::new(
                 io::ErrorKind::TimedOut,
                 format!(
@@ -679,6 +689,27 @@ impl HostVsockListener {
                 ),
             )
         })
+    }
+
+    /// Hand every accepted connection to a relay that forwards it to a
+    /// host-native TCP service (order 830-xsk2).
+    ///
+    /// THIS IS WHAT MAKES THE LISTENER USEFUL. Without it the delegate
+    /// accepts, duplicates the fd, sends it to a channel nobody reads, and
+    /// the connection dies unserved — which from inside the guest is
+    /// indistinguishable from a service that answers nothing.
+    ///
+    /// Refuses on a second call rather than starting a second drain: two
+    /// readers on one channel split the accepted connections arbitrarily
+    /// between them, so half the guest requests would be served by a relay
+    /// pointed somewhere else.
+    pub fn forward_to(&mut self, target: std::net::SocketAddr) -> io::Result<()> {
+        let rx = self
+            .rx
+            .take()
+            .ok_or_else(|| io::Error::other("this listener is already forwarding"))?;
+        let _ = crate::host_vsock_forward::spawn_forwarder(rx, target);
+        Ok(())
     }
 
     /// The port this listener is registered on.

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: memoise-the-three-gate-steps-two-hosts-pay-without-information
+    event:
+      type: note
+      ts: "2026-09-04T14:00:31Z"
+      agent_id: linux-macuahuitl-claude-20260904t140030z
+      host: macuahuitl
+      summary: |
+        MEMO KEY MOVED, before anyone memoises (yoga 2026-09-04, relayed by the coordinator): 1003-444f closed at 1e82211f8 and ./build.sh --check now runs `cargo test --workspace --no-fail-fast -- --test-threads=1` through the existing ratchet (ran 331 -> 2199, gate 103 s -> 137 s on yoga). The skippable candidate `step:running-plan-ledger-tests-cargo-test-p-tillandsias-plan-all-targ` (130 runs on yoga, 316 here) names an invocation that NO LONGER EXISTS; its history is the history of a replaced step, so a memo keyed on it would key on a step that never fires. The replacement step has a different name and cost profile (the gate's largest single item now). Consequences for this packet: (1) the three-candidate set must be re-read from post-1e82211f8 entries before the memo is designed (min_runs=5 on the NEW step, per host); (2) the input-scoped key for the workspace-test step is the derived crate set plus each crate's source digest, which 1003-444f now provides; (3) on the floor the gate cost rises with the workspace suite (esme's --check was 18m29s before this change), so the memo's value is largest exactly where 1004-pg9p measures, and that host cannot emit a skippable line for ~20 h. Sequencing unchanged: claimable now that 1003-444f is closed, but the first act is the re-read.

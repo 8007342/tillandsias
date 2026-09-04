@@ -157,6 +157,11 @@ const USAGE: &str = concat!(
     "                                     schedulable (device_class, lane, engine) triples, and its\n",
     "                                     present-but-unusable devices. Distinct from `capabilities`\n",
     "                                     above, which reports THIS BINARY's subcommands.\n",
+    "                                     `--by-hardware` (805-r98w) re-keys it on (fingerprint,\n",
+    "                                     substrate) and reports control=yes|no per hardware group,\n",
+    "                                     so a caller can ASK whether a substrate control exists\n",
+    "                                     rather than assume one; unidentified rows are listed, never\n",
+    "                                     bucketed together.\n",
     "           experts-probe             ORDER 718-ja7g. Which expert TIER is live on this host, as\n",
     "                                     ONE line: l0 (file-backed, always ready) / l1 (retrieval —\n",
     "                                     needs BOTH an embeddings endpoint and a built index) / l2\n",
@@ -475,6 +480,117 @@ const USAGE: &str = concat!(
     "           loop-status-fragments      ORDER 582-nqw5. Report the loop_status.d/ overlay: live\n",
     "                                     fragments, malformed ones, and whether compaction is eligible\n"
 );
+
+/// Read a cycle fragment for `loop-status-append`, refusing every input shape
+/// that cannot answer promptly (order 1004-8vkv).
+///
+/// THREE OUTCOMES USED TO BE ONE. `loop-status-append <file>` dropped the
+/// positional, fell through to stdin, and then behaved differently depending on
+/// what fd 0 happened to be:
+///   * an inherited SOCKET (a forge agent's stdin, by construction) — blocked
+///     forever. Measured by lenovinha 2026-09-04: 26 MINUTES at 0.0% CPU in
+///     unix_stream_data_wait before /proc was consulted. Nothing in the cycle
+///     times out on it, and a host stuck there is indistinguishable from a host
+///     mid-analysis.
+///   * a CLOSED stdin — reported "fragment carries no `## Cycle` section", which
+///     is a confident statement about a file the tool never opened, and sends
+///     the reader to edit a fragment that was fine.
+///
+/// SO THE FIX IS NOT "ALSO ACCEPT A PATH". It is that every way of supplying
+/// input either produces bytes or says why it cannot, in bounded time.
+///
+/// WHY A THREAD AND NOT AN fstat ON THE FD TYPE. Refusing by file type
+/// (socket/tty/char-device) sounds tighter and is wrong twice: a FIFO is a
+/// "pipe" and blocks exactly like a socket when nothing is writing, and a
+/// socket that DOES have data is perfectly readable. What actually matters is
+/// whether the bytes arrive, so this waits on the read with a deadline instead
+/// of predicting from the descriptor's kind. A regular file or a live pipe
+/// returns instantly and is unaffected.
+///
+/// The reader thread is deliberately left blocked when the deadline expires:
+/// it holds only stdin, the process exits on the next line, and there is no
+/// portable way in std to cancel a blocking read. Detaching it is the honest
+/// cost of not taking a libc dependency for one poll(2).
+fn read_loop_status_fragment(args: &[String]) -> String {
+    use std::io::IsTerminal as _;
+
+    const STDIN_DEADLINE: std::time::Duration = std::time::Duration::from_secs(5);
+
+    let from_file = |f: &str| -> String {
+        match std::fs::read_to_string(f) {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("error: read {f}: {e}");
+                std::process::exit(1);
+            }
+        }
+    };
+
+    if let Some(i) = args.iter().position(|a| a == "--file")
+        && let Some(f) = args.get(i + 1)
+    {
+        return from_file(f);
+    }
+
+    // A BARE POSITIONAL IS HONOURED, not dropped. The usage line already
+    // advertised `--file`, so the finder was not wrong to expect a path form to
+    // exist — they used the one that reads naturally. Refusing would also have
+    // satisfied the criterion; honouring it is better, because the invocation
+    // that cost 26 minutes now simply works.
+    //
+    // Only a value that EXISTS as a file is taken, so a future flag's argument
+    // is never mistaken for a fragment; anything else falls through to stdin
+    // and is reported there.
+    let positional = args
+        .iter()
+        .skip(1)
+        .find(|a| !a.starts_with('-') && Path::new(a.as_str()).is_file());
+    if let Some(f) = positional {
+        return from_file(f);
+    }
+
+    let stdin = std::io::stdin();
+    if stdin.is_terminal() {
+        eprintln!(
+            "error: loop-status-append has no input — stdin is a terminal, and this \
+             command does not prompt.\n  Supply the fragment one of these ways:\n    \
+             tillandsias-plan loop-status-append < fragment.md\n    \
+             tillandsias-plan loop-status-append --file fragment.md\n    \
+             tillandsias-plan loop-status-append fragment.md"
+        );
+        std::process::exit(2);
+    }
+
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::Builder::new()
+        .name("loop-status-stdin".into())
+        .spawn(move || {
+            let mut raw = String::new();
+            let r = std::io::Read::read_to_string(&mut std::io::stdin(), &mut raw);
+            let _ = tx.send(r.map(|_| raw));
+        })
+        .expect("spawn the stdin reader");
+
+    match rx.recv_timeout(STDIN_DEADLINE) {
+        Ok(Ok(raw)) => raw,
+        Ok(Err(e)) => {
+            eprintln!("error: read stdin: {e}");
+            std::process::exit(1);
+        }
+        Err(_) => {
+            eprintln!(
+                "error: loop-status-append read nothing from stdin within {}s and refused to \
+                 keep waiting.\n  fd 0 is open but no one is writing to it — an inherited \
+                 socket or an idle pipe.\n  This is the 26-minute silent hang of order \
+                 1004-8vkv, stopped early on purpose.\n  Supply the fragment explicitly \
+                 instead:\n    tillandsias-plan loop-status-append --file fragment.md\n    \
+                 tillandsias-plan loop-status-append < fragment.md",
+                STDIN_DEADLINE.as_secs()
+            );
+            std::process::exit(2);
+        }
+    }
+}
 
 fn usage() -> ! {
     eprintln!("{USAGE}");
@@ -1921,20 +2037,20 @@ fn run_loop_status(args: &[String], base: &Path) {
             // heading), and writes it as a NEW fragment file — the concurrent
             // write that used to conflict on the shared base now lands on a
             // per-host path.
-            let mut raw = String::new();
-            if let Some(i) = args.iter().position(|a| a == "--file")
-                && let Some(f) = args.get(i + 1)
-            {
-                raw = match std::fs::read_to_string(f) {
-                    Ok(r) => r,
-                    Err(e) => {
-                        eprintln!("error: read {}: {e}", f);
-                        std::process::exit(1);
-                    }
-                };
-            } else if let Err(e) = std::io::Read::read_to_string(&mut std::io::stdin(), &mut raw) {
-                eprintln!("error: read stdin: {e}");
-                std::process::exit(1);
+            let raw = read_loop_status_fragment(args);
+            // 1004-8vkv: an EMPTY read must not be reported as a malformed
+            // fragment. "carries no `## Cycle` section" against zero bytes is a
+            // confident statement about a file that was never opened, and it
+            // sent the finder to edit a fragment that was fine.
+            if raw.trim().is_empty() {
+                eprintln!(
+                    "error: loop-status-append read 0 bytes — there was no fragment to \
+                     append.\n  This is not a problem with your fragment's headings; \
+                     nothing was read at all.\n  Supply it explicitly:\n    \
+                     tillandsias-plan loop-status-append --file fragment.md\n    \
+                     tillandsias-plan loop-status-append < fragment.md"
+                );
+                std::process::exit(2);
             }
             // 719-kgr5: the fragment NAME carries this stamp and fragments fold
             // in name order, so an invented value here reorders the folded
@@ -3802,6 +3918,62 @@ fn main() {
                 return;
             }
 
+            // ORDER 805-r98w, second half. `--by-hardware` is the SUBSTRATE-
+            // CONTROL projection: the matrix keyed on (hardware fingerprint,
+            // substrate) instead of on hostname, so rows sharing a machine
+            // model sit together and the substrate is the only free variable
+            // between them.
+            //
+            // WHY THIS ARM EXISTS AT ALL. `fragments::group_by_hardware` and
+            // `HardwareGroup::isolates_substrate` landed with four tests and
+            // NO production caller — the grouping was computable but not
+            // reachable, so every actual reader of the matrix still keyed on
+            // hostname and the control the order was filed to obtain could not
+            // be asked for. A function nobody can invoke does not deliver the
+            // capability; this is the face that does.
+            //
+            // WHAT IT PRINTS, and why the negative answer is the point:
+            //   hardware  <fingerprint>  loci=<n>  control=<yes|no>  <locus:host ...>
+            //   unidentified  <locus>:<host_id>
+            // `control=no` is the expected reading today. yolanda and yoga were
+            // asserted for weeks to be a twin pair and are not — hw2-f4e46bd13a0220cf
+            // against hw2-e94acbd479cb8b80, different SKU, core counts and iGPU
+            // bin. A caller must be able to ASK whether a control exists and be
+            // told no, rather than read a grouping and assume one does; that
+            // assumption is the whole defect this order removed.
+            //
+            // Unidentified rows are listed, never bucketed. A document with no
+            // fingerprint means the probe refused to identify the machine, and
+            // two machines that both failed to identify themselves are not
+            // thereby the same machine — grouping them would manufacture the
+            // false twin this order exists to prevent. Absent and
+            // "identified as nothing" are different facts (843-624y).
+            if args.iter().any(|a| a == "--by-hardware") {
+                let (groups, unidentified) =
+                    tillandsias_plan::fragments::group_by_hardware(&matrix);
+                for g in &groups {
+                    let obs = g
+                        .observations
+                        .iter()
+                        .map(|(locus, host)| format!("{locus}:{host}"))
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    let control = if g.isolates_substrate() { "yes" } else { "no" };
+                    println!(
+                        "hardware\t{}\tloci={}\tcontrol={}\t{}",
+                        g.fingerprint,
+                        g.observations.len(),
+                        control,
+                        obs
+                    );
+                }
+                for (locus, host) in &unidentified {
+                    println!("unidentified\t{locus}:{host}");
+                }
+                log_cli_usage(&subcommand, "answered", start_time.elapsed().as_millis());
+                return;
+            }
+
             // ORDER 861-n7f5. `--cpu-flags` is the ENGINE-DISPATCH projection:
             // one line per distinct host_id, sorted, as
             //   <host_id>\t<flags-csv>
@@ -3989,6 +4161,31 @@ fn main() {
                 // an engineering problem someone can see.
                 if let Some(devices) = entry.document["devices"].as_sequence() {
                     for d in devices {
+                        // ORDER 1011-zp59. A device left unscheduled by POLICY
+                        // belongs on this line whatever `usable` says, and it
+                        // is reported with ITS OWN reason.
+                        //
+                        // lenovinha's Vega has no ROCm runtime, so `usable` is
+                        // false and the unusable arm below would print
+                        // `present-unusable (rocm-runtime-missing)` — literally
+                        // true, and read by everyone as "this device does not
+                        // work". It works: measured through Vulkan, fully
+                        // resident. It is simply beaten 3-5x by the discrete
+                        // card beside it and is left off on purpose.
+                        //
+                        // Printing the policy reason here rather than flipping
+                        // `usable` upstream keeps the capability reading honest
+                        // (no Vulkan lane was probed) while making the row's
+                        // IMPLICATION true, which is the whole defect.
+                        if let Some(policy) = d["policy_unscheduled"].as_str() {
+                            println!(
+                                "  present-unscheduled: {}/{} ({})",
+                                d["device_class"].as_str().unwrap_or("?"),
+                                d["name"].as_str().unwrap_or("?"),
+                                policy
+                            );
+                            continue;
+                        }
                         if d["usable"].as_bool() != Some(true) {
                             continue;
                         }
@@ -4040,6 +4237,15 @@ fn main() {
                 // shows only what is schedulable cannot tell them apart.
                 if let Some(devices) = entry.document["devices"].as_sequence() {
                     for d in devices {
+                        // ORDER 1011-zp59. A policy-unscheduled device was
+                        // already reported above with its own reason. Falling
+                        // through to here would print BOTH lines for one
+                        // device, and the `present-unusable` one is exactly the
+                        // false implication this order removes — so the row
+                        // would still carry it, now contradicted two lines up.
+                        if d["policy_unscheduled"].as_str().is_some() {
+                            continue;
+                        }
                         if d["usable"].as_bool() == Some(false) {
                             // `os_status` is printed BESIDE the reason, not
                             // folded into it, because they are two independent

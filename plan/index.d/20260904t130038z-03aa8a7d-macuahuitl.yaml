@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: smoke-runbook-assumes-bash-and-has-no-windows-lane
+    event:
+      type: progress
+      ts: "2026-09-04T13:00:38Z"
+      agent_id: linux-macuahuitl-claude-20260904t130038z
+      host: macuahuitl
+      summary: |
+        IMPLEMENTED by the coordinator (macuahuitl, 2026-09-04 meta cycle 12:39Z), status implemented rather than completed because two criteria need hosts this one is not. WHAT LANDED in skills/smoke-curl-install-and-test-e2e/SKILL.md: (1) §0 item 0 declares the shell and gives every bash block a first-line guard `[ -n "${BASH_VERSION:-}" ] || { ...; exit 2; }` (6 blocks carry it); every captured-status assertion now also refuses an EMPTY capture (`test -n "$RC" && test "$RC" -eq 0`), and §3's `echo "init exit"` became an assertion. (2) §1 Windows: the `irm | iex | Tee-Object` block asserts the install exit, records install_exit=, asserts the tray resolves on PATH, and asserts `tillandsias-tray.exe --version` carries the release tag EXACTLY (the flag exists: windows-tray main.rs:142). (3) §3 "Windows" block: `--provision-once` (never `--provision`), destruction marker + fresh-distro assertion (wsl -l -q contains tillandsias; ext4.vhdx postdates the marker), `--status-once --json` POLLED to phase Ready within 60 s, then `--diagnose --json` LAST with an exit assertion and a conditional `.version` check; the not-durable-Ready note from esme's finding sits under it so a later exit 1 is not filed as a provision failure. (4) Host Matrix Windows row names the block. Yolanda's include_str pin strings survive (vault-shamir-share-v1=3, vault-root-token-v1=3, tillandsias-vm-uuid=2; cargo test -p tillandsias-windows-tray --bins green after the edit). PRE-FIX RESULTS: criteria 1, 3, 4, 5, 6 FAILS (no guard, no Windows block, no assertions, matrix row named no block). NOT MEASURED HERE, and why the status is implemented: criterion 2 (a zsh caller stops at the guard) — zsh is not installed on macuahuitl; the guard was exercised under bash only; pirria (zsh) runs the negative control. Criterion 3's block has never executed on a Windows host; yolanda or esme runs §1 and §3 as written on the next Windows smoke and pastes 01-install-exit.txt, 03-provision-exit.txt, 03-status-summary.txt and 03-diagnose.json. Completion follows those two runs.

@@ -1,0 +1,59 @@
+# ORDER 1004-8vkv. Pin the INPUT handling of `loop-status-append` — the write
+# every host makes at the end of every cycle.
+#
+# The defect this pins was invisible twice over. A bare path argument was
+# silently dropped, the command fell through to stdin, and what happened next
+# depended on what fd 0 happened to be: an inherited socket (a forge agent's
+# stdin, by construction) blocked FOREVER — 26 minutes at 0.0% CPU in
+# unix_stream_data_wait, measured by lenovinha on 2026-09-04 — while a closed
+# stdin produced "fragment carries no `## Cycle` section", a confident
+# statement about a file the tool had never opened.
+#
+# Neither outcome failed loudly, and a host sitting in the first one is
+# indistinguishable from a host mid-analysis, so nothing in the cycle could
+# tell the difference. That is why the pin is behavioural: it runs the real
+# binary under a bounded timeout with nothing writing to fd 0, and treats a
+# timeout kill as the failure it is.
+#
+# Exit-criterion mapping: step (b) is criterion 1 (a bare positional is never
+# dropped); step (c) is criterion 2 (a stdin nobody is writing to is refused in
+# bounded time, never waited on); step (d) is criterion 3 (an empty read names
+# itself); step (e) is the positive control without which the rest are
+# satisfied by a binary that refuses everything.
+name: litmus:loop-status-append-input-shape
+spec: methodology-accountability
+phase: pre-build
+description: >
+  Pin loop-status-append's input handling: a bare path argument is honoured
+  rather than silently dropped, a stdin with no writer is refused within a
+  bounded time instead of blocking forever, an empty read reports its byte
+  count rather than blaming the fragment's headings, and both sanctioned
+  explicit forms still write a fragment.
+severity: high
+size: instant
+
+preconditions:
+  - repository contains scripts/test-loop-status-append-input.sh
+  - repository contains crates/tillandsias-plan/src/main.rs
+  - a built tillandsias-plan binary, or a cargo toolchain to build one
+
+critical_path:
+  - step: "SHAPE: the fixture exists and is executable"
+    command: "test -x scripts/test-loop-status-append-input.sh && echo 'ok: fixture-present'"
+    timeout_ms: 5000
+    expected_behavior: "ok: fixture-present"
+
+  - step: "BEHAVIOURAL: every input arm passes against the real binary (bare path honoured, blocking stdin refused bounded, empty read named, both explicit forms still write)"
+    command: "bash scripts/test-loop-status-append-input.sh"
+    timeout_ms: 120000
+    expected_behavior: "PASS: loop-status-append input handling 6/6 (1004-8vkv)"
+
+  - step: "ANTI-REGRESSION: the bounded-read path is present in the dispatch, not a comment claiming it"
+    command: "grep -q 'recv_timeout' crates/tillandsias-plan/src/main.rs && grep -q 'read_loop_status_fragment' crates/tillandsias-plan/src/main.rs && echo 'ok: bounded-read-wired'"
+    timeout_ms: 5000
+    expected_behavior: "ok: bounded-read-wired"
+
+  - step: "ANTI-REGRESSION: the no-Cycle refusal names what it read, so an empty read and a malformed fragment are different sentences"
+    command: "grep -q 'first line {first:?}' crates/tillandsias-plan/src/loop_status.rs && echo 'ok: refusal-names-input'"
+    timeout_ms: 5000
+    expected_behavior: "ok: refusal-names-input"

@@ -163,22 +163,35 @@ for f in scripts/diagnose-proxy.sh scripts/run-forge-project.sh scripts/orchestr
     grep -nE '^[[:space:]]*openssl |\| openssl |\$\(openssl ' "$ROOT/$f" | grep -vE ':[[:space:]]*#' | grep -q . \
         && bad "$f still calls openssl bare"
 done
-ok "the openssl callers take the dispatch"
-
 # ── 4e. THE openssl WRITE-PATH CAVEAT, recorded where a converter will hit it. ─
 # jq is a pure filter: stdin in, stdout out, namespace-agnostic. openssl WRITES
 # FILES, so a toolbox fallback only works where the container shares the write
-# path. VERIFIED on lenovinha 2026-08-26 that /tmp is shared bidirectionally,
-# and every CERTS_DIR in the three converted callers is under /tmp. This arm
-# fails if one of them starts writing somewhere else, because that silently
-# lands the cert where the caller cannot find it.
+# path. This arm fails if a caller starts writing somewhere unshared, because
+# that silently lands the cert where the caller cannot find it.
+#
+# TWO SHARED ROOTS ARE ALLOWED, EACH MEASURED RATHER THAN ASSUMED:
+#   /tmp                  — verified bidirectionally on lenovinha 2026-08-26.
+#   $TILLANDSIAS_CA_DIR   — the single-sourced CA path (998-3z6g), which is
+#                           HOME-relative since the bundle left /tmp. Verified
+#                           bidirectionally on yoga 2026-09-04: a file written
+#                           by the host under $HOME/.local/state/tillandsias
+#                           was read inside `toolbox run`, and an append made
+#                           inside the toolbox was read back on the host.
+#
+# 998-3z6g MOVED THE CA OUT OF /tmp AND THIS ARM WENT RED, which is the arm
+# doing its job — a CERTS_DIR moved and the pin caught it. What it could not
+# know is whether the NEW root is shared, and that question is answered by
+# measurement above, not by widening the pattern because the tests are red.
+# Adding a third root means running the same probe for it; an unmeasured root
+# belongs in the reject arm no matter how plausible it looks.
 for f in scripts/diagnose-proxy.sh scripts/run-forge-project.sh scripts/orchestrate-enclave.sh; do
     _cd="$(grep -oE 'CERTS_DIR="?[^"]*"?' "$ROOT/$f" | head -1)"
     case "$_cd" in
-        *mktemp*|*/tmp/*) ;;
+        *mktemp*|*/tmp/*|*TILLANDSIAS_CA_DIR*) ;;
         *) bad "$f writes certs to a path that may not be shared with the toolbox: $_cd" ;;
     esac
 done
+ok "every converted openssl caller writes under a MEASURED shared root (/tmp or the CA dir)"
 ok "every converted openssl caller writes under /tmp (shared with the toolbox)"
 
 # ── 4f. DEPTH: a caller ONE LEVEL DOWN must still resolve the lib (914-ahsy). ─

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-gate-runs-two-crates-tests-and-names-none-of-the-rest
+    field: status
+    value: completed
+    ts: "2026-09-04T13:53:34Z"
+    host: yoga
+
+events:
+  - packet_id: the-gate-runs-two-crates-tests-and-names-none-of-the-rest
+    event:
+      type: completed
+      ts: "2026-09-04T13:53:34Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: 3330dbbdf: --check runs cargo test --workspace --no-fail-fast --test-threads=1 through the baseline ratchet; ran=331->2199 tolerated=1 stale=0; C4 controlled both directions (pre rc=0, post rc=1 on the same probe); litmus:build-ci-dispatch-shape gains workspace-derived and serial/to-completion arms, dev-build instant 11/11
+  - packet_id: the-gate-runs-two-crates-tests-and-names-none-of-the-rest
+    event:
+      type: note
+      ts: "2026-09-04T13:53:34Z"
+      host: yoga
+      summary: |-
+        all four filed criteria measured FAILS pre-fix and PASS post-fix; C5 moved to the outcome as a constraint per the coordinator; interference filed as 1021-hf9e

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: plan-only-push-lane-refuses-a-legitimate-attestation-append
+    event:
+      type: note
+      ts: "2026-09-04T14:15:19Z"
+      agent_id: linux-macuahuitl-claude-20260904t141519z
+      host: macuahuitl
+      summary: |
+        COUPLING (coordinator, from macbookair 2026-09-04): 1024-c3h3's interim remedy for ghost evidence SHAs (land first, then push the completed fragment through the plan-only lane) depends on this lane accepting attestation-shaped appends; on the macOS lane it refuses them, so a Mac host falls back to the full gate silently. Not a blocker for the ordering change, which holds through any lane, but whoever closes this packet should re-check the remedy path on macOS, and whoever closes 1024-c3h3 should not assume the lane.

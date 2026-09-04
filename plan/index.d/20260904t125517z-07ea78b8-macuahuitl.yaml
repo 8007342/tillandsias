@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: plan-only-push-lane-refuses-a-legitimate-attestation-append
+    event:
+      type: note
+      ts: "2026-09-04T12:55:17Z"
+      agent_id: linux-macuahuitl-claude-20260904t125517z
+      host: macuahuitl
+      summary: |
+        LINUX AT HEAD IS GREEN, RELEASED BACK TO READY AS A macOS-LANE REPRODUCTION (coordinator, macuahuitl 2026-09-04, meta cycle 12:39Z). Measured on the merged union (osx-next + windows-next into linux-next, 447e74090): the accept arm at litmus-plan-only-push-lane-shape.yaml:81 run directly prints "ok: lane-accepts-attestation-append" rc=0, and the full methodology-accountability spec via scripts/run-litmus-test.sh --phase pre-build --size instant runs 121 steps with 0 [FAIL] (rc=0). So the refusal macbookair measured ("check-mo-full-attestations refused (full gate required)") does not reproduce on Linux at HEAD. Regimes differ in: bash 3.2 and BSD userland on macOS; the plan binary the fixture resolves (mf_plan_binary); git version. Next action, for a macOS host: run the same arm on the Mac, paste the FULL stderr of check-mo-full-attestations.sh from inside the fixture (the hook prints only "refused"), and state which of the checker's refusal verdicts fired. pickup_role changes to macos with this note; the coordinator's claim is released.

@@ -76,9 +76,18 @@ critical_path:
     # The argv-with-subcommand path the runtime layer uses. Pin
     # both the method signature AND the `\"run\".to_string()` push
     # so a regression that removes the subcommand surfaces fast.
-    command: "grep -F 'pub fn build_run_argv(&self) -> Vec<String>' crates/tillandsias-podman/src/container_spec.rs && grep -F 'vec![\"run\".to_string()]' crates/tillandsias-podman/src/container_spec.rs"
+    command: "grep -F 'pub fn build_run_argv(&self) -> Result<Vec<String>, crate::policy::LaunchArgvError>' crates/tillandsias-podman/src/container_spec.rs && grep -F 'vec![\"run\".to_string()]' crates/tillandsias-podman/src/container_spec.rs"
     timeout_ms: 3000
     expected_behavior: "build_run_argv"
+
+  - step: "NEGATIVE CONTROL (972-6vaj): the pre-hardening signature returning a bare Vec is GONE — a revert to the escape-hatch form must FAIL here"
+    # The pin above follows 972-6vaj, which made build_run_argv REFUSE a
+    # policy-invalid argv (Result, not Vec). This control keeps the pin honest:
+    # if someone restores the bare-Vec form, the positive step's grep would
+    # miss and THIS step names why, instead of the pin silently drifting.
+    command: "if grep -F 'pub fn build_run_argv(&self) -> Vec<String>' crates/tillandsias-podman/src/container_spec.rs; then echo 'fail: bare-vec build_run_argv is back (972-6vaj reverted)'; else echo 'ok: bare-vec signature absent'; fi"
+    timeout_ms: 3000
+    expected_behavior: "ok: bare-vec signature absent"
 
   - step: ">=6 ContainerSpec unit tests pinned by name (each Req scenario)"
     # Pinning by test-name presence catches a regression that
@@ -123,7 +132,7 @@ rollback:
     initialising all 6 hardening defaults to `true`; the 5 fluent-
     chain builder methods (`detached` / `interactive` / `tty` /
     `name` / `hostname`); `pub fn build_run_args(&self) ->
-    Vec<String>` + `pub fn build_run_argv(&self) -> Vec<String>`
+    Vec<String>` + `pub fn build_run_argv(&self) -> Result<Vec<String>, LaunchArgvError>` (972-6vaj: it REFUSES a policy-invalid argv)
     with `vec!["run".to_string()]` prefix; >=6 named unit tests
     covering the spec scenarios.
   command: "grep -nE 'pub struct ContainerSpec|pub fn new\\(image|pub fn (detached|interactive|tty|name|hostname|build_run_args|build_run_argv)\\(|fn (default_spec_includes_immutable|persistent_web_profile|build_run_argv_prefixes_run|raw_option_passthrough_is_narrowly_allowlisted)' crates/tillandsias-podman/src/container_spec.rs | head -20"

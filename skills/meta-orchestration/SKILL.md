@@ -1787,9 +1787,11 @@ Only `linux_mutable` performs global coordination:
 
 ## Cycle Metrics (report before the handoff)
 
-Run `scripts/cycle-metrics.sh [<since-ref>]` and include its output verbatim in
-the final handoff. It emits one `key=value` line per block — branch on those,
-never on prose.
+Run `scripts/cycle-metrics.sh --cycle-start <Start-Of-Cycle UTC> [<since-ref>]`
+and include its output verbatim in the final handoff. It emits one `key=value`
+line per block — branch on those, never on prose. `--cycle-start` is the UTC
+you recorded at Start-Of-Cycle (e.g. `2026-09-04T06:00:00Z`); without it the
+`repeat:` line measures the last three hours, not this cycle.
 
 Every handoff MUST carry these lines; the two questions they answer are
 distinct — measure before you optimize:
@@ -1854,6 +1856,38 @@ distinct — measure before you optimize:
   `source=absent` until this host has run one instrumented step. `slowest` names
   the single step to attack first.
 
+- **`repeat:`** — "which steps were paid REPEATEDLY inside THIS cycle?" The
+  within-cycle count view over the same timing log (`window=`, `steps=`,
+  `top3=<step>=<count>,...`), order 1001-q3zf. Count, not duration: a gate
+  re-run after every rebase costs its duration TIMES the rounds, and only the
+  product is actionable. Pass `--cycle-start <your Start-Of-Cycle UTC>` (or
+  export `TILLANDSIAS_CYCLE_START_TS`) so the window is this cycle and not the
+  default last three hours: `scripts/cycle-metrics.sh --cycle-start
+  2026-09-04T06:00:00Z`. Reads `source=absent` when the timing log is missing.
+
+- **`recur:`** — "which steps are paid on EVERY cycle, and what do they cost
+  cumulatively?" The cross-cycle view over the last 7 days (`window=`, `runs=`,
+  `steps=`, `top3=<step>:runs=<n>:total_ms=<t>:avg_ms=<a>:fail_pct=<p>,...`),
+  ranked by total_ms — a cheap step paid three hundred times outranks an
+  expensive one paid twice. Step names contain colons (`step:...`,
+  `check:litmus-pre-build`), so parse an entry FROM THE RIGHT: the trailing
+  `:key=value` fields never contain a colon; the step is everything before the
+  first `:runs=`.
+
+- **`skippable:`** — "which expensive, repeated, outcome-invariant steps could
+  be memoised or skipped?" This is the operator's instrument for "repeated work
+  that wastes every cycle / expensive work that may be cached or skipped"
+  (2026-09-03). A candidate ran at least `min_runs=` times, averaged at least
+  `floor_ms=`, and NEVER changed outcome in the window, so every run after the
+  first bought no information. Entries are
+  `<step>:runs=<n>:avg_ms=<a>:fail_pct=<p>:saved_ms_upper=<s>`, parsed from the
+  right like `recur:`. **`saved_ms_upper` is a BOUND, not a saving** —
+  total_ms minus one run; the log carries no input identity, so nothing here
+  can say a run WOULD have hit a cache. Paste it as a bound. Do not file a
+  skip-or-memoise packet from one host's reading: the coordinator's cross-host
+  recurrence audit (coordinate-multihost-work) acts only when the same step
+  tops `skippable:` on two or more hosts.
+
 The two lines worth reading first:
 
 - **`answer_rate`** — the experts' USEFULNESS. Not call count. An expert called
@@ -1892,7 +1926,8 @@ Before exit:
 2. Refresh `plan/index.yaml` if this cycle changed active work, blockers,
    tested release, or host assignments. Record THIS cycle's status as a NEW
    `## Cycle` fragment in `plan/loop_status.d/` via
-   `tillandsias-plan loop-status-append --host <host> --ts <UTC-ISO>` — never
+   `tillandsias-plan loop-status-append --host <host> --ts <UTC-ISO> --file fragment.md`
+   (`< fragment.md` and a bare path also work; order 1004-8vkv) — never
    edit the shared `plan/loop_status.md` directly, or a concurrent host's
    status write conflicts for the same reason the old monolithic ledger did
    (packet 582-nqw5). The folded view (`tillandsias-plan loop-status`) is the
@@ -1909,8 +1944,15 @@ Before exit:
    timestamp, or omit `--ts` entirely when "now" is genuinely the right stamp:
 
    ```bash
-   tillandsias-plan loop-status-append --host <host> --ts <cycle-start-UTC> --backfill
+   tillandsias-plan loop-status-append --host <host> --ts <cycle-start-UTC> --backfill --file fragment.md
    ```
+
+   THE FRAGMENT MUST BE SUPPLIED EXPLICITLY. `--file <path>`, `< path` and a
+   bare path argument all work. Before order 1004-8vkv a bare path was silently
+   dropped and the command fell through to stdin, which on an inherited socket
+   (a forge agent's stdin, by construction) blocked for 26 minutes at 0.0%% CPU.
+   It is now refused in 5s naming the explicit forms, but supplying the input
+   explicitly is still the invocation to type.
 
    `--backfill` only reaches BACKWARD (a future `--ts` is still refused), so it
    waives nothing the limit exists to protect, and the refusal already names it.

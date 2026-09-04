@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-gate-runs-two-crates-tests-and-names-none-of-the-rest
+    event:
+      type: progress
+      ts: "2026-09-04T13:53:34Z"
+      agent_id: linux-yoga-claude-20260904t133011z
+      host: yoga
+      summary: |-
+        DELIVERED (3330dbbdf). ./build.sh --check now runs cargo test --workspace --no-fail-fast -- --test-threads=1 through the existing baseline ratchet: ran=331 -> ran=2199, tolerated=1, stale=0. TITLE CORRECTIONS, stated not silently edited: the packet says 'two crates' and it was ONE — I had miscounted build.sh's '-p tillandsias-headless --bin tillandsias' into --check, and that line lives in the --test/ci-full block. And macbookair's relayed 'check wraps -p tillandsias-plan --lib only' was stale in the tree; --lib was dropped 2026-08-22 and check-test-baseline.sh's header still said otherwise, which is fixed in the same commit next to its cause. CRITERIA, each measured pre-fix before the diff and post-fix after: C1 (every crate run or named) pre FAILS 21 of 22 neither run nor named, post PASSES by --workspace with nothing excluded; C2 (derived, never hand-maintained) pre FAILS with zero occurrences of cargo metadata or workspace members in build.sh and check-test-baseline.sh and the literal '-p tillandsias-plan' as the selector, post PASSES with cargo as the enumerator; C3 (silence never stands in for a pass) pre FAILS, post satisfied structurally rather than by a second check; C4 (a red core test turns the gate red) pre FAILS measured at rc=0 with core hard-red and 'Checking tillandsias-core' printed in the same log, post PASSES at rc=1 from the identical probe, reverted both times. C5 (runs to completion) was moved to the outcome as a constraint on the fix per the coordinator, since --no-fail-fast was already present and a criterion the tree passes has no teeth. A CHECK I DELETED RATHER THAN SHIPPED: scripts/check-workspace-test-coverage.sh matched transcript deps/<stem> names against workspace members to name silent crates; the stem is a TARGET name, headless declares bin 'tillandsias' and both trays declare 'tillandsias-tray', and it reported headless as silent in a run where headless had just caught a red. FILED: 1021-hf9e, the headless bin suite gives a different failure set on every parallel run (three runs, three sets; isolation passes), which is why the gate is serial — 51.6s serial against 61s parallel, so determinism cost nothing. FOUND BY THE FIRST RUN: proxy_cache_policy's known-red became tolerated=1 rather than never-exercised, and a stale count pin (5 dispatches vs 6 after --ensure-enclave) fixed as compliance per its own assertion message — the same cause as ae85ee471, one change and two stale pins, this one in a target no gate ran.

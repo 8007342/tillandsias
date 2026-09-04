@@ -47,6 +47,39 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: evidence bundle litmus summary parser"
 
+
+  # ORDER 1003-444f. The gate's test step must stay DERIVED. Until this order it
+  # ran `-p tillandsias-plan` — one crate of 22 — and the other 21 were neither
+  # run nor named, so their silence read as a pass. Measured before the fix: a
+  # deliberately-failing test in tillandsias-core left `./build.sh --check` at
+  # rc=0, in a run that printed `Checking tillandsias-core`. Compiled, never
+  # run. Measured after: the same probe returns rc=1.
+  #
+  # The pin is on --workspace SPECIFICALLY, not on "some crates are tested",
+  # because the failure mode this order closes is a HAND-MAINTAINED SET. The
+  # in-tree precedent says so in its own words: `--lib` was dropped from this
+  # step on 2026-08-22 after scoping it to one target "recreated that blind
+  # spot inside the fix". A crate list is that mistake with more entries — it
+  # goes stale silently the day someone adds a crate, and the crate nobody
+  # remembered is the one that needed covering. --workspace makes cargo the
+  # enumerator, so a new member is covered the day it lands.
+  - step: "the gate's test step is workspace-derived, never an enumerated crate list"
+    command: "awk '/_step \"Running workspace tests/,/tee \\\"\\$_WS_TEST_TRANSCRIPT\\\"/' build.sh > /tmp/ws-step.$$; /usr/bin/grep -q -- '--workspace' /tmp/ws-step.$$ || { echo 'FAIL: the gate test step is no longer --workspace'; rm -f /tmp/ws-step.$$; exit 1; }; /usr/bin/grep -qE -- '-p tillandsias-[a-z-]+' /tmp/ws-step.$$ && { echo 'FAIL: the gate test step names an individual crate — the set must stay derived (1003-444f)'; rm -f /tmp/ws-step.$$; exit 1; }; rm -f /tmp/ws-step.$$; echo 'ok: workspace-derived'"
+    timeout_ms: 5000
+    expected_behavior: "ok: workspace-derived"
+
+  # A ratchet compares FAILURE SETS, so the set must be a function of the tree.
+  # Measured on yoga: tillandsias-headless's bin suite gave three different
+  # failure sets across three parallel runs and one stable set under
+  # --test-threads=1, because those tests share process-global state. Serial is
+  # also FASTER here (51.6s vs 61s), so this costs nothing and buys the
+  # determinism the ratchet requires. Filed separately: serial execution is a
+  # mitigation, not a cure.
+  - step: "the gate's test step runs serially and to completion"
+    command: "awk '/_step \"Running workspace tests/,/tee \\\"\\$_WS_TEST_TRANSCRIPT\\\"/' build.sh > /tmp/ws-step2.$$; ok=1; /usr/bin/grep -q -- '--test-threads=1' /tmp/ws-step2.$$ || { echo 'FAIL: not serial — a flaky failure set makes the ratchet a coin flip'; ok=0; }; /usr/bin/grep -q -- '--no-fail-fast' /tmp/ws-step2.$$ || { echo 'FAIL: missing --no-fail-fast — a suite that stops early hides its tail (829-g4xf)'; ok=0; }; rm -f /tmp/ws-step2.$$; [ \"$ok\" = 1 ] || exit 1; echo 'ok: serial and to-completion'"
+    timeout_ms: 5000
+    expected_behavior: "ok: serial and to-completion"
+
 observability:
   traces:
     - "@trace spec:dev-build"

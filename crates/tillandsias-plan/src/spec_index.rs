@@ -99,8 +99,8 @@ pub fn resolve_dir() -> Option<String> {
             .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
             .filter(|s| !s.is_empty())
     };
-    // Rung 4 of the shell ladder: repo-relative under the checkout's target/
-    // (931-p26p). Ordered AFTER the podman volume and BEFORE the HOME-derived
+    // Rung 4 of the shell ladder: repo-relative under the checkout's .cache/
+    // (931-p26p; moved off target/ by 1003-v3dc). Ordered AFTER the podman volume and BEFORE the HOME-derived
     // cache, so every host that reaches an earlier rung is byte-identical to
     // before — Linux and macOS hit the podman volume and never see this.
     //
@@ -128,8 +128,24 @@ pub fn resolve_dir() -> Option<String> {
     resolve_from(&dirs, &roots)
 }
 
-/// The checkout's `target/tillandsias-spec-index`, when there is a writable
-/// checkout to anchor it to.
+/// The checkout's `.cache/spec-index`, when there is a writable checkout to
+/// anchor it to.
+///
+/// ORDER 1003-v3dc: this was `target/tillandsias-spec-index` until 2026-09-04.
+/// Start-Of-Day maintenance runs `cargo clean`, which removes `target/`
+/// WHOLESALE, so the index — 23,154 chunks and a cold embed measured in minutes
+/// — was published into a directory a routine GC deletes. `metrics-log-path.sh`
+/// had already refused `target/` for exactly this reason and moved the metrics
+/// log to `.cache/`; this follows that precedent. The 931-p26p property that
+/// made the checkout the right anchor is unchanged: both Windows userlands
+/// genuinely share it.
+///
+/// THIS MUST TRACK THE SHELL BLOCK. The producer is
+/// scripts/spec-index-ensure.sh and the consumer is this ladder; if they name
+/// different directories the index is written where nothing reads it, which is
+/// 890-t9pu's writer/reader defect. The shell side is pinned across its three
+/// carriers by scripts/check-spec-index-resolution-agreement.sh, and that guard
+/// cannot see this file — so changing one without the other is a silent split.
 ///
 /// Discovery mirrors the shell block in scripts/spec-index-ensure.sh and its
 /// two overlay copies, which the agreement guard pins: an explicit
@@ -166,21 +182,16 @@ fn repo_relative_root() -> Option<String> {
     if !checkout.is_dir() {
         return None;
     }
-    let target = checkout.join("target");
-    let writable = if target.exists() {
-        !is_read_only(&target)
+    let cache = checkout.join(".cache");
+    let writable = if cache.exists() {
+        !is_read_only(&cache)
     } else {
         !is_read_only(&checkout)
     };
     if !writable {
         return None;
     }
-    Some(
-        target
-            .join("tillandsias-spec-index")
-            .to_string_lossy()
-            .into(),
-    )
+    Some(cache.join("spec-index").to_string_lossy().into())
 }
 
 fn is_read_only(path: &std::path::Path) -> bool {
@@ -342,20 +353,40 @@ mod tests {
             r
         };
 
-        let want = co.join("target").join("tillandsias-spec-index");
+        let want = co.join(".cache").join("spec-index");
         assert_eq!(
             got.as_deref(),
             Some(want.to_string_lossy().as_ref()),
-            "the repo-relative rung must resolve under the checkout's target/,              so two userlands with different $HOME on one host converge              (931-p26p); got {got:?}"
+            "the repo-relative rung must resolve under the checkout's .cache/,              so two userlands with different $HOME on one host converge              (931-p26p); got {got:?}"
         );
 
         // The point of the rung, stated as an assertion rather than a comment:
-        // the answer must not mention a home directory at all.
+        // the answer must be anchored to the CHECKOUT, not to a home directory.
+        //
+        // ORDER 1003-v3dc: this used to assert `!resolved.contains(".cache")`,
+        // as a proxy for "did not fall through to the HOME-derived rung". That
+        // proxy stopped being valid the moment rung 4 itself moved to
+        // `<checkout>/.cache/spec-index` — the substring now appears in the
+        // CORRECT answer, and the test failed on a passing implementation.
+        //
+        // Assert the property directly instead of a spelling that happened to
+        // correlate with it: the resolved path must live under the checkout,
+        // and must not live under $HOME. A proxy assertion is exactly what
+        // 931-p26p's arm 6 exists to avoid — a check that passes for a reason
+        // other than the one it names.
         let resolved = got.expect("rung resolved");
         assert!(
-            !resolved.contains(".cache"),
-            "the rung leaked into the HOME-derived cache path: {resolved}"
+            resolved.starts_with(co.to_string_lossy().as_ref()),
+            "the rung must anchor to the checkout {co:?}; got {resolved}"
         );
+        if let Ok(home) = std::env::var("HOME")
+            && !home.is_empty()
+        {
+            assert!(
+                !resolved.starts_with(&home),
+                "the rung leaked into the HOME-derived cache path: {resolved}"
+            );
+        }
 
         let _ = std::fs::remove_dir_all(&co);
     }
