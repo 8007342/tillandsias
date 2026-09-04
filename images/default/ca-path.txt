@@ -20,4 +20,29 @@
 # CHANGING THIS VALUE IS NOT A CONSTANT CHANGE. Existing containers bind the OLD
 # path in their stored definitions and must be RECREATED, not restarted — that
 # migration is 998-3z6g, and it is why this rung lands first and alone.
-/tmp/tillandsias-ca
+# ── THE VALUE, AND WHY IT IS A TEMPLATE (998-3z6g) ──────────────────────────
+#
+# `${HOME}` is expanded by BOTH readers. It is a template rather than a static
+# path because two measurements ruled a static one out:
+#
+#   GUEST (macbook-macos, real Mac VM, 2026-09-04): /var/lib/tillandsias-ca
+#     works — key present, perms 600, owner root, directory survives reboot.
+#     It works BECAUSE the guest runs as root.
+#   HOST (yoga, same day): uid 1000, rootless. `mkdir -p /var/lib/tillandsias-ca`
+#     -> Permission non accordée. /var/lib is not writable AT ALL.
+#     Durable and writable here: $HOME/.local/state, $HOME/.local/share.
+#
+# So /var/lib fails on a rootless host for exactly the reason it succeeds in the
+# guest, and /tmp works everywhere and is the bug — volatile by design, cleared
+# on reboot and swept by systemd-tmpfiles, which is what made the proxy
+# permanently unrestartable (975-rsgm).
+#
+# A HOME-relative path was the only candidate measured to satisfy both: durable
+# on a rootless Linux host, and equally creatable in the guest where HOME=/root.
+#
+# EXPANSION IS THE READERS' JOB AND MUST AGREE. tillandsias-core::ca_path
+# substitutes ${HOME} from the environment; scripts/lib-ca-path.sh gets it from
+# the shell. A test asserts the two produce the same string, because a template
+# with two expanders is a new way for one declaration to mean two things — which
+# is the defect this file was created to remove, not a licence to reintroduce it.
+${HOME}/.local/state/tillandsias/ca
