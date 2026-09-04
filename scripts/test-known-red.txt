@@ -19,13 +19,20 @@
 # adopting this gate will see them as new red until it measures and files its
 # own.
 #
-# Fails on any host without a working Squid launch in the test environment:
-# the test brings up a bumped-TLS proxy and asserts the origin-TLS and
-# signed-URL logs fail closed, and it panics at
-# crates/tillandsias-headless/tests/proxy_cache_policy.rs:112 with "Squid
-# launch" before reaching a single assertion. Measured red on linux-next at
-# 81d2315f5 (2026-08-20) and again at f9ee195a9 (2026-08-21); it survived the
-# archive-sweep revert, so it is independent of that cycle's work.
-# FILED AS 845-7a88 (2026-08-22). This entry is the oldest thing in
-# this file and it must not become the reason the file is ignored.
-proxy_cache_policy::bumped_origin_tls_and_signed_url_logs_fail_closed
+# REMOVED 2026-09-04 — FIXED, not tolerated. Order 1022-px54.
+#
+# The entry below was here since 2026-08-22 as 845-7a88, described as "fails on
+# any host without a working Squid launch in the test environment". That
+# description was wrong about the cause, which is why it sat for two weeks: the
+# test never launched Squid at all. It read images/proxy/entrypoint.sh as TEXT
+# and asserted the literal `exec squid -N`, and commit 7292b097b (767-es4w)
+# had changed that line to `exec /usr/local/bin/squid-supervisor squid squid -N`
+# so a mid-service crash would be counted and restarted. The assertion drifted;
+# no environment was ever required.
+#
+# It is now fixed at the assertion (pinning the supervised launch and the
+# parse-before-serve ordering) rather than tolerated here. Removing the entry is
+# the other half of the fix: this file's own warning says a stale entry "must not
+# become the reason the file is ignored", and the gate enforces that — it refused
+# with `stale=1` the moment the test went green, because a known-red that has
+# started passing makes the NEXT break of that same test invisible.
