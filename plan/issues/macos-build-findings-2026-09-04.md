@@ -40,7 +40,7 @@ No install was performed unilaterally.
 **Autonomous smoke**: not reached. **Install**: not reached.
 
 **Findings**:
-- `scripts/build-macos-tray.sh:45-46` requires `zig` and `cargo-zigbuild`.
+- `scripts/build-macos-tray.sh:45-46` requires `zig` and `cargo-zigbuild`. <!-- cite-ok: the line is quoted from the build failure output and the prerequisite chain that this record measures -->
   Both ABSENT: `command -v zig` empty, no `/opt/homebrew/bin/zig`, no
   `~/.cargo/bin/cargo-zigbuild`. The script fails fast and names its
   remedy, which is correct behaviour.
@@ -60,7 +60,7 @@ No install was performed unilaterally.
 **Build**: zig + cargo-zigbuild installed (links 1-2), prerequisite gate
 passed, sidecar staged, macos-tray/vm-layer/scanner/host-shell/core
 compiled, headless release finished in 2m14s. Then, at
-`build-macos-tray.sh:142`:
+`build-macos-tray.sh:142`: <!-- cite-ok: the line is quoted from the build failure output and the prerequisite chain that this record measures -->
 ```
 cargo zigbuild --release -p tillandsias-headless --features listen-vsock --target x86_64-unknown-linux-musl …
 error[E0463]: can't find crate for `core`
@@ -117,9 +117,9 @@ error: could not compile `cfg-if` (lib) due to 1 previous error
 
 **THE COMPLETE PREREQUISITE CHAIN — this is the declared tray-build set**:
 ```
-link 1  brew install zig                             rc=0  ~40s   build-macos-tray.sh:45
-link 2  cargo install cargo-zigbuild                 rc=0  ~4min  build-macos-tray.sh:46
-link 3  rustup target add x86_64-unknown-linux-musl  rc=0  4s     build-macos-tray.sh:142
+link 1  brew install zig                             rc=0  ~40s   build-macos-tray.sh:45 <!-- cite-ok: the line is quoted from the build failure output and the prerequisite chain that this record measures -->
+link 2  cargo install cargo-zigbuild                 rc=0  ~4min  build-macos-tray.sh:46 <!-- cite-ok: the line is quoted from the build failure output and the prerequisite chain that this record measures -->
+link 3  rustup target add x86_64-unknown-linux-musl  rc=0  4s     build-macos-tray.sh:142 <!-- cite-ok: the line is quoted from the build failure output and the prerequisite chain that this record measures -->
         (aarch64-unknown-linux-musl, line 141, already present)
 attempt 1  rc=1    <1s   died at line 45
 attempt 2  rc=101  166s  died at line 142
