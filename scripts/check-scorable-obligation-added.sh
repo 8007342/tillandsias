@@ -125,8 +125,17 @@ while IFS= read -r f; do
                 # it when a requirement's meaning changes. What would be wrong is
                 # letting the resulting score be read as comparable. So it is
                 # NAMED, loudly, and the gate still passes.
+                # 1036-jamx: the DECLARATIVE forms only. A bare `tombstone`
+                # substring also matches prose REFERRING to this mechanism —
+                # "the tombstone/regime scan still needs" tripped it — which is
+                # the same defect the scorable patterns above were just anchored
+                # to fix, in this script's sibling arm. The signal stays prose
+                # because the fixture's contract is prose (`notes: this row will
+                # tombstone req-old`), so it is narrowed to verb forms rather
+                # than moved to a field, which would change another packet's
+                # design unilaterally.
                 case "$whole" in
-                    *tombstone*)
+                    *tombstones*|*tombstoning*|*will\ tombstone*|*tombstone:*)
                         regime_broken=$((regime_broken + 1))
                         rdetail="${rdetail}  ${f}: packet '${pid}' tombstones an obligation — its score is OUTSIDE the monotone regime and must not be compared with the previous run (977-448j)"$'\n'
                         ;;

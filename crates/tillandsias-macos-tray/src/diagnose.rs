@@ -381,18 +381,27 @@ pub struct DiagnoseReport {
     /// bundle carries. `None` means undecidable (no bundle, or nothing staged
     /// yet) and must never be read as "fine".
     pub guest_binary_staged_matches_bundle: Option<bool>,
-    /// Order 735-2g5i. Whether a live tray process owns the VM right now,
-    /// established by probing the tray's own singleton lock.
+    /// Whether a tray PROCESS is running right now, established by probing the
+    /// tray's own singleton lock (order 735-2g5i; renamed from `vm_owner_live`
+    /// by 980-ja2m).
     ///
-    /// This is macOS's answer to the question Windows answers with
-    /// `wire.reachable`: is somebody actively working on this? macOS cannot ask
-    /// the guest directly — its vsock is per-VM-handle with no AF_VSOCK, so the
-    /// live phase is reachable ONLY from inside the tray process (see the
-    /// "Control wire status" note in `print_human`). Singleton ownership is the
-    /// strongest FACT a separate `--diagnose` process can establish, and like
-    /// the Windows probe it is an observation rather than an inference from
-    /// timing.
-    pub vm_owner_live: bool,
+    /// READ THE NAME LITERALLY: this observes a PROCESS, not a VM. It was
+    /// called `vm_owner_live` and documented as "a live tray process owns the
+    /// VM", which is a claim the probe cannot support — the lock says a tray is
+    /// running and nothing more. A tray that is running but wedged, holding no
+    /// VM at all, holds the lock exactly as a healthy one does; the field
+    /// cannot separate them in either direction.
+    ///
+    /// This is NOT macOS's answer to what Windows answers with
+    /// `wire.reachable`, and the old comment saying so overstated it. Windows
+    /// asks the guest and believes the phase it names; this asks the host
+    /// whether a process is alive. macOS cannot ask the guest from here — its
+    /// vsock is per-VM-handle with no AF_VSOCK, so the live phase is reachable
+    /// ONLY from inside the tray process (see the "Control wire status" note in
+    /// `print_human`). Process liveness is the strongest fact a separate
+    /// `--diagnose` can establish today; naming it for the fact it establishes
+    /// is the point of the rename.
+    pub tray_process_running: bool,
 
     /// Guest metrics snapshot (778-n9z2), read over the control wire.
     ///
@@ -479,7 +488,7 @@ fn collect_report() -> DiagnoseReport {
         guest_binary_bundle_sha256: provenance.bundle_sha256,
         guest_binary_staged_sha256: provenance.staged_sha256,
         guest_binary_staged_matches_bundle: provenance.staged_matches_bundle,
-        vm_owner_live: live_tray_owns_vm(),
+        tray_process_running: a_tray_process_holds_the_singleton(),
         // collect_report() runs in a process with no VM handle by
         // construction. It must NOT boot one: install-macos.sh runs
         // `--diagnose --json` synchronously during install, so a wire read
@@ -490,15 +499,18 @@ fn collect_report() -> DiagnoseReport {
     }
 }
 
-/// Is a live tray holding the VM singleton right now? (order 735-2g5i)
+/// Is a tray PROCESS holding the singleton right now? (order 735-2g5i; renamed
+/// from `live_tray_owns_vm` by 980-ja2m)
 ///
-/// `Ok(None)` is WouldBlock — the lock is held, i.e. a running tray owns the
-/// VM. Acquiring and immediately dropping the guard is side-effect free when
-/// the lock is free, which is what makes this safe to call from a read-only
-/// report. A probe infrastructure error returns false: an unknown owner must
-/// never be reported as a live one, because that is the direction that tells
-/// automation to keep waiting.
-fn live_tray_owns_vm() -> bool {
+/// `Ok(None)` is WouldBlock — the lock is held, i.e. a tray process is running.
+/// It does NOT mean that process owns a VM, that a VM exists, or that the guest
+/// is reachable; the old name and comment claimed the first of those and the
+/// probe cannot see any of them. Acquiring and immediately dropping the guard
+/// is side-effect free when the lock is free, which is what makes this safe to
+/// call from a read-only report. A probe infrastructure error returns false: an
+/// unknown state must never be reported as a running one, because that is the
+/// direction that tells automation to keep waiting.
+fn a_tray_process_holds_the_singleton() -> bool {
     matches!(
         tillandsias_core::singleton::SingletonGuard::try_acquire("tillandsias-macos-tray"),
         Ok(None)
@@ -596,16 +608,36 @@ fn print_human(r: &DiagnoseReport) {
     }
     println!();
     if r.provisioned {
-        println!("Status: PROVISIONED — first-launch materialization complete.");
-    } else if r.vm_owner_live {
-        // Order 735-2g5i. Distinct from the line below, and distinctly EXITED:
-        // a running tray owns the VM and the boot artifacts are not there yet,
-        // which is what provisioning-in-progress looks like from outside the
-        // tray process. Telling the operator to "launch the tray once" here
-        // would be advice to do the thing they are already doing.
+        // 980-ja2m. Say what was MEASURED — the boot artifacts are on disk —
+        // and then say plainly what was not. This used to read "PROVISIONED —
+        // first-launch materialization complete." and stop, which an operator
+        // reasonably read as "the system is healthy". Nothing in this report
+        // observes the VM or the guest, so the report must not leave the
+        // impression that something did.
+        println!("Status: PROVISIONED — the boot artifacts are on disk.");
+        if r.tray_process_running {
+            println!("        A tray process is running (singleton lock held).");
+        } else {
+            println!("        No tray process is running.");
+        }
         println!(
-            "Status: CONVERGING (exit {DIAGNOSE_EXIT_CONVERGING}) — a running tray owns the VM \
-             and is still materializing it."
+            "        NOT CHECKED: whether a VM is running, or whether the guest is healthy. This"
+        );
+        println!("        report cannot see either — macOS has no AF_VSOCK, so the live phase is");
+        println!(
+            "        readable only from inside the tray process. Open the menubar chip for live status."
+        );
+    } else if r.tray_process_running {
+        // Order 735-2g5i, narrowed by 980-ja2m. Distinct from the line below,
+        // and distinctly EXITED. The old text said "a running tray owns the VM
+        // and is still materializing it" — the singleton cannot support either
+        // half of that: a WEDGED tray with no VM holds the lock identically.
+        // What is actually known is that the artifacts are absent and a tray
+        // process exists. Telling the operator to "launch the tray once" here
+        // would still be advice to do what they are already doing.
+        println!(
+            "Status: CONVERGING (exit {DIAGNOSE_EXIT_CONVERGING}) — boot artifacts are absent \
+             and a tray process is running."
         );
         println!(
             "        Not an error. Re-run --diagnose in a few moments; the tray's \
@@ -675,7 +707,7 @@ fn exit_code_from(r: &DiagnoseReport) -> i32 {
     // for something that will never arrive. Staging residue (`rootfs.qcow2`,
     // `rootfs.img.xz.partial`, `*.part`) survives a crashed provision, so its
     // mere presence is not evidence that anything is still running.
-    if r.vm_owner_live {
+    if r.tray_process_running {
         return DIAGNOSE_EXIT_CONVERGING;
     }
     2
@@ -2522,7 +2554,7 @@ mod tests {
             guest_binary_staged_sha256: Some("26f120b6b1ef".to_string()),
             guest_binary_staged_matches_bundle: Some(true),
             // A provisioned host at rest: nothing is mid-materialization.
-            vm_owner_live: false,
+            tray_process_running: false,
             metrics: None,
             metrics_status: METRICS_STATUS_NO_HANDLE.to_string(),
         }
@@ -2609,7 +2641,7 @@ mod tests {
         // broken. This is the case that used to collapse into 2 and made a
         // scripted post-install check call a still-materializing host broken.
         report.provisioned = false;
-        report.vm_owner_live = true;
+        report.tray_process_running = true;
         assert_eq!(
             exit_code_from(&report),
             DIAGNOSE_EXIT_CONVERGING,
@@ -2621,7 +2653,7 @@ mod tests {
         // unprovisioned" would satisfy the assertion above — and that is the
         // worse failure, because it tells automation to keep waiting on a host
         // where nothing is running.
-        report.vm_owner_live = false;
+        report.tray_process_running = false;
         assert_eq!(
             exit_code_from(&report),
             2,
@@ -2632,7 +2664,7 @@ mod tests {
         // regardless of who holds the VM (the steady state — the tray is
         // normally running).
         report.provisioned = true;
-        report.vm_owner_live = true;
+        report.tray_process_running = true;
         assert_eq!(
             exit_code_from(&report),
             0,

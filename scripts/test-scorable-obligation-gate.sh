@@ -240,6 +240,24 @@ check "a bash-prefixed script closure still passes" "ok:scorable-obligations:1 c
       bash scripts/test-something.sh prints PASS at a clean HEAD.
 ')"
 
+# 1036-jamx. NEGATIVE CONTROL FOR THE TOMBSTONE SCAN, from a real false
+# positive: a packet DESCRIBING this mechanism ("the tombstone/regime scan
+# still needs the flattened body") was reported as tombstoning an obligation.
+# Same defect as the scorable patterns had, in the sibling arm of the same
+# script. A note nobody can trust is a note everybody learns to skip.
+out_tsref="$(run_in_fixture "packets:
+  - packet_id: mentions-the-mechanism
+    order: 999-oooo
+    status: ready
+    verifiable_closure: |
+      ${C} -p x --test y passes.
+    notes: this row explains how the tombstone/regime scan reads the body
+")"
+case "$out_tsref" in
+    *"regime-broken"*) fail=$((fail+1)); echo "FAIL: prose REFERRING to tombstoning is not a tombstone"; echo "  got=[$out_tsref]" ;;
+    *) pass=$((pass+1)) ;;
+esac
+
 total=$((pass+fail))
 if [ "$fail" -eq 0 ]; then
     echo "PASS: scorable-obligation gate $pass/$total (977-448j)"

@@ -12,10 +12,24 @@ packets:
       - docs
       - testing
     estimated_hours: 2
-    verifiable_closure: |
-      scripts/advance-work-from-plan or its skill body states the capture rule,
-      and a reviewer can grep the worker skill for a `| tail` / `| grep`
-      invocation of build.sh or land-on-platform-branch.sh and find none.
+    unscoreable: |
+      CORRECTED 2026-09-04 by 1036-jamx, which is the gate this row's own
+      closure failed. The closure read "scripts/advance-work-from-plan or its
+      skill body states the capture rule, and a reviewer can grep ... and find
+      none" — prose naming no runnable command, and admitted only because the
+      pattern then matched anywhere in the packet.
+
+      It is stated unscoreable rather than dressed in a command, because the
+      obligation is NOT repo-decidable. What must change is that agents stop
+      discarding these tools' exit status; a grep proving a sentence exists in
+      a skill file would be a PROXY for that, and this packet is about a proxy
+      read as the thing. A green grep over skill prose while agents keep piping
+      the gate is exactly the failure being filed.
+
+      The honest pin, if someone wants one, is a check that no script in this
+      repo pipes build.sh or land-on-platform-branch.sh into a status-losing
+      pipeline — that is mechanical, and it is a NARROWER claim than the
+      packet, so it would close a different row rather than this one.
     title: |
       Three refusals read as exit 0 in one cycle because the agent piped the tool's output — the tools were right every time, and the reading discarded the status they took care to produce.
     deliverable: |
