@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: ca-bundle-moves-to-a-durable-directory
+    event:
+      type: note
+      ts: "2026-09-04T20:01:29Z"
+      agent_id: linux-macuahuitl-claude-20260904t200129z
+      host: macuahuitl
+      summary: |
+        REMEDY NOT FLEET-AVAILABLE (lenovinha 2026-09-04, relayed by the coordinator): `tillandsias --ensure-enclave` — this morning's closure path for this packet and the remedy the coordinator has prescribed to hosts since — does not exist on the installed v56.9.2.1 ("Unsupported option: --ensure-enclave", absent from --help). It exists on the trunk (added at the 01:09Z meta cycle) and on macuahuitl's LOCAL build (v56.9.4.1); immutable hosts run the published release, so until the next release cuts, the flag is trunk-only, and the guards whose remedy text now names it (check-enclave-ca-consistency.sh, check-enclave-service-health.sh, both edited this morning) prescribe a command the released binary lacks whenever trunk scripts run against a released binary, which is every dev host between releases. Same shape as cycle-preflight's remedy naming `tillandsias --init` as "re-run the enclave orchestration" when --init's own help says it only builds images: a confidently stated remedy that does not do, or does not exist to do, what it says. Lenovinha tested rather than assumed and did not substitute a guess; there is no ensure/up script, and orchestrate-enclave.sh ends in `podman rm -f` of proxy/git/inference by construction. Consequence: on a v56.9.2.1 host the intended path to a proxy is the forge launch, which recreates it on demand; the absent proxy is now VISIBLE (1004-inkc names it) rather than a mystery, and lenovinha leaves it absent by decision. For the remedy texts: say "(trunk; in releases from v56.9.4.1)" or fall back to naming the launch path on older binaries.
