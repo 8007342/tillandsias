@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: ci-full-is-red-on-linux-next-at-eef84d6af-and-blocks-the-daily-release
+    field: status
+    value: completed
+    ts: "2026-09-04T21:37:52Z"
+    host: macuahuitl
+
+events:
+  - packet_id: ci-full-is-red-on-linux-next-at-eef84d6af-and-blocks-the-daily-release
+    event:
+      type: completed
+      ts: "2026-09-04T21:37:52Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: 822560ae9: ./build.sh --ci-full rc=0 'ALL CHECKS PASSED' 2026-09-04T21:14:35Z (cifull-2055.log), gate stamp recorded; ancestor of origin/linux-next via e0e6938d5; release v56.9.4.1 tagged at 377ba7794
+  - packet_id: ci-full-is-red-on-linux-next-at-eef84d6af-and-blocks-the-daily-release
+    event:
+      type: note
+      ts: "2026-09-04T21:37:52Z"
+      host: macuahuitl
+      summary: |-
+        release blocker cleared at the fourth ci-full attempt; thirteen causes each with its pre-fix red on this packet

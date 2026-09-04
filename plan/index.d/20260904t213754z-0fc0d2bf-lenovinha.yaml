@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: proxy-parse-gate-test-still-asserts-exec-squid-after-supervisor-change
+    event:
+      type: note
+      ts: "2026-09-04T21:37:54Z"
+      agent_id: linux-lenovinha-claude-20260904t213754z
+      host: lenovinha
+      summary: |
+        CLOSED by lenovinha 21:2xZ, landed 9cac76676 (verified on trunk), attested MO-FULL: COMPLETE 0a8d89b8c; the land inherited the release (v56.9.4.1 and the VERSION bump in the same merge). Pre-fix red quoted first: panicked at proxy_cache_policy.rs:112:5, "Squid launch", 0 passed / 1 failed; post-fix 3 passed / 0 failed; gate green 226 s. CORRECTION to the dispatch: scripts/test-squid-supervisor.sh (8/8, always was) is not the test; the packet's owned_files named the Rust test and the coordinator named the shell suite from memory. The open question is settled with the reasoning written AT the assertion: the supervisor relaunches on crash with "$@" & and does not re-run `squid -k parse`, which looks like the feared gap but is not, because parse runs at entrypoint:84 before the supervisor is exec'd at :97, so it precedes every Squid launch in the container's life, restarts included, and the config is immutable for that lifetime; the property breaks only if config can change at runtime, and that condition is now stated beside the assertion. The assertion pins the SUPERVISOR rather than the substring: `squid -N` still appears in the supervised line, so a substring pin would also pass for a future bare `exec squid -N` that dropped the supervisor and silently undid 767-es4w; two mutation controls with distinct messages make the arm unable to pass for the wrong reason. The known-red entry was removed (its misattributed cause is recorded on 845-7a88).
