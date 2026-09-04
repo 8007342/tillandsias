@@ -2937,6 +2937,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Requirement-id fixture passed"
 
+    _step "Checking the credential verdict tells invalid from unreachable (995-srbf)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-credential-verdict-script.sh" 2>&1; then
+        _error "the credential verdict script stopped distinguishing a refused token from an unanswered probe (995-srbf) — a false demotion logs the operator out, a missed one holds LoggedIn against a dead token"
+        exit 1
+    fi
+    _info "Credential verdict fixture passed"
+
     _step "Checking litmus steps can actually fail (972-cvdg)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-steps-can-fail.sh" 2>&1; then
         _error "a litmus step prints the same token on success and failure (972-cvdg) — see the verdict line above"

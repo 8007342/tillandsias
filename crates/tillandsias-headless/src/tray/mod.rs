@@ -7268,7 +7268,9 @@ mod tests {
             LaunchKind::Claude,
             "tillandsias-forge:v0.1.260506.6",
         );
-        let args = spec.build_run_argv();
+        let args = spec
+            .build_run_argv()
+            .expect("the tray launch spec must satisfy the hardening envelope (972-6vaj)");
 
         assert_eq!(args[0], "run");
         assert!(args.contains(&"--rm".to_string()));
@@ -7346,7 +7348,9 @@ mod tests {
             LaunchKind::OpenCodeWeb,
             "tillandsias-forge:v0.1.260506.6",
         );
-        let args = spec.build_run_argv();
+        let args = spec
+            .build_run_argv()
+            .expect("the tray launch spec must satisfy the hardening envelope (972-6vaj)");
 
         assert_eq!(args[0], "run");
         assert!(args.contains(&"-d".to_string()));

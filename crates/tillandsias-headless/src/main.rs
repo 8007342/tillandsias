@@ -15047,6 +15047,10 @@ fn maybe_spawn_vsock_listener(
             // (notify/inotify) — a dependency decision recorded in
             // 690-xeda, not taken unilaterally here.
             let mut ticks_since_presence: u32 = 30; // first heavy check on the first eligible tick
+            // ORDER 995-srbf: heavy ticks since the last truthful revalidation,
+            // and how many revalidations in a row could not reach an answer.
+            let mut revalidations_due: u32 = 5; // revalidate on the first heavy tick
+            let mut consecutive_unreachable: u32 = 0;
             loop {
                 if login_probe_state.current_phase() != tillandsias_control_wire::VmPhase::Ready
                     || !login_probe_state.has_login_state_subscribers()
@@ -15056,6 +15060,7 @@ fn maybe_spawn_vsock_listener(
                     // the heavy check is due immediately on wake.
                     last_presence = None;
                     ticks_since_presence = 30;
+                    revalidations_due = 5;
                     let _ = tokio::time::timeout(
                         std::time::Duration::from_secs(60),
                         login_probe_nudge.notified(),
@@ -15110,6 +15115,97 @@ fn maybe_spawn_vsock_listener(
                 let presence = tokio::task::spawn_blocking(vault_bootstrap::is_github_key_present)
                     .await
                     .unwrap_or(false);
+                // ORDER 995-srbf — REVALIDATION, because presence is not
+                // validity.
+                //
+                // The `continue` below short-circuits on unchanged presence,
+                // so everything past it runs only on a presence TRANSITION: a
+                // token added or deleted. A token that EXPIRES OR IS REVOKED
+                // IN PLACE keeps presence true forever, the truthful probe is
+                // never reached again, and `set_login_state` is change-gated —
+                // so the tray holds `LoggedIn` against a dead credential
+                // indefinitely. Measured in the field: 22h uptime, a token
+                // present-and-refused throughout, never demoted.
+                //
+                // `is_github_key_present` says so itself, one line from where
+                // it is called: "For a definitive auth validation that proves
+                // the credential works, use `remote_projects::is_github_logged_in`
+                // instead."
+                //
+                // COST, and the exit criterion that constrains this fix: the
+                // truthful probe is a podman exec and must not land on the hot
+                // path. It does not. The 2s tick is untouched; this rides the
+                // 60s heavy tick and fires on every 5th one, so a revalidation
+                // costs one exec per ~5 minutes, and only while a LoginState
+                // subscriber is attached to a Ready VM — an idle headless
+                // still parks and spends nothing.
+                revalidations_due = revalidations_due.saturating_add(1);
+                if revalidations_due >= 5 {
+                    revalidations_due = 0;
+                    let observation = tokio::task::spawn_blocking(|| {
+                        remote_projects::observe_github_credential(false)
+                    })
+                    .await
+                    .unwrap_or_else(|join_err| {
+                        remote_projects::CredentialObservation::Unreachable(format!(
+                            "revalidation task panicked: {join_err}"
+                        ))
+                    });
+                    match observation {
+                        // Truthful observations feed the funnel directly. The
+                        // three-state menu machine was always correct; it was
+                        // never handed a fresh observation.
+                        remote_projects::CredentialObservation::Valid(login) => {
+                            consecutive_unreachable = 0;
+                            login_probe_state
+                                .apply_login_transition(
+                                    true,
+                                    Some(login),
+                                    vsock_server::fetch_cloud_projects,
+                                )
+                                .await;
+                        }
+                        remote_projects::CredentialObservation::Invalid(reason) => {
+                            consecutive_unreachable = 0;
+                            warn!(
+                                spec = "github-credential-health",
+                                reason = %reason,
+                                "credential revalidation says the token is not usable; demoting"
+                            );
+                            login_probe_state
+                                .apply_login_transition(
+                                    false,
+                                    None,
+                                    vsock_server::fetch_cloud_projects,
+                                )
+                                .await;
+                        }
+                        // NOT a demotion. `probe_github_username` returns None
+                        // for an invalid token AND for a probe that could not
+                        // run, and demoting on the second would log the
+                        // operator out over a podman hiccup or a cold image —
+                        // a false negative far more visible than the stale
+                        // state this fix is for. It must not be silent either:
+                        // a permanently broken probe would otherwise be
+                        // indistinguishable from a healthy one, which is the
+                        // exact shape of the defect being fixed.
+                        remote_projects::CredentialObservation::Unreachable(reason) => {
+                            consecutive_unreachable = consecutive_unreachable.saturating_add(1);
+                            warn!(
+                                spec = "github-credential-health",
+                                reason = %reason,
+                                consecutive = consecutive_unreachable,
+                                "credential revalidation could not reach an answer; \
+                                 holding the current login state"
+                            );
+                        }
+                    }
+                    // The observation just published a state of its own, so the
+                    // presence baseline is re-derived on the next heavy tick
+                    // rather than being compared against a stale value.
+                    last_presence = None;
+                    continue;
+                }
                 if last_presence == Some(presence) {
                     continue;
                 }
@@ -18515,6 +18611,101 @@ mod tests {
             "podman exec in the launcher must not pass -i: no call site \
              feeds stdin, and -i wedges conmon attach on a null stdin \
              (order 635-kagg)"
+        );
+    }
+
+    /// ORDER 995-srbf — the truthful probe must run WITHOUT a presence
+    /// transition.
+    ///
+    /// The defect was entirely one of ORDER: everything after the
+    /// `if last_presence == Some(presence) { continue; }` short-circuit runs
+    /// only when presence FLIPS, and an expired-in-place token never flips it.
+    /// Moving the validating probe above that line is the fix, so the ordering
+    /// is what this pins. A test that merely asserted the probe is called
+    /// somewhere in the loop would have passed before the fix.
+    #[test]
+    fn credential_revalidation_runs_before_the_presence_short_circuit() {
+        let source = include_str!("main.rs");
+        let loop_body = source
+            .split("let mut ticks_since_presence: u32 = 30;")
+            .nth(1)
+            .and_then(|tail| {
+                tail.split("// Order 260: guest-side LocalProjects rescan")
+                    .next()
+            })
+            .expect("the login probe loop body");
+        let revalidate = loop_body
+            .find("observe_github_credential")
+            .expect("the login loop must call the validating probe, not only the presence check");
+        let short_circuit = loop_body
+            .find("if last_presence == Some(presence) {")
+            .expect("the presence short-circuit");
+        assert!(
+            revalidate < short_circuit,
+            "the validating probe must run BEFORE the unchanged-presence \
+             short-circuit; past it, it only ever sees a token added or \
+             deleted and never one that went bad in place (995-srbf)"
+        );
+    }
+
+    /// ORDER 995-srbf — the exit criterion that constrains the fix: no
+    /// per-tick podman exec.
+    ///
+    /// The revalidation must be gated by the heavy-tick counter, not run on
+    /// the 2s tick. Written so that "fixing" this into a performance defect
+    /// goes red.
+    #[test]
+    fn credential_revalidation_is_not_on_the_hot_path() {
+        let source = include_str!("main.rs");
+        let loop_body = source
+            .split("let mut ticks_since_presence: u32 = 30;")
+            .nth(1)
+            .and_then(|tail| {
+                tail.split("// Order 260: guest-side LocalProjects rescan")
+                    .next()
+            })
+            .expect("the login probe loop body");
+        let heavy_gate = loop_body
+            .find("if !sentinel_hit && !heavy_due {")
+            .expect("the heavy-tick gate");
+        let revalidate = loop_body
+            .find("observe_github_credential")
+            .expect("the validating probe call");
+        assert!(
+            heavy_gate < revalidate,
+            "the validating probe is a podman exec and must sit behind the \
+             heavy-tick gate, never on the 2s tick (995-srbf)"
+        );
+        assert!(
+            loop_body.contains("revalidations_due >= 5"),
+            "revalidation must ride a multiple of the heavy tick so it costs \
+             one exec per several minutes, not one per heavy tick"
+        );
+    }
+
+    /// ORDER 995-srbf — an unreachable probe must NOT demote.
+    ///
+    /// `probe_github_username` returns None for an invalid token and for a
+    /// probe that could not run. Demoting on the second logs the operator out
+    /// over a podman hiccup. The `Unreachable` arm must reach no
+    /// `apply_login_transition` call.
+    #[test]
+    fn an_unreachable_credential_probe_does_not_demote() {
+        let source = include_str!("main.rs");
+        let arm = source
+            .split("CredentialObservation::Unreachable(reason) => {")
+            .nth(1)
+            .and_then(|tail| tail.split("\n                    }").next())
+            .expect("the Unreachable arm of the revalidation match");
+        assert!(
+            !arm.contains("apply_login_transition"),
+            "an unreachable probe says nothing about the credential and must \
+             not change the login state: {arm}"
+        );
+        assert!(
+            arm.contains("warn!"),
+            "an unreachable probe must still be loud — a permanently broken \
+             probe is otherwise indistinguishable from a healthy one: {arm}"
         );
     }
 
@@ -22456,13 +22647,22 @@ esac
             .enable_time()
             .build()
             .expect("test runtime");
+        // The fixture argv carries the hardening envelope, sourced from the
+        // policy constant rather than spelled here so it cannot drift from it.
+        //
+        // 986-ahnc made `run_agent_container_attached` refuse an argv missing
+        // these, and this fixture reached that guard with a bare argv — the
+        // guard was right and the fixture was wrong. Hardcoding the flags would
+        // reintroduce exactly the drift the constant exists to prevent.
         let run_args = |name: &str| {
-            vec![
-                "--rm".to_string(),
-                "--name".to_string(),
-                name.to_string(),
-                "localhost/tillandsias-forge:test".to_string(),
-            ]
+            let mut argv = vec!["--rm".to_string(), "--name".to_string(), name.to_string()];
+            argv.extend(
+                tillandsias_podman::policy::MANDATORY_HARDENING_FLAGS
+                    .iter()
+                    .map(|f| f.to_string()),
+            );
+            argv.push("localhost/tillandsias-forge:test".to_string());
+            argv
         };
 
         let result_file = scratch.path().join("result.jsonl");
