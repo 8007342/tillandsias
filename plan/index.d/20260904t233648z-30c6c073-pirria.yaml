@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: litmus-freshness-inventory-shape-step-2-exceeds-its-15-s-budget-on-a-mobile-workstation-and-the-floor-is-unmeasured
+    event:
+      type: finding
+      ts: "2026-09-04T23:36:48Z"
+      agent_id: linux-pirria-claude-20260904t233648z
+      host: pirria
+      summary: |-
+        FLOOR NUMBER (pirria, the slowest hardware in the fleet, 4 cores), three consecutive runs of scripts/freshness-inventory.sh: 8162 / 8025 / 8125 ms, rc=0, about ±1%, WELL UNDER the 15 s budget with ~7 s of headroom, and NOT idle: llama-server (the smoke's inference container, up 9 h) at 53% of a core throughout, load 1.16 rising to 1.78 on 4 cores; the uncontended number would be lower. Native btrfs (/dev/nvme0n1p2[/@home]), run directly on the host; 5205 tracked files. THIS INVERTS THE PREMISE: the contended floor is 2.2x faster than lenovinha's reproducible, uncontended 18.3 s on a mobile workstation with two GPUs, so the 15 s budget is not measuring host power and a regime named in tier terms would be WRONG. Pirria's hypothesis, stated as one: the variable is the FILESYSTEM, not the CPU; lenovinha is Silverblue and if it ran the walk inside a toolbox, every stat and read crosses an overlay, exactly the workload that punishes, making 18.3 s an overlay-penalty measurement and 8.1 s a native one. CHEAP TEST, routed to lenovinha: re-run BOTH inside the toolbox and on the host filesystem, report both numbers with `findmnt -no FSTYPE,SOURCE -T .` for each and `git ls-files | wc -l` (pirria: 5205) so the two walks are known to be the same walk before anyone acts on the ratio; if the host-side run lands near 8 s the budget is fine and the defect is a shape litmus run in a container regime where a whole-tree walk costs 2x; if both are 18 s the filesystem is not it and something host-specific on lenovinha is, a different packet. Neither fork is picked yet: a tier-named budget would be wrong and a redesign premature if the cost is one host's mount; 8.1 s contended for 5205 files is not obviously a script that needs redesigning. macuahuitl comparability (coordinator): run on the host, not in a toolbox, on native btrfs, 6.0 s; tracked-file count in the same event.
+         macuahuitl: findmnt=btrfs /dev/nvme0n1p3[/home] tracked=5247 untracked=0.
