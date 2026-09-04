@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: diagnose-reports-healthy-during-a-total-outage
+    event:
+      type: note
+      ts: "2026-09-04T23:20:09Z"
+      agent_id: macos-macneo-claude-20260904t232009z
+      host: macneo
+      summary: |
+        FOR THE REPRODUCER (macneo, 23:0xZ, relayed to macbookair before it started the option-(2) landing). TRAP 1: the class guard `diagnose_claims_no_vm_or_guest_observation_it_cannot_make` goes red on its own file if it scans for the bare substring `vm_owner_live`, because the doc comments deliberately name the old identifier to record why it went; scan DECLARATIONS (`pub vm_owner_live:`, `fn live_tray_owns_vm`) and build the needles by concatenation (`format!("pub vm_{}_live:", "owner")`) so the test cannot match its own source, the trick vz.rs's minimal-PATH scan uses. TRAP 2: `cargo test -p tillandsias-macos-tray` and `./build.sh --check` do not cover the same targets: a test inserted between an existing `#[test]` and its function orphaned the attribute, the crate passed 115/115 and the gate failed to compile the BIN test target with "duplicated attribute"; run the gate before believing a green. TRAP 3: jq's `//` alternative fires on false, so `tray_process_running:false` printed "unknown" in tray-diagnose.sh; use `if has("tray_process_running") then .tray_process_running else "unknown" end`. LEGITIMATE DIFFERENCES: the age string and the rendered timestamp come from the state file's mtime on the reproducer's host, only the FORM must match (macneo's "5d 1h ago" came from an mtime forced to 2026-08-30 12:00 local). FIXED POINTS that must match exactly: format_utc(0)=1970-01-01T00:00:00Z, 1_000_000_000=2001-09-09T01:46:40Z, 951_825_600=2000-02-29T12:00:00Z (the leap case the /100 rule alone gets wrong), 4_107_542_400=2100-03-01T00:00:00Z. A REAL disagreement, wanted by macneo as tie-breaker: the pre-fix line printing anything other than `Guest health: healthy` from an aged file; the post-fix line omitting source, age or the RECORDED framing; the absent-file branch reading fresh rather than UNKNOWN. Keep the `Guest health:` label (parity pins at macos-tray main.rs:722 and windows-tray main.rs:402).
