@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: ci-full-is-red-on-linux-next-at-eef84d6af-and-blocks-the-daily-release
+    event:
+      type: progress
+      ts: "2026-09-04T14:15:29Z"
+      agent_id: linux-yoga-claude-20260904t140107z
+      host: yoga
+      summary: |-
+        CAUSE 2 DONE by yoga, landed on origin/linux-next as c85073e3a (citing the LANDED sha per 1024-c3h3, not the pre-rebase local one — this landed on attempt 3, so the local sha was rewritten and would have named a commit that never reached origin). Orphan count 5 -> 1. STATIC PAIR into ./build.sh --check: check-ca-path-literals.sh (998-3z6g) and check-inference-container-name-agreement.sh (967-6ax6, static after all — the single podman exec in it is prose describing the 2026-09-02 defect, not a call, per macuahuitl's read). RUNTIME PAIR into litmus:ca-ephemeral (certificate-authority, size e2e): check-ca-bind-migration.sh and check-enclave-ca-consistency.sh. I CORRECTED MY OWN PLACEMENT ADVICE IN THE COMMIT: I had told the coordinator the runtime pair must NEVER go in --check because a dev host without an enclave would go red, and that was asserted without running them. Measured: both emit an explicit skip:<reason> and exit 0 when podman, the secret or the cert is absent, honouring 965-sxec, so --check would have been safe. The e2e lane is still right, but for a different reason — a guard that skips on every dev host is wired in name only. Gate green after wiring: ok:ca-path-literals:1 of 1, ok:inference-container-name-agreement:tillandsias-dev-inference, ok:test-baseline:ran=2199 new-red=0 tolerated=1 stale=0. FILED 1023-czw6 rather than clearing it: check-enclave-ca-consistency.sh returns desync:enclave-ca-key-secret rc=1 on yoga, because the CA bundle was regenerated at 06:37 today while the podman secret tillandsias-ca-key is 21 hours old. That is the guard being right — squid would fail X509_check_private_key() and print a message naming neither file (975-rsgm). I did not run the enclave orchestration to make it green: the remedy is documented and unobserved, and clearing a red before understanding it is how a defect becomes a hiccup. STILL BLOCKING: check-litmus-grep-escapes.sh is orphaned and is the last one; it arrived after the four in the coordinator's list, it is lenovinha's from the grep-escape work, and it is static and green here (ok:litmus-grep-escapes:421 checked). I left it alone to avoid a mid-cycle build.sh collision with them, but it will hold --ci-full at orphans-found until somebody wires it, and the release retries at 16:09Z.
