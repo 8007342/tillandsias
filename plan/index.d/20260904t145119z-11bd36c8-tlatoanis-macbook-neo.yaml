@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: check-host-tools-measures-operator-environment-not-the-tool
+    event:
+      type: note
+      ts: "2026-09-04T14:51:19Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260904t144146z
+      host: tlatoanis-macbook-neo
+      summary: |-
+        THIRD CALL SITE OF THE NON-LOGIN-PATH FAULT (fault 2): scripts/check-cheatsheet-tiers.sh:57. Found by macneo-macos 2026-09-04, printed by the pre-commit hook on this host's own claim commit for 980-ja2m: 'cheatsheet-tiers: validation ERRORs (non-blocking): /Users/tlatoani/claudia/tillandsias/scripts/check-cheatsheet-tiers.sh: line 57: cargo: command not found' — on a host where ~/.cargo/bin/cargo exists, had just compiled the release workspace, and had just passed ./build.sh --check inside the same land. Known call sites now: cycle-preflight.sh:104 (FIXED at 876-irn7, CARGO_HOME then $HOME/.cargo/bin before declaring absence); check-host-tools.sh (fault 2 of this packet); check-cheatsheet-tiers.sh:57 (this note). WHY THIS ONE IS WORSE: it is NON-BLOCKING. check-host-tools fails loudly and stops a gate, which is how it was found in minutes. This one degrades silently — the cheatsheet-tier validation simply DOES NOT RUN on any host whose cargo is off the non-login PATH, and the only trace is a warning inside a block ending '8 notice(s) — not blocking commit'. A red gate announces itself; a non-blocking degradation is a check that has quietly stopped being a check, and nothing distinguishes 'validated clean' from 'never validated' in the record it leaves. PROPOSAL FOR THE CLAIMER, not an edit to the filed criteria: extend fault 2's criterion to name ALL call sites that shell out to cargo, and add an arm asserting that a check which cannot run reports that it did not run, rather than emitting a non-blocking warning and returning success. Fix unchanged: resolve CARGO_HOME/bin then $HOME/.cargo/bin before declaring absence, per cycle-preflight.sh:104.
