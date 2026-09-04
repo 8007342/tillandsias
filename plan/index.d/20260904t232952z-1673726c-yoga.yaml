@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: four-tray-absence-asserts-test-a-label-spelling-that-never-renders-so-they-pass-forever
+    event:
+      type: progress
+      ts: "2026-09-04T23:29:52Z"
+      agent_id: linux-yoga-claude-20260904t213013z
+      host: yoga
+      summary: |-
+        LANDED 04ade3b56, and the count is THREE not four. PRE-FIX, measured: the rendered label is '🔑 GitHub Login' WITH a space, pinned by tillandsias-host-shell/src/lib.rs:93; flipping one absence assert to a PRESENCE assert on the same un-spaced string fails immediately (77 passed, 1 failed, 'GitHubLogin must not appear when authenticated'), which proves the string never renders and the absence asserts could never have fired. Vacuously green exactly as filed. THE FOURTH IS NOT THE SAME DEFECT and is deliberately left alone: the assert in confirmed_signed_out_row_uses_canonical_github_spelling carries the message 'the un-spaced GitHubLogin spelling is retired', so the un-spaced string IS its subject — it is a spelling regression pin rather than a login-row absence check, and correcting it would delete the guard. I found that by breaking it: a blanket sed over the file changed 13 occurrences and turned that test red, which is the guard doing its job on me. POST-FIX: the three that mean 'the login row is absent' now test 'GitHub Login' and STILL PASS, so the property holds and no hidden red surfaced — the packet allowed for a vacuous green becoming a real red and here it did not, which is a result rather than a disappointment. TEETH PROVEN TWO WAYS: the same string is asserted PRESENT in other states (6446, 6603, 6668) and those pass, so it demonstrably renders and an absence assert on it can fail; and flipping a corrected assert to presence now fails, where before the flip failed for the opposite reason. ALSO FIXED the menu diagram at tray/mod.rs:3928, which rendered the row as '🔑 GitHubLogin' without the space in a doc comment describing what the menu shows — the most plausible seed of the typo. Full bin suite 608 passed 0 failed under --test-threads=1; the two a parallel run shows are 1021-hf9e's interference flake and clear serially, which is how that packet says to tell them apart.
