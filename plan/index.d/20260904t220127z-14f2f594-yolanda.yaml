@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: cloud-only-migration-interrupted-local-src-still-load-bearing
+    event:
+      type: progress
+      ts: "2026-09-04T22:01:27Z"
+      agent_id: windows-yolanda-opus5-20260904t220127z
+      host: yolanda
+      summary: |-
+        WIRE CLOSED. The LocalProjects surface is gone from the control wire and WIRE_VERSION is 3. Slice 3's last step, landed after every consumer was removed and verified removed IN MY OWN TREE rather than on the branch that removed them.
+
+        WHAT LANDED, in one commit as scoped:
+          control-wire: EnumerateLocalProjects, LocalProjectsReply, LocalProjectsPush removed from ControlMessage; SubscriptionTopic::LocalProjects removed; their kind() arms, round-trip tests and kind-table entries removed; WIRE_VERSION 2 -> 3.
+          windows-tray: vm_status_subscribe_topics and legacy_subscribe_topics COLLAPSED to one, the version-skew fallback retry deleted, and the vacuous pin deleted — all in the same commit as the variant, which is the whole reason they were kept until now.
+          macos-tray: action_host.rs's ABSENCE assertion removed. It asserted LocalProjects was not in the subscribe list; with the variant gone its subject does not exist, and it stops compiling by construction. Taken here rather than by macbookair for exactly that reason.
+          LocalProjectEntry RETAINED, with the reason in the source: local_projects.rs still returns it, 1031-q4pb owns giving order 505's validation a source outside this crate, and it is a plain struct with NO DISCRIMINANT — so retaining it changes no byte of the encoding. It dies with that validation, not with the wire.
+
+        PRECONDITION VERIFIED, NOT TAKEN ON REPORT. a00a0f76b, b8aec1dec and bae481780 all confirmed ancestors of my HEAD after merging origin/linux-next. Consumer counts re-derived in MY tree: vsock_server.rs 1, control_dispatch.rs 2, main.rs 0, vsock_client.rs 1, tray/mod.rs 2 — and every one of those six is a COMMENT, checked line by line. Zero code consumers outside control-wire before I removed anything. Two hours earlier the same counts were 14/13/1/2/15, so this check was not ceremony.
+
+        WIRE_VERSION 3 COVERS THE REMOVAL AND NOTHING ELSE, stated in the constant's own doc so a reviewer's stowaway check is a lookup. 890-y72v's DeliverCredentialsReply discriminator is ruled to version 4 and is not in this diff.
+
+        MUTATIONS RUN BEFORE HANDING OVER, both, because a guard I have not tried to break is not evidence:
+          A. WIRE_VERSION 3 -> 2  ->  RED (wire_version_constant_is_three). The bump is guarded.
+          B. Pure reorder, swapping DeliverCredentials and DeliverCredentialsReply, no signature change  ->  GREEN. 62 passed, 0 failed.
+        B IS THE EXPECTED RESULT AND IT IS THE POINT: 1029-5wvd's gap SURVIVES this commit. Nothing in the tree notices a renumbering, my commit does not change that, and macbookair's exhaustive discriminant pin is still required. I ran it so the packet is not accidentally read as closed by this landing, and so the next agent has a measured negative on the post-removal tree rather than one taken before it.
+
+        A GUARD I DID NOT KNOW ABOUT CAUGHT THE BUMP. wire_version_constant_is_two asserted the constant equals 2 and went red on my change. That is the first thing all day that noticed a wire change without being told to, and it is worth naming because the same file's round-trip tests and its "every declared variant" table notice nothing. Renamed to wire_version_constant_is_three with both bumps' reasons recorded, so the next reader learns why v3 exists from the test as well as the constant.
+
+        FEATURE-SET NOTE, correcting the advice I was given. macbookair's finding is that `--features tray` does not compile the vsock surfaces and `tray,listen-vsock` is the truthful set. TRUE ON THEIR PLATFORM, NOT AVAILABLE ON MINE: `--features tray` fails on Windows at tray/mod.rs:16 with `cannot find unix in os` — the Linux tray uses std::os::unix, so that feature set is UNBUILDABLE here for platform reasons, independent of this change. What Windows can compile is `-p tillandsias-headless --features listen-vsock`, which passes with only pre-existing warnings (verified by stashing my diff and re-running: identical warning set on the pristine tree). So the union pass on a Linux or macOS host is the only place the tray+vsock combination is actually checked, and my green is narrower than macbookair's advice implies. Saying so rather than letting "I used the recommended feature set" stand.
+
+        EVIDENCE: ./build.sh --check exit 0, ok:test-baseline:ran=2202 new-red=0 tolerated=0 stale=0; control-wire 62/0; windows-tray bins 108/0.

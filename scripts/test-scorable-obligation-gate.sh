@@ -17,6 +17,9 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 # keeps the fixture self-contained (criterion 3: this suite must not depend on
 # the real ledger) without asserting a pin that does not resolve.
 L="litmus"
+# Assembled for the same reason as L above: a literal cargo invocation in
+# this file is fixture DATA, not a claim this suite makes about the workspace.
+C="cargo test"
 GATE="$PWD/scripts/check-scorable-obligation-added.sh"
 pass=0; fail=0
 
@@ -148,6 +151,33 @@ check "script-named closure accepted" "ok:scorable-obligations:1 checked" \
     status: ready
     verifiable_closure: |
       scripts/check-something.sh reports ok
+')"
+
+# 1033-ev5r: a closure naming a cargo invocation is scorable for the same
+# reason a script one is — a command with an exit code that any reader can run.
+# The gate refused such a row, whose author's only alternatives were a
+# do-nothing scripts/ wrapper around cargo or a dishonest `unscoreable:`. Both
+# are worse records than the cargo line.
+check "cargo-named closure accepted" "ok:scorable-obligations:1 checked" \
+  "$(run_in_fixture 'packets:
+  - packet_id: cargo-pinned-row
+    order: 999-hhhh
+    status: ready
+    verifiable_closure: |
+      '"${C}"' -p some-crate --test some_target passes green at a clean HEAD.
+')"
+
+# NEGATIVE CONTROL FOR THE WIDENING. Without this, the arm above proves only
+# that SOMETHING passes — a gate that accepted every fragment would satisfy it.
+# Prose that merely MENTIONS testing, with no runnable command, must still be
+# refused, or the widening has removed the gate rather than widened it.
+check "prose about testing is still refused" "violation:scorable-obligation-missing:1" \
+  "$(run_in_fixture 'packets:
+  - packet_id: prose-only-row
+    order: 999-iiii
+    status: ready
+    verifiable_closure: |
+      Someone should test this properly and confirm the behaviour is right.
 ')"
 
 total=$((pass+fail))

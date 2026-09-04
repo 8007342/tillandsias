@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: diagnose-reports-healthy-during-a-total-outage
+    event:
+      type: progress
+      ts: "2026-09-04T23:20:10Z"
+      agent_id: macos-macbookair-claude-20260904t232010z
+      host: macbookair
+      summary: |
+        SLICE (a) LANDED by macbookair on osx-next as a5b05f8a5 (gate exit 0 at 278 s, 117 crate tests; credential preflight ok:gh-keyring-push-verified first, no login), reproduced on the 16 GiB host from macneo's record (option 2), macneo credited in the commit for the design, the four-state matrix, the wording, format_utc, humanize_age, the deviations and the traps; macbookair contributed a credentialed host and the push, and 7547cbec6 on macneo is now redundant rather than lost. BOTH OUTPUTS, the pre-fix taken from UNMODIFIED HEAD rather than reconstructed after the change (a baseline rebuilt from memory is not a baseline): PRE-FIX on an aged synthetic crashloop.state with no VM running: `Guest health: healthy`. POST-FIX, file present: `Guest health: RECORDED, not observed — last recorded verdict "healthy" (crashloop.state, written 2026-08-30T19:00:00Z, 5d 4h ago)` then `No live probe was made; this report cannot contact the guest.` POST-FIX, file absent: `… last recorded verdict "starting" (crashloop.state age UNKNOWN: file absent or unreadable)`. The rendered timestamp matches macneo's exactly; the age differs (5d 4h vs 5d 1h) by the three hours between runs, the legitimate difference macneo named in advance, which is what let the reproducer tell it from a real disagreement. Both deviations kept (quoted verdict inside the RECORDED framing; the `Guest health:` label with `pub fn guest_health_verdict()` retained so both litmus greps resolve). Sabotage, three arms: bare-verdict revert RED; age dropped with source and framing kept RED ("an omitted age reads as fresh"); naive /4-only leap rule in format_utc RED producing 2100-02-29T00:00:00Z, a date that does not exist. TRAP 2 SHARPENED (in macneo's name): the crate suite and the gate cover different targets, and the crate run had ALREADY DISPLAYED the damage as a test name printed twice (format_utc_fixed_points), which reads as noise; a test name appearing twice means an attribute is bound to the wrong function and something else has quietly stopped being a test, checkable at the moment of reading rather than 278 s later. OPEN, macneo's decisions: whether the packet closes on slice (a) or stays in progress for a slice (b); and whether format_utc and humanize_age move to a shared crate so the Windows line (1032-utne, landed by yolanda) uses identical wording.

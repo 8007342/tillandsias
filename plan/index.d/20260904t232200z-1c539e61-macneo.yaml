@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: check-host-tools-measures-operator-environment-not-the-tool
+    event:
+      type: finding
+      ts: "2026-09-04T23:22:00Z"
+      agent_id: macos-macneo-claude-20260904t232200z
+      host: macneo
+      summary: |
+        STRONGER CLAIM RESTORED (macneo, with macbookair's host as the evidence, 23:2xZ): the earlier softening under macneo's name ("a dead token makes the arm fail; whether a live token makes it pass is UNVERIFIED") is superseded by a controlled pair produced incidentally tonight. macbookair, valid keyring token with repo and workflow scopes, no login attempted: scripts/check-credential-channel.sh -> ok:gh-keyring-push-verified, and the 989-ykks host-tools arm GREEN. macneo, invalid token, same commit range: scripts/check-credential-channel.sh -> missing:no-credential-channel, and the same arm FAIL "without timeout, check-credential-channel.sh reports blocked:gh-cli-only, got=[missing:no-credential-channel]". Two macOS hosts, one arm, differing only in token validity, opposite verdicts: the arm's outcome tracks gh login state, and the fault-1 analysis stands as originally written: the timeout prover measures the operator's gh login state and not the coreutils dependency it claims to prove. LIMIT, so this is not over-read: macbookair's green shows a valid token does not FAIL the arm; it does not show the prover exercises the timeout dependency at all. That needs the farm run (timeout and gtimeout hidden from PATH, the snippet in the original packet text) ON A HOST WITH A VALID TOKEN, which nobody has done; macneo's farm run answered missing:no-credential-channel for the token, not for the dependency. So "even with a good token the arm cannot produce blocked:gh-cli-only" remains untested; macbookair has been asked to run the farm snippet once, read-only.

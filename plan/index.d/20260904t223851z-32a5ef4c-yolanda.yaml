@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: windows-trays-guest-health-line-prints-the-bare-crashloop-verdict-with-no-source-and-no-age
+    event:
+      type: progress
+      ts: "2026-09-04T22:38:51Z"
+      agent_id: windows-yolanda-opus5-20260904t223851z
+      host: yolanda
+      summary: |-
+        FIXED. The Windows Guest health line names its source and its age, and the bare-verdict form is now unprintable.
+
+        PRE-FIX RESULT, MEASURED ON THE SHIPPED BINARY, not reasoned about. I wrote a crashloop.state to %LOCALAPPDATA%\tillandsias\wsl\, aged its mtime to five days, and ran the INSTALLED v56.9.2.1 tray's --diagnose. Twice, for the two verdicts a stale file can produce:
+
+          state: ever_ready 1                       ->  "Guest health: starting"
+          state: ever_ready 1 + last_phase ready    ->  "Guest health: healthy"
+
+        Both from a file written 2026-08-30T22:17:31Z, read at 2026-09-04, age five days. No source, no age, no indication that nothing had been contacted. `Guest health: healthy` is indistinguishable from a live observation of a healthy guest, and on this host at that moment the guest had not been probed at all.
+
+        POST-FIX, same inputs:
+          Guest health: RECORDED, not observed - last recorded verdict "healthy" (crashloop.state, written 2026-08-30T22:17:31Z, 5d ago)
+          No live probe was made; this report cannot contact the guest.
+
+        THE HOST WAS RESTORED. The real crashloop.state was backed up before I touched it, restored byte-identical afterwards (diff clean), and its ORIGINAL MTIME restored too — which matters more than usual here, because for this file the mtime IS the datum the feature reads. Leaving it at restore-time would have silently made a five-day-old record look fresh, which is the defect.
+
+        WHERE THE AGE COMES FROM, and it is not obvious: the state format (`tillandsias-crashloop-state v1`, window_secs / threshold / ever_ready / last_phase / event lines) carries NO write timestamp. Event lines carry their own at_unix, but a file with no events - the common healthy case, and both cases above - has nothing dated in it at all. So the age can only come from the file's MTIME, which is why the formatter reads metadata rather than parsing the body. A reader who assumed the body carried a timestamp would find the healthy case has none.
+
+        ABSENT/UNREADABLE IS THE ARM THAT MATTERS MOST, and it is easy to get wrong. `CrashLoopDetector::load` returns a DEFAULT detector on any read error - by design, "absence of state is no loop observed yet, never a hard failure". Correct for the detector, dangerous for the report: without a special case the line prints `starting` for a guest it has never heard of, with exactly the confidence of an observation. Now: `(crashloop.state, age UNKNOWN - file absent or unreadable)`, still inside the RECORDED framing.
+
+        WHAT IS DELIBERATELY UNCHANGED: the `Guest health:` literal, because two parity surface tests pin it (macos-tray and windows-tray main.rs:402), and the `crash-loop:<subsystem>` token, which appears VERBATIM inside the new framing so `verdict_matches_grammar` still describes it and the tray notification path still keys on it. Verified with a real tripped detector: `crash-loop:vault-unseal` survives intact.
+
+        THREE TESTS, and the first carries the packet's guard: it asserts the first line is NOT `Guest health: healthy`, NOT `Guest health: starting`, and does NOT start with `Guest health: crash-loop:` - the bare-verdict form is the defect, so it must not be printable rather than merely not currently printed.
+
+        NEGATIVE CONTROL ARMED: reverting guest_health_lines to the shipped one-liner turns both the aged-file test and the absent-file test RED, green on restore. Not asserted from the source reading - run.
+
+        TWO MISTAKES OF MINE IN THIS CYCLE, both caught, both worth recording. I first wrote the crash-loop test against a `CrashLoopSubsystem::Vault` variant that does not exist (the real one is VaultUnseal, slug vault-unseal) - a compile error, so it cost nothing. And I ran the suite with a filter of `1032`, which matches no test name; it reported `ok. 0 passed` and I nearly took that as three greens. A filter that matches nothing returns success, and the day's whole theme is that a green over an empty set reads exactly like a green over a full one. Re-ran by explicit test name.
+
+        EVIDENCE: ./build.sh --check exit 0, ok:test-baseline:ran=2202 new-red=0 tolerated=0 stale=0.

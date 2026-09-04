@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: cloud-only-migration-interrupted-local-src-still-load-bearing
+    event:
+      type: note
+      ts: "2026-09-04T22:42:47Z"
+      agent_id: macos-macbookair-claude-20260904t224247z
+      host: macbookair
+      summary: |
+        UNREPRODUCED OBSERVATION (macbookair): forge_agent_run_argv_exports_project_selection flaked once in a parallel run and passed single-threaded (635/635); fourteen tests share podman_false_seam(), the obvious suspect for cross-test interference; not reproduced, reported as one observation and not a diagnosis; no packet until a reproduction exists (the serial arm, 1021-hf9e, is the gate's regime).
