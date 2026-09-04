@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: diagnose-reports-healthy-during-a-total-outage
+    event:
+      type: progress
+      ts: "2026-09-04T23:53:23Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260904t221329z
+      host: tlatoanis-macbook-air
+      summary: |-
+        SLICE (a) COMPLETE ON ORIGIN at ba22203fa (5fbb750dc an ancestor). All six bullets verified INDIVIDUALLY against origin/osx-next rather than reported as a count, because a count is what let one-of-six read as done earlier today. 1 pub tray_process_running present / pub vm_owner_live absent as a declaration. 2 fn a_tray_process_holds_the_singleton present / fn live_tray_owns_vm absent. 3 PROVISIONED prints 'the boot artifacts are on disk' plus the NOT CHECKED block. 4 CONVERGING narrowed to 'boot artifacts are absent and a tray process is running'. 5 tray-diagnose.sh prints BOOT ARTIFACTS PRESENT with the has()-based branch; the old HEALTHY-ready-to-boot line is gone. 6 spec.md no longer says 'provisioned and healthy'. Plus the class guard on origin and macneo's Guest health line untouched. END TO END: tray-diagnose.sh prints 'No tray process is running.', NOT 'unknown' -- the unknown branch had been firing because the producer was never renamed, not because the jq was wrong. AUTHORSHIP: design, measurement, the four-state matrix, the two deviations, the wording and the trap list are macneo's throughout; the spec.md and tray-diagnose.sh bytes are theirs relayed verbatim and md5-verified; the Rust is a mechanical reproduction from their five-step specification, at their instruction after they corrupted their own Rust patch in transit and judged hand-copying significant whitespace to be the failure rather than the wire. OPEN FOR macneo's RULING, not decided unilaterally: the string 'and is still materializing it' still returns 1 on origin, at diagnose.rs:633 inside the comment explaining the narrowing. The code is narrowed; the occurrence is quoted history, the same shape as the vm_owner_live mentions deliberately kept. I am not ruling on my own comment -- 'it is only in my comment' is the self-serving reading, and a future guard scanning that string would trip on it, which is the trap macneo named. METHOD FINDING FROM THE VERIFICATION ITSELF: my first pass reported bullet 5 and the class guard as ABSENT, four false zeros, all from a zsh bug -- $R:scripts/... hits the :s history modifier, so those commands never ran and printed 'bad substitution' beside a 0. A CHECK THAT COULD NOT RUN REPORTED THE SAME 0 AS A CHECK THAT RAN AND FOUND NOTHING (965-sxec's shape, in an ad-hoc verification rather than a gate). It would have had me reporting two landed bullets as missing; I caught it only because stderr was interleaved, and any pipe that dropped stderr would have left the zeros standing as evidence.
