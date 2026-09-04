@@ -475,7 +475,7 @@ if [ -n "$details" ]; then
     fi
     echo "  CAUSE: an enclave service exited and nothing restarted it. rc>128 means it died of signal rc-128 (143=SIGTERM, 137=SIGKILL, 139=SIGSEGV); the in-container supervisors (767-es4w proxy, 767-nkkq forge harness) can only speak while their container lives, so a stopped container is silent by construction." >&2
     echo "  REMEDY: 'podman logs <service>' for the last words, then bring the enclave up through" >&2
-    echo "  the orchestration: 'tillandsias --ensure-enclave' (idempotent), NOT 'podman start <service>' and NOT '--init', which only builds images (1004-xw3q). Order 975-rsgm: a bare" >&2
+    echo "  the orchestration: 'tillandsias --ensure-enclave' (idempotent), NOT 'podman start <service>' and NOT '--init', which only builds images (1004-xw3q). VERSION: --ensure-enclave is TRUNK-ONLY as of 2026-09-04 and is absent from the released v0.4.260830.5, where this remedy fails with an unknown flag — update rather than substitute --init. Order 975-rsgm: a bare" >&2
     echo "  'podman start' skips the preconditions the launch path establishes — for the" >&2
     echo "  proxy that is the CA key secret, and starting without it produces a DIFFERENT" >&2
     echo "  failure (squid: X509_check_private_key() failed) whose message names neither" >&2

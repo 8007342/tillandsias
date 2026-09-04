@@ -64,6 +64,11 @@ if [ ! -r "$CA_DIR/intermediate.crt" ]; then
         echo "  REMEDY: bring the enclave up through the orchestration: \`tillandsias --ensure-enclave\`"
         echo "  (idempotent; the same ensure a lane launch runs). NOT \`tillandsias --init\`, which only"
         echo "  builds images and never touches the proxy (1004-xw3q, measured 2026-09-04)."
+        echo "  VERSION: --ensure-enclave is TRUNK-ONLY as of 2026-09-04. It is absent from the"
+        echo "  released v0.4.260830.5 (\`tillandsias --help\` there does not list it), so on an"
+        echo "  installed binary this remedy fails with an unknown flag. There is no substitute"
+        echo "  to reach for — --init is a different operation, not an older spelling — so the"
+        echo "  action on a released binary is to update, not to improvise."
     } >&2
     exit 1
 fi
@@ -99,6 +104,9 @@ if [ "$cert_mod" != "$secret_mod" ]; then
         echo "  old key (975-rsgm)."
         echo "  REMEDY: bring the proxy up through the orchestration — \`tillandsias --ensure-enclave\`,"
         echo "  which refreshes the secret from the current bundle — never \`podman start\` and not \`--init\`."
+        echo "  VERSION: --ensure-enclave is TRUNK-ONLY as of 2026-09-04 and absent from the released"
+        echo "  v0.4.260830.5; on an installed binary this remedy fails with an unknown flag, and the"
+        echo "  action is to update rather than substitute --init, which does something else."
     } >&2
     exit 1
 fi
