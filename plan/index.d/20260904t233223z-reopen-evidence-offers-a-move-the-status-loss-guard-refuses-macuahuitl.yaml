@@ -1,0 +1,48 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: set-field-reopen-evidence-offers-a-move-that-check-fragment-status-loss-then-refuses
+    order: 1037-x5mk
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: any
+    capability_tags: [plan, ledger, closure-ladder, guards, protocol]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-plan/src/main.rs
+      - scripts/check-fragment-status-loss.sh
+      - skills/advance-work-from-plan/SKILL.md
+    title: |
+      `set-field --reopen-evidence` lets a completed packet be set back to ready, and check-fragment-status-loss then refuses the tree because a landed `completed` event against a `ready` fold is a status loss it cannot clear
+    context: |
+      FOUND by lenovinha 2026-09-04T23:2xZ while withdrawing 1034-ihxw (its premise was void: the `[ -x $absolute ]`
+      probe it added to gate-stamp.sh is the exact form order 889-8tcb records as having deadlocked every Windows host,
+      twenty lines above the edit). It first set the packet back to `ready` with --reopen-evidence; the tree was then
+      refused by check-fragment-status-loss, which is a set-membership join over landed terminal events, so no later
+      event can clear an already-landed `completed`. Two mechanisms disagree about whether a completed packet may
+      return to ready, and the disagreement surfaced at 23:20Z on a host trying to be honest. COORDINATOR RULING, so
+      the claimer implements a decision rather than makes one: a completed packet does NOT return to ready. The ledger
+      is append-only and its closures are evidence; if the premise was void the packet is OBSOLETED (terminal, both
+      channels agree, which is what lenovinha did); if a real regression of a closed packet is found, a NEW packet is
+      filed citing the old one, exactly as 1034-ihxw was refiled as 1036-e5w9 with the correct diagnosis. The tool must
+      say this instead of offering the move: `set-field status ready` on a packet with a landed terminal event refuses
+      with the rule and names the two sanctioned moves; --reopen-evidence is retired or confined to packets with no
+      landed terminal event. The guard's behaviour is right and stays.
+    exit_criteria:
+      - "set-field refuses ready on a packet whose fold carries a landed terminal event, printing the rule and the two sanctioned moves (obsoleted; a new packet citing this one); pre-fix result: FAILS (the move is offered and the guard refuses afterwards)"
+      - "a fixture drives both paths (obsoleted accepted; a new packet accepted; ready refused) against the status-loss guard and all three agree; pre-fix result: FAILS"
+      - "the worker skill's closure section states the rule in one sentence"
+    unscoreable: |
+      The pin is a shell fixture over the plan binary and the status-loss guard;
+      no litmus lane covers the closure ladder's reopen path yet, and the claimer
+      names one if they add it.
+    events:
+      - type: note
+        ts: "2026-09-04T23:32:23Z"
+        host: macuahuitl
+        summary: |
+          FILED by the coordinator from lenovinha's report, with the ruling stated in
+          the context so the claimer implements it. Lenovinha resolved its own case
+          correctly (obsoleted, refiled as 1036-e5w9) without faking a status.
