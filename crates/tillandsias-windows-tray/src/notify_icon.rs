@@ -75,7 +75,6 @@ use tillandsias_host_shell::menu_state::{
 };
 use tillandsias_host_shell::provisioning::{ProvisionPhase, ProvisionProgress};
 use tillandsias_host_shell::pty::{PtyIntent, intent_for_action, launch_spec};
-use tillandsias_host_shell::scanner::{ProjectEvent, watch_projects};
 
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::Graphics::Gdi::HBRUSH;
@@ -574,28 +573,20 @@ pub fn run() -> ! {
             *guard = Some(MenuState::initial());
         }
 
-        // Host-side project discovery: scan %USERPROFILE%\src and keep the
-        // menu's local-projects list current. This runs entirely on the host
-        // and needs no VM, so the tray lists ~/src projects from first paint
-        // (the popup rebuilds from MENU_STATE on every right-click).
-        // A missing ~/src is a NORMAL state (fresh machine, or the operator
-        // relocated it — live 2026-07-23): create the canonical dir so the
-        // watch always registers and the list is simply empty, instead of
-        // the scanner's no-paths ERROR landing in the Event Log.
-        // @trace spec:host-shell-architecture.scanner.local-project-discovery@v1
-        let _ = std::fs::create_dir_all(crate::wsl_lifecycle::user_src_dir());
-        match watch_projects(&crate::wsl_lifecycle::user_src_dir()) {
-            Ok(mut rx) => {
-                tokio::task::spawn_local(async move {
-                    while let Some(ev) = rx.recv().await {
-                        apply_project_event(ev);
-                    }
-                });
-            }
-            Err(err) => {
-                tracing::warn!(%err, "host-side ~/src project scan unavailable");
-            }
-        }
+        // HOST-SIDE ~/src DISCOVERY IS GONE (order 997-e4v2). The tray used to
+        // `create_dir_all(%USERPROFILE%\src)` here and watch it, feeding the
+        // Local menu from host disk with no VM involved.
+        //
+        // Creating that directory was itself the thing the migration exists to
+        // remove: the tray MADE the host checkout root on every start, so a
+        // machine that never had one got one anyway. Cloud is the only project
+        // path now, on the ephemeral GitHub -> GitMirror -> Forge chain, and
+        // nothing on this path touches host disk.
+        //
+        // Forward-only, by operator ruling 2026-09-03: an existing ~/src is
+        // IGNORED and left to rot — no migration, no detection, no warning, no
+        // cleanup pass, because there are no users in the wild.
+        // @trace order:997-e4v2
 
         // Spawn the WSL provisioning + lifecycle task, UNLESS dev mode asked us
         // to skip it. `--no-provision` (or TILLANDSIAS_NO_PROVISION=1) brings the
@@ -1772,15 +1763,6 @@ static VM_STATUS_PUSH_HEALTH: std::sync::LazyLock<
     tillandsias_host_shell::subscription_health::SubscriptionHealth,
 > = std::sync::LazyLock::new(tillandsias_host_shell::subscription_health::SubscriptionHealth::new);
 
-/// True while the current push subscription includes
-/// `SubscriptionTopic::LocalProjects` (order 154 slice 3). Distinct from
-/// [`VM_STATUS_PUSH_HEALTH`] because of version skew: against a guest that
-/// predates order 260 the listener falls back to the legacy three-topic
-/// subscribe (see `run_vm_status_push_listener`), and the local-projects
-/// wire poll must then stay active even though the subscription is healthy.
-static LOCAL_PROJECTS_PUSH_SUBSCRIBED: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
-
 /// SC-07 gate: the steady-state `VmStatusRequest` poll is fallback-only —
 /// suppressed whenever the push subscription is delivering.
 fn should_poll_vm_status(push_stream_healthy: bool) -> bool {
@@ -1797,7 +1779,6 @@ fn vm_status_subscribe_topics() -> Vec<tillandsias_control_wire::SubscriptionTop
         tillandsias_control_wire::SubscriptionTopic::VmStatus,
         tillandsias_control_wire::SubscriptionTopic::LoginState,
         tillandsias_control_wire::SubscriptionTopic::CloudProjects,
-        tillandsias_control_wire::SubscriptionTopic::LocalProjects,
     ]
 }
 
@@ -1824,18 +1805,6 @@ fn legacy_subscribe_topics() -> Vec<tillandsias_control_wire::SubscriptionTopic>
 /// clients on every `GithubLoginStatusRequest` (order 230 piggyback), so a
 /// burst refreshes every tray, not just this one.
 fn should_poll_login_and_cloud(push_stream_healthy: bool, fast_poll_burst: bool) -> bool {
-    fast_poll_burst || !push_stream_healthy
-}
-
-/// SC-07 extension (order 154 slice 3): the every-10-ticks
-/// `EnumerateLocalProjects` wire poll is fallback-only — suppressed while the
-/// push subscription delivers `LocalProjectsPush` (order 260: the headless
-/// runs a subscriber-gated guest rescan and pushes a change-gated full
-/// replacement list). A user-action fast-poll burst still forces a confirming
-/// round, same rationale as [`should_poll_login_and_cloud`]. This was the
-/// last steady-state wire poll; with it gated, a healthy subscription means
-/// the tick loop sends nothing.
-fn should_poll_local_projects(push_stream_healthy: bool, fast_poll_burst: bool) -> bool {
     fast_poll_burst || !push_stream_healthy
 }
 
@@ -1993,20 +1962,6 @@ fn apply_cloud_projects(
     n
 }
 
-/// Apply a live VM-side local-projects observation — from a
-/// `LocalProjectsReply` poll or an unrequested `LocalProjectsPush` frame
-/// (order 154 slice 3; full replacement list per the wire doc) — to the
-/// shared `MenuState.local_projects`, so both surfaces stay byte-identical
-/// (mirrors `apply_cloud_projects`). Returns the entry count for logging.
-fn apply_local_projects(entries: &[tillandsias_control_wire::LocalProjectEntry]) -> usize {
-    let mapped: Vec<ProjectEntry> = entries.iter().map(local_entry_to_menu).collect();
-    let n = mapped.len();
-    if let Ok(mut guard) = MENU_STATE.lock() {
-        guard.get_or_insert_with(MenuState::initial).local_projects = mapped;
-    }
-    n
-}
-
 /// Dedicated push listener (order 154 slices 1+2): a persistent reader task
 /// on its own control-wire connection. Connect → handshake →
 /// `Subscribe{[VmStatus, LoginState, CloudProjects]}` → `SubscribeAck` → loop
@@ -2033,7 +1988,6 @@ async fn run_vm_status_push_listener(hwnd: HwndHandle) {
         // Change-gated: redundant set(false) on every reconnect attempt does
         // not wake the tick loop's transition waiter.
         VM_STATUS_PUSH_HEALTH.set(false);
-        LOCAL_PROJECTS_PUSH_SUBSCRIBED.store(false, std::sync::atomic::Ordering::SeqCst);
         // One connect+handshake+subscribe attempt for a given topic list.
         // A FRESH connection per attempt is deliberate: a guest that cannot
         // decode the topic list (postcard unknown-discriminant) may tear the
@@ -2075,18 +2029,21 @@ async fn run_vm_status_push_listener(hwnd: HwndHandle) {
         // that predates order 260 cannot DECODE a Subscribe naming it — and
         // would otherwise reject the whole subscription, regressing VmStatus/
         // Login/Cloud pushes to polls until the guest is refreshed. Try the
-        // full list first; on failure resubscribe with the legacy three-topic
-        // list and leave the local-projects wire poll active
-        // (LOCAL_PROJECTS_PUSH_SUBSCRIBED stays false).
-        let mut local_topic_subscribed = true;
+        // full list first; on failure resubscribe with the legacy list.
+        //
+        // ORDER 997-e4v2: the two lists are now IDENTICAL, because the tray
+        // no longer asks for LocalProjects — so this is presently a plain
+        // retry on a fresh connection, not a version-skew downgrade. The
+        // shape is kept deliberately rather than collapsed: order 260's
+        // stale-guest concern becomes moot only when the topic leaves the
+        // wire, which is the last step of the coordinated tray window, and
+        // the fallback should go in the same commit as the variant.
         let established = match try_subscribe(vm_status_subscribe_topics()).await {
             Ok(c) => Ok(c),
             Err(first_err) => {
-                local_topic_subscribed = false;
                 tracing::debug!(
                     %first_err,
-                    "full-topic subscribe failed; retrying with legacy topics \
-                     (guest may predate the LocalProjects topic, order 260)"
+                    "topic subscribe failed; retrying once on a fresh connection"
                 );
                 try_subscribe(legacy_subscribe_topics()).await
             }
@@ -2108,16 +2065,7 @@ async fn run_vm_status_push_listener(hwnd: HwndHandle) {
 
         backoff_idx = 0;
         VM_STATUS_PUSH_HEALTH.set(true);
-        LOCAL_PROJECTS_PUSH_SUBSCRIBED
-            .store(local_topic_subscribed, std::sync::atomic::Ordering::SeqCst);
-        if local_topic_subscribed {
-            tracing::info!("vm status push subscription established (polls suppressed, SC-07)");
-        } else {
-            tracing::info!(
-                "vm status push subscription established on legacy topics \
-                 (local-projects poll stays active until the guest carries order 260)"
-            );
-        }
+        tracing::info!("vm status push subscription established (polls suppressed, SC-07)");
 
         // Initial sync (order 154 slices 2+3): pushes are change-gated, so a
         // client that (re)subscribes after the last transition would wait
@@ -2130,7 +2078,6 @@ async fn run_vm_status_push_listener(hwnd: HwndHandle) {
         // covered it while the subscription was down.
         refresh_github_login(hwnd).await;
         refresh_cloud_projects(hwnd).await;
-        refresh_local_projects(hwnd).await;
 
         loop {
             match client.next_envelope().await {
@@ -2157,10 +2104,6 @@ async fn run_vm_status_push_listener(hwnd: HwndHandle) {
                     ControlMessage::CloudProjectsPush { projects, .. } => {
                         let n = apply_cloud_projects(&projects, true);
                         tracing::debug!(count = n, "cloud projects pushed");
-                    }
-                    ControlMessage::LocalProjectsPush { entries, .. } => {
-                        let n = apply_local_projects(&entries);
-                        tracing::debug!(count = n, "local projects pushed");
                     }
                     other => {
                         tracing::debug!("push stream: ignoring frame {}", other.kind());
@@ -2213,64 +2156,6 @@ async fn refresh_vm_status(hwnd: HwndHandle) {
         }
         other => {
             tracing::debug!("vm status poll: unexpected reply variant {}", other.kind());
-        }
-    }
-}
-
-/// Map a wire `LocalProjectEntry` ({label, guest_path, last_seen_unix}) onto the
-/// shared menu `ProjectEntry`. `path` is the in-VM mount path the headless
-/// reported — used by "Attach Here" forge-container launches as the cwd. `ready`
-/// is `false` because per-project forge status isn't on the wire yet (slice 19
-/// note). Mirrors macOS `local_entry_to_menu` (slice 19, `06088c41`).
-fn local_entry_to_menu(entry: &tillandsias_control_wire::LocalProjectEntry) -> ProjectEntry {
-    ProjectEntry {
-        name: entry.label.clone(),
-        path: entry.guest_path.clone(),
-        ready: false,
-        full_name: None,
-    }
-}
-
-/// Poll the in-VM headless's `EnumerateLocalProjects` handler (convergence
-/// packet Q4; landed in `05cc3a7d`) and merge the result into the shared
-/// `MenuState.local_projects`. Complementary to the host-side `~/src` scanner
-/// (which delivers immediate file-change updates without a running VM); the
-/// wire poll picks up VM-side reconciliation on a slower cadence and matches
-/// the macOS tray's polling shape (slice 19, `06088c41`).
-///
-/// Best-effort: a transient wire error / Error{Unsupported} leaves the
-/// last-known list untouched (logged at debug / warn respectively).
-async fn refresh_local_projects(hwnd: HwndHandle) {
-    use tillandsias_control_wire::ControlMessage;
-
-    let reply = match live_client_request(
-        "local projects refresh",
-        |seq| ControlMessage::EnumerateLocalProjects { seq },
-        hwnd,
-    )
-    .await
-    {
-        Some(r) => r,
-        None => return,
-    };
-    match reply.body {
-        ControlMessage::LocalProjectsReply { entries, .. } => {
-            let n = apply_local_projects(&entries);
-            tracing::debug!(count = n, "local projects refreshed (VM-side)");
-        }
-        // Per convergence packet item 4 (eddb5c00): surface the dispatcher's
-        // Error so an operator sees why the local-projects didn't refresh.
-        ControlMessage::Error { code, message, .. } => {
-            tracing::warn!(
-                "local projects refresh: {}",
-                describe_wire_error(code, &message)
-            );
-        }
-        other => {
-            tracing::debug!(
-                "local projects refresh: unexpected reply variant {}",
-                other.kind()
-            );
         }
     }
 }
@@ -3157,19 +3042,18 @@ fn request_fast_poll_burst(rounds: u32) {
 /// (order 154, SC-11).
 ///
 /// True exactly when every fallback gate in the loop body is closed, so a
-/// wake would find nothing to do: `should_poll_vm_status`,
-/// `should_poll_login_and_cloud`, and `should_poll_local_projects` all
-/// require either an unhealthy stream or a burst. Note the LOCAL projects
-/// subscription is tracked separately — the stream can be healthy while the
-/// legacy-topic fallback is engaged, and in that state the 10-tick
-/// `EnumerateLocalProjects` poll is still load-bearing and the timer must
-/// stay.
-fn tick_timer_suppressed(
-    push_stream_healthy: bool,
-    local_projects_push_subscribed: bool,
-    fast_poll_burst: bool,
-) -> bool {
-    push_stream_healthy && local_projects_push_subscribed && !fast_poll_burst
+/// wake would find nothing to do: `should_poll_vm_status` and
+/// `should_poll_login_and_cloud` both require either an unhealthy stream or
+/// a burst.
+///
+/// ORDER 997-e4v2 dropped the third gate. The local-projects subscription
+/// used to be tracked separately, because the stream could be healthy while
+/// the legacy-topic fallback was engaged and the 10-tick
+/// `EnumerateLocalProjects` poll was still load-bearing. The Windows tray no
+/// longer polls or subscribes for local projects at all, so that state does
+/// not exist here any more.
+fn tick_timer_suppressed(push_stream_healthy: bool, fast_poll_burst: bool) -> bool {
+    push_stream_healthy && !fast_poll_burst
 }
 
 /// Set by the bounded auto-reset policy and drained by the message loop,
@@ -3424,19 +3308,6 @@ fn spawn_provisioning(hwnd: HWND) {
                             let fast_poll =
                                 FAST_POLL_COUNT.load(std::sync::atomic::Ordering::SeqCst);
                             if tick.is_multiple_of(10) || fast_poll > 0 {
-                                // VM-side local projects arrive as pushes
-                                // while the subscription is healthy (order
-                                // 260 / slice 3); the wire poll is
-                                // fallback-only. The host-side ~/src scanner
-                                // is untouched — it never hits the wire.
-                                if should_poll_local_projects(
-                                    VM_STATUS_PUSH_HEALTH.is_healthy()
-                                        && LOCAL_PROJECTS_PUSH_SUBSCRIBED
-                                            .load(std::sync::atomic::Ordering::SeqCst),
-                                    fast_poll > 0,
-                                ) {
-                                    refresh_local_projects(hwnd).await;
-                                }
                                 // Login + cloud projects arrive as pushes
                                 // while the subscription is healthy (order
                                 // 154 slice 2) — the requests below are
@@ -3482,8 +3353,6 @@ fn spawn_provisioning(hwnd: HWND) {
                             // a confirming round.
                             let suppress_timer = tick_timer_suppressed(
                                 VM_STATUS_PUSH_HEALTH.is_healthy(),
-                                LOCAL_PROJECTS_PUSH_SUBSCRIBED
-                                    .load(std::sync::atomic::Ordering::SeqCst),
                                 FAST_POLL_COUNT.load(std::sync::atomic::Ordering::SeqCst) > 0,
                             );
                             let wake =
@@ -3859,47 +3728,6 @@ unsafe fn handle_menu_command(hwnd: HWND, cmd_id: u16) {
     let action = menu_action::resolve(&logical_id);
     tracing::info!(menu_id = %logical_id, action = ?action, "tray menu click");
     dispatch_action(hwnd, action);
-}
-
-/// Apply a host-side project scan event to the shared menu state.
-fn apply_project_event(ev: ProjectEvent) {
-    if let Ok(mut guard) = MENU_STATE.lock() {
-        let state = guard.get_or_insert_with(MenuState::initial);
-        apply_project_event_to(state, &ev);
-    }
-}
-
-/// Pure update rule for a project scan event — factored out of the global so
-/// the dedup / sort / removal behaviour is unit-testable without Win32.
-///
-/// `Added` inserts a `local` [`ProjectEntry`] (deduped by directory basename,
-/// kept name-sorted); `Removed` drops it. Paths with no usable basename are
-/// ignored.
-///
-/// @trace spec:host-shell-architecture.scanner.local-project-discovery@v1
-fn apply_project_event_to(state: &mut MenuState, ev: &ProjectEvent) {
-    match ev {
-        ProjectEvent::Added { path } => {
-            let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
-                return;
-            };
-            if name.is_empty() || state.local_projects.iter().any(|p| p.name == name) {
-                return;
-            }
-            state.local_projects.push(ProjectEntry {
-                name: name.to_string(),
-                path: path.to_string_lossy().into_owned(),
-                ready: false,
-                full_name: None,
-            });
-            state.local_projects.sort_by(|a, b| a.name.cmp(&b.name));
-        }
-        ProjectEvent::Removed { path } => {
-            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                state.local_projects.retain(|p| p.name != name);
-            }
-        }
-    }
 }
 
 /// Route a resolved [`MenuAction`] to its handler.
@@ -4358,26 +4186,29 @@ mod tests {
     }
 
     /// Order 154 (SC-11): the timer may be dropped only in the state where a
-    /// wake would find every fallback gate closed. The three false cases are
-    /// the negative control — each is a state in which the tick loop still
-    /// has real work, so a helper that simply returned `true` (retiring the
-    /// timer unconditionally and stalling the fallback polls) fails here.
+    /// wake would find every fallback gate closed. The false cases are the
+    /// negative control — each is a state in which the tick loop still has
+    /// real work, so a helper that simply returned `true` (retiring the timer
+    /// unconditionally and stalling the fallback polls) fails here.
+    ///
+    /// ORDER 997-e4v2 removed the third argument. The local-projects
+    /// subscription was tracked separately because a healthy stream could
+    /// coexist with an engaged legacy-topic fallback, leaving the 10-tick
+    /// `EnumerateLocalProjects` poll load-bearing. The Windows tray neither
+    /// polls nor subscribes for local projects now, so that state is gone and
+    /// its case with it.
     #[test]
     fn tick_timer_is_suppressed_only_when_every_fallback_gate_is_closed() {
         assert!(
-            tick_timer_suppressed(true, true, false),
-            "healthy stream, local projects pushed, no burst: a wake would do nothing"
+            tick_timer_suppressed(true, false),
+            "healthy stream, no burst: a wake would do nothing"
         );
         assert!(
-            !tick_timer_suppressed(false, true, false),
+            !tick_timer_suppressed(false, false),
             "an unhealthy stream is exactly when the fallback polls own freshness"
         );
         assert!(
-            !tick_timer_suppressed(true, false, false),
-            "legacy-topic fallback: the 10-tick EnumerateLocalProjects poll still runs"
-        );
-        assert!(
-            !tick_timer_suppressed(true, true, true),
+            !tick_timer_suppressed(true, true),
             "a user action asked for a confirming round"
         );
     }
@@ -4510,7 +4341,6 @@ mod tests {
                 tillandsias_control_wire::SubscriptionTopic::VmStatus,
                 tillandsias_control_wire::SubscriptionTopic::LoginState,
                 tillandsias_control_wire::SubscriptionTopic::CloudProjects,
-                tillandsias_control_wire::SubscriptionTopic::LocalProjects,
             ]
         );
     }
@@ -4539,38 +4369,88 @@ mod tests {
         );
     }
 
-    /// Order 154 slice 3 version-skew pin: the legacy fallback list must be
-    /// exactly the full list minus `LocalProjects`. If a future slice adds a
-    /// fifth topic to `vm_status_subscribe_topics()` this fails loud so the
-    /// author decides the fallback story for it too.
+    /// ORDER 997-e4v2: the Windows tray never touches the host's ~/src.
+    ///
+    /// Two separate paths used to feed the Local menu and BOTH are gone: the
+    /// host-side scanner, which called `create_dir_all(%USERPROFILE%\src)` on
+    /// every start and watched it, and the VM-side wire path (subscribe,
+    /// 10-tick EnumerateLocalProjects poll, LocalProjectsPush handler).
+    ///
+    /// The scanner half is the one worth pinning hardest. It did not merely
+    /// READ a host directory — it CREATED one, so a machine that had never
+    /// had a ~/src got one from the tray alone. Under the forward-only ruling
+    /// (existing trees are ignored and left to rot) creating the root is the
+    /// one thing that cannot survive, and a delete-only diff cannot show that
+    /// it is absent on purpose.
+    ///
+    /// Asserted over the PRODUCTION half with comments stripped: the record
+    /// comments left at both removal sites name the very things being
+    /// forbidden, so a whole-file scan would match the explanation and push a
+    /// future reader to delete the record to get back to green.
     #[test]
-    fn legacy_topics_are_full_topics_minus_local_projects() {
-        let mut expected = vm_status_subscribe_topics();
-        expected.retain(|t| *t != tillandsias_control_wire::SubscriptionTopic::LocalProjects);
-        assert_eq!(legacy_subscribe_topics(), expected);
+    fn windows_tray_never_creates_watches_or_polls_the_host_src_tree() {
+        let source = include_str!("notify_icon.rs");
+        let production = source
+            .split("#[cfg(test)]")
+            .next()
+            .expect("the file has a production half");
+        let code: String = production
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join(
+                "
+",
+            );
+
+        assert!(
+            !code.contains("user_src_dir"),
+            "the tray must not resolve, create, or watch the host ~/src tree; \
+             Cloud is the only project path (997-e4v2)"
+        );
+        assert!(
+            !code.contains("watch_projects"),
+            "the host-side ~/src scanner is gone (997-e4v2)"
+        );
+        for symbol in [
+            "EnumerateLocalProjects",
+            "LocalProjectsReply",
+            "LocalProjectsPush",
+            "LocalProjectEntry",
+        ] {
+            assert!(
+                !code.contains(symbol),
+                "the Windows tray must not consume {symbol}; the variant stays \
+                 defined on the wire until the coordinated tray window removes \
+                 it, but this tray is no longer a consumer (997-e4v2)"
+            );
+        }
     }
 
-    /// SC-07 extension (order 154 slice 3): the EnumerateLocalProjects wire
-    /// poll — the last steady-state wire poll — is fallback-only, mirroring
-    /// the login/cloud gate: suppressed while the push subscription is
-    /// healthy, restored when it drops, force-run during a fast-poll burst.
+    /// ORDER 997-e4v2: this distinction is now VACUOUS, and that is the point
+    /// of keeping the test rather than deleting it.
+    ///
+    /// The Windows tray no longer subscribes to `SubscriptionTopic::
+    /// LocalProjects`, so the "full" list and the pre-order-260 "legacy" list
+    /// are the same three topics and the version-skew fallback can never
+    /// engage from here. The two functions are deliberately NOT collapsed:
+    /// order 260's stale-guest concern becomes moot only when the topic itself
+    /// leaves the wire, which is the last step of the coordinated tray window
+    /// (macos-tray and host-shell drop their consumers first, then the
+    /// control-wire variants come out). This pin should be deleted in the SAME
+    /// commit that removes the variant — not before, or the wire loses its
+    /// guard while a consumer still exists.
     #[test]
-    fn local_projects_poll_is_fallback_only_when_push_healthy() {
-        assert!(
-            should_poll_local_projects(false, false),
-            "poll must run while the push stream is down"
+    fn legacy_topics_equal_full_topics_now_that_local_projects_is_unsubscribed() {
+        assert_eq!(
+            legacy_subscribe_topics(),
+            vm_status_subscribe_topics(),
+            "with LocalProjects unsubscribed the fallback list is the full              list; if these diverge again, a topic was added without deciding              whether a stale guest can decode it (order 260, 997-e4v2)"
         );
         assert!(
-            !should_poll_local_projects(true, false),
-            "poll must be suppressed while the push stream is healthy"
-        );
-        assert!(
-            should_poll_local_projects(true, true),
-            "a fast-poll burst must force a confirming round even when healthy"
-        );
-        assert!(
-            should_poll_local_projects(false, true),
-            "a fast-poll burst with the stream down must still poll"
+            !vm_status_subscribe_topics()
+                .contains(&tillandsias_control_wire::SubscriptionTopic::LocalProjects),
+            "the Windows tray must not ask for local projects (997-e4v2)"
         );
     }
 
@@ -5492,25 +5372,6 @@ mod tests {
         );
     }
 
-    /// Local `ProjectEntry.path` is the in-VM `guest_path` (per its doc) so an
-    /// `Attach Here` exec lands the forge container with the right cwd. Mirrors
-    /// the macOS slice 19 mapping.
-    #[test]
-    fn local_entry_maps_to_guest_path() {
-        let entry = tillandsias_control_wire::LocalProjectEntry {
-            label: "tillandsias".to_string(),
-            guest_path: "/mnt/c/Users/bullo/src/tillandsias".to_string(),
-            last_seen_unix: 1700000000,
-        };
-        let mapped = local_entry_to_menu(&entry);
-        assert_eq!(mapped.name, "tillandsias");
-        assert_eq!(mapped.path, "/mnt/c/Users/bullo/src/tillandsias");
-        assert!(
-            !mapped.ready,
-            "per-project ready flag isn't on the wire yet"
-        );
-    }
-
     /// Cloud `ProjectEntry.path` is the `owner/repo` slug (per its doc) so the
     /// menu's cloud-projects submenu shows a stable, gh-style identifier.
     #[test]
@@ -5643,31 +5504,6 @@ mod tests {
         assert_eq!(&argv[sep + 1..sep + 2], &["podman"]);
     }
 
-    use std::path::PathBuf;
-
-    fn added(p: &str) -> ProjectEvent {
-        ProjectEvent::Added {
-            path: PathBuf::from(p),
-        }
-    }
-
-    #[test]
-    fn project_added_inserts_sorted_and_deduped() {
-        let mut state = MenuState::initial();
-        apply_project_event_to(&mut state, &added("C:\\Users\\u\\src\\zebra"));
-        apply_project_event_to(&mut state, &added("C:\\Users\\u\\src\\apple"));
-        // Duplicate basename is ignored.
-        apply_project_event_to(&mut state, &added("C:\\Users\\u\\src\\apple"));
-
-        let names: Vec<&str> = state
-            .local_projects
-            .iter()
-            .map(|p| p.name.as_str())
-            .collect();
-        assert_eq!(names, vec!["apple", "zebra"], "name-sorted, deduped");
-        assert!(state.local_projects.iter().all(|p| !p.ready));
-    }
-
     #[test]
     fn select_agent_updates_state_idempotently() {
         use tillandsias_host_shell::menu_state::SelectedAgent;
@@ -5691,24 +5527,5 @@ mod tests {
         assert!(!apply_menu_action_state(&mut state, &MenuAction::Quit));
         assert!(!apply_menu_action_state(&mut state, &MenuAction::OpenLog));
         assert_eq!(state.selected_agent, SelectedAgent::Codex);
-    }
-
-    #[test]
-    fn project_removed_drops_entry() {
-        let mut state = MenuState::initial();
-        apply_project_event_to(&mut state, &added("C:\\Users\\u\\src\\keep"));
-        apply_project_event_to(&mut state, &added("C:\\Users\\u\\src\\drop"));
-        apply_project_event_to(
-            &mut state,
-            &ProjectEvent::Removed {
-                path: PathBuf::from("C:\\Users\\u\\src\\drop"),
-            },
-        );
-        let names: Vec<&str> = state
-            .local_projects
-            .iter()
-            .map(|p| p.name.as_str())
-            .collect();
-        assert_eq!(names, vec!["keep"]);
     }
 }
