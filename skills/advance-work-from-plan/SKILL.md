@@ -430,7 +430,11 @@ status `ready`. The packet closes only when every agent named in
     expert ARTIFACT is wrong (order 531), not that the questions were hard;
     check the base branch before trusting any expert answer from this cycle.
     Report `experts_substitution` as `unknown` — it is not derivable in-repo and
-    must never be estimated.
+    must never be estimated. Pass `--cycle-start <your Start-Of-Cycle UTC>` so
+    `repeat:` measures this cycle, and read `skippable:` (printed right after
+    `timing:`) alongside `verdict:` — it names the expensive, outcome-invariant
+    steps this host keeps paying (order 1001-q3zf); quote `saved_ms_upper` as
+    the bound it is.
 1.  **Full Verification**: Run the full validation litmus on your platform to confirm zero-drift compliance.
 2.  **Close the packet — BOTH the event and the status transition.**
 

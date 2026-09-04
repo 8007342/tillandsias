@@ -120,6 +120,55 @@ To guarantee convergence in finite time, the orchestrator MUST track and enforce
 -   A host waiting for remote integration MUST be assigned an independent
     fallback unless all eligible work is blocked.
 -   **Assign Stable Work Items**: Each assignment must specify: `id`, `owner_host`, `status`, dependencies, owned files, next concrete action, expected evidence, and `agent_status_packet` expectations.
+-   **Cross-host recurrence audit** (order 1001-q3zf). The meta-orchestration
+    handoff REQUIRES pasting the cycle-metrics output verbatim, which is how
+    the `recur:` and `skippable:` lines are meant to reach
+    `plan/loop_status.d/`. That is a rule, not an observed behaviour: on
+    2026-09-04 only 17 of 353 loop_status entries carried a `timing:` line,
+    none carried `recur:`, and the newest entry of every host had none. So
+    the audit has two outcomes and BOTH are findings. Once per pass, read the
+    NEWEST entry per host — the host set is derived from the file names, not
+    a roster that goes stale, and the grep is token-anchored because entries
+    arrive bare, as `- recur:` bullets, and inline inside backticked prose
+    joined by ` · ` or ` | `, so a `^recur:` grep undercounts. The stem is
+    everything after the `<timestamp>z-[<8hex>-]` prefix, NOT the text after
+    the last dash: session stems carry dashes of their own
+    (`lenovinha-tillandsias-forge`, `macuahuitl-tillandsias-forge`, and a
+    bare `forge`), and a last-dash split collapsed all three into one `forge`
+    row that read only lenovinha's newest entry while macuahuitl's five
+    entries got no row at all (adversarial review, 2026-09-04) — a dropped
+    host under-counts the two-or-more-hosts trigger below. Files that do not
+    carry the prefix (the README) are not hosts and are skipped:
+
+    ```bash
+    for h in $(ls plan/loop_status.d/*.md \
+               | grep -E '/[0-9]{8}t[0-9]{6}z-([0-9a-f]{8}-)?[^/]+\.md$' \
+               | sed -E 's#.*/[0-9]{8}t[0-9]{6}z-([0-9a-f]{8}-)?##; s/\.md$//' | sort -u); do
+      f=$(ls -t plan/loop_status.d/*.md | grep -E "z-([0-9a-f]{8}-)?$h\.md$" | head -1)
+      [ -n "$f" ] || continue
+      l=$(grep -ho 'skippable: [^`|·]*' "$f" | tail -1)
+      echo "$h ${l:-NOT-PASTING ($f)}"
+    done
+    ```
+
+    Re-run the loop after editing it and confirm every multi-dash stem gets
+    its own row; the row count must equal the distinct-stem count.
+
+    An empty result for a host means THAT HOST IS NOT PASTING its
+    cycle-metrics — route it as a plain ask to that host ("paste the
+    cycle-metrics output verbatim in your handoff"); never read silence as
+    "no candidates". Parse a present entry FROM THE RIGHT — step names
+    contain colons; the step is everything before the first `:runs=`. When
+    the SAME step tops `skippable:` on two or more hosts, file ONE packet to
+    memoise or skip it, citing each host's `runs=`, `avg_ms=`, `fail_pct=`
+    and `saved_ms_upper=` (a bound, and say so: the log carries no input
+    identity, so nobody can claim a run would have hit a cache). Never act
+    on one host's reading alone — attach the regime; a step that is
+    invariant on a fat host may be the one that fails on a floor host. If
+    `recur:` shows a step's cumulative total rising cycle over cycle on every
+    host while `skippable:` never names it, that is the outcome-varying
+    repeat the tree-digest rung (named in the 1001-q3zf packet's
+    next_action) exists to measure; do not guess at it.
 -   **Every dispatch MUST carry the credential preflight** (order 982-sguu). A
     dispatched task is an entry path into committable work that does NOT pass
     through the meta-orchestration loop, so it skips that loop's Start-of-Cycle

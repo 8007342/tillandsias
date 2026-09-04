@@ -1,0 +1,148 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: cycle-metrics-report-repeated-and-skippable-steps
+    order: 1001-q3zf
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [metrics, observability, methodology, multi-host, measure-before-optimize, token-conscious]
+    estimated_hours: 4
+    owned_files:
+      - scripts/cycle-metrics.sh
+      - scripts/test-cycle-metrics-recurrence.sh
+      - openspec/litmus-tests/litmus-cycle-metrics-recurrence-shape.yaml
+      - openspec/litmus-bindings.yaml
+      - methodology/agent-observability.yaml
+      - skills/meta-orchestration/SKILL.md
+      - skills/advance-work-from-plan/SKILL.md
+      - skills/coordinate-multihost-work/SKILL.md
+    title: |
+      Every host's cycle reports which steps it pays on every cycle and which expensive outcome-invariant steps could be memoised or skipped — three reporter lines over the timing log that already exists.
+    context: |
+      THE ASK, operator, 2026-09-03: "add metrics to each host's iterations to
+      detect repeated work that just wastes work every cycle, and expensive
+      work that may be cached or skipped."
+
+      THE DATA ALREADY EXISTED AND ONLY THE REPORTER WAS MISSING. The
+      methodology (agent-observability.yaml, context_cost_metrics, status
+      measure-only) already DESIGNED a within-cycle step_repetition line
+      ("repeat:") that nothing emitted. The per-host timing log
+      (scripts/timing-log.sh, cycle-metrics.sh --emit-timing /
+      --emit-timing-batch, path from scripts/metrics-log-path.sh) already
+      carried one record per timed step: {ts, host, step, phase, duration_ms,
+      exit}. MEASURED on macuahuitl 2026-09-04: 48,790 rows since 2026-08-26;
+      build-check ran 465 times (avg 72 s, 103 failures); and a single gate
+      step, step:checking-the-plan-archiver-preserves-the-ready-set-831-ezea,
+      ran 361 times at 13.9 s each and NEVER failed — 83 minutes that bought
+      exactly one bit of information. That is precisely the shape the
+      operator wants surfaced, and it was sitting in a file nobody read.
+
+      SO THIS IS A REPORTER, NOT AN EMITTER. Three lines in the full report of
+      scripts/cycle-metrics.sh, right after timing:, computed in ONE extra jq
+      pass (0.4 s over 48,790 rows), no date(1) (jq now/fromdateiso8601, so
+      it runs on macOS bash 3.2 and Git Bash):
+        repeat:    window=<since=<utc>|3h> steps=<n> top3=<step>=<count>,... source=<path|absent>
+                   -- steps paid repeatedly INSIDE ONE CYCLE; a host passes
+                   --cycle-start <its Start-Of-Cycle UTC>
+        recur:     window=<n>d runs=<n> steps=<n> top3=<step>:runs=:total_ms=:avg_ms=:fail_pct=,... source=
+                   -- steps paid on EVERY cycle, ranked by cumulative cost
+        skippable: candidates=<n> floor_ms=<f> min_runs=<m> top3=<step>:runs=:avg_ms=:fail_pct=:saved_ms_upper=,... source=
+                   -- runs >= min_runs, avg >= floor, outcome NEVER changed
+
+      TWO DISCIPLINES, PINNED. (1) PARSE FROM THE RIGHT: step names contain
+      colons (step:..., litmus:..., check:litmus-pre-build) — the same fact
+      slowest=<step>:<ms> already lives with — so the trailing :key=value
+      fields never contain a colon and the step is everything before the
+      first ":runs=". The fixture pins it with a two-colon step name. (2)
+      saved_ms_upper IS AN UPPER BOUND (total_ms - avg_ms) and is named as one
+      at every surface: the log carries no input identity, so this cannot say
+      a run WOULD have hit a cache, only that its outcome matched every other
+      run. Invariance is decided on raw counts, never on the rounded
+      percentage, so one failure in three hundred runs is not rounded into
+      "never fails".
+
+      THE NAMED NEXT RUNG, deliberately not this order: a tree digest on
+      timing records, so exact repeats (same inputs, same step) become
+      MEASURABLE rather than bounded, and skippable: can say "would have hit"
+      instead of "could not have differed".
+
+      Landed with: scripts/test-cycle-metrics-recurrence.sh (exact-arithmetic
+      checks, under a second), litmus:cycle-metrics-recurrence-shape bound
+      under methodology-accountability (pre-build, instant), methodology
+      entries cross_cycle_recurrence and skippable_candidates each with a
+      review: question per metrics_refinement, and the three skills routing
+      the lines into the handoff and the coordinator's cross-host audit
+      (images/default/skills/ is a build-staged, gitignored copy of skills/
+      and is not owned here).
+
+      ADVERSARIAL REVIEW 2026-09-04, fixed before landing: a well-formed
+      timing row whose step DECODED to a newline shifted the three jq output
+      lines, so recur: carried repeat data and skippable: vanished —
+      reachable through --emit-timing, which wrote the step unescaped. Step
+      keys are now sanitised at report time (control, whitespace and comma
+      bytes become `_`), --emit-timing strips `"` and `\` like the batch
+      emitter, an unparseable --cycle-start reads
+      `window=since=<value>:unparsed` rather than silently widening to 3h, a
+      directory or unreadable log reads source=absent, and jq's clock is
+      bound through the same parser as the records so a jq 1.6 UTC-offset
+      bug cancels and a strptime-less jq reads `:unwindowable` instead of
+      zeros. The coordinator audit was reworded from an asserted paste
+      behaviour to the rule it is: on that date only 17 of 353 loop_status
+      entries carried a timing: line and no host's newest entry did, so an
+      empty audit result is "this host is not pasting", never "no
+      candidates". Found on the way: the reporter's groundtruth grading ran
+      TWICE whenever a case was red (grade exits 1, and the timeout-or-bare
+      `||` fallback re-ran it), 5.3 s becoming 10.7 s, so every litmus step
+      calling --experts-only under a 10 s budget had been killed (exit 124)
+      since 2026-09-02T21Z, when spec-forge-isolation-and-egress and
+      spec-inference-tier-mechanism-is-in-code went red on spec.answer.
+      The reporter now grades once; the two red cases are NOT this order's.
+      One contract shift follows from grading once: a host where all-sets
+      grading exceeds 60 s used to end as source=groundtruth-all-sets after
+      an unbounded second run, and now reports groundtruth-rung1 or deferred
+      instead. On a low-end host that label shift is the timeout doing its
+      job, not a regression — read it as "this host cannot grade all sets in
+      a minute" and route the grading to a host that can.
+
+      SECOND REVIEW ROUND, 2026-09-04: the coordinator audit's host loop split
+      file names on the LAST dash, so lenovinha-tillandsias-forge,
+      macuahuitl-tillandsias-forge and the bare forge stem collapsed into one
+      row that read only lenovinha's newest entry — a dropped host under-counts
+      the two-or-more-hosts trigger. The stem is now everything after the
+      timestamp/hash prefix (17 rows for 17 stems). Also closed: an empty step
+      name reports as `-`, a step containing `:runs=` is rewritten so the
+      parse-from-the-right rule holds, numeric knobs are normalised before
+      they reach a label (`--recur-window-days 07` no longer prints 07d),
+      --emit-timing turns control bytes into `_` instead of writing a split
+      row, the bash fallback label uses the jq sanitiser, and a
+      strptime-less jq no longer labels a valid --cycle-start `:unparsed`.
+    next_action: |
+      Two things are LEFT, neither of them this packet's closure. (1) The
+      TREE-DIGEST RUNG: extend --emit-timing / --emit-timing-batch with an
+      input digest (tree hash of the step's declared inputs, or the git tree
+      for gate steps) so a repeat is "same digest, same step" and skippable:
+      can report a measured saving instead of saved_ms_upper; file it as its
+      own order once two hosts have pasted skippable: lines. (2) The
+      coordinator's CROSS-HOST RECURRENCE AUDIT
+      (skills/coordinate-multihost-work, Shape & Assign): read the newest
+      recur:/skippable: per host from plan/loop_status.d/, and file ONE
+      memoise-or-skip packet only when the same step tops skippable: on two
+      or more hosts, citing per-host numbers. On this host the first reading
+      already names step:checking-the-plan-archiver-preserves-the-ready-set-831-ezea
+      at runs=301 avg_ms=15167 fail_pct=0 saved_ms_upper=4550156 — one host,
+      so not yet actionable; attach the regime.
+    exit_criteria:
+      - |
+        the three lines repeat:, recur: and skippable: appear in every full cycle-metrics report, right after timing:, with the pinned grammar; none of them appears under --experts-only
+      - |
+        scripts/test-cycle-metrics-recurrence.sh asserts exact arithmetic on all three lines, including a step name containing colons parsed from the right, the floor/min_runs boundaries, the --cycle-start and 7-day windows, malformed-row tolerance, and the absent-log path with exit 0
+      - |
+        the litmus spec is bound under methodology-accountability and green in the pre-build instant suite
+      - |
+        methodology/agent-observability.yaml names each of the three metrics with a question and a review question, and names saved_ms_upper as an upper bound with the tree-digest rung as the next step
+      - |
+        skills/meta-orchestration, skills/advance-work-from-plan and skills/coordinate-multihost-work route the lines into the handoff (with --cycle-start) and the coordinator audits recur:/skippable: across hosts before filing a memoise-or-skip packet
+    verifiable_closure: |
+      litmus:cycle-metrics-recurrence-shape is green in scripts/run-litmus-test.sh --phase pre-build --size instant, and scripts/test-cycle-metrics-recurrence.sh exits 0.
