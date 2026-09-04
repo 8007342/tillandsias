@@ -9,6 +9,7 @@ active
 ## Requirements
 
 ### Requirement: Cache tooling reports disk pressure before eviction
+<!-- req-id: 210d06d0 -->
 
 Cache management tools MUST inspect Podman and filesystem usage before evicting images or cache directories.
 

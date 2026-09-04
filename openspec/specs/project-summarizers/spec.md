@@ -13,6 +13,7 @@ Define the language-specific manifest summarizer scripts that extract project me
 ## Requirements
 
 ### Requirement: Summarizers MUST parse manifest files deterministically
+<!-- req-id: dc5d5dd0 -->
 
 Each language-specific summarizer MUST read the project manifest and extract key metadata in a consistent, machine-readable format.
 
@@ -69,6 +70,7 @@ Each language-specific summarizer MUST read the project manifest and extract key
   - (Optional) reads `go.sum` for transitive dependency count
 
 ### Requirement: Summarizers MUST output structured, consistent data
+<!-- req-id: 7670e4f1 -->
 
 All summarizers MUST produce output in a unified structured format (JSON recommended).
 
@@ -96,6 +98,7 @@ All summarizers MUST produce output in a unified structured format (JSON recomme
 - **AND** returns exit code 1
 
 ### Requirement: Summarizers MUST be embeddable as shell scripts
+<!-- req-id: 076037a6 -->
 
 All summarizers MUST be standalone shell scripts with no external runtime dependencies (beyond common CLI tools like `jq`, `sed`).
 
@@ -110,6 +113,7 @@ All summarizers MUST be standalone shell scripts with no external runtime depend
 - **AND** performance is acceptable for real-time regeneration
 
 ### Requirement: README dispatcher orchestrates all summarizers
+<!-- req-id: 25267081 -->
 
 A master dispatcher script MUST invoke the appropriate summarizers based on project type detection.
 

@@ -77,8 +77,19 @@
 # a transcript, so its own fixture (scripts/test-check-test-baseline.sh) runs
 # in milliseconds and can drive cases that would take minutes to provoke for
 # real. Callers own the cargo invocation and the transcript capture; see the
-# two call sites in build.sh (`--test` wraps the whole workspace suite,
-# `--check` wraps `-p tillandsias-plan --lib` only).
+# two call sites in build.sh — BOTH now wrap the whole workspace suite.
+#
+# THIS CLAUSE USED TO SAY "`--check` wraps `-p tillandsias-plan --lib` only",
+# and by 2026-09-04 both halves of that were false. `--lib` was dropped from
+# the plan-crate step on 2026-08-22 (build.sh records why: it had made this
+# ratchet blind to the binary's own tests, two of which sat red for cycles),
+# and 1003-444f widened the step from one crate to `--workspace`. The stale
+# clause outlived the first change by a fortnight in a file nothing reads for
+# drift, was quoted to two hosts as current behaviour, and landed in a
+# packet's premise before anyone ran the gate to check. That is this file's
+# own subject — a source-shape claim that goes stale on a correct change,
+# somewhere unwatched — so it is corrected here next to its cause rather than
+# in a tidy-up commit of its own.
 #
 # GRAMMAR (exactly one line on stdout; every detail goes to stderr)
 #   ok:test-baseline:ran=<n> new-red=0 tolerated=<t> stale=0

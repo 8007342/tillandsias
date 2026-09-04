@@ -6,6 +6,7 @@ active
 ## Requirements
 
 ### Requirement: First-launch readiness feedback
+<!-- req-id: eb759b9a -->
 - **ID**: tray-app.ux.first-launch-feedback@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -31,6 +32,7 @@ The tray application SHALL provide clear visual feedback during first-launch set
 - **AND** no silent failure occurs
 
 ### Requirement: Native tray behavior by platform wrapper
+<!-- req-id: 2460a9f4 -->
 - **ID**: tray-app.platform.cross-platform-native-tray@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -55,6 +57,7 @@ The tray application SHALL function correctly on Linux, macOS, and Windows throu
 
 
 ### Requirement: Seedlings submenu exposes OpenCode Web
+<!-- req-id: d2056d54 -->
 - **ID**: tray-app.menu.seedlings-agent-selection@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -73,6 +76,7 @@ The Seedlings submenu SHALL list three agent choices — "OpenCode Web", "OpenCo
 - **AND** `save_selected_agent()` persists `opencode-web` to `~/.config/tillandsias/config.toml`
 
 ### Requirement: Per-project Stop action for running web containers
+<!-- req-id: bb5f783c -->
 - **ID**: tray-app.menu.per-project-stop-action@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -90,6 +94,7 @@ The per-project submenu SHALL show a "Stop" item whenever a `tillandsias-<projec
 - **AND** the handler stops the web container and updates the menu
 
 ### Requirement: Attach Here branches on selected agent
+<!-- req-id: 7bbc1871 -->
 - **ID**: tray-app.action.attach-here-agent-branching@v1
 - **Modality**: MUST
 - **Measurable**: true

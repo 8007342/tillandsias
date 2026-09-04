@@ -9,6 +9,7 @@ active
 ## Requirements
 
 ### Requirement: Local CI maps checks to traceable specs
+<!-- req-id: 2132b7c7 -->
 
 Local CI scripts MUST map major check categories to owning specs so failures can be traced back to the behavior they protect.
 

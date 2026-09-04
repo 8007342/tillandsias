@@ -15,7 +15,7 @@ committed_for_project: false
 ---
 # jq and yq
 
-@trace spec:agent-source-of-truth
+@trace spec:knowledge-source-of-truth
 
 **Version baseline**: jq 1.7.1, yq 4.40.5 (Fedora 43)  
 **Use when**: Querying, filtering, or transforming JSON (jq) or YAML (yq) from command line or pipes

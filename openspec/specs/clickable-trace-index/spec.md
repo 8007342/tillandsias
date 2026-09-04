@@ -116,6 +116,7 @@ files.
 - **AND** it SHALL print the non-mutating trace-check remedy
 
 ### Requirement: Project observatorium view
+<!-- req-id: 2a03f998 -->
 
 The runtime SHALL provide `--observatorium <project-path>` as a project view
 parallel to `--bash`, `--opencode`, and `--opencode-web`. The runtime SHALL

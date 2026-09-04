@@ -110,7 +110,69 @@ make_sandbox() {
     } > "$sb/bin/cargo"
     chmod +x "$sb/bin/cargo"
 
+    # ORDER 1022-y7kc cause 3. STUB THE aarch64 MUSL LINKER, because without it
+    # this fixture tests the HOST'S TOOLCHAIN rather than the script's
+    # behaviour.
+    #
+    # build_with_cargo preflights for a linker before compiling anything
+    # (934-7jd4: the fallback used to compile the whole x86_64 target and only
+    # then discover the aarch64 linker was missing). That refusal is CORRECT
+    # and returns before cargo is ever invoked. The fixture stubbed nix and
+    # cargo but not the linker, and run_sandbox PREPENDS to the host PATH
+    # rather than scrubbing it — so on a host carrying neither
+    # aarch64-linux-musl-gcc nor clang, the blocked-rung arm asserted "cargo
+    # was reached", the preflight correctly refused first, and a right answer
+    # read as a lane failure. Measured on yoga 2026-09-04: both linkers ABSENT,
+    # arm red; the same arm is green in the instant tier on hosts that happen
+    # to carry clang, which is why this was full-tier-only and looked
+    # host-specific.
+    #
+    # Stubbing it makes the sandbox hermetic in the direction the arm means to
+    # test. The refusal path keeps its own arm below, driven by REMOVING this
+    # stub, so 934-7jd4's behaviour is still pinned rather than papered over.
+    {
+        printf '#!/usr/bin/env bash\n'
+        printf 'printf "%%s\\n" "$*" >> "%s/linker-argv.log"\n' "$sb"
+        printf 'exit 0\n'
+    } > "$sb/bin/aarch64-linux-musl-gcc"
+    chmod +x "$sb/bin/aarch64-linux-musl-gcc"
+
     printf '%s\n' "$sb"
+}
+
+# ORDER 1022-y7kc cause 3, SECOND FIX. "No linker" must be a property of the
+# SANDBOX, never of the host.
+#
+# My first fix stubbed the linker so the blocked-rung arm stopped depending on
+# the host carrying one, and then scenario 4b removed that stub to pin
+# 934-7jd4's refusal — which reintroduced the identical host-dependence with
+# the sign flipped. run_sandbox PREPENDS to PATH, so deleting a stub does not
+# remove the host's own tool: 4b passed on yoga (no clang, no
+# aarch64-linux-musl-gcc) and failed on macuahuitl (clang present, and the
+# preflight accepts clang), where the preflight correctly did not refuse and
+# both 4b arms went red. I had diagnosed the prepend as the cause of the
+# original bug in the same commit that relied on it.
+#
+# Mirroring PATH by symlink is what makes the absence real. Enumerating what
+# build-guest-binaries.sh needs would be a guess that goes stale (it reaches
+# for cargo, nix, install, file, readlink, find, grep, mkdir, rm, dirname at
+# least); mirroring everything EXCEPT the two names the preflight probes is
+# mechanical, complete, and stays correct when the script grows a dependency.
+make_linkerless_bin() { # <sandbox> ; prints a bin dir mirroring PATH minus the linkers
+    local sb="$1" d="$sb/nolinker-bin" dir f b
+    mkdir -p "$d"
+    local IFS=:
+    for dir in $PATH; do
+        [ -d "$dir" ] || continue
+        for f in "$dir"/*; do
+            [ -x "$f" ] && [ ! -d "$f" ] || continue
+            b="${f##*/}"
+            # Exactly the two names build_with_cargo probes with `command -v`.
+            case "$b" in aarch64-linux-musl-gcc | clang) continue ;; esac
+            [ -e "$d/$b" ] || ln -s "$f" "$d/$b" 2>/dev/null || true
+        done
+    done
+    printf '%s\n' "$d"
 }
 
 run_sandbox() { # <sandbox> ; prints combined output, returns the script's rc
@@ -185,6 +247,35 @@ if [ -s "$sb/nix-argv.log" ]; then
     note_fail "blocked-rung-never-calls-nix" "nix was called despite no usable rung: $(cat "$sb/nix-argv.log")"
 else
     note_ok "blocked-rung-never-calls-nix"
+fi
+
+# ── 4b. NO LINKER: the cargo fallback REFUSES by name, before compiling ─────
+# ORDER 1022-y7kc cause 3, the other direction of 4. Scenario 4 stubs an
+# aarch64 musl linker so the degradation path can be exercised; this one
+# REMOVES it, which is the state every host without a cross toolchain is in —
+# and is the state yoga was in when this fixture's blocked-rung arm went red
+# against a script that was behaving correctly.
+#
+# 934-7jd4 made build_with_cargo preflight the linker BEFORE compiling
+# anything, because the fallback used to build the whole x86_64 target (~73s)
+# and only then discover the aarch64 linker was absent — reporting a doom
+# knowable in milliseconds as a linker problem, when the actionable fact was
+# that the nix lane was unavailable. Pinning it here means a future reader who
+# sees the blocked-rung arm fail cannot "fix" it by deleting the preflight:
+# that would turn this arm red instead, and this one names the cost.
+sb="$(make_sandbox nolinker 'blocked:nix-toolbox:no-nix-and-no-toolbox' 1 "$DAEMON_ARGS" workingnix)"
+rm -f "$sb/bin/aarch64-linux-musl-gcc"
+nolinker_bin="$(make_linkerless_bin "$sb")"
+out="$(PATH="$sb/bin:$nolinker_bin" bash "$sb/scripts/build-guest-binaries.sh" 2>&1)"
+if printf '%s' "$out" | grep -q 'REFUSED: the cargo fallback cannot succeed on this host'; then
+    note_ok "no-linker-refuses-by-name"
+else
+    note_fail "no-linker-refuses-by-name" "output: $out"
+fi
+if [ -s "$sb/cargo-argv.log" ]; then
+    note_fail "no-linker-compiles-nothing" "cargo ran despite no usable linker — 934-7jd4's preflight is gone"
+else
+    note_ok "no-linker-compiles-nothing"
 fi
 
 # ── 5. toolbox rung: refused BY NAME, not silently attempted ────────────────

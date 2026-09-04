@@ -21,10 +21,10 @@ pull_recipe: see-section-pull-on-demand
 
 # Windows Sandbox
 
-@trace spec:agent-cheatsheets, spec:cross-platform, spec:windows-wsl-runtime, spec:chromium-browser-isolation
+@trace spec:agent-cheatsheets, spec:cross-platform, spec:windows-wsl-runtime, spec:browser-isolation-core
 
 **Version baseline**: Windows 10 1903+ / Windows 11 (Pro/Enterprise/Education only — **NOT Home**).
-**Use when**: hosting an isolated, ephemeral Windows process tree (e.g., the Chromium framework) with kernel-level isolation from the host — no shared filesystem, registry, credentials, or network namespace. Tillandsias' Windows browser-isolation backend per `spec:chromium-browser-isolation`.
+**Use when**: hosting an isolated, ephemeral Windows process tree (e.g., the Chromium framework) with kernel-level isolation from the host — no shared filesystem, registry, credentials, or network namespace. Tillandsias' Windows browser-isolation backend per `spec:browser-isolation-core`.
 
 ## Provenance
 
@@ -132,7 +132,7 @@ Per Microsoft Learn: *"Running Windows Sandbox with no applications open offers 
 - **Network gap (HARD)**: there is no documented `.wsb` config that lets the sandbox reach `localhost:3128` on the host while blocking external internet. `Networking=Default` exposes the entire host network; `Networking=Disable` blocks even host loopback. Two viable workarounds — both have trade-offs:
   1. **Host IP + per-project allowlist on the proxy**: keep `Networking=Default`, configure Chromium inside sandbox to use proxy at `<host-LAN-IP>:3128`, and rely on Squid's allowlist to enforce per-project egress. Risk: sandbox sees the LAN.
   2. **Mapped-folder proxy bridge**: `<Networking>Disable</Networking>` plus a host-side relay process that polls a file-shared queue under `<MappedFolders>`. Heavyweight; not Microsoft-documented.
-- **No headless mode**: the sandbox window is always visible. Tillandsias can spawn it minimized but cannot suppress it entirely. For Tillandsias' design (per `spec:chromium-browser-isolation`, the window IS the browser window), this is desired behaviour.
+- **No headless mode**: the sandbox window is always visible. Tillandsias can spawn it minimized but cannot suppress it entirely. For Tillandsias' design (per `spec:browser-isolation-core`, the window IS the browser window), this is desired behaviour.
 - **No CDP attach across the sandbox boundary**: host-based Playwright cannot drive Chromium inside the sandbox via Chrome DevTools Protocol on `localhost:9222`. **Run Playwright INSIDE the sandbox** (bake into the framework folder at install time) rather than from the host. This aligns with `chromium-browser-isolation`'s "Playwright vendored in framework image" decision.
 - **Multiple concurrent instances are 24H2+ only**: pre-24H2 Microsoft docs state *"Windows Sandbox currently doesn't allow multiple instances to run simultaneously"*. The 24H2 `wsb` CLI does support multi-instance per the new docs but Tillandsias must guard the multi-project case behind a Windows-version check.
 - **`wsb exec` cannot capture stdout**: any "is Chromium ready" probe must use a side-channel (file in `<MappedFolders>`, network heartbeat to the proxy, etc.).
@@ -175,7 +175,7 @@ This cheatsheet documents Windows Sandbox configuration (.wsb XML), lifecycle co
 ```bash
 #!/bin/bash
 # Generate Windows Sandbox configuration reference for Tillandsias browser isolation
-# @trace spec:chromium-browser-isolation, spec:windows-sandbox
+# @trace spec:browser-isolation-core, spec:windows-sandbox
 
 cat > windows-sandbox-config.md <<'EOF'
 # Windows Sandbox Configuration

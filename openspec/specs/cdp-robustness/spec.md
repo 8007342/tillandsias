@@ -9,6 +9,7 @@ active
 ## Requirements
 
 ### Requirement: CDP operations handle transport failure explicitly
+<!-- req-id: fd32b2a1 -->
 
 Chrome DevTools Protocol clients MUST treat connection loss, malformed responses, timeouts, and target disappearance as recoverable operation failures with structured errors.
 

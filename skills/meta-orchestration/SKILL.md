@@ -533,9 +533,16 @@ do not** (851-gpb5, learned by the first Mac to join). Your branch is
 `origin/linux-next` into it — methodology's pre-push gate
 (`pull_merge_cadence.pre_push_gate`; Finalization step 6). Run
 `scripts/install-hooks.sh` once so the v5 pre-push hook actually enforces that
-merge on your checkout. `./build.sh --check`/`--test` work natively (host
-tools: Xcode Command Line Tools for gcc, `brew install pkg-config`, rustup
-with the rustfmt and clippy components), but `--install` is REFUSED by design
+merge on your checkout. `./build.sh --check`/`--test` work natively, but **run
+`scripts/check-host-tools.sh` FIRST — it prints every missing host tool with its
+`brew install` line** (order 989-ykks). That replaces the list of host tools this
+paragraph used to carry, and the replacement is not tidying: the list was wrong
+in two ways in one week (it omitted `coreutils`, a hard requirement of the
+credential gate per 988-7kxf, and `pkg-config`, without which `--check` cannot
+start), and a list is only ever written by someone whose machine already works.
+The host that HAS a tool cannot detect that it is undocumented; it reports `ok:`
+and lands all night while the host that lacks it debugs an unrelated failure
+hours later. A probe cannot drift that way. `--install` is REFUSED by design
 (723-whrx): the macOS build path is `scripts/build-macos-tray.sh` — wrapped by
 `/build-macos-tray`, which also files findings to
 `plan/issues/macos-build-findings-<DATE>.md` — and local-build e2e
@@ -668,6 +675,41 @@ filing — not the prompt.
    wedge record and 873-zcim itself while another cycle held its checkout.
    Release at Finalization (step 9b) with
    `TILLANDSIAS_CYCLE_HOLDER_PID=$PPID scripts/cycle-checkout-lock.sh release`.
+
+   **IF YOU RELOCATE, TAKE THE BOUNDARY IN THE WORKTREE YOU RELOCATE TO**
+   (order 983-xha6). This is one line and its absence cost the fleet visibility
+   three separate times on 2026-09-03:
+
+   ```bash
+   cd <the clone or worktree you will actually work in>
+   boundary_dir="$(mktemp -d "${TMPDIR:-/tmp}/meta-orchestration-boundary.XXXXXX")"
+   scripts/meta-orchestration-worktree-guard.sh snapshot "$boundary_dir"
+   ```
+
+   The guard's stamps live in `$(git rev-parse --git-dir)`, so they are ALREADY
+   per-checkout and a relocated worktree can hold its own boundary — verified in
+   a fresh clone: snapshot, commit, `verify` -> `ok: startup worktree boundary
+   preserved`. Nothing needed building. What was missing was anyone saying to do
+   it, so step 3 below snapshotted the checkout the cycle then correctly stopped
+   using, the clone never got a boundary, and `mo-full-attest` refused at
+   Finalization with `no verified startup boundary for this cycle` — AFTER a
+   green gate with every commit pushed.
+
+   The consequence is not a missing line of output. `MO-FULL:` is how automation
+   learns a cycle finished, so a lawfully relocated cycle is INDISTINGUISHABLE
+   FROM ONE THAT DIED: the trunk carries its commits while the fleet record says
+   the host never reported. A forge hits this by default — its checkout is a
+   clone, it is often seeded from `main` (965-rb3v), and `main` is refused by
+   `check-committable-branch.sh` — so relocating is the NORMAL forge path, not an
+   exception.
+
+   Snapshotting a fresh clone is not a formality and not vacuous: the clone
+   starts clean, so the boundary proves the cycle left nothing uncommitted behind
+   it. What IS vacuous — and must never be done to obtain a marker — is
+   snapshotting AFTER the work and verifying immediately: that compares a tree
+   against itself and emits a valid-looking proof of nothing (651-2x5s). If you
+   reach Finalization having never snapshotted, the honest outcome is a BLOCKED
+   exit with no marker; do not manufacture one.
 
 3. Snapshot the startup boundary before classifying or changing any path:
    ```bash
@@ -1284,6 +1326,60 @@ another. Reads fold it in automatically — the packet is queryable immediately.
 Fragments are IMMUTABLE: to change something, write a new fragment, never edit an
 existing one (that is what makes the fold order-independent).
 
+### Prose NEVER passes through argv (order 971-7muc)
+
+```bash
+tillandsias-plan append-event <ref> <type> --summary-file NOTE.md --host <host>
+tillandsias-plan append-event <ref> <type> --summary-file -  --host <host> <<'EOF'
+...prose...
+EOF
+```
+
+**Note the QUOTED heredoc delimiter — `<<'EOF'`, never `<<EOF`.** An unquoted
+delimiter expands backticks and `$(...)` inside the body, which is one of the two
+ways this defect actually happened.
+
+WHY, and it is worth the four lines because every instrument we have says the
+write succeeded. Prose passed as a shell argument is rewritten by the shell
+*before* `tillandsias-plan` starts, and the damage is unrecoverable by then:
+
+```text
+"the `accel_mem_budget_gb` field"   ->   argv receives:   "the  field"
+```
+
+Both backticks and the word between them are gone. Two hosts lost the SUBJECT of
+a sentence to this on one evening (964-r98h, 970-7fqk), and `validate-yaml`,
+`tillandsias-plan check`, the fragment-keys guard and `./build.sh --check` all
+passed the result — because valid YAML carrying plausible prose is exactly what
+the corruption produces. It bites hardest on the most valuable writes: prose that
+quotes an identifier is prose explaining *why* something is named what it is, and
+backticks are how anyone writes that.
+
+`--summary-file` is read by the process itself, so no shell ever sees the bytes.
+The argv path still exists and now REFUSES text carrying expansion residue (an
+unbalanced backtick, a literal `$(`) — but understand what that can and cannot
+do: a *balanced* substitution leaves no trace at all, so the refusal is a
+backstop, not a guarantee. The file is the guarantee.
+
+Pinned by `scripts/test-ledger-prose-roundtrip.sh`, which asserts byte-identity
+for text containing backticks, `$(...)` and `$VAR`.
+
+### Multi-line `perl -0pi` edits are FORBIDDEN on this tree (hard rule, 2026-09-04)
+
+Three source corruptions in one day, all the same shape: a multi-line
+`perl -0pi -e 's|...|...|'` edit landed its replacement inside a file's
+HEADER COMMENT (accel_probe.rs twice, a fixture header once) instead of at
+the intended site, the line count stayed plausible, and only the compiler or
+a read of the diff's DELETIONS caught it. The author had filed the warning for
+the fleet at 11:49Z and hit it twice more in the same afternoon.
+
+Edit by exact-match, single-string replacement only: the Edit tool, a
+`python3` script that asserts the anchor occurs exactly once before writing,
+or `sed` on ONE addressed line. After any scripted edit, read the diff's
+removed lines before committing, not the count of them. A tool whose failure
+mode is "plausible file, wrong place" is not a tool for a tree whose gates
+grep for shapes.
+
 **Never compute "the next free order" yourself.** That number comes from a
 ledger snapshot which is stale the moment another host commits, so two hosts
 filing in the same window pick the SAME number deterministically. It happened
@@ -1707,9 +1803,11 @@ Only `linux_mutable` performs global coordination:
 
 ## Cycle Metrics (report before the handoff)
 
-Run `scripts/cycle-metrics.sh [<since-ref>]` and include its output verbatim in
-the final handoff. It emits one `key=value` line per block — branch on those,
-never on prose.
+Run `scripts/cycle-metrics.sh --cycle-start <Start-Of-Cycle UTC> [<since-ref>]`
+and include its output verbatim in the final handoff. It emits one `key=value`
+line per block — branch on those, never on prose. `--cycle-start` is the UTC
+you recorded at Start-Of-Cycle (e.g. `2026-09-04T06:00:00Z`); without it the
+`repeat:` line measures the last three hours, not this cycle.
 
 Every handoff MUST carry these lines; the two questions they answer are
 distinct — measure before you optimize:
@@ -1774,6 +1872,38 @@ distinct — measure before you optimize:
   `source=absent` until this host has run one instrumented step. `slowest` names
   the single step to attack first.
 
+- **`repeat:`** — "which steps were paid REPEATEDLY inside THIS cycle?" The
+  within-cycle count view over the same timing log (`window=`, `steps=`,
+  `top3=<step>=<count>,...`), order 1001-q3zf. Count, not duration: a gate
+  re-run after every rebase costs its duration TIMES the rounds, and only the
+  product is actionable. Pass `--cycle-start <your Start-Of-Cycle UTC>` (or
+  export `TILLANDSIAS_CYCLE_START_TS`) so the window is this cycle and not the
+  default last three hours: `scripts/cycle-metrics.sh --cycle-start
+  2026-09-04T06:00:00Z`. Reads `source=absent` when the timing log is missing.
+
+- **`recur:`** — "which steps are paid on EVERY cycle, and what do they cost
+  cumulatively?" The cross-cycle view over the last 7 days (`window=`, `runs=`,
+  `steps=`, `top3=<step>:runs=<n>:total_ms=<t>:avg_ms=<a>:fail_pct=<p>,...`),
+  ranked by total_ms — a cheap step paid three hundred times outranks an
+  expensive one paid twice. Step names contain colons (`step:...`,
+  `check:litmus-pre-build`), so parse an entry FROM THE RIGHT: the trailing
+  `:key=value` fields never contain a colon; the step is everything before the
+  first `:runs=`.
+
+- **`skippable:`** — "which expensive, repeated, outcome-invariant steps could
+  be memoised or skipped?" This is the operator's instrument for "repeated work
+  that wastes every cycle / expensive work that may be cached or skipped"
+  (2026-09-03). A candidate ran at least `min_runs=` times, averaged at least
+  `floor_ms=`, and NEVER changed outcome in the window, so every run after the
+  first bought no information. Entries are
+  `<step>:runs=<n>:avg_ms=<a>:fail_pct=<p>:saved_ms_upper=<s>`, parsed from the
+  right like `recur:`. **`saved_ms_upper` is a BOUND, not a saving** —
+  total_ms minus one run; the log carries no input identity, so nothing here
+  can say a run WOULD have hit a cache. Paste it as a bound. Do not file a
+  skip-or-memoise packet from one host's reading: the coordinator's cross-host
+  recurrence audit (coordinate-multihost-work) acts only when the same step
+  tops `skippable:` on two or more hosts.
+
 The two lines worth reading first:
 
 - **`answer_rate`** — the experts' USEFULNESS. Not call count. An expert called
@@ -1812,7 +1942,8 @@ Before exit:
 2. Refresh `plan/index.yaml` if this cycle changed active work, blockers,
    tested release, or host assignments. Record THIS cycle's status as a NEW
    `## Cycle` fragment in `plan/loop_status.d/` via
-   `tillandsias-plan loop-status-append --host <host> --ts <UTC-ISO>` — never
+   `tillandsias-plan loop-status-append --host <host> --ts <UTC-ISO> --file fragment.md`
+   (`< fragment.md` and a bare path also work; order 1004-8vkv) — never
    edit the shared `plan/loop_status.md` directly, or a concurrent host's
    status write conflicts for the same reason the old monolithic ledger did
    (packet 582-nqw5). The folded view (`tillandsias-plan loop-status`) is the
@@ -1829,8 +1960,15 @@ Before exit:
    timestamp, or omit `--ts` entirely when "now" is genuinely the right stamp:
 
    ```bash
-   tillandsias-plan loop-status-append --host <host> --ts <cycle-start-UTC> --backfill
+   tillandsias-plan loop-status-append --host <host> --ts <cycle-start-UTC> --backfill --file fragment.md
    ```
+
+   THE FRAGMENT MUST BE SUPPLIED EXPLICITLY. `--file <path>`, `< path` and a
+   bare path argument all work. Before order 1004-8vkv a bare path was silently
+   dropped and the command fell through to stdin, which on an inherited socket
+   (a forge agent's stdin, by construction) blocked for 26 minutes at 0.0%% CPU.
+   It is now refused in 5s naming the explicit forms, but supplying the input
+   explicitly is still the invocation to type.
 
    `--backfill` only reaches BACKWARD (a future `--ts` is still refused), so it
    waives nothing the limit exists to protect, and the refusal already names it.
@@ -1922,6 +2060,66 @@ Before exit:
    get unstuck — salvage first (872-c9nd) and report blocked with the salvage
    ref.
 
+3c. **EVERY LEDGER WRITE HAPPENS BEFORE THE GATE, NOT AFTER IT** (yolanda,
+   2026-09-02). The gate stamp hashes the CONTENT of every tracked and
+   untracked file in the worktree, so a ledger write after a green gate
+   creates a new `plan/index.d/` or `plan/loop_status.d/` file, moves the
+   digest, and the pre-push hook then refuses a tree whose CODE the gate
+   validated perfectly. Order your Finalization so that `append-event`,
+   `set-field`, `loop-status-append` and any issue file all land FIRST,
+   then gate once, then commit and push.
+
+   MEASURED: three extra full gates in one cycle on windows, about 25
+   minutes, plus a fourth on this host the same day. Both agents
+   rediscovered the ordering by trial; it was written down nowhere, which
+   is why it is here now rather than in a message that scrolls away.
+
+   The one exception is the attestation ledger, which CANNOT precede the
+   gate — `record` attests the head that finalization produces. That is
+   why step 9 re-verifies and re-derives; it is not a second chance at
+   the gate.
+
+   DO NOT diagnose this from the refusal message: it lists paths whose
+   MTIME is newer than the stamp, while the decision is made on CONTENT.
+   A merge or a regeneration that rewrites bytes identically appears in
+   that list without being the cause, and the file that actually moved
+   the digest may not appear at all. `scripts/gate-stamp.sh verify` is the
+   authority.
+
+
+   **USE THE ONE COMMAND THAT DOES 4-6 IN THE RIGHT ORDER** (order 859-4jny,
+   discoverability gap found 2026-09-03):
+
+   ```bash
+   scripts/land-on-platform-branch.sh [branch] [attempts]   # -> ok:land:<sha>:attempt-N
+   ```
+
+   It fetches, rebases, GATES, pushes, and then PROVES the commit landed by
+   asking the remote (`git merge-base --is-ancestor HEAD origin/<branch>`) —
+   because neither a zero exit status nor a `<branch> -> <branch>` line in the
+   output is sufficient evidence, and both have reported LANDED for a refused
+   push. It refuses non-retryable failures at once with their remedy (auth) and
+   retries only a lost race.
+
+   WHY THIS IS NAMED HERE AND NOT LEFT TO BE DISCOVERED. Steps 4, 5 and 6 are
+   three manual acts whose ORDER is the whole contract, and a host that
+   hand-rolls them can invert them. That is not hypothetical: on 2026-09-03 a
+   forge inverted gate-and-push TWICE in one session — once under real urgency
+   (an ephemeral container, work not yet durable) and once with no urgency at
+   all — while spending that same session filing defects about instruments that
+   report success without measuring anything. Its improvised loop
+   (`fetch && rebase && push`) had NO GATE IN IT BY CONSTRUCTION.
+
+   The tool that cannot make that mistake had existed since 859-4jny and this
+   skill named it ZERO times, so every host was taught the hand-rolled ritual
+   and none were taught the safe one. Documentation was not the gap and neither
+   was discipline: the host had run `salvage-dirty-worktree.sh` earlier in the
+   same cycle, so it was not unaware of its tooling. **Push is what "I am done
+   with this" feels like**, and the action that feels like finishing must be the
+   action that is correct — so the finishing command is named here, first,
+   before the three steps it replaces.
+
+   Fall through to 4-6 by hand only when this refuses for a reason it names.
 4. Run the local gate: `./build.sh --check` and fix what it reports.
    An unparseable or unformatted push poisons every downstream clone. Push CI
    no longer exists on any working branch — only the manually-dispatched
@@ -1997,6 +2195,40 @@ Before exit:
    re-derive ONCE more — the terminal marker must name the head that CONTAINS
    the ledger record:
    ```bash
+   # RUN `record` ONLY AFTER THE WORK PUSH HAS ACTUALLY SUCCEEDED, and check
+   # that it wrote. MEASURED on lenovinha 2026-09-03: `record` ran while HEAD
+   # was still unpushed and CORRECTLY REFUSED; a push-retry loop then landed
+   # the work WITHOUT re-running `record`; and the terminal `self` printed
+   # COMPLETE, because by then local and remote agreed. So the emitted marker
+   # was VALID and the durable ledger line — the thing automation actually
+   # consumes — was never written. A green marker is not evidence the ledger
+   # was appended.
+   #
+   # THE TRAP IS THE RETRY LOOP, not the ordering as written here: step 6
+   # already pushed, so this recipe is correct on the happy path. Insert a
+   # fetch/rebase/retry between the push and `record` — which every host does
+   # on a busy trunk — and `record` is silently skipped on any iteration that
+   # refused. Re-run `record` after the LAST successful push, not the first
+   # attempt.
+   #
+   # THIS IS NOW ENFORCED, NOT ONLY ADVISED (order 974-uk95). `self` refuses a
+   # COMPLETE marker unless THIS cycle wrote a durable record: `record` stamps
+   # the head it recorded, the boundary guard's `snapshot` clears that stamp at
+   # Start Of Cycle, and a marker whose HEAD does not descend from a recorded
+   # head is refused. So the skipped-record case now fails LOUDLY — no marker,
+   # which every outer launcher already treats as failure — instead of printing
+   # a valid marker beside an empty ledger. BLOCKED is exempt: a cycle saying it
+   # did not finish must still be able to say so.
+   #
+   # The ordering is still yours to get right. The guard catches a skipped
+   # record; it cannot make a retry loop call `record` for you.
+   #
+   # AUDIT IT THE WAY THEY CAUGHT IT: grep the ledger for this cycle's head
+   # rather than trusting the marker.
+   #   grep -c "$(git rev-parse HEAD)" plan/mo-full-attestations.d/<host>.md
+   # Expect the WORK head to appear, not the record commit's own head — the
+   # ledger line attests the work and committing it moves HEAD, which is why
+   # the terminal marker is re-derived one commit later.
    scripts/mo-full-attest.sh record                                  # verify + append + print the marker
    git add plan/mo-full-attestations.d/ && git commit -m "record(mo-full): attest <branch> cycle"
    git push

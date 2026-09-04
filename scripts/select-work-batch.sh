@@ -420,6 +420,26 @@ if [ "$query_rc" -ne 0 ]; then
 fi
 rm -f "$query_err"
 
+# ── THE ROUTING POOL (order 1011-d578) ──────────────────────────────────────
+# Captured HERE, before the tier / tool / accelerator subtractions below, and
+# it is the whole fix. Ordinal routing gives distinct hosts distinct ordinals,
+# but an ordinal only names the same EPIC on two hosts if both index the SAME
+# LIST. The list was each host's OWN post-subtraction pool, so slot k meant
+# different epics on different hosts and disjointness held only while the pools
+# happened to differ in the right way. It was emergent, never guaranteed.
+#
+# Measured 2026-09-04: 1002-7jeg's bring-up lane widened pools for hosts with
+# present-but-unusable hardware, macuahuitl's frontier re-ordered, and it
+# collided with mstudio — 8 hosts onto 7 epics on a roster with room for 8.
+# The same code had routed 8/8 hours earlier, which is the tell that the
+# property was a margin rather than a mechanism.
+#
+# This blob is a function of (ledger, role, release) alone — no host capability
+# touches it — so every host of a role scores an IDENTICAL frontier and equal
+# ordinals cannot alias. The host's own filtered pool still decides what it
+# WORKS; it no longer decides where it is POINTED.
+ROUTING_ROWS="$rows"
+
 # select-rows already applied: status ready, role claimability, release,
 # dependency-clearance (unresolvable ids count as BLOCKING, matching the
 # resolver) and lease exclusion. The three separate refusals that used to
@@ -603,27 +623,83 @@ fi
 # Same subtract-don't-project mechanism as TOOL_CAP_TAGS above, but the
 # presence test reads the host's own capability-matrix row instead of
 # `command -v`: a packet tagged for an accelerator this host lacks is never
-# offered to it. Enrolling a tag here asserts "no host without USABLE
-# <hardware> can make progress on ANY packet tagged <tag>".
+# offered to it.
+#
+# ORDER 1002-7jeg NARROWED WHAT "LACKS" MEANS, because the original reading
+# starved the work that would have lifted it. This block used to assert "no
+# host without USABLE <hardware> can make progress on ANY packet tagged
+# <tag>", building the set from `:usable` states alone. That assertion is
+# false for BRING-UP work, whose entire deliverable is to move a device from
+# present to usable: such a packet is tagged for the device by construction,
+# and the host that can lift it is precisely the one whose device is present
+# but not yet usable — the host this filter hid it from.
+#
+# Measured fleet-wide on 2026-09-04: the only npu states anywhere were
+# `npu:Intel NPU:unusable`, `npu:AMD XDNA:unusable` and `npu:amd:unusable`.
+# No host reported a usable NPU, so no host could hold `npu` in HOST_ACCELS,
+# and all five ready npu-tagged packets (802-2536, 805-r98w, 854-8p9d,
+# 917-6iwv, 917-n3n9) were unselectable by EVERY host in the fleet —
+# permanently, and signalled only by a bare `accel_filtered=N` naming
+# nothing. Self-sealing: the packets that would make the NPU usable could not
+# be selected until the NPU was usable. It defeated direct assignment too;
+# 917-6iwv reached lenovinha only because the coordinator assigned it by hand.
+#
+# So there are now TWO states, and only the second subtracts:
+#   present-but-unusable  -> the BRING-UP lane. Offered. This host has the
+#                            hardware and lacks only the engine, which is the
+#                            thing the packet exists to supply.
+#   absent entirely       -> subtracted, exactly as before. No amount of work
+#                            here conjures a device that is not in the box.
+# "Lacks the engine" and "lacks the hardware" are different states; only the
+# latter is grounds to withhold the work.
 #
 # A host with NO matrix row (and no TILLANDSIAS_HOST_ACCELS seam) skips the
-# subtraction entirely — exit criterion 4: an unprobed host degrades to
-# today's behaviour, never to an emptier pool than today's.
+# subtraction entirely — 847-wgy4 exit criterion 4: an unprobed host degrades
+# to today's behaviour, never to an emptier pool than today's.
 ACCEL_CAP_TAGS="cuda rocm npu metal"
 ACCEL_FILTERED=0
+ACCEL_FILTERED_TAGS=""
+ACCEL_BRINGUP_TAGS=""
 if [ -n "${TILLANDSIAS_HOST_ACCELS+x}" ] || [ -n "$MY_CAP_LINE" ]; then
     if [ -n "${TILLANDSIAS_HOST_ACCELS+x}" ]; then
         HOST_ACCELS=" ${TILLANDSIAS_HOST_ACCELS} "
+        # Seam parity: a caller that stubs the usable set must be able to stub
+        # the present set too, or the fixture cannot reach the bring-up branch.
+        # Set-even-empty, like HOST_ACCELS itself, so a caller can assert "this
+        # host has NO device present" and get the pure subtraction back.
+        if [ -n "${TILLANDSIAS_HOST_ACCELS_PRESENT+x}" ]; then
+            HOST_ACCELS_PRESENT=" ${TILLANDSIAS_HOST_ACCELS_PRESENT} "
+        else
+            # Unset (not empty) means the caller is speaking only about usable
+            # accelerators, so present collapses to usable and this reduces to
+            # the pre-1002-7jeg behaviour for that caller.
+            HOST_ACCELS_PRESENT="$HOST_ACCELS"
+        fi
     else
         HOST_ACCELS=" "
+        HOST_ACCELS_PRESENT=" "
         _accels="$(printf '%s' "$MY_CAP_LINE" | cut -f3)"
         case "$_accels" in *"gpu:nvidia:usable"*) HOST_ACCELS="${HOST_ACCELS}cuda " ;; esac
         case "$_accels" in *"gpu:amd:usable"*)    HOST_ACCELS="${HOST_ACCELS}rocm " ;; esac
         case "$_accels" in *"npu:"*":usable"*)    HOST_ACCELS="${HOST_ACCELS}npu " ;; esac
         case "$_accels" in *"gpu:apple:usable"*)  HOST_ACCELS="${HOST_ACCELS}metal " ;; esac
+        # PRESENT is state-blind on purpose: it asks "is the device in the
+        # box?", not "does it work?". Any state token — usable, unusable,
+        # present-unscheduled, or one not yet invented — counts as present,
+        # so a new state word cannot silently re-strand a device class.
+        case "$_accels" in *"gpu:nvidia:"*) HOST_ACCELS_PRESENT="${HOST_ACCELS_PRESENT}cuda " ;; esac
+        case "$_accels" in *"gpu:amd:"*)    HOST_ACCELS_PRESENT="${HOST_ACCELS_PRESENT}rocm " ;; esac
+        case "$_accels" in *"npu:"*)        HOST_ACCELS_PRESENT="${HOST_ACCELS_PRESENT}npu " ;; esac
+        case "$_accels" in *"gpu:apple:"*)  HOST_ACCELS_PRESENT="${HOST_ACCELS_PRESENT}metal " ;; esac
     fi
     for accel in $ACCEL_CAP_TAGS; do
         case "$HOST_ACCELS" in *" ${accel} "*) continue ;; esac
+        # The bring-up lane: hardware present, engine not yet. Offer it.
+        case "$HOST_ACCELS_PRESENT" in
+            *" ${accel} "*)
+                ACCEL_BRINGUP_TAGS="${ACCEL_BRINGUP_TAGS}${ACCEL_BRINGUP_TAGS:+,}${accel}"
+                continue ;;
+        esac
         accel_err="$(mktemp)"
         accel_rows="$("$PLAN" select-rows --status ready --claimable-by "$ROLE" \
             "${REL_ARG[@]+"${REL_ARG[@]}"}" --tag "$accel" --limit 400 2>"$accel_err")"
@@ -643,12 +719,20 @@ if [ -n "${TILLANDSIAS_HOST_ACCELS+x}" ] || [ -n "$MY_CAP_LINE" ]; then
                 !in_pool { drop[$4] = 1; next }
                 !($4 in drop)')"
         after_n="$(printf '%s\n' "$rows" | grep -c .)"
-        ACCEL_FILTERED=$((ACCEL_FILTERED + before_n - after_n))
+        _accel_dropped=$((before_n - after_n))
+        ACCEL_FILTERED=$((ACCEL_FILTERED + _accel_dropped))
+        # Criterion 3: a bare count names nothing, and a reader who sees it
+        # cannot tell a correct subtraction from a starved device class. Carry
+        # the tag and how many it took, so the triage line is legible without
+        # re-running the query by hand.
+        if [ "$_accel_dropped" -gt 0 ]; then
+            ACCEL_FILTERED_TAGS="${ACCEL_FILTERED_TAGS}${ACCEL_FILTERED_TAGS:+,}${accel}:${_accel_dropped}"
+        fi
     done
 fi
 
 if [ -z "$rows" ]; then
-    echo "refused:no-eligible-work:every ready packet claimable by role ${ROLE} needs an accelerator this host lacks (accel_filtered=${ACCEL_FILTERED})"
+    echo "refused:no-eligible-work:every ready packet claimable by role ${ROLE} needs an accelerator this host lacks (accel_filtered=${ACCEL_FILTERED}(${ACCEL_FILTERED_TAGS}))"
     exit 1
 fi
 
@@ -686,7 +770,12 @@ maxorder="$(printf '%s\n' "$rows" | awk -F'\t' '{gsub(/[^0-9].*$/,"",$3); if ($3
 # depcounts rides the input stream behind a marker line, NOT awk -v: BSD awk
 # (macOS) rejects -v values containing literal newlines ("newline in string"),
 # GNU awk merely tolerates them. Same dep[] map either way.
-scored="$({ printf '%s\n' "$depcounts"; printf '==ROWS==\n'; printf '%s\n' "$rows"; } \
+# Scoring is a FUNCTION because it is now applied to two pools: the host's own
+# (which decides what it works) and the routing pool (which decides where it is
+# pointed). Order 1011-d578 — one implementation, so the two orderings cannot
+# drift apart and re-introduce the aliasing this fix removes.
+_score_epics() {
+    { printf '%s\n' "$depcounts"; printf '==ROWS==\n'; printf '%s\n' "$1"; } \
     | awk -F'\t' -v maxo="$maxorder" '
       $0 == "==ROWS==" { in_rows = 1; next }
       !in_rows {
@@ -723,7 +812,10 @@ scored="$({ printf '%s\n' "$depcounts"; printf '==ROWS==\n'; printf '%s\n' "$row
               printf "%.3f\t%s\t%d\t%d\t%.1f\n", score, e, cnt[e], blocking, neglect;
           }
       }' \
-    | sort -t"$(printf '\t')" -k1,1nr -k2,2)"
+    | sort -t"$(printf '\t')" -k1,1nr -k2,2
+}
+
+scored="$(_score_epics "$rows")"
 
 [ -n "$scored" ] || { echo "refused:no-eligible-work:could not score any epic"; exit 1; }
 
@@ -767,17 +859,52 @@ if [ -n "$MY_CAP_LINE" ] && [ "$HOST_TIER" != "low-end" ]; then
     roster_n="$(printf '%s\n' "$CAP_HOSTS" | grep -c .)"
     my_rank="$(printf '%s\n' "$CAP_HOSTS" | awk -F'\t' -v h="$HOST_NAME" '$1==h{print NR; exit}')"
     if [ -n "$my_rank" ] && [ "$roster_n" -ge 1 ]; then
+        # ORDER 1011-d578. The ordinal indexes the ROUTING frontier — scored
+        # from the pre-subtraction pool, identical on every host of this role —
+        # not this host's own. Equal ordinals therefore name equal epics, which
+        # is what makes "distinct ranks give disjoint epics" a mechanism rather
+        # than the coincidence it had been.
+        routing_scored="$(_score_epics "$ROUTING_ROWS")"
+        if printf '%s\n' "$routing_scored" | grep -qv '	UNGROUPED	'; then
+            routing_scored="$(printf '%s\n' "$routing_scored" | awk -F'\t' '$2!="UNGROUPED"')"
+        fi
+        routing_count="$(printf '%s\n' "$routing_scored" | grep -c .)"
         width="$TOPK"
         [ "$roster_n" -gt "$width" ] && width="$roster_n"
-        [ "$width" -gt "$epic_count" ] && width="$epic_count"
+        [ "$width" -gt "$routing_count" ] && width="$routing_count"
         [ "$width" -lt 1 ] && width=1
         # TILLANDSIAS_ROUTE_ROT pins the rotation for fixtures (the
         # anti-starvation litmus walks it); live it is a function of the UTC
         # DATE alone, fleet-uniform by construction.
         day_rot="${TILLANDSIAS_ROUTE_ROT:-$(date -u +%Y%m%d | cksum | cut -d' ' -f1)}"
-        routed_pick=$(( ( (my_rank - 1 + day_rot) % width ) + 1 ))
-        k="$width"
-        ROUTE="rank:${my_rank}/${roster_n}:width=${width}"
+        routed_slot=$(( ( (my_rank - 1 + day_rot) % width ) + 1 ))
+        # The slot names an epic on the SHARED frontier. This host may not be
+        # able to work it — its own subtractions may have removed every packet
+        # in that epic — so walk forward from the slot until one lands in the
+        # host's own pool. Advancing is deterministic and preserves the
+        # ordinal's separation for every host that CAN serve its slot; only
+        # hosts genuinely unable to serve theirs converge, which is the honest
+        # minimum rather than a collision the mechanism invited.
+        routed_epic=""
+        _probe=0
+        while [ "$_probe" -lt "$width" ]; do
+            _slot=$(( ( (routed_slot - 1 + _probe) % width ) + 1 ))
+            _cand="$(printf '%s\n' "$routing_scored" | sed -n "${_slot}p" | cut -f2)"
+            if [ -n "$_cand" ] && printf '%s\n' "$scored" | cut -f2 | grep -qxF "$_cand"; then
+                routed_epic="$_cand"
+                break
+            fi
+            _probe=$(( _probe + 1 ))
+        done
+        if [ -n "$routed_epic" ]; then
+            routed_pick="$(printf '%s\n' "$scored" | cut -f2 | grep -nxF "$routed_epic" | head -1 | cut -d: -f1)"
+            k="$width"
+            ROUTE="rank:${my_rank}/${roster_n}:width=${width}"
+        fi
+        # No reachable epic on the shared frontier: ROUTE stays "seed" and the
+        # seeded draw below runs, which is exactly the rowless-host path. A
+        # host that can work nothing the fleet is pointed at should fall back
+        # loudly through the existing mechanism, not be handed slot 1.
     fi
 fi
 
@@ -971,11 +1098,12 @@ urgency_unscored="$(printf '%s\n' "$rows" | awk -F'\t' '$1==99' | grep -c .)"
 # caps_filtered rides the triage line ONLY when the host-capability subtraction
 # dropped rows (same conditional idiom as the header's `urgent=`), so a fully
 # capable host emits byte-identical output to the pre-filter selector.
-printf 'triage: eligible=%s grouped=%s ungrouped=%s epics=%s urgency_unscored=%s%s%s%s\n' \
+printf 'triage: eligible=%s grouped=%s ungrouped=%s epics=%s urgency_unscored=%s%s%s%s%s\n' \
     "$eligible" "$grouped" "$ungrouped" "$epics" "$urgency_unscored" \
     "$( [ "${CAPS_FILTERED:-0}" -gt 0 ] && printf ' caps_filtered=%s' "$CAPS_FILTERED" )" \
     "$( [ "${TIER_FILTERED:-0}" -gt 0 ] && printf ' tier_filtered=%s' "$TIER_FILTERED" )" \
-    "$( [ "${ACCEL_FILTERED:-0}" -gt 0 ] && printf ' accel_filtered=%s' "$ACCEL_FILTERED" )"
+    "$( [ "${ACCEL_FILTERED:-0}" -gt 0 ] && printf ' accel_filtered=%s(%s)' "$ACCEL_FILTERED" "$ACCEL_FILTERED_TAGS" )" \
+    "$( [ -n "${ACCEL_BRINGUP_TAGS:-}" ] && printf ' accel_bringup=%s' "$ACCEL_BRINGUP_TAGS" )"
 # The frontier is printed so a cycle can justify its choice, and so a human can
 # see what it did NOT pick. An unexplained selection is unauditable.
 printf '%s\n' "$scored" | head -n "$k" | while IFS=$'\t' read -r sc e c b n; do

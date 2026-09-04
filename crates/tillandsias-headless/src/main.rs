@@ -327,6 +327,8 @@ fn main() {
     let init = user_args.iter().any(|a| a == "--init");
     let force = user_args.iter().any(|a| a == "--force");
     let status_check = user_args.iter().any(|a| a == "--status-check");
+    // Order 1004-xw3q: the restore path the health guard's remedy names.
+    let ensure_enclave = user_args.iter().any(|a| a == "--ensure-enclave");
     let inference_tier = user_args.iter().any(|a| a == "--inference-tier");
     // Order 480 follow-up: make the capability probe observable from the host.
     // Until this flag existed the probe had no caller at all, so there was no
@@ -381,6 +383,12 @@ fn main() {
     }
 
     let capabilities = user_args.iter().any(|a| a == "--capabilities");
+    // Order 805-r98w (second half). The fingerprint existed but nothing
+    // could obtain it, which made it useless for its ONE purpose: proving two
+    // hosts are the same hardware. A bare flag printing nothing but the hash
+    // is what a cross-host comparison actually needs — one command, one line,
+    // diffable by eye or by script across an OS boundary.
+    let hardware_fingerprint = user_args.iter().any(|a| a == "--hardware-fingerprint");
     // Order 852-dk9z: --fresh bypasses the capability cache. The row
     // generator passes it so a published row can never be a stale-cache
     // artifact of a previous binary.
@@ -593,10 +601,13 @@ fn main() {
         "--init",
         "--inference-tier",
         "--capabilities",
+        // Order 805-r98w: prints the substrate hash alone, for twin-host comparison.
+        "--hardware-fingerprint",
         // Order 852-dk9z: modifier for --capabilities; bypasses the probe cache.
         "--fresh",
         "--record-measurement",
         "--status-check",
+        "--ensure-enclave",
         "--github-login",
         "--with-token",
         "--claude-login",
@@ -668,6 +679,7 @@ fn main() {
         || observatorium
         || init
         || status_check
+        || ensure_enclave
         || inference_tier
         || capabilities
         || github_login
@@ -839,6 +851,33 @@ fn main() {
         std::process::exit(0);
     }
 
+    if hardware_fingerprint {
+        // Deliberately the ONLY thing on stdout: this is meant to be compared
+        // between hosts, so `diff <(a) <(b)` and a human eye must both work.
+        // Honours --fresh for the same reason --capabilities does — a stale
+        // cache would compare two binaries, not two machines.
+        let doc = if fresh_capabilities {
+            accel_probe::probe_fresh(effective_inference_tier())
+        } else {
+            accel_probe::load_or_probe(effective_inference_tier())
+        };
+        // REFUSES rather than degrades. On native Windows today the probe
+        // yields a placeholder-only document, and hashing it returns a string
+        // every 16-thread Windows host shares — a false twin, which is the
+        // failure 805-r98w exists to prevent. Exit 3 distinguishes "this host
+        // cannot answer" from a probe crash.
+        match accel_probe::hardware_fingerprint_checked(&doc) {
+            Ok(fp) => {
+                println!("{fp}");
+                std::process::exit(0);
+            }
+            Err(refusal) => {
+                eprintln!("hardware-fingerprint: {refusal}");
+                std::process::exit(3);
+            }
+        }
+    }
+
     if capabilities {
         // Order 480 follow-up: the structured probe, made observable.
         //
@@ -872,6 +911,19 @@ fn main() {
     // @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
     if reset_guest {
         if let Err(e) = run_reset_guest(debug) {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+        return;
+    }
+
+    // Order 1004-xw3q: a standalone restore path. Top-level and returning, NOT
+    // nested under `if init` like `--status-check` is: the first draft mirrored
+    // that block, and `tillandsias --ensure-enclave` alone then fell through
+    // into the app's service path and sat idle until the shutdown handler tore
+    // Vault down (measured 2026-09-04, three runs, no podman call ever made).
+    if ensure_enclave {
+        if let Err(e) = run_cli_with_vault_credential_cleanup(debug, || run_ensure_enclave(debug)) {
             eprintln!("Error: {}", e);
             std::process::exit(1);
         }
@@ -1380,6 +1432,9 @@ fn print_usage(version: &str) {
          Destructive by design; you'll re-authenticate once"
     );
     println!("  --status-check Verify services are online through a representative stack smoke");
+    println!(
+        "  --ensure-enclave Bring the application-lifetime enclave services (network, Vault, egress proxy) up idempotently without launching a lane — the restore path after a reboot or a stopped proxy; --init only builds images"
+    );
     println!("  --github-login Authenticate GitHub and store the token in Vault");
     println!("  --with-token   Read a GitHub token from stdin; requires --github-login");
     println!(
@@ -1625,7 +1680,13 @@ const ENCLAVE_ONLY_NET: &str = "tillandsias-enclave";
 // CIDR entry never covers `https://nix-cache:5000`.
 const ENCLAVE_NO_PROXY_BASE: &str =
     "localhost,127.0.0.1,0.0.0.0,::1,vault,tillandsias-vault,inference,proxy,nix-cache";
-const CA_DIR: &str = "/tmp/tillandsias-ca";
+/// ORDER 998-qrwu. The path is declared ONCE in images/default/ca-path.txt and
+/// read through tillandsias-core, which both this crate and tillandsias-macos-tray
+/// depend on. It was a literal in 38 places; 975-rsgm has to move it off /tmp,
+/// and a partial move fails only on the recovery path.
+fn ca_dir() -> String {
+    tillandsias_core::ca_path::ca_dir()
+}
 
 fn enclave_subnet() -> String {
     std::env::var(ENCLAVE_SUBNET_ENV)
@@ -3044,7 +3105,7 @@ fn enforce_ca_key_mode(_key: &Path) -> std::io::Result<()> {
 
 fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
     // @trace spec:secret-rotation, spec:reverse-proxy-internal
-    let certs_dir = PathBuf::from(CA_DIR);
+    let certs_dir = PathBuf::from(ca_dir());
 
     if std::env::var("TILLANDSIAS_HOST_KIND").as_deref() == Ok("forge") {
         // The forge environment does not have openssl CLI and is not responsible
@@ -3437,7 +3498,7 @@ fn ensure_proxy_running(debug: bool) -> Result<(), String> {
         //
         // Best-effort: an unreadable or absent key is not a reason to refuse
         // a proxy that is already serving.
-        let _ = enforce_ca_key_mode(&PathBuf::from(CA_DIR).join("intermediate.key"));
+        let _ = enforce_ca_key_mode(&PathBuf::from(ca_dir()).join("intermediate.key"));
         if debug {
             eprintln!("[tillandsias] enclave proxy already running");
         }
@@ -3758,6 +3819,184 @@ fn format_seed_staleness(
 /// launch (exit 1, loud remediation) when `behind` exceeds it. No auto-ff:
 /// mutating an operator-owned checkout is the 763-munc ruling still held
 /// open.
+/// Order 965-rb3v: the line printed when the host checkout's HEAD could NOT be
+/// resolved, so no `TILLANDSIAS_FORGE_SEED_BRANCH` is injected.
+///
+/// WHY THIS IS LOUD AND UNCONDITIONAL. The unresolved case is currently
+/// SILENT — `if let Some(seed) = read_host_project_current_branch(..)` simply
+/// injects nothing — and silence here is indistinguishable from success while
+/// producing a specific, wrong outcome: with no seed the mirror's HEAD falls
+/// back to UPSTREAM'S DEFAULT BRANCH inside ensure-mirror-head, which on this
+/// project is `main`. So "could not read the branch" and "deliberately seed
+/// from main" render identically in every log, and the forge lands on `main`
+/// with nothing having reported a problem.
+///
+/// AND THE GUEST CANNOT CATCH IT, which is the part worth stating in code.
+/// The startup context's honesty guard reports
+/// `base_state=ok base_actual=<x> base_expected=<x>`, where `base_expected` IS
+/// the seed. A wrong seed therefore agrees with itself and reads `ok` — the
+/// context file says as much ("a seed that matches an old branch agrees with
+/// itself"). Nothing on the guest side ever learns the host checkout's HEAD,
+/// so the host is the ONLY place this can be observed, and it was the one
+/// place staying quiet.
+///
+/// NOT a hard refusal, deliberately, and this is a decision worth naming
+/// rather than burying. Order 501's contract is that a project with no
+/// readable branch injects NO seed env and the guest behaves byte-identically
+/// to pre-501 — end-user transparency for the ordinary non-Tillandsias project
+/// that is not a git checkout at all. A hard failure here would turn every
+/// such launch into an error. The failure is made LOUD and NAMED instead; the
+/// refuse-vs-warn default is the operator's call, as it already is for
+/// `TILLANDSIAS_SEED_STALENESS_MAX_BEHIND`.
+///
+/// Formatted from plain values so the shape is unit-testable without a repo,
+/// same as [`format_seed_staleness`].
+fn format_seed_unresolved(project_display: &str) -> String {
+    format!(
+        "[tillandsias] [forge-launch] SEED UNRESOLVED: could not read a branch \
+         from the host checkout at {project_display} — injecting no \
+         TILLANDSIAS_FORGE_SEED_BRANCH. The mirror's HEAD will fall back to \
+         UPSTREAM'S DEFAULT BRANCH (typically `main`), so this forge may land \
+         somewhere other than the branch you are working on, and the guest's \
+         base_state will still read `ok` because it compares the clone against \
+         the seed rather than against your checkout. Causes: detached HEAD, a \
+         path that is not a git checkout, or an unreadable .git."
+    )
+}
+
+/// The RESOLVED counterpart, order 965-rb3v. The unresolved case above is
+/// loud; the SUCCESS case was silent, and on a developer host silence is
+/// where the defect lives.
+///
+/// MEASURED on macuahuitl 2026-09-02: the host carries EIGHT checkouts of
+/// this project (opencode/, claudia/, codex/, agy/, repeat/, src/ and two
+/// tillandsias.org trees), THREE of them on `main`, and the two plausible
+/// seed sources are stale abandoned trees last committed on 08-09 and
+/// 08-03. A forge launched there arrived seeded from `main` while the
+/// checkout being worked in sat on linux-next, and the guest's base_state
+/// still read `ok` because it compares the clone against the seed rather
+/// than against anyone's intent.
+///
+/// `read_host_project_current_branch` was NOT at fault and was ruled out by
+/// test from both sides (d4b764392). It resolved correctly — against a
+/// checkout nobody intended. So the defect is not a misread branch, it is
+/// an UNREPORTED PROJECT PATH, and the fix is to say which checkout was
+/// used, always, not only when reading it fails.
+fn format_seed_resolved(project_display: &str, seed: &str) -> String {
+    format!(
+        "[tillandsias] [forge-launch] SEED {seed} from {project_display} \
+         — this forge will be created from that branch of that checkout. If \
+         it is not the checkout you are working in, stop and relaunch from \
+         the right one: the guest cannot detect the difference, because \
+         base_state compares the clone against this seed rather than \
+         against your intent."
+    )
+}
+
+/// Emit [`format_seed_resolved`]. Split from the formatter for the same
+/// reason as its unresolved twin: the wording stays unit-testable without a
+/// repo and the call site stays one line.
+fn report_seed_resolved(project_path: &Path, seed: &str) {
+    eprintln!(
+        "{}",
+        format_seed_resolved(&project_path.display().to_string(), seed)
+    );
+}
+
+/// ORDER 965-rb3v, second rung. Does this project USE platform branches?
+///
+/// Gated on the project rather than hardcoded, because order 501's contract is
+/// that an ordinary project — one that is not this repo, and may not be a git
+/// checkout at all — is forged with no seed logic visible to the user. Warning
+/// every project that its branch is not named `*-next` would export a
+/// Tillandsias naming convention onto everyone else's repository, which
+/// `methodology/multi-host-development.yaml:21-27` says explicitly is NOT a
+/// runtime convention of the product.
+///
+/// So the question asked here is a fact about the checkout, not a policy: does
+/// it carry any `*-next` branch, local or remote? If it does not, this project
+/// does not use them and nothing is warned.
+fn project_has_platform_branches(project_path: &Path) -> bool {
+    std::process::Command::new("git")
+        .arg("-C")
+        .arg(project_path)
+        .args([
+            "for-each-ref",
+            "--format=%(refname:short)",
+            "refs/heads/*-next",
+            "refs/remotes/*/*-next",
+        ])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .is_some_and(|s| s.split_whitespace().any(|l| !l.is_empty()))
+}
+
+/// ORDER 965-rb3v, second rung. The seed resolved to a NON-platform branch on a
+/// project that has platform branches.
+///
+/// MEASURED ON A SECOND HOST (lenovinha, 2026-09-03), which is what promotes
+/// this from a macuahuitl-specific eight-checkout accident to a fleet defect.
+/// A tray-launched forge there arrived with `TILLANDSIAS_FORGE_SEED_BRANCH=main`
+/// and a guest clone whose HEAD was a release merge into `main`, while the work
+/// of that session — and its sibling bare-metal session — was on `linux-next`,
+/// by then ~205 commits ahead.
+///
+/// THE COST IS NOT ABSTRACT AND IT IS NOT "an old tree". `main` is not
+/// committable by contract: `scripts/check-committable-branch.sh` returns
+/// `blocked:committable-cycle-on-main`, and direct pushes to `main` are
+/// forbidden outright. So a forge seeded from `main` cannot commit ANYTHING
+/// from its own checkout. That is the whole cycle lost unless the agent notices
+/// and clones a platform branch by hand, which is exactly what the lenovinha
+/// session had to do.
+///
+/// And the guest cannot discover this for itself: `base_state` compares the
+/// clone against the seed, so a wrong seed agrees with itself and reads `ok`
+/// (`base_state=ok base_actual=main base_expected=main`, observed). The host is
+/// the only possible observer, which is why the warning belongs here.
+///
+/// WARN, NOT REFUSE, deliberately — the same reasoning the coordinator accepted
+/// for the unresolved case (965-rb3v decision, 2026-09-02T21:40Z): a hard
+/// refusal here would break the 501 contract for projects this launcher is
+/// shared with, and refuse-vs-warn is an operator decision, not a side effect.
+fn format_seed_not_platform_branch(project_display: &str, seed: &str) -> String {
+    format!(
+        "[tillandsias] [forge-launch] SEED NOT A PLATFORM BRANCH: {project_display} is on \
+         `{seed}`, but this project uses `*-next` platform branches and `{seed}` is not one. \
+         The forge will be created from `{seed}`, and if that is `main` it CANNOT COMMIT — \
+         `main` takes changes only through a PR, so the guest's own checkout is unusable for \
+         work. The guest cannot detect this: base_state compares the clone against this seed, \
+         so a wrong seed agrees with itself and reads ok. If you meant to work on a platform \
+         branch, switch this checkout to it and relaunch."
+    )
+}
+
+/// Emit [`format_seed_not_platform_branch`] when it applies. Split from the
+/// formatter for the same reason as its two siblings: the wording stays
+/// unit-testable without a repo, and the call site stays one line.
+fn report_seed_not_platform_branch(project_path: &Path, seed: &str) {
+    if seed.ends_with("-next") {
+        return;
+    }
+    if !project_has_platform_branches(project_path) {
+        return;
+    }
+    eprintln!(
+        "{}",
+        format_seed_not_platform_branch(&project_path.display().to_string(), seed)
+    );
+}
+/// Emit [`format_seed_unresolved`] for a project path whose HEAD did not
+/// resolve. Separated from the formatter so the wording is testable and the
+/// call sites stay one line.
+fn report_seed_unresolved(project_path: &Path) {
+    eprintln!(
+        "{}",
+        format_seed_unresolved(&project_path.display().to_string())
+    );
+}
+
 fn report_seed_staleness(project_path: &Path, seed: &str) {
     let git = |git_args: &[&str]| -> Option<String> {
         let out = std::process::Command::new("git")
@@ -5567,24 +5806,172 @@ fn projects_root() -> PathBuf {
 /// On git-less hosts (the VM rootfs deliberately ships no `git`) this
 /// degrades to the presence of `.git` — the strongest signal available there,
 /// and exactly the old behavior for that lane.
-#[cfg(any(feature = "tray", feature = "listen-vsock"))]
-pub(crate) fn is_valid_git_checkout(path: &Path) -> bool {
-    if !path.join(".git").exists() {
+/// HOW FAR THE EVIDENCE ABOUT A CHECKOUT ACTUALLY GOES (order 997-e4v2).
+///
+/// Three states, not two, and the third one is the whole point: the caller
+/// QUARANTINES on a negative verdict — it renames the user's directory aside —
+/// so "I could not evaluate this" must never arrive as "this is invalid".
+///
+/// MEASURED, which is why this is a type and not a bool. On esmeraldinha
+/// 2026-09-02 the in-VM `/home/forge/src` is a drvfs mount reporting uid 1000
+/// while the headless runs as root, so `git rev-parse` exits 128 with
+/// "detected dubious ownership in repository". The old predicate read any
+/// non-zero exit as invalid, and ten healthy checkouts were renamed aside
+/// between Aug 25 and Sep 2 — `git fsck` exits 0 on every one of them, all
+/// have complete worktrees, and their only "modifications" are symlink and
+/// exec-bit entries with zero content differences. Nine of nine quarantines
+/// correlate with a tray menu click. Every launch judged a healthy tree bad on
+/// arrival, and each one also destroyed that checkout's repo-local
+/// `.git/.gh-credentials`, which nothing in the tree reseeds.
+///
+/// This is 965-sxec's shape with the polarity that matters more: there a gate
+/// that could not RUN asserted what it would have FOUND, and cost a reader an
+/// hour. Here the same confusion MUTATES STATE.
+// Deliberately NOT feature-gated, unlike its callers: this decides whether a
+// user's directory gets renamed, so it must be compiled and TESTED on every
+// host, including the ones that build neither tray nor listen-vsock. The
+// allow(dead_code) is the same shape this file already uses for
+// physical_core_count on non-Linux.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum CheckoutVerdict {
+    /// A git worktree whose HEAD resolves to a commit.
+    Valid,
+    /// Evaluated, and it is genuinely not a usable checkout: no `.git`, or a
+    /// HEAD that does not verify (an unborn branch, an interrupted clone).
+    /// This is the ONLY verdict that may quarantine.
+    Invalid,
+    /// The question could not be answered here. Git refused to operate —
+    /// dubious ownership, a held lock, a corrupt index. Says NOTHING about the
+    /// tree, so the tree is left exactly where it is.
+    Indeterminate(String),
+}
+
+/// Ground-truth checkout classification (fresh-checkout invariant, 2026-07-20;
+/// third state added by 997-e4v2).
+///
+/// EXIT CODES RATHER THAN MESSAGE TEXT, deliberately: git's stderr is localised
+/// and rewordable, and a classifier keyed on English prose would silently start
+/// quarantining again under a translated git. With `--quiet`, `rev-parse
+/// --verify` returns 1 for a ref that does not verify — a real answer.
+///
+/// 128 IS NOT RESERVED FOR REFUSAL, and an earlier version of this comment said
+/// it was. Measured by esme-windows against git 2.55.0 and reproduced here:
+///
+///   rc=0    healthy                        rc=1    unborn HEAD
+///   rc=128  dubious ownership (a REFUSAL)  rc=128  `.git` present but empty
+///   rc=128  HEAD deleted                   rc=128  HEAD is garbage text
+///   rc=1    HEAD -> nonexistent ref        rc=0    COMMIT OBJECT CORRUPTED
+///
+/// All four 128s print the same "fatal: not a git repository" for three of them
+/// and a different fatal for the fourth, so the code alone cannot separate a
+/// refusal from real damage. Treating every 128 as a refusal would be safe —
+/// it never destroys — but it would retire the feature's whole purpose: the
+/// 2026-07-20 scenario is an operator who deleted the checkout and relaunched,
+/// and an empty `.git` is exactly a 128. Self-repair would never fire again.
+///
+/// So a 128 is split STRUCTURALLY, not by prose. `head_is_structurally_present`
+/// asks whether the repository still has a HEAD file at all — a fact about the
+/// tree, in our code, immune to translation. Missing HEAD is real damage and
+/// may quarantine; HEAD present with git still refusing means something about
+/// the ENVIRONMENT is wrong (on the fleet, the tree is owned by uid 1000
+/// because the containerized `gh` clone wrote it while the headless evaluates
+/// as root), and the tree is left alone.
+///
+/// WHAT THIS PREDICATE STILL CANNOT SEE, recorded because the quarantine is
+/// named for it: a CORRUPTED COMMIT OBJECT returns 0. `rev-parse --verify`
+/// resolves the ref and never reads the object, so genuine corruption reads as
+/// Valid — before this change and after it. Three-stating the error handling
+/// does not touch that, and anyone relying on this to detect a damaged
+/// repository should know it detects a damaged *ref*, not a damaged object.
+///
+/// On git-less hosts (the VM rootfs deliberately ships no `git`) this degrades
+/// to the presence of `.git` — the strongest signal available there, and
+/// exactly the old behavior for that lane.
+/// Does this repository still have a HEAD file at all?
+///
+/// The structural half of the 128 split (997-e4v2). A fact about the tree,
+/// determined by OUR code rather than by parsing git's localised stderr, so it
+/// answers the same way under any locale.
+///
+/// Handles both layouts: a `.git` DIRECTORY holds `HEAD` directly; a `.git`
+/// FILE is a gitfile whose `gitdir:` line points at the real directory (the
+/// worktree and submodule layout). A gitfile we cannot read or parse is itself
+/// damage — there is no repository to find — so it answers false.
+///
+/// Conservative by construction: when in doubt this returns TRUE, which routes
+/// to Indeterminate and leaves the tree alone. The cost of a wrong true is a
+/// refusal the operator must resolve; the cost of a wrong false is a renamed
+/// directory.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub(crate) fn head_is_structurally_present(path: &Path) -> bool {
+    let dot_git = path.join(".git");
+    let meta = match std::fs::metadata(&dot_git) {
+        Ok(m) => m,
+        // Nothing to inspect. The caller only reaches this with `.git`
+        // existing, so a metadata failure is a permissions or race condition:
+        // refuse rather than quarantine.
+        Err(_) => return true,
+    };
+    if meta.is_dir() {
+        return dot_git.join("HEAD").exists();
+    }
+    // Gitfile: `gitdir: <path>`, absolute or relative to the worktree.
+    let Ok(body) = std::fs::read_to_string(&dot_git) else {
+        return true;
+    };
+    let Some(rest) = body.lines().find_map(|l| l.trim().strip_prefix("gitdir:")) else {
+        // A `.git` file that is not a gitfile is not a repository.
         return false;
+    };
+    let target = PathBuf::from(rest.trim());
+    let resolved = if target.is_absolute() {
+        target
+    } else {
+        path.join(target)
+    };
+    resolved.join("HEAD").exists()
+}
+
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub(crate) fn classify_git_checkout(path: &Path) -> CheckoutVerdict {
+    if !path.join(".git").exists() {
+        // No `.git` at all is a real, evaluated answer about the tree.
+        return CheckoutVerdict::Invalid;
     }
     match std::process::Command::new("git")
         .arg("-C")
         .arg(path)
         .args(["rev-parse", "--quiet", "--verify", "HEAD"])
         .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
+        .output()
     {
-        Ok(status) => status.success(),
+        Ok(out) if out.status.success() => CheckoutVerdict::Valid,
+        Ok(out) if out.status.code() == Some(1) => CheckoutVerdict::Invalid,
+        Ok(out) => {
+            // Real damage, not a refusal: a repository with no HEAD file has
+            // nothing to lose and is exactly the deleted-checkout case the
+            // quarantine exists for (2026-07-20).
+            if !head_is_structurally_present(path) {
+                return CheckoutVerdict::Invalid;
+            }
+            let detail = String::from_utf8_lossy(&out.stderr)
+                .lines()
+                .find(|l| !l.trim().is_empty())
+                .unwrap_or("git refused to evaluate this repository")
+                .trim()
+                .to_string();
+            CheckoutVerdict::Indeterminate(format!(
+                "git rev-parse exited {}: {detail}",
+                out.status
+                    .code()
+                    .map(|c| c.to_string())
+                    .unwrap_or_else(|| "by signal".to_string())
+            ))
+        }
         // No git binary on this host: `.git` presence is the best available
         // ground truth (git-less VM lane).
-        Err(_) => true,
+        Err(_) => CheckoutVerdict::Valid,
     }
 }
 
@@ -5636,13 +6023,29 @@ fn resolve_cloud_project_checkout(nwo: &str, debug: bool) -> Result<String, Stri
     // `exists()` accepted empty/partial/broken checkouts and launched agents
     // onto them. Quarantine anything invalid (rename aside, never delete —
     // the dir may hold user data), then materialize fresh below.
-    if target.exists() && !is_valid_git_checkout(&target) {
-        let aside = quarantine_invalid_checkout(&target)?;
-        eprintln!(
-            "[tillandsias] cloud: {} was not a valid git checkout; moved aside to {} and re-cloning",
-            target.display(),
-            aside.display()
-        );
+    if target.exists() {
+        match classify_git_checkout(&target) {
+            CheckoutVerdict::Valid => {}
+            CheckoutVerdict::Invalid => {
+                let aside = quarantine_invalid_checkout(&target)?;
+                eprintln!(
+                    "[tillandsias] cloud: {} was not a valid git checkout; moved aside to {} and re-cloning",
+                    target.display(),
+                    aside.display()
+                );
+            }
+            // 997-e4v2: REFUSE, do not quarantine. Renaming a tree we could not
+            // evaluate is a mutation on the strength of an unanswered question,
+            // and it is how ten healthy checkouts were moved aside on one host.
+            CheckoutVerdict::Indeterminate(why) => {
+                return Err(format!(
+                    "cannot evaluate the checkout at {}: {why}. Leaving it untouched — this says \
+                     nothing about the tree, and the instrument is what needs repair. If this is \
+                     a uid mismatch on a mounted project root, that mount is the defect (997-e4v2).",
+                    target.display()
+                ));
+            }
+        }
     }
     if !target.exists() {
         eprintln!(
@@ -5986,6 +6389,25 @@ const SHARED_STACK_SCOPES: &[(&str, SharedStackScope)] = &[
     ("tillandsias-nix-cache", SharedStackScope::Core),
     ("tillandsias-inference", SharedStackScope::LaneScoped),
 ];
+
+/// The containers a shutdown phase may act on: RUNNING and OWNED. The
+/// graceful-stop phase has filtered by ownership since 936-kdev; the SIGKILL
+/// escalation below it re-listed every `tillandsias-` container and filtered
+/// on state alone, so the 5-second install-validation instance inside
+/// `./build.sh --install` SIGKILLed `tillandsias-builder` — the toolbox the
+/// build was running in — four seconds after "app.stopped", and the build
+/// died rc=137 with the live Vault and proxy (measured on macuahuitl
+/// 2026-09-04 at 01:09Z and 12:42:21Z; order 1019-ba6e). Both phases now
+/// share this one predicate, so ownership cannot be honoured in one loop and
+/// forgotten in the next.
+fn shutdown_escalation_targets(
+    containers: Vec<tillandsias_podman::ContainerListEntry>,
+) -> Vec<tillandsias_podman::ContainerListEntry> {
+    containers
+        .into_iter()
+        .filter(|c| c.state == "running" && is_stack_managed_name(&c.name))
+        .collect()
+}
 
 /// Is `name` a container THIS APPLICATION creates and therefore may stop?
 /// (936-kdev). The `tillandsias-` prefix alone is NOT ownership: the
@@ -6500,10 +6922,25 @@ fn build_opencode_forge_args(
 ) -> Vec<String> {
     // CLI mode attaches stdio (--interactive --tty) for a real shell; Web
     // mode detaches the container so the run() call returns and the host
-    // owns the lifecycle. Forcing --interactive --tty under a non-TTY shell
-    // (the way a tray launch or background script ends up) makes podman
-    // refuse with "input device is not a TTY" before any container start
-    // event fires.
+    // owns the lifecycle.
+    //
+    // CORRECTED 2026-09-04 (order 795-bmbq), because this comment asserted a
+    // mechanism nobody had measured. It said forcing --interactive --tty under
+    // a non-TTY shell "makes podman REFUSE with 'input device is not a TTY'
+    // BEFORE any container start event fires". Measured against the guest's
+    // own podman, from macOS over --exec-guest:
+    //
+    //   podman run --rm -it alpine true < /dev/null
+    //   -> level=warning msg="The input device is not a TTY. The --tty and
+    //      --interactive flags might not work properly"
+    //   -> container RAN, exit 0
+    //
+    // So podman WARNS AND PROCEEDS; it does not refuse, and the container does
+    // start. The flags are still skipped for the prompted and diagnostics
+    // lanes below, and that is still right — but for the reason given there,
+    // not because podman would reject the launch. (The podman VERSION was not
+    // captured in that run, so this bounds the claim to the guest image of
+    // that date; an older podman may genuinely have refused.)
     let mut args = vec![
         "--rm".into(),
         "--name".into(),
@@ -6525,9 +6962,23 @@ fn build_opencode_forge_args(
             // When a prompt is provided, the entrypoint execs
             // `opencode run --auto "<prompt>"` which is non-interactive.
             // (It passed --dangerously-skip-permissions until order 429; that
-            // flag does not exist in opencode and was silently swallowed.)  Skip --interactive --tty so podman does not
-            // attempt to claim the terminal (which causes SIGTTIN/SIGTTOU /
-            // stopped T state when the parent is in a harness PTY).
+            // flag does not exist in opencode and was silently swallowed.)
+            //
+            // Skip --interactive --tty for that lane. THE REASON IS THAT THE
+            // LANE IS NOT INTERACTIVE — `opencode run` reads no stdin and
+            // renders no TUI, so asking podman to allocate a tty for it buys
+            // nothing and hands the container a terminal to contend for.
+            //
+            // The SIGTTIN/SIGTTOU stopped-T observation behind this is real and
+            // is recorded in the linked findings file; what was never measured
+            // is that podman "claiming the terminal" is its cause. Order
+            // 795-bmbq re-examined that: see the corrected note above the args
+            // vector, where podman is shown to warn and proceed rather than
+            // refuse. The attribution is therefore left as an OBSERVATION with
+            // an unproven mechanism rather than restated as a cause.
+            //
+            // The interactive lane below is NOT amputated and was not at the
+            // 2026-08-17 audit either — 795-bmbq was filed believing it was.
             // @trace plan/issues/build-install-smoke-e2e-findings-2026-06-14.md
             if !diagnostics && prompt.is_none() {
                 args.push("--interactive".into());
@@ -6701,9 +7152,18 @@ fn build_opencode_forge_args(
         // DEFAULT is the operator decision the packet holds open, and this
         // launcher is shared fleet-wide — a hard default here would change
         // sibling hosts' behavior unattended).
+        report_seed_resolved(project_path, &seed);
+        // 965-rb3v second rung. Seeding from a non-platform branch is never
+        // intended on a project that has them, and `main` in particular yields
+        // a forge that cannot commit at all.
+        report_seed_not_platform_branch(project_path, &seed);
         report_seed_staleness(project_path, &seed);
         args.push("--env".into());
         args.push(format!("TILLANDSIAS_FORGE_SEED_BRANCH={seed}"));
+    } else {
+        // 965-rb3v: the unresolved case was silent, and silence renders
+        // identically to a deliberate `main` seed. Still injects nothing.
+        report_seed_unresolved(project_path);
     }
     // Forge gitconfig injection (order 224): pre-populate global git config
     // with mirror redirect and safe.directory, bind-mounted
@@ -8461,6 +8921,44 @@ fn run_cache_verify(debug: bool) -> Result<(), String> {
 /// Run the representative end-to-end stack smoke after images exist.
 ///
 /// @trace spec:dev-build, spec:enclave-network, spec:proxy-container, spec:git-mirror-service, spec:inference-container, spec:default-image, spec:observability-convergence
+/// `--ensure-enclave`: bring the application-lifetime enclave services up
+/// idempotently — the network, Vault, and the egress proxy (whose CA bundle and
+/// key secret `ensure_proxy_running` refreshes on the way) — WITHOUT launching a
+/// lane. This is the restore path the health guard's remedy names.
+///
+/// WHY IT EXISTS (order 1004-xw3q, measured on lenovinha and pirria
+/// 2026-09-04). Every remedy text said "re-run the enclave orchestration
+/// (`tillandsias --init`)", and `--init` exits 0 without creating or starting
+/// the proxy: its own help calls it "Pre-build container images". The real
+/// orchestration is `ensure_proxy_running`, reached only from a lane launch or
+/// a standalone login flow, so a host whose proxy died after a reboot had no
+/// command that would bring it back short of launching a forge — and the one
+/// script whose name says "orchestrate" (`scripts/orchestrate-enclave.sh`) is an
+/// e2e path that ends by removing the proxy. A remedy that names a command
+/// which does not do the thing is the 975-rsgm shape one level up.
+///
+/// Idempotent by construction: every step reuses what is already running.
+/// Litmus/fake podman mode skips Vault exactly as `--init` does.
+///
+/// @trace order:1004-xw3q
+fn run_ensure_enclave(debug: bool) -> Result<(), String> {
+    require_desktop_user_session("tillandsias --ensure-enclave")?;
+    report_runtime_lane("--ensure-enclave", debug);
+    ensure_enclave_network(debug)?;
+    #[cfg(feature = "vault")]
+    if std::env::var_os("LITMUS_PODMAN_MODE").is_none() {
+        vault_bootstrap::ensure_vault_running(debug)?;
+    }
+    ensure_proxy_running(debug)?;
+    let proxy = if crate::vault_bootstrap::container_running("tillandsias-proxy") {
+        "running"
+    } else {
+        "not-running"
+    };
+    println!("ok:enclave-ensured:proxy={proxy}");
+    Ok(())
+}
+
 fn run_status_check(debug: bool) -> Result<(), String> {
     require_desktop_user_session("tillandsias --status-check")?;
     report_runtime_lane("--status-check", debug);
@@ -9185,7 +9683,7 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
         // the CA bundle MUST be materialized and mounted like every other
         // vault-talking container. On a fresh guest where login runs
         // BEFORE any forge launch (the recommended order), nothing else
-        // has created /tmp/tillandsias-ca yet: without this the flow
+        // has created the CA directory yet: without this the flow
         // collected the operator's token and THEN died with "CA bundle
         // not readable" (field repro 2026-07-22). ensure_ca_bundle is
         // idempotent.
@@ -11162,6 +11660,49 @@ async fn run_delegated_agent_container(
         ));
     }
 
+    // ORDER 999-5m4e. THE INVARIANT IS LOCAL, NOT INHERITED FROM A CALL ORDER.
+    //
+    // Production today is NOT exposed and this is defence in depth, which is
+    // the honest framing. VERIFIED 2026-09-04: this function's only production
+    // caller is `run_agent_container_attached`, which validates first; its four
+    // other callers are inside `mod tests` (which begins at the #[cfg(test)] at
+    // line 16663, and all four sit past it). Every production container launch
+    // therefore already passes `validate_launch_argv`.
+    //
+    // SO WHY GUARD HERE TOO. The 986-ahnc guard lives in the OUTER function, so
+    // the hardening invariant holds because of WHERE THE CALL COMES FROM rather
+    // than because of anything this function checks. Add one production caller
+    // that reaches this directly — the natural thing to do for a background or
+    // queued drain — and the envelope is gone with no diagnostic. An invariant
+    // that depends on call order is one refactor from being false, and this one
+    // decides whether a container runs unhardened.
+    //
+    // The gap is not hypothetical in the test lane, which is how it was found:
+    // lenovinha-silverblue observed `delegated_result_fake_podman` handing the
+    // SAME bare argv to both entry points, the attached one refusing with the
+    // policy citation and this one launching it. That is this function accepting
+    // an argv the policy forbids — true of the fixture today and true of any
+    // future caller.
+    //
+    // "run" is prepended for the same reason as in the outer guard: the client
+    // adds it downstream, so `args` alone is not what podman receives.
+    {
+        let mut full = Vec::with_capacity(args.len() + 1);
+        full.push("run".to_string());
+        full.extend_from_slice(args);
+        if let Err(err) = tillandsias_podman::policy::validate_launch_argv(&full) {
+            eprintln!(
+                "[security] refusing to launch delegated {container_name}: {err}\n\
+                 [security] the launch argv lost part of the immutable hardening \
+                 envelope; see crates/tillandsias-podman/src/policy.rs \
+                 MANDATORY_HARDENING_FLAGS (orders 986-ahnc, 999-5m4e)"
+            );
+            return Err(format!(
+                "refusing to launch delegated {container_name}: hardening envelope violation: {err}"
+            ));
+        }
+    }
+
     // Invalidate any caller-preseeded result before spawning. Classification
     // never reads this file, and downstream readers see either this empty
     // current-generation placeholder or bytes captured by this run.
@@ -11281,6 +11822,53 @@ async fn run_agent_container_attached(
     debug: bool,
     delegated: Option<&DelegatedRunConfig>,
 ) -> Result<(), String> {
+    // ORDER 986-ahnc. THE FORGE ARGV IS VALIDATED HERE OR NOWHERE.
+    //
+    // 972-6vaj put the hardening envelope behind a real check on the
+    // ContainerSpec path. The forge does not take that path: its argv is a
+    // plain Vec<String> from build_stack_common_args + build_opencode_forge_args
+    // via build_forge_common_args, so `validate_launch_argv` could not have
+    // covered the container that matters most even when it was being called.
+    // This is the choke point every attached agent launch passes through.
+    //
+    // "run" is PREPENDED because `run_container_attached_observed` adds it
+    // downstream (client.rs: `let mut full_args = vec!["run".to_string()]`),
+    // so `args` alone is not what podman receives and the validator — which
+    // requires the run subcommand — would reject every launch on a
+    // technicality. Validate the argv podman actually gets, not the fragment
+    // this function was handed.
+    //
+    // REFUSE RATHER THAN LOG, and this was the open decision the packet named.
+    // The worry was that a false positive here stops every forge on the host,
+    // which is real: this function serves every attached agent launch. Three
+    // things settle it. There are exactly TWO production call sites and both
+    // are forge launches that already carry the whole envelope (verified on
+    // the live container: private userns, expanded CapDrop, no-new-privileges,
+    // label=disable). The function already returns Result and both callers
+    // already handle the error, so refusing costs no new plumbing. And a test
+    // below asserts the REAL builders produce a validating argv, so a false
+    // positive fails the gate rather than a launch. Given that, the only way
+    // to reach this refusal is for someone to remove a hardening flag from the
+    // builders — which is precisely the regression the check exists to stop,
+    // and letting it through with a log would be the fail-safe-looking outcome
+    // this fleet keeps paying for.
+    {
+        let mut full = Vec::with_capacity(args.len() + 1);
+        full.push("run".to_string());
+        full.extend_from_slice(args);
+        if let Err(err) = tillandsias_podman::policy::validate_launch_argv(&full) {
+            eprintln!(
+                "[security] refusing to launch {container_name}: {err}\n\
+                 [security] the launch argv lost part of the immutable hardening \
+                 envelope; see crates/tillandsias-podman/src/policy.rs \
+                 MANDATORY_HARDENING_FLAGS (order 986-ahnc)"
+            );
+            return Err(format!(
+                "refusing to launch {container_name}: hardening envelope violation: {err}"
+            ));
+        }
+    }
+
     let Some(config) = delegated else {
         return client
             .run_container_attached_observed(stage, container_name, args, debug)
@@ -13095,13 +13683,22 @@ pub(crate) fn ensure_enclave_for_project(
     // detached HEAD, git-less host) falls back to upstream's default inside
     // ensure-mirror-head.
     let project_default_branch = project_path.and_then(read_host_project_current_branch);
-    if debug {
-        match &project_default_branch {
-            Some(b) => eprintln!("[tillandsias] [forge-launch] Host checkout branch: {b}"),
-            None => eprintln!(
-                "[tillandsias] [forge-launch] No host checkout branch (mirror falls back to upstream default)"
-            ),
+    match (&project_default_branch, project_path) {
+        (Some(b), _) => {
+            if debug {
+                eprintln!("[tillandsias] [forge-launch] Host checkout branch: {b}");
+            }
         }
+        // 965-rb3v: this arm used to be gated on `debug`, so the ordinary
+        // launch said nothing at all while the mirror silently took upstream's
+        // default (`main`). The consequence is the same whether or not anyone
+        // passed --debug, so the report must be too.
+        (None, Some(p)) => report_seed_unresolved(p),
+        (None, None) => eprintln!(
+            "[tillandsias] [forge-launch] SEED UNRESOLVED: no project path was given, so no \
+             branch could be read — the mirror's HEAD will fall back to UPSTREAM'S DEFAULT \
+             BRANCH (typically `main`)."
+        ),
     }
 
     let rt = podman_runtime()?;
@@ -13492,6 +14089,73 @@ fn forge_tool_cache_volume(project_name: &str) -> String {
     format!("tillandsias-forge-cache-{project_name}")
 }
 
+/// The `/home/forge/src` tmpfs spec for a clone-only forge launch — the FOURTH
+/// hot path, and until now the missing one.
+///
+/// ORDER 997-e4v2. `openspec/specs/forge-hot-cold-split` mandates four kernel
+/// tmpfs mounts at container start and names `/home/forge/src` among them,
+/// sized per launch by `compute_hot_budget()` from the git mirror's pack size.
+/// Three of the four shipped; this one did not, and `compute_hot_budget()` /
+/// `parse_size_pack_kb()` sat with ZERO callers outside their own unit tests in
+/// a change ARCHIVED AS COMPLETE on 2026-04-27. What actually occupied the path
+/// was its opposite: a PERSISTENT drvfs mount of the Windows host's `~/src`,
+/// injected by the tray. The mount cannot be removed before this exists, or a
+/// forge launches with no project source at all — hence tmpfs first, mount
+/// second, never mount-first.
+///
+/// Clone-only lanes ONLY. Under the opt-in host-mount lane the caller has
+/// already bind-mounted the host checkout at `/home/forge/src/<project>`, and a
+/// tmpfs over its parent would mask it.
+///
+/// @trace order:997-e4v2
+/// @trace spec:forge-hot-cold-split (Requirement: HOT tier — RAM-backed tmpfs
+///   for finely curated paths; Per-launch project source budget)
+fn forge_hot_src_tmpfs(project_name: &str) -> String {
+    let budget = tillandsias_core::config::compute_hot_budget(
+        forge_mirror_pack_size_kb(project_name),
+        &tillandsias_core::config::ForgeConfig::default(),
+    );
+    format!("/home/forge/src:size={budget}m,mode=0755")
+}
+
+/// The project mirror's `size-pack` in KiB, or 0 when it cannot be read.
+///
+/// 0 is not a guess dressed as a measurement: `compute_hot_budget` clamps it UP
+/// to `HOT_PATH_BUDGET_FLOOR_MB`, which is exactly the spec's "Empty mirror
+/// returns floor (256 MB)" scenario. A fresh project has no mirror yet, and
+/// fail-closing a launch on an unreadable pack size would break the first
+/// launch of every project to protect a number that only tunes a cap.
+///
+/// @trace order:997-e4v2
+/// @trace spec:forge-hot-cold-split (Requirement: Per-launch project source
+///   budget — step 1, the mirror's `git count-objects -v -H`)
+fn forge_mirror_pack_size_kb(project_name: &str) -> u64 {
+    let mut inspect = podman_command();
+    inspect.args([
+        "volume",
+        "inspect",
+        &format!("tillandsias-mirror-{project_name}"),
+        "--format",
+        "{{.Mountpoint}}",
+    ]);
+    let Ok(mountpoint) = podman_command_output(inspect, false) else {
+        return 0;
+    };
+    if mountpoint.is_empty() {
+        return 0;
+    }
+    let Ok(output) = Command::new("git")
+        .args(["-C", &mountpoint, "count-objects", "-v", "-H"])
+        .output()
+    else {
+        return 0;
+    };
+    if !output.status.success() {
+        return 0;
+    }
+    tillandsias_core::config::parse_size_pack_kb(&String::from_utf8_lossy(&output.stdout))
+}
+
 /// In-container mount point of the DURABLE spec-index tier (order 801-a2by).
 /// Injected as `FORGE_SPEC_INDEX_ROOT` so nothing inside the enclave ever
 /// shells out to podman to find it.
@@ -13624,7 +14288,15 @@ fn build_forge_agent_run_args_with_vault(
             MountMode::ReadWrite,
         )
     } else {
-        spec
+        // ORDER 997-e4v2: the fourth HOT path. forge-hot-cold-split mandates
+        // /home/forge/src be a per-launch kernel tmpfs sized by
+        // compute_hot_budget(); three of four hot paths shipped and this one
+        // never did, which is why the persistent drvfs mount could occupy the
+        // path unnoticed. Clone-only lane only — under host-mount the arm above
+        // has bind-mounted the host checkout at /home/forge/src/<project>, and
+        // a tmpfs over its parent would mask it.
+        // @trace order:997-e4v2, spec:forge-hot-cold-split
+        spec.tmpfs(forge_hot_src_tmpfs(project_name))
     };
     let spec = spec
         // Persistent per-project tool/package cache (order 179). lib-common points
@@ -13715,6 +14387,10 @@ fn build_forge_agent_run_args_with_vault(
     // no env → guest behavior unchanged.
     if let Some(seed) = read_host_project_current_branch(project_path) {
         spec = spec.env("TILLANDSIAS_FORGE_SEED_BRANCH", seed);
+    } else {
+        // 965-rb3v: see build_opencode_forge_args — same silent-unresolved
+        // hazard on this lane, same loud notice, same no-env behaviour.
+        report_seed_unresolved(project_path);
     }
     // Every OAuth-credentialed agent lane mounts a scoped Vault token so its
     // entrypoint can restore the opaque provider document. OpenCode re-execs
@@ -14601,6 +15277,10 @@ fn maybe_spawn_vsock_listener(
             // (notify/inotify) — a dependency decision recorded in
             // 690-xeda, not taken unilaterally here.
             let mut ticks_since_presence: u32 = 30; // first heavy check on the first eligible tick
+            // ORDER 995-srbf: heavy ticks since the last truthful revalidation,
+            // and how many revalidations in a row could not reach an answer.
+            let mut revalidations_due: u32 = 5; // revalidate on the first heavy tick
+            let mut consecutive_unreachable: u32 = 0;
             loop {
                 if login_probe_state.current_phase() != tillandsias_control_wire::VmPhase::Ready
                     || !login_probe_state.has_login_state_subscribers()
@@ -14610,6 +15290,7 @@ fn maybe_spawn_vsock_listener(
                     // the heavy check is due immediately on wake.
                     last_presence = None;
                     ticks_since_presence = 30;
+                    revalidations_due = 5;
                     let _ = tokio::time::timeout(
                         std::time::Duration::from_secs(60),
                         login_probe_nudge.notified(),
@@ -14664,6 +15345,97 @@ fn maybe_spawn_vsock_listener(
                 let presence = tokio::task::spawn_blocking(vault_bootstrap::is_github_key_present)
                     .await
                     .unwrap_or(false);
+                // ORDER 995-srbf — REVALIDATION, because presence is not
+                // validity.
+                //
+                // The `continue` below short-circuits on unchanged presence,
+                // so everything past it runs only on a presence TRANSITION: a
+                // token added or deleted. A token that EXPIRES OR IS REVOKED
+                // IN PLACE keeps presence true forever, the truthful probe is
+                // never reached again, and `set_login_state` is change-gated —
+                // so the tray holds `LoggedIn` against a dead credential
+                // indefinitely. Measured in the field: 22h uptime, a token
+                // present-and-refused throughout, never demoted.
+                //
+                // `is_github_key_present` says so itself, one line from where
+                // it is called: "For a definitive auth validation that proves
+                // the credential works, use `remote_projects::is_github_logged_in`
+                // instead."
+                //
+                // COST, and the exit criterion that constrains this fix: the
+                // truthful probe is a podman exec and must not land on the hot
+                // path. It does not. The 2s tick is untouched; this rides the
+                // 60s heavy tick and fires on every 5th one, so a revalidation
+                // costs one exec per ~5 minutes, and only while a LoginState
+                // subscriber is attached to a Ready VM — an idle headless
+                // still parks and spends nothing.
+                revalidations_due = revalidations_due.saturating_add(1);
+                if revalidations_due >= 5 {
+                    revalidations_due = 0;
+                    let observation = tokio::task::spawn_blocking(|| {
+                        remote_projects::observe_github_credential(false)
+                    })
+                    .await
+                    .unwrap_or_else(|join_err| {
+                        remote_projects::CredentialObservation::Unreachable(format!(
+                            "revalidation task panicked: {join_err}"
+                        ))
+                    });
+                    match observation {
+                        // Truthful observations feed the funnel directly. The
+                        // three-state menu machine was always correct; it was
+                        // never handed a fresh observation.
+                        remote_projects::CredentialObservation::Valid(login) => {
+                            consecutive_unreachable = 0;
+                            login_probe_state
+                                .apply_login_transition(
+                                    true,
+                                    Some(login),
+                                    vsock_server::fetch_cloud_projects,
+                                )
+                                .await;
+                        }
+                        remote_projects::CredentialObservation::Invalid(reason) => {
+                            consecutive_unreachable = 0;
+                            warn!(
+                                spec = "github-credential-health",
+                                reason = %reason,
+                                "credential revalidation says the token is not usable; demoting"
+                            );
+                            login_probe_state
+                                .apply_login_transition(
+                                    false,
+                                    None,
+                                    vsock_server::fetch_cloud_projects,
+                                )
+                                .await;
+                        }
+                        // NOT a demotion. `probe_github_username` returns None
+                        // for an invalid token AND for a probe that could not
+                        // run, and demoting on the second would log the
+                        // operator out over a podman hiccup or a cold image —
+                        // a false negative far more visible than the stale
+                        // state this fix is for. It must not be silent either:
+                        // a permanently broken probe would otherwise be
+                        // indistinguishable from a healthy one, which is the
+                        // exact shape of the defect being fixed.
+                        remote_projects::CredentialObservation::Unreachable(reason) => {
+                            consecutive_unreachable = consecutive_unreachable.saturating_add(1);
+                            warn!(
+                                spec = "github-credential-health",
+                                reason = %reason,
+                                consecutive = consecutive_unreachable,
+                                "credential revalidation could not reach an answer; \
+                                 holding the current login state"
+                            );
+                        }
+                    }
+                    // The observation just published a state of its own, so the
+                    // presence baseline is re-derived on the next heavy tick
+                    // rather than being compared against a stale value.
+                    last_presence = None;
+                    continue;
+                }
                 if last_presence == Some(presence) {
                     continue;
                 }
@@ -15830,10 +16602,7 @@ pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
                 // stopper). Ownership is decided by is_stack_managed_name —
                 // the same vocabulary the teardown and reset scopes speak —
                 // never by prefix alone.
-                let running_at_start: Vec<_> = containers
-                    .iter()
-                    .filter(|c| c.state == "running" && is_stack_managed_name(&c.name))
-                    .collect();
+                let running_at_start = shutdown_escalation_targets(containers);
 
                 if !running_at_start.is_empty() {
                     info!(
@@ -15870,10 +16639,9 @@ pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
                     .await
                     {
                         Ok(Ok(remaining)) => {
-                            let running: Vec<_> = remaining
-                                .into_iter()
-                                .filter(|c| c.state == "running")
-                                .collect();
+                            // 1019-ba6e: ownership, not prefix — the same
+                            // predicate the stop phase applied.
+                            let running = shutdown_escalation_targets(remaining);
                             if running.is_empty() {
                                 debug!(
                                     "verification clean: zero running managed containers remain"
@@ -16114,6 +16882,215 @@ pub(crate) async fn service_stop(
 
 #[cfg(test)]
 mod tests {
+    /// ORDER 997-e4v2. THE VERDICT THAT RENAMES A DIRECTORY MUST BE EARNED.
+    ///
+    /// Four arms, and the fourth is the one this order exists for. The caller
+    /// quarantines — it renames the user's tree aside — so a question git
+    /// REFUSED to answer must never arrive as an answer about the tree. Ten
+    /// healthy checkouts were moved aside on esmeraldinha between Aug 25 and
+    /// Sep 2 because the old predicate collapsed exit 128 into "invalid";
+    /// `git fsck` exits 0 on every one of them.
+    ///
+    /// The `.git`-is-a-garbage-file arm doubles as the INDETERMINATE fixture,
+    /// because it is the one condition that reproduces a 128 without needing a
+    /// uid mismatch, which no portable test can arrange. That it also covers a
+    /// genuinely broken tree is deliberate and is a real behaviour change worth
+    /// stating: an interrupted clone whose `.git` git cannot parse is now
+    /// REFUSED rather than silently re-cloned. Refusing mutates nothing and
+    /// names the path; quarantining guesses and moves data. A structurally
+    /// valid repo with an unborn HEAD still quarantines (exit 1), which is the
+    /// case where there is provably nothing to lose.
+    #[test]
+    fn only_an_evaluated_verdict_may_quarantine_a_checkout() {
+        use super::{CheckoutVerdict, classify_git_checkout, head_is_structurally_present};
+
+        fn copy_tree(from: &std::path::Path, to: &std::path::Path) {
+            std::fs::create_dir_all(to).expect("dst");
+            for e in std::fs::read_dir(from).expect("read src").flatten() {
+                let (src, dst) = (e.path(), to.join(e.file_name()));
+                if src.is_dir() {
+                    copy_tree(&src, &dst);
+                } else {
+                    let _ = std::fs::copy(&src, &dst);
+                }
+            }
+        }
+        use std::process::Command;
+
+        let root = std::env::temp_dir().join(format!("tz-checkout-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("temp root");
+
+        let git_ok = Command::new("git").arg("--version").output().is_ok();
+        if !git_ok {
+            // The git-less lane is its own documented behaviour; without a git
+            // binary this test would assert the fallback, not the classifier.
+            return;
+        }
+
+        // ARM 1 — no `.git` at all: an EVALUATED answer about the tree.
+        let bare = root.join("no-git");
+        std::fs::create_dir_all(&bare).expect("bare dir");
+        assert_eq!(classify_git_checkout(&bare), CheckoutVerdict::Invalid);
+
+        // ARM 2 — a real repo with a commit: Valid.
+        let good = root.join("good");
+        std::fs::create_dir_all(&good).expect("good dir");
+        let git = |args: &[&str], cwd: &std::path::Path| {
+            Command::new("git")
+                .arg("-C")
+                .arg(cwd)
+                .args(args)
+                .output()
+                .expect("git runs")
+        };
+        git(&["init", "-q"], &good);
+        git(&["config", "user.email", "t@example.invalid"], &good);
+        git(&["config", "user.name", "t"], &good);
+        std::fs::write(good.join("f"), b"x").expect("file");
+        git(&["add", "f"], &good);
+        git(&["commit", "-qm", "c"], &good);
+        assert_eq!(
+            classify_git_checkout(&good),
+            CheckoutVerdict::Valid,
+            "a worktree whose HEAD resolves is valid"
+        );
+
+        // ARM 3 — a structurally valid repo with an UNBORN head: Invalid, and
+        // it is safe to quarantine because there are no commits to lose.
+        let unborn = root.join("unborn");
+        std::fs::create_dir_all(&unborn).expect("unborn dir");
+        git(&["init", "-q"], &unborn);
+        assert_eq!(
+            classify_git_checkout(&unborn),
+            CheckoutVerdict::Invalid,
+            "rev-parse --quiet returns 1 for a ref that does not verify — a real answer"
+        );
+
+        // ARM 4 - REAL DAMAGE THAT ALSO EXITS 128. Measured by esme-windows
+        // against git 2.55.0 and reproduced here: an empty `.git`, a deleted
+        // HEAD and a garbage HEAD all return 128 with the same fatal text as a
+        // refusal. These have no HEAD to lose and are the 2026-07-20
+        // deleted-checkout case, so they MUST stay quarantinable - treating
+        // every 128 as a refusal would be safe but would retire self-repair
+        // entirely, which is a decision, not a side effect.
+        let emptygit = root.join("emptygit");
+        std::fs::create_dir_all(emptygit.join(".git")).expect("empty .git");
+        assert_eq!(
+            classify_git_checkout(&emptygit),
+            CheckoutVerdict::Invalid,
+            "an empty .git has no HEAD to lose - self-repair must still fire"
+        );
+
+        let delhead = root.join("delhead");
+        copy_tree(&good, &delhead);
+        std::fs::remove_file(delhead.join(".git").join("HEAD")).expect("rm HEAD");
+        assert_eq!(
+            classify_git_checkout(&delhead),
+            CheckoutVerdict::Invalid,
+            "a deleted HEAD is damage, not a refusal"
+        );
+
+        // A `.git` file that names no repository is damage too - there is
+        // nothing to find, so nothing is lost by re-cloning.
+        let bogus = root.join("bogus-gitfile");
+        std::fs::create_dir_all(&bogus).expect("bogus dir");
+        std::fs::write(bogus.join(".git"), b"not a gitfile\n").expect("bogus .git");
+        assert_eq!(classify_git_checkout(&bogus), CheckoutVerdict::Invalid);
+
+        // ARM 5 - THE ONE THAT MATTERS. A structurally intact tree must never
+        // be called damage, because that verdict renames the user's directory.
+        // This is the signal separating esmeraldinha's ten healthy trees (HEAD
+        // present, git refusing on ownership) from every case above.
+        assert!(
+            head_is_structurally_present(&good),
+            "a healthy tree must read as structurally present"
+        );
+        assert!(
+            !head_is_structurally_present(&emptygit) && !head_is_structurally_present(&delhead),
+            "damage must read as structurally absent, or a refusal and a broken \
+             tree become indistinguishable again"
+        );
+
+        // And the VERDICT itself, not just the signal. A tree whose HEAD is
+        // intact but whose config git cannot parse exits 128 exactly like the
+        // damage above, and must still be REFUSED rather than renamed. It
+        // stands in for esmeraldinha's dubious-ownership 128, which no portable
+        // test can arrange because that needs two uids. Without this arm
+        // nothing asserts the classifier ever RETURNS Indeterminate, and a
+        // mutation collapsing it back into Invalid would pass.
+        let refused = root.join("refused");
+        copy_tree(&good, &refused);
+        std::fs::write(refused.join(".git").join("config"), b"this is not [valid\n")
+            .expect("bad config");
+        assert!(head_is_structurally_present(&refused));
+        match classify_git_checkout(&refused) {
+            CheckoutVerdict::Indeterminate(why) => assert!(
+                !why.is_empty(),
+                "an indeterminate verdict must name what refused, or the operator cannot repair the instrument"
+            ),
+            other => panic!(
+                "a structurally intact repository git REFUSED to evaluate must never be reported as {other:?} - that verdict renames the user's directory (997-e4v2)"
+            ),
+        }
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// ORDER 986-ahnc. THE REAL FORGE ARGV MUST PASS THE CHECK THAT NOW GUARDS
+    /// IT, so a false positive fails the GATE rather than a launch.
+    ///
+    /// This is the test the refuse-versus-log decision rests on. Refusing at
+    /// `run_agent_container_attached` is only safe because the argv the real
+    /// builders produce is known to validate; without this, the first proof
+    /// would be a forge failing to start on someone's machine.
+    ///
+    /// It builds through `build_opencode_forge_args` — the LIVE path, not one
+    /// of the two dead builders (`ContainerLauncher::build_container_spec` and
+    /// the legacy tray `build_launch_spec`, both of which have no production
+    /// callers and either of which would give a green assertion and change
+    /// nothing).
+    #[test]
+    // @trace order:986-ahnc, order:972-6vaj, spec:security-privacy-isolation
+    fn the_live_forge_argv_satisfies_the_hardening_envelope() {
+        let argv = build_opencode_forge_args(
+            std::path::Path::new("/tmp/probe-project"),
+            "probe-project",
+            None,
+            None,
+            std::path::Path::new("/tmp/probe-certs"),
+            "0.0.0-test",
+            ForgeMode::Cli,
+            None,
+            false,
+            false,
+        );
+
+        // `run` is prepended downstream by run_container_attached_observed, so
+        // validate what podman actually receives.
+        let mut full = vec!["run".to_string()];
+        full.extend_from_slice(&argv);
+
+        assert_eq!(
+            tillandsias_podman::policy::validate_launch_argv(&full),
+            Ok(()),
+            "the live forge argv must satisfy the envelope the choke point enforces: {full:?}"
+        );
+
+        // NEGATIVE CONTROL: without it, this test would still pass if
+        // validate_launch_argv were ever weakened to accept anything, and the
+        // assertion above would be decoration.
+        let stripped: Vec<String> = full
+            .iter()
+            .filter(|a| *a != "--cap-drop=ALL")
+            .cloned()
+            .collect();
+        assert!(
+            tillandsias_podman::policy::validate_launch_argv(&stripped).is_err(),
+            "removing a mandatory flag from the real forge argv must be refused"
+        );
+    }
+
     use super::*;
     use std::path::PathBuf;
     use tillandsias_podman::{CommandFailure, CommandOutput, FakeBackend, RetryClass};
@@ -17105,10 +18082,12 @@ mod tests {
             main_window
                 .matches("run_cli_with_vault_credential_cleanup(debug")
                 .count(),
-            5,
-            "both status dispatches, OpenCode, forge-agent, and provider-login CLI \
-             dispatches must clean up (5 as of the provider-login dispatch; a new \
-             dispatch that wraps itself in the cleanup is compliance, not drift)"
+            6,
+            "both status dispatches, OpenCode, forge-agent, provider-login and \
+             --ensure-enclave CLI dispatches must clean up (6 as of the \
+             --ensure-enclave dispatch, 998-3z6g; a new dispatch that wraps \
+             itself in the cleanup is compliance, not drift — bump this count \
+             and name the dispatch, as 1003-444f's class requires)"
         );
         assert!(
             !main_window
@@ -17586,6 +18565,32 @@ mod tests {
         assert!(is_stack_managed_name("tillandsias-git-myproj"));
     }
 
+    /// 1019-ba6e: the SIGKILL escalation must consult ownership exactly as
+    /// the graceful stop does. Before the fix it filtered on state alone and
+    /// killed the developer toolbox the build was running in.
+    #[test]
+    fn shutdown_escalation_targets_only_owned_running_containers() {
+        let entry = |name: &str, state: &str| tillandsias_podman::ContainerListEntry {
+            name: name.to_string(),
+            state: state.to_string(),
+            exit_code: 0,
+            exited_at: 0,
+            restarts: 0,
+        };
+        let targets = shutdown_escalation_targets(vec![
+            entry("tillandsias-builder", "running"),
+            entry("tillandsias-dev-inference", "running"),
+            entry("tillandsias-vault", "running"),
+            entry("tillandsias-proxy", "exited"),
+        ]);
+        let names: Vec<&str> = targets.iter().map(|c| c.name.as_str()).collect();
+        assert_eq!(
+            names,
+            vec!["tillandsias-vault"],
+            "only OWNED and RUNNING containers may be escalated to SIGKILL"
+        );
+    }
+
     /// Order 477 (the packet's steady-state criterion): after the LAST lane
     /// exits, the container set must converge in ONE step — the set the
     /// teardown leaves standing must be exactly the set the liveness
@@ -17860,6 +18865,101 @@ mod tests {
             "podman exec in the launcher must not pass -i: no call site \
              feeds stdin, and -i wedges conmon attach on a null stdin \
              (order 635-kagg)"
+        );
+    }
+
+    /// ORDER 995-srbf — the truthful probe must run WITHOUT a presence
+    /// transition.
+    ///
+    /// The defect was entirely one of ORDER: everything after the
+    /// `if last_presence == Some(presence) { continue; }` short-circuit runs
+    /// only when presence FLIPS, and an expired-in-place token never flips it.
+    /// Moving the validating probe above that line is the fix, so the ordering
+    /// is what this pins. A test that merely asserted the probe is called
+    /// somewhere in the loop would have passed before the fix.
+    #[test]
+    fn credential_revalidation_runs_before_the_presence_short_circuit() {
+        let source = include_str!("main.rs");
+        let loop_body = source
+            .split("let mut ticks_since_presence: u32 = 30;")
+            .nth(1)
+            .and_then(|tail| {
+                tail.split("// Order 260: guest-side LocalProjects rescan")
+                    .next()
+            })
+            .expect("the login probe loop body");
+        let revalidate = loop_body
+            .find("observe_github_credential")
+            .expect("the login loop must call the validating probe, not only the presence check");
+        let short_circuit = loop_body
+            .find("if last_presence == Some(presence) {")
+            .expect("the presence short-circuit");
+        assert!(
+            revalidate < short_circuit,
+            "the validating probe must run BEFORE the unchanged-presence \
+             short-circuit; past it, it only ever sees a token added or \
+             deleted and never one that went bad in place (995-srbf)"
+        );
+    }
+
+    /// ORDER 995-srbf — the exit criterion that constrains the fix: no
+    /// per-tick podman exec.
+    ///
+    /// The revalidation must be gated by the heavy-tick counter, not run on
+    /// the 2s tick. Written so that "fixing" this into a performance defect
+    /// goes red.
+    #[test]
+    fn credential_revalidation_is_not_on_the_hot_path() {
+        let source = include_str!("main.rs");
+        let loop_body = source
+            .split("let mut ticks_since_presence: u32 = 30;")
+            .nth(1)
+            .and_then(|tail| {
+                tail.split("// Order 260: guest-side LocalProjects rescan")
+                    .next()
+            })
+            .expect("the login probe loop body");
+        let heavy_gate = loop_body
+            .find("if !sentinel_hit && !heavy_due {")
+            .expect("the heavy-tick gate");
+        let revalidate = loop_body
+            .find("observe_github_credential")
+            .expect("the validating probe call");
+        assert!(
+            heavy_gate < revalidate,
+            "the validating probe is a podman exec and must sit behind the \
+             heavy-tick gate, never on the 2s tick (995-srbf)"
+        );
+        assert!(
+            loop_body.contains("revalidations_due >= 5"),
+            "revalidation must ride a multiple of the heavy tick so it costs \
+             one exec per several minutes, not one per heavy tick"
+        );
+    }
+
+    /// ORDER 995-srbf — an unreachable probe must NOT demote.
+    ///
+    /// `probe_github_username` returns None for an invalid token and for a
+    /// probe that could not run. Demoting on the second logs the operator out
+    /// over a podman hiccup. The `Unreachable` arm must reach no
+    /// `apply_login_transition` call.
+    #[test]
+    fn an_unreachable_credential_probe_does_not_demote() {
+        let source = include_str!("main.rs");
+        let arm = source
+            .split("CredentialObservation::Unreachable(reason) => {")
+            .nth(1)
+            .and_then(|tail| tail.split("\n                    }").next())
+            .expect("the Unreachable arm of the revalidation match");
+        assert!(
+            !arm.contains("apply_login_transition"),
+            "an unreachable probe says nothing about the credential and must \
+             not change the login state: {arm}"
+        );
+        assert!(
+            arm.contains("warn!"),
+            "an unreachable probe must still be loud — a permanently broken \
+             probe is otherwise indistinguishable from a healthy one: {arm}"
         );
     }
 
@@ -19115,7 +20215,7 @@ mod tests {
             &PathBuf::from("/home/tlatoani/src/tillandsias"),
             "tillandsias",
             None,
-            &PathBuf::from("/tmp/tillandsias-ca"),
+            &PathBuf::from(ca_dir()),
             "0.2.260518",
             ForgeAgentMode::Claude,
             true,
@@ -21192,6 +22292,230 @@ mod tests {
         }
     }
 
+    /// Order 965-rb3v, THE DISCRIMINATOR. A tray-launched forge came up with
+    /// `TILLANDSIAS_FORGE_SEED_BRANCH=main` while the host checkout's HEAD was
+    /// `linux-next` and its `origin/HEAD` pointed at `origin/main`. Three
+    /// causes were in play and they need different fixes; this pins the one
+    /// that is answerable in-process — does the resolution read the CHECKOUT'S
+    /// HEAD, or does it resolve the REMOTE'S DEFAULT?
+    ///
+    /// The fixture is the exact shape that separates them: local HEAD and
+    /// `origin/HEAD` deliberately DISAGREE, and they disagree with precisely
+    /// the two branch names from the field report. Anything resolving the
+    /// remote default yields `main` and fails here; reading the checkout's own
+    /// HEAD yields `linux-next` and passes. A fixture where the two agree
+    /// could not tell the two implementations apart at all — which is why the
+    /// existing seed test, whose repo has no remote, never caught this.
+    ///
+    /// A PASS HERE NARROWS, IT DOES NOT ACQUIT. It rules out the remote-default
+    /// reading; a stale registered project path, or a checkout that really was
+    /// on `main` at launch, both still produce the field symptom and are only
+    /// measurable on the host (podman inspect on a fresh launch).
+    #[test]
+    fn seed_branch_reads_checkout_head_not_the_remotes_default() {
+        let _env = env_lock();
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let project = tmp.path().join("disagreeing");
+        let git_dir = project.join(".git");
+        std::fs::create_dir_all(git_dir.join("objects")).expect("mkdir objects");
+        std::fs::create_dir_all(git_dir.join("refs").join("heads")).expect("mkdir heads");
+        std::fs::create_dir_all(git_dir.join("refs").join("remotes").join("origin"))
+            .expect("mkdir origin");
+
+        // The checkout is on linux-next...
+        std::fs::write(git_dir.join("HEAD"), "ref: refs/heads/linux-next\n").expect("write HEAD");
+        // ...while the remote's default is main. This is the disagreement.
+        std::fs::write(
+            git_dir
+                .join("refs")
+                .join("remotes")
+                .join("origin")
+                .join("HEAD"),
+            "ref: refs/remotes/origin/main\n",
+        )
+        .expect("write origin/HEAD");
+        // A config with an origin remote, so nothing can mistake this for the
+        // remote-less shape the older fixture uses.
+        std::fs::write(
+            git_dir.join("config"),
+            "[core]\n\trepositoryformatversion = 0\n\
+             [remote \"origin\"]\n\turl = https://example.invalid/tillandsias.git\n\
+             \tfetch = +refs/heads/*:refs/remotes/origin/*\n",
+        )
+        .expect("write config");
+
+        assert_eq!(
+            read_host_project_current_branch(&project).as_deref(),
+            Some("linux-next"),
+            "the seed must come from the checkout's HEAD, never the remote's default branch"
+        );
+
+        // And it must reach BOTH builders as linux-next, not main — the read
+        // being right is not the same as the launch arg being right.
+        let certs = tmp.path().join("ca");
+        let opencode = build_opencode_forge_args(
+            &project,
+            "alpha",
+            None,
+            None,
+            &certs,
+            "1.2.3",
+            ForgeMode::Cli,
+            None,
+            false,
+            false,
+        );
+        let agent = build_forge_agent_run_args_with_vault(
+            &project,
+            "alpha",
+            None,
+            &certs,
+            "1.2.3",
+            ForgeAgentMode::Maintenance,
+            false,
+            None,
+            None,
+        );
+        for (lane, args) in [("opencode", &opencode), ("agent", &agent)] {
+            assert!(
+                has_arg(args, "TILLANDSIAS_FORGE_SEED_BRANCH=linux-next"),
+                "{lane} builder must seed from the checkout HEAD: {args:?}"
+            );
+            assert!(
+                !has_arg(args, "TILLANDSIAS_FORGE_SEED_BRANCH=main"),
+                "{lane} builder must NOT seed from the remote default: {args:?}"
+            );
+        }
+    }
+
+    /// ORDER 965-rb3v. The RESOLVED notice must name BOTH the branch and the
+    /// CHECKOUT, because naming only the branch is what made the original
+    /// defect invisible: on a host with eight checkouts of this project the
+    /// branch alone does not say which tree it came from, and three of those
+    /// eight sat on `main`.
+    #[test]
+    fn seed_resolved_notice_names_both_the_branch_and_the_checkout() {
+        let notice = format_seed_resolved("/home/op/src/tillandsias", "linux-next");
+        assert!(
+            notice.contains("linux-next"),
+            "the notice must name the seed branch: {notice}"
+        );
+        assert!(
+            notice.contains("/home/op/src/tillandsias"),
+            "the notice must name WHICH CHECKOUT it read — the branch alone is \
+             what hid 965-rb3v on a host carrying eight of them: {notice}"
+        );
+        assert!(
+            notice.contains("SEED "),
+            "the notice needs a greppable token: {notice}"
+        );
+    }
+
+    /// ORDER 965-rb3v, second rung. The non-platform-branch warning must say
+    /// the thing that actually costs a cycle: that a `main` seed yields a forge
+    /// which CANNOT COMMIT. Naming the branch alone is not enough — `main` reads
+    /// like a reasonable default until you know it is refused by contract.
+    #[test]
+    fn seed_non_platform_notice_says_the_forge_cannot_commit() {
+        let notice = format_seed_not_platform_branch("/home/op/src/tillandsias", "main");
+        assert!(
+            notice.contains("main"),
+            "the warning must name the seed branch: {notice}"
+        );
+        assert!(
+            notice.contains("/home/op/src/tillandsias"),
+            "the warning must name WHICH CHECKOUT — same reason as the resolved \
+             notice: {notice}"
+        );
+        assert!(
+            notice.contains("CANNOT COMMIT"),
+            "the warning must state the CONSEQUENCE, not just the fact: a forge \
+             seeded from main is refused by check-committable-branch.sh and the \
+             whole cycle is lost unless the agent notices: {notice}"
+        );
+        assert!(
+            notice.contains("base_state"),
+            "the warning must say why the GUEST cannot detect this itself — a \
+             wrong seed agrees with itself and reads ok: {notice}"
+        );
+    }
+
+    /// ORDER 965-rb3v, second rung. THE NEGATIVE CONTROL, and the reason the
+    /// check is gated on the project rather than the branch name.
+    ///
+    /// Order 501's contract is that an ordinary project — not this repo, maybe
+    /// not even a git checkout — is forged with no seed logic visible. Warning
+    /// every project whose branch is not named `*-next` would export a
+    /// Tillandsias naming convention onto everyone else's repository, which
+    /// `methodology/multi-host-development.yaml:21-27` says explicitly is not a
+    /// runtime convention of the product. A repo with no `*-next` branches must
+    /// therefore stay silent, however its branch is named.
+    #[test]
+    fn a_project_without_platform_branches_is_never_warned() {
+        let tmp = std::env::temp_dir().join(format!(
+            "tillandsias-965-rb3v-noplat-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).expect("tmp");
+        let git = |args: &[&str]| {
+            std::process::Command::new("git")
+                .arg("-C")
+                .arg(&tmp)
+                .args(args)
+                .output()
+                .expect("git")
+        };
+        git(&["init", "--initial-branch=master", "-q"]);
+        git(&["config", "user.email", "t@example.invalid"]);
+        git(&["config", "user.name", "t"]);
+        std::fs::write(tmp.join("f"), b"x").expect("write");
+        git(&["add", "f"]);
+        git(&["commit", "-qm", "c"]);
+
+        assert!(
+            !project_has_platform_branches(&tmp),
+            "a repo with only `master` has no platform branches"
+        );
+
+        // And the positive control, so the predicate cannot pass by always
+        // answering false — a check that never fires is not a check.
+        git(&["branch", "linux-next"]);
+        assert!(
+            project_has_platform_branches(&tmp),
+            "a repo carrying `linux-next` DOES have platform branches"
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// Order 965-rb3v: the unresolved case must NAME ITSELF. It injects no
+    /// seed (order 501's end-user-transparency contract, pinned by
+    /// `forge_builders_inject_seed_branch_from_host_checkout`), which means
+    /// the mirror falls back to upstream's default — so the only thing
+    /// separating "could not read the branch" from "deliberately seeded main"
+    /// is this line existing and saying so.
+    #[test]
+    fn seed_unresolved_notice_names_the_path_and_the_main_fallback() {
+        let notice = format_seed_unresolved("/home/op/src/tillandsias");
+        assert!(
+            notice.contains("/home/op/src/tillandsias"),
+            "the notice must name the path it failed to read: {notice}"
+        );
+        assert!(
+            notice.contains("SEED UNRESOLVED"),
+            "the notice needs a greppable token: {notice}"
+        );
+        assert!(
+            notice.contains("main"),
+            "the notice must name the branch the mirror will actually fall back to: {notice}"
+        );
+        assert!(
+            notice.contains("base_state"),
+            "the notice must say why the guest's base_state cannot catch this: {notice}"
+        );
+    }
+
     #[test]
     fn delegated_result_codex_entrypoint_appends_json_to_the_exec_command() {
         let entrypoint = include_str!(concat!(
@@ -21475,6 +22799,73 @@ mod tests {
         }
     }
 
+    /// ORDER 999-5m4e. The hardening invariant must be LOCAL to the delegated
+    /// entry point, not inherited from whoever calls it.
+    ///
+    /// This is the negative control the packet needed and did not have. The
+    /// fixture above builds its argv FROM the policy constant — correctly, so
+    /// it cannot drift — which means it can no longer demonstrate the gap it
+    /// was used to find. A test that passes because the interesting case is
+    /// absent is the shape this fleet spent 2026-09-03 recording.
+    ///
+    /// So: hand this entry point a BARE argv directly and require it to refuse
+    /// before any podman process is spawned. It must not depend on
+    /// `run_agent_container_attached` having validated first, because the whole
+    /// point of 999-5m4e is that one future caller reaching here directly loses
+    /// the envelope with no diagnostic.
+    ///
+    /// MUTATION: delete the guard block in `run_delegated_agent_container` and
+    /// this test fails with its own message. It passes only while the check is
+    /// there.
+    #[test]
+    fn delegated_launch_refuses_an_argv_missing_the_hardening_envelope() {
+        let _pseam_lock = podman_seam_lock();
+        let _env = env_lock();
+        let identity = "worker-nc";
+        let name = forge_container_name_for_mode_with_instance(
+            "alpha",
+            ForgeAgentMode::OpenCode,
+            Some(identity),
+        );
+        // Deliberately BARE: --rm/--name and an image, and none of
+        // MANDATORY_HARDENING_FLAGS. This is what a future caller that skipped
+        // the outer guard would produce.
+        let bare = vec![
+            "--rm".to_string(),
+            "--name".to_string(),
+            name.clone(),
+            "localhost/tillandsias-forge:test".to_string(),
+        ];
+        let client = PodmanClient::new();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_io()
+            .enable_time()
+            .build()
+            .expect("test runtime");
+        let err = runtime
+            .block_on(run_delegated_agent_container(
+                &client,
+                "opencode",
+                &name,
+                &bare,
+                false,
+                &DelegatedRunConfig {
+                    timeout_secs: 3,
+                    result_file: None,
+                    instance_identity: identity.to_string(),
+                },
+            ))
+            .expect_err(
+                "the delegated entry point must REFUSE an argv missing the hardening \
+                 envelope — it launched instead, so the invariant depends on the caller \
+                 and one direct call loses the envelope silently (999-5m4e)",
+            );
+        assert!(
+            err.contains("hardening envelope violation"),
+            "refusal must name the hardening envelope so a reader knows what was lost, got: {err}"
+        );
+    }
+
     #[cfg(unix)]
     #[test]
     fn delegated_result_fake_podman_covers_fresh_status_and_exact_timeout_reap() {
@@ -21577,13 +22968,22 @@ esac
             .enable_time()
             .build()
             .expect("test runtime");
+        // The fixture argv carries the hardening envelope, sourced from the
+        // policy constant rather than spelled here so it cannot drift from it.
+        //
+        // 986-ahnc made `run_agent_container_attached` refuse an argv missing
+        // these, and this fixture reached that guard with a bare argv — the
+        // guard was right and the fixture was wrong. Hardcoding the flags would
+        // reintroduce exactly the drift the constant exists to prevent.
         let run_args = |name: &str| {
-            vec![
-                "--rm".to_string(),
-                "--name".to_string(),
-                name.to_string(),
-                "localhost/tillandsias-forge:test".to_string(),
-            ]
+            let mut argv = vec!["--rm".to_string(), "--name".to_string(), name.to_string()];
+            argv.extend(
+                tillandsias_podman::policy::MANDATORY_HARDENING_FLAGS
+                    .iter()
+                    .map(|f| f.to_string()),
+            );
+            argv.push("localhost/tillandsias-forge:test".to_string());
+            argv
         };
 
         let result_file = scratch.path().join("result.jsonl");
@@ -23395,6 +24795,77 @@ esac
         &tail[..end]
     }
 
+    /// ORDER 997-e4v2. The fourth HOT path is EMITTED, and by the spec's own
+    /// sizing function rather than a constant that merely looks like it.
+    ///
+    /// This is the test the archived 2026-04-27 change should have had.
+    /// `forge-hot-cold-split` mandates four tmpfs mounts and names
+    /// `/home/forge/src` among them; three shipped, and `compute_hot_budget()`
+    /// sat with ZERO non-test callers while the change was archived as
+    /// complete. An inert function with passing unit tests is exactly as green
+    /// as a wired one, so unit tests over `compute_hot_budget` could not have
+    /// caught this — only a test that reaches the LAUNCH PATH can.
+    ///
+    /// @trace order:997-e4v2, spec:forge-hot-cold-split
+    #[test]
+    fn forge_src_is_a_hot_tmpfs_sized_by_compute_hot_budget() {
+        let spec = forge_hot_src_tmpfs("a-project-with-no-mirror-on-this-host");
+
+        let (path, opts) = spec
+            .split_once(':')
+            .expect("tmpfs spec is <path>:<options>");
+        assert_eq!(path, "/home/forge/src", "the spec names this exact path");
+        assert!(
+            opts.contains("mode=0755"),
+            "spec table gives /home/forge/src mode 0755, got {opts:?}"
+        );
+
+        let size_mb: u32 = opts
+            .split(',')
+            .find_map(|o| o.strip_prefix("size="))
+            .and_then(|s| s.strip_suffix('m'))
+            .expect("every hot mount carries a kernel-enforced size cap")
+            .parse()
+            .expect("size cap is a plain MB integer");
+
+        // The bound, not a fixed number: this host may or may not have a
+        // mirror volume for the name above, and the assertion must be about
+        // the CLAMP the spec specifies, not about which arm ran.
+        let config = tillandsias_core::config::ForgeConfig::default();
+        assert!(
+            (tillandsias_core::config::HOT_PATH_BUDGET_FLOOR_MB..=config.hot_path_max_mb)
+                .contains(&size_mb),
+            "budget {size_mb} MB escaped the spec's [{}, {}] clamp",
+            tillandsias_core::config::HOT_PATH_BUDGET_FLOOR_MB,
+            config.hot_path_max_mb
+        );
+    }
+
+    /// The clone-only lane gets the tmpfs; the host-mount lane must NOT.
+    ///
+    /// A tmpfs on `/home/forge/src` would mask the bind mount its sibling arm
+    /// places at `/home/forge/src/<project>`, so the two are mutually
+    /// exclusive by construction. Pinned against the source because the arms
+    /// are chosen at launch by host configuration this test cannot set.
+    ///
+    /// @trace order:997-e4v2, spec:forge-hot-cold-split
+    #[test]
+    fn hot_src_tmpfs_is_clone_only_never_over_the_host_mount() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source_window(source, "let host_mount = forge_uses_host_mount();");
+
+        let call = window
+            .find("forge_hot_src_tmpfs(project_name)")
+            .expect("the clone-only lane must emit the /home/forge/src tmpfs");
+        let host_mount_bind = window
+            .find("format!(\"/home/forge/src/{project_name}\")")
+            .expect("the host-mount lane must still bind the host checkout");
+        assert!(
+            host_mount_bind < call,
+            "the tmpfs belongs to the ELSE arm; emitting it before or inside \
+             the host-mount arm would mask the bind mount"
+        );
+    }
     #[test]
     fn idiomatic_podman_launch_paths_do_not_bypass_shared_layer() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));

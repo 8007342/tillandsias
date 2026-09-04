@@ -14,6 +14,7 @@ The membership set is NOT enumerated here in prose. It is defined by the run-arg
 ## Requirements
 
 ### Requirement: Internal podman network for container isolation
+<!-- req-id: 1310793a -->
 The system MUST create and manage a podman internal network named `tillandsias-enclave` that prevents containers attached to it from reaching external networks directly. The network MUST be created on first container launch and persist until the application exits. The network MUST be reused if already present.
 
 @trace spec:enclave-network
@@ -38,6 +39,7 @@ The system MUST create and manage a podman internal network named `tillandsias-e
 - **THEN** the system MUST log a warning and leave the network in place
 
 ### Requirement: Container attachment to enclave network
+<!-- req-id: c29af806 -->
 The system MUST attach every Tillandsias-managed container to the `tillandsias-enclave` network. Only the proxy MUST additionally be attached to the egress network for external access.
 
 The attach sites are these run-argument builders, named by SYMBOL so the list survives every edit that does not rename one (order 245 P8; the same anchoring order 881-29me requires of audit citations):
@@ -70,6 +72,7 @@ A new enclave member MUST be added to this list in the same commit that attaches
 - **AND** it MUST be reachable from enclave containers at hostname `proxy`
 
 ### Requirement: Enclave lifecycle telemetry
+<!-- req-id: 7213c628 -->
 All enclave network operations MUST be logged to the `--log-enclave` accountability window with lifecycle events only (no secrets, no context params). Each event MUST include a clickable `@trace` link.
 
 @trace spec:enclave-network

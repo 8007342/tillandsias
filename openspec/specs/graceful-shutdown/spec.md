@@ -13,6 +13,7 @@ Define the graceful shutdown contract for Tillandsias headless binary: signal ha
 ## Requirements
 
 ### Requirement: SIGTERM and SIGINT trigger graceful shutdown immediately
+<!-- req-id: 431d9173 -->
 
 The application MUST register signal handlers for SIGTERM and SIGINT at startup. When either signal is received, the application MUST begin the graceful shutdown sequence without delay.
 
@@ -33,6 +34,7 @@ The application MUST register signal handlers for SIGTERM and SIGINT at startup.
 - **AND** multiple SIGINT signals MUST be idempotent (no crash, no double-shutdown)
 
 ### Requirement: All managed containers receive stop signals before force-kill
+<!-- req-id: b3e1e091 -->
 
 When shutdown begins, all tillandsias-managed containers MUST be stopped gracefully before any force-kill is applied. The stop signal gives containers up to 30 seconds (default, overridable via `--shutdown-timeout`) to exit cleanly.
 
@@ -52,6 +54,7 @@ When shutdown begins, all tillandsias-managed containers MUST be stopped gracefu
 - **AND** no SIGKILL MUST be needed for idle containers
 
 ### Requirement: Foreground forge exits clean idle stacks
+<!-- req-id: 274ff826 -->
 
 Foreground CLI agent launches (`--opencode`, `--codex`, `--claude`, `--bash`)
 and status-check probes MUST remove their supporting stack after the attached
@@ -75,6 +78,7 @@ forge process exits when no other forge container remains active.
 - **AND** debug output MUST state how many forge containers are still active
 
 ### Requirement: Graceful shutdown has a configurable timeout with force-kill fallback
+<!-- req-id: d158926d -->
 
 The default graceful shutdown timeout is 30 seconds. This timeout is overridable via `--shutdown-timeout <seconds>` CLI flag. If any container does not exit within the timeout, it MUST be force-killed.
 
@@ -102,6 +106,7 @@ The default graceful shutdown timeout is 30 seconds. This timeout is overridable
 - **AND** the application MUST NOT hang waiting for unresponsive containers
 
 ### Requirement: Exit code reflects shutdown status
+<!-- req-id: 062da5bf -->
 
 The application MUST exit with exit code 0 on successful graceful shutdown. If an unrecoverable error occurs during shutdown (e.g., podman unavailable, permission denied on cleanup), the application MUST exit with exit code 1 or higher.
 
@@ -121,6 +126,7 @@ The application MUST exit with exit code 0 on successful graceful shutdown. If a
 - **AND** the application MUST NOT suppress the error
 
 ### Requirement: No stale sockets remain after shutdown
+<!-- req-id: 2bd74fcf -->
 
 After the application exits, no tillandsias-managed sockets or named pipes MUST be left in `/tmp/`. All IPC endpoints (control sockets, log pipes) MUST be cleaned up as part of shutdown.
 
@@ -139,6 +145,7 @@ After the application exits, no tillandsias-managed sockets or named pipes MUST 
 - **AND** persistent logs (if any) MUST be preserved according to `--log-enclave` policy
 
 ### Requirement: No stale mounts remain after shutdown
+<!-- req-id: ed5b0079 -->
 
 After the application exits, no tillandsias-managed mount points MUST remain. All bind mounts, overlayfs layers, and tmpfs mounts MUST be unmounted as part of shutdown.
 

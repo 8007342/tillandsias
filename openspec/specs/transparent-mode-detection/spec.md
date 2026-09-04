@@ -9,6 +9,7 @@ active
 ## Requirements
 
 ### Requirement: Launcher mode is detected from invocation context
+<!-- req-id: adbc8b93 -->
 
 The Linux launcher MUST distinguish direct CLI, tray, transparent wrapper, and install/runtime modes from explicit arguments and executable context.
 

@@ -9,6 +9,7 @@ active
 ## Requirements
 
 ### Requirement: Browser routes are allowlisted by project and service
+<!-- req-id: dff8fbbc -->
 
 Browser window state MUST keep route targets explicit. A browser-facing route is valid only when its project label, service label, hostname, upstream container, and internal port are known to the tray state model.
 

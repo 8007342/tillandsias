@@ -22,7 +22,7 @@ pull_recipe: see-section-pull-on-demand
 
 # Windows installer prerequisites — WSL2 hard requirement
 
-@trace spec:agent-cheatsheets, spec:cross-platform, spec:windows-wsl-runtime, spec:chromium-browser-isolation, spec:install-progress
+@trace spec:agent-cheatsheets, spec:cross-platform, spec:windows-wsl-runtime, spec:browser-isolation-core, spec:install-progress
 
 **Version baseline**: Windows 10 build 19041+ / Windows 11 (any SKU including Home).
 **Use when**: implementing the one-line `install.ps1` / `install.sh` curl installer's prerequisite-check prelude. WSL2 is a HARD requirement; the installer SHALL short-circuit with a clear remediation message if any check fails, BEFORE downloading the tray binary or distro tarball.

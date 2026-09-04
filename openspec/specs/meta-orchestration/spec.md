@@ -19,6 +19,7 @@ ratio) for months before the file existed — order 877 closed that ghost.
 ## Requirements
 
 ### Requirement: A full cycle proves its own exit
+<!-- req-id: 80c37fb4 -->
 
 A full-mode cycle MUST NOT report success by exit code alone. It ends with a
 `MO-FULL: <DISPOSITION> <LOCAL_SHA> <BRANCH> <REMOTE_SHA>` marker that is
@@ -35,6 +36,7 @@ the local head is verifiably the converged remote head.
   (litmus:mo-full-attestation-ledger-shape, order 614-2gqx / 651-2x5s)
 
 ### Requirement: The startup boundary is inviolable
+<!-- req-id: 556ea573 -->
 
 A cycle snapshots the worktree at start (`meta-orchestration-worktree-guard.sh
 snapshot`) and MUST leave every pre-existing dirty path byte-identical on
@@ -52,6 +54,7 @@ protects.
   orders 872-c9nd, 874-s8vf, 874-w2gc)
 
 ### Requirement: One checkout, one cycle
+<!-- req-id: 31472a3e -->
 
 Every lane that can start a cycle — driver timer, operator prompt, /loop
 cron — MUST acquire the checkout lock (`cycle-checkout-lock.sh`, mkdir arm;
@@ -67,6 +70,7 @@ in a locked checkout; separate worktrees or clones are the sanctioned path.
   refusal durably outside the contended checkout (order 873-zcim)
 
 ### Requirement: Guards run before work, and fail loud
+<!-- req-id: 2de114fe -->
 
 Before worker drain a cycle MUST verify its instrument
 (`cycle-preflight.sh` — rebuild `tillandsias-plan`, re-verify after every
@@ -84,6 +88,7 @@ seen RED before being trusted.
   (litmus:credential-channel-check-shape, orders 860-g798, 851-cduu)
 
 ### Requirement: Every mode names its verdict
+<!-- req-id: 5fb8d705 -->
 
 The skill's invocation modes (full, smoke, targeted verify) are decided from
 the invoking prompt BEFORE any work, and each ends in its pinned grammar —

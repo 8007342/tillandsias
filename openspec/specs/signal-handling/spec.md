@@ -9,6 +9,7 @@ active
 ## Requirements
 
 ### Requirement: Headless runtime shuts down on process signals
+<!-- req-id: bc09cb85 -->
 
 The headless runtime MUST handle supported termination signals by initiating graceful shutdown of child processes, sockets, and runtime state.
 

@@ -10,6 +10,7 @@ active
 ## Requirements
 
 ### Requirement: Content-hash image identity with human aliases
+<!-- req-id: e9d9b06b -->
 
 The `chromium-framework` image MUST use a content-hash tag derived from the image source set as its canonical identity:
 
@@ -18,6 +19,7 @@ The `chromium-framework` image MUST use a content-hash tag derived from the imag
 - Human-facing `v<Major>.<Minor>.<YYMMDD>.<Build>` and `:latest` tags MAY exist only as aliases to the canonical hash tag
 
 ### Requirement: Image hierarchy locked to chromium-core
+<!-- req-id: 4925e429 -->
 
 The `chromium-framework` image MUST extend `chromium-core` using the same canonical hash identity:
 
@@ -26,10 +28,12 @@ The `chromium-framework` image MUST extend `chromium-core` using the same canoni
 - The build script SHOULD pass the canonical chromium-core hash tag so the hierarchy stays content-addressed
 
 ### Requirement: Security model inheritance and framework-specific isolation
+<!-- req-id: 5088ff0b -->
 
 The image MUST inherit the `chromium-core` security model (read-only root, no external network, no credentials, reduced capabilities) AND add framework-specific browser isolation layers.
 
 ### Requirement: Build invocation via build-image.sh
+<!-- req-id: 29ca1476 -->
 
 The image build MUST be invoked via `scripts/build-image.sh chromium-framework` which:
 

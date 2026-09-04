@@ -17,7 +17,7 @@ committed_for_project: false
 ---
 # git Workflows
 
-@trace spec:agent-source-of-truth
+@trace spec:knowledge-source-of-truth
 
 **Version baseline**: git 2.45 (Fedora 43)  
 **Use when**: Cloning, committing, branching, rebasing, pushing (clones via enclave mirror, not GitHub directly)

@@ -135,17 +135,28 @@ critical_path:
   # four fields, their names, their order, and their numeric shape are all still
   # required. The negative control below is what keeps the widening honest.
   - step: "reports epic coverage so the ungrouped gap cannot hide"
-    command: "mf_stage prod 0 OUT -- scripts/select-work-batch.sh linux && mf_holds_ere OUT '^triage: eligible=[0-9]+ grouped=[0-9]+ ungrouped=[0-9]+ epics=[0-9]+( [a-z_]+=[0-9]+)*$' && echo 'ok: triage line'"
+    command: "mf_stage prod 0 OUT -- scripts/select-work-batch.sh linux && mf_holds_ere OUT '^triage: eligible=[0-9]+ grouped=[0-9]+ ungrouped=[0-9]+ epics=[0-9]+( [a-z_]+=([0-9]+(\\([a-z0-9:,]+\\))?|[a-z][a-z0-9:,]*))*$' && echo 'ok: triage line'"
     timeout_ms: 30000
     expected_behavior: "ok: triage line"
 
   # NEGATIVE CONTROL for the widening above: the relaxed pattern must still
   # reject a triage line that is missing a required field or has them out of
-  # order. Without this, `( [a-z_]+=[0-9]+)*` could be mistaken for "anything
-  # goes after epics", and a future edit that dropped `ungrouped` entirely would
-  # sail through the step above.
+  # order. Without this, the trailing-field group could be mistaken for
+  # "anything goes after epics", and a future edit that dropped `ungrouped`
+  # entirely would sail through the step above.
+  #
+  # WIDENED BY 1002-7jeg, deliberately. A trailing field's value used to be
+  # digits only. accel_filtered now carries WHAT it dropped, not just how many
+  # (`accel_filtered=4(rocm:1,npu:3)`), and accel_bringup names tags
+  # (`accel_bringup=npu`) — because a bare count could not distinguish a
+  # correct subtraction from a permanently starved device class, which is how
+  # the npu starvation survived unnoticed. So a value is now digits with an
+  # optional parenthesised detail, or a lowercase tag list. The control below
+  # grew two arms with the grammar: the named form must be ACCEPTED, and an
+  # unbalanced `4(unclosed` must still be REJECTED, so "allow parentheses" did
+  # not quietly become "allow anything".
   - step: "the coverage pin still rejects a malformed triage line"
-    command: "pat='^triage: eligible=[0-9]+ grouped=[0-9]+ ungrouped=[0-9]+ epics=[0-9]+( [a-z_]+=[0-9]+)*$'; echo 'triage: eligible=1 grouped=2 epics=4' | grep -qE \"$pat\" && { echo 'FAIL: missing ungrouped accepted'; exit 1; }; echo 'triage: eligible=1 ungrouped=3 grouped=2 epics=4' | grep -qE \"$pat\" && { echo 'FAIL: out-of-order accepted'; exit 1; }; echo 'triage: eligible=1 grouped=2 ungrouped=3 epics=4 urgency_unscored=5' | grep -qE \"$pat\" && echo 'ok: pin discriminates' || { echo 'FAIL: valid extended line rejected'; exit 1; }"
+    command: "pat='^triage: eligible=[0-9]+ grouped=[0-9]+ ungrouped=[0-9]+ epics=[0-9]+( [a-z_]+=([0-9]+(\\([a-z0-9:,]+\\))?|[a-z][a-z0-9:,]*))*$'; echo 'triage: eligible=1 grouped=2 epics=4' | grep -qE \"$pat\" && { echo 'FAIL: missing ungrouped accepted'; exit 1; }; echo 'triage: eligible=1 ungrouped=3 grouped=2 epics=4' | grep -qE \"$pat\" && { echo 'FAIL: out-of-order accepted'; exit 1; }; echo 'triage: eligible=1 grouped=2 ungrouped=3 epics=4 accel_filtered=4(rocm:1,npu:3) accel_bringup=npu' | grep -qE \"$pat\" || { echo 'FAIL: named-filter line rejected'; exit 1; }; echo 'triage: eligible=1 grouped=2 ungrouped=3 epics=4 accel_filtered=4(unclosed' | grep -qE \"$pat\" && { echo 'FAIL: unbalanced detail accepted'; exit 1; }; echo 'triage: eligible=1 grouped=2 ungrouped=3 epics=4 urgency_unscored=5' | grep -qE \"$pat\" && echo 'ok: pin discriminates' || { echo 'FAIL: valid extended line rejected'; exit 1; }"
     timeout_ms: 5000
     expected_behavior: "ok: pin discriminates"
 

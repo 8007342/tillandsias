@@ -9,6 +9,7 @@ active
 TBD - created by archiving change tillandsias-bootstrap. Update Purpose after archive.
 ## Requirements
 ### Requirement: User-facing app semantics
+<!-- req-id: 4a9ea8c3 -->
 All container operations SHALL be presented to the user as "app" actions. The words "container", "pod", "image", or "runtime" MUST NOT appear in any user-facing text.
 
 #### Scenario: Starting an app
@@ -24,6 +25,7 @@ All container operations SHALL be presented to the user as "app" actions. The wo
 - **THEN** the error message uses plain language (e.g., "Could not start. Is Podman running?") without exposing container internals
 
 ### Requirement: Running environment tracking with lifecycle iconography
+<!-- req-id: 7573ef70 -->
 The application SHALL maintain an in-memory registry of all running environments, updated by events from the podman orchestration layer. Each environment's tillandsia icon SHALL reflect its lifecycle state.
 
 #### Scenario: Environment booting
@@ -51,6 +53,7 @@ The application SHALL maintain an in-memory registry of all running environments
 - **THEN** the environment is removed from the running section and the tray icon state updates accordingly
 
 ### Requirement: Graceful stop
+<!-- req-id: c719cd4c -->
 Stopping an app SHALL send SIGTERM to the container, allow a grace period, then force-kill if necessary.
 
 #### Scenario: Clean stop
@@ -62,6 +65,7 @@ Stopping an app SHALL send SIGTERM to the container, allow a grace period, then 
 - **THEN** the container is force-killed and removed, and the user is not burdened with technical details
 
 ### Requirement: Destroy with safety hold
+<!-- req-id: 8bc05b31 -->
 Destroying an app (removing its cache and persistent data) SHALL require a deliberate hold action to prevent accidental data loss.
 
 #### Scenario: Destroy action
@@ -77,6 +81,7 @@ Destroying an app (removing its cache and persistent data) SHALL require a delib
 - **THEN** the container is removed, project-specific cache data is deleted, but the project source directory in `~/src` is never touched
 
 ### Requirement: Tray status display
+<!-- req-id: 36122bab -->
 Running apps SHALL be displayed in the tray with visual indicators and available actions.
 
 #### Scenario: Single running app
@@ -96,6 +101,7 @@ Running apps SHALL be displayed in the tray with visual indicators and available
 - **THEN** reconnection attempts use exponential backoff starting at 1 second, doubling to a maximum of 30 seconds, and MUST NOT degrade to fixed-interval polling
 
 ### Requirement: shutdown_all terminates web containers and closes webviews
+<!-- req-id: 39e5fda9 -->
 
 `shutdown_all()` SHALL, as part of the existing quit sequence, stop every running `tillandsias-<project>-forge` container tracked in `TrayState::running` and close every `WebviewWindow` whose label begins with `web-`.
 
@@ -106,6 +112,7 @@ Running apps SHALL be displayed in the tray with visual indicators and available
 - **AND** all open web `WebviewWindow` instances are closed before the final exit
 
 ### Requirement: Orphan web containers are swept on shutdown
+<!-- req-id: 75925ad9 -->
 
 The orphan-sweep step of `shutdown_all()` SHALL match containers whose names follow `tillandsias-*-forge` (in addition to existing match patterns), so that web containers left behind by a prior crashed session are cleaned up.
 
@@ -114,6 +121,7 @@ The orphan-sweep step of `shutdown_all()` SHALL match containers whose names fol
 - **THEN** the sweep stops and removes it with the same logic used for other tillandsias orphans
 
 ### Requirement: Webview close is not an exit signal
+<!-- req-id: 3ca05953 -->
 
 The Tauri runtime event handler SHALL filter `RunEvent::WindowEvent { event: CloseRequested, .. }` for windows whose label starts with `web-` and SHALL NOT propagate that close to `RunEvent::ExitRequested`. Only the tray's `MenuCommand::Quit` action and OS-initiated termination signals SHALL trigger `shutdown_all()`.
 
@@ -131,6 +139,7 @@ The Tauri runtime event handler SHALL filter `RunEvent::WindowEvent { event: Clo
 - **AND** the process exits cleanly
 
 ### Requirement: ExitRequested discriminates on code
+<!-- req-id: 5094a910 -->
 
 The Tauri `RunEvent::ExitRequested` handler SHALL branch on the `code` field. When
 `code.is_none()` (Tauri auto-exit triggered by the last window closing) the handler
@@ -156,6 +165,7 @@ arm exactly once per process lifetime.
 - **AND** the process exits with status 0
 
 ### Requirement: Tray Quit dispatches MenuCommand::Quit (no direct process exit)
+<!-- req-id: 1d0edeff -->
 
 The tray menu's Quit item SHALL dispatch `MenuCommand::Quit` through the existing
 menu channel. The tray menu callback SHALL NOT call `std::process::exit`, nor otherwise
@@ -175,6 +185,7 @@ terminate the process synchronously without routing through the event loop.
 - **AND** the Quit branch sends `MenuCommand::Quit` and returns
 
 ### Requirement: Event loop owns the sole shutdown_all invocation
+<!-- req-id: 4c01fd67 -->
 
 Exactly one code path per process lifetime SHALL invoke
 `handlers::shutdown_all(&state).await`: the `MenuCommand::Quit` arm of the main event
@@ -195,6 +206,7 @@ loop. Other paths (signal handlers, webview close, auto-exit) SHALL NOT run
 - **AND** the enclave network remains attached
 
 ### Requirement: shutdown_all removes containers AND destroys the enclave network
+<!-- req-id: 34a655cb -->
 
 `shutdown_all()` SHALL not only stop every tillandsias container but also
 remove them (`podman rm`) before attempting to destroy the enclave network.
@@ -223,6 +235,7 @@ empty and `podman network exists tillandsias-enclave` MUST be false.
   leftovers" warnings
 
 ### Requirement: shutdown_all verifies post-sweep state and escalates stragglers
+<!-- req-id: 0e79bc91 -->
 
 After the existing graceful-stop and orphan-sweep phases of `shutdown_all` complete, the application SHALL run a verification phase that polls `podman ps --filter name=tillandsias-` until it returns zero rows or a 5-second budget elapses. Any container still listed at the end of the budget SHALL be escalated through `podman kill --signal=KILL` followed by `podman rm -f`. Any container that survives that escalation SHALL trigger a last-resort SIGTERM to its `conmon` process (matched by the substring pattern `conmon.*--name tillandsias-` against the process command line). The verification phase SHALL run synchronously, blocking `shutdown_all` from returning until either zero stragglers remain or the budget is exhausted.
 
@@ -249,6 +262,7 @@ After the existing graceful-stop and orphan-sweep phases of `shutdown_all` compl
 - **AND** `shutdown_all` returns so the tray can call `app_handle.exit(0)` rather than blocking the user indefinitely
 
 ### Requirement: kill_container accepts an explicit signal
+<!-- req-id: 52950565 -->
 
 The `ContainerLauncher::kill_container` (or its underlying client method) SHALL accept an optional signal argument so callers can distinguish "send the default signal" (today's behavior — SIGTERM) from "force SIGKILL". The verification phase of `shutdown_all` SHALL always pass `Some("KILL")` because graceful has already been attempted by the time it runs.
 

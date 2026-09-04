@@ -15,6 +15,7 @@ leak, escape, or silently weaken?"
 ## Requirements
 
 ### Requirement: Zero-tolerance credential boundary
+<!-- req-id: 22ec1695 -->
 
 The runtime SHALL never expose host credentials, secret material, or native
 keyring access to forge, terminal, browser, or proxy containers except through
@@ -47,6 +48,7 @@ files.
 - **AND** a failed parse/no-file assertion MUST fail the launch loudly.
 
 ### Requirement: Zero-tolerance runtime leakage boundary
+<!-- req-id: 2e93ec7a -->
 
 The shipped runtime SHALL not leak host runtime state into containers beyond
 the explicitly documented runtime seams. Host D-Bus, host home directories,
@@ -58,6 +60,7 @@ host Podman sockets, and host-specific paths MUST NOT be inherited by default.
 - **AND** any host path leak is treated as a boundary failure
 
 ### Requirement: Zero-tolerance network boundary
+<!-- req-id: 7243fc55 -->
 
 Containers SHALL not bypass the proxy/enclave model for ordinary runtime
 traffic. Direct egress is forbidden unless a spec explicitly names a debug or
@@ -74,6 +77,7 @@ standalone exception.
 - **AND** browser behavior MUST remain separate from forge behavior
 
 ### Requirement: Zero-tolerance shell-wrapper boundary
+<!-- req-id: 791b7211 -->
 
 The shipped runtime SHALL use compiled Rust and direct Podman calls for user
 facing orchestration. Repository shell scripts MAY remain as developer tooling,
@@ -88,6 +92,7 @@ directly instead of constructing shell-escaped command strings.
 - **AND** interactive tray launches SHALL not depend on shell interpolation for Podman argv
 
 ### Requirement: Security hardening defaults are immutable
+<!-- req-id: c5e2ff16 -->
 
 The baseline container security contract SHALL remain non-negotiable:
 `--cap-drop=ALL`, `--security-opt=no-new-privileges`, `--userns=keep-id`, and

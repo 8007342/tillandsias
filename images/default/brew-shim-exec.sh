@@ -101,6 +101,34 @@ fi
 
 [ "${TILLANDSIAS_BREW_AUTOINSTALL:-1}" = "0" ] && hint_and_exit
 
+# ── Re-entrancy guard (order 966-rq7f) ────────────────────────────────────────
+# BREW IS A RUBY PROGRAM, AND `ruby` IS ONE OF THE TOOLS WE SHIM. So `brew
+# install ruby` runs brew, brew resolves an interpreter through PATH, PATH finds
+# this shim, and the shim runs `brew install ruby`. Each level holds for its
+# full BREW_INSTALL_TIMEOUT, so nothing unwinds while the next level forks.
+#
+# MEASURED on pirria (N150 forge) 2026-09-02, from an ordinary `./build.sh
+# --check` that merely probed for ruby: 3663 live processes — 2872 bash plus 716
+# concurrent `timeout 150 brew install --formula ruby`, ppids mixed between pid 1
+# and each other — reaching 89.4% of the 4096 pid ceiling. It failed on
+# attestation and the Cellar stayed EMPTY, so it forked 3663 times and installed
+# nothing. Under the pre-667-se87 ceiling of 512 the same probe would have
+# exceeded the cap sevenfold; that is the recorded "silent session death" shape.
+#
+# The success path below already ends with "Re-resolve strictly inside the brew
+# prefix so we never re-enter the shim" — the re-entry hazard was understood,
+# but guarded only where the install SUCCEEDS. The unbounded case is the
+# FAILING one, which is also the one that runs longest.
+#
+# The answer to a fork bomb is not a higher ceiling. One inherited marker turns
+# N nested installs into one, and a nested probe degrades to the same hint an
+# absent tool already gives.
+if [ -n "${TILLANDSIAS_BREW_SHIM_INSTALLING:-}" ]; then
+    echo "tillandsias: refusing to install '$FORMULA' — already inside an install of '${TILLANDSIAS_BREW_SHIM_INSTALLING}' (re-entrancy guard, order 966-rq7f)." >&2
+    hint_and_exit
+fi
+export TILLANDSIAS_BREW_SHIM_INSTALLING="$FORMULA"
+
 # Lazy Homebrew bootstrap: pinned-tag clone into the standard prefix
 # (bottles are only prebuilt for this exact prefix). Fail-soft to the hint.
 # A recent failed bootstrap (typically dead enclave egress) is remembered

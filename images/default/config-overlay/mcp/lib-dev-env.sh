@@ -71,10 +71,19 @@ tillandsias_dev_env_hook() {
     if [ -z "${TILLANDSIAS_INFERENCE_ENDPOINT:-}" ]; then
         export TILLANDSIAS_INFERENCE_ENDPOINT="http://127.0.0.1:${TILLANDSIAS_DEV_INFERENCE_PORT:-11434}"
     fi
-    if [ -z "${TILLANDSIAS_EMBED_ENDPOINT:-}" ]; then
-        # ollama's OpenAI-compatible surface, for spec_answer's /embeddings.
-        export TILLANDSIAS_EMBED_ENDPOINT="${TILLANDSIAS_INFERENCE_ENDPOINT%/}/v1"
+    # ORDER 967-xq5e: ONE derivation, reached — not a third copy. This block
+    # exported the endpoint unprobed, which is correct on the dev lane (this
+    # hook has just ensured the container) but was one of three places that
+    # each knew how to spell it. The helper honours an explicit value, derives
+    # the same loopback default, and PROBES before wiring.
+    _lde_embed_lib="${TILLANDSIAS_PROJECT_ROOT:-}/images/default/lib-embed-endpoint.sh"
+    [ -r "$_lde_embed_lib" ] || _lde_embed_lib="${BASH_SOURCE[0]%/*}/../../lib-embed-endpoint.sh"
+    if [ -r "$_lde_embed_lib" ]; then
+        # shellcheck source=../../lib-embed-endpoint.sh
+        . "$_lde_embed_lib"
+        resolve_embed_endpoint >/dev/null 2>&1 || true
     fi
+    unset _lde_embed_lib
     # The MODEL must match the endpoint, and on dev that endpoint is the
     # ollama this hook just ensured (order 760-hzi4). forge-plan.sh defaults
     # to `nomic-embed-text-v1-GGUF`, a lemonade/LM-Studio name, because it was

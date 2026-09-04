@@ -12,6 +12,7 @@ Store and retrieve the GitHub OAuth token in the host OS's platform-native secre
 ## Requirements
 
 ### Requirement: Platform-native keyring backend
+<!-- req-id: b6da2b9b -->
 
 The application MUST use the platform-native secret service exclusively, accessed in-process via the `keyring` crate.
 
@@ -30,6 +31,7 @@ The application MUST use the platform-native secret service exclusively, accesse
 - **THEN** the keyring MUST be accessed via Credential Manager (Wincred, `CredWriteW` / `CredReadW` / `CredDeleteW`)
 
 ### Requirement: Single keyring entry for the GitHub token
+<!-- req-id: c61780de -->
 
 The GitHub OAuth token MUST be stored under a single, fixed keyring entry shared by all platforms.
 
@@ -41,6 +43,7 @@ The GitHub OAuth token MUST be stored under a single, fixed keyring entry shared
 - **AND** these constants MUST match `SERVICE` and `GITHUB_TOKEN_KEY` in `src-tauri/src/secrets.rs`
 
 ### Requirement: Host-only keyring API surface
+<!-- req-id: 7c379a12 -->
 
 The functions `store_github_token`, `retrieve_github_token`, and `delete_github_token` MUST be the sole APIs for accessing the GitHub OAuth token, and MUST execute exclusively in the host Rust process. No container, entrypoint script, or subprocess MUST call the keyring directly.
 

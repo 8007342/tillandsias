@@ -1,6 +1,6 @@
 # OpenSpec Workflow
 
-@trace spec:agent-source-of-truth
+@trace spec:knowledge-source-of-truth
 @cheatsheet agents/openspec.md
 
 Every non-trivial change (new feature, fix, refactor) goes through OpenSpec. This ensures work is traceable, reversible, and converges toward specification.

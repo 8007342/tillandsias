@@ -334,6 +334,179 @@ agent_observability_protocol:
         constraint-derived rather than activity-derived (packet 567): a metric
         that rewards activity is a privilege-escalation path wherever it gates
         anything.
+    # ── OPERATOR DIRECTIVE 2026-09-03: become token-conscious ────────────
+    context_cost_metrics:
+      status: measure-only
+      purpose: >
+        Long-running loop sessions accrete context for days. The operator's
+        direction is to become token-conscious NOW so that remedies can be
+        chosen from data LATER, and to decompose long-running monolithic
+        sessions into ephemeral minimal-context sub-agents the way experts and
+        cheatsheets were decomposed by domain. This section adds the
+        INSTRUMENTATION. It deliberately adds NO remedy.
+      amends_a_declination: >
+        `honest_limits.token_and_wallclock_efficiency` below says token
+        efficiency "belongs to the harness — not derivable in-repo". THAT
+        REMAINS TRUE AND IS NOT WITHDRAWN. A token count is not derivable here.
+        What IS derivable is a family of CONTEXT-GROWTH PROXIES, and this
+        section adds those under their real name. A proxy reported as a token
+        count would be the exact defect this protocol exists to prevent.
+      proxy_discipline:
+        rule: >
+          Every metric here is a PROXY and MUST be named as one at every
+          surface. `transcript_bytes` is bytes, not tokens. The ratio between
+          them is model- and content-dependent and is NOT a constant this
+          project may assume. Anyone converting a proxy to a token estimate
+          MUST cite the measurement that established the conversion, or report
+          the proxy.
+        why: >
+          On 2026-09-03 this fleet recorded EIGHT instruments that answered a
+          different question than the one asked of them, including a grep count
+          reported as a verification and a composite memory high-water mark read
+          as a working set. A metrics section written the day after that must
+          not add a ninth.
+      surfaced_every_cycle:
+        context_growth:
+          line: "context: transcript_mb=<x> lines=<n> delta_mb=<x> tools=<n> source=<path|absent>"
+          question: "How fast is this session's context growing, and per what?"
+          honest_limit: >
+            Bytes and JSONL lines of the harness transcript, NOT tokens. Absent
+            when the harness does not expose a transcript path — `absent` is a
+            valid and required value.
+        cycle_shape:
+          line: "shape: cycles_this_session=<n> tool_calls_per_cycle=<x> messages_per_cycle=<x> compactions=<n>"
+          question: "Is per-cycle cost stable, or creeping as the session ages?"
+          rule: >
+            The CREEP is the signal, not the absolute. A loop whose per-cycle
+            tool count is flat across forty cycles is behaving; one that doubles
+            is the thing this instrumentation exists to catch.
+        step_repetition:
+          line: "repeat: window=<since=<utc>|3h> steps=<n> top3=<entries|-> source=<path|absent>"
+          question: "Which methodology steps are paid REPEATEDLY inside one cycle?"
+          rule: >
+            The expensive step is rarely the slow one; it is the one paid many
+            times. A gate re-run after every rebase (982-cs43) costs its
+            duration TIMES the number of rounds, and only the product is
+            actionable. Report the top three by count, not by duration —
+            duration is already covered by `timing`. Emitted by
+            scripts/cycle-metrics.sh over the timing log (order 1001-q3zf);
+            the window is the cycle's own start, passed as
+            `--cycle-start <Start-Of-Cycle UTC>`, else the last three hours.
+            Entries are `<step>=<count>`, count desc then step asc.
+          review: >
+            Did any host act on a repeat: top3 — merge two rounds into one,
+            or stop re-running a gate the rebase did not invalidate? If no
+            cycle has, the line is a count nobody reads and is retired.
+        # ── order 1001-q3zf: the two CROSS-CYCLE lines the operator asked for ──
+        # "add metrics to each host's iterations to detect repeated work that
+        # just wastes work every cycle, and expensive work that may be cached
+        # or skipped" (2026-09-03). The data already existed — the timing log
+        # held 48,790 records on macuahuitl, and one gate step had run 361
+        # times at 13.9 s never failing — and only the reporter was missing.
+        cross_cycle_recurrence:
+          line: "recur: window=<n>d runs=<n> steps=<n> top3=<entries|-> source=<path|absent>"
+          question: "Which steps are paid on EVERY cycle, and what do they cost cumulatively?"
+          rule: >
+            Over the last N days (default 7), a step RECURS when it ran at
+            least twice. Entries are
+            `<step>:runs=<n>:total_ms=<t>:avg_ms=<a>:fail_pct=<p>`, top three
+            by total_ms desc then step asc — the cumulative cost, not the
+            mean, because a cheap step paid three hundred times outranks an
+            expensive one paid twice. Step names may contain colons
+            (`step:...`, `check:litmus-pre-build`): parse an entry FROM THE
+            RIGHT — the trailing `:key=value` fields never contain a colon,
+            and the step is everything before the first `:runs=`.
+          review: >
+            Does the recur: top3 still name steps a cycle pays by DESIGN
+            (gates, suites), or has it filled with steps paid by habit? If a
+            release boundary passes and no packet cites a recur: number, say
+            why the line stays.
+        skippable_candidates:
+          line: "skippable: candidates=<n> floor_ms=<f> min_runs=<m> top3=<entries|-> source=<path|absent>"
+          question: "Which expensive, repeated, outcome-invariant steps could be memoised or skipped?"
+          honest_limit: >
+            A CANDIDATE is a step with runs >= min_runs (default 5), avg_ms >=
+            floor_ms (default 2000) and an outcome that NEVER changed in the
+            window (fail_pct 0 or 100, decided on raw counts, never on the
+            rounded percentage). Its `saved_ms_upper` is total_ms - avg_ms:
+            an UPPER BOUND on what a perfect skip could have saved, and it
+            MUST be named as a bound at every surface. The timing log carries
+            no input identity, so this line cannot say a run WOULD have hit a
+            cache — only that its outcome matched every other run. Quoting it
+            as a saving is the proxy-as-measurement defect proxy_discipline
+            exists to prevent. The named next rung, deliberately not part of
+            order 1001-q3zf, is a TREE DIGEST on timing records, so exact
+            repeats become measurable rather than bounded.
+          rule: >
+            Entries are
+            `<step>:runs=<n>:avg_ms=<a>:fail_pct=<p>:saved_ms_upper=<s>`, top
+            three by saved_ms_upper desc then step asc; parsed from the right
+            like recur:. This is the operator's "repeated work that wastes
+            every cycle / expensive work that may be cached or skipped"
+            instrument, and it is a candidate list, not a decision: a
+            memoise-or-skip packet is filed only when the same step tops
+            skippable: on two or more hosts (attach the regime; never act on
+            one host's reading alone), by the coordinator's cross-host
+            recurrence audit in skills/coordinate-multihost-work.
+          review: >
+            Has a skippable: candidate been memoised or skipped, and did the
+            host's recur: total for that step then FALL? If a candidate was
+            skipped and its total did not fall, the bound was not a proxy
+            for anything and the line is retired or re-derived.
+      candidate_remedies_NOT_ADOPTED:
+        rule: >
+          /compact, /clear, and sub-agent delegation are CANDIDATES. None is
+          adopted, none is scheduled, and no methodology step calls one today.
+          They are recorded here so that when the data arrives nobody has to
+          re-derive the option space — and so that adopting one is a visible
+          decision rather than a drift.
+        adoption_precondition: >
+          A remedy is adopted only when (a) the metrics above show the cost it
+          claims to reduce, on more than one host, and (b) the fleet's agents
+          AGREE on the step it attaches to. Measurement precedes remedy. This is
+          the same rule that kept the forge memory ceiling from being set from
+          intuition (981-n5vx) after three hosts measured three different things.
+        known_hazard: >
+          A remedy that discards context is IRREVERSIBLE mid-cycle. Any proposal
+          must say what a cycle LOSES, not only what it saves — and must survive
+          the question "what would this have discarded during the 996-bcjx
+          investigation", where three corrections arrived across four exchanges
+          and each depended on the prior ones.
+      direction_micro_context:
+        rule: >
+          The longer-horizon aim, operator-stated: long-running work decomposes
+          into sub-tasks that are IDEMPOTENT, EPHEMERAL and MINIMAL-CONTEXT, the
+          way a monolith decomposes into services and the way experts and
+          cheatsheets were split by domain. A sub-task that needs the whole
+          session's history is a sub-task that was not decomposed.
+        why_it_may_beat_bigger_models: >
+          The operator's hypothesis, recorded as a hypothesis: many small agents
+          with minimal context may be FASTER and cheaper than one large agent
+          with a large context running a large task. This is not yet measured.
+          The metrics above are what would measure it.
+      metrics_refinement:
+        rule: >
+          THE METRICS THEMSELVES ARE SUBJECT TO REVIEW ON A FIXED CADENCE, and
+          this obligation is part of the protocol rather than a nicety. Every
+          metric added here carries a REVIEW question, and a metric that cannot
+          answer its review question is retired rather than kept.
+        cadence: "every tenth cycle per host, or on any release boundary, whichever is sooner"
+        review_questions:
+          - "Does this metric still measure what its `question:` field claims? Name the observation, not the intent."
+          - "Has anything acted on it? A metric nobody has used to make a decision is a cost with no return — retire it or say why it stays."
+          - "Could it be satisfied without the underlying thing improving? If yes it is an activity metric and inherits the anti_gaming_rule below."
+          - "Is its proxy still a proxy for what it was chosen to proxy? Re-establish the link, do not assume it."
+        why: >
+          A metric drifts exactly the way a guard drifts, and this fleet has
+          eight same-day instances of an instrument answering the wrong
+          question. A metrics protocol WITHOUT a refinement obligation is
+          itself an unwired ratchet — and `a guard's wiring is part of the
+          guard, and an unwired one should fail its own audit` (795-5itp).
+        retirement_is_success: >
+          Retiring a metric that no decision ever used is a GOOD outcome and
+          must be recordable as one. A protocol that only ever grows is a
+          protocol nobody is willing to audit.
+
     honest_limits:
       substitution: >
         "Did the agent query the expert INSTEAD of grepping the ledger?" is the

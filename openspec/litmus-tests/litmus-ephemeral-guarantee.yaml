@@ -29,7 +29,7 @@ gating_points:
 observability:
   traces:
     - "@trace spec:forge-offline"
-    - "@trace spec:ephemeral-guarantee"
+    - "@trace spec:forge-offline"
   expected_log: "External network request blocked (expected)"
   log_fields:
     spec: "forge-offline"

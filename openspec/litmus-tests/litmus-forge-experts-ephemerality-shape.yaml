@@ -134,7 +134,7 @@ critical_path:
     # Enumerates the region's real redirection targets (comments excluded) and
     # rejects anything outside the ephemeral set. A new persisted index file
     # cannot be added without either being ephemeral or turning this RED.
-    command: "bad=$(sed -n '/^# ── Forge EXPERTS: launch-time build/,/^# ── Cache directory structure/p' images/default/lib-common.sh | grep -v '^[[:space:]]*#' | grep -oE '(^|[[:space:]])>>?[[:space:]]*\"?[^\"|&; )]+' | sed -E 's/^[[:space:]]*>>?[[:space:]]*\"?//' | sort -u | grep -vE '^(/dev/null|/tmp/|\\$FORGE_EXPERTS_STATE_DIR/|\\$stamp$|\\$index_dir/|\\$cache_stamp\\.tmp\\.)'); test -z \"$bad\" && echo 'ok: writes-confined-to-ephemeral-surfaces' || { echo \"REGRESSION: experts region writes to non-ephemeral target(s): $bad\"; exit 1; }"
+    command: "bad=$(sed -n '/^# ── Forge EXPERTS: launch-time build/,/^# ── Cache directory structure/p' images/default/lib-common.sh | grep -v '^[[:space:]]*#' | grep -oE '(^|[[:space:]])>>?[[:space:]]*\"?[^\"|&; )]+' | sed -E 's/^[[:space:]]*>>?[[:space:]]*\"?//' | sort -u | grep -vE '^(/dev/null|/tmp/|\\$FORGE_EXPERTS_STATE_DIR/|\\$stamp$|\\$index_dir/|\\$state_dir/|\\$cache_stamp\\.tmp\\.)'); test -z \"$bad\" && echo 'ok: writes-confined-to-ephemeral-surfaces' || { echo \"REGRESSION: experts region writes to non-ephemeral target(s): $bad\"; exit 1; }"
     timeout_ms: 10000
     expected_behavior: "ok: writes-confined-to-ephemeral-surfaces"
 
@@ -156,6 +156,17 @@ critical_path:
     command: "grep -q 'stamp=\"$FORGE_EXPERTS_STATE_DIR/plan-source-hash\"' images/default/lib-common.sh && echo 'ok: source-hash-stamp-in-tmpfs'"
     timeout_ms: 5000
     expected_behavior: "ok: source-hash-stamp-in-tmpfs"
+
+  - step: "the model-warm state file — an indirect write target — is itself in tmpfs"
+    # $state_dir is accepted by the write-confinement step by name; this is its
+    # order-621-2re2 payment. Added 2026-09-02 with 965-hz3f's lifecycle warm
+    # (warm_tier_model_fail_soft), which introduced the indirection and landed
+    # without it — the union litmus caught it, not either branch's gate, because
+    # ./build.sh --check runs no litmus at all (748-tkjx). The write IS ephemeral;
+    # what was missing is the proof this file demands of every new indirection.
+    command: "grep -q 'state_dir=\"${FORGE_EXPERTS_STATE_DIR:-/dev/shm/tillandsias-experts}\"' images/default/lib-common.sh && echo 'ok: model-warm-state-in-tmpfs'"
+    timeout_ms: 5000
+    expected_behavior: "ok: model-warm-state-in-tmpfs"
 
   - step: "BEHAVIOURAL: the artifact-cache write target — persistent BY DESIGN (781-6gys) — resolves into the sanctioned cargo build-cache subtree"
     # $cache_stamp.tmp. is accepted by the write-confinement step by name; this

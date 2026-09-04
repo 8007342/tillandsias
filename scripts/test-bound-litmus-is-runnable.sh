@@ -133,8 +133,12 @@ git -C "$g" -c user.email=f@f -c user.name=f commit -qm base >/dev/null 2>&1
 git -C "$g" branch -f base-ref >/dev/null 2>&1
 # Now ADD a bound-but-unrunnable file, exactly the 2026-09-01 shape.
 cp "$bad" "$g/openspec/litmus-tests/litmus-fixture-bad.yaml"
-sed -i "s|name: $GOOD_NAME|name: $BAD_NAME|" "$g/openspec/litmus-tests/litmus-fixture-bad.yaml"
-sed -i "s|  litmus_tests: \[\]|  litmus_tests:\n  - $BAD_NAME|" "$g/openspec/litmus-bindings.yaml"
+sed "s|name: $GOOD_NAME|name: $BAD_NAME|" "$g/openspec/litmus-tests/litmus-fixture-bad.yaml" > "$g/openspec/litmus-tests/litmus-fixture-bad.yaml.tmp" && mv "$g/openspec/litmus-tests/litmus-fixture-bad.yaml.tmp" "$g/openspec/litmus-tests/litmus-fixture-bad.yaml"
+# Rewrite the bindings file rather than sed-ing a newline into the
+# replacement: BSD sed (every macOS host) supports neither a bare `-i` nor a
+# `\n` in an s/// replacement, and the fixture failed here with
+# `sed: invalid command code` (851-gpb5).
+printf 'version: "1.0"\nspecs:\n- spec_id: ci-release\n  status: active\n  litmus_tests:\n  - %s\n' "$BAD_NAME" > "$g/openspec/litmus-bindings.yaml"
 out="$(cd "$g" && LITMUS_BINDINGS_ROOT="$g" TILLANDSIAS_LITMUS_BIND_BASE=base-ref bash scripts/check-litmus-bindings.sh 2>&1)"; rc=$?
 if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q 'violation:bound-but-unrunnable'; then
     pass=$((pass + 1))
@@ -146,7 +150,7 @@ fi
 #    must pass. Without this, arm 6 is satisfied by a gate that refuses every
 #    newly-bound file, which would block all future litmus work.
 cp "$good" "$g/openspec/litmus-tests/litmus-fixture-bad.yaml"
-sed -i "s|name: $GOOD_NAME|name: $BAD_NAME|" "$g/openspec/litmus-tests/litmus-fixture-bad.yaml"
+sed "s|name: $GOOD_NAME|name: $BAD_NAME|" "$g/openspec/litmus-tests/litmus-fixture-bad.yaml" > "$g/openspec/litmus-tests/litmus-fixture-bad.yaml.tmp" && mv "$g/openspec/litmus-tests/litmus-fixture-bad.yaml.tmp" "$g/openspec/litmus-tests/litmus-fixture-bad.yaml"
 out="$(cd "$g" && LITMUS_BINDINGS_ROOT="$g" TILLANDSIAS_LITMUS_BIND_BASE=base-ref bash scripts/check-litmus-bindings.sh 2>&1)"; rc=$?
 if [ "$rc" -eq 0 ]; then
     pass=$((pass + 1))

@@ -20,6 +20,7 @@ declared identity (856/864/874-idnt) exists to replace.
 ## Requirements
 
 ### Requirement: The guest never inherits the host's git identity
+<!-- req-id: f257a89a -->
 
 Guest git identity (user.name / user.email) is configured inside the
 container at entry, from Tillandsias-provided values — never mounted,
@@ -33,6 +34,7 @@ copied, or leaked from the host's global git config.
   not the operator's
 
 ### Requirement: Agentic commits carry attribution trailers
+<!-- req-id: 621c8801 -->
 
 A `prepare-commit-msg` hook (installed via `core.hooksPath` in the GUEST's
 global config, so the host's `.git/hooks/` is never touched) appends
@@ -48,6 +50,7 @@ sources are exempt; an existing `Generated-By:` trailer is never duplicated.
   trailer, not two
 
 ### Requirement: Hook installation cannot break a hostile environment
+<!-- req-id: f9f6e107 -->
 
 Every step of hook installation degrades gracefully (`|| true` /
 `|| return 0`): a read-only cache directory or missing git binary leaves the

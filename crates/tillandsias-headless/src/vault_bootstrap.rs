@@ -3043,43 +3043,95 @@ fn push_share_candidate(
 }
 
 /// Ordered, validated, deduplicated Shamir-share candidates for the
-/// generate-root self-heal: host-delivered credentials, host keychain,
-/// then the guest-local fallback file. The sources can legitimately
-/// disagree after a storage re-init — e.g. the host keychain pinned to a
-/// previous vault-data epoch while the guest fallback file tracks the
-/// current one (the 2026-07-28 Windows login wedge) — so the heal must be
-/// able to fall through to the next source when generate-root rejects one.
+/// generate-root self-heal: the guest's OWN podman secret first, then
+/// host-delivered credentials, host keychain, and the guest-local fallback
+/// file. The sources can legitimately disagree after a storage re-init — e.g.
+/// the host keychain pinned to a previous vault-data epoch while the guest
+/// fallback file tracks the current one (the 2026-07-28 Windows login wedge) —
+/// so the heal must be able to fall through to the next source when
+/// generate-root rejects one.
+///
+/// WHY THE PODMAN SECRET LEADS (order 803-49re, operator incident 2026-08-17).
+/// Every host-derived source can be stale against the live storage, and on that
+/// incident all three of them were: the operator's login failed for an hour
+/// while the self-heal retried three shares that could not authenticate. The
+/// share that WOULD have worked was sitting in this guest's own
+/// `tillandsias-vault-unseal` podman secret — the key the vault entrypoint had
+/// already unsealed this very storage with, in the same boot
+/// ("unseal key material loaded (32 bytes)", "vault unsealed (sealed=false)").
+/// The heal never consulted it, and told the operator to "recover the correct
+/// share or perform an attended storage-preserving re-init" for a vault that
+/// was healthy and unsealed the whole time.
+///
+/// It leads rather than trails because it is the only source with direct
+/// evidence for the CURRENT storage epoch: it is not a copy of a key that
+/// unsealed something once, it is the key this running vault unsealed with.
+/// Ordering is otherwise behaviour-preserving — every candidate is still tried
+/// until one authenticates, and two candidates that both authenticate against
+/// one storage epoch are necessarily the same key.
+/// The ORDER, and nothing else — pure so a test can assert the real ordering
+/// rather than a hand-written copy of it.
+///
+/// Order 803-49re. A test that rebuilds the candidate list itself pins only the
+/// author's intent: the production order could be changed underneath it and the
+/// test would stay green. Every caller of this ordering goes through here.
+#[cfg(feature = "vault")]
+fn assemble_share_candidates(
+    guest_podman_secret: Option<String>,
+    host_delivered: Option<String>,
+    host_keychain: Option<String>,
+    fallback_file: Option<String>,
+) -> Vec<(&'static str, String)> {
+    let mut candidates: Vec<(&'static str, String)> = Vec::new();
+    for (label, value) in [
+        ("guest podman secret", guest_podman_secret),
+        ("host-delivered credentials", host_delivered),
+        ("host keychain", host_keychain),
+        ("fallback file", fallback_file),
+    ] {
+        if let Some(v) = value {
+            push_share_candidate(&mut candidates, label, v.trim().to_string());
+        }
+    }
+    candidates
+}
+
 #[cfg(feature = "vault")]
 fn shamir_share_candidates() -> Vec<(&'static str, String)> {
-    let mut candidates: Vec<(&'static str, String)> = Vec::new();
+    // The guest's own unseal secret, base64-encoded to match the other sources.
+    // `read_unseal_secret_bytes` already refuses anything that is not exactly 32
+    // recovered key bytes, and `push_share_candidate` validates and dedupes, so
+    // a podman that is absent, errors, or short-reads simply contributes no
+    // candidate — it can never displace a working one.
+    let guest_podman_secret = read_unseal_secret_bytes().map(|bytes| {
+        use base64::Engine;
+        base64::engine::general_purpose::STANDARD.encode(bytes)
+    });
 
-    if is_running_in_vm()
-        && let Some(cell) = IN_VM_CREDENTIALS.get()
-        && let Ok(guard) = cell.lock()
-        && let Some(creds) = &*guard
-        && let Some(encoded) = &creds.unseal_share_b64
-    {
-        push_share_candidate(
-            &mut candidates,
-            "host-delivered credentials",
-            encoded.trim().to_string(),
-        );
-    }
+    let host_delivered = if is_running_in_vm() {
+        IN_VM_CREDENTIALS.get().and_then(|cell| {
+            cell.lock()
+                .ok()
+                .and_then(|g| g.as_ref()?.unseal_share_b64.clone())
+        })
+    } else {
+        None
+    };
 
-    if let Ok(entry) = Entry::new(KEYCHAIN_SERVICE, VAULT_SHAMIR_SHARE_V1)
-        && let Ok(encoded) = with_keyring_timeout(move || entry.get_password())
-    {
-        push_share_candidate(&mut candidates, "host keychain", encoded.trim().to_string());
-    }
+    let host_keychain = Entry::new(KEYCHAIN_SERVICE, VAULT_SHAMIR_SHARE_V1)
+        .ok()
+        .and_then(|entry| with_keyring_timeout(move || entry.get_password()).ok());
 
-    if let Ok(cache_dir) = crate::init_cache_dir()
-        && let Ok(encoded) =
-            fs::read_to_string(cache_dir.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}")))
-    {
-        push_share_candidate(&mut candidates, "fallback file", encoded.trim().to_string());
-    }
+    let fallback_file = crate::init_cache_dir().ok().and_then(|dir| {
+        fs::read_to_string(dir.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}"))).ok()
+    });
 
-    candidates
+    assemble_share_candidates(
+        guest_podman_secret,
+        host_delivered,
+        host_keychain,
+        fallback_file,
+    )
 }
 
 /// Persist a freshly minted (healed) root token to the same stores the
@@ -3163,9 +3215,9 @@ fn heal_stale_root_token(
         return Err(
             "OPERATOR ACTION REQUIRED: vault rejects the cached root token and no valid \
              Shamir share is available to self-heal (no valid 32-byte base64 Shamir share in \
-             VM credentials, host keychain, or fallback file). Vault storage was left untouched — \
-             it may hold real secrets. Recover the share, or perform an attended \
-             storage-preserving re-init. Do NOT wipe the vault-data volume."
+             the guest podman secret, VM credentials, host keychain, or fallback file). Vault \
+             storage was left untouched — it may hold real secrets. Recover the share, or \
+             perform an attended storage-preserving re-init. Do NOT wipe the vault-data volume."
                 .to_string(),
         );
     }
@@ -4167,6 +4219,79 @@ mod tests {
     use super::*;
 
     static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+    // ---- order 803-49re: the self-heal's Shamir share sources ----
+
+    /// The guest's own podman secret must LEAD the candidate list, and a stale
+    /// host copy must never displace it.
+    ///
+    /// THE INCIDENT THIS PINS (operator, 2026-08-17). GitHub login failed for an
+    /// hour. The self-heal retried three host-derived shares — delivered
+    /// credentials, host keychain, fallback file — and every one was stale
+    /// against the live storage ("cipher: message authentication failed"). The
+    /// share that would have worked was in this guest's own
+    /// `tillandsias-vault-unseal` podman secret: the key the vault entrypoint
+    /// had already unsealed that same storage with, in that same boot. The heal
+    /// never consulted it and told the operator to consider an attended re-init
+    /// of a vault that was healthy and unsealed throughout.
+    ///
+    /// Ordering is the property, not mere membership: every candidate is tried
+    /// until one authenticates, so a trailing podman secret would still have
+    /// healed — after three failures and their log noise. Leading, it is tried
+    /// first, because it is the only source with direct evidence for the
+    /// CURRENT storage epoch rather than a copy of a key that unsealed
+    /// something once.
+    #[test]
+    #[cfg(feature = "vault")]
+    fn the_guest_podman_secret_leads_the_shamir_candidates() {
+        use base64::Engine;
+        let b64 = |b: &[u8]| base64::engine::general_purpose::STANDARD.encode(b);
+
+        let live = [7u8; 32]; // what the running vault actually unsealed with
+        let stale = [9u8; 32]; // the host's copy, from a previous storage epoch
+
+        // Drives the REAL assembly function, so the order asserted below is the
+        // order production uses. A hand-built list would pin only intent.
+        let list =
+            assemble_share_candidates(Some(b64(&live)), Some(b64(&stale)), None, Some(b64(&stale)));
+
+        assert_eq!(
+            list.first().map(|(label, _)| *label),
+            Some("guest podman secret"),
+            "the only source with evidence for the current storage epoch must be tried first"
+        );
+        // The stale share is still PRESENT — dropping it would be a different
+        // and worse bug, since a host copy is right whenever the guest secret
+        // is absent. It simply no longer goes first.
+        assert_eq!(list.len(), 2, "identical stale copies dedupe: {list:?}");
+        assert_eq!(list[1].1, b64(&stale));
+
+        // A podman secret identical to the host copy must not produce two
+        // entries — the heal would otherwise burn a generate-root attempt
+        // proving the same key twice.
+        let same = assemble_share_candidates(Some(b64(&live)), None, Some(b64(&live)), None);
+        assert_eq!(same.len(), 1, "one key must yield one candidate: {same:?}");
+
+        // A podman that is absent, errors, or short-reads contributes NOTHING
+        // and cannot displace a working host share. This is why the read is
+        // allowed to fail silently at the call site.
+        let degraded = assemble_share_candidates(
+            Some(b64(&[1u8; 16])), // short read: not 32 key bytes
+            None,
+            Some(b64(&stale)),
+            None,
+        );
+        assert!(
+            assemble_share_candidates(Some(String::new()), None, None, None).is_empty(),
+            "an empty podman read must contribute no candidate"
+        );
+        assert_eq!(
+            degraded.len(),
+            1,
+            "a missing or short podman secret must not shadow a usable host share: {degraded:?}"
+        );
+        assert_eq!(degraded[0].0, "host keychain");
+    }
 
     // ---- order 828-k3mq: the credential drain's keep/destroy decision ----
 

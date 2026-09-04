@@ -9,6 +9,7 @@ active
 ## Requirements
 
 ### Requirement: Runtime metrics expose current system health
+<!-- req-id: fb3eaf00 -->
 
 Metrics components MUST expose process, container, and runtime health measurements in a form suitable for local dashboards and diagnostics.
 

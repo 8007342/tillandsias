@@ -149,7 +149,7 @@ fi
 #       3. The project's podman named volume — what makes the host builder and
 #          every forge share ONE store. INSPECT only: creating it is the
 #          producer's job, never a reader's.
-#       4. <checkout>/target/tillandsias-spec-index — THE CHECKOUT IS THE ONE
+#       4. <checkout>/.cache/spec-index — THE CHECKOUT IS THE ONE
 #          THING TWO USERLANDS SHARE (order 931-p26p, added 2026-08-29).
 #          Rungs 1-3 are unchanged and still win, so a host that reaches one of
 #          them behaves EXACTLY as before: Linux and macOS hit the podman volume
@@ -174,13 +174,57 @@ fi
 #          hosts and harnesses with no podman (macOS/Windows bare metal).
 #     Every podman step is fail-soft: a hiccup degrades to (4)/(5), never to an
 #     error. POSIX sh — lib-expert-capability.sh is not bash.
+#
+#     ── 1003-v3dc: NOT PERMITTED IS NOT ABSENT, AND RUNG 4 IS NOT target/ ────
+#
+#     Two corrections, both measured on lenovinha 2026-09-04 (Fedora Silverblue,
+#     rootless podman), where 23,154 embeddings were published into a directory
+#     the next Start-Of-Day `cargo clean` would have removed.
+#
+#     (a) RUNG 3 USED `[ ! -d "$_tsi_root" ]` AS ITS LIVENESS TEST. Under
+#     rootless podman the volume mountpoint lives under the user's container
+#     storage and stat fails with EACCES from OUTSIDE the user namespace — so
+#     that test failed for PERMISSION and was read as ABSENCE, silently demoting
+#     every host of this class. The discriminator does not need a container
+#     probe: a SUCCESSFUL `podman volume inspect` is itself the existence
+#     oracle. If podman names a mountpoint, the volume EXISTS; if we then cannot
+#     stat it, that is EACCES and the tier is unavailable-to-us, which is a
+#     different fact from ENOENT and is now reported as one. Readers inside the
+#     enclave never reach this rung — the launcher injects FORGE_SPEC_INDEX_ROOT
+#     at rung 2 — so no reader gains a podman dependency here.
+#
+#     (b) RUNG 4 WAS `target/`, WHICH IS WHERE CACHES GO TO DIE. Start-Of-Day
+#     maintenance runs `cargo clean`, which removes target/ WHOLESALE.
+#     scripts/metrics-log-path.sh already refused target/ for exactly this
+#     reason and moved the metrics log to `.cache/`; the spec index is far more
+#     expensive to rebuild than a metrics log and had the same exposure. Rung 4
+#     is now `<checkout>/.cache/spec-index`, which is gitignored host-local
+#     state, is not swept, and keeps the 931-p26p property that made the
+#     checkout the right carrier: both Windows userlands genuinely share it.
+#
+#     THE DEMOTION IS NO LONGER SILENT. The resolver prints a THIRD line — a
+#     reason token, empty when the preferred rung won. `--where` renders it, so
+#     a durable tier that was skipped says so instead of reporting
+#     serving-exists=yes with `volume=` and `root=` disagreeing and nothing
+#     naming the discrepancy.
 _tillandsias_spec_index_paths() {
+    _tsi_reason=""
     _tsi_root="${FORGE_SPEC_INDEX_ROOT:-}"
     if [ -z "$_tsi_root" ] && [ "${TILLANDSIAS_SPEC_INDEX_NO_PODMAN:-0}" != "1" ] \
        && command -v podman >/dev/null 2>&1; then
         _tsi_vol="${TILLANDSIAS_SPEC_INDEX_VOLUME:-tillandsias-spec-index-${TILLANDSIAS_PROJECT:-tillandsias}}"
         _tsi_root="$(podman volume inspect -f '{{.Mountpoint}}' "$_tsi_vol" 2>/dev/null)" || _tsi_root=""
-        if [ -z "$_tsi_root" ] || [ ! -d "$_tsi_root" ]; then _tsi_root=""; fi
+        # 1003-v3dc. A successful inspect is the EXISTENCE oracle; `[ -d ]` is
+        # only a REACHABILITY test. Keeping them apart is the whole fix: under
+        # rootless podman the second fails with EACCES on a volume the first
+        # just proved exists, and conflating them demoted the durable tier in
+        # silence.
+        if [ -n "$_tsi_root" ] && [ ! -d "$_tsi_root" ]; then
+            _tsi_reason="durable-tier-not-permitted:${_tsi_vol}"
+            _tsi_root=""
+        elif [ -z "$_tsi_root" ]; then
+            _tsi_root=""   # ENOENT: no such volume. Quiet, and correct.
+        fi
     fi
     if [ -z "$_tsi_root" ]; then
         # Rung 4 — repo-relative (931-p26p). See the precedence note above.
@@ -198,8 +242,8 @@ _tillandsias_spec_index_paths() {
         # Writability is tested, not assumed: a read-only checkout mount would
         # otherwise capture resolution and strand the reader on a rung nothing
         # can publish into.
-        if [ -n "$_tsi_co" ] && [ -d "$_tsi_co" ]            && { [ -w "$_tsi_co/target" ] || { [ ! -e "$_tsi_co/target" ] && [ -w "$_tsi_co" ]; }; }; then
-            _tsi_root="$_tsi_co/target/tillandsias-spec-index"
+        if [ -n "$_tsi_co" ] && [ -d "$_tsi_co" ]            && { [ -w "$_tsi_co/.cache" ] || { [ ! -e "$_tsi_co/.cache" ] && [ -w "$_tsi_co" ]; }; }; then
+            _tsi_root="$_tsi_co/.cache/spec-index"
         fi
     fi
     if [ -z "$_tsi_root" ]; then
@@ -213,7 +257,7 @@ _tillandsias_spec_index_paths() {
         _tsi_fp="$(cat "$_tsi_root/current" 2>/dev/null | tr -d '[:space:]')"
         if [ -n "$_tsi_fp" ]; then _tsi_dir="$_tsi_root/$_tsi_fp"; else _tsi_dir="$_tsi_root"; fi
     fi
-    printf '%s\n%s\n' "$_tsi_root" "$_tsi_dir"
+    printf '%s\n%s\n%s\n' "$_tsi_root" "$_tsi_dir" "$_tsi_reason"
 }
 # <<< END spec-index resolution (801-a2by)
 
@@ -230,11 +274,26 @@ if [ -z "${FORGE_SPEC_INDEX_ROOT:-}" ] \
 fi
 
 INDEX_ROOT="$(_tillandsias_spec_index_paths | sed -n 1p)"
+# 1003-v3dc: the third line is the DEMOTION REASON, empty when the preferred
+# rung won. Captured here so every caller can render it, not only --where.
+INDEX_DEMOTED="$(_tillandsias_spec_index_paths | sed -n 3p)"
 
 if [ "${1:-}" = "--where" ]; then
     printf 'spec-index:project=%s\n' "$TILLANDSIAS_PROJECT"
     printf 'spec-index:volume=%s\n' "$SPEC_INDEX_VOLUME"
     printf 'spec-index:root=%s\n' "$INDEX_ROOT"
+    # ORDER 1003-v3dc. A durable tier that was SKIPPED must say so here. Before
+    # this, `volume=` and `root=` could disagree — the volume named, the root
+    # under the checkout — while `serving-exists=yes` sat underneath and nothing
+    # in the report connected the two. A reader saw three true lines and no
+    # indication that the expensive, reboot-surviving tier had been passed over
+    # for a host-local fallback. That is the guard-nobody-honours shape: the
+    # information was all present and the CONCLUSION was absent.
+    if [ -n "$INDEX_DEMOTED" ]; then
+        printf 'spec-index:durable-tier=unavailable:%s\n' "$INDEX_DEMOTED"
+    else
+        printf 'spec-index:durable-tier=ok\n'
+    fi
     # ORDER 760-hzi4. `serving=` is the line every consumer parses and its shape
     # is unchanged. What is new is that this report no longer describes TWO
     # DIFFERENT DIRECTORIES as if they were one.
@@ -283,6 +342,30 @@ if [ "${1:-}" = "--where" ]; then
     exit 0
 fi
 
+# ORDER 967-xq5e. DERIVE, do not merely inherit. This line used to be
+#     EMBED_EP="${TILLANDSIAS_EMBED_ENDPOINT:-}"
+# and the refusal below fired whenever the caller had not exported it. Every
+# site that derived that variable lived in the FORGE lane, so on a bare-metal
+# host it arrived only if whatever ran `git commit` happened to have it — and a
+# git hook inherits its caller's environment. MEASURED: macuahuitl logged 32
+# consecutive `skip:spec-index:no-embed-endpoint` and zero non-skips ever, index
+# 128 commits stale, with a healthy endpoint on localhost the whole time; yoga
+# built fine because one line in a git-ignored .claude/settings.local.json
+# exported it. The host lane had never refreshed an index anywhere.
+#
+# The derivation is SHARED, never copied — images/default/lib-embed-endpoint.sh
+# is the one directory both the image and a host checkout can reach, and
+# lib-common.sh sources the same file. A second copy here is the drift this
+# repo keeps paying for (967-6ax6, one container name in two places).
+_sie_embed_lib="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/images/default/lib-embed-endpoint.sh"
+if [ -r "$_sie_embed_lib" ]; then
+    # shellcheck source=../images/default/lib-embed-endpoint.sh
+    . "$_sie_embed_lib"
+    resolve_embed_endpoint >/dev/null 2>&1 || true
+    _sie_verdict="${TILLANDSIAS_EMBED_ENDPOINT_VERDICT:-no-verdict}"
+else
+    _sie_verdict="skip:embed-endpoint:helper-absent:$_sie_embed_lib"
+fi
 EMBED_EP="${TILLANDSIAS_EMBED_ENDPOINT:-}"
 EMBED_MODEL="${TILLANDSIAS_EMBED_MODEL:-nomic-embed-text}"
 BATCH="${TILLANDSIAS_SPEC_INDEX_BATCH:-64}"
@@ -293,7 +376,19 @@ MAX_CHARS="${TILLANDSIAS_SPEC_INDEX_MAX_CHARS:-6000}"
 for _tool in jq curl; do
     command -v "$_tool" >/dev/null 2>&1 || { echo "skip:spec-index:no-$_tool"; exit 0; }
 done
-[ -n "$EMBED_EP" ] || { echo "skip:spec-index:no-embed-endpoint"; exit 0; }
+# The refusal NAMES WHAT IT TRIED (967-xq5e). The old verdict was
+# `skip:spec-index:no-embed-endpoint` and nothing else — it named a missing
+# variable and named nothing that would supply it, empty stderr, so 32 honest
+# refusals on macuahuitl read as configuration rather than breakage and nobody
+# had reason to open the log. A refusal that cannot be acted on is a refusal
+# nobody acts on.
+[ -n "$EMBED_EP" ] || {
+    echo "skip:spec-index:no-embed-endpoint"
+    echo "  derivation: ${_sie_verdict:-not-attempted}" >&2
+    echo "  remedy: start the dev inference lane (scripts/dev-inference-ensure.sh)," >&2
+    echo "          or export TILLANDSIAS_EMBED_ENDPOINT to an OpenAI-shape /v1 base." >&2
+    exit 0
+}
 
 # Resolve the binary through the SHARED probe, never a hardcoded path — a
 # hardcoded ./target/release path is the bug 704-zcgi centralised this to stop
@@ -332,8 +427,44 @@ _refuse_unwritable() {
     exit 1
 }
 
-work="$(mktemp -d "${TMPDIR:-/tmp}/spec-index-ensure.XXXXXX")" || {
-    echo "blocked:spec-index:no-tmpdir"; exit 1; }
+# ── ORDER 964-zedm: STAGE WHERE THE PAYLOAD FITS, NOT WHERE TMPDIR POINTS ────
+#
+# This was `mktemp -d "${TMPDIR:-/tmp}/..."`, and in a forge /tmp is a 256 MB
+# tmpfs while the index root sits on a 1.2 TB overlay. MEASURED on
+# lenovinha-tillandsias-forge 2026-09-02, a cold build of 22,645 chunks:
+#
+#     spec-index:delta reused=0 embed=22645 of 22645
+#     jq: error: writing output failed: No space left on device
+#     blocked:spec-index:payload-failed
+#     $ df -h /tmp /            ->  tmpfs 256M ... overlay 1.9T (1.2T avail)
+#
+# So the build died for want of space on a host with 1.2 TB free. The staged
+# payload is the same order of magnitude as the published index — this host
+# stages ~92 MB of vectors for a 22.7k-chunk corpus and the numbers grow
+# together — so the filesystem that can hold the RESULT is the one that can
+# hold the WORKING SET. Staging beside the index root makes that a property of
+# the code rather than of the ambient environment.
+#
+# WHY NOT native_scratch_dir(): it answers a different question. That helper
+# asks "is this worktree on a slow filesystem, and where should scratch live
+# for SPEED" — and by design it returns the caller's fallback on fast native
+# Linux, which is exactly the forge case here. Speed and capacity are different
+# properties and a helper that answers one must not be conscripted to answer
+# the other; on this host it would hand back /tmp and reproduce the bug.
+#
+# TILLANDSIAS_SPEC_INDEX_TMPDIR overrides, for an operator who knows better —
+# honoured on existence, never probed for size, the same rule the endpoint
+# derivation applies to an explicit endpoint (967-xq5e).
+_stage_parent="${TILLANDSIAS_SPEC_INDEX_TMPDIR:-$INDEX_ROOT}"
+mkdir -p "$_stage_parent" 2>/dev/null || true
+work="$(mktemp -d "$_stage_parent/.spec-index-ensure.XXXXXX" 2>/dev/null)" || {
+    # Fall back to the ambient TMPDIR rather than refusing: a host whose index
+    # root is momentarily unwritable is worse off with no build at all than
+    # with the pre-964-zedm behaviour.
+    work="$(mktemp -d "${TMPDIR:-/tmp}/spec-index-ensure.XXXXXX")" || {
+        echo "blocked:spec-index:no-tmpdir"; exit 1; }
+    echo "spec-index: staging in ${TMPDIR:-/tmp} — could not create a staging dir under $_stage_parent (964-zedm)" >&2
+}
 LOCK_DIR=""
 _cleanup() {
     rm -rf "$work"
@@ -587,7 +718,24 @@ for part in "$work"/b/part-*; do
     # default, which reproduces every historical measurement exactly.
     jq -sc --arg m "$EMBED_MODEL" --arg p "${TILLANDSIAS_EMBED_DOC_PREFIX:-}" \
         '{model:$m, input:[.[] | $p + .]}' "$part" > "$work/payload.json" || {
-        echo "blocked:spec-index:payload-failed"; exit 1; }
+        # ORDER 964-zedm: NAME THE DIRECTORY THAT RAN OUT. This printed
+        # `blocked:spec-index:payload-failed` and nothing else, and jq's own
+        # "No space left on device" went to stderr with no path attached — so
+        # the reader learned that a payload failed, not that a 256 MB tmpfs
+        # they never chose was full while the index root had 1.2 TB free. The
+        # verdict named the step; the cause was a filesystem two layers away.
+        # Same lesson as 965-sxec's refusal: a diagnosis that cannot be acted
+        # on is one nobody acts on.
+        echo "blocked:spec-index:payload-failed"
+        {
+            echo "  staging dir: $work"
+            echo "  free space:  $(df -Ph "$work" 2>/dev/null | awk 'NR==2{print $4" of "$2" ("$5" used) on "$6}')"
+            echo "  index root:  $INDEX_ROOT"
+            echo "  free space:  $(df -Ph "$INDEX_ROOT" 2>/dev/null | awk 'NR==2{print $4" of "$2" ("$5" used) on "$6}')"
+            echo "  If the staging dir is small and the index root is not, set"
+            echo "  TILLANDSIAS_SPEC_INDEX_TMPDIR to a directory with room (964-zedm)."
+        } >&2
+        exit 1; }
     # `-f` IS THE BUG THIS BLOCK KEEPS RE-LEARNING, so it is gone. curl's --fail
     # makes an HTTP 400 an exit-22 failure AND DISCARDS THE RESPONSE BODY — the
     # body being the only place the server says what was actually wrong. This

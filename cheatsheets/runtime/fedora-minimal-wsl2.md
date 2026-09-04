@@ -24,7 +24,7 @@ pull_recipe: see-section-pull-on-demand
 
 # Fedora-minimal WSL2 distro — recipe for hosting podman
 
-@trace spec:agent-cheatsheets, spec:cross-platform, spec:windows-wsl-runtime, spec:chromium-browser-isolation, spec:default-image, spec:podman-orchestration
+@trace spec:agent-cheatsheets, spec:cross-platform, spec:windows-wsl-runtime, spec:browser-isolation-core, spec:default-image, spec:podman-orchestration
 
 **Version baseline**: Fedora 43 (current GA at time of writing); podman 5.x; WSL2 on Windows 10 19044+ / Windows 11.
 **Use when**: building the single `tillandsias` WSL2 distro that hosts podman and runs every Tillandsias container (forge, proxy, git, router, inference, browser-chrome) inside it. The Windows arm of `spec:windows-wsl-runtime`.

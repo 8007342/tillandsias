@@ -14,7 +14,7 @@ committed_for_project: false
 ---
 # OpenSpec Workflow
 
-@trace spec:agent-source-of-truth
+@trace spec:knowledge-source-of-truth
 
 **Version baseline**: OpenSpec v0.2+ (baked at /opt/agents/openspec)  
 **Use when**: Creating/applying/archiving OpenSpec changes, understanding the artifact lifecycle

@@ -9,6 +9,7 @@ active
 ## Requirements
 
 ### Requirement: Runtime traffic uses the Squid proxy policy
+<!-- req-id: 38b053b4 -->
 
 Forge and runtime containers MUST route configured HTTP/HTTPS traffic through the Squid proxy so allowlists, localhost peer routing, and cache policy are enforced consistently.
 

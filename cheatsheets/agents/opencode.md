@@ -15,7 +15,7 @@ committed_for_project: false
 ---
 # OpenCode
 
-@trace spec:agent-source-of-truth
+@trace spec:knowledge-source-of-truth
 
 **Version baseline**: OpenCode v0.2+ (baked at /usr/local/bin/opencode, web mode via Bun 1.0+)
 **Use when**: Launching web-based visual IDE, running OpenCode CLI, debugging web sessions, parallel coding

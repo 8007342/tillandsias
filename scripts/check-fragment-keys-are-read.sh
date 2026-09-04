@@ -47,7 +47,48 @@ FRAG_DIR="${TILLANDSIAS_FRAGMENT_DIR:-plan/index.d}"
 # the Rust, because a parser that guessed wrong would fail OPEN — and failing
 # open is the whole defect. If the fold learns a new channel, this list is
 # updated in the same commit; the litmus asserts the list matches the source.
-READ_KEYS=" packets events fields status "
+#
+# `capabilities` was added on 2026-09-02 after this list had already drifted from
+# it: the fold has read that channel since 843-624y (LWW by (ts, host), and
+# fold_capability_rows above), and the list had not been updated in the same
+# commit — the exact staleness the paragraph above warns about. The effect was a
+# deadlock, not a lost fragment: 850-bif2 makes publishing a capability row a
+# daily obligation and this guard refused every row the generator produced.
+# The litmus arm now iterates the same five names, so the next channel cannot
+# drift silently either.
+READ_KEYS=" packets events fields status capabilities "
+
+# CHANNELS THE FOLD DELIBERATELY DOES NOT READ, AND MUST NOT BE REFUSED FOR IT.
+#
+# Order 793-qr4t, measured on lenovinha 2026-09-02: this guard failed
+# `./build.sh --check` on a capability row that the Start-Of-Day gate had just
+# told the host to publish, using the generator the skill names
+# (`host-capability-probe.sh --fragment`). Every host that publishes a row —
+# which 850-bif2 requires before it drains work — would hit the same refusal.
+#
+# THE GUARD'S PREMISE IS TRUE OF `steps:` AND THIS LIST IS WHERE AN EXCEPTION GOES.
+#
+# `steps:` was a key nobody read: the fold discarded those fragments and NOTHING
+# ELSE looked at them, so the contents were genuinely lost. A channel with a
+# non-fold CONSUMER is different, and belongs here rather than in READ_KEYS —
+# adding to it is a claim someone can check: name the consumer.
+#
+# `capabilities` WAS listed here (793-qr4t, lenovinha) and has been removed by
+# the coordinator, by the rule this comment itself prescribed: "when 846-idhn
+# lands a base representation for capability rows, `capabilities` moves from
+# here into READ_KEYS". 846-idhn is completed and archived; compaction now
+# serialises `capabilities:` into the base (fragments.rs, ORDER 846-idhn) and
+# plan/index.yaml carries the key. So the fold both READS the channel
+# (fold_capabilities) and WRITES it, which is exactly what READ_KEYS asserts.
+#
+# WHY THIS NEEDED A THIRD PARTY. Two hosts fixed the same deadlock the same
+# hour, independently and both defensibly: macbook widened READ_KEYS, lenovinha
+# added this allowlist because widening looked like it would make the litmus
+# assertion false to buy silence. It would have, BEFORE 846-idhn. Both landed,
+# and the merged result listed one key in two lists that mean opposite things —
+# with READ_KEYS matched first, so the allowlist entry was also dead. Neither
+# host could see it: each was looking at its own branch, and both gates passed.
+NON_FOLD_CHANNELS=" "
 
 violations=0
 checked=0
@@ -58,6 +99,9 @@ for f in "$FRAG_DIR"/*.yaml; do
     while IFS= read -r key; do
         [ -n "$key" ] || continue
         case "$READ_KEYS" in
+            *" $key "*) continue ;;
+        esac
+        case "$NON_FOLD_CHANNELS" in
             *" $key "*) continue ;;
         esac
         echo "  $f" >&2

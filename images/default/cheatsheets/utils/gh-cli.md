@@ -15,7 +15,7 @@ committed_for_project: false
 ---
 # GitHub CLI (gh)
 
-@trace spec:agent-source-of-truth
+@trace spec:knowledge-source-of-truth
 
 **Version baseline**: gh 2.48 (Fedora 43)  
 **Use when**: Creating/reviewing pull requests, managing issues, checking CI status, or authenticating with GitHub

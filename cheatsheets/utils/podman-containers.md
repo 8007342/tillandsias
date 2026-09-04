@@ -15,7 +15,7 @@ committed_for_project: false
 ---
 # Podman
 
-@trace spec:agent-source-of-truth
+@trace spec:knowledge-source-of-truth
 
 **Version baseline**: podman 5.0.0 (Fedora 43)  
 **Use when**: Managing containers, images, and enclaves; building images with Containerfile

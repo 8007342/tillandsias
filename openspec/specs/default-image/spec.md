@@ -9,6 +9,7 @@ active
 TBD - created by archiving change attach-here-mvp. Update Purpose after archive.
 ## Requirements
 ### Requirement: Fedora Minimal base image with dev tools
+<!-- req-id: b5556cae -->
 The default container image SHALL be based on Fedora Minimal and MUST include OpenCode, OpenSpec CLI, and essential development tools.
 
 The forge image MUST NOT carry a Nix store. The forge is EPHEMERAL by design — it must be cheap to launch and cheap to destroy — and a multi-hundred-megabyte store baked into it taxes exactly the operation the forge exists to make cheap, on every host in the fleet. Nix belongs to the LONG-LIVED tier alongside the inference container, git mirror, router and proxy. A forge that needs a Nix artifact FETCHES it from the enclave cache service (order 801-kqme: harmonia 3.2.0 serving a read-only mount of the host store, TLS from the stack CA plus an ed25519 content-signing key). Decided by The Tlatoāni, 2026-08-19, order 801-x1nx.
@@ -41,6 +42,7 @@ The forge image MUST NOT carry a Nix store. The forge is EPHEMERAL by design —
 - **THEN** `pylsp`, `yamllint`, `markdownlint`, `actionlint`, and `vale` SHALL be available in PATH and executable
 
 ### Requirement: Non-root user with UID 1000
+<!-- req-id: 9d208db4 -->
 The container SHALL run as user `forge` (UID 1000) to match host user UID via `--userns=keep-id`.
 
 #### Scenario: Volume permissions
@@ -48,6 +50,7 @@ The container SHALL run as user `forge` (UID 1000) to match host user UID via `-
 - **THEN** files created inside the container SHALL be owned by the host user (UID 1000)
 
 ### Requirement: Entrypoint launches OpenCode
+<!-- req-id: e73bfd2e -->
 The container entrypoint SHALL bootstrap the environment and launch OpenCode as the foreground process.
 
 #### Scenario: First run bootstrap
@@ -59,6 +62,7 @@ The container entrypoint SHALL bootstrap the environment and launch OpenCode as 
 - **THEN** bootstrap MAY be skipped and OpenCode SHALL launch immediately
 
 ### Requirement: Prompted CLI entrypoints emit structured results only on request
+<!-- req-id: 1c48081a -->
 
 The OpenCode CLI and Codex forge entrypoints MUST keep their ordinary
 human-formatted behavior unless the launcher supplies
@@ -81,6 +85,7 @@ result request.
 - **AND** an OpenCode Web serve launch MUST omit the format request
 
 ### Requirement: Declarative image definition via embedded Containerfiles
+<!-- req-id: a2d894d4 -->
 The default forge image SHALL be built from the embedded Containerfiles and supporting image sources using direct `podman build` calls. Containerfiles are the primary build path.
 
 #### Scenario: Build forge image
@@ -92,6 +97,7 @@ The default forge image SHALL be built from the embedded Containerfiles and supp
 - **THEN** the image SHALL be built via direct `podman build` using `images/web/Containerfile`
 
 ### Requirement: Image identity is content-hash based with human aliases
+<!-- req-id: cbc6e1bb -->
 
 The default forge image SHALL use a content-hash canonical tag derived from the image source set.
 
@@ -104,6 +110,7 @@ The default forge image SHALL use a content-hash canonical tag derived from the 
 - **AND** the version and latest aliases SHALL be refreshed to point at the same image
 
 ### Requirement: Forge image ships an OpenCode Web entrypoint
+<!-- req-id: c0c65217 -->
 
 The default forge image SHALL include `/usr/local/bin/entrypoint-forge-opencode-web.sh`, installed with executable permissions, alongside the existing OpenCode and Claude entrypoints.
 
@@ -113,6 +120,7 @@ The default forge image SHALL include `/usr/local/bin/entrypoint-forge-opencode-
 - **AND** the file SHALL be owned consistently with the other entrypoints
 
 ### Requirement: OpenCode Web entrypoint runs opencode serve
+<!-- req-id: 6addc166 -->
 
 The web entrypoint SHALL terminate by `exec`-ing `opencode serve --hostname 0.0.0.0 --port 4096`, binding inside the container only, after the standard setup (CA trust, git clone, OpenSpec init, OpenCode install).
 
@@ -122,6 +130,7 @@ The web entrypoint SHALL terminate by `exec`-ing `opencode serve --hostname 0.0.
 - **AND** no terminal UI MUST be launched
 
 ### Requirement: Default opencode model is a tool-capable Zen provider
+<!-- req-id: baa98214 -->
 
 The bundled `images/default/config-overlay/opencode/config.json` SHALL
 set `model` to a tool-capable Zen model (default:
@@ -166,6 +175,7 @@ users MAY select any enumerated model on demand.
   default `small_model`, not explicit `--model` overrides
 
 ### Requirement: Cooperative split documented in agent instructions
+<!-- req-id: f0cb7737 -->
 
 The bundled instructions surfaced to opencode SHALL include guidance
 that ollama models are for analysis subtasks (no tool calling required)
@@ -183,6 +193,7 @@ together.
 - **THEN** the instructions SHALL keep the work on the Zen tool-caller
 
 ### Requirement: Coding-agent harnesses refresh at launch with persistent fallback
+<!-- req-id: 14db3605 -->
 
 Agent harnesses SHALL be refreshed at container launch into the persistent
 project tool cache. OpenCode and Claude Code SHALL use their official curl
@@ -283,6 +294,7 @@ those contracts SHALL be rejected and replaced by that last-good binary.
 - **AND** no `[tools-overlay]` log lines SHALL appear at attach time
 
 ### Requirement: Forge worker identities are collision-resistant across launch and teardown
+<!-- req-id: d0030534 -->
 
 Every nonempty `TILLANDSIAS_FORGE_INSTANCE` value SHALL produce a
 collision-resistant Podman-safe component consisting of a readable capped
@@ -330,6 +342,7 @@ pair.
 - **AND** SHALL NOT target a nonexistent unscoped legacy forge.
 
 ### Requirement: Codex state persistence excludes provider authentication and is worker-namespaced
+<!-- req-id: 6a111a33 -->
 
 The broad Codex state root (`CODEX_HOME`) SHALL remain ephemeral and, when a
 forge instance is present, per-worker. Tillandsias SHALL persist only explicitly
@@ -402,6 +415,7 @@ Codex changes its state layout.
   not refresh every agent harness.
 
 ### Requirement: OpenCode consumes Vault authentication without credential files
+<!-- req-id: 625798d4 -->
 
 When the existing Gemini API-key producer at `secret/gemini/api-key` is
 configured, OpenCode and OpenCode Web SHALL derive exactly one
@@ -441,6 +455,7 @@ ambient `OPENCODE_AUTH_CONTENT`.
   providers.
 
 ### Requirement: Agent instructions document subdomain routing convention
+<!-- req-id: fad9fcf2 -->
 
 The forge image SHALL ship an opencode instruction file at
 `/home/forge/.config-overlay/opencode/instructions/web-services.md`
@@ -476,6 +491,7 @@ for each service.
   the agent)
 
 ### Requirement: Forge ships headless Chromium and headless Firefox with WebDriver bridges
+<!-- req-id: 056cb3c5 -->
 
 The forge image SHALL install `chromium-headless` (Fedora's headless-only Chromium build), `firefox` (used in `--headless` mode), `chromedriver` (the W3C WebDriver server for Chromium), and `geckodriver` (the Mozilla WebDriver server for Firefox; pinned upstream binary because Fedora doesn't package it). All four binaries SHALL be on the default `$PATH` for the forge user (UID 1000).
 
@@ -504,6 +520,7 @@ The full-Chrome / full-Firefox GUI variants are intentionally NOT installed — 
 - **AND** the version SHALL be bumped by deliberate Containerfile edits, NOT by `:latest`-style floating refs
 
 ### Requirement: Forge image bakes the cheatsheets directory at /opt/cheatsheets/
+<!-- req-id: 6810c089 -->
 
 The forge image (`images/default/Containerfile`) SHALL `COPY cheatsheets/ /opt/cheatsheets/` near the end of the build (after the `/opt/agents/` layer, before the locale-files COPY) and SHALL set `ENV TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets` so agent runtimes can discover the path without hardcoding it. Ownership SHALL be `root:root` and permissions SHALL be world-readable, so the forge user (UID 1000) MAY read but MUST NOT modify any cheatsheet.
 
@@ -521,6 +538,7 @@ The forge image (`images/default/Containerfile`) SHALL `COPY cheatsheets/ /opt/c
 - **THEN** the call MUST fail with EACCES — `/opt/cheatsheets/` is image-state, not user-state
 
 ### Requirement: Forge entrypoint surfaces TILLANDSIAS_CHEATSHEETS to agents
+<!-- req-id: 45829bc4 -->
 
 Every forge entrypoint script (`entrypoint-forge-claude.sh`, `entrypoint-forge-opencode.sh`, `entrypoint-forge-opencode-web.sh`, `entrypoint-terminal.sh`) SHALL ensure `TILLANDSIAS_CHEATSHEETS` is in the agent's environment. The image-level `ENV` already covers this; entrypoints MUST NOT unset or shadow it.
 
@@ -529,6 +547,7 @@ Every forge entrypoint script (`entrypoint-forge-claude.sh`, `entrypoint-forge-o
 - **THEN** the launched agent's process environment SHALL contain `TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets`
 
 ### Requirement: forge-welcome.sh prints the cheatsheet location once per session
+<!-- req-id: 8c13fae2 -->
 
 `forge-welcome.sh` SHALL print a single line of the form `📚 Cheatsheets: /opt/cheatsheets/INDEX.md (cat or rg this file first)` near the top of its output, so agents and humans alike see the discovery path on first attach.
 
@@ -537,6 +556,7 @@ Every forge entrypoint script (`entrypoint-forge-claude.sh`, `entrypoint-forge-o
 - **THEN** its stdout SHALL contain the single-line cheatsheet hint
 
 ### Requirement: Forge image ships cheatsheets at /opt/cheatsheets-image (image-baked canonical)
+<!-- req-id: d0a7ccfe -->
 
 The forge image (`images/default/Containerfile`) SHALL bake cheatsheets at
 `/opt/cheatsheets-image/` (the immutable lower-layer copy) rather than at
@@ -571,6 +591,7 @@ The forge image (`images/default/Containerfile`) SHALL bake cheatsheets at
   from multiple entrypoints via `lib-common.sh`)
 
 ### Requirement: OpenCode config includes 4 new instruction files
+<!-- req-id: 0b4136d5 -->
 The `images/default/config-overlay/opencode/config.json` instructions list SHALL expand from 3 to 5 files to include methodology index and 4 action-first sub-files.
 
 #### Scenario: config.json lists all 5 instruction files in order
@@ -589,6 +610,7 @@ The `images/default/config-overlay/opencode/config.json` instructions list SHALL
 - **THEN** methodology.md SHALL direct the agent to the 4 sub-files for specific workflows
 
 ### Requirement: config-overlay installs 4 new instruction files
+<!-- req-id: d5b83761 -->
 The `images/default/config-overlay/opencode/instructions/` directory SHALL contain 4 new markdown files, each under 200 lines and action-first in structure.
 
 #### Scenario: forge-discovery.md exists
@@ -612,6 +634,7 @@ The `images/default/config-overlay/opencode/instructions/` directory SHALL conta
 - **THEN** the file SHALL contain step-by-step workflow with proposal, design, specs, tasks, archive
 
 ### Requirement: methodology.md becomes an index
+<!-- req-id: 1dc7c8e0 -->
 The `images/default/config-overlay/opencode/instructions/methodology.md` file SHALL be rewritten as a ~15-line index that points agents to the 4 sub-files, replacing the current 36-line generic principles document.
 
 #### Scenario: methodology.md is concise and actionable
@@ -624,6 +647,7 @@ The `images/default/config-overlay/opencode/instructions/methodology.md` file SH
 - **THEN** methodology.md SHALL include a short "Core Principles" section linking to the deeper guidance in sub-files
 
 ### Requirement: Forge image ships the host-browser MCP stub
+<!-- req-id: ffe52eac -->
 
 The forge image SHALL ship a stdio↔control-socket bridge stub at
 `/home/forge/.config-overlay/mcp/host-browser.sh`. The stub SHALL be
@@ -703,6 +727,7 @@ equivalent key, so both agent runtimes see the eight `browser.*` tools.
 
 
 ### Requirement: Agent permission defaults — pre-grant container-local filesystem; enforce at the boundary
+<!-- req-id: a87ac088 -->
 
 Inside a forge container, agent-level permission prompts for the container's own
 filesystem are security theater. The forge is ephemeral, single-project, and
@@ -766,6 +791,7 @@ theater without weakening security.
   above, not assumptions about agent behavior
 
 ### Requirement: Forge validation profile is non-destructive and machine-readable
+<!-- req-id: 8b784ea7 -->
 
 The repository SHALL provide `scripts/forge-validate.sh` as the maximal safe
 validation profile for agents running inside a forge. It SHALL check the push

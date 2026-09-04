@@ -8,6 +8,7 @@ status: active
 TBD - created by archiving change tray-responsiveness-and-startup-gating. Update Purpose after archive.
 ## Requirements
 ### Requirement: Credential health probe distinguishes "down" from "unauthenticated"
+<!-- req-id: 98e5e9d5 -->
 
 The tray SHALL run a GitHub credential health probe on startup and cache its classified result. The probe MUST classify every failure into exactly one of these states:
 
@@ -46,6 +47,7 @@ The classification SHALL drive downstream UI gating:
 - **AND** GitHub login is offered as the only actionable menu item (plus Exit/Language)
 
 ### Requirement: Probe runs off the event loop with a bounded timeout
+<!-- req-id: c33e363b -->
 
 The probe MUST execute on a spawned task with a 10-second budget. Timeouts reclassify as `GithubUnreachable`, not `CredentialInvalid`.
 
@@ -57,6 +59,7 @@ The probe MUST execute on a spawned task with a 10-second budget. Timeouts recla
 - **AND** Quit/Language responded normally during the probe
 
 ### Requirement: Result is cached per process lifetime but invalidated on explicit sign-in / sign-out
+<!-- req-id: 09fcfb2f -->
 
 The probe result SHALL be cached for the tray process's lifetime and only re-run on:
 
@@ -73,6 +76,96 @@ Background re-probing every N seconds is forbidden (`spec:tray-app` responsivene
 - **AND** the new classification replaces the cached one
 - **AND** UI gating advances to the new state
 
+
+### Requirement: A credential that goes bad IN PLACE is observed without a presence transition
+<!-- req-id: b39297a1 -->
+
+
+<!-- @trace order:995-srbf, spec:github-credential-health -->
+
+Every trigger in the requirements above is a TRANSITION: the tray starting, a
+sign-in, a sign-out, a token appearing or disappearing from the store. A token
+that expires or is revoked while sitting in place crosses none of them. This
+requirement covers that case, which produced a measured 22-hour window in which
+a present-and-refused token was rendered as `Authenticated`.
+
+The guest-side login poll SHALL obtain a VALIDATING observation of the
+credential on a bounded cadence, independent of any change in token PRESENCE. A
+presence check MUST NOT be treated as a validity check: presence answers "is
+there a token", and the state table above is defined entirely in terms of what
+the API said.
+
+The validating observation MUST distinguish a credential the API REFUSED from a
+probe that obtained NO ANSWER, and only the first may demote. A probe that could
+not run says nothing about the credential; demoting on it logs the operator out
+over a transient container or network fault, which is a more visible failure
+than the stale state this requirement exists to prevent.
+
+A probe that repeatedly obtains no answer MUST NOT be silent. An indefinitely
+broken probe is otherwise indistinguishable from a healthy one — the exact
+shape of the defect this requirement addresses.
+
+#### Scenario: A token revoked mid-session demotes without any presence change
+- **WHEN** the tray has been running with a valid token and the token is revoked at GitHub
+- **AND** the token remains present in Vault, so presence never changes
+- **THEN** the next validating observation classifies it `CredentialInvalid`
+- **AND** the tray demotes to the GitHub login leaf
+- **AND** the demotion required no restart, no sign-out, and no token removal
+
+#### Scenario: A probe that cannot run does not log the operator out
+- **WHEN** the validating probe fails because the container runtime, image, proxy or network is unavailable
+- **THEN** the classification is `GithubUnreachable`
+- **AND** the login state is left exactly as it was
+- **AND** the failure is logged with its reason and a consecutive-failure count
+
+#### Scenario: Revalidation stays off the hot path
+- **WHEN** the login poll is running with a subscriber attached to a Ready VM
+- **THEN** the validating probe runs at a multiple of the heavy tick, not on the fast tick
+- **AND** an idle headless with no subscriber runs no validating probe at all
+
+### Requirement: The implemented vocabulary is named, and the tray-loop polling ban is scoped
+<!-- req-id: a15921a9 -->
+
+
+
+<!-- @trace order:995-srbf, spec:github-credential-health -->
+
+SUPERSEDES, without removing, the clause in "Result is cached per process
+lifetime" that reads "Background re-probing every N seconds is forbidden". That
+clause cites the `spec:tray-app` responsiveness invariant, whose subject is the
+TRAY EVENT LOOP. It is preserved with that scope: the tray event loop still
+performs no credential polling. The guest-side headless is not the tray loop and
+already polls there; the validating observation rides that existing cadence, off
+the event loop, and the responsiveness invariant is untouched.
+
+Stating the ban unscoped is what made the honest fix look prohibited. The
+requirement it protects is responsiveness, not staleness — and taken literally
+it forbade the only mechanism that can observe a mid-session expiry at all.
+
+STATE VOCABULARY, RECONCILED. The four names in the table above appeared nowhere
+in `crates/` when this was written: an active spec whose classifier vocabulary
+had no implementation. The implemented type is
+`remote_projects::CredentialObservation`, and this is its mapping — the spec
+names what exists, rather than naming four states and leaving a reader to assume
+they are implemented:
+
+| Spec state | Implemented as |
+|---|---|
+| `Authenticated` | `CredentialObservation::Valid(login)` — the API answered with an account handle |
+| `CredentialMissing` | `CredentialObservation::Invalid("no-token-in-vault")` |
+| `CredentialInvalid` | `CredentialObservation::Invalid("api-rejected-credential")` — HTTP 401/403 |
+| `GithubUnreachable` | `CredentialObservation::Unreachable(reason)` — every no-answer class, including a probe that never ran |
+
+`CredentialMissing` and `CredentialInvalid` collapse to one variant carrying a
+reason because the state table gates them IDENTICALLY (project lists disabled,
+login as the primary call-to-action). The distinction is preserved in the reason
+string, which is what reaches the log, rather than in a variant nothing branches
+on.
+
+#### Scenario: The spec's vocabulary is checkable against the code
+- **WHEN** a reader looks for the classifier named in this spec
+- **THEN** `CredentialObservation` exists in `crates/tillandsias-headless/src/remote_projects.rs`
+- **AND** each of its variants is reachable from the verdict the containerized probe emits
 
 ## Litmus Tests
 

@@ -12,6 +12,7 @@ pipeline MUST keep cheap pre-build validation separate from the expensive
 post-build smoke so measurable debt is visible instead of folded into one blob.
 ## Requirements
 ### Requirement: Transparent build-substrate re-exec
+<!-- req-id: 2bf34bb3 -->
 The build script SHALL detect the host and transparently re-exec into the
 platform's dedicated build substrate when the host base OS is not itself the
 build environment: the `tillandsias-builder` toolbox on immutable Silverblue
@@ -47,6 +48,7 @@ normal build path MUST NOT require a Nix shell.
 - **AND** no container bootstrap overhead SHALL be introduced
 
 ### Requirement: Debug build by default
+<!-- req-id: c42b5827 -->
 Running `./build.sh` with no flags SHALL perform a debug workspace build directly on the host.
 
 #### Scenario: Default invocation
@@ -54,6 +56,7 @@ Running `./build.sh` with no flags SHALL perform a debug workspace build directl
 - **THEN** `cargo build --workspace` SHALL run directly on the host
 
 ### Requirement: Release build
+<!-- req-id: 103640a9 -->
 The `--release` flag SHALL produce a Tauri release bundle.
 
 #### Scenario: Release build
@@ -61,6 +64,7 @@ The `--release` flag SHALL produce a Tauri release bundle.
 - **THEN** the release command SHALL run directly on the host
 
 ### Requirement: Test execution
+<!-- req-id: da441904 -->
 The `--test` flag SHALL run the full test suite.
 
 #### Scenario: Run tests
@@ -68,6 +72,7 @@ The `--test` flag SHALL run the full test suite.
 - **THEN** `cargo test --workspace` SHALL run directly on the host and SHALL report results
 
 ### Requirement: Clean build
+<!-- req-id: 210a9170 -->
 The `--clean` flag SHALL remove all build artifacts before building.
 
 #### Scenario: Clean then build
@@ -79,6 +84,7 @@ The `--clean` flag SHALL remove all build artifacts before building.
 - **THEN** `cargo clean` SHALL run first, then a release build SHALL proceed
 
 ### Requirement: Build churn directories opt out of copy-on-write on btrfs
+<!-- req-id: bfc2d453 -->
 On a btrfs host, the build artifact directory (`target/`) and the rootless
 container layer store (`~/.local/share/containers/storage/overlay`) SHALL
 carry the `nodatacow` attribute (`chattr +C`). These trees are rebuildable
@@ -107,6 +113,7 @@ naturally. Do not wipe either tree just to migrate it.
 - **THEN** the attribute is not applicable and the check SHALL pass as a named skip, not a failure
 
 ### Requirement: Install to local path
+<!-- req-id: ed8883a6 -->
 The `--install` flag SHALL build a release binary and copy it to `~/.local/bin/` with only non-executable supporting files.
 
 #### Scenario: Install binary
@@ -116,6 +123,7 @@ The `--install` flag SHALL build a release binary and copy it to `~/.local/bin/`
 - **AND** no shell scripts, flake files, or image sources MUST be copied to `~/.local/share/tillandsias/`
 
 ### Requirement: CI full runs in explicit phases
+<!-- req-id: c90e3cc9 -->
 The `--ci-full` path SHALL run in named phases so pre-build contract checks, the
 post-build smoke, and the runtime residual litmus suite remain separately
 measurable.
@@ -136,6 +144,7 @@ measurable.
 - **AND** its failures SHALL remain visible and not be conflated with the pre-build or smoke phases
 
 ### Requirement: Post-build status check smoke
+<!-- req-id: d5442e49 -->
 The installed binary SHALL support a `--status-check` smoke path that launches
 the enclave stack, runs an embedded in-container health probe, and prints
 verifiable service-online evidence before cleaning up.
@@ -148,6 +157,7 @@ verifiable service-online evidence before cleaning up.
 - **AND** the command SHALL exit cleanly after cleanup
 
 ### Requirement: Remove installed binary
+<!-- req-id: c63aab80 -->
 The `--remove` flag SHALL remove the installed binary from `~/.local/bin/`.
 
 #### Scenario: Remove binary
@@ -155,6 +165,7 @@ The `--remove` flag SHALL remove the installed binary from `~/.local/bin/`.
 - **THEN** `~/.local/bin/tillandsias` SHALL be deleted if it exists
 
 ### Requirement: Wipe caches and artifacts
+<!-- req-id: 7bf6bb37 -->
 The `--wipe` flag SHALL remove all caches and build artifacts.
 
 #### Scenario: Wipe everything
@@ -163,6 +174,7 @@ The `--wipe` flag SHALL remove all caches and build artifacts.
 
 
 ### Requirement: Installer triggers init
+<!-- req-id: 62f10e6f -->
 The installer script SHALL run `tillandsias --init` as a background task after installation.
 
 #### Scenario: Fresh install
@@ -171,6 +183,7 @@ The installer script SHALL run `tillandsias --init` as a background task after i
 - **AND** the installer SHALL print a message indicating images are building in the background
 
 ### Requirement: Cross-platform build documentation
+<!-- req-id: 4580ef6c -->
 The project SHALL include documentation at `docs/cross-platform-builds.md` explaining the cross-platform build strategy and legal constraints.
 
 #### Scenario: macOS infeasibility documented
@@ -186,6 +199,7 @@ The project SHALL include documentation at `docs/cross-platform-builds.md` expla
 - **THEN** they SHALL understand that CI (GitHub Actions) remains the authoritative build pipeline for all platforms, and local cross-compilation is supplementary for troubleshooting
 
 ### Requirement: Install exits with deterministic exit codes
+<!-- req-id: 8e3a5622 -->
 The `--install` flag SHALL exit with code 0 (success) or 1 (failure), enabling chaining with subsequent commands.
 
 #### Scenario: Install succeeds
@@ -202,6 +216,7 @@ The `--install` flag SHALL exit with code 0 (success) or 1 (failure), enabling c
 - **AND** MUST be safe for error handling: `./build.sh --install || echo "build failed; fix errors above"`
 
 ### Requirement: Transparent HTTPS caching via dev proxy
+<!-- req-id: ff1435ce -->
 The build script SHALL automatically set up and manage a local caching proxy (tillandsias-dev-proxy) for transparent HTTPS caching of build dependencies (apt, cargo, OCI, rustup). The proxy SHALL be idempotent and resilient.
 
 #### Scenario: First build with no proxy image

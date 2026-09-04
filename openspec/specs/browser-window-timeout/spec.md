@@ -9,6 +9,7 @@ active
 ## Requirements
 
 ### Requirement: Browser windows expire after inactivity
+<!-- req-id: 15aaef17 -->
 
 Browser MCP windows MUST enforce idle and absolute timeout policy so stale browser sessions cannot accumulate indefinitely.
 

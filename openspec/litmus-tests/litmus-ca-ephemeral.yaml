@@ -50,10 +50,39 @@ gating_points:
     success: "temporary certificates fully removed"
     failure: "CA certs persist on disk after shutdown"
 
+  # ORDER 1022-y7kc cause 2. Two RUNTIME guards from the 998-3z6g work shipped
+  # with no caller on any activation surface, and audit-guard-activation fails
+  # --ci-full on an orphan. They belong HERE and not in ./build.sh --check:
+  # both read podman state, so on a dev host with no enclave they have nothing
+  # to compare. Note they degrade correctly rather than guessing — measured on
+  # yoga 2026-09-04, each emits an explicit `skip:<reason>` and exits 0 when
+  # podman, the secret or the cert is absent (965-sxec: a check that could not
+  # run never claims what it would have found). So --check would have been
+  # SAFE, not red as I first assumed — but a guard that skips on every dev host
+  # is wired in name only, and this lane is where it actually executes.
+  - step: "the CA bind source is the migrated path, not the old /tmp one (998-3z6g)"
+    command: "bash scripts/check-ca-bind-migration.sh"
+    timeout_ms: 60000
+    expected_behavior: "ok:ca-bind-current:<n>, or an explicit skip: when podman has nothing to inspect"
+
+  # MEASURED RED ON yoga 2026-09-04 AND FILED, not wired-and-hoped: this host
+  # returns `desync:enclave-ca-key-secret` rc=1 because the CA bundle was
+  # regenerated at 06:37 while the `tillandsias-ca-key` secret is 21 hours old,
+  # so the proxy's cert and key do not match. That is the guard being RIGHT —
+  # squid would start and die with X509_check_private_key() naming neither
+  # file, which is the misreading this guard exists to prevent. It is host
+  # state, cleared by the launch path's ensure_proxy_ca_key_secret --replace,
+  # not a trunk defect; filed separately so a red here is diagnosed rather than
+  # absorbed.
+  - step: "the proxy's key secret matches the CA bundle it is bound to (998-3z6g)"
+    command: "bash scripts/check-enclave-ca-consistency.sh"
+    timeout_ms: 60000
+    expected_behavior: "ok:enclave-ca-consistent, or an explicit skip: when the secret or cert is absent"
+
 observability:
   traces:
     - "@trace spec:certificate-authority"
-    - "@trace spec:ephemeral-guarantee"
+    - "@trace spec:certificate-authority"
   expected_log: "CA certificate cleaned on proxy shutdown"
   log_fields:
     spec: "certificate-authority"

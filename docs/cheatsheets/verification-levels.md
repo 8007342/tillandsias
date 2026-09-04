@@ -1,6 +1,6 @@
 # Verification Levels
 
-@trace spec:verification-level-tracking
+@trace spec:methodology-accountability
 
 **Use when**: Declaring how thoroughly a spec claim is verified, designing CI enforcement, understanding code-spec evidence chains, or upgrading evidence quality for critical specifications.
 
@@ -73,7 +73,7 @@ pub fn transition_environment(env_id: &str, target_state: State) -> Result<()> {
 
 **Example**:
 ```rust
-// @trace spec:proxy-cache-config, verified_at:L1
+// @trace spec:proxy-container, verified_at:L1
 /// Configures Squid proxy with domain allowlist.
 /// See cheatsheets/runtime/mitm-proxy-design.md for patterns.
 pub fn setup_proxy_cache(config: &ProxyConfig) -> Result<()> {
@@ -84,7 +84,7 @@ pub fn setup_proxy_cache(config: &ProxyConfig) -> Result<()> {
 
 **Corresponding cheatsheet entry** (`cheatsheets/runtime/mitm-proxy-design.md`):
 ```markdown
-@trace spec:proxy-cache-config
+@trace spec:proxy-container
 
 ## Provenance
 
@@ -175,7 +175,7 @@ async fn test_ollama_model_manifest_schema() {
 
 **Example**:
 ```rust
-// @trace spec:forge-container-launch, verified_at:L3
+// @trace spec:forge-as-only-runtime, verified_at:L3
 pub async fn launch_forge(project: &Project) -> Result<ContainerId> {
     let start = Instant::now();
     match create_and_start_container(project).await {
@@ -260,7 +260,7 @@ fn render_menu(&self) -> MenuItems { ... }
 
 **Single spec, L2**:
 ```rust
-// @trace spec:proxy-cache-config, verified_at:L2
+// @trace spec:proxy-container, verified_at:L2
 fn setup_proxy(config: &ProxyConfig) -> Result<()> { ... }
 ```
 
@@ -308,7 +308,7 @@ Upstream source: https://wiki.squid-cache.org/Features/CacheControl
 
 # proxy-cache-config Specification
 
-@trace spec:proxy-cache-config
+@trace spec:proxy-container
 
 ## Purpose
 

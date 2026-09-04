@@ -37,6 +37,7 @@ Cross-references:
 ## Requirements
 
 ### Requirement: Two canonical primitives
+<!-- req-id: d3c36a46 -->
 - **ID**: host-guest-transport.primitives.stream-and-exec@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -47,6 +48,7 @@ New host→guest interactions MUST be expressed as one of these; no third bespok
 connect/exec path may be added in tray or headless code.
 
 ### Requirement: Callers are backend-agnostic
+<!-- req-id: 145c9fd0 -->
 - **ID**: host-guest-transport.facade.no-cfg-selection@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -58,6 +60,7 @@ by matching `GuestEndpoint` variants. Backend implementation names (`virtio-vsoc
 logs, or caller code. Enforced by `litmus:host-guest-no-cfg-transport-selection`.
 
 ### Requirement: One wire protocol for both primitives on every backend
+<!-- req-id: c53178b6 -->
 - **ID**: host-guest-transport.protocol.single-framing@v1
 - **Modality**: MUST
 - **Measurable**: true
@@ -67,6 +70,7 @@ Both primitives, on every backend, SHALL use the `control-wire` framing and the
 rejected with a typed error; `WIRE_VERSION` changes MUST remain additive.
 
 ### Requirement: Cross-platform conformance
+<!-- req-id: c2772554 -->
 - **ID**: host-guest-transport.conformance.shared-fixtures@v1
 - **Modality**: MUST
 - **Measurable**: true

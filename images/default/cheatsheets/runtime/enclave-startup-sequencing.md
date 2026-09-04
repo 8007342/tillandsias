@@ -114,7 +114,7 @@ Host
 #!/bin/bash
 set -euo pipefail
 
-# @trace spec:enclave-startup-sequencing, spec:async-inference-launch
+# @trace, spec:async-inference-launch
 
 # === CRITICAL PATH (blocking, tray waits) ===
 

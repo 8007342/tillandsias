@@ -175,6 +175,25 @@ Update the PR body with today's `${new_tag}` even if reusing — the human revie
 >
 > The verification did not disappear; it moved to this host. Run it here.
 
+**Before the gate, if this host rebaked its images today** (any `--init`
+after a version change, the post-restart checklist), warm podman's ID-mapped
+layer copy of the forge image once — `podman run --rm --userns=keep-id
+localhost/tillandsias-forge:<installed VERSION> true` (exit 2 from the
+entrypoint's credential refusal is expected; the copy is what you want). The
+full pre-build litmus runs four forge-runtime fixtures under `--userns=keep-id`
+and each one's budget expires while podman copies a 3.1 GB image; the new
+kill-time adjudicator reads them as NOT contended, genuinely too slow, which
+is true and misleading. Measured on the v56.9.2.1 cut: four reds, all gone
+after one warm (plan/issues/enhancement-keep-id-layer-copy-cold-after-image-
+rebake-2026-09-02.md). Also clear `target-guest/` if it was staged by an
+earlier `--install` run under a bumped VERSION — `build-guest-binaries.sh
+--verify` reads that as an integrity mismatch, not stale staging.
+
+`gh` resolves the repository from the working directory: run every `gh`
+command from the checkout (or pass `-R <owner>/<repo>`), never from a scratch
+directory — `gh release download` from elsewhere fails with "not a git
+repository" and looks like a missing asset.
+
 ```bash
 # THE GATE. This is the whole safety net now — there is nothing server-side.
 ./build.sh --ci-full || { echo "gate failed — do NOT merge"; exit 1; }
@@ -214,8 +233,14 @@ so a VERSION-only PR still gets its checks". Both are now false: `ci.yml` is
 deleted, and `main`'s `required_status_checks.contexts` is `[]`. What remains is
 the PR requirement and `enforce_admins: true` — no server-side verification of
 content at all. Step 3's local gate is what stands in for it, and it already ran
-against this tree; a VERSION-only bump changes one line and does not need it
-re-run.
+against this tree. **But the bump branch still needs its own `./build.sh
+--check` before the push** (measured on the v56.9.2.1 cut, 2026-09-02): the
+pre-push hook compares the gate STAMP against the tree bytes, and the bump
+changes VERSION plus every crate's `Cargo.toml` — so the push is refused with
+"the tree changed since ./build.sh --check last passed". Run
+`TILLANDSIAS_SKIP_VERSION_BUMP=1 ./build.sh --check` on the bump branch, then
+`git add Cargo.lock` and `--amend` it into the bump commit if the check
+touched it (still VERSION + Cargo only, 702-eusw), then push.
 
 ```bash
 git checkout main

@@ -25,6 +25,18 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
+# The fragment validator the plan-only lane looks for (case 7). Resolved from
+# the REAL checkout through the shared probe (721-nyev: an executable bit is a
+# claim, running the binary is evidence), and absolutized because the arm runs
+# from inside the temp repo.
+. "$ROOT/scripts/plan-binary-probe.sh"
+LANE_PLAN_BIN="$(cd "$ROOT" && resolve_plan_binary 2>/dev/null || true)"
+case "$LANE_PLAN_BIN" in
+    "") ;;
+    /*) ;;
+    *) LANE_PLAN_BIN="$ROOT/${LANE_PLAN_BIN#./}" ;;
+esac
+
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
 # Build a throwaway repo with the real scripts, a bare origin, and the real
@@ -33,6 +45,12 @@ make_repo() {
     local d="$1"
     mkdir -p "$d/work"
     git init -q -b main "$d/work"
+    # core.hooksPath is GLOBAL and REPLACES .git/hooks (a forge sets it in
+    # ~/.gitconfig), so an unpinned scratch repo runs the REAL forge hooks
+    # instead of this fixture's. Pin it per repo. Same defect as 889-twhe
+    # and 877-mynm; found by sweeping for the class rather than by being
+    # blocked, because neither of these fixtures is wired into build.sh.
+    git -C "$d/work" config core.hooksPath .git/hooks
     (
         cd "$d/work" || exit 1
         git config user.email f@t
@@ -166,7 +184,14 @@ echo "ok: case 6 — write refuses an unknown scope class at write time"
 # push, which is the exact class the lane was built to rescue.
 D="$WORK/c7"; make_repo "$D"
 before="$(remote_head "$D")"
-out="$(cd "$D/work" && printf 'packets: []\n' > plan/index.d/lane.yaml && git add -A && git commit -qm frag >/dev/null 2>&1 && git push origin main 2>&1)"
+# Name the fragment validator explicitly. The lane fails closed when neither yq
+# nor a runnable tillandsias-plan can parse a pushed plan/index.d/ blob — correct
+# behaviour, and fatal to THIS fixture, whose temp repo has an empty target/ and
+# which therefore depends on yq being on PATH. No macOS host has yq, so case 7
+# failed there for want of a validator while linux-next passed: the arm stopped
+# testing the lane's stamp handling and started testing tool availability.
+# resolve_plan_binary honours this override, so the lane gets a real reader.
+out="$(cd "$D/work" && printf 'packets: []\n' > plan/index.d/lane.yaml && git add -A && git commit -qm frag >/dev/null 2>&1 && TILLANDSIAS_PLAN_BIN="$LANE_PLAN_BIN" git push origin main 2>&1)"
 rc=$?
 after="$(remote_head "$D")"
 [ "$rc" = 0 ] || fail "case 7: plan-only lane broke under the new stamp handling: $out"

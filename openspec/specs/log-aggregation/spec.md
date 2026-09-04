@@ -9,6 +9,7 @@ active
 ## Requirements
 
 ### Requirement: Runtime logs aggregate without dropping source metadata
+<!-- req-id: c0d85ab6 -->
 
 The logging aggregator MUST preserve source component, timestamp, severity, trace context, and spec trace metadata when collecting events from multiple producers.
 

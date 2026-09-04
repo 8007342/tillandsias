@@ -20,6 +20,7 @@ This spec ensures:
 ## Requirements
 
 ### Requirement: Spec coverage metrics
+<!-- req-id: d14e341e -->
 
 Each spec requirement MUST have an associated implementation marker and coverage metric.
 
@@ -42,6 +43,7 @@ Each spec requirement MUST have an associated implementation marker and coverage
 - **AND** the spec MUST be considered "locked" (further changes unlikely)
 
 ### Requirement: Trace cardinality and completeness
+<!-- req-id: b67a8e60 -->
 
 Traces MUST be counted and validated to ensure they cover the spec they reference.
 
@@ -61,6 +63,7 @@ Traces MUST be counted and validated to ensure they cover the spec they referenc
 - **AND** SHOULD track `untraced_implementation_risk = true` for that spec
 
 ### Requirement: Requirement↔Litmus Test binding
+<!-- req-id: 24dfb1ea -->
 
 Each spec's Litmus Test section MUST reference Requirements by name, creating a bidirectional binding.
 
@@ -81,6 +84,7 @@ Each spec's Litmus Test section MUST reference Requirements by name, creating a 
 - **AND** SHOULD suggest adding a binding in the test's comment
 
 ### Requirement: Implementation latency — time from spec to code
+<!-- req-id: 9a68f161 -->
 
 The tray MUST track how long a spec takes to move from "written" to "implementation merged".
 
@@ -104,6 +108,7 @@ The tray MUST track how long a spec takes to move from "written" to "implementat
   - Specs with latency < 1 day (fast convergence)
 
 ### Requirement: Spec debt and staleness
+<!-- req-id: c86e8b45 -->
 
 Specs without recent implementation or test updates MUST be flagged as stale or drifting.
 
@@ -124,6 +129,7 @@ Specs without recent implementation or test updates MUST be flagged as stale or 
 - **AND** the tray MUST track which code versions reference which spec versions
 
 ### Requirement: Convergence scoring
+<!-- req-id: 31d9e83b -->
 
 The tray MUST compute a convergence score reflecting how well the implementation aligns with spec intent.
 This score is a coarse health indicator. Correctness-proximity residuals are
@@ -156,6 +162,7 @@ reported separately as CentiColons by `methodology/proximity.yaml` and
   ```
 
 ### Requirement: Dashboard is a read-only projection
+<!-- req-id: e3b24f77 -->
 
 The CentiColon dashboard (`docs/convergence/centicolon-dashboard.md` and `docs/convergence/centicolon-dashboard.json`) SHALL be a read-only projection of the signature log. Hand-edits SHALL be considered drift and SHALL be reverted on the next regeneration.
 
@@ -176,6 +183,7 @@ The CentiColon dashboard (`docs/convergence/centicolon-dashboard.md` and `docs/c
 - **AND** stale snapshots SHALL NOT be cited as authoritative evidence for spec convergence
 
 ### Requirement: Dashboard alert thresholds
+<!-- req-id: bc48c303 -->
 
 The dashboard SHALL classify the latest signature into one of three alert levels based on its `percent_closed` value. Thresholds SHALL match those declared in the renderer (default: red < 90%, yellow < 95%, green otherwise).
 
@@ -193,6 +201,7 @@ The dashboard SHALL classify the latest signature into one of three alert levels
 - **THEN** the `.json` SHALL set `alert_level = "green"`
 
 ### Requirement: Dashboard trend metrics
+<!-- req-id: 57ba57c0 -->
 
 The dashboard `.json` SHALL include trend metrics over the most recent 7 signature records: a `pass_rate_7d_percent` (share of records whose `ci_result` is PASS) and a `coverage_avg_7d_percent` (mean `percent_closed`). These metrics enable downstream CI/CD systems to consume convergence trends without re-parsing the signature log.
 
@@ -207,6 +216,7 @@ The dashboard `.json` SHALL include trend metrics over the most recent 7 signatu
 - **AND** the `.md` SHALL display the "no signature records yet" hint
 
 ### Requirement: Litmus test — observability instrumentation
+<!-- req-id: fbc0290c -->
 
 The following critical verification paths MUST be reproducible against the tray and the dashboard renderer:
 
@@ -244,10 +254,11 @@ git checkout crates/tillandsias-headless/src/main.rs
 ```bash
 # Create new spec
 cat > openspec/specs/test-latency/spec.md << 'EOF'
-<!-- @trace spec:test-latency -->
+<!-- @trace spec:observability-convergence -->
 # Test Latency Spec
 ## Requirements
 ### Requirement: Test requirement
+<!-- req-id: 3b78404b -->
 ## Sources of Truth
 EOF
 git add openspec/specs/test-latency/spec.md
@@ -257,7 +268,7 @@ git commit -m "test: create latency spec"
 SPEC_DATE=$(git log -1 --format=%aI openspec/specs/test-latency/spec.md)
 
 # Add implementation trace
-echo "// @trace spec:test-latency" >> crates/tillandsias-headless/src/test.rs
+echo "// @trace spec:observability-convergence" >> crates/tillandsias-headless/src/test.rs
 git add crates/tillandsias-headless/src/test.rs
 git commit -m "test: implement latency spec"
 

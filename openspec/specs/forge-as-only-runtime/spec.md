@@ -45,6 +45,7 @@ surface so that:
 ## Requirements
 
 ### Requirement: Forge Image Bakes the Full Agent Set
+<!-- req-id: 8dace842 -->
 
 The forge image (`tillandsias-forge`) MUST contain on `$PATH` after build:
 
@@ -67,6 +68,7 @@ by extending the forge image, never by installing on the host.
 - **AND** the host MUST NOT need any of these binaries to be present locally
 
 ### Requirement: All Podman Run Goes Through the Idiomatic Layer
+<!-- req-id: edc6ed67 -->
 
 All `podman run` (and `podman create`/`podman start`) invocations originating
 from `crates/tillandsias-headless/` MUST go through
@@ -93,6 +95,7 @@ and they remain subject to review.
   `# allowed-bootstrap` on the same line
 
 ### Requirement: No Host-Side Agent Binaries
+<!-- req-id: c36312dc -->
 
 The tray launch path MUST NOT introduce host-side agent binaries. This means:
 
@@ -114,6 +117,7 @@ The tray launch path MUST NOT introduce host-side agent binaries. This means:
 - **AND** the host MUST never check `$PATH` for `claude`
 
 ### Requirement: Mount Categories Are Exhaustive
+<!-- req-id: 80badba1 -->
 
 Mount sources passed to a forge container MUST belong to exactly one of these
 categories:
@@ -147,6 +151,7 @@ stores MUST be unreachable from inside the forge.
   MUST hold
 
 ### Requirement: Attached forge exit cleans idle stacks
+<!-- req-id: 3f6c4b40 -->
 
 Foreground forge launches SHALL not leave proxy, git, inference, or status
 check containers running after the attached forge exits. The cleanup pass MUST
@@ -164,6 +169,7 @@ stack containers are removed only when no active forge containers remain.
 - **AND** a debug line SHALL state that no active forge containers remain
 
 ### Requirement: Delegated agent results come from the current scoped run
+<!-- req-id: 4a4829af -->
 
 A delegated agent run in the attached OpenCode CLI or Codex CLI lane is exactly
 a nonblank prompt combined with
@@ -263,6 +269,7 @@ host MUST never read that path as outcome evidence.
 - **AND** the outcome MUST be `TIMED OUT`, never success
 
 ### Requirement: Host Terminal Is the Only Host-Side Process
+<!-- req-id: 8022bb1b -->
 
 For interactive launches, the tray MUST spawn exactly one host-side process:
 the user's default terminal emulator (`foot`, `gnome-terminal`,

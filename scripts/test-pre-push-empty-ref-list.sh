@@ -71,6 +71,35 @@ git init -q --bare "$W/bare.git"
 git init -q -b linux-next "$W/wc"; ( cd "$W/wc" && git remote add origin "$W/bare.git" )
 git init -q -b linux-next "$W/other"; ( cd "$W/other" && git remote add origin "$W/bare.git" )
 
+# HERMETIC MEANS AGAINST GLOBAL GIT CONFIG TOO (order 964-fwvh). This fixture's
+# whole method is a spy hook at <repo>/.git/hooks/pre-push, and a global
+# `core.hooksPath` silently REPLACES that directory for every repo on the host —
+# the spy is written, git never runs it, and all five push-driven arms read
+# '<none>' rather than a byte count. Measured on macuahuitl-tillandsias-forge
+# 2026-09-02: the forge image sets core.hooksPath=~/.cache/tillandsias/git-hooks
+# globally, so `./build.sh --check` failed 5/11 here while passing on bare-metal
+# hosts that happen not to set it. The failure names the RULE ("the plan-only
+# fast lane's acceptance path is unproven") rather than the environment, so it
+# reads as a real regression in the thing under test.
+#
+# Pinning it per-repo restores the hermeticity the header already claims: a
+# repo-local core.hooksPath always wins over the global one, and .git/hooks is
+# exactly where install_spy writes.
+for _r in "$W/wc" "$W/other"; do
+    git -C "$_r" config core.hooksPath "$_r/.git/hooks"
+done
+unset _r
+#
+# INDEPENDENTLY CONFIRMED the same day by pirria-tillandsias-forge (a floor
+# host, different hardware and podman stack) while blocked on an unrelated
+# gate red: same defect, same remedy, arrived at from the same fingerprint —
+# arms 1-5 (which go through git) reading '<none>' while arms 6-11 (which
+# pipe stdin to the guard directly) stayed green. Their articulation is the
+# one to carry: a fixture that installs a hook must pin core.hooksPath, or it
+# silently measures nothing wherever the ambient config sets one — and it
+# reports the ABSENCE of a signal as a CHANGE in it. Their duplicate of this
+# hunk was dropped in the merge; nothing of theirs is lost.
+
 # A spy in the composed hook's exact shape: capture stdin once, report its size.
 install_spy() {
     cat > "$1/.git/hooks/pre-push" <<'SPY'

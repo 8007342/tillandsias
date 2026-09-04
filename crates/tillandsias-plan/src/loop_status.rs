@@ -158,8 +158,19 @@ pub fn parse_fragment(raw: &str, path: &Path) -> Result<Vec<CycleSection>, Strin
         });
     }
     if sections.is_empty() {
+        // 1004-8vkv: NAME WHAT WAS READ. This message used to be the only
+        // outcome for both a real fragment with the wrong heading level and a
+        // read that returned nothing, so a caller whose stdin was closed was
+        // told to fix a file the tool had never opened. Reporting the size and
+        // the first line makes the two cases different sentences at a glance;
+        // the zero-byte case is refused earlier and never reaches here.
+        let bytes = raw.len();
+        let first = raw
+            .lines()
+            .find(|l| !l.trim().is_empty())
+            .unwrap_or("<blank>");
         return Err(format!(
-            "{}: fragment carries no `## Cycle` section",
+            "{}: fragment ({bytes} bytes, first line {first:?}) carries no `## Cycle` section",
             path.display()
         ));
     }

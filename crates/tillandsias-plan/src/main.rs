@@ -7,8 +7,8 @@
 
 use std::path::{Path, PathBuf};
 use tillandsias_plan::{
-    Ledger, Schema, answer, count_release, edit, fragments, groundtruth, loop_status, methodology,
-    spec, str_field, str_list,
+    Ledger, Schema, answer, count_release, fragments, groundtruth, loop_status, methodology, spec,
+    str_field, str_list,
 };
 
 /// ORDER 569. The capability manifest, embedded from the crate's own
@@ -26,6 +26,10 @@ use tillandsias_plan::{
 /// relaunch would provide. One file, two readers — see capabilities.txt for why
 /// this is data rather than a Rust array. If it becomes a Rust array again, the
 /// shell side has to hardcode a second copy and the two will drift.
+// @trace order:984-i4k2
+#[path = "source_revision.rs"]
+mod source_revision;
+
 const CAPABILITY_MANIFEST: &str = include_str!("../capabilities.txt");
 
 /// The manifest's tokens, comments and blank lines stripped.
@@ -63,6 +67,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "answer",
     "arrival-routing-check",
     "blocked-by",
+    "build-id",
     "blocked-closure",
     "blocking-counts",
     "burndown",
@@ -103,7 +108,9 @@ const DISPATCH_ARMS: &[&str] = &[
     "select-rows",
     "split-parents",
     "experts-probe",
+    "source-revision",
     "spec-envelope",
+    "score-checks",
     "spec-floor",
     "spec-index",
     "spec-retrieve",
@@ -150,6 +157,11 @@ const USAGE: &str = concat!(
     "                                     schedulable (device_class, lane, engine) triples, and its\n",
     "                                     present-but-unusable devices. Distinct from `capabilities`\n",
     "                                     above, which reports THIS BINARY's subcommands.\n",
+    "                                     `--by-hardware` (805-r98w) re-keys it on (fingerprint,\n",
+    "                                     substrate) and reports control=yes|no per hardware group,\n",
+    "                                     so a caller can ASK whether a substrate control exists\n",
+    "                                     rather than assume one; unidentified rows are listed, never\n",
+    "                                     bucketed together.\n",
     "           experts-probe             ORDER 718-ja7g. Which expert TIER is live on this host, as\n",
     "                                     ONE line: l0 (file-backed, always ready) / l1 (retrieval —\n",
     "                                     needs BOTH an embeddings endpoint and a built index) / l2\n",
@@ -232,6 +244,8 @@ const USAGE: &str = concat!(
     "                                     scripts/check-arrival-routing.sh), 3 on a named fragment\n",
     "                                     the fold could not read.\n",
     "           next-order [prefix]       mint a COLLISION-FREE order token for a new packet\n",
+    "           build-id                  which SOURCES this binary was compiled from (984-i4k2)\n",
+    "           source-revision [dir]     what a rebuild from a checkout would bake (984-i4k2)\n",
     "                                     (<seq>-<suffix>, e.g. 581-k3f9). Never compute the\n",
     "                                     'next free order' yourself: that reads a ledger snapshot\n",
     "                                     which is stale the moment another host commits, so\n",
@@ -379,7 +393,10 @@ const USAGE: &str = concat!(
     "                                     then answer it. Unrouted questions are unsupported.\n",
     "           methodology-index [--root D]\n",
     "                                     every indexed path with its file:line (the query surface)\n",
-    "           append-event <id|order> <type> <summary> --ts <ISO> [--agent A] [--host H]\n",
+    "           append-event <id|order> <type> (--summary-file <path>|-) --ts <ISO> [--agent A] [--host H]\n",
+    "                                     Prose comes from a FILE or stdin so the shell cannot expand it (971-7muc).\n",
+    "                                     A literal <summary> argument still works but is REFUSED when it carries\n",
+    "                                     shell-expansion residue; a balanced substitution is invisible by then.\n",
     "                                     append an event, VALIDATED before flush (refuses a broken ledger).\n",
     "                                     --agent defaults from TILLANDSIAS_AGENT_ID and REFUSES when both\n",
     "                                     are absent; --host defaults to the compiled platform (772-4se9).\n",
@@ -401,6 +418,17 @@ const USAGE: &str = concat!(
     "                                     ORDER 547. Chunk the whole-spec corpus into <dir>/chunks.jsonl\n",
     "           spec-retrieve --index-dir <dir> --query-vec <f> [--k N]\n",
     "                                     network-free cosine top-k over caller-supplied embeddings\n",
+    "           score-checks\n",
+    "                                     ORDER 977-j6qu. THE centicolon scorer. Reads\n",
+    "                                     `<check-id> <weight> <pass|fail>` lines on stdin and\n",
+    "                                     prints {earned,denominator,residual,regime} — one\n",
+    "                                     ranking function over the obligation lattice, so\n",
+    "                                     local-ci.sh stops accumulating a second score under\n",
+    "                                     the same name. `regime` names when the score left the\n",
+    "                                     monotone band (a tombstone changes the denominator),\n",
+    "                                     because a bare number cannot say which side it is on.\n",
+    "                                     A malformed line REFUSES rather than scoring a partial\n",
+    "                                     denominator, which would raise the percentage.\n",
     "           spec-floor --chunks-json <f>\n",
     "                                     ORDER 821-73es. Apply the grounded pipeline's retrieval\n",
     "                                     floors (TILLANDSIAS_RETRIEVE_REFUSAL_FLOOR on the best\n",
@@ -452,6 +480,117 @@ const USAGE: &str = concat!(
     "           loop-status-fragments      ORDER 582-nqw5. Report the loop_status.d/ overlay: live\n",
     "                                     fragments, malformed ones, and whether compaction is eligible\n"
 );
+
+/// Read a cycle fragment for `loop-status-append`, refusing every input shape
+/// that cannot answer promptly (order 1004-8vkv).
+///
+/// THREE OUTCOMES USED TO BE ONE. `loop-status-append <file>` dropped the
+/// positional, fell through to stdin, and then behaved differently depending on
+/// what fd 0 happened to be:
+///   * an inherited SOCKET (a forge agent's stdin, by construction) — blocked
+///     forever. Measured by lenovinha 2026-09-04: 26 MINUTES at 0.0% CPU in
+///     unix_stream_data_wait before /proc was consulted. Nothing in the cycle
+///     times out on it, and a host stuck there is indistinguishable from a host
+///     mid-analysis.
+///   * a CLOSED stdin — reported "fragment carries no `## Cycle` section", which
+///     is a confident statement about a file the tool never opened, and sends
+///     the reader to edit a fragment that was fine.
+///
+/// SO THE FIX IS NOT "ALSO ACCEPT A PATH". It is that every way of supplying
+/// input either produces bytes or says why it cannot, in bounded time.
+///
+/// WHY A THREAD AND NOT AN fstat ON THE FD TYPE. Refusing by file type
+/// (socket/tty/char-device) sounds tighter and is wrong twice: a FIFO is a
+/// "pipe" and blocks exactly like a socket when nothing is writing, and a
+/// socket that DOES have data is perfectly readable. What actually matters is
+/// whether the bytes arrive, so this waits on the read with a deadline instead
+/// of predicting from the descriptor's kind. A regular file or a live pipe
+/// returns instantly and is unaffected.
+///
+/// The reader thread is deliberately left blocked when the deadline expires:
+/// it holds only stdin, the process exits on the next line, and there is no
+/// portable way in std to cancel a blocking read. Detaching it is the honest
+/// cost of not taking a libc dependency for one poll(2).
+fn read_loop_status_fragment(args: &[String]) -> String {
+    use std::io::IsTerminal as _;
+
+    const STDIN_DEADLINE: std::time::Duration = std::time::Duration::from_secs(5);
+
+    let from_file = |f: &str| -> String {
+        match std::fs::read_to_string(f) {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("error: read {f}: {e}");
+                std::process::exit(1);
+            }
+        }
+    };
+
+    if let Some(i) = args.iter().position(|a| a == "--file")
+        && let Some(f) = args.get(i + 1)
+    {
+        return from_file(f);
+    }
+
+    // A BARE POSITIONAL IS HONOURED, not dropped. The usage line already
+    // advertised `--file`, so the finder was not wrong to expect a path form to
+    // exist — they used the one that reads naturally. Refusing would also have
+    // satisfied the criterion; honouring it is better, because the invocation
+    // that cost 26 minutes now simply works.
+    //
+    // Only a value that EXISTS as a file is taken, so a future flag's argument
+    // is never mistaken for a fragment; anything else falls through to stdin
+    // and is reported there.
+    let positional = args
+        .iter()
+        .skip(1)
+        .find(|a| !a.starts_with('-') && Path::new(a.as_str()).is_file());
+    if let Some(f) = positional {
+        return from_file(f);
+    }
+
+    let stdin = std::io::stdin();
+    if stdin.is_terminal() {
+        eprintln!(
+            "error: loop-status-append has no input — stdin is a terminal, and this \
+             command does not prompt.\n  Supply the fragment one of these ways:\n    \
+             tillandsias-plan loop-status-append < fragment.md\n    \
+             tillandsias-plan loop-status-append --file fragment.md\n    \
+             tillandsias-plan loop-status-append fragment.md"
+        );
+        std::process::exit(2);
+    }
+
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::Builder::new()
+        .name("loop-status-stdin".into())
+        .spawn(move || {
+            let mut raw = String::new();
+            let r = std::io::Read::read_to_string(&mut std::io::stdin(), &mut raw);
+            let _ = tx.send(r.map(|_| raw));
+        })
+        .expect("spawn the stdin reader");
+
+    match rx.recv_timeout(STDIN_DEADLINE) {
+        Ok(Ok(raw)) => raw,
+        Ok(Err(e)) => {
+            eprintln!("error: read stdin: {e}");
+            std::process::exit(1);
+        }
+        Err(_) => {
+            eprintln!(
+                "error: loop-status-append read nothing from stdin within {}s and refused to \
+                 keep waiting.\n  fd 0 is open but no one is writing to it — an inherited \
+                 socket or an idle pipe.\n  This is the 26-minute silent hang of order \
+                 1004-8vkv, stopped early on purpose.\n  Supply the fragment explicitly \
+                 instead:\n    tillandsias-plan loop-status-append --file fragment.md\n    \
+                 tillandsias-plan loop-status-append < fragment.md",
+                STDIN_DEADLINE.as_secs()
+            );
+            std::process::exit(2);
+        }
+    }
+}
 
 fn usage() -> ! {
     eprintln!("{USAGE}");
@@ -1898,20 +2037,20 @@ fn run_loop_status(args: &[String], base: &Path) {
             // heading), and writes it as a NEW fragment file — the concurrent
             // write that used to conflict on the shared base now lands on a
             // per-host path.
-            let mut raw = String::new();
-            if let Some(i) = args.iter().position(|a| a == "--file")
-                && let Some(f) = args.get(i + 1)
-            {
-                raw = match std::fs::read_to_string(f) {
-                    Ok(r) => r,
-                    Err(e) => {
-                        eprintln!("error: read {}: {e}", f);
-                        std::process::exit(1);
-                    }
-                };
-            } else if let Err(e) = std::io::Read::read_to_string(&mut std::io::stdin(), &mut raw) {
-                eprintln!("error: read stdin: {e}");
-                std::process::exit(1);
+            let raw = read_loop_status_fragment(args);
+            // 1004-8vkv: an EMPTY read must not be reported as a malformed
+            // fragment. "carries no `## Cycle` section" against zero bytes is a
+            // confident statement about a file that was never opened, and it
+            // sent the finder to edit a fragment that was fine.
+            if raw.trim().is_empty() {
+                eprintln!(
+                    "error: loop-status-append read 0 bytes — there was no fragment to \
+                     append.\n  This is not a problem with your fragment's headings; \
+                     nothing was read at all.\n  Supply it explicitly:\n    \
+                     tillandsias-plan loop-status-append --file fragment.md\n    \
+                     tillandsias-plan loop-status-append < fragment.md"
+                );
+                std::process::exit(2);
             }
             // 719-kgr5: the fragment NAME carries this stamp and fragments fold
             // in name order, so an invented value here reorders the folded
@@ -3240,6 +3379,84 @@ fn main() {
         std::process::exit(tillandsias_plan::expert_serve::run_blocking(cfg));
     }
 
+    if args[0] == "score-checks" {
+        // ORDER 977-j6qu. THE SHELL STOPS COMPUTING A SECOND SCORE.
+        //
+        // scripts/local-ci.sh accumulated `total_cc` itself — summing a
+        // weight per check — while methodology/math-foundations.yaml
+        // described a `centicolon_function` over the obligation lattice
+        // that nothing implemented. Two objects, one name. This routes
+        // the shell through the model so there is ONE ranking function.
+        //
+        // INPUT is one `<check-id> <weight> <pass|fail>` per line on
+        // stdin, which is what local-ci.sh already has in hand. Each
+        // check becomes an obligation: a PASS establishes
+        // PositivelyTested, a FAIL leaves it Absent.
+        //
+        // WHY PositivelyTested AND NOT THE TOP OF THE CHAIN, which is
+        // the honest part: a green check witnesses that a test passed.
+        // It says nothing about RuntimeObserved or EvidenceBundled, and
+        // scoring it as though it did would be the model agreeing with
+        // whatever the shell already believed. The numbers are
+        // UNCHANGED today because every weight is earned at exactly the
+        // bar a passing check reaches — so this wiring is verifiable
+        // against the previous behaviour rather than a silent
+        // re-definition of what percent_closed means.
+        use tillandsias_plan::obligation::{
+            ObligationState, Regime, SpecState, Weights, centicolon_function,
+        };
+        let mut state = SpecState::new();
+        let mut weights = Weights::new();
+        let mut malformed = 0usize;
+        let stdin = std::io::stdin();
+        let mut line = String::new();
+        loop {
+            line.clear();
+            match std::io::BufRead::read_line(&mut stdin.lock(), &mut line) {
+                Ok(0) | Err(_) => break,
+                Ok(_) => {}
+            }
+            let t = line.trim();
+            if t.is_empty() {
+                continue;
+            }
+            let parts: Vec<&str> = t.split_whitespace().collect();
+            if parts.len() != 3 {
+                malformed += 1;
+                continue;
+            }
+            let Ok(w) = parts[1].parse::<u64>() else {
+                malformed += 1;
+                continue;
+            };
+            weights = weights.with(parts[0], w, ObligationState::PositivelyTested);
+            if parts[2] == "pass" {
+                state.set(parts[0], ObligationState::PositivelyTested);
+            }
+        }
+        // A MALFORMED LINE IS NOT A ZERO. Silently dropping it would
+        // shrink the denominator and RAISE the percentage, which is the
+        // direction nobody audits.
+        if malformed > 0 {
+            eprintln!(
+                "blocked:score-checks:malformed-input:{malformed} line(s) were not \
+                     `<id> <weight> <pass|fail>` — refusing rather than scoring a \
+                     partial denominator"
+            );
+            std::process::exit(2);
+        }
+        let score = centicolon_function(&state, &weights);
+        let regime = match &score.regime {
+            Regime::Monotone => "monotone".to_string(),
+            Regime::Broken(why) => format!("broken:{why}"),
+        };
+        println!(
+            "{{\"earned\":{},\"denominator\":{},\"residual\":{},\"regime\":\"{}\"}}",
+            score.earned, score.denominator, score.residual, regime
+        );
+        return;
+    }
+
     // ORDER 394c. The methodology corpus is a DIFFERENT corpus from the plan
     // ledger, so these subcommands run before (and independently of) the
     // ledger load — a checkout with a broken or absent plan/index.yaml must
@@ -3701,6 +3918,62 @@ fn main() {
                 return;
             }
 
+            // ORDER 805-r98w, second half. `--by-hardware` is the SUBSTRATE-
+            // CONTROL projection: the matrix keyed on (hardware fingerprint,
+            // substrate) instead of on hostname, so rows sharing a machine
+            // model sit together and the substrate is the only free variable
+            // between them.
+            //
+            // WHY THIS ARM EXISTS AT ALL. `fragments::group_by_hardware` and
+            // `HardwareGroup::isolates_substrate` landed with four tests and
+            // NO production caller — the grouping was computable but not
+            // reachable, so every actual reader of the matrix still keyed on
+            // hostname and the control the order was filed to obtain could not
+            // be asked for. A function nobody can invoke does not deliver the
+            // capability; this is the face that does.
+            //
+            // WHAT IT PRINTS, and why the negative answer is the point:
+            //   hardware  <fingerprint>  loci=<n>  control=<yes|no>  <locus:host ...>
+            //   unidentified  <locus>:<host_id>
+            // `control=no` is the expected reading today. yolanda and yoga were
+            // asserted for weeks to be a twin pair and are not — hw2-f4e46bd13a0220cf
+            // against hw2-e94acbd479cb8b80, different SKU, core counts and iGPU
+            // bin. A caller must be able to ASK whether a control exists and be
+            // told no, rather than read a grouping and assume one does; that
+            // assumption is the whole defect this order removed.
+            //
+            // Unidentified rows are listed, never bucketed. A document with no
+            // fingerprint means the probe refused to identify the machine, and
+            // two machines that both failed to identify themselves are not
+            // thereby the same machine — grouping them would manufacture the
+            // false twin this order exists to prevent. Absent and
+            // "identified as nothing" are different facts (843-624y).
+            if args.iter().any(|a| a == "--by-hardware") {
+                let (groups, unidentified) =
+                    tillandsias_plan::fragments::group_by_hardware(&matrix);
+                for g in &groups {
+                    let obs = g
+                        .observations
+                        .iter()
+                        .map(|(locus, host)| format!("{locus}:{host}"))
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    let control = if g.isolates_substrate() { "yes" } else { "no" };
+                    println!(
+                        "hardware\t{}\tloci={}\tcontrol={}\t{}",
+                        g.fingerprint,
+                        g.observations.len(),
+                        control,
+                        obs
+                    );
+                }
+                for (locus, host) in &unidentified {
+                    println!("unidentified\t{locus}:{host}");
+                }
+                log_cli_usage(&subcommand, "answered", start_time.elapsed().as_millis());
+                return;
+            }
+
             // ORDER 861-n7f5. `--cpu-flags` is the ENGINE-DISPATCH projection:
             // one line per distinct host_id, sorted, as
             //   <host_id>\t<flags-csv>
@@ -3888,6 +4161,31 @@ fn main() {
                 // an engineering problem someone can see.
                 if let Some(devices) = entry.document["devices"].as_sequence() {
                     for d in devices {
+                        // ORDER 1011-zp59. A device left unscheduled by POLICY
+                        // belongs on this line whatever `usable` says, and it
+                        // is reported with ITS OWN reason.
+                        //
+                        // lenovinha's Vega has no ROCm runtime, so `usable` is
+                        // false and the unusable arm below would print
+                        // `present-unusable (rocm-runtime-missing)` — literally
+                        // true, and read by everyone as "this device does not
+                        // work". It works: measured through Vulkan, fully
+                        // resident. It is simply beaten 3-5x by the discrete
+                        // card beside it and is left off on purpose.
+                        //
+                        // Printing the policy reason here rather than flipping
+                        // `usable` upstream keeps the capability reading honest
+                        // (no Vulkan lane was probed) while making the row's
+                        // IMPLICATION true, which is the whole defect.
+                        if let Some(policy) = d["policy_unscheduled"].as_str() {
+                            println!(
+                                "  present-unscheduled: {}/{} ({})",
+                                d["device_class"].as_str().unwrap_or("?"),
+                                d["name"].as_str().unwrap_or("?"),
+                                policy
+                            );
+                            continue;
+                        }
                         if d["usable"].as_bool() != Some(true) {
                             continue;
                         }
@@ -3939,6 +4237,15 @@ fn main() {
                 // shows only what is schedulable cannot tell them apart.
                 if let Some(devices) = entry.document["devices"].as_sequence() {
                     for d in devices {
+                        // ORDER 1011-zp59. A policy-unscheduled device was
+                        // already reported above with its own reason. Falling
+                        // through to here would print BOTH lines for one
+                        // device, and the `present-unusable` one is exactly the
+                        // false implication this order removes — so the row
+                        // would still carry it, now contradicted two lines up.
+                        if d["policy_unscheduled"].as_str().is_some() {
+                            continue;
+                        }
                         if d["usable"].as_bool() == Some(false) {
                             // `os_status` is printed BESIDE the reason, not
                             // folded into it, because they are two independent
@@ -4158,6 +4465,47 @@ fn main() {
                 index.display(),
                 removed
             );
+        }
+        "build-id" => {
+            // ORDER 984-i4k2. WHICH CODE IS THIS BINARY, as opposed to which
+            // subcommands does it have.
+            //
+            // The expert-capability skew line compares subcommand SETS, so a
+            // subcommand present in both the running binary and the checkout is
+            // invisible to it however much its behaviour changed. Measured
+            // 2026-09-03: four hosts' binaries predated 823e3ac0d and kept
+            // writing `append-event` output into plan/index.yaml rather than a
+            // fragment, while the skew line truthfully reported `skew=none`.
+            // Baked by build.rs from the sources actually compiled.
+            println!(
+                "{}+{}",
+                env!("CARGO_PKG_VERSION"),
+                env!("TILLANDSIAS_PLAN_REVISION")
+            );
+            return;
+        }
+        "source-revision" => {
+            // The other half of the comparison: what a REBUILD from this
+            // checkout would bake. Same code as build.rs uses (one
+            // implementation, `include!`d there), so the two sides cannot
+            // drift into reporting skew forever or never.
+            let dir = args
+                .get(1)
+                .cloned()
+                .unwrap_or_else(|| "crates/tillandsias-plan".to_string());
+            let path = std::path::Path::new(&dir);
+            if !path.is_dir() {
+                eprintln!(
+                    "error: source-revision needs the tillandsias-plan crate directory; '{dir}' is not a directory"
+                );
+                std::process::exit(2);
+            }
+            println!(
+                "{}+{}",
+                env!("CARGO_PKG_VERSION"),
+                source_revision::source_revision(path)
+            );
+            return;
         }
         "next-order" => {
             // Mint a collision-free order token for a NEW packet.
@@ -5357,8 +5705,41 @@ fn main() {
             }
         }
         "ready" => {
+            // ORDER 992-w7ds. `ready` is THE roll-call view, and it read
+            // identically for a row nobody has ever touched and one that was
+            // claimed, worked and deliberately RELEASED with a carry-forward.
+            // Measured on the live ledger 2026-09-03: 216 of 424 ready rows
+            // carry events — 51% of the queue a coordinator reads as unstarted
+            // is not. I dispatched two hosts onto finished work that day and
+            // briefed a third on rungs that had landed days earlier.
+            //
+            // The marker is appended, never substituted: `line()` already
+            // appends ARCHIVED conditionally as a trailing field, and the
+            // callers that parse this take field 2 (status), so a further
+            // trailing field is additive. Deliberately NOT a second command —
+            // criterion 1 says the distinction must be in the view the roll
+            // call already uses, because a check you must know to run is one
+            // nobody runs.
+            //
+            // `worked:<n>@<host>` names the count and WHO last touched it, so a
+            // coordinator can read the events or ask that host rather than
+            // re-deriving. An untouched row prints nothing extra and still
+            // looks exactly as it always did.
             for p in ledger.ready(args.get(1).map(String::as_str)) {
-                emit(&line(&ledger, p));
+                let mut out = line(&ledger, p);
+                if let Some(seq) = p
+                    .get("events")
+                    .and_then(serde_yaml::Value::as_sequence)
+                    .filter(|s| !s.is_empty())
+                {
+                    let who = seq
+                        .last()
+                        .and_then(|e| e.get("host"))
+                        .and_then(serde_yaml::Value::as_str)
+                        .unwrap_or("-");
+                    out.push_str(&format!("\tworked:{}@{}", seq.len(), who));
+                }
+                emit(&out);
             }
         }
         "burndown" => {
@@ -5583,6 +5964,7 @@ fn main() {
             let mut host: Option<String> = None;
             let mut flag_type: Option<String> = None;
             let mut flag_summary: Option<String> = None;
+            let mut flag_summary_file: Option<String> = None;
             let mut backfill = false;
             let mut i = 1;
             while i < args.len() {
@@ -5612,6 +5994,23 @@ fn main() {
                         i += 1;
                         flag_summary = args.get(i).cloned();
                     }
+                    // ORDER 971-7muc. THE SANCTIONED PATH FOR PROSE.
+                    //
+                    // Prose passed through argv has already been processed by
+                    // the shell before this program starts, and the damage is
+                    // INVISIBLE HERE: `the \`field\` name` in double quotes
+                    // arrives as `the  name` with both backticks and the word
+                    // between them already gone. Two hosts lost the SUBJECT of
+                    // a sentence to that on one evening, and every validator
+                    // passed the result, because valid YAML containing plausible
+                    // prose is exactly what the corruption produces.
+                    //
+                    // A file (or `-` for stdin) is read by THIS process, so the
+                    // shell never sees the text and cannot expand anything in it.
+                    "--summary-file" => {
+                        i += 1;
+                        flag_summary_file = args.get(i).cloned();
+                    }
                     // 719-kgr5 escape hatch: recording an event that genuinely
                     // happened earlier. Takes no value.
                     "--backfill" => backfill = true,
@@ -5638,9 +6037,33 @@ fn main() {
             let etype = flag_type
                 .or_else(|| positional.get(1).cloned())
                 .unwrap_or_else(|| usage());
-            let summary = flag_summary
-                .or_else(|| positional.get(2).cloned())
-                .unwrap_or_else(|| usage());
+            // ORDER 971-7muc. Prose comes from a FILE when one is named: this
+            // process reads it, so the shell never touched the bytes.
+            let summary = match flag_summary_file.as_deref() {
+                Some(path) => {
+                    if flag_summary.is_some() {
+                        eprintln!(
+                            "error: --summary and --summary-file are mutually exclusive \
+                             — pass the prose once, and prefer --summary-file (971-7muc)"
+                        );
+                        std::process::exit(2);
+                    }
+                    match read_prose_source(path) {
+                        Ok(text) => text,
+                        Err(e) => {
+                            eprintln!("error: cannot read --summary-file {path}: {e}");
+                            std::process::exit(2);
+                        }
+                    }
+                }
+                None => {
+                    let text = flag_summary
+                        .or_else(|| positional.get(2).cloned())
+                        .unwrap_or_else(|| usage());
+                    reject_shell_mangled_prose(&text);
+                    text
+                }
+            };
             let (reference, etype, summary) = (&reference, &etype, &summary);
             // 719-kgr5. This used to REQUIRE --ts, on the reasoning that "the
             // tool does not invent timestamps" — but the caller then invented
@@ -5697,14 +6120,13 @@ fn main() {
                 .filter(|h| !h.trim().is_empty())
                 .map(require_acceptable_host)
                 .unwrap_or_else(resolve_writer_host);
-            let block = edit::event_block(etype, &ts, &agent, &host, summary);
-            let raw = match std::fs::read_to_string(&index) {
-                Ok(r) => r,
-                Err(e) => {
-                    eprintln!("error: read {}: {e}", index.display());
-                    std::process::exit(1);
-                }
-            };
+            // 966-7umc: the base is no longer read here. It was read only to
+            // locate the packet's block for an in-place append; the fragment
+            // path needs neither the block nor the base text, so a scout
+            // recording a finding no longer pulls a 31k-line ledger into memory
+            // to write four lines. Existence and the archived refusal are both
+            // settled above, against the folded ledger, before any byte is
+            // written.
 
             // 699-usxc. A packet declared only in an uncompacted fragment has no
             // block in the BASE to append into — this arm locates packets by
@@ -5720,11 +6142,43 @@ fn main() {
             // hardest when someone is correcting a mistake in the record —
             // exactly when the ledger most needs to accept a write.
             //
-            // So: if the base cannot host the event, write it as a NEW FRAGMENT,
-            // which is what the overlay is for and what set-field already does.
-            // The fold reads events from fragments, so the result is identical
-            // to a base append from every reader's point of view.
-            if !edit::base_hosts_packet(&raw, &target) {
+            // So: write the event as a NEW FRAGMENT, which is what the overlay
+            // is for and what set-field already does. The fold reads events
+            // from fragments, so the result is identical to a base append from
+            // every reader's point of view.
+            //
+            // ORDER 966-7umc: THE FRAGMENT IS NOW THE DEFAULT, NOT THE FALLBACK.
+            //
+            // This branch used to be conditional on `!base_hosts_packet(..)`,
+            // so the common case — a packet that IS in the base — appended to
+            // plan/index.yaml. That write is OUTSIDE the plan-only push lane
+            // (scripts/hooks/pre-push-local-gate.sh admits only NEW files under
+            // plan/index.d/, plan/loop_status.d/, plan/issues/<class>/ and
+            // plan/mo-full-attestations.d/), so recording one event obliged the
+            // writer to pass a full `./build.sh --check`.
+            //
+            // WHICH IS A GATE THE HOSTS THAT MOST NEED TO RECORD CANNOT PASS.
+            // Measured 2026-09-02: an N100/WSL2 floor host (curl-installed, no
+            // built router sidecar) and a CPU-only forge each hand-authored a
+            // fragment to get their findings in, and said so in the fragment
+            // header. A hand-authored fragment then broke the fold and stopped
+            // every push in the fleet for twenty minutes. The tool was harder
+            // to use than hand-writing YAML, so people hand-wrote YAML — and
+            // the failure mode of hand-written YAML is exactly the one the
+            // flush guard exists to prevent.
+            //
+            // The point is not that the base append was wrong. It is that a
+            // scout with a finding must have a path that does not run a
+            // compiler. `compact` folds fragments into the base later, on a
+            // host that can afford the gate, which is where that cost belongs.
+            //
+            // `base_hosts_packet` and `edit::append_event` remain — compaction
+            // is what needs them — and the ONE thing this must not do is
+            // silently write a fragment the fold would skip, so the same
+            // 775-b4qz parse check set-field has is applied below. It was
+            // missing from this path, which is the same defect class in the
+            // one place it had already been fixed.
+            {
                 let compact = loop_status::iso_to_compact(&ts);
                 let suffix = format!(
                     "{:08x}",
@@ -5741,11 +6195,16 @@ fn main() {
                 let path = dir.join(fragments::fragment_name(&compact, &suffix, &host));
                 let mut body = String::new();
                 body.push_str("# Ledger fragment — append-only, IMMUTABLE once written.\n");
-                body.push_str("# Written by: tillandsias-plan append-event (order 699-usxc).\n");
                 body.push_str(
-                    "#\n# The target packet is declared only in an uncompacted fragment, so the\n\
-                     # BASE ledger has no block to append into. Recording the event here keeps\n\
-                     # it visible to the fold, which is what every reader consults.\n",
+                    "# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).\n",
+                );
+                body.push_str(
+                    "#\n# Events go to the OVERLAY, never to plan/index.yaml: a base write falls\n\
+                     # outside the plan-only push lane and would oblige the writer to pass a full\n\
+                     # ./build.sh --check, which is precisely the gate a floor host or a forge may\n\
+                     # not be able to run. The fold reads events from fragments, so every reader\n\
+                     # sees this exactly as it would a base append; `compact` folds it into the\n\
+                     # base later, on a host that can afford the gate.\n",
                 );
                 body.push_str("events:\n");
                 body.push_str(&format!("  - packet_id: {target}\n"));
@@ -5754,42 +6213,25 @@ fn main() {
                 body.push_str(&format!("      ts: \"{ts}\"\n"));
                 body.push_str(&format!("      agent_id: {agent}\n"));
                 body.push_str(&format!("      host: {host}\n"));
-                body.push_str("      summary: >\n");
-                for line in summary.replace('\n', " ").split('\n') {
-                    body.push_str(&format!("        {line}\n"));
-                }
+                body.push_str(&format!(
+                    "      summary: {}",
+                    prose_block_scalar(summary, 8)
+                ));
                 if let Err(e) = std::fs::write(&path, body) {
                     eprintln!("error: write {}: {e}", path.display());
                     std::process::exit(1);
                 }
+                // 775-b4qz: never exit 0 on a fragment the fold would skip.
+                // set-field has had this since 775-b4qz; append-event never
+                // did, and a fragment the fold skips is INVISIBLE — the write
+                // reports success and the finding is simply absent from every
+                // answer. That is strictly worse than a refusal, and it is the
+                // failure a hand-authored fragment produced fleet-wide today.
+                if let Err(e) = fragments::verify_written_parses(&path) {
+                    reject_written_fragment(&path, &e);
+                }
                 println!("appended {etype} event to {target} ({})", path.display());
-                return;
             }
-            let candidate = match edit::append_event(&raw, &target, &block) {
-                Ok(c) => c,
-                Err(e) => {
-                    eprintln!("error: {e}");
-                    std::process::exit(1);
-                }
-            };
-            // FLUSH GUARD: never write a broken ledger (order-263 by construction).
-            let violations = edit::validate_candidate(
-                &candidate,
-                ledger.archived_ids(),
-                &schema.reference_fields,
-            );
-            if !violations.is_empty() {
-                eprintln!("REFUSED: this edit would break the ledger:");
-                for v in &violations {
-                    eprintln!("  violation: {v}");
-                }
-                std::process::exit(1);
-            }
-            if let Err(e) = std::fs::write(&index, candidate) {
-                eprintln!("error: write {}: {e}", index.display());
-                std::process::exit(1);
-            }
-            println!("appended {etype} event to {target}");
         }
         // Order 569. Was `usage()`, which conflated "this binary cannot do that"
         // with "you forgot an operand". The wrapper needs the two apart: the
@@ -5923,8 +6365,7 @@ fn main() {
                 body.push_str("      type: note\n");
                 body.push_str(&format!("      ts: \"{ts}\"\n"));
                 body.push_str(&format!("      host: {host}\n"));
-                body.push_str("      summary: >\n");
-                body.push_str(&format!("        {}\n", note.replace('\n', " ")));
+                body.push_str(&format!("      summary: {}", prose_block_scalar(&note, 8)));
                 if let Err(e) = std::fs::write(&path, body) {
                     eprintln!("error: write {}: {e}", path.display());
                     std::process::exit(1);
@@ -6129,7 +6570,42 @@ fn main() {
                         .get("ts")
                         .and_then(serde_yaml::Value::as_str)
                         .unwrap_or("-");
-                    println!("{ty}\t{ts}");
+                    // ORDER 992-w7ds. `<type>\t<ts>` could not tell a CLAIM from
+                    // a RELEASE — both are `note` — so a row that was claimed,
+                    // worked and deliberately released reads exactly like one
+                    // nobody has ever touched. Measured on the live ledger
+                    // 2026-09-03: 216 of 424 `ready` rows carry events, so 51%
+                    // of the queue a coordinator reads as unstarted is not.
+                    // Two hosts were dispatched onto finished work that night.
+                    // The host and the summary's FIRST LINE are what
+                    // discriminate, so they are appended rather than replacing
+                    // anything. Safe by measurement, not by assumption: this
+                    // format has NO runtime consumer anywhere in the tree — only
+                    // the dispatch arm, the usage string, capabilities.txt, and
+                    // one comment in check-stranded-in-progress.sh describing a
+                    // call 946-pdpi already moved to `expire-claims`.
+                    let host = ev
+                        .get("host")
+                        .and_then(serde_yaml::Value::as_str)
+                        .unwrap_or("-");
+                    // Truncated on CHARACTER boundaries, not bytes — a summary
+                    // may carry non-ASCII and a byte slice would panic. Capped
+                    // because this view is scanned, not read: an uncapped line
+                    // is a paragraph, and a roll call over a few hundred rows
+                    // stops being legible, which is the job it was widened for.
+                    let raw = ev
+                        .get("summary")
+                        .and_then(serde_yaml::Value::as_str)
+                        .unwrap_or("")
+                        .lines()
+                        .next()
+                        .unwrap_or("");
+                    let summary: String = if raw.chars().count() > 100 {
+                        format!("{}…", raw.chars().take(100).collect::<String>())
+                    } else {
+                        raw.to_string()
+                    };
+                    println!("{ty}\t{ts}\t{host}\t{summary}");
                 }
             }
             log_cli_usage(&subcommand, "answered", start_time.elapsed().as_millis());
@@ -6691,6 +7167,123 @@ fn scalar_to_string(v: &serde_yaml::Value) -> String {
             .unwrap_or_default()
             .trim()
             .to_string(),
+    }
+}
+
+/// ORDER 971-7muc. Refuse prose that carries the RESIDUE of shell expansion.
+///
+/// ── WHAT THIS CAN AND CANNOT CATCH, stated plainly because the limit is the
+/// whole reason `--summary-file` exists ────────────────────────────────────────
+///
+/// By the time this program runs, the shell has finished. A BALANCED command
+/// substitution leaves no trace whatsoever:
+///
+///     "the `accel_mem_budget_gb` field"   ->   argv receives:  "the  field"
+///
+/// Both backticks and the word between them are gone before `main` is entered.
+/// No amount of inspection here can recover or even detect that. That is exactly
+/// how two hosts lost the subject of a sentence on one evening (964-r98h and
+/// 970-7fqk) while `validate-yaml`, `plan check`, the fragment-keys guard and
+/// `./build.sh --check` all passed the result: valid YAML, plausible prose.
+///
+/// So this is a residue detector, not a guarantee, and it must not be mistaken
+/// for one. What it CAN see:
+///
+///   - an UNBALANCED backtick — an odd count means one of a pair was consumed,
+///     which is positive evidence that an expansion already happened;
+///   - a literal `$(` — either an unexpanded substitution the author did not
+///     intend to store, or the visible half of one the shell partly ate.
+///
+/// Prose with BALANCED backticks passes, because that is what correct
+/// single-quoting delivers and refusing it would break every honest caller.
+///
+/// The real remedy is structural and lives one layer up: take the prose from a
+/// file so the shell never sees it. This check exists so the hazardous path
+/// fails loudly where it can, rather than staying silently available to whoever
+/// is in a hurry — which, per the packet, is precisely when this happens.
+fn reject_shell_mangled_prose(text: &str) {
+    let backticks = text.chars().filter(|c| *c == '`').count();
+    let unbalanced = backticks % 2 == 1;
+    let has_subst = text.contains("$(");
+    if !unbalanced && !has_subst {
+        return;
+    }
+    let mut reasons: Vec<&str> = Vec::new();
+    if unbalanced {
+        reasons
+            .push("an unbalanced backtick (odd count — one of a pair was consumed by the shell)");
+    }
+    if has_subst {
+        reasons.push("a literal `$(` (an unexpanded or partly-expanded command substitution)");
+    }
+    eprintln!(
+        "error: refusing to store prose passed through argv that carries {} \
+         — the shell has already rewritten this text and the damage is not \
+         recoverable here (971-7muc).\n\
+         \n\
+         Pass the prose through a file instead, so no shell ever sees it:\n\
+         \n    tillandsias-plan append-event <ref> <type> --summary-file NOTE.md ...\n\
+         \n  or from stdin:\n\
+         \n    tillandsias-plan append-event <ref> <type> --summary-file - ... <<'EOF'\n\
+         \n  Note the QUOTED heredoc delimiter ('EOF', not EOF): an unquoted one \
+         expands backticks in the body and reproduces the very defect this refuses.",
+        reasons.join(" and ")
+    );
+    std::process::exit(2);
+}
+
+/// ORDER 971-7muc. Render prose as a LITERAL block scalar, preserving newlines.
+///
+/// `append-event` previously wrote `summary: >` after `summary.replace('\n', " ")`
+/// — a folded scalar fed text whose line breaks had already been destroyed, so
+/// the two mechanisms agreed on discarding paragraph structure. A multi-paragraph
+/// event summary came back as one run-on line.
+///
+/// This is the SAME failure signature as the argv mangling this order was filed
+/// for, and it survived for the same reason: the result is valid YAML carrying
+/// plausible prose, so validate-yaml, `plan check`, the fragment-keys guard and
+/// `./build.sh --check` all pass it. Only a byte-identity assertion sees it, and
+/// nothing asserted byte identity until now.
+///
+/// `|` keeps the trailing newline, `|-` strips it, so an input either way
+/// round-trips exactly. Empty input degrades to `""` rather than emitting a
+/// dangling `summary: |` with no body, which the fold rejects.
+fn prose_block_scalar(s: &str, indent: usize) -> String {
+    if s.is_empty() {
+        return " \"\"\n".to_string();
+    }
+    let (chomp, body) = if s.ends_with('\n') {
+        ("|", s.strip_suffix('\n').unwrap_or(s))
+    } else {
+        ("|-", s)
+    };
+    let pad = " ".repeat(indent);
+    let mut out = format!("{chomp}\n");
+    for l in body.split('\n') {
+        if l.is_empty() {
+            out.push('\n');
+        } else {
+            out.push_str(&pad);
+            out.push_str(l);
+            out.push('\n');
+        }
+    }
+    out
+}
+
+/// ORDER 971-7muc. Read prose from a file, or from stdin when the path is `-`.
+///
+/// The point is not convenience. Prose that reaches this program through argv
+/// has already been rewritten by the shell, and the rewrite is not recoverable
+/// here — see [`reject_shell_mangled_prose`]. Reading the bytes ourselves is the
+/// only way to guarantee that what the author wrote is what the ledger stores.
+fn read_prose_source(path: &str) -> std::io::Result<String> {
+    if path == "-" {
+        let mut buf = String::new();
+        std::io::Read::read_to_string(&mut std::io::stdin(), &mut buf)?;
+        Ok(buf)
+    } else {
+        std::fs::read_to_string(path)
     }
 }
 

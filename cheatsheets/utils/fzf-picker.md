@@ -15,7 +15,7 @@ committed_for_project: false
 ---
 # fzf (Fuzzy Finder)
 
-@trace spec:agent-source-of-truth
+@trace spec:knowledge-source-of-truth
 
 **Version baseline**: fzf 0.48.0 (Fedora 43)  
 **Use when**: Interactively selecting files, commands, or search results from piped input

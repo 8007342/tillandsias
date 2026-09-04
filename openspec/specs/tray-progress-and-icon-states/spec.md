@@ -14,6 +14,7 @@ Replace the comma-joined, fragmentary status chip with an additive, emoji-based 
 ## Requirements
 
 ### Requirement: Additive Progress Chip
+<!-- req-id: 9c29085d -->
 
 The status chip MUST be a single-line, additive string composed of: @trace spec:tray-progress-and-icon-states
 
@@ -41,6 +42,7 @@ The status chip MUST be a single-line, additive string composed of: @trace spec:
 - **AND** this transition SHOULD complete in under 30 seconds (typical subsequent starts)
 
 ### Requirement: Unhealthy Stage
+<!-- req-id: 9de030ea -->
 
 A new `Stage::Unhealthy` variant MUST signal that at least one subsystem has failed and no concurrent retry is in progress. When detected:
 
@@ -56,6 +58,7 @@ A new `Stage::Unhealthy` variant MUST signal that at least one subsystem has fai
 - **AND** detailed error MUST be in the log (user can inspect with --log-forge or UI log viewer)
 
 ### Requirement: Cold-Start Baseline
+<!-- req-id: d169ccc9 -->
 
 When the tray starts and NO subsystem has yet reported a build status, AND the stage is `Booting`, the chip MUST read:
 
@@ -69,6 +72,7 @@ This ensures the menu reads "loading / checking" instead of "ostensibly empty" d
 - **AND** user SHOULD see the tray is responsive (not hung or broken)
 
 ### Requirement: Locale Keys for Chip
+<!-- req-id: e2aa0df4 -->
 
 The tray MUST add the following locale keys (en, de, es):
 
@@ -82,6 +86,7 @@ The tray MUST add the following locale keys (en, de, es):
 Locale-parity tests (`every_en_key_exists_in_es`, `every_en_key_exists_in_de`) MUST enforce that all three locales have entries for every key.
 
 ### Requirement: Sign-In Label Rename
+<!-- req-id: 32801eb2 -->
 
 The "Sign in to GitHub" menu item MUST be renamed:
 

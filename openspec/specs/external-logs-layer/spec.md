@@ -8,6 +8,7 @@ active
 Define the host-side external log tier for producer/consumer container pairs, including the shared parent directory layout, producer manifests, and auditor invariants that keep cross-container log visibility explicit and bounded.
 ## Requirements
 ### Requirement: Two-tier observability model
+<!-- req-id: 665e2d29 -->
 
 Tillandsias SHALL distinguish two log tiers per container — INTERNAL (per-container `ContainerLogs` mount, never visible to siblings) and EXTERNAL (manifest-curated files mounted RW at producer and RO at consumers). The two tiers are mutually exclusive in mount semantics: INTERNAL is owner-only RW, EXTERNAL crosses the enclave through a parent-directory bind-mount.
 
@@ -24,6 +25,7 @@ Tillandsias SHALL distinguish two log tiers per container — INTERNAL (per-cont
 - **AND** consumers see one subdirectory per active producer role
 
 ### Requirement: Producer mount + manifest contract
+<!-- req-id: 27479e38 -->
 
 A producer container SHALL declare every file it writes externally in `/etc/tillandsias/external-logs.yaml` baked into its image. The launcher SHALL bind-mount the per-role host directory RW into the producer at `/var/log/tillandsias/external/`. The manifest is the producer's versioned public log API; any file written outside the manifest is a contract violation flagged by the tray auditor.
 
@@ -44,6 +46,7 @@ A producer container SHALL declare every file it writes externally in `/etc/till
 - **AND** the directory SHALL be disk-backed (NEVER tmpfs) per `forge-hot-cold-split` spec
 
 ### Requirement: Consumer mount
+<!-- req-id: 231255a0 -->
 
 A consumer container (forge, maintenance terminal) SHALL receive a RO bind-mount of the parent `~/.local/state/tillandsias/external-logs/` directory at `/var/log/tillandsias/external/`. The parent-directory mount semantics ensures new producers appearing after the consumer starts become visible without restart.
 
@@ -57,6 +60,7 @@ A consumer container (forge, maintenance terminal) SHALL receive a RO bind-mount
 - **THEN** the consumer SHALL see the new producer's role directory without restart (parent-dir RO mount semantics)
 
 ### Requirement: Auditor invariants
+<!-- req-id: f2f57910 -->
 
 The tray-side auditor SHALL run every 60 s alongside existing health checks and enforce three invariants on every external-log file: (1) the file is declared in its producer's manifest, (2) the file's size is below `rotate_at_mb`, (3) the file's growth rate is below 1 MB/min sustained. Violations emit accountability-tagged events with `category = "external-logs"` and `spec = "external-logs-layer"`.
 
@@ -83,6 +87,7 @@ The tray-side auditor SHALL run every 60 s alongside existing health checks and 
 - **AND** growth-rate history SHALL be maintained in a `HashMap<(role, file), VecDeque<(Instant, u64)>>` local to the event loop across ticks
 
 ### Requirement: Reverse-breach refusal
+<!-- req-id: 3c1e087c -->
 
 A `ContainerProfile` MUST NOT be both a producer (`external_logs_role: Some(_)`) AND a consumer (`external_logs_consumer: true`). Allowing both would break the producer's manifest contract by letting consumer-tier writes shadow producer-tier files. `ContainerProfile::validate()` SHALL refuse such profiles and the launcher SHALL assert the invariant.
 
@@ -92,6 +97,7 @@ A `ContainerProfile` MUST NOT be both a producer (`external_logs_role: Some(_)`)
 - **AND** `build_podman_args()` SHALL assert this invariant and emit an `accountability = true` WARN if violated
 
 ### Requirement: Migration of git-push.log
+<!-- req-id: a8a76bcf -->
 
 The pre-existing `git-push.log` file under `~/.local/state/tillandsias/containers/tillandsias-git/logs/` SHALL be migrated to the new EXTERNAL-tier location (`~/.local/state/tillandsias/external-logs/git-service/git-push.log`) on first tray startup after this layer ships. The migration SHALL be atomic, idempotent, and require no entrypoint code change in the git-service image.
 

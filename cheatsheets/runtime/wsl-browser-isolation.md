@@ -26,10 +26,10 @@ pull_recipe: see-section-pull-on-demand
 
 # WSL browser isolation (Chromium)
 
-@trace spec:agent-cheatsheets, spec:cross-platform, spec:windows-wsl-runtime, spec:chromium-browser-isolation
+@trace spec:agent-cheatsheets, spec:cross-platform, spec:windows-wsl-runtime, spec:browser-isolation-core
 
 **Version baseline**: WSL2 on Windows 10 build 19044+ / Windows 11; systemd integration requires Win 10 19044+ or Win 11 22H2+.
-**Use when**: hosting a hardened Chromium browser as a sibling WSL distro alongside `tillandsias-forge`/`tillandsias-git`/`tillandsias-proxy`/etc. Goal: full filesystem + credential isolation from the host, all egress forced through `tillandsias-proxy:3128`. The Windows arm of `spec:chromium-browser-isolation`.
+**Use when**: hosting a hardened Chromium browser as a sibling WSL distro alongside `tillandsias-forge`/`tillandsias-git`/`tillandsias-proxy`/etc. Goal: full filesystem + credential isolation from the host, all egress forced through `tillandsias-proxy:3128`. The Windows arm of `spec:browser-isolation-core`.
 
 ## Provenance
 
@@ -46,7 +46,7 @@ pull_recipe: see-section-pull-on-demand
 
 ## Why a sibling WSL distro vs Windows Sandbox
 
-This distro is the Windows arm of `spec:chromium-browser-isolation`. Windows Sandbox was investigated and rejected as the primary mechanism (see `runtime/windows-sandbox.md` for the full feasibility report — kept as a "considered, rejected" alternative per the @trace lifecycle convention). The blockers: Sandbox is unavailable on Windows Home, has no middle-ground network mode (all-or-nothing), no CDP attach across the boundary, multi-instance is Win11 24H2+ only. A WSL distro sibling avoids every one of those. Trade-off: WSL2 has one shared Linux kernel for all distros; Sandbox spawns a per-instance kernel. We already accept the shared-kernel trust model for the forge distro (where untrusted agent code runs); this cheatsheet adds a more-locked-down distro alongside.
+This distro is the Windows arm of `spec:browser-isolation-core`. Windows Sandbox was investigated and rejected as the primary mechanism (see `runtime/windows-sandbox.md` for the full feasibility report — kept as a "considered, rejected" alternative per the @trace lifecycle convention). The blockers: Sandbox is unavailable on Windows Home, has no middle-ground network mode (all-or-nothing), no CDP attach across the boundary, multi-instance is Win11 24H2+ only. A WSL distro sibling avoids every one of those. Trade-off: WSL2 has one shared Linux kernel for all distros; Sandbox spawns a per-instance kernel. We already accept the shared-kernel trust model for the forge distro (where untrusted agent code runs); this cheatsheet adds a more-locked-down distro alongside.
 
 ## Isolation properties achieved
 
@@ -271,7 +271,7 @@ This cheatsheet documents hardened Chromium deployment in a WSL2 distro alongsid
 ```bash
 #!/bin/bash
 # Build WSL2 browser-chrome distro with Chromium hardening
-# @trace spec:chromium-browser-isolation, spec:windows-wsl-runtime
+# @trace spec:browser-isolation-core, spec:windows-wsl-runtime
 
 # Build base distro from fedora-minimal:44 + Chromium + hardening tools
 podman create registry.fedoraproject.org/fedora-minimal:44 /bin/sh -c 'true' > "$BUILD_CONTAINER"

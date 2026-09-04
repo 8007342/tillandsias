@@ -14,6 +14,7 @@ Defer inference container startup to a background task, unblocking forge launch 
 ## Requirements
 
 ### Requirement: Detached inference startup task
+<!-- req-id: 74a695bb -->
 
 The `ensure_enclave_ready()` handler MUST spawn `ensure_inference_running()` as a detached `tokio::spawn(...)` task instead of awaiting it synchronously. The spawned task MUST:
 
@@ -37,6 +38,7 @@ The `BUILD_MUTEX` at `handlers.rs:54` already serializes concurrent builds, so t
 - **AND** the coding session MUST already be running — the user has shell access regardless
 
 ### Requirement: Startup-time empirical validation
+<!-- req-id: ddedfd77 -->
 
 A timer log line MUST be emitted at the end of `ensure_enclave_ready()` (before inference result) to record the elapsed time from handler start to readiness. This enables measurement of the warm-launch savings empirical ly.
 
@@ -47,6 +49,7 @@ A timer log line MUST be emitted at the end of `ensure_enclave_ready()` (before 
 - **AND** the log line MUST include annotation `@trace spec:async-inference-launch, spec:enclave-network`
 
 ### Requirement: Enclave readiness message clarity
+<!-- req-id: 3fd71823 -->
 
 The final readiness line emitted by `ensure_enclave_ready()` MUST distinguish between:
 

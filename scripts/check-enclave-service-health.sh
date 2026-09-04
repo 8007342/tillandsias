@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# ORDER 998-qrwu: the CA directory comes from the ONE declaration
+# (images/default/ca-path.txt), never a literal — see scripts/lib-ca-path.sh.
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-ca-path.sh"
 # @trace spec:runtime-diagnostics
 #
 # check-enclave-service-health.sh — ONE place that reports the health of the
@@ -110,10 +113,14 @@
 # live in $STATE_DIR/service-restarts-<name> as "epoch count", windowed, so a
 # flapper goes quiet at the cap instead of being fought forever.
 
+_HEALTH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 set -uo pipefail
 
 PREFIX="${TILLANDSIAS_ENCLAVE_SERVICE_PREFIX:-tillandsias-}"
 EXPECTED="${TILLANDSIAS_ENCLAVE_EXPECTED_SERVICES:-}"
+# ORDER 1004-inkc — THE EXPECTED SET IS THIS SCRIPT'S, NOT ITS CALLER'S.
+# Resolved after argument parsing (see _resolve_default_expected below), because
+# an explicit --expect must still win.
 STRICT=0
 ACT=0
 ACT_GRACE_S="${TILLANDSIAS_ENCLAVE_ACT_GRACE_S:-1800}"
@@ -171,6 +178,68 @@ _age() { # <seconds>
     if [ "$s" -lt 86400 ]; then printf '%dh%dm' $((s / 3600)) $(((s % 3600) / 60)); return; fi
     printf '%dd%dh' $((s / 86400)) $(((s % 86400) / 3600))
 }
+
+# ORDER 1004-inkc — DEFAULT EXPECTED SET, WITH THE ANCHOR RULE, IN THE CHECK.
+#
+# THE DEFECT THIS CLOSES, measured on lenovinha-silverblue 2026-09-04, two
+# readings of one host minutes apart with nothing repaired between them:
+#   proxy container DOWN     -> degraded:enclave-service-health:services=6:up=5:down=1
+#   proxy container REMOVED  -> ok:enclave-service-health:services=5:up=5:down=0:dead=0:absent=0
+# The service went from stopped to NONEXISTENT and the verdict went from
+# degraded to ok, printing absent=0 while a required service was absent. A gate
+# that `podman rm` can satisfy is not a gate.
+#
+# The enumeration below walks what EXISTS, so a deleted member is invisible to
+# it; without a declaration it never reaches the absent loop either. 994-8r3w
+# declared the expected set but wired it into ONE CALLER (cycle-preflight), so
+# the verdict depended on who invoked the script — and the bare invocation, the
+# one an operator makes by hand, was the unguarded path. That order's own
+# unmet criterion 3 says it: "nothing yet fails if a future edit stops preflight
+# exporting the variable." This is that criterion, done in the check.
+#
+# THE ANCHOR RULE MOVES HERE TOO, and it is not optional. A machine that has
+# never provisioned an enclave is not MISSING anything, and reporting it absent
+# would be the cry-wolf failure that gets a check switched off — which is how
+# the original gap survived. Vault is the anchor: every other persistent service
+# depends on it in the graph, so its presence is what distinguishes "provisioned
+# and degraded" from "never provisioned". Leaving the anchor in the caller while
+# moving the default here would have re-created the same split one layer down.
+#
+# Precedence unchanged: --expect and TILLANDSIAS_ENCLAVE_EXPECTED_SERVICES still
+# win, so every existing caller and fixture behaves exactly as before.
+# `--expect none` (or the env set to `none`) means EXPECT NOTHING — pure
+# enumeration, the behaviour every caller had before this order. It exists
+# because an EMPTY value now means "use the default", so without an explicit
+# token there is no way to ask for the old semantics, and a caller that wants
+# them would have to pass a fake service name. Fixtures exercising unrelated
+# properties (exit codes, origin labels, stale-healthy) use it so they do not
+# silently inherit the fleet's expected set and start reporting an absence they
+# were never written to model.
+#
+# ── FIXTURE-ONLY. NO PRODUCTION CALLER MAY PASS `none`. ─────────────────────
+#
+# This token disables the absent detection, which is the entire subject of
+# 1004-inkc. A production caller passing it would turn this check back into one
+# that CANNOT FAIL on a deleted service — precisely the class the order just
+# removed, reintroduced through the door built to fix it.
+#
+# Enforced, not merely requested: scripts/check-enclave-expect-none-is-fixture-only.sh
+# refuses any caller outside the fixture, and it is wired into local-ci.sh. The
+# rule is deliberately a LINT rather than a runtime guard keyed on a test-only
+# environment variable — such a variable is itself settable from production, so
+# it would move the hole rather than close it.
+if [ "$EXPECTED" = "none" ]; then
+    EXPECTED=""
+elif [ -z "$EXPECTED" ]; then
+    _declared_file="$_HEALTH_DIR/../images/default/enclave-services.txt"
+    if [ -r "$_declared_file" ] && podman container exists "${PREFIX}vault" 2>/dev/null; then
+        EXPECTED="$(
+            grep -v '^[[:space:]]*#' "$_declared_file" 2>/dev/null \
+              | grep -v '^[[:space:]]*$' \
+              | tr '\n' ',' | sed 's/,$//'
+        )"
+    fi
+fi
 
 names=""
 up=0
@@ -316,6 +385,48 @@ if [ "$ACT" -eq 1 ] && [ -n "${down_list:-}" ]; then
 "
             continue
         fi
+        # ORDER 975-rsgm. RESTORE THE PRECONDITION BEFORE STARTING THE PROXY,
+        # because `podman start` alone is what CREATES the second failure.
+        #
+        # The proxy is served its certificate from a bind mount and its private
+        # key from the podman secret `tillandsias-ca-key`.
+        # `ensure_proxy_ca_key_secret` refreshes that secret with `--replace`
+        # immediately before every launch — on the LAUNCH path only. This
+        # self-heal, and the REMEDY line this script prints, both use plain
+        # `podman start`, which bypasses it. So after any CA regeneration the
+        # heal "succeeds", squid comes up, and dies:
+        #
+        #   WARNING: '/etc/squid/certs/intermediate.key' X509_check_private_key() failed
+        #   FATAL: No valid signing certificate configured for HTTP_port [::]:3128
+        #
+        # MEASURED on yoga over five cycles: the restart reported
+        # `fix:enclave-service-restarted:...:action=started` and the container
+        # was dead seconds later, with a message naming neither file. The heal
+        # was reporting success for an action that could not work.
+        #
+        # Refreshing the secret from the current bundle is exactly what the
+        # launch path does, so this is not a new policy — it is the same
+        # precondition, applied on the path that was missing it. It runs ONLY
+        # for the proxy and ONLY when the pair actually disagrees, so a healthy
+        # host pays one modulus comparison and nothing is rotated needlessly.
+        _ca_check="${TILLANDSIAS_CA_CONSISTENCY_CHECK:-$_HEALTH_DIR/check-enclave-ca-consistency.sh}"
+        if [ "$name" = "tillandsias-proxy" ] && [ -x "$_ca_check" ]; then
+            if ! bash "$_ca_check" >/dev/null 2>&1; then
+                _cadir="${TILLANDSIAS_CA_DIR}"
+                if [ -r "$_cadir/intermediate.key" ] \
+                   && _run podman secret create --replace tillandsias-ca-key "$_cadir/intermediate.key" >/dev/null 2>&1; then
+                    details="${details}fix:enclave-ca-key-rotated:service=${name}:action=secret-replaced
+"
+                else
+                    # Say so rather than starting into a certain death. A start
+                    # that reports `started` and dies is worse than a refusal
+                    # that names the reason.
+                    details="${details}fail:enclave-ca-desync-unrepaired:service=${name}:action=operator
+"
+                    continue
+                fi
+            fi
+        fi
         if _run podman start "$name" >/dev/null 2>&1; then
             [ "$_cepoch" -eq 0 ] && _cepoch="$now"
             _ccount=$((_ccount + 1))
@@ -343,6 +454,12 @@ if [ -n "$EXPECTED" ]; then
         done
         if [ "$found" -eq 0 ]; then
             absent=$((absent + 1))
+            # ORDER 1004-inkc: an absent member still COUNTS as a service. Left
+            # out, `services=` shrinks when a member is deleted — which is half
+            # of what made the two readings look like an improvement: 6 down to
+            # 5 reads as "one fewer thing to worry about" rather than "one thing
+            # vanished".
+            total=$((total + 1))
             details="${details}fail:enclave-service-absent:service=${want}:state=absent:rc=none:signal=none:age=unknown:restarts=0:health=none:origin=unknown:age_s=-1
 "
         fi
@@ -357,7 +474,14 @@ if [ -n "$details" ]; then
         echo "  NOTE: health=stale-healthy means podman still reports the LAST healthcheck result for a container that is no longer running. The service is dead; the word 'healthy' beside it is podman's stale record, not a reading." >&2
     fi
     echo "  CAUSE: an enclave service exited and nothing restarted it. rc>128 means it died of signal rc-128 (143=SIGTERM, 137=SIGKILL, 139=SIGSEGV); the in-container supervisors (767-es4w proxy, 767-nkkq forge harness) can only speak while their container lives, so a stopped container is silent by construction." >&2
-    echo "  REMEDY: 'podman logs <service>' for the last words, then 'podman start <service>' or re-run the enclave orchestration. If it exits again immediately, that is a crash loop and belongs in a packet, not a restart." >&2
+    echo "  REMEDY: 'podman logs <service>' for the last words, then bring the enclave up through" >&2
+    echo "  the orchestration: 'tillandsias --ensure-enclave' (idempotent), NOT 'podman start <service>' and NOT '--init', which only builds images (1004-xw3q). VERSION: --ensure-enclave is TRUNK-ONLY as of 2026-09-04 and is absent from the released v0.4.260830.5, where this remedy fails with an unknown flag — update rather than substitute --init. Order 975-rsgm: a bare" >&2
+    echo "  'podman start' skips the preconditions the launch path establishes — for the" >&2
+    echo "  proxy that is the CA key secret, and starting without it produces a DIFFERENT" >&2
+    echo "  failure (squid: X509_check_private_key() failed) whose message names neither" >&2
+    echo "  the certificate nor the key, sending the reader at the wrong subsystem." >&2
+    echo "  If it exits again immediately, that is a crash loop and belongs in a packet," >&2
+    echo "  not a restart." >&2
 fi
 
 if [ "$down" -gt 0 ] || [ "$absent" -gt 0 ]; then
@@ -366,5 +490,9 @@ if [ "$down" -gt 0 ] || [ "$absent" -gt 0 ]; then
     exit 0
 fi
 
-echo "ok:enclave-service-health:services=${total}:up=${up}:down=0:dead=0:absent=0"
+# ORDER 1004-inkc: print the COMPUTED absent, not a hard-coded 0. This line is
+# only reached when down and absent are both zero, so the value is 0 either way
+# — but a literal here means the ok verdict asserts something it never measured,
+# and the next person to change the absent logic gets no help from it.
+echo "ok:enclave-service-health:services=${total}:up=${up}:down=0:dead=0:absent=${absent}"
 exit 0

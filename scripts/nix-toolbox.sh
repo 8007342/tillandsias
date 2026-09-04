@@ -158,6 +158,7 @@ daemon_live() {
 # only which rung refused.
 NIX_TB_CHROOT_ERR=""
 NIX_TB_PULL_ERR=""
+NIX_TB_CREATE_ERR=""
 
 chroot_works() {
     if ! command -v nix >/dev/null 2>&1; then
@@ -206,7 +207,28 @@ toolbox_exists() {
 }
 
 ensure_toolbox() {
-    command -v toolbox >/dev/null 2>&1 || return 1
+    # ORDER 814-5avq. CAPTURE WHY, not just THAT — the 934-7jd4 rule, applied to
+    # the one arm that still discarded its cause.
+    #
+    # MEASURED on lenovinha-tillandsias-forge 2026-09-03: a forge has no
+    # `toolbox` and no `podman` (it IS the container), no sudo, and no systemd.
+    # Every `return 1` below therefore fell through resolve_rung to its `*)`
+    # catch-all and printed `blocked:create-failed` — a verdict that names a
+    # FAILED CREATION on a host where creation was never attempted and never
+    # could be. It reads as a transient, repairable fault and sends the reader
+    # to podman logs that do not exist.
+    #
+    # The pinned verdict grammar (test-nix-toolbox.sh) is deliberately
+    # untouched; the cause travels beside it on stderr, which is exactly what
+    # the `detail:` channel was built for.
+    if ! command -v toolbox >/dev/null 2>&1; then
+        if command -v podman >/dev/null 2>&1; then
+            NIX_TB_CREATE_ERR="toolbox: command not found on PATH (podman IS present — install toolbox, or use the chroot rung)"
+        else
+            NIX_TB_CREATE_ERR="neither toolbox nor podman on PATH — this host kind has NO toolbox lane at all (a forge is already a container; nesting one is not the design). Nothing was created and nothing failed to create."
+        fi
+        return 1
+    fi
     if toolbox_exists; then
         return 0
     fi
@@ -272,6 +294,7 @@ resolve_rung() {
            [ -n "$NIX_TB_PULL_ERR" ] && printf 'detail:nix-toolbox:pull:%s\n' "$NIX_TB_PULL_ERR" >&2
            printf 'blocked:image-pull-failed\n'; return 1 ;;
         *) [ -n "$NIX_TB_CHROOT_ERR" ] && printf 'detail:nix-toolbox:chroot:%s\n' "$NIX_TB_CHROOT_ERR" >&2
+           [ -n "$NIX_TB_CREATE_ERR" ] && printf 'detail:nix-toolbox:create:%s\n' "$NIX_TB_CREATE_ERR" >&2
            printf 'blocked:create-failed\n'; return 1 ;;
     esac
 }

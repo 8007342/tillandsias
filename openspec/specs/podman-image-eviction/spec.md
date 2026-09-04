@@ -9,6 +9,7 @@ active
 ## Requirements
 
 ### Requirement: Image eviction is targeted and explainable
+<!-- req-id: 54e2eef7 -->
 
 Cache management MUST evict Podman images only after identifying Tillandsias-owned candidates and reporting what will be removed.
 

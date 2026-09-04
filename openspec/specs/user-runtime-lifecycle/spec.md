@@ -9,6 +9,7 @@ active
 ## Requirements
 
 ### Requirement: User runtime images are reproducible release artifacts
+<!-- req-id: 77ee5b82 -->
 
 User runtime images MUST be built from versioned image sources shipped with the release binary. A normal installed runtime MUST NOT require a Tillandsias source checkout, Rust/Cargo, Nix, toolbox, or host-side image source files. The binary MAY materialize its embedded runtime assets into a versioned user data directory before invoking Podman. The images are cache artifacts and MUST be rebuildable without durable project data loss.
 
@@ -26,6 +27,7 @@ User runtime images MUST be built from versioned image sources shipped with the 
 - **AND** `TILLANDSIAS_ROOT` MUST be treated only as an explicit developer override
 
 ### Requirement: Host prerequisites are explicit
+<!-- req-id: 709819d1 -->
 
 The lifecycle MUST treat Podman and normal shell/user-session facilities as explicit prerequisites. Missing prerequisites MUST produce user-facing diagnostics instead of hidden auto-install attempts in normal runtime paths.
 

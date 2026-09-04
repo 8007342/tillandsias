@@ -9,6 +9,7 @@ active
 ## Requirements
 
 ### Requirement: Window lifecycle updates are token-scoped
+<!-- req-id: 0a907f4f -->
 
 Browser window lifecycle operations MUST be scoped to the window/project token that initiated them so concurrent launches, closes, and route updates cannot overwrite unrelated state.
 

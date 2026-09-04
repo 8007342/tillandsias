@@ -14,6 +14,7 @@ Provide an isolated, on-demand Chromium runtime for tray-launched browser window
 ## Requirements
 
 ### Requirement: Download and Verify Bundled Chromium
+<!-- req-id: 99cebd95 -->
 
 On tray initialization, the host SHALL check if `~/.cache/tillandsias/chromium/<pinned-version>/chrome` exists and is current. If missing or stale (version bumped in a Tillandsias release), it SHALL:
 
@@ -28,6 +29,7 @@ On tray initialization, the host SHALL check if `~/.cache/tillandsias/chromium/<
 - **AND** old cached versions are cleaned up after one full release cycle
 
 ### Requirement: Launch Windows with Ephemeral Profiles
+<!-- req-id: 29411bce -->
 
 Each tray-launched browser window SHALL use:
 
@@ -45,6 +47,7 @@ Each tray-launched browser window SHALL use:
 - **AND** CDP is available on the assigned debugging port for MCP integration
 
 ### Requirement: Browser Detection
+<!-- req-id: c85449df -->
 
 The `browser.rs::detect_browser()` function SHALL return `BundledChromium { bin: ~/.cache/tillandsias/chromium/<version>/chrome }` unconditionally. Legacy browser detection paths (Safari, Firefox, OS default) MAY be kept as tombstoned code for three releases but are NOT invoked at runtime.
 
@@ -54,6 +57,7 @@ The `browser.rs::detect_browser()` function SHALL return `BundledChromium { bin:
 - **AND** fallback browser detection is not triggered
 
 ### Requirement: Download Telemetry
+<!-- req-id: 93f43dd0 -->
 
 The host SHALL emit telemetry on first-launch download per the `forge-cache-dual` spec:
 

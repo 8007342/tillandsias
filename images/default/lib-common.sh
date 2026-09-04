@@ -333,6 +333,105 @@ configure_git_identity() {
     _install_expert_refresh_hook
 }
 
+# install_project_guard_hooks — ORDER 969-nhh7. Give the PROJECT CHECKOUT the
+# pre-commit and pre-push guards every other host has.
+#
+# THE GAP. `_install_agent_trailer_hook` sets `core.hooksPath` GLOBALLY so the
+# forge's own two hooks reach every repo. A global hooksPath also REPLACES
+# `.git/hooks` for every repo, and nothing in the launch ran
+# `scripts/install-hooks.sh`, so a forge carried exactly two hooks:
+# prepare-commit-msg and post-commit. Neither is a guard. Measured on
+# macuahuitl-tillandsias-forge 2026-09-02 and confirmed by the coordinator on
+# both live forges plus the operator's own.
+#
+# WHY IT MATTERS MORE THAN IT SOUNDS: push CI no longer exists on any working
+# branch (litmus:github-actions-budget), so `pre-push-local-gate.sh` is the ONLY
+# automated trunk protection there is — and inside a forge it was wired to
+# nothing. Trunk protection was convention. That is not a property a system can
+# rely on, and it failed the same day it was found: a cycle on this host ran
+# `./build.sh --check`, got a REFUSAL, and pushed anyway because the commit and
+# push were chained unconditionally. No hook existed to stop it. The agent
+# mistake will recur on every host forever; the missing hook is why it reached
+# the trunk.
+#
+# THE GUARDS GO IN REPO-LOCAL, AND THAT IS THE WHOLE DESIGN. Installing them
+# into the global dir is the obvious move and it is KNOWN-BAD: a global guard
+# fires in every repo on the box, including each /tmp fixture repo a litmus
+# test creates. Measured in a forge guest on 2026-09-01 — `git commit` became
+# impossible outside the checkout, six litmus suites failed as collateral, and
+# `build.sh --check` died at the 877-mynm fixture; removing the global hook
+# alone took it from 6/5 to 11/0. So a repo-local `core.hooksPath` is set for
+# the project checkout ONLY, which overrides the global one for that repo and
+# for nothing else.
+#
+# The trailer hook is carried across because the repo-local path shadows the
+# global dir entirely: without copying it, commits in the project would lose
+# their agent attribution. install-hooks.sh's own post-commit supersedes the
+# forge's global one (both are the same order-396 expert-refresh concern, and
+# the installer's version also chains the dashboard refresh), so it is left to
+# the installer rather than copied.
+#
+# FAIL-SOFT on every rung, like every other lifecycle step here: a missing
+# checkout, a missing installer, or a failed install each log one line and
+# return 0. A forge without guards is worse than one with them, but it is not
+# a reason to refuse the launch.
+install_project_guard_hooks() {
+    local project_dir="${1:-}"
+    [ -n "$project_dir" ] && [ -d "$project_dir/.git" ] || {
+        trace_lifecycle "git-hook" "guards skipped (no checkout at ${project_dir:-<unset>})"
+        return 0
+    }
+    local installer="$project_dir/scripts/install-hooks.sh"
+    [ -r "$installer" ] || {
+        trace_lifecycle "git-hook" "guards skipped (no scripts/install-hooks.sh — not a Tillandsias checkout)"
+        return 0
+    }
+
+    local local_hooks="$project_dir/.git/hooks"
+    mkdir -p "$local_hooks" 2>/dev/null || return 0
+    # Repo-local beats global. Without this the global dir keeps winning and
+    # install-hooks.sh — which correctly resolves via `git rev-parse
+    # --git-path hooks` — would install into the GLOBAL dir, recreating the
+    # 2026-09-01 collateral this function exists to avoid.
+    git -C "$project_dir" config core.hooksPath "$local_hooks" 2>/dev/null || return 0
+
+    local global_hooks="$HOME/.cache/tillandsias/git-hooks"
+    if [ -r "$global_hooks/prepare-commit-msg" ]; then
+        cp "$global_hooks/prepare-commit-msg" "$local_hooks/prepare-commit-msg" 2>/dev/null || true
+        chmod 0755 "$local_hooks/prepare-commit-msg" 2>/dev/null || true
+    fi
+
+    if ( cd "$project_dir" && bash "$installer" ) >>/tmp/forge-lifecycle.log 2>&1; then
+        trace_lifecycle "git-hook" "project guards installed (core.hooksPath=${local_hooks})"
+    else
+        trace_lifecycle "git-hook" "project guard install FAILED — this checkout has no pre-push gate (969-nhh7)"
+        echo "[forge] WARNING: scripts/install-hooks.sh failed; this checkout has NO pre-push gate." >&2
+        echo "[forge] Push CI is gone, so nothing but your own discipline is checking the trunk." >&2
+    fi
+    return 0
+}
+
+# forge_hook_state_line — ORDER 969-nhh7. One machine-readable line for the
+# startup context, so "this forge has no pre-push gate" is a STATED FACT rather
+# than something an agent discovers by accident while checking something else.
+#
+# That is exactly how it was found: a cycle went looking for whether its push
+# had taken the plan-only lane and discovered there was no hook at all. An
+# unobservable guard is indistinguishable from a missing one — the same lesson
+# check-daily-maintenance.sh's marker learned (801-qasc).
+forge_hook_state_line() {
+    local project_dir="${1:-}" hooks_dir="" gate="absent" precommit="absent"
+    if [ -n "$project_dir" ] && [ -d "$project_dir/.git" ]; then
+        hooks_dir="$(git -C "$project_dir" rev-parse --path-format=absolute --git-path hooks 2>/dev/null)"
+    fi
+    if [ -n "$hooks_dir" ]; then
+        [ -x "$hooks_dir/pre-push" ] && gate="present"
+        [ -x "$hooks_dir/pre-commit" ] && precommit="present"
+    fi
+    printf 'hooks: pre_push=%s pre_commit=%s dir=%s\n' \
+        "$gate" "$precommit" "${hooks_dir:-unresolved}"
+}
+
 # @trace spec:forge-git-identity-anonymization
 # Install a prepare-commit-msg hook that appends agent attribution trailers
 # (Co-Authored-By, Generated-By) when TILLANDSIAS_AGENT_NAME is set at
@@ -1020,13 +1119,61 @@ export FORGE_EXPERTS_BIN_DIR FORGE_EXPERTS_STATE_DIR
 # which the enclave ollama at inference:11434 404s — so the L1 tier was dead on
 # every cold forge (919-vvyv). Same split lib-dev-env.sh draws on the dev side:
 # the ENVIRONMENT names the endpoint and the model that matches it; an explicit
-# operator value always wins. Without OLLAMA_HOST (no enclave inference
-# service) the endpoint stays unset and spec_answer keeps its typed refusal.
-if [ -z "${TILLANDSIAS_EMBED_ENDPOINT:-}" ] && [ -n "${OLLAMA_HOST:-}" ]; then
-    # ollama's OpenAI-compatible surface, for /v1/embeddings — the same
-    # derivation start_expert_serve_fail_soft applies per-invocation below.
-    export TILLANDSIAS_EMBED_ENDPOINT="${OLLAMA_HOST%/}/v1"
+# operator value always wins. With no reachable inference service at all the
+# endpoint stays unset and spec_answer keeps its typed refusal.
+#
+# OLLAMA_HOST IS NOT THE SENTINEL FOR "THERE IS AN ENCLAVE INFERENCE SERVICE",
+# and treating it as one left this whole block dead on the forge it was written
+# for (order 964-fwvh). Measured on macuahuitl-tillandsias-forge 2026-09-02:
+# OLLAMA_HOST unset, and yet inference:11434 up and serving eight models, a
+# 22682-chunk spec index published at /opt/tillandsias/spec-index, and
+# TILLANDSIAS_EMBED_MODEL exported by the unconditional branch immediately
+# below. So the launch armed the model and not the endpoint, and every answer
+# through the launch-started expert-serve was
+# `unsupported: no embedding endpoint` — the 712-r5x8 fresh-forge gap intact,
+# in the one configuration built to close it. The enclave service is named by
+# TILLANDSIAS_INFERENCE_ENDPOINT (default http://inference:11434, per
+# lib-inference-state.sh), which is what lib-dev-env.sh already derives from on
+# the dev side; OLLAMA_HOST is one operator's way of spelling it, not the
+# fleet's.
+#
+# PROBE, DO NOT ASSUME. The invariant this block must keep is that a forge with
+# no inference service wires nothing and keeps its typed refusal — an endpoint
+# exported on faith would replace an honest `unsupported: no embedding
+# endpoint` with a misleading `the embedding endpoint did not answer`. So the
+# derived candidate is confirmed with the same cheap bounded OpenAI-shape
+# liveness probe the capability line uses (_tillandsias_expert_embed_state,
+# 712-r5x8): GET <base>/models, 3s ceiling. Refused connections and DNS misses
+# return immediately, so a forge without inference pays no measurable launch
+# cost. An explicit TILLANDSIAS_EMBED_ENDPOINT is never probed and never
+# overridden.
+# ORDER 967-xq5e — ONE derivation, in images/default/lib-embed-endpoint.sh.
+#
+# What used to live here was TWO blocks: the original probe-and-export, plus a
+# forge fallback (919-vvyv) added when the first turned out to be inert in the
+# very lane it was written for. Two blocks in one file, each knowing how to
+# spell the endpoint, is the drift this repo keeps paying for — and a THIRD copy
+# existed in config-overlay/mcp/lib-dev-env.sh while the host lane had none at
+# all, which is 967-xq5e: spec-index-ensure.sh inherited the variable and
+# refused when absent, so the host lane never refreshed an index anywhere.
+#
+# The helper preserves every property those blocks documented: an explicit
+# endpoint is never probed and never overridden; a derived candidate is PROBED
+# with the bounded OpenAI-shape liveness check (712-r5x8) so a lane with no
+# inference service wires nothing and keeps its typed refusal; a root url gains
+# /v1 and one already spelled /v1 does not gain a second. The forge/host split
+# moves INTO the helper as the default it picks (`inference` inside the enclave,
+# loopback on a host), which is what made the old fallback necessary.
+#
+# Pinned by scripts/test-embed-endpoint-derivation.sh, whose last arm fails if
+# any second `export TILLANDSIAS_EMBED_ENDPOINT=` reappears outside the helper.
+_tlc_embed_lib="${BASH_SOURCE[0]%/*}/lib-embed-endpoint.sh"
+if [ -r "$_tlc_embed_lib" ]; then
+    # shellcheck source=lib-embed-endpoint.sh
+    source "$_tlc_embed_lib"
+    resolve_embed_endpoint >/dev/null 2>&1 || true
 fi
+unset _tlc_embed_lib
 if [ -z "${TILLANDSIAS_EMBED_MODEL:-}" ]; then
     # The OLLAMA name — what the inference entrypoint pulls at startup
     # (919-vvyv D1) and what spec-index-ensure.sh embeds the corpus with.
@@ -1282,14 +1429,32 @@ start_forge_experts_async() {
     # the same FORGE_SPEC_INDEX_ROOT the backgrounded builder writes to. An
     # export from the forked subshell below would reach nobody.
     _forge_spec_index_root_for_session || true
+    # ORDER 969-nhh7: SYNCHRONOUS, and that is the point. The guards must exist
+    # before the agent can make its first commit; installing them in the
+    # background lane below would leave a race in which a fast agent commits
+    # and pushes through a checkout that has no gate yet — which is the exact
+    # condition being fixed. Cheap (a few file writes) and fail-soft.
+    _fgh_project_dir=""
+    [ -n "${TILLANDSIAS_PROJECT:-}" ] && _fgh_project_dir="/home/forge/src/${TILLANDSIAS_PROJECT}"
+    [ -n "$_fgh_project_dir" ] || _fgh_project_dir="$PWD"
+    install_project_guard_hooks "$_fgh_project_dir" || true
+    unset _fgh_project_dir
     _forge_experts_set_state building
     _generic_project_set_state building
     (
         discover_generic_project >>/tmp/forge-lifecycle.log 2>&1 || true
         ensure_forge_experts >>/tmp/forge-lifecycle.log 2>&1 || true
+        # ORDER 965-hz3f: warm the tier's selected model BEFORE expert-serve
+        # is reachable, so the first real question does not pay the VRAM load
+        # inside a tier budget that was only ever a promise about inference
+        # latency. Measured cold-vs-warm on an RTX A5000: 7b 23353ms -> 938ms,
+        # 14b 9996ms -> 1474ms; both warm figures fit Quick's 3000ms, both
+        # cold ones do not. Fail-soft — a cold model is slow, not broken.
+        warm_tier_model_fail_soft >>/tmp/forge-lifecycle.log 2>&1 || true
         # ORDER 920-pxg6: the grounded OpenAI-compatible endpoint the
         # local-experts OpenCode agent talks to. AFTER ensure_forge_experts,
-        # so the capabilities probe sees the freshly installed binary.
+        # so the capabilities probe sees the freshly installed binary, and
+        # after the warm above so "ready" means ready to answer in-budget.
         start_expert_serve_fail_soft >>/tmp/forge-lifecycle.log 2>&1 || true
         # ORDER 919-vvyv (D2): LAST, because it can churn for a long time on
         # CPU (measured: ~2min GPU, ~60min CPU cold; 0.05s warm) and nothing
@@ -1414,6 +1579,123 @@ ensure_forge_spec_index() {
     return 0
 }
 
+# _tillandsias_select_warm_model — ORDER 965-hz3f. Pure selection: given the
+# host's accel class and the models the endpoint actually reports, name the ONE
+# model to warm. Echoes the model, or nothing when no candidate is present.
+#
+# Pure and argument-fed so the policy is testable without an endpoint, an
+# accelerator, or a forge — the same reason format_seed_staleness exists on the
+# Rust side. scripts/test-warm-tier-model.sh exercises every branch.
+#
+# THE LADDER IS THE INFERENCE CONTAINER'S, NOT A SECOND ONE. images/inference/
+# entrypoint.sh classifies by VRAM/RAM and pulls T2 (qwen2.5:7b) .. T5; this
+# picks which of the ALREADY-PRESENT models the expert lane will actually use,
+# so it can only ever narrow that set. Re-deriving a tier here would be the
+# 704-zcgi shape — two probes for one fact, drifting apart.
+_tillandsias_select_warm_model() {
+    _wm_class="${1:-cpu-only}"
+    _wm_available="${2:-}"
+    # GPU lanes get the model that satisfies the citation contract; the CPU
+    # floor gets the small default it can actually serve inside a tier budget.
+    # 14b-over-7b is the measured floor on ONE regime (macuahuitl RTX A5000,
+    # 2026-09-02: through the full pipeline 7b echoed 0 retrieved keys and 14b
+    # echoed 3 with a correct Sources line) and is deliberately NOT written as
+    # a fleet rule here — it is a preference order over what is present, so a
+    # host with only 7b still warms 7b. yoga's ROCm replication (824-6qxh) is
+    # what would make it a rule.
+    case "$_wm_class" in
+        workstation-gpu|hybrid-gpu-npu) _wm_order="qwen2.5:14b qwen2.5:7b qwen2.5:3b" ;;
+        *)                              _wm_order="qwen2.5:3b qwen2.5:7b qwen2.5:0.5b" ;;
+    esac
+    for _wm_cand in $_wm_order; do
+        case ",${_wm_available}," in
+            *",${_wm_cand},"*) printf '%s\n' "$_wm_cand"; return 0 ;;
+        esac
+    done
+    return 1
+}
+
+# warm_tier_model_fail_soft — ORDER 965-hz3f (coordinator decision, from the
+# 2026-09-02 forge measurement on 927-2q4w).
+#
+# WHY THIS EXISTS. A tier budget is a promise about INFERENCE latency, and it
+# was being charged for a VRAM MODEL LOAD as well. Measured on macuahuitl's
+# RTX A5000: the same model, same prompt, cold vs warm — qwen2.5:7b 23353ms
+# then 938ms; qwen2.5:14b 9996ms then 1474ms. Both WARM figures sit inside the
+# Quick tier's 3000ms; both COLD figures blow through it. So the first query
+# against any fresh endpoint times out and every later one fits, which
+# presents as "this model is too slow for the budget" and is really "nobody
+# warmed the model".
+#
+# That misreading had already been drawn once: darwin's 10-24s measurements
+# (2026-08-29) were read as a model-size floor conflicting with the tier
+# budget, and the remedy proposed was to raise the budget. The budget is NOT
+# raised here, deliberately — raising it would hide the load behind a longer
+# promise instead of removing it from the promise, and a budget the user waits
+# out is not a budget. TILLANDSIAS_SYNTH_BUDGET_MS stays as the operator
+# escape hatch for genuinely slow lanes.
+#
+# LOAD IS REPORTED ON ITS OWN LINE, never folded into a tier verdict, so
+# "loading" and "slow" stay distinguishable in the startup context.
+#
+# FAIL-SOFT on every rung, like every other lifecycle step here: no endpoint,
+# no candidate model, a failed request, or a missing curl each write a state
+# and return 0. A cold model is slow, not broken.
+warm_tier_model_fail_soft() {
+    local ep model accel_class available started elapsed state_dir
+    state_dir="${FORGE_EXPERTS_STATE_DIR:-/dev/shm/tillandsias-experts}"
+    mkdir -p "$state_dir" 2>/dev/null || true
+    _warm_state() { printf '%s\n' "$1" >"$state_dir/model-warm" 2>/dev/null || true; }
+
+    ep="${TILLANDSIAS_INFERENCE_ENDPOINT:-http://inference:11434}"
+    ep="${ep%/}"
+    case "$ep" in */v1) ep="${ep%/v1}" ;; esac
+    if ! command -v curl >/dev/null 2>&1; then
+        _warm_state "model_warm=- warm_state=skipped warm_reason=no-curl load_ms=-"
+        return 0
+    fi
+
+    available="$(curl -fsS -m 5 "$ep/api/tags" 2>/dev/null \
+        | tr ',' '\n' | sed -n 's/.*"name":"\([^"]*\)".*/\1/p' | paste -sd, - 2>/dev/null)"
+    if [ -z "$available" ]; then
+        _warm_state "model_warm=- warm_state=skipped warm_reason=endpoint-unreachable load_ms=-"
+        echo "[warm] inference endpoint $ep did not list models — nothing to warm (non-fatal)"
+        return 0
+    fi
+
+    # An explicit operator model always wins, and is warmed even if the
+    # preference order would not have picked it.
+    if [ -n "${TILLANDSIAS_INFERENCE_MODEL:-}" ]; then
+        model="$TILLANDSIAS_INFERENCE_MODEL"
+    else
+        accel_class="$(printf '%s\n' "${TILLANDSIAS_ACCEL_ENVELOPE:-}" \
+            | sed -n 's/.*accel_class=\([a-z-]*\).*/\1/p')"
+        model="$(_tillandsias_select_warm_model "${accel_class:-cpu-only}" "$available")" || model=""
+    fi
+    if [ -z "$model" ]; then
+        _warm_state "model_warm=- warm_state=skipped warm_reason=no-candidate-present load_ms=-"
+        echo "[warm] no tier-model candidate among: $available (non-fatal)"
+        return 0
+    fi
+
+    # ONE minimal completion. The point is the VRAM load, not the answer, so
+    # ask for as few tokens as the server will emit.
+    started="$(date +%s%3N 2>/dev/null || echo 0)"
+    if curl -fsS -m 300 -o /dev/null \
+        -H 'Content-Type: application/json' \
+        -d "{\"model\":\"$model\",\"max_tokens\":1,\"messages\":[{\"role\":\"user\",\"content\":\"warm\"}]}" \
+        "$ep/v1/chat/completions" 2>/dev/null; then
+        elapsed="$(( $(date +%s%3N 2>/dev/null || echo 0) - started ))"
+        _warm_state "model_warm=$model warm_state=warm warm_reason=- load_ms=$elapsed"
+        echo "[warm] $model loaded in ${elapsed}ms — tier budgets now measure inference, not model load (965-hz3f)"
+    else
+        elapsed="$(( $(date +%s%3N 2>/dev/null || echo 0) - started ))"
+        _warm_state "model_warm=$model warm_state=failed warm_reason=request-failed load_ms=$elapsed"
+        echo "[warm] warming $model failed after ${elapsed}ms (non-fatal; first real query pays the load)" >&2
+    fi
+    return 0
+}
+
 # start_expert_serve_fail_soft — ORDER 920-pxg6. Launch the grounded
 # `expert-serve` loopback endpoint beside the MCP servers. FAIL-SOFT on every
 # rung: a missing binary, a pre-920-pxg6 binary (no `expert-serve` token in
@@ -1454,11 +1736,16 @@ start_expert_serve_fail_soft() {
     fi
     # The server's lifetime is stdin EOF (deliberate: `</dev/null` keeps the
     # capability-sweep litmus fast), so the lane holds its stdin open with a
-    # silent pipe that dies with the container. The embed endpoint defaults
-    # from the enclave inference service the profile already injects
-    # (OLLAMA_HOST); an explicit operator value always wins, and with neither
-    # the server refuses typed per request — same discipline as spec_answer.
-    TILLANDSIAS_EMBED_ENDPOINT="${TILLANDSIAS_EMBED_ENDPOINT:-${OLLAMA_HOST:+${OLLAMA_HOST%/}/v1}}" \
+    # silent pipe that dies with the container. The embed endpoint is resolved
+    # ONCE, at source time, by the probed derivation block above (964-fwvh):
+    # explicit operator value, else OLLAMA_HOST, else the enclave inference
+    # service — and only if it actually answered. Inheriting that decision is
+    # the point; re-deriving here from OLLAMA_HOST alone is what left this
+    # server serving `unsupported: no embedding endpoint` on a forge whose
+    # inference container was up the whole time. With nothing resolved the
+    # variable stays empty and the server refuses typed per request — same
+    # discipline as spec_answer.
+    TILLANDSIAS_EMBED_ENDPOINT="${TILLANDSIAS_EMBED_ENDPOINT:-}" \
         nohup bash -c "tail -f /dev/null | '$bin' expert-serve --port '$port' --root '$project_dir'" \
         >>/tmp/forge-lifecycle.log 2>&1 &
     trace_lifecycle "expert-serve" "starting: ${bin} expert-serve on 127.0.0.1:${port} (root ${project_dir}, pid $!)"
@@ -3860,6 +4147,23 @@ inject_startup_context() {
         _inference_count=0
         _inference_status="NOT-READY (probe-helper-missing: ${_inference_state_lib} not present in this image)"
     fi
+    # Order 965-hz3f: the model warm-up verdict, written to tmpfs by
+    # warm_tier_model_fail_soft during the lifecycle lane. Absent means the
+    # lane has not reached the warm step yet — reported as `pending` rather
+    # than as a skip, because "not yet" and "decided not to" are different
+    # facts and only one of them is worth acting on.
+    local _model_warm_line _model_warm_file
+    _model_warm_file="${FORGE_EXPERTS_STATE_DIR:-/dev/shm/tillandsias-experts}/model-warm"
+    if [[ -r "$_model_warm_file" ]]; then
+        _model_warm_line="$(head -1 "$_model_warm_file" 2>/dev/null)"
+    fi
+    [[ -n "${_model_warm_line:-}" ]] \
+        || _model_warm_line="model_warm=- warm_state=pending warm_reason=lifecycle-not-reached load_ms=-"
+    # Order 969-nhh7: whether THIS checkout carries the guards, read live
+    # rather than assumed from the fact that the installer exists.
+    local _hook_line
+    _hook_line="$(forge_hook_state_line "$project_dir" 2>/dev/null)"
+    [[ -n "$_hook_line" ]] || _hook_line="hooks: pre_push=unknown pre_commit=unknown dir=unresolved"
     # Order 456 / 394 rung 1 EXTENSION (experts launch state): a PEER line to
     # the inference state above, under the same discipline — a closed token
     # vocabulary and never an ambiguous "may still be building". The experts
@@ -3994,7 +4298,7 @@ inject_startup_context() {
     if [[ -n "${TILLANDSIAS_ACCEL_ENVELOPE:-}" ]]; then
         _accel_envelope="$TILLANDSIAS_ACCEL_ENVELOPE"
     else
-        _accel_envelope="accel_class=unknown accel_gpu=unknown accel_gpu_name=- accel_npu=unknown accel_npu_name=- accel_reason=envelope-not-exported accel_cpu_cores=- accel_ram_gb=-"
+        _accel_envelope="accel_class=unknown accel_gpu=unknown accel_gpu_name=- accel_npu=unknown accel_npu_name=- accel_reason=envelope-not-exported accel_cpu_cores=- accel_ram_gb=- accel_side=unknown-side accel_gpu_path=unknown accel_gpu_engine=unknown accel_mem_model=undetermined accel_mem_budget_gb=- accel_prefill_dev=cpu accel_decode_dev=cpu accel_decode_crossover_b=unmeasured"
     fi
 
     local branch version agent_name
@@ -4107,10 +4411,18 @@ inject_startup_context() {
   - This is the HOST's hardware, projected onto a closed vocabulary so you can branch on it without probing devices you cannot see. \`accel_class\` is the one field worth reading first: \`workstation-gpu\` (a discrete GPU is deliverable to this container — larger models are cheap here), \`mobile-npu\` (an NPU is deliverable — prefer small quantized models), \`hybrid-gpu-npu\` (both), or \`cpu-only\`.
   - \`cpu-only\` is never a bare verdict: when hardware is present but unreachable, \`accel_gpu\`/\`accel_npu\` read \`present-unusable\` and \`accel_reason\` names the obstruction (e.g. \`cdi-spec-missing\` — the GPU exists but the container runtime has no CDI spec to hand it over; \`engine-missing\` — the NPU exists but no runtime targets it yet). Report the reason rather than concluding the node has no accelerator.
   - \`accel_class\` describes CAPACITY, not readiness. It is independent of \`inference_state\` below: a \`workstation-gpu\` node still reports \`inference_state=not-ready\` until a model is cached.
+  - **A device can be absent for three different reasons and \`accel_gpu\`/\`accel_npu\` distinguish them** (order 793-qr4t). \`none\` — the probe looked and there is no such device. \`unknown\` — the probe has no arm for this class on this platform, so it never looked (an Apple Neural Engine reads this: present, drivable, and invisible only because the probe reads \`/sys/class/accel\`). \`unobservable-from-this-side\` — the probe looked from a guest or a container and the device is on the far side of that boundary; measured on WSL2, where a healthy XDNA2 NPU on the Windows side used to read \`none\` in the guest. Only \`none\` licenses "this machine cannot do that kind of work".
+  - \`accel_side\` says WHERE the probe stood (\`native-linux\`, \`wsl2-guest\`, \`windows-host\`, \`macos-host\`, \`container\`, \`unknown-side\`), and it is what makes the three answers above readable. \`accel_gpu_path\` is HOW the GPU is reached (\`drm\`, \`dxg-d3d12\`, \`metal\`, \`cuda\`, \`none\`) and \`accel_gpu_engine\` is WHAT can drive it (\`rocm\`, \`cuda\`, \`metal\`, \`vulkan-radv\`, \`vulkan-dozen\`, an engine's own slug, or \`engine-missing\` when the device is real and nothing we ship can drive it). Path and engine are independent: a WSL2 host had a real \`/dev/dxg\` path and no Vulkan loader on it, and logged \`library=cpu\` while every other signal said GPU.
+  - **\`accel_mem_budget_gb\` is the ONE memory budget, and ONLY \`accel_mem_model=unified\` licenses reading it as the whole machine.** Never add a GPU pool to it on any value — summing double-counts a pool that does not exist. The non-decided values say WHY there is no answer, and they are three different problems (order 964-r98h): \`no-gpu\` (nothing to sum against), \`unobservable-from-this-side\` (a real GPU whose evidence path this side cannot reach — a WSL2 guest sees no DRM sysfs for a paravirtual GPU, so it reports this permanently and correctly), and \`undetermined\` (the classifier ran here and refused). Only the last is a gap in the probe.
+  - \`accel_prefill_dev\`/\`accel_decode_dev\` are the per-PHASE routing policy (order 793-qc6q), not a per-host verdict: prefill is compute-bound and wins on an accelerator, decode is memory-bandwidth-bound and on unified memory the CPU wins below a per-host size threshold. That threshold is \`accel_decode_crossover_b\`, in billions of parameters, MEASURED on this host — \`unmeasured\` means no measurement exists here and decode stays on the CPU rather than borrowing another machine's number, and \`cpu-wins\` means this host measured it and the CPU won at every size. Embedding never goes to the GPU. The CPU is always available; a fallback always names its reason.
 - **Inference**: \`http://inference:11434\` (Ollama) — ${_inference_status}, tier: ${TILLANDSIAS_INFERENCE_TIER:-unknown}.
   - Machine-readable (branch on this, do not parse the prose): \`inference_state=${_inference_state} inference_models=${_inference_count} inference_warm=${_inference_warm} inference_reason=${_inference_reason}\`
   - \`inference_state\` is \`ready\` only when the endpoint answers AND at least one model is cached. Otherwise \`not-ready\` with a named \`inference_reason\`: \`no-models\` (endpoint up, nothing cached), \`endpoint-unreachable\`, \`endpoint-timeout\`, \`endpoint-http-error\`, \`probe-tool-missing\`, \`probe-helper-missing\`, or \`probe-error-<n>\`. There is no indeterminate "starting up" state.
   - Local inference is OPTIONAL: a \`not-ready\` endpoint never blocks this session. Use cloud models, or pull one yourself (\`curl http://inference:11434/api/pull -d '{"name":"qwen2.5:0.5b"}'\`).
+  - Machine-readable MODEL WARM-UP (order 965-hz3f — branch on this, do not parse the prose): \`${_model_warm_line}\`
+  - This is a SEPARATE line from the tier verdicts on purpose. A tier budget is a promise about INFERENCE latency, and a cold model charges a VRAM load against it: measured on an RTX A5000, qwen2.5:7b took 23353ms cold and 938ms warm, 14b 9996ms then 1474ms — both warm figures inside the Quick tier's 3000ms, both cold ones far outside. Folding the load into a tier verdict makes "loading" and "slow" indistinguishable, which is exactly how a cold-start was once read as a model-size floor and nearly answered by raising the budget. \`warm_state\` is \`warm\` (loaded, and \`load_ms\` is what the load cost), \`failed\` (the request errored — the first real query pays the load), or \`skipped\` with a named \`warm_reason\`: \`no-curl\`, \`endpoint-unreachable\`, \`no-candidate-present\`. The budget is NOT raised to accommodate a cold model; \`TILLANDSIAS_SYNTH_BUDGET_MS\` remains the operator escape hatch for a genuinely slow lane.
+- **Git guards** — machine-readable (order 969-nhh7 — branch on this, do not parse the prose): \`${_hook_line}\`
+  - \`pre_push=present\` means this checkout has the composed pre-push gate, so a push with no \`./build.sh --check\` stamp is REFUSED. \`pre_push=absent\` means it is not: push CI no longer exists on any working branch, so the local gate is the ONLY automated trunk protection, and without it nothing but your own discipline is checking what reaches the trunk. Run \`scripts/install-hooks.sh\` if you see \`absent\`, and treat every push until then as unguarded. This line exists because a forge carried exactly two hooks — neither a guard — for long enough that a cycle ran the gate, got a REFUSAL, and pushed anyway with nothing to stop it; the gap was found by accident while checking something else, and an unobservable guard is indistinguishable from a missing one.
 - **Experts** — \`experts: ${_experts_status}\`. An expert is a CITED RETRIEVAL SURFACE behind an MCP tool, not a model; the plan expert runs NO inference. Query it through the \`forge-plan\` MCP server (\`plan_answer\`, \`plan_next\`, \`methodology_ask\`, \`spec_answer\`, \`plan_check\`, \`plan_status\`, \`plan_ready\`, \`plan_blocked_by\`, \`plan_closure\`, \`plan_burndown\`; \`expert_capability\` when any answer is \`unsupported\`) instead of grepping \`plan/index.yaml\`.
   - Machine-readable (branch on this, do not parse the prose): \`experts_state=${_experts_state} experts_reason=${_experts_reason} experts_elapsed=${_experts_elapsed}\`
   - Machine-readable CAPABILITY SKEW (order 569 — branch on this, do not parse the prose): \`${_cap_line}\`

@@ -266,9 +266,14 @@ podman run -d --userns=keep-id:uid=1000,gid=1000 --security-opt label=disable \
 `--userns` because rootless podman otherwise maps host uid 1000 to container 0;
 `label=disable` because SELinux is Enforcing and denies exec from the bind mount.
 Clearing the proxy env matters too: the image bakes `http_proxy=http://proxy:3128`,
-and when the proxy container is down (it fails to start once `/tmp/tillandsias-ca`
-is wiped on reboot) every pull returns 000 — which looks like "no egress" and is
-really "dead proxy".
+and when the proxy container is down every pull returns 000 — which looks like
+"no egress" and is really "dead proxy".
+
+That symptom is current; the cause below is not. Until 998-3z6g the CA bundle
+lived in `/tmp/tillandsias-ca`, so a reboot wiped it and the proxy was left
+permanently unrestartable — podman records a bind SOURCE at container creation,
+so restarting could not recover it (975-rsgm). The bundle is HOME-relative now
+and survives a reboot, so a dead proxy today needs a different explanation.
 
 ## Common pitfalls
 

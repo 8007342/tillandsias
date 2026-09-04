@@ -14,6 +14,7 @@ tooling that keeps the cache queryable.
 ## Requirements
 
 ### Requirement: Cheatsheet tree structure is fixed
+<!-- req-id: 72f7548e -->
 
 The repository SHALL maintain a top-level `cheatsheets/` directory with the
 seven canonical categories used by Tillandsias agents:
@@ -27,6 +28,7 @@ lowercase, hyphenated `<topic>.md` filename.
 - **AND** the filename SHALL use the same hyphenation as the topic name
 
 ### Requirement: Cheatsheet template is standardized
+<!-- req-id: 5775ce60 -->
 
 Every cheatsheet SHALL follow the repository template in `cheatsheets/TEMPLATE.md`.
 The template SHALL require, in order: title heading, `@trace spec:cheatsheet-tooling`
@@ -40,6 +42,7 @@ and `## See also`.
 - **AND** `## Provenance` SHALL be populated before the file is considered complete
 
 ### Requirement: INDEX.md is generated, not hand-edited
+<!-- req-id: 86a09bf4 -->
 
 `cheatsheets/INDEX.md` SHALL be regenerated from cheatsheet frontmatter by
 `scripts/regenerate-cheatsheet-index.sh`. The file MUST NOT be hand-edited.
@@ -54,6 +57,7 @@ The header comment in `INDEX.md` SHALL state that it is auto-generated.
 - **THEN** the next regeneration run SHALL restore the generated form
 
 ### Requirement: Cheatsheet authoring stays toolable
+<!-- req-id: 0d4c2c16 -->
 
 The repository SHALL expose lightweight tooling for cheatsheet indexing and
 validation so agents can discover, regenerate, and verify the cheatsheet cache

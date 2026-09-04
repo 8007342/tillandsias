@@ -21,6 +21,7 @@ corrected.
 ## Requirements
 
 ### Requirement: Every container declares a network posture
+<!-- req-id: 7e5c0c56 -->
 
 Every Tillandsias-managed container MUST run in exactly one of the postures
 below, and the posture MUST be a deliberate choice — including the choice to
@@ -58,6 +59,7 @@ name.
   `plan/issues/git-mirror-egress-spec-divergence-audit-2026-08-10.md`
 
 ### Requirement: S0 is not a scenario, and S4 is retired
+<!-- req-id: fbf1fc84 -->
 
 **S0 (no network) MUST NOT be published as an available posture.** The draft
 listed it; nothing uses it, and a named posture with no taker is a label

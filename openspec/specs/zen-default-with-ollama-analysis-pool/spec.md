@@ -14,6 +14,7 @@ Split agent responsibilities between cloud-based Zen models (for tool-calling an
 ## Requirements
 
 ### Requirement: Default model routing
+<!-- req-id: a9a28a47 -->
 
 The bundled `config.json` overlay (in `images/default/config-overlay/opencode/`) SHALL set:
 
@@ -37,6 +38,7 @@ The user MAY override to `--model ollama/<name>` for offline analysis, but the o
 - **AND** no cloud API calls are made for the agent loop itself
 
 ### Requirement: Tier-tagged tool-capable model pre-pulls
+<!-- req-id: 150d984c -->
 
 The inference container's entrypoint SHALL pre-pull tool-capable models bucketed by host capability. Models are baked (T0, T1) or pulled at runtime (T2+).
 
@@ -66,6 +68,7 @@ T0 and T1 are baked into the inference image at build time so the first attach h
 - **AND** the user may see "Downloading model..." telemetry, but it does not block attach
 
 ### Requirement: Squid proxy workaround for ollama manifests
+<!-- req-id: aebf87fc -->
 
 Until the Squid SSL-bump EOF failure on ollama manifest pulls is root-caused, the spec documents a fallback:
 

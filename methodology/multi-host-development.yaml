@@ -292,8 +292,185 @@ multi_host_development:
       THE COORDINATOR'S DUTY IS UNCHANGED: it merges PLATFORM branches into
       linux-next. Side branches are the host's own and are never merged by the
       coordinator; a host promotes its own work when the feature is coherent.
-      A side branch idle beyond the lane deadlines in sweep_role below is
-      treated the same way as any other stale lane.
+
+      The three questions this clause used to leave open — WHEN a host is
+      entitled to side-branch, WHO promotes, and WHAT REAPS a stale one — are
+      answered in the three keys that follow. Read them together; a host that
+      side-branches without reading side_branch_reaper is creating a ref the
+      fleet has no sanctioned way to remove.
+
+    side_branch_entry_test: >
+      THE TRIGGER IS THE MERGE'S COST, NOT THE GATE'S LENGTH AND NOT THE HOST'S
+      NAME. This is the durable answer to 863-iicc criterion 1, and it reverses
+      the packet's own opening framing on the fleet's own measurements.
+
+      WHY NOT GATE LENGTH. The packet models cost as convex in gate duration T
+      and proposes T as the discriminator. Three measurements refuse it.
+      calmecacpilli has one of the FASTEST gates in the fleet (107/110/121/122s)
+      and paid 4.0 gate re-runs to land one commit — DOUBLE esmeraldinha's 2.0,
+      the number the exemption was written for. pirria gates in 86-90s, has
+      4.2x headroom against the tightest-clustered median inter-push gap, and
+      still lost two push races out of four attempts. A discriminator that
+      exempts the slow and charges the fast-but-unlucky is measuring the wrong
+      variable: contention is bursty and a host gates immediately after
+      fetching, which is an inspection-paradox worst case, so P(beaten) is
+      governed by WHEN you push relative to a burst, not by how long you take.
+
+      WHY NOT HOST IDENTITY. Gate length is a function of LEDGER SIZE, which
+      grows every cycle by construction (3-6 fragments per host per cycle,
+      arrival outrunning drain at slope 1.80). Every host's numbers drift
+      toward the exemption over time with no change in hardware or cadence. A
+      ruling that names hosts goes stale silently; the interim ruling's
+      floor-tier-only grant (2026-08-25, clause A/B) is correct as a stopgap
+      and wrong as durable text for exactly this reason.
+
+      THE TEST, phrased so it stays true as the fleet changes. A host is
+      entitled to a side branch when, MEASURED ON THAT HOST and recorded on the
+      packet or in plan/issues/, BOTH hold:
+
+        (a) the per-cycle merge of origin/<base> costs more than the cycle's
+            own work — the rebuild the merge forces, not the merge itself; and
+        (b) the work in hand spans more than one cycle, so there is a
+            "complete set of work" for the merge to be deferred to.
+
+      (a) is the operator's actual complaint and the only cost the floor can
+      see that the fast hosts cannot. (b) is what distinguishes a side branch
+      from a retry: a single-cycle unit of work has nothing to defer and should
+      simply be re-gated and re-pushed. A host meeting (a) but not (b) is
+      asking for a shorter gate, which is criterion 7's question and a better
+      lever — the plan-only lane (668-2xeh, repaired by 877-mynm) already
+      proves the gate can be scoped to what a push actually touches.
+
+      MEASURE (a) HONESTLY, because the fleet's existing instrument cannot. The
+      merge-ratio table (esmeraldinha 0.40, macuahuitl 0.11, pirria/yoga/
+      lenovinha 0.00) measures contention TIMES merge-strategy: pirria rebases
+      where esmeraldinha merges, so it authors zero merge commits while paying
+      the full cost twice. Merge ratio is not a contention ranking and must not
+      be read as one. RE-GATES PER LANDED CYCLE survives strategy and is the
+      number to record.
+
+      NOT A STANDING EXEMPTION. The entitlement is per-feature and expires with
+      it. A host that met the test last month re-measures rather than inherits.
+
+    side_branch_promotion: >
+      THE HOST THAT OPENED IT PROMOTES IT, AND NOBODY ELSE. This is deliberate
+      asymmetry with lanes: the coordinator sweep enumerates and sweep-merges
+      agent/* and salvage/*, but a side branch is a host's own deferred
+      integration and the coordinator has no way to know whether the feature is
+      coherent yet.
+
+      PROMOTION IS THE MOMENT THE GATE APPLIES IN FULL, and it is one ordered
+      procedure, not a merge:
+
+        1. fetch origin; merge origin/<base> INTO the side branch, on the side
+           branch, resolving conflicts there. This is where the deferred cost
+           is paid, once, and it is paid off the platform branch so a long
+           resolution blocks nobody.
+        2. run the full local gate (./build.sh --check) on the merged result.
+        3. fast-forward or merge the side branch into <platform>-next and push
+           it. This push IS gated — pre-push-linux-next-merged.sh fires for
+           osx-next and windows-next — and it should pass, because step 1 just
+           satisfied it.
+        4. record the promotion on the packet: side branch name, tip SHA,
+           and the re-gates-per-landed-cycle the deferral actually bought.
+        5. delete the side branch (see side_branch_reaper for why step 5 is
+           the hard one).
+
+      IF STEP 3 LOSES A RACE, re-run steps 1-3. Losing a race at promotion is
+      the cost the scheme concentrates rather than removes; it is paid once per
+      feature instead of once per cycle, which is the whole point.
+
+      A PROMOTION IS NOT A CHECKPOINT. Do not promote to "get work off the
+      host" — that is what pushing the side branch already does, and
+      scripts/salvage-dirty-worktree.sh covers the panic case. Promote when the
+      feature is coherent, per the operator's framing: "at the end of a
+      complete set of work".
+
+    side_branch_reaper: >
+      THE NAME IN THE INTERIM RULING IS OUT OF GRAMMAR, AND THAT IS THE REAPER
+      PROBLEM. Read in code rather than inferred, 2026-09-02:
+      images/git/entrypoint.sh TILLANDSIAS_DEFAULT_BRANCH_CREATION_REGEX admits
+      main, gh-pages, (linux|windows|osx)-next, release/*, revert-*, claude/*,
+      agent/<host>/<base>/<yyyymmdd>-<slug> and salvage/<host>/<yyyymmdd>-<slug>
+      — and NOTHING ELSE. `<platform>-side-<feature>` matches none of them. So a
+      side branch pushed under the interim ruling's own name trips the
+      warn-only grammar hook today and would be REJECTED at the rung that makes
+      it enforcing.
+
+      Worse, branch_namespaces.naming above already states the consequence in
+      terms this clause contradicts: "those two prefixes are the ONLY
+      non-integration namespaces the creation_regex admits and the only ones
+      the coordinator sweep enumerates, so an out-of-grammar name is a stray
+      that nothing will ever reap." A side branch under the interim name is,
+      by the fleet's own rule, a stray.
+
+      THE RULING: side branches use the LANE GRAMMAR —
+      agent/<host>/<base>/<yyyymmdd>-<slug>, with <base> naming the platform
+      branch it will be promoted into. `<platform>-side-<feature>` is retired
+      as a name and survives only as the concept's label. This costs nothing:
+      the ref is already ungated by pre-push-linux-next-merged.sh (which
+      matches only osx-next and windows-next, so every non-integration name is
+      ungated equally), it is already excluded from the pre_push_gate by
+      lane_exclusion, it becomes grammar-legal instead of grammar-warning, and
+      it becomes VISIBLE to the sweep that is supposed to reap it.
+
+      CORRECTION, MEASURED THE SAME DAY THIS CLAUSE WAS WRITTEN, BY TRYING IT:
+      "ungated" above is TRUE OF THE TRUNK-MERGE HOOK AND FALSE OF THE BUILD
+      STAMP, and the difference decides whether a lane is a durability escape
+      hatch. A push of agent/pirria/linux-next/20260902-floor-measurements from
+      a forge with a red gate printed `ok:linux-next-merged:0` — the merge hook
+      passed, exactly as lane_exclusion promises — and was then REFUSED by
+      scripts/hooks/pre-push-local-gate.sh with "./build.sh --check has never
+      run in this checkout". That hook exempts ONLY salvage refs, by name and
+      by design (order 872-c9nd), with the comment that a dirty-tree copy is
+      not expected to build. agent/* gets no such exemption.
+
+      SO A LANE IS NOT A PLACE WORK CAN GO WHEN THE GATE IS RED. Its purpose is
+      to defer the TRUNK MERGE, not the gate — a host on a lane still gates
+      every push. Read lane_exclusion narrowly: it is about the merge, and the
+      words "durability beats integration freshness" that accompany it explain
+      why the MERGE is deferred; they are not a licence to skip the build.
+
+      WHEN THE GATE ITSELF CANNOT PASS — infrastructure absent, or a fixture
+      red for reasons the cycle did not cause — the sanctioned namespace is
+      salvage/<host>/<yyyymmdd>-<slug>, which IS gate-exempt, and the
+      coordinator triages it. A host that reaches for a lane in that situation
+      meets the same refusal it was trying to escape, and if it then reaches
+      for --no-verify it has overridden the trunk's only gate on its own
+      judgement. Reach for salvage instead. This is 872-c9nd's rule — SALVAGE
+      BEFORE YOU REFUSE — arriving from the opposite direction: that rule was
+      written for a dirty tree, and it applies just as exactly to a CLEAN tree
+      whose commits cannot pass a gate they did not break.
+
+      THE REAPER IS THEREFORE sweep_role's, UNCHANGED AND WITHOUT A NEW
+      MECHANISM: merged -> delete; idle >24h -> salvage packet; >72h ->
+      operator; >14d -> archive tag then delete. Bound to the
+      coordinate-multihost-work ROLE, not to a machine.
+
+      THE LIABILITY THAT REMAINS, STATED PLAINLY RATHER THAN DESIGNED AROUND.
+      Automated DELETION does not work yet and will not until order 451's
+      authenticated administrative path lands. Order 579's containment makes
+      the mirror pre-receive hook reject every ref deletion before invoking the
+      privileged upstream relay, because port 9418 is anonymous and a
+      bulk-delete bypass would let any enclave peer borrow the mirror's
+      privileged credential. Order 504 (the automated sweep) inherits that
+      block through 502 -> 451. Until then the deletion half of every deadline
+      above is the COORDINATOR'S BY HAND, per the interim ruling's clause C.
+      The enumeration, sweep-merge, packet-filing and escalation halves work
+      today; only the final `git push origin :<lane>` does not.
+
+      CAP, carried forward from the interim ruling and now given its reason:
+      at most ONE live side branch per host, landed or salvaged within 72h.
+      The cap is not tidiness — it is sized to the manual reaper. A backstop
+      that a human executes cannot absorb an unbounded number of refs, and
+      needing a second concurrent side branch is a signal the work is too big
+      and should be split.
+
+      A HOST MUST NOT OPEN A SIDE BRANCH IT CANNOT REPORT. Record the branch
+      name and tip SHA on the packet at creation, on the base ref, not on the
+      side branch — a ref recorded only inside itself is invisible to the
+      enumerator that is supposed to find it, which is the same failure as an
+      out-of-grammar name reached by a different route.
 
     in_progress_output_of_a_long_horizon_job: >
       A LONG-RUNNING JOB'S PARTIAL OUTPUT LIVES OUTSIDE THE CHECKOUT UNTIL IT
@@ -936,12 +1113,16 @@ loop_cadence:
     # local hours. No two slots within 15 minutes. A host arms its OWN slot —
     # relayed cadence is coordination config, but each session's operator or
     # loop harness does the arming (rate-change doctrine unchanged).
-    macos: "08 even hours (0-22/2) — reserved; currently loops on request"
+    macos: "08 even hours (0-22/2) — armed 2026-09-02 at the fleet restart (osx-next was 345 commits behind linux-next; the merge is its first cycle)"
     macuahuitl: "23 even hours (0-22/2) — coordinator; armed 2026-08-31, re-armed 2026-09-02 after the host reboot (session crons die with the session). Full meta-orchestration cycle at 38 past 02/06/10/14/18/22 (every 4h — the forge e2e rate limit — and ≥15 min from every sibling slot)"
     yolanda: "53 even hours (0-22/2)"
     pirria: "08 odd hours (1-23/2) — reserved; currently one-off per operator"
     lenovinha: "23 odd hours (1-23/2)"
     yoga: "53 odd hours (1-23/2)"
+    lenovinha-tillandsias-forge: "38 odd hours (1-23/2) — forge on lenovinha (CPU-only container lane); armed 2026-09-02 at the fleet restart; 15 min from lenovinha (23 odd) and yoga (53 odd), the same spacing the even window already uses"
+    macuahuitl-tillandsias-forge: "no slot — ephemeral and idempotent, driven by the coordinator per story; relaunch with tillandsias --claude --remote-control macuahuitl-tillandsias-forge"
+    floor-forges: "no slot — pirria-tillandsias-forge and esme-tillandsias-wsl2 are floor tier (4 cores): one-off per coordinator, because a per-cycle merge of linux-next costs the floor tens of minutes (863-iicc)"
+    tillandsias.org-forge: "no slot — the operator's own forge on macuahuitl (the first real user); never dispatched by the coordinator"
   coordinator_note: >
     The coordinator's slot at even:23 lands 30 minutes after yolanda's
     previous-window push and 30 before her next, and sweeps sibling landings

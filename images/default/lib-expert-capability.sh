@@ -40,7 +40,7 @@
 # state):
 #
 #   expert_capability: now=<csv|none|stale-binary> after_relaunch=<csv|none> \
-#                      skew=<none|pending-build|relaunch-required|relaunch-regresses> \
+#                      skew=<none|pending-build|relaunch-required|relaunch-regresses|rebuild-required|unknown-currency> \
 #                      blocked_capabilities=<csv|-> lost_on_relaunch=<csv|->
 #
 # FIELD VOCABULARIES (all CLOSED):
@@ -232,6 +232,67 @@ tillandsias_expert_capability() {
         TILLANDSIAS_EXPERT_CAP_SKEW="relaunch-regresses"
     fi
 
+    # ── ORDER 984-i4k2: BEHAVIOUR, NOT ONLY CAPABILITY ────────────────────
+    #
+    # Everything above compares two SUBCOMMAND SETS. A subcommand present in
+    # both the running binary and the checkout is invisible to it however much
+    # its behaviour changed, and `skew=none` is then truthful and useless at
+    # the same time.
+    #
+    # MEASURED 2026-09-03. Forges whose binaries predated 823e3ac0d kept
+    # writing `append-event` output straight into plan/index.yaml instead of a
+    # fragment — on FOUR hosts (lenovinha-tillandsias-forge,
+    # pirria-tillandsias-forge, macuahuitl-tillandsias-forge, yolanda) — while
+    # this line reported `skew=none` on every one. `append-event` existed in
+    # both versions, so the sets matched exactly.
+    #
+    # So compare the BUILD IDENTITY too: what the running binary was compiled
+    # from (`build-id`, baked by build.rs) against what a rebuild from this
+    # checkout would produce (`source-revision`, the same hash code). Only the
+    # revision half is new; the capability comparison above is untouched and
+    # its verdicts still win, because a missing subcommand is a bigger fact
+    # than a stale one.
+    #
+    # A HOST THAT CANNOT ESTABLISH ITS OWN CURRENCY SAYS SO. That is the whole
+    # point: `unknown-currency` is louder than `none` and is the honest answer
+    # for a binary too old to have `build-id` at all — which is exactly the
+    # 2026-09-03 population. A truthful-but-inapplicable green is what this
+    # defect is made of, so the absence of an answer must not render as one.
+    if [ "$TILLANDSIAS_EXPERT_CAP_SKEW" = "none" ] && [ -n "$_tec_bin" ]; then
+        _tec_running_id="$("$_tec_bin" build-id 2>/dev/null | head -1)" || _tec_running_id=""
+        _tec_checkout_id=""
+        if [ -n "$_tec_checkout" ] \
+            && [ -f "$_tec_checkout/crates/tillandsias-plan/src/main.rs" ]; then
+            _tec_checkout_id="$("$_tec_bin" source-revision \
+                "$_tec_checkout/crates/tillandsias-plan" 2>/dev/null | head -1)" \
+                || _tec_checkout_id=""
+        fi
+        case "$_tec_running_id" in
+            *+*)
+                # Both sides answered: a mismatch is a real behaviour skew.
+                if [ -n "$_tec_checkout_id" ] \
+                    && [ "$_tec_running_id" != "$_tec_checkout_id" ]; then
+                    TILLANDSIAS_EXPERT_CAP_SKEW="rebuild-required"
+                fi
+                ;;
+            *)
+                # No build-id. Either the binary predates it (the measured
+                # population) or the probe could not run it. Both are "I cannot
+                # tell", and neither is `none`.
+                #
+                # THIS ARM IS ABOUT THE BINARY, NOT THE COMPARISON. A checkout
+                # with no sources to compare against is a different situation:
+                # there is nothing to be current WITH, the binary is fine, and
+                # `after_relaunch` already reports what the checkout provided.
+                # Criterion 3 asks that a host unable to establish ITS OWN
+                # currency say so; it does not ask for an alarm when the
+                # comparison target is absent, and raising one there would fire
+                # on every partial mount and every manifest-only fixture.
+                TILLANDSIAS_EXPERT_CAP_SKEW="unknown-currency"
+                ;;
+        esac
+    fi
+
     _tillandsias_expert_capability_emit
     return 0
 }
@@ -316,7 +377,7 @@ _tec_build_in_flight() {
 #       3. The project's podman named volume — what makes the host builder and
 #          every forge share ONE store. INSPECT only: creating it is the
 #          producer's job, never a reader's.
-#       4. <checkout>/target/tillandsias-spec-index — THE CHECKOUT IS THE ONE
+#       4. <checkout>/.cache/spec-index — THE CHECKOUT IS THE ONE
 #          THING TWO USERLANDS SHARE (order 931-p26p, added 2026-08-29).
 #          Rungs 1-3 are unchanged and still win, so a host that reaches one of
 #          them behaves EXACTLY as before: Linux and macOS hit the podman volume
@@ -341,13 +402,57 @@ _tec_build_in_flight() {
 #          hosts and harnesses with no podman (macOS/Windows bare metal).
 #     Every podman step is fail-soft: a hiccup degrades to (4)/(5), never to an
 #     error. POSIX sh — lib-expert-capability.sh is not bash.
+#
+#     ── 1003-v3dc: NOT PERMITTED IS NOT ABSENT, AND RUNG 4 IS NOT target/ ────
+#
+#     Two corrections, both measured on lenovinha 2026-09-04 (Fedora Silverblue,
+#     rootless podman), where 23,154 embeddings were published into a directory
+#     the next Start-Of-Day `cargo clean` would have removed.
+#
+#     (a) RUNG 3 USED `[ ! -d "$_tsi_root" ]` AS ITS LIVENESS TEST. Under
+#     rootless podman the volume mountpoint lives under the user's container
+#     storage and stat fails with EACCES from OUTSIDE the user namespace — so
+#     that test failed for PERMISSION and was read as ABSENCE, silently demoting
+#     every host of this class. The discriminator does not need a container
+#     probe: a SUCCESSFUL `podman volume inspect` is itself the existence
+#     oracle. If podman names a mountpoint, the volume EXISTS; if we then cannot
+#     stat it, that is EACCES and the tier is unavailable-to-us, which is a
+#     different fact from ENOENT and is now reported as one. Readers inside the
+#     enclave never reach this rung — the launcher injects FORGE_SPEC_INDEX_ROOT
+#     at rung 2 — so no reader gains a podman dependency here.
+#
+#     (b) RUNG 4 WAS `target/`, WHICH IS WHERE CACHES GO TO DIE. Start-Of-Day
+#     maintenance runs `cargo clean`, which removes target/ WHOLESALE.
+#     scripts/metrics-log-path.sh already refused target/ for exactly this
+#     reason and moved the metrics log to `.cache/`; the spec index is far more
+#     expensive to rebuild than a metrics log and had the same exposure. Rung 4
+#     is now `<checkout>/.cache/spec-index`, which is gitignored host-local
+#     state, is not swept, and keeps the 931-p26p property that made the
+#     checkout the right carrier: both Windows userlands genuinely share it.
+#
+#     THE DEMOTION IS NO LONGER SILENT. The resolver prints a THIRD line — a
+#     reason token, empty when the preferred rung won. `--where` renders it, so
+#     a durable tier that was skipped says so instead of reporting
+#     serving-exists=yes with `volume=` and `root=` disagreeing and nothing
+#     naming the discrepancy.
 _tillandsias_spec_index_paths() {
+    _tsi_reason=""
     _tsi_root="${FORGE_SPEC_INDEX_ROOT:-}"
     if [ -z "$_tsi_root" ] && [ "${TILLANDSIAS_SPEC_INDEX_NO_PODMAN:-0}" != "1" ] \
        && command -v podman >/dev/null 2>&1; then
         _tsi_vol="${TILLANDSIAS_SPEC_INDEX_VOLUME:-tillandsias-spec-index-${TILLANDSIAS_PROJECT:-tillandsias}}"
         _tsi_root="$(podman volume inspect -f '{{.Mountpoint}}' "$_tsi_vol" 2>/dev/null)" || _tsi_root=""
-        if [ -z "$_tsi_root" ] || [ ! -d "$_tsi_root" ]; then _tsi_root=""; fi
+        # 1003-v3dc. A successful inspect is the EXISTENCE oracle; `[ -d ]` is
+        # only a REACHABILITY test. Keeping them apart is the whole fix: under
+        # rootless podman the second fails with EACCES on a volume the first
+        # just proved exists, and conflating them demoted the durable tier in
+        # silence.
+        if [ -n "$_tsi_root" ] && [ ! -d "$_tsi_root" ]; then
+            _tsi_reason="durable-tier-not-permitted:${_tsi_vol}"
+            _tsi_root=""
+        elif [ -z "$_tsi_root" ]; then
+            _tsi_root=""   # ENOENT: no such volume. Quiet, and correct.
+        fi
     fi
     if [ -z "$_tsi_root" ]; then
         # Rung 4 — repo-relative (931-p26p). See the precedence note above.
@@ -365,8 +470,8 @@ _tillandsias_spec_index_paths() {
         # Writability is tested, not assumed: a read-only checkout mount would
         # otherwise capture resolution and strand the reader on a rung nothing
         # can publish into.
-        if [ -n "$_tsi_co" ] && [ -d "$_tsi_co" ]            && { [ -w "$_tsi_co/target" ] || { [ ! -e "$_tsi_co/target" ] && [ -w "$_tsi_co" ]; }; }; then
-            _tsi_root="$_tsi_co/target/tillandsias-spec-index"
+        if [ -n "$_tsi_co" ] && [ -d "$_tsi_co" ]            && { [ -w "$_tsi_co/.cache" ] || { [ ! -e "$_tsi_co/.cache" ] && [ -w "$_tsi_co" ]; }; }; then
+            _tsi_root="$_tsi_co/.cache/spec-index"
         fi
     fi
     if [ -z "$_tsi_root" ]; then
@@ -380,7 +485,7 @@ _tillandsias_spec_index_paths() {
         _tsi_fp="$(cat "$_tsi_root/current" 2>/dev/null | tr -d '[:space:]')"
         if [ -n "$_tsi_fp" ]; then _tsi_dir="$_tsi_root/$_tsi_fp"; else _tsi_dir="$_tsi_root"; fi
     fi
-    printf '%s\n%s\n' "$_tsi_root" "$_tsi_dir"
+    printf '%s\n%s\n%s\n' "$_tsi_root" "$_tsi_dir" "$_tsi_reason"
 }
 # <<< END spec-index resolution (801-a2by)
 
@@ -422,12 +527,20 @@ _tillandsias_expert_embed_state() {
 _tillandsias_expert_capability_emit() {
     TILLANDSIAS_EXPERT_CAP_SPEC_INDEX="$(_tillandsias_expert_spec_index_state)"
     TILLANDSIAS_EXPERT_CAP_EMBED="$(_tillandsias_expert_embed_state)"
+    # ORDER 919-vvyv exit criterion 4. embed_endpoint= says whether an endpoint
+    # ANSWERS; it cannot say which model the answer path will ask it for, and a
+    # mismatch between the model the corpus was embedded with and the model the
+    # query uses 404s while presenting as a missing index (the 760-hzi4 defect-i
+    # shape). Reporting the name makes that comparison possible from the startup
+    # context alone. APPENDED, never inserted, for the same substring-matching
+    # readers named below.
+    TILLANDSIAS_EXPERT_CAP_EMBED_MODEL="${TILLANDSIAS_EMBED_MODEL:-unset}"
     # spec_index and embed_endpoint are APPENDED, never inserted: the
     # existing fields are matched by substring in
     # litmus:capability-manifest-guard and
     # litmus:expert-capability-skew-honesty, so growing the line at the end
     # is additive for every current reader.
-    TILLANDSIAS_EXPERT_CAPABILITY_LINE="expert_capability: now=${TILLANDSIAS_EXPERT_CAP_NOW} after_relaunch=${TILLANDSIAS_EXPERT_CAP_AFTER} skew=${TILLANDSIAS_EXPERT_CAP_SKEW} blocked_capabilities=${TILLANDSIAS_EXPERT_CAP_BLOCKED} lost_on_relaunch=${TILLANDSIAS_EXPERT_CAP_LOST} spec_index=${TILLANDSIAS_EXPERT_CAP_SPEC_INDEX} embed_endpoint=${TILLANDSIAS_EXPERT_CAP_EMBED}"
+    TILLANDSIAS_EXPERT_CAPABILITY_LINE="expert_capability: now=${TILLANDSIAS_EXPERT_CAP_NOW} after_relaunch=${TILLANDSIAS_EXPERT_CAP_AFTER} skew=${TILLANDSIAS_EXPERT_CAP_SKEW} blocked_capabilities=${TILLANDSIAS_EXPERT_CAP_BLOCKED} lost_on_relaunch=${TILLANDSIAS_EXPERT_CAP_LOST} spec_index=${TILLANDSIAS_EXPERT_CAP_SPEC_INDEX} embed_endpoint=${TILLANDSIAS_EXPERT_CAP_EMBED} embed_model=${TILLANDSIAS_EXPERT_CAP_EMBED_MODEL}"
 }
 
 # tillandsias_expert_capability_advice — the one-sentence action for the verdict.
@@ -443,6 +556,12 @@ tillandsias_expert_capability_advice() {
             ;;
         relaunch-regresses)
             printf 'DO NOT RELAUNCH YET: the running binary provides MORE than the mounted checkout, so a relaunch would REMOVE capability. Move the checkout to a base that carries the expert sources first.\n'
+            ;;
+        rebuild-required)
+            printf 'BEHAVIOUR SKEW: the running binary has every subcommand the checkout declares, but was compiled from DIFFERENT sources — so a subcommand can exist in both and do something else. This is the 984-i4k2 case: four hosts kept writing append-event output into plan/index.yaml instead of a fragment while the skew line read `none`. Rebuild: cargo build --release -p tillandsias-plan && install -m0755 target/release/tillandsias-plan "$HOME/.local/bin/tillandsias-plan".\n'
+            ;;
+        unknown-currency)
+            printf 'CURRENCY UNKNOWN: this binary cannot report which sources it was built from (no `build-id`), so whether its subcommands still BEHAVE as the checkout expects cannot be established. Treat writes as suspect until it is rebuilt. A binary this old predates 823e3ac0d, which is the population that wrote to the wrong ledger channel silently.\n'
             ;;
         *)
             printf 'No capability skew: everything the mounted checkout provides is already available in this session.\n'

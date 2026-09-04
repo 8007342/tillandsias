@@ -1,0 +1,83 @@
+# ORDER 998-qrwu. THE enclave CA bundle directory — one literal, read by every
+# lane.
+#
+# It was written as a literal in 38 places across 16 files (measured
+# 2026-09-03): 8 inside an embedded shell preamble in
+# crates/tillandsias-macos-tray/src/diagnose.rs, the rest across the headless
+# crate and a dozen scripts. 975-rsgm needs this directory MOVED off /tmp —
+# /tmp is volatile, and podman records a bind SOURCE at container creation, so a
+# reboot makes the proxy permanently unrestartable. Moving a path written in 38
+# places moves some and misses others, and a missed one points at a directory
+# that is not there, on a recovery path that only runs when something is already
+# wrong.
+#
+# So the path is declared HERE and nowhere else. Rust reads it with include_str!
+# (the manifest travels inside the artifact, the capabilities.txt pattern);
+# shell reads it through scripts/lib-ca-path.sh. A drift test asserts the two
+# agree, and scripts/check-ca-path-literals.sh ratchets the literal count so it
+# cannot grow back.
+#
+# CHANGING THIS VALUE IS NOT A CONSTANT CHANGE. Existing containers bind the OLD
+# path in their stored definitions and must be RECREATED, not restarted — that
+# migration is 998-3z6g, and it is why this rung lands first and alone.
+# ── THE VALUE, AND WHY IT IS A TEMPLATE (998-3z6g) ──────────────────────────
+#
+# `${HOME}` is expanded by BOTH readers. It is a template rather than a static
+# path because two measurements ruled a static one out:
+#
+#   GUEST (macbook-macos, real Mac VM, 2026-09-04): /var/lib/tillandsias-ca
+#     works — key present, perms 600, owner root, directory survives reboot.
+#     It works BECAUSE the guest runs as root.
+#   HOST (yoga, same day): uid 1000, rootless. `mkdir -p /var/lib/tillandsias-ca`
+#     -> Permission non accordée. /var/lib is not writable AT ALL.
+#     Durable and writable here: $HOME/.local/state, $HOME/.local/share.
+#
+# So /var/lib fails on a rootless host for exactly the reason it succeeds in the
+# guest, and /tmp works everywhere and is the bug — volatile by design, cleared
+# on reboot and swept by systemd-tmpfiles, which is what made the proxy
+# permanently unrestartable (975-rsgm).
+#
+# A HOME-relative path was the only candidate measured to satisfy both: durable
+# on a rootless Linux host, and equally creatable in the guest where HOME=/root.
+#
+# EXPANSION IS THE READERS' JOB AND MUST AGREE. tillandsias-core::ca_path
+# substitutes ${HOME} from the environment; scripts/lib-ca-path.sh gets it from
+# the shell. A test asserts the two produce the same string, because a template
+# with two expanders is a new way for one declaration to mean two things — which
+# is the defect this file was created to remove, not a licence to reintroduce it.
+# ── ORDER 1027-539s: THIS VALUE IS THE ROOT, NOT THE CA DIRECTORY ───────────
+#
+# It used to be `${HOME}/.local/state/tillandsias/ca`. 1019-ivia needed the same
+# durable root for guest-binary staging, found nothing declaring it, and wrote a
+# second copy in Rust — 998-qrwu's defect at N=2 instead of N=38. So the ROOT is
+# what is declared here and each consumer appends its own leaf:
+#
+#   tillandsias-core::ca_path        -> <root>/ca          (the CA bundle)
+#   tillandsias-core::guest_bin_path -> <root>/guest-bin   (staged guest binary)
+#   scripts/lib-ca-path.sh           -> <root>/ca          (the shell reader)
+#
+# The resulting CA path is BYTE-IDENTICAL to what this file declared before, so
+# there is NO MIGRATION: nothing rebinds, no container is recreated. That is
+# what let this land on its own, unlike 998-3z6g which had to move a directory.
+#
+# ── DO NOT MAKE THIS HONOUR XDG_STATE_HOME ─────────────────────────────────
+#
+# Someone will propose it, because the XDG state dir elsewhere in this repo DOES
+# honour it — tillandsias-core::config::log_dir/state_dir (via dirs::state_dir),
+# scripts/uninstall.sh's platform table, scripts/build-image.sh's telemetry dir,
+# tillandsias-logging's event_collector. Those are a DIFFERENT CONCEPT that
+# happens to be the same string on a default Linux host, and they are correct:
+# platform-idiomatic, environment-honouring, deliberately ~/Library/Logs on
+# macOS.
+#
+# This root is not that. 998-3z6g chose HOME-relative BY MEASUREMENT because it
+# was the only candidate identical on a rootless Linux host AND inside the guest
+# where HOME=/root, and the CA bundle must be byte-identical on both sides of the
+# VM boundary. Honouring XDG_STATE_HOME would make it environment-dependent and
+# reintroduce exactly the host/guest divergence that measurement removed.
+#
+# Harmonising the two is not a cleanup. Pointing uninstall.sh's LOG_DIR at this
+# root would delete ~/.local/state on a Mac and leave ~/Library/Logs behind — an
+# uninstall that silently fails to uninstall, on the platform where the
+# divergence is deliberate.
+${HOME}/.local/state/tillandsias

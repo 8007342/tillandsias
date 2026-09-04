@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# ORDER 998-qrwu: the CA directory comes from the ONE declaration
+# (images/default/ca-path.txt), never a literal — see scripts/lib-ca-path.sh.
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-ca-path.sh"
 # @trace spec:enclave-network, spec:proxy-container, spec:git-mirror-service, spec:inference-container, spec:default-image
 # Orchestrate the complete enclave stack with network setup and diagnostics
 # Usage: ./scripts/orchestrate-enclave.sh <project-path> <project-name>
@@ -13,7 +16,7 @@ set -euo pipefail
 # toolbox shares /tmp with the host bidirectionally — VERIFIED on lenovinha
 # 2026-08-26: a file the host wrote to /tmp is readable inside the container and
 # vice versa, and every CERTS_DIR here is under /tmp (mktemp -d, or
-# /tmp/tillandsias-ca). A caller whose write path is NOT shared would have the
+# ${TILLANDSIAS_CA_DIR}). A caller whose write path is NOT shared would have the
 # cert land where the caller cannot find it — a silent break, not an error.
 # Re-check the path before converting any further openssl site.
 # shellcheck source=scripts/lib/tool-dispatch.sh
@@ -76,17 +79,51 @@ fi
 log_step "Setting up enclave network..."
 
 # Check if network exists
+# @trace spec:enclave-network, order:972-a8vh
+# --internal is a MUST in the enclave-network spec ("THEN the system MUST create
+# it with `podman network create tillandsias-enclave --internal`"), and it is what
+# makes the enclave an enclave: without it podman attaches a gateway and every
+# member gets NAT egress, so the proxy stops being the only way out. The three
+# Rust paths pass it (tillandsias-podman/src/client.rs, tillandsias-podman-cli,
+# tillandsias-headless); this shell path did not, so WHICH BINARY created the
+# network decided whether the isolation existed.
 if ! podman network exists "$ENCLAVE_NET" 2>/dev/null; then
-    log_info "Creating network: $ENCLAVE_NET ($ENCLAVE_SUBNET)"
+    log_info "Creating network: $ENCLAVE_NET ($ENCLAVE_SUBNET, internal)"
     podman network create \
         --driver bridge \
+        --internal \
         --subnet "$ENCLAVE_SUBNET" \
         "$ENCLAVE_NET" || {
         log_error "Failed to create network"
         exit 1
     }
 else
-    log_info "Network already exists: $ENCLAVE_NET"
+    # REUSE IS NOT UNCONDITIONAL (order 972-a8vh, second exit criterion).
+    # Adding the flag above fixes NEW networks and reaches no host that already
+    # has one: `podman network exists` returns true, creation is skipped, and an
+    # unisolated network survives every future launch. That is the same
+    # installed-base gap as the proxy CA key left 0644 on hosts provisioned
+    # before its fix — the code change does not reach what is already deployed.
+    # The spec's "MUST be reused if already present" is about not churning the
+    # network, not about reusing one that fails the isolation MUST.
+    _net_internal="$(podman network inspect "$ENCLAVE_NET" \
+        --format '{{.Internal}}' 2>/dev/null || echo unknown)"
+    case "$_net_internal" in
+        true)
+            log_info "Network already exists: $ENCLAVE_NET (internal)"
+            ;;
+        false)
+            log_error "Network $ENCLAVE_NET EXISTS BUT IS NOT INTERNAL — it was created without --internal, so every member has NAT egress and the proxy is not the only way out (order 972-a8vh, spec:enclave-network)."
+            log_error "This is not repaired by relaunching: recreate it with"
+            log_error "    podman network rm $ENCLAVE_NET && podman network create --driver bridge --internal --subnet $ENCLAVE_SUBNET $ENCLAVE_NET"
+            log_error "Stop every container attached to it first. Refusing to reuse an unisolated enclave network."
+            exit 1
+            ;;
+        *)
+            log_error "Could not determine whether $ENCLAVE_NET is internal (podman network inspect returned '$_net_internal'). Refusing to assume isolation."
+            exit 1
+            ;;
+    esac
 fi
 
 # ===========================================================================
@@ -94,11 +131,11 @@ fi
 # ===========================================================================
 # @trace spec:transparent-https-caching, spec:proxy-container, spec:certificate-authority
 # Generate ephemeral 30-day CA cert for entire enclave stack.
-# Stored at /tmp/tillandsias-ca/ so it persists across container restarts
+# Stored at ${TILLANDSIAS_CA_DIR}/ so it persists across container restarts
 # within a session, but is wiped on host reboot (ephemeral-first security).
 log_step "Setting up transparent HTTPS certificate authority..."
 
-CERTS_DIR="/tmp/tillandsias-ca"
+CERTS_DIR="${TILLANDSIAS_CA_DIR}"
 mkdir -p "$CERTS_DIR"
 
 # Idempotent: only generate if cert doesn't exist or is older than 25 days

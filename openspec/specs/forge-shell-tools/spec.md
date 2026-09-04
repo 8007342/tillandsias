@@ -9,6 +9,7 @@ status: active
 Define the live shell-tooling surface in the forge image: alternative shells, modern terminal utilities, and shell startup config that make interactive sessions useful by default.
 ## Requirements
 ### Requirement: Alternative shells available
+<!-- req-id: 4fc9fc46 -->
 The forge image MUST include fish and zsh, startable by typing `fish` or `zsh` from any shell.
 
 #### Scenario: Start fish
@@ -20,6 +21,7 @@ The forge image MUST include fish and zsh, startable by typing `fish` or `zsh` f
 - **THEN** the zsh shell MUST start with autocompletion and a configured prompt
 
 ### Requirement: Terminal tools installed
+<!-- req-id: 831f931f -->
 The forge image MUST include a curated set of terminal tools for file management, editing, and modern CLI workflows.
 
 #### Scenario: File manager
@@ -36,6 +38,7 @@ The forge image MUST include a curated set of terminal tools for file management
 
 
 ### Requirement: Shell configurations
+<!-- req-id: 58d5297a -->
 The forge image MUST include sensible default configs for bash, fish, and zsh with colored output, useful aliases, and modern tool integration.
 
 #### Scenario: Bash prompt

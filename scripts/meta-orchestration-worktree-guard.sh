@@ -201,6 +201,21 @@ case "$mode" in
         # verification left by the previous cycle, so a stale stamp can never
         # satisfy this one.
         printf '%s\n' "$state_dir" >"$(stamp_path boundary-state)"
+
+        # ORDER 974-uk95. A NEW CYCLE HAS RECORDED NOTHING YET.
+        #
+        # `mo-full-attest.sh self` refuses a COMPLETE marker unless this cycle
+        # wrote a durable ledger record, and it decides that by reading the
+        # stamp `record` leaves behind. Clearing it here is what makes the
+        # question "did THIS cycle record" rather than "has this checkout ever
+        # recorded" — without it, one successful record would license every
+        # later cycle's marker forever, which is the original defect with a
+        # longer fuse.
+        #
+        # Snapshot is the right hook for the same reason it retires the previous
+        # boundary directory: cleanup is owned by the next start, not by a
+        # previous exit that may never come.
+        rm -f "$(stamp_path mo-full-recorded)" 2>/dev/null || true
         rm -f "$(stamp_path boundary-verified)"
         ;;
     re-snapshot)

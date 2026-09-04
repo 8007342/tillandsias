@@ -9,6 +9,7 @@ active
 ## Requirements
 
 ### Requirement: Runtime image source digest detects stale images
+<!-- req-id: 70f39970 -->
 
 Runtime image builds that use release-shipped Containerfiles MUST compare the current runtime image source digest with the digest stored after the last successful build. The runtime MUST rebuild an image when its materialized image context changes and MUST NOT rely on repository file mtimes for installed user runtime staleness.
 

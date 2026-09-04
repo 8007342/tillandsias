@@ -20,6 +20,7 @@ blocked-closure
 # when the windows/linux branches merged (linux side: 752-pst5). Declared now.
 blocking-counts
 # built a PRE-EXPERT binary from it, and stamped `experts: ready` — because
+build-id
 burndown
 capabilities
 #      capabilities` prints this file, embedded at compile time via
@@ -68,8 +69,10 @@ query
 ready
 # "ready" only ever meant "the build finished", never "the binary can answer".
 # relaunch" sets can never drift apart the way a hardcoded list in the wrapper
+score-checks
 select-rows
 set-field
+source-revision
 spec-envelope
 spec-floor
 spec-index

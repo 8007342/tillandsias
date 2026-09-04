@@ -55,6 +55,15 @@ pub mod readiness;
 pub mod transport_conformance;
 pub mod vsock_exec;
 
+// Relay for guest-initiated vsock connections accepted by the macOS host
+// listener (order 830-xsk2). cfg(unix) inside the file: only macOS produces
+// these fds, but the relay is family-agnostic POSIX and is worth compiling
+// and testing on the Linux hosts too.
+//
+// @trace spec:vsock-transport, spec:vm-idiomatic-layer
+#[cfg(unix)]
+pub mod host_vsock_forward;
+
 // macOS host-side vsock connector. Declared at this level so callers can
 // import `tillandsias_vm_layer::transport_macos::connect_to_vm_vsock` from
 // the macOS tray. The file is itself `#![cfg(target_os = "macos")]` so it
@@ -80,6 +89,12 @@ pub mod fake;
 /// `download` feature so trait-only consumers stay reqwest-free.
 #[cfg(feature = "download")]
 pub mod fetch;
+
+/// Pure-Rust qcow2 -> raw expansion, so first-run provisioning needs no
+/// `qemu-img` on the host (order 980-xcaf). Behind `download` because that is
+/// what carries `flate2`, which the compressed-cluster path needs.
+#[cfg(feature = "download")]
+pub mod qcow2;
 
 /// Shared (co-owned) Recipefile + manifest.toml parser for the recipe
 /// materializer (vm-recipe-provisioning §2). Behind the `recipe` feature.

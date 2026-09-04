@@ -16,7 +16,7 @@ committed_for_project: false
 ---
 # Enclave Networking
 
-@trace spec:agent-source-of-truth
+@trace spec:knowledge-source-of-truth
 
 **Version baseline**: Tillandsias forge enclave (v0.1.170+, proxy v0.1+, git-service v0.1+, inference v0.1+)  
 **Use when**: Understanding how the forge accesses external services, what's blocked, what's available locally

@@ -668,7 +668,14 @@ impl Harness {
                 // shifts the pairing. Caught immediately — adding this engine
                 // took the tree to 19485 chunks against 19483 stored vectors.
                 let (chunks, vectors) = self.spec_index()?;
-                let top = crate::spec::top_k(&qvec, vectors, 6);
+                // ORDER 917-6iwv: the SAME width the pipeline serves, not a
+                // second literal beside it. This line read `6` while
+                // pipeline::RETRIEVE_K was independently `6`; nothing compared
+                // them, so the grader could certify a width no caller gets.
+                // A grader measuring a configuration the product does not serve
+                // is worse than no grader, because its number looks like
+                // evidence.
+                let top = crate::spec::top_k(&qvec, vectors, crate::pipeline::RETRIEVE_K);
                 let picked: Vec<crate::spec::ScoredChunk> = top
                     .iter()
                     .map(|(i, sc)| crate::spec::ScoredChunk {

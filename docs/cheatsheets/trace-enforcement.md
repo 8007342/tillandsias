@@ -124,7 +124,7 @@ pub fn ensure_podman_available() -> Result<(), String> {
 }
 
 // After:
-// @trace spec:init-system-checks
+// @trace spec:init-command
 pub fn ensure_podman_available() -> Result<(), String> {
     // ...
 }
@@ -146,7 +146,7 @@ If your function is listed, you're done. If not, check:
 ```
 fix: add @trace to ensure_podman_available
 
-@trace spec:init-system-checks
+@trace spec:init-command
 https://github.com/8007342/tillandsias/search?q=%40trace+spec%3Ainit-system-checks&type=code
 ```
 

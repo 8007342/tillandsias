@@ -20,7 +20,7 @@ pull_recipe: see-section-pull-on-demand
 
 # systemd socket activation
 
-@trace spec:container-health, spec:wsl-daemon-orchestration
+@trace spec:podman-idiomatic-patterns, spec:wsl-daemon-orchestration
 @cheatsheet runtime/unix-socket-ipc.md
 
 **Version baseline**: systemd 250+ (freedesktop.org standard)

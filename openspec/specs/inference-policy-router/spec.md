@@ -27,6 +27,7 @@ routing table nor its test fixtures.
 ## Requirements
 
 ### Requirement: CLASS-1 — Four workload classes with declared objectives
+<!-- req-id: 629c7598 -->
 
 The router MUST recognise exactly four workload classes, each with a single
 declared objective:
@@ -60,6 +61,7 @@ be introduced without a change to this spec.
 - **THEN** the router MUST select the stable placement
 
 ### Requirement: ROUTE-1 — The routing table is data and route() is a pure function
+<!-- req-id: ccce240e -->
 
 The routing table MUST be a declarative data file (TOML), not code. Adding,
 reordering, or removing a placement preference MUST NOT require recompiling
@@ -87,6 +89,7 @@ require a Python interpreter.
 - **THEN** the new order MUST take effect without recompiling
 
 ### Requirement: ROUTE-2 — Placements are ordered fallback chains terminating in CPU tier-S
+<!-- req-id: 7bd254bf -->
 
 Every placement MUST be an ordered list of candidate (device, slot,
 model-tier) triples.
@@ -118,6 +121,7 @@ request time.
 - **THEN** the request MUST still be served by CPU tier-S
 
 ### Requirement: ROUTE-3 — Failures advance the chain; three strikes quarantine the device
+<!-- req-id: 2218beec -->
 
 A placement failure — engine error, out-of-memory, device unavailable, or
 readiness timeout — MUST advance the request to the next candidate in its
@@ -145,6 +149,7 @@ pair MUST NOT be retried by later requests in the same session.
 - **THEN** the router MUST skip it without attempting it
 
 ### Requirement: ROUTE-4 — A model must fit device-visible memory with at least 10% headroom
+<!-- req-id: 1a1bf9f9 -->
 
 The router MUST NOT place a model whose resident size exceeds 90% of the
 memory the chosen device can actually address — dedicated VRAM for a discrete
@@ -171,6 +176,7 @@ placement and fail on out-of-memory.
 - **THEN** the NPU candidate MUST be skipped
 
 ### Requirement: ROUTE-5 — First request is served from a resident small model while the preferred model loads
+<!-- req-id: 9791d3b9 -->
 
 When the preferred placement requires loading a model that is not yet
 resident, the router MUST serve the first request from an already-resident
@@ -192,6 +198,7 @@ answered MUST be observable to the caller.
 - **THEN** the in-flight response MUST complete on the model that started it
 
 ### Requirement: ADAPT-1 — Power and thermal signals are subscribed, not polled-only
+<!-- req-id: 60ae593a -->
 
 On Linux the router MUST subscribe to UPower and PowerProfiles D-Bus
 `PropertiesChanged` signals, and the subscription MUST work with both
@@ -219,6 +226,7 @@ failure and MUST NOT suspend work.
 - **AND** MUST log a warning rather than fail
 
 ### Requirement: ADAPT-2 — On battery or power-saver, background work suspends within 5 seconds
+<!-- req-id: 9522be76 -->
 
 On a transition to battery power or to a power-saver profile, the router MUST,
 within 5 seconds of receiving the signal:
@@ -250,6 +258,7 @@ Linux, EcoQoS on Windows, background QoS on macOS.
 - **THEN** it MUST self-tag `SCHED_IDLE`
 
 ### Requirement: ADAPT-3 — Background work resumes only on AC and thermal-nominal and idle
+<!-- req-id: a7efdddf -->
 
 Suspended background work MUST resume only when all three of the following
 hold simultaneously: the host is on AC power, thermals are nominal, and there
@@ -270,6 +279,7 @@ Any one condition failing MUST keep background work suspended.
 - **THEN** background work MUST resume from its checkpoint
 
 ### Requirement: ADAPT-4 — Status surface and pin override with auto-release
+<!-- req-id: 58cbec0c -->
 
 The router MUST expose a `policy status` surface reporting, at minimum: the
 current placement per workload class with the reason it was chosen, all
@@ -302,6 +312,7 @@ MUST NOT be able to select a device the capability probe reports
 - **THEN** no pin may be in effect after restart
 
 ### Requirement: NEG-1 — Non-goals are binding prohibitions
+<!-- req-id: 04f9da2f -->
 
 The following are prohibited, not merely deprioritised:
 
@@ -337,6 +348,7 @@ availability on Linux, where NPU-only flows are the supported shape.
 - **AND** MUST NOT attempt to run prefill and decode on different devices
 
 ### Requirement: NEG-2 — Degraded lanes never outrank healthy ones
+<!-- req-id: fe0d605c -->
 
 A (device, engine) lane the capability probe marked `degraded: true` — a
 measured decode below 30% of its bandwidth roofline — MUST NOT be preferred

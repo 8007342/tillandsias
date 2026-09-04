@@ -6,6 +6,7 @@ status: active
 ## Requirements
 
 ### Requirement: Platform-appropriate artifact selection
+<!-- req-id: 297b16f8 -->
 - **ID**: update-system.artifact.platform-selection@v1
 - **Modality**: MUST
 - **Measurable**: true

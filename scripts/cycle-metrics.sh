@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # @trace spec:methodology-accountability
-# @trace order:575
+# @trace order:575, order:1001-q3zf
 #
 # Cycle metrics — what a meta-orchestration cycle reports about ITSELF when it
 # ends, in one pinned grammar.
@@ -48,8 +48,88 @@
 #   plan:    packets=<n> ready=<n> blocked=<n> pending=<n>
 #   flow:    cycles=<n> avg_completed_per_cycle=<x> avg_commits_per_cycle=<y> \
 #            overhead_ratio=<commits-per-completed|-> source=<path|absent>
-#   repo:    commits_this_cycle=<n|-> worktree=<clean|dirty> traces=<current|stale|unknown>
+#   repo:    commits_this_cycle=<n|-> worktree=<clean|dirty> traces=<current|stale|unavailable:<reason>>
 #   verdict: <ok|attention>:<reason>
+#   repeat:    window=<since=<utc>|3h> steps=<n> top3=<entries|-> source=<path|absent>
+#   recur:     window=<n>d runs=<n> steps=<n> top3=<entries|-> source=<path|absent>
+#   skippable: candidates=<n> floor_ms=<f> min_runs=<m> top3=<entries|-> source=<path|absent>
+#
+# THE repeat:/recur:/skippable: LINES (order 1001-q3zf). The operator
+# asked, 2026-09-03, for "metrics to each host's iterations to detect repeated
+# work that just wastes work every cycle, and expensive work that may be cached
+# or skipped". The methodology (agent-observability.yaml, context_cost_metrics)
+# had already DESIGNED a within-cycle step_repetition line that nothing
+# emitted, and the timing log already held the answer: on macuahuitl one gate
+# step (step:checking-the-plan-archiver-preserves-the-ready-set-831-ezea) had
+# run 361 times at 13.9 s each, never once failing — 83 minutes bought exactly
+# one bit of information. So these are REPORTERS over existing data. No new
+# emitter, no new log.
+#
+#   repeat:    "which steps were paid REPEATEDLY inside THIS cycle?" Window is
+#              `--cycle-start <utc>` / TILLANDSIAS_CYCLE_START_TS, else the last
+#              3 h. top3 by COUNT desc then step asc, as <step>=<count>. Count,
+#              not duration: a gate re-run after every rebase (982-cs43) costs
+#              its duration TIMES the number of rounds; only the product is
+#              actionable and duration is already on timing:.
+#   recur:     "which steps are paid on EVERY cycle, and what do they cost
+#              cumulatively?" Last N days (--recur-window-days, default 7). A
+#              step recurs when it ran >= 2 times in the window. Entries are
+#              <step>:runs=<n>:total_ms=<t>:avg_ms=<a>:fail_pct=<p>, top3 by
+#              total_ms desc then step asc.
+#   skippable: "which expensive, repeated, OUTCOME-INVARIANT steps could be
+#              memoised or skipped?" Same window. A candidate ran >= min_runs
+#              (default 5), averaged >= floor_ms (default 2000), and NEVER
+#              changed outcome (fail_pct 0 or 100 — decided on raw counts, not
+#              the rounded percentage). Entries are
+#              <step>:runs=<n>:avg_ms=<a>:fail_pct=<p>:saved_ms_upper=<s>, top3
+#              by saved_ms_upper desc then step asc.
+#
+# PARSE FROM THE RIGHT. Step names may contain colons (step:..., litmus:...,
+# check:litmus-pre-build) — the same fact `slowest=<step>:<ms>` already lives
+# with. The trailing :key=value fields never contain a colon, so the step is
+# everything before the FIRST `:runs=` and the fields are read from the right.
+# For that rule to hold, a step name that itself contains `:runs=` is
+# rewritten to `_runs=` in the reported key (no emitter names steps that way;
+# the rewrite keeps the rule true rather than documented). Pinned by a
+# colon-bearing step name in scripts/test-cycle-metrics-recurrence.sh.
+#
+# STEP NAMES ARE SANITISED BEFORE THEY REACH A LINE. The grammar is
+# whitespace- and comma-delimited, and the three lines are read back ONE PER
+# LINE, so a control character, whitespace or comma inside a step name would
+# shift the labels: a step whose JSON decoded to a newline put the recur:
+# label on the tail of the repeat data and lost the skippable: line entirely
+# (adversarial review, 2026-09-04; reachable through --emit-timing, which
+# used to write the step unescaped). Every control, whitespace or comma byte
+# in a reported step key becomes `_`, and an empty key becomes `-`;
+# --emit-timing strips `"` and `\` from step/phase/host exactly as
+# --emit-timing-batch always did, and turns raw control bytes into `_` so a
+# newline in a step name cannot split the row. The timing log itself is not
+# rewritten — the key is sanitised at report time.
+#
+# WINDOW LABELS NEVER HIDE A CALLER ERROR. A `--cycle-start` that does not
+# parse (missing Z, garbage) reports `window=since=<value>:unparsed steps=0`
+# rather than silently widening to 3h; fractional seconds are accepted on
+# the flag as they are on records. A `--cycle-start` given as the LAST
+# argument with no value is the env fallback, not the literal flag text.
+# jq >= 1.7 is required for the windowing: 1.6 lacks strptime on Windows and
+# applies the local UTC offset to fromdateiso8601. `now` is therefore bound
+# through the same parser (now|todate|fromdateiso8601) so an offset cancels,
+# and when the parser cannot round-trip the clock at all the three lines
+# read `source=<path>:unwindowable` — zeros with a bare path would be a
+# guess, and the litmus header names that as the failure it prevents.
+#
+# saved_ms_upper IS A BOUND, NOT A SAVING. It is total_ms - avg_ms: what a
+# perfect skip could have saved if every run after the first had been
+# redundant. The log carries no input identity, so this script cannot say a
+# run WOULD have hit a cache — only that its outcome matched every other run.
+# Anyone quoting it as a saving is making the claim this header refuses to
+# make. The named next rung (not this order) is a tree digest on timing
+# records, so exact repeats become measurable rather than bounded.
+#
+# WHAT THESE DO NOT CLAIM: they do not see cross-host caches, do not know why
+# a step ran, and do not know whether a re-run was demanded by a rebase or by
+# habit. They rank where to LOOK. All three read `source=absent` on a missing
+# log and zeros on an empty window; never a guess.
 #
 # THE `flow:` LINE and its emitter (packet 682-epud). The greedier-batching
 # hypothesis (682-yiz7) asks whether LARGER batches per cycle amortize the fixed
@@ -191,12 +271,70 @@ if [ "${1:-}" = "--emit-timing" ]; then
     for v in et_duration_ms et_exit; do
         eval "case \"\$$v\" in ''|*[!0-9]*) $v=0 ;; esac"
     done
+    # A `"` or `\` in a string field would make the row malformed JSON (dropped
+    # by every reader) or, worse, a well-formed row whose step DECODES to a
+    # control character and shifts the report's line labels (1001-q3zf review).
+    # Strip them, exactly as --emit-timing-batch does with gsub(/["\\]/, "").
+    # A raw control byte (a newline in the step) would split the row and lose
+    # the measurement, so it becomes `_` — the report-time sanitiser's rule.
+    # An empty step (`step=`) is recorded as absent, `-`, not as "".
+    et_host="${et_host//[\"\\]/}"; et_step="${et_step//[\"\\]/}"; et_phase="${et_phase//[\"\\]/}"
+    et_host="${et_host//[[:cntrl:]]/_}"; et_step="${et_step//[[:cntrl:]]/_}"; et_phase="${et_phase//[[:cntrl:]]/_}"
+    [ -n "$et_step" ] || et_step="-"
     {
         et_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
         printf '{"ts":"%s","host":"%s","step":"%s","phase":"%s","duration_ms":%s,"exit":%s}\n' \
             "$et_ts" "$et_host" "$et_step" "$et_phase" \
             "$et_duration_ms" "$et_exit" \
             >>"$TIMING_LOG"
+    } 2>/dev/null || true
+    exit 0
+fi
+
+# ── --emit-context: append one CONTEXT-GROWTH PROXY record ───────────────────
+# OPERATOR DIRECTIVE 2026-09-03 (become token-conscious), methodology
+# agent_observability_protocol.cycle_metrics.context_cost_metrics.
+#
+# THESE ARE PROXIES AND THE FIELD NAMES SAY SO. `transcript_bytes` is BYTES of
+# the harness transcript, not tokens. The bytes-per-token ratio is model- and
+# content-dependent and this project does NOT assume one; a caller converting
+# this to a token estimate must cite the measurement that established the
+# conversion. A proxy reported as a token count is the defect the whole
+# observability protocol exists to prevent.
+#
+# Best-effort by construction, exactly like --emit-timing and --emit-flow: a
+# metrics write may never fail the cycle it measures. Always exits 0. An absent
+# transcript is recorded as 0, which the reporter renders `absent` — never
+# guessed, never omitted.
+if [ "${1:-}" = "--emit-context" ]; then
+    shift
+    ec_host="-"; ec_cycle="-"; ec_transcript="-"
+    ec_bytes=0; ec_lines=0; ec_tools=0; ec_compactions=0
+    for tok in "$@"; do
+        case "$tok" in
+            host=*)        ec_host="${tok#host=}" ;;
+            cycle=*)       ec_cycle="${tok#cycle=}" ;;
+            transcript=*)  ec_transcript="${tok#transcript=}" ;;
+            tools=*)       ec_tools="${tok#tools=}" ;;
+            compactions=*) ec_compactions="${tok#compactions=}" ;;
+        esac
+    done
+    # Measure the transcript here rather than trusting a passed-in number: the
+    # caller reporting its own size is a self-report, and a self-report is an
+    # instrument (993-yqie / the 2026-09-03 session's most repeated lesson).
+    if [ -f "$ec_transcript" ]; then
+        ec_bytes="$(wc -c <"$ec_transcript" 2>/dev/null | tr -d ' ')"
+        ec_lines="$(wc -l <"$ec_transcript" 2>/dev/null | tr -d ' ')"
+    fi
+    for v in ec_bytes ec_lines ec_tools ec_compactions; do
+        eval "case \"\$$v\" in ''|*[!0-9]*) $v=0 ;; esac"
+    done
+    {
+        ec_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
+        printf '{"ts":"%s","host":"%s","cycle":"%s","transcript_bytes":%s,"transcript_lines":%s,"tool_calls":%s,"compactions":%s}\n' \
+            "$ec_ts" "$ec_host" "$ec_cycle" \
+            "$ec_bytes" "$ec_lines" "$ec_tools" "$ec_compactions" \
+            >>"${TILLANDSIAS_CONTEXT_LOG:-${TMPDIR:-/tmp}/tillandsias-context.jsonl}"
     } 2>/dev/null || true
     exit 0
 fi
@@ -319,19 +457,42 @@ fi
 
 # --experts-only prints just the expert blocks and skips the plan/repo/verdict
 # work. Those blocks shell out to `tillandsias-plan check` and
-# `generate-traces.sh --check`, which are real scans over the whole repo and take
+# `trace-coverage.sh --gate`, which are real scans over the whole repo and take
 # seconds; the expert numbers are pure arithmetic over one log. Worth having as
 # its own mode rather than a test-only affordance: "how are the experts doing
 # right now" is the question asked most often, and it should not cost a repo
 # scan.
 EXPERTS_ONLY=false
 SINCE_REF=""
-for arg in "$@"; do
-    case "$arg" in
+# Order 1001-q3zf: the repeat:/recur:/skippable: knobs. Each flag has an env
+# fallback so a host that exports its Start-Of-Cycle once need not thread it
+# through every call; the flag wins when both are given.
+CYCLE_START_TS="${TILLANDSIAS_CYCLE_START_TS:-}"
+RECUR_WINDOW_DAYS="${TILLANDSIAS_RECUR_WINDOW_DAYS:-7}"
+SKIP_MIN_RUNS="${TILLANDSIAS_SKIP_MIN_RUNS:-5}"
+SKIP_FLOOR_MS="${TILLANDSIAS_SKIP_FLOOR_MS:-2000}"
+while [ $# -gt 0 ]; do
+    case "$1" in
         --experts-only) EXPERTS_ONLY=true ;;
-        *) [ -z "$SINCE_REF" ] && SINCE_REF="$arg" ;;
+        --cycle-start) if [ $# -gt 1 ]; then shift; CYCLE_START_TS="$1"; fi ;;
+        --cycle-start=*) CYCLE_START_TS="${1#--cycle-start=}" ;;
+        --recur-window-days) if [ $# -gt 1 ]; then shift; RECUR_WINDOW_DAYS="$1"; fi ;;
+        --recur-window-days=*) RECUR_WINDOW_DAYS="${1#--recur-window-days=}" ;;
+        *) [ -z "$SINCE_REF" ] && SINCE_REF="$1" ;;
     esac
+    shift
 done
+# Non-numeric knobs fall back to their defaults rather than aborting the jq
+# program (which would silently zero all three lines under 2>/dev/null).
+# Values are then NORMALISED (leading zeros dropped, more than nine digits
+# is the default) so the label echoes the number used, not the flag text:
+# `--recur-window-days 07` printed `window=07d` before this.
+case "$RECUR_WINDOW_DAYS" in ''|*[!0-9]*|??????????*) RECUR_WINDOW_DAYS=7 ;; esac
+case "$SKIP_MIN_RUNS" in ''|*[!0-9]*|??????????*) SKIP_MIN_RUNS=5 ;; esac
+case "$SKIP_FLOOR_MS" in ''|*[!0-9]*|??????????*) SKIP_FLOOR_MS=2000 ;; esac
+RECUR_WINDOW_DAYS=$((10#$RECUR_WINDOW_DAYS))
+SKIP_MIN_RUNS=$((10#$SKIP_MIN_RUNS))
+SKIP_FLOOR_MS=$((10#$SKIP_FLOOR_MS))
 
 # ── experts ─────────────────────────────────────────────────────────────────
 calls=0
@@ -544,15 +705,25 @@ accuracy_line='expert_accuracy: deferred source=litmus:expert-groundtruth-harnes
 # produced six FALSE reds — and is safe now that each set declares its own
 # corpus. A missing corpus is exit 2, which yields no result line and leaves
 # the `deferred` fallback in place, so this cannot silently under-report.
+#
+# GRADE EXACTLY ONCE (found during the 1001-q3zf review, 2026-09-04). This
+# used to read `( timeout 60 grade ... || grade ... )`, meant as "use timeout
+# when the host has it". But grade exits 1 whenever a CASE fails, so on any
+# host with a red groundtruth case the `||` re-ran the whole grade: measured
+# 5.3 s once, 10.7 s inside the reporter, and every litmus step that calls
+# `--experts-only` under a 10 s budget was killed (exit 124) from
+# 2026-09-02T21Z, when two spec.answer cases first went red. The choice of
+# timeout-or-bare is made BEFORE the call now, so a red case costs one grade.
 if [ -n "$GRADE_BIN" ]; then
     gt_sets="$REPO_ROOT/openspec/litmus-tests/groundtruth"
     gr=""
+    if command -v timeout >/dev/null 2>&1; then grade_wrap="timeout"; else grade_wrap=""; fi
     if [ -d "$gt_sets" ]; then
         # shellcheck disable=SC2086
-        gr="$(cd "$REPO_ROOT" && ( command -v timeout >/dev/null 2>&1 && timeout 60 "$GRADE_BIN" grade --root . openspec/litmus-tests/groundtruth/*.yaml || "$GRADE_BIN" grade --root . openspec/litmus-tests/groundtruth/*.yaml ) 2>/dev/null | grep '^groundtruth-result:' | tail -1)"
+        gr="$(cd "$REPO_ROOT" && ( if [ -n "$grade_wrap" ]; then timeout 60 "$GRADE_BIN" grade --root . openspec/litmus-tests/groundtruth/*.yaml; else "$GRADE_BIN" grade --root . openspec/litmus-tests/groundtruth/*.yaml; fi ) 2>/dev/null | grep '^groundtruth-result:' | tail -1)"
     fi
     if [ -z "$gr" ]; then
-        gr="$(cd "$REPO_ROOT" && ( command -v timeout >/dev/null 2>&1 && timeout 30 "$GRADE_BIN" grade --root . || "$GRADE_BIN" grade --root . ) 2>/dev/null | grep '^groundtruth-result:' | tail -1)"
+        gr="$(cd "$REPO_ROOT" && ( if [ -n "$grade_wrap" ]; then timeout 30 "$GRADE_BIN" grade --root .; else "$GRADE_BIN" grade --root .; fi ) 2>/dev/null | grep '^groundtruth-result:' | tail -1)"
         gsrc="groundtruth-rung1"
     else
         gsrc="groundtruth-all-sets"
@@ -722,6 +893,148 @@ if [ "$EXPERTS_ONLY" = true ]; then
     exit 0
 fi
 
+# ── repeat / recur / skippable (order 1001-q3zf) ────────────────────────────
+# Three views over the SAME timing log the block above reads, answering the
+# operator's ask of 2026-09-03: "detect repeated work that just wastes work
+# every cycle, and expensive work that may be cached or skipped". The data was
+# already there — 48,790 records on macuahuitl when this was written — and only
+# the reporter was missing.
+#   repeat:    which steps were paid more than once INSIDE THIS CYCLE (the
+#              methodology step_repetition line; count, not duration, because
+#              a gate re-run after every rebase costs duration TIMES rounds).
+#   recur:     which steps are paid on EVERY cycle, and what they cost
+#              cumulatively over the window (total_ms, not avg — the product
+#              is what is actionable).
+#   skippable: which expensive, repeated, OUTCOME-INVARIANT steps are
+#              memoisation/skip candidates: every run after the first bought no
+#              information, because the outcome never changed. Invariance is
+#              decided on the raw counts (fails == 0 or fails == runs), never on
+#              the rounded fail_pct, so one failure in three hundred runs is not
+#              rounded into "never fails".
+#
+# ONE extra pass over the log (a single jq process; the whole thing measured
+# 0.4 s over 48,790 rows). Records are windowed by `ts`: a row whose ts does
+# not parse as %Y-%m-%dT%H:%M:%SZ (the emitters write `unknown` when date(1)
+# fails) cannot be placed in time and is dropped from THESE lines only; the
+# timing: line above still counts it. Malformed rows drop via fromjson?
+# exactly as above. The clock is jq's `now` — no date(1), so the same program
+# runs on BSD userland and Git Bash, given jq >= 1.7 (see the header: 1.6 is
+# offset-shifted or strptime-less, and the lines say `:unwindowable` rather
+# than print zeros when the parser cannot round-trip the clock).
+#
+# PARSE FROM THE RIGHT. Step names contain colons (`step:checking-...`,
+# `litmus:<name>`, `check:litmus-pre-build`) — the same situation `slowest=` already
+# lives with. So in every top3 entry the trailing `:key=value` fields never
+# contain a colon and the step is everything before the FIRST `:runs=`.
+#
+# saved_ms_upper IS AN UPPER BOUND, and every surface that quotes it must say
+# so. It is total_ms minus one run: the most a perfect skip could have saved.
+# The log carries no input identity, so this line cannot say a given run WOULD
+# have hit a cache — only that its outcome was the same as the last one. The
+# named next rung, deliberately not this packet, is a tree digest on timing
+# records so exact repeats become measurable rather than bounded.
+#
+# The window for repeat: is `--cycle-start <utc>` (or TILLANDSIAS_CYCLE_START_TS),
+# else the last three hours; for recur:/skippable: the last N days
+# (--recur-window-days, default 7). An empty window reports zeros with
+# source=<path>; a missing or unreadable log (a directory, say) reports zeros
+# with source=absent; a log jq could not read reports source=<path>:unreadable.
+# Never a guess.
+recur_source="absent"; recur_input=/dev/null
+if [ -f "$TIMING_LOG" ] && [ -r "$TIMING_LOG" ]; then
+    recur_source="$TIMING_LOG"; recur_input="$TIMING_LOG"
+fi
+recur_stats="$("$JQ" -n -R -r --arg cs "$CYCLE_START_TS" --arg rdays "$RECUR_WINDOW_DAYS" \
+    --arg minruns "$SKIP_MIN_RUNS" --arg floor "$SKIP_FLOOR_MS" '
+    # (No apostrophes in this block: it lives inside a single-quoted jq
+    # program, where one would terminate the string.)
+    # The clock is bound THROUGH the parser: on jq 1.6 fromdateiso8601 applies
+    # the local UTC offset, and binding now the same way cancels it; on a jq
+    # whose strptime is missing the round-trip yields null and the first
+    # output line says so instead of letting zeros pose as an empty window.
+    ((now | todate | fromdateiso8601?) // null) as $now
+    | (if $now == null then "clock=unwindowable" else "clock=ok" end),
+    ( [inputs | fromjson?]
+    | map(select(type=="object"
+          and (.duration_ms | type)=="number"
+          and .duration_ms >= 0
+          and .duration_ms < 86400000))
+    # Step keys are sanitised here, before they can reach the -r output: a
+    # control character would split the three lines, whitespace or a comma
+    # would split an entry. Colons are kept (parse from the right).
+    # An empty step becomes "-" (a bare `=5` entry is legal but unreadable),
+    # and a literal `:runs=` inside a step name is rewritten so the
+    # parse-from-the-right rule (step = everything before the FIRST `:runs=`)
+    # holds for every key this program can emit.
+    | map(. + {t: ((.ts | tostring | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601?) // null),
+               s: ((.step // "-") | tostring | gsub("[[:cntrl:][:space:],]"; "_")
+                   | gsub(":runs="; "_runs=") | if . == "" then "-" else . end)})
+    | map(select(.t != null)) as $r
+    | ($cs | gsub("[[:cntrl:][:space:],]"; "_")) as $cslabel
+    | ($cs | if . == "" then null
+             else ((sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601?) // null) end) as $cstart
+    # A --cycle-start that fails to parse on a clock that ALSO fails to
+    # round-trip is a platform limitation, not a caller error; the source
+    # suffix (:unwindowable) carries that diagnosis and the label stays bare.
+    | ($cs != "" and $cstart == null and $now != null) as $unparsed
+    | (if $cstart == null then (($now // 0) - 10800) else $cstart end) as $rstart
+    | (if $cs == "" then "3h"
+       elif $unparsed then "since=\($cslabel):unparsed"
+       else "since=\($cslabel)" end) as $rwin
+    | (($now // 0) - ($rdays | tonumber) * 86400) as $wstart
+    | ($r | (if $unparsed then [] else map(select(.t >= $rstart)) end) | group_by(.s)
+         | map({s: .[0].s, n: length}) | sort_by([-.n, .s])) as $rep
+    | ($r | map(select(.t >= $wstart))) as $rw
+    | ($rw | group_by(.s)
+         | map({s: .[0].s, runs: length,
+                total: (map(.duration_ms) | add | floor),
+                fails: (map(select(((.exit // 0) | tostring) != "0")) | length)})
+         | map(. + {avg: ((.total / .runs) | floor),
+                    fail_pct: ((.fails * 100 / .runs) | round)})) as $agg
+    | ($agg | map(select(.runs >= 2)) | sort_by([-.total, .s])) as $rec
+    | ($agg | map(select(.runs >= ($minruns | tonumber)
+                         and .avg >= ($floor | tonumber)
+                         and (.fails == 0 or .fails == .runs)))
+            | map(. + {saved: (.total - .avg)}) | sort_by([-.saved, .s])) as $skip
+    | "window=\($rwin) steps=\($rep | length) top3=" +
+        (if ($rep | length) == 0 then "-"
+         else ($rep[:3] | map("\(.s)=\(.n)") | join(",")) end),
+      "window=\($rdays)d runs=\($rw | length) steps=\($rec | length) top3=" +
+        (if ($rec | length) == 0 then "-"
+         else ($rec[:3] | map("\(.s):runs=\(.runs):total_ms=\(.total):avg_ms=\(.avg):fail_pct=\(.fail_pct)") | join(",")) end),
+      "candidates=\($skip | length) floor_ms=\($floor) min_runs=\($minruns) top3=" +
+        (if ($skip | length) == 0 then "-"
+         else ($skip[:3] | map("\(.s):runs=\(.runs):avg_ms=\(.avg):fail_pct=\(.fail_pct):saved_ms_upper=\(.saved)") | join(",")) end)
+    )' "$recur_input" 2>/dev/null)"
+recur_clock=""; repeat_line=""; recur_line=""; skip_line=""
+if [ -n "$recur_stats" ]; then
+    { IFS= read -r recur_clock; IFS= read -r repeat_line; IFS= read -r recur_line; IFS= read -r skip_line; } <<EOF
+$recur_stats
+EOF
+elif [ "$recur_source" != "absent" ]; then
+    # The log exists and is readable but jq produced nothing (jq missing or
+    # too old to run the program). Say so; zeros with a bare path would be a
+    # guess dressed as an empty window.
+    recur_source="${recur_source}:unreadable"
+fi
+case "$recur_clock" in
+    clock=unwindowable) [ "$recur_source" != "absent" ] && recur_source="${recur_source}:unwindowable" ;;
+esac
+if [ -z "$repeat_line" ]; then
+    # Same sanitiser as the jq path (control, whitespace, comma -> `_`), so
+    # one --cycle-start renders one label whether or not jq ran. No
+    # `:unparsed` here: without jq nobody parsed it, and the source suffix
+    # (`:unreadable`) already says why.
+    if [ -n "$CYCLE_START_TS" ]; then
+        repeat_line="window=since=${CYCLE_START_TS//[[:cntrl:][:space:],]/_} steps=0 top3=-"
+    else repeat_line="window=3h steps=0 top3=-"; fi
+fi
+printf 'repeat: %s source=%s\n' "$repeat_line" "$recur_source"
+printf 'recur: %s source=%s\n' \
+    "${recur_line:-window=${RECUR_WINDOW_DAYS}d runs=0 steps=0 top3=-}" "$recur_source"
+printf 'skippable: %s source=%s\n' \
+    "${skip_line:-candidates=0 floor_ms=${SKIP_FLOOR_MS} min_runs=${SKIP_MIN_RUNS} top3=-}" "$recur_source"
+
 # ── plan ────────────────────────────────────────────────────────────────────
 packets="-"; ready="-"; blocked="-"; pending="-"
 PLAN_BIN=""
@@ -762,16 +1075,41 @@ if [ -n "$SINCE_REF" ] && git -C "$REPO_ROOT" rev-parse --verify "$SINCE_REF" >/
     # merged. The merge commit itself still counts: making it was cycle work.
     commits="$(git -C "$REPO_ROOT" rev-list --count --first-parent "${SINCE_REF}..HEAD" 2>/dev/null || echo -)"
 fi
-traces="unknown"
-if [ -x "$REPO_ROOT/scripts/generate-traces.sh" ]; then
-    if out="$("$REPO_ROOT/scripts/generate-traces.sh" --check 2>/dev/null)"; then
-        case "$out" in
-            *ok:trace-indexes-current*) traces="current" ;;
-            *stale:trace-indexes*) traces="stale" ;;
-        esac
-    else
-        traces="stale"
-    fi
+# traces= is read from `scripts/trace-coverage.sh --gate`, the ghost-trace
+# ratchet that REPLACED the rendered trace index (order 625, 2026-08-08).
+#
+# ORDER 1004-j4p4 — THIS BLOCK PROBED A SCRIPT THAT NO LONGER EXISTED. Until
+# 2026-09-04 it tested `-x` on the retired index generator; the test was false
+# on every checkout, the probe never ran, and the line printed traces=unknown
+# on every host every cycle for four weeks — a well-formed nothing that no
+# reader could tell from "did not look". So the value set carries no bare
+# unknown any more: a checker that is missing or not executable is NAMED
+# (`unavailable:<reason>`), which a reader can act on where unknown was not.
+#
+# Why the gate and not validate-traces.sh: both exit 0 on this tree and both
+# are cheap (measured 2026-09-04 on macuahuitl: --gate 0.3s, validate-traces.sh
+# 1.5s), but the gate prints a pinned one-line verdict (`ok:ghost-trace-gate`)
+# where validate-traces prints a count that must be parsed, and the gate is the
+# checker whose own header names itself the retired generator's replacement.
+#
+# The probe's exit code sets the FIELD, never the reporter's: gate exit 0 is
+# current, exit 1 (a new ghost, or a baseline that must be pruned) is stale,
+# any other exit is an unavailable: that carries the code.
+traces_probe="$REPO_ROOT/scripts/trace-coverage.sh"
+if [ ! -e "$traces_probe" ]; then
+    traces="unavailable:probe-missing:scripts/trace-coverage.sh"
+elif [ ! -x "$traces_probe" ]; then
+    traces="unavailable:probe-not-executable:scripts/trace-coverage.sh"
+else
+    out="$("$traces_probe" --gate 2>/dev/null)"; traces_rc=$?
+    case "$traces_rc" in
+        0) case "$out" in
+               *ok:ghost-trace-gate*) traces="current" ;;
+               *) traces="unavailable:probe-verdict-unrecognised" ;;
+           esac ;;
+        1) traces="stale" ;;
+        *) traces="unavailable:probe-exit-${traces_rc}" ;;
+    esac
 fi
 printf 'repo: commits_this_cycle=%s worktree=%s traces=%s\n' "$commits" "$worktree" "$traces"
 
@@ -782,7 +1120,11 @@ verdict="ok:nothing-flagged"
 if [ "$worktree" = "dirty" ]; then
     verdict="attention:worktree-dirty"
 elif [ "$traces" = "stale" ]; then
-    verdict="attention:trace-indexes-stale"
+    verdict="attention:ghost-trace-gate-red"
+elif [ "${traces#unavailable:}" != "$traces" ]; then
+    # 1004-j4p4: a probe whose target is gone must surface in the verdict,
+    # not only in a field nobody reads — that is how the last one hid.
+    verdict="attention:traces-probe-${traces#unavailable:}"
 elif [ "$degraded" -gt 0 ]; then
     verdict="attention:experts-degraded-${degraded}-calls-could-not-run"
 elif [ "$calls" -gt 0 ] && [ "$graded" -gt 0 ] && [ "$answered" -eq 0 ]; then

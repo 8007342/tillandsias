@@ -31,7 +31,7 @@ observability:
   traces:
     - "@trace spec:enclave-network"
     - "@trace spec:tray-host-control-socket"
-    - "@trace spec:ephemeral-guarantee"
+    - "@trace spec:enclave-network"
   expected_log: "Sockets cleaned after representative stack run"
   log_fields:
     spec: "enclave-network"

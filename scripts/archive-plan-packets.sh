@@ -15,11 +15,25 @@ REPO_ROOT="$(dirname "$DIR")"
 # no yq fallback (it runs .rb programs, not just YAML parsing). Ensure the
 # toolbox, then prefer host ruby and fall back to the toolbox's — zero
 # behavior change on hosts that carry ruby natively.
-source "$DIR/ensure_toolbox.sh"
+# ORDER 965-sxec: a failed ensure is a DEGRADED lane, not the verdict.
+# `set -e` plus a sourced script that `return 1`s killed this one with rc=1
+# before the ruby probe below could run — so a host with a broken toolbox got
+# the same uninterpretable exit as a real ledger violation, one layer above the
+# 127 this order is about. ensure_toolbox is an ACCELERATOR (it makes the
+# toolbox lane available); whether ruby is USABLE is decided by _ruby_usable(),
+# by execution, and that is the question the caller actually needs answered.
+# Keep the ensure's stderr — it is the diagnosis when the toolbox lane is why
+# ruby is unreachable.
+source "$DIR/ensure_toolbox.sh" || true
 # 704-zcgi. The .rb now asks the FOLD which packets are terminal instead of
 # grepping the base index, so this script has a hard tillandsias-plan
 # dependency too — resolved by execution, through the one shared probe.
 source "$DIR/plan-binary-probe.sh"
+# ORDER 964-9yyp. Where this check's scratch copies land. See the file for the
+# measurement; the short version is that --check copies plan/, rewrites the
+# copy, copies it again and diffs the two trees, so it is metadata- and
+# write-bound, and on the Windows gate's 9p checkout that costs 11.7x.
+source "$DIR/native-scratch-dir.sh"
 _ruby() {
     # -E UTF-8:UTF-8 pins Ruby's default external/internal encodings. On an
     # unset-locale host (measured 2026-08-23: the WSL lane the Windows gate
@@ -27,7 +41,15 @@ _ruby() {
     # ledger's first em-dash kills String#match? with "invalid byte sequence
     # in US-ASCII". The ledger is UTF-8 by construction; zero behavior change
     # where the locale already says so.
-    if command -v ruby >/dev/null 2>&1; then
+    # ORDER 965-sxec. Gate on USABILITY, and dispatch on the lane the probe
+    # actually confirmed — not on `command -v`, which a brew shim satisfies
+    # without providing a ruby. Testing PATH here and the toolbox there could
+    # disagree: a forge with a shim named `ruby` and no working toolbox would
+    # take the native branch and exit 127, which is the defect. Placing the
+    # gate INSIDE _ruby means no call site can forget it (three call sites
+    # today), and the probe is memoised so the cost is paid once.
+    _require_ruby
+    if [ "$_RUBY_LANE" = "native" ]; then
         ruby -E UTF-8:UTF-8 "$@"
     else
         # ORDER 923-ws3r — FORWARD THE NAMESPACE ACROSS THIS BOUNDARY.
@@ -68,6 +90,76 @@ _ruby() {
     fi
 }
 
+
+# ── ORDER 965-sxec: RUBY MUST BE USABLE, NOT MERELY ON PATH ──────────────────
+#
+# `command -v ruby` is not a usability test inside a forge. The image ships NO
+# ruby and puts an on-demand brew SHIM on PATH under that name, so `command -v`
+# succeeds, the shim attempts a userspace install, the install fails by design
+# (attestation verification is REQUIRED and no GitHub credential may exist in a
+# forge), and the shim exits 127.
+#
+# 127 is the defect. build.sh already draws the right distinction — it maps
+# rc==3 to "the archiver's check COULD NOT RUN ... the instrument is what needs
+# repair (923-ws3r)" — but 127 misses that branch and falls through to the
+# `-ne 0` arm, which prints:
+#
+#     the plan archiver would CHANGE THE READY SET, orphan events, or leave
+#     archived rows unanswerable — do not sweep
+#
+# That is a substantive claim about the LEDGER, asserted on the strength of a
+# command that never executed. An agent reading it goes hunting for ledger
+# damage that does not exist. MEASURED on lenovinha-tillandsias-forge
+# 2026-09-02: `scripts/archive-plan-packets.sh --check` -> rc=127, and the gate
+# reported ledger corruption.
+#
+# So probe by EXECUTION, exactly as 704-zcgi/721-nyev require for the plan
+# binary two blocks below, and for the same reason: an executable bit — or a
+# name on PATH — is not the property being asked about. The probe is a trivial
+# program, bounded, with output discarded; a real ruby answers in milliseconds
+# and a shim fails immediately now that the 966-rq7f re-entrancy guard stops it
+# recursing.
+#
+# MEMOISED for the process lifetime. Before 966-rq7f each shim hit forked a
+# fresh `brew install ruby`, and a single `--check` reached 3663 processes and
+# 89.4% of the pid ceiling on pirria — the container then failed to fork at all
+# and the symptom surfaced as `git: unable to create threaded lstat`, nowhere
+# near its cause. The guard fixed the recursion; this memo makes sure a caller
+# that probes repeatedly still pays exactly one acquisition attempt.
+_RUBY_LANE=""
+_ruby_usable() {
+    if [ -n "$_RUBY_LANE" ]; then
+        [ "$_RUBY_LANE" != "none" ]
+        return
+    fi
+    _RUBY_LANE="none"
+    if command -v ruby >/dev/null 2>&1 \
+        && TILLANDSIAS_BREW_AUTOINSTALL=0 timeout 30 ruby -e 'exit 0' >/dev/null 2>&1; then
+        _RUBY_LANE="native"
+    elif command -v toolbox >/dev/null 2>&1 \
+        && timeout 60 toolbox run --container tillandsias-builder \
+            ruby -e 'exit 0' >/dev/null 2>&1; then
+        # The toolbox lane _ruby() falls back to. A host with no native ruby but
+        # a working builder toolbox is fully supported and must not be refused.
+        _RUBY_LANE="toolbox"
+    fi
+    [ "$_RUBY_LANE" != "none" ]
+}
+
+# Refuse into the could-not-run channel rather than letting a 127 masquerade as
+# a ledger verdict. Callers that only need the archiver's OTHER halves never
+# reach this; it guards the ruby-dependent paths.
+_require_ruby() {
+    _ruby_usable && return 0
+    echo "Check FAILED: no usable ruby in this locus, so the archiver's ready-set" >&2
+    echo "  and orphan-event invariants CANNOT BE EVALUATED. This says NOTHING" >&2
+    echo "  about the ledger — the instrument is missing, not the data (923-ws3r)." >&2
+    echo "  Inside a forge this is expected: the image ships no ruby and the brew" >&2
+    echo "  shim cannot install one without a GitHub credential (965-sxec)." >&2
+    echo "  Remedy: run this check on a host with ruby or a tillandsias-builder" >&2
+    echo "  toolbox, or rebuild the forge image with ruby present." >&2
+    exit 3
+}
 cd "$REPO_ROOT"
 
 # CLEAN UP ON EVERY EXIT, INCLUDING THE ONES NOBODY ANTICIPATED.
@@ -85,16 +177,124 @@ cd "$REPO_ROOT"
 # place deliberately: they free the copy EARLY on long paths, and running the
 # cleanup twice is harmless.
 _archiver_cleanup() {
-    rm -rf plan_tmp plan_tmp_bak scripts/archive-plan-packets-check.rb plan_tmp_*.txt
+    # ORDER 964-9yyp: the scratch may live outside the worktree now, and the
+    # trap has to reach it there. `${SCRATCH:-$REPO_ROOT}` because this trap is
+    # armed before SCRATCH is assigned on some paths and an unbound expansion
+    # under `set -u` would turn a cleanup into a second failure.
+    local _s="${SCRATCH:-$REPO_ROOT}"
+    # AND IT MUST NOT BE ABLE TO FAIL (997-e4v2). Under `set -e` a failing
+    # command in an EXIT trap rewrites the script's exit code to 1 — measured
+    # by esme-windows in the VM with a genuine EACCES, across every ending form
+    # and for function traps as well as inline ones. This script promises that
+    # 3 means COULD-NOT-RUN and 1 means the ready-set invariant was violated
+    # (923-ws3r, 965-sxec), so a cleanup that cannot delete a temp file would
+    # silently convert "I could not run" into "the plan archiver would CHANGE
+    # THE READY SET" — the exact false substantive verdict 965-sxec was filed
+    # to remove, reintroduced through the tidying.
+    #
+    # A leaked temp dir is a housekeeping cost; a false invariant violation
+    # sends every reader to audit a ledger that is fine.
+    rm -rf "$_s"/plan_tmp "$_s"/plan_tmp_bak scripts/archive-plan-packets-check.rb "$_s"/plan_tmp_*.txt 2>/dev/null || true
+}
+
+# ORDER 965-sxec. IS THERE A RUBY THIS SCRIPT CAN ACTUALLY RUN?
+#
+# `_ruby` above resolves host ruby, else the toolbox. Inside a FORGE neither is
+# there — the image deliberately ships no ruby (the meta-orchestration skill says
+# so in as many words) and what is on PATH is a brew shim whose on-demand install
+# fails by design under attestation verification. So `_ruby` exits 127, `set -e`
+# kills this script with 127, and build.sh's `-ne 0` branch prints "the plan
+# archiver would CHANGE THE READY SET" — a substantive claim about the ledger,
+# asserted on the strength of a command that never executed. Measured on
+# lenovinha-tillandsias-forge 2026-09-02 by an agent who then went looking for
+# ledger damage that did not exist.
+#
+# 923-ws3r ALREADY BUILT THE CHANNEL for this: exit 3 means could-not-run and
+# build.sh maps it to "the instrument is what needs repair". The signal simply
+# never reached it, which is that packet's own lesson arriving one exit code
+# short. This probe routes it.
+#
+# It runs the interpreter rather than testing for the binary, because on the host
+# that found this the binary IS on PATH and is a shim that cannot execute. An
+# executable bit is a claim; running it is evidence — the same rule
+# plan-binary-probe.sh states for tillandsias-plan, three files away.
+# TWO HOSTS IMPLEMENTED 965-sxec INDEPENDENTLY AND THE UNION BROKE (coordinator,
+# 2026-09-02). yoga (a3a846cba) put the usability gate INSIDE _ruby via
+# _require_ruby, which EXITS 3 on an unusable lane. yolanda (582c3b835) added
+# this probe plus the tokenised early exit below, and probed by calling _ruby.
+# Composed, this probe can never return false: _ruby exits the script from
+# inside it, before the token is ever printed. The gate caught it as
+# "no could-not-run:no-usable-ruby token" — exit 3 happened, but via yoga's
+# stderr path with no token, so build.sh cannot tell this exit 3 from the
+# others and the forge skip (965-sxec criterion 3) never keys.
+#
+# Resolution: ONE probe. _ruby_usable is the lane-recording one and is what
+# _ruby itself dispatches on, so asking it here cannot disagree with what
+# _ruby will do — which was the whole point of yoga's change. yolanda's
+# tokenised early exit stays reachable, which was the whole point of theirs.
+_ruby_runnable() {
+    _ruby_usable
 }
 
 if [ "$1" == "--check" ]; then
+    # ORDER 964-js34: per-phase profile, opt-in and zero-cost when off.
+    _ap_t0=0; _ap_last=0
+    # BSD date SUCCEEDS on %3N and emits a literal "N", so an exit-code guard
+    # cannot catch it (761-g36m). Digit-validate, then degrade to whole
+    # seconds — this feeds a profile line only.
+    _ap_now() {
+        local _t
+        _t="$(date +%s%3N 2>/dev/null || true)" # gnu-date: ok (digit-validated below)
+        case "$_t" in '' | *[!0-9]*) _t="$(date +%s 2>/dev/null || echo 0)000" ;; esac
+        printf '%s' "$_t"
+    }
+    _ap_phase() {
+        [ -n "${TILLANDSIAS_ARCHIVER_PROFILE:-}" ] || return 0
+        local _n; _n=$(_ap_now)
+        [ "$_ap_last" = 0 ] && { _ap_t0=$_n; _ap_last=$_n; return 0; }
+        printf '[archiver-profile] %-28s %6sms\n' "$1" "$((_n - _ap_last))" >&2
+        _ap_last=$_n
+    }
+    _ap_total() {
+        [ -n "${TILLANDSIAS_ARCHIVER_PROFILE:-}" ] || return 0
+        printf '[archiver-profile] %-28s %6sms\n' TOTAL "$(( $(_ap_now) - _ap_t0 ))" >&2
+    }
+    _ap_phase start
     echo "Running in check mode..."
+    if ! _ruby_runnable; then
+        # A STABLE TOKEN ON STDOUT, so a caller can tell THIS could-not-run from
+        # the others without parsing prose. Only this cause is skip-eligible: a
+        # stale plan binary or an unreadable fragment also exit 3 and must never
+        # be waved through, because those are repairable where they happen.
+        echo "could-not-run:no-usable-ruby (965-sxec)"
+        # ...then the CANONICAL refusal, on stderr, from the single place that
+        # owns that text. This block used to carry its own copy of the prose,
+        # which is how the merged tree ended up with two refusals that named the
+        # instrument differently and satisfied different tests (coordinator,
+        # 2026-09-02: yoga's arm wants "no usable ruby in this locus" and a
+        # Remedy on STDERR, because a refusal printed on stdout is invisible to
+        # a caller reading a log; yolanda's arm wants the token). _require_ruby
+        # re-checks the memoised lane, prints that text to stderr, and exits 3 —
+        # so both hold with ONE copy of the words.
+        _require_ruby
+    fi
+    # ORDER 964-9yyp. On a fast worktree this is "$REPO_ROOT" and every path
+    # below is byte-for-byte what it was — a host that was correct before this
+    # order behaves identically after it. On the Windows gate's 9p checkout it
+    # is a native-FS directory, and the check drops from 62.3s to 5.3s doing
+    # exactly the same work. It also stops the copy landing in the worktree,
+    # which is the leak the cleanup trap above exists to survive.
+    SCRATCH="$(native_scratch_dir archiver-check "$REPO_ROOT")"
     trap _archiver_cleanup EXIT INT TERM
-    rm -rf plan_tmp plan_tmp_bak
-    cp -a plan/ plan_tmp/
+    rm -rf "$SCRATCH"/plan_tmp "$SCRATCH"/plan_tmp_bak
+    cp -a plan/ "$SCRATCH"/plan_tmp/
+    _ap_phase copy-plan-tree
     
-    sed 's|plan/|plan_tmp/|g' scripts/archive-plan-packets.rb > scripts/archive-plan-packets-check.rb
+    # The generated .rb reads and writes the COPY, so it needs the copy's real
+    # location. `|` stays the delimiter because the replacement is a path and
+    # contains no `|`; it is a directory name we chose, not user input.
+    sed "s|plan/|$SCRATCH/plan_tmp/|g" scripts/archive-plan-packets.rb > scripts/archive-plan-packets-check.rb
+    _ap_phase sed-rewrite-rb
 
     # THE ACCEPTANCE ASSERTION (831-ezea). Everything below the idempotency
     # diff was already here and it proved the WRONG PROPERTY. An archiver that
@@ -146,7 +346,8 @@ if [ "$1" == "--check" ]; then
     # The .rb resolves the same binary; hand it the probed answer rather than
     # letting it re-derive one.
     export TILLANDSIAS_PLAN_BIN="$PLAN_BIN"
-    "$PLAN_BIN" --index plan_tmp/index.yaml ready > plan_tmp_ready_before.txt
+    "$PLAN_BIN" --index "$SCRATCH"/plan_tmp/index.yaml ready > "$SCRATCH"/plan_tmp_ready_before.txt
+    _ap_phase ready-before
 
     # SECOND INVARIANT: archiving must not ORPHAN live fragment events.
     #
@@ -163,54 +364,68 @@ if [ "$1" == "--check" ]; then
     # CREATING new ones.
     _orphans() {   # $1 = index path, $2 = output file
         "$PLAN_BIN" --index "$1" query --limit 0 2>/dev/null \
-            | cut -f1,2 | tr '\t' '\n' | sed '/^$/d' | sort -u > plan_tmp_live.txt
-        comm -23 plan_tmp_addressed.txt plan_tmp_live.txt > "$2"
+            | cut -f1,2 | tr '\t' '\n' | sed '/^$/d' | sort -u > "$SCRATCH"/plan_tmp_live.txt
+        comm -23 "$SCRATCH"/plan_tmp_addressed.txt "$SCRATCH"/plan_tmp_live.txt > "$2"
     }
-    : > plan_tmp_addressed_raw.txt
-    for _frag in plan_tmp/index.d/*.yaml; do
+    : > "$SCRATCH"/plan_tmp_addressed_raw.txt
+    for _frag in "$SCRATCH"/plan_tmp/index.d/*.yaml; do
         [ -e "$_frag" ] || continue
-        if ! "$PLAN_BIN" fragment-event-packets "$_frag" >> plan_tmp_addressed_raw.txt 2>/dev/null; then
+        if ! "$PLAN_BIN" fragment-event-packets "$_frag" >> "$SCRATCH"/plan_tmp_addressed_raw.txt 2>/dev/null; then
             echo "Check FAILED: cannot read fragment $_frag, so the orphan invariant"
             echo "  cannot be evaluated. Refusing."
-            rm -rf plan_tmp plan_tmp_bak scripts/archive-plan-packets-check.rb plan_tmp_*.txt
+            _archiver_cleanup
             exit 3
         fi
     done
-    sort -u plan_tmp_addressed_raw.txt > plan_tmp_addressed.txt
-    _orphans plan_tmp/index.yaml plan_tmp_orphans_before.txt
+    sort -u "$SCRATCH"/plan_tmp_addressed_raw.txt > "$SCRATCH"/plan_tmp_addressed.txt
+    _orphans "$SCRATCH"/plan_tmp/index.yaml "$SCRATCH"/plan_tmp_orphans_before.txt
+    _ap_phase orphans-before
 
-    _ruby scripts/archive-plan-packets-check.rb >/dev/null
+    if ! _ruby scripts/archive-plan-packets-check.rb >/dev/null; then
+        echo "Check COULD NOT RUN: the archiver's ruby worker failed to execute"
+        echo "  (965-sxec). The ready set was never re-derived, so nothing here is"
+        echo "  a statement about it."
+        exit 3
+    fi
+    _ap_phase ruby-sweep
 
-    _orphans plan_tmp/index.yaml plan_tmp_orphans_after.txt
-    if ! diff -u plan_tmp_orphans_before.txt plan_tmp_orphans_after.txt > plan_tmp_orphans_diff.txt; then
+    _orphans "$SCRATCH"/plan_tmp/index.yaml "$SCRATCH"/plan_tmp_orphans_after.txt
+    _ap_phase orphans-after
+    if ! diff -u "$SCRATCH"/plan_tmp_orphans_before.txt "$SCRATCH"/plan_tmp_orphans_after.txt > "$SCRATCH"/plan_tmp_orphans_diff.txt; then
         echo "Check FAILED: archiving ORPHANED live fragment events. These packet ids are"
         echo "  addressed by a plan/index.d events block that the fold will now DISCARD:"
-        grep '^+[^+]' plan_tmp_orphans_diff.txt | sed -n '1,40p'
-        rm -rf plan_tmp plan_tmp_bak scripts/archive-plan-packets-check.rb plan_tmp_*.txt
+        grep '^+[^+]' "$SCRATCH"/plan_tmp_orphans_diff.txt | sed -n '1,40p'
+        _archiver_cleanup
         exit 1
     fi
 
-    "$PLAN_BIN" --index plan_tmp/index.yaml ready > plan_tmp_ready_after.txt
-    if ! diff -u plan_tmp_ready_before.txt plan_tmp_ready_after.txt > plan_tmp_ready_diff.txt; then
+    "$PLAN_BIN" --index "$SCRATCH"/plan_tmp/index.yaml ready > "$SCRATCH"/plan_tmp_ready_after.txt
+    _ap_phase ready-after
+    if ! diff -u "$SCRATCH"/plan_tmp_ready_before.txt "$SCRATCH"/plan_tmp_ready_after.txt > "$SCRATCH"/plan_tmp_ready_diff.txt; then
         echo "Check FAILED: archiving CHANGED THE READY SET. These rows are schedulable"
         echo "  work that the archive swallowed; they will answer 'no packet matches':"
-        sed -n '1,40p' plan_tmp_ready_diff.txt
-        rm -rf plan_tmp plan_tmp_bak scripts/archive-plan-packets-check.rb \
-               plan_tmp_ready_before.txt plan_tmp_ready_after.txt plan_tmp_ready_diff.txt
+        sed -n '1,40p' "$SCRATCH"/plan_tmp_ready_diff.txt
+        _archiver_cleanup
         exit 1
     fi
-    rm -f plan_tmp_*.txt
+    rm -f "$SCRATCH"/plan_tmp_*.txt
 
-    cp -a plan_tmp/ plan_tmp_bak/
+    cp -a "$SCRATCH"/plan_tmp/ "$SCRATCH"/plan_tmp_bak/
     
-    _ruby scripts/archive-plan-packets-check.rb >/dev/null
+    if ! _ruby scripts/archive-plan-packets-check.rb >/dev/null; then
+        echo "Check COULD NOT RUN: the archiver's ruby worker failed on the second"
+        echo "  pass (965-sxec), so idempotency was never evaluated."
+        exit 3
+    fi
+    _ap_phase ruby-sweep
     
-    if ! diff -qr plan_tmp/ plan_tmp_bak/ > /dev/null; then
+    _ap_phase idempotency-diff
+    if ! diff -qr "$SCRATCH"/plan_tmp/ "$SCRATCH"/plan_tmp_bak/ > /dev/null; then
         echo "Check failed: second run modified files. Not idempotent."
-        rm -rf plan_tmp plan_tmp_bak scripts/archive-plan-packets-check.rb plan_tmp_*.txt
+        _archiver_cleanup
         exit 1
     fi
-    rm -rf plan_tmp plan_tmp_bak scripts/archive-plan-packets-check.rb plan_tmp_*.txt
+    _archiver_cleanup
 
     # THIRD INVARIANT: archiving must not break what the expert system can ANSWER.
     #
@@ -228,6 +443,7 @@ if [ "$1" == "--check" ]; then
     # rather than inlined because the answer requires a full tree copy and a
     # cargo run — see the script's header for why it is a tree and not a plan/.
     echo "Checking the sweep does not break what the expert system can answer..."
+    _ap_phase pre-answerability
     if ! _answerability="$("$DIR/check-archive-answerability.sh")"; then
         # 923-ws3r. The sub-check names its own inability distinctly from a real
         # regression, so relay the distinction instead of flattening it.
@@ -247,6 +463,8 @@ if [ "$1" == "--check" ]; then
     fi
     echo "  $_answerability"
 
+    _ap_phase answerability
+    _ap_total
     echo "Check passed: ready set unchanged, no new orphaned events, archived packets stay answerable, and the script is idempotent."
     exit 0
 fi

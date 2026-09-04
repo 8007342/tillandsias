@@ -21,6 +21,7 @@ This spec ensures:
 ## Requirements
 
 ### Requirement: Ephemeral profile on tmpfs
+<!-- req-id: 4a4b6c4d -->
 
 Chromium profile (bookmarks, history, preferences, extensions) MUST be stored in tmpfs, created fresh on startup, and destroyed on shutdown.
 
@@ -43,6 +44,7 @@ Chromium profile (bookmarks, history, preferences, extensions) MUST be stored in
 - **AND** no data SHALL be transmitted to external sync services
 
 ### Requirement: Domain allowlist enforcement
+<!-- req-id: 940c17c2 -->
 
 Only whitelisted domains MAY be accessible from the safe-variant browser.
 
@@ -70,6 +72,7 @@ Only whitelisted domains MAY be accessible from the safe-variant browser.
 - **AND** invalid entries SHOULD be logged as warnings
 
 ### Requirement: Credential isolation — no persistence
+<!-- req-id: 0bda60fe -->
 
 Credentials (cookies, passwords, autofill) MUST NOT be persisted and MUST NOT be synced.
 
@@ -92,6 +95,7 @@ Credentials (cookies, passwords, autofill) MUST NOT be persisted and MUST NOT be
 - **AND** the user SHALL manually re-enter information each session
 
 ### Requirement: Cache is ephemeral and minimal
+<!-- req-id: 987908c1 -->
 
 Chromium cache MUST be stored in tmpfs, limited in size, and destroyed on shutdown.
 
@@ -113,6 +117,7 @@ Chromium cache MUST be stored in tmpfs, limited in size, and destroyed on shutdo
 - **AND** SHALL re-fetch all resources
 
 ### Requirement: Minimal capabilities — cap-drop=ALL
+<!-- req-id: eacb551f -->
 
 Safe-variant container MUST run with minimum Linux capabilities required for display and network access.
 
@@ -134,6 +139,7 @@ Safe-variant container MUST run with minimum Linux capabilities required for dis
 - **AND** no host-gateway internet fallback SHALL be used
 
 ### Requirement: No extensions or plugins
+<!-- req-id: 5371e97f -->
 
 Third-party extensions and plugins MUST NOT be allowed in the safe-variant.
 
@@ -148,6 +154,7 @@ Third-party extensions and plugins MUST NOT be allowed in the safe-variant.
 - **AND** SHOULD log `plugin_blocked = true, plugin = "flash"` or similar
 
 ### Requirement: Litmus test — chromium-safe-variant lifecycle
+<!-- req-id: 541ddc26 -->
 
 Critical verification paths:
 

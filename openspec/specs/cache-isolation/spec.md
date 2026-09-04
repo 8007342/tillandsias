@@ -9,6 +9,7 @@ active
 ## Requirements
 
 ### Requirement: Durable cache and project state remain separated
+<!-- req-id: 279617a2 -->
 
 Cache layers MAY be reused across projects only when they contain tool or dependency artifacts that are independent of project secrets and working tree state.
 

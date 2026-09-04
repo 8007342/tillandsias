@@ -754,7 +754,18 @@ pub fn set_field_fragment_body(
             body.push_str(&format!("      type: {etype}\n"));
             body.push_str(&format!("      ts: \"{ts}\"\n"));
             body.push_str(&format!("      host: {host}\n"));
-            body.push_str(&format!("      summary: >\n        {summary}\n"));
+            // ORDER 971-7muc. A FOLDED scalar (`>`) collapses every newline into a
+            // space, and writing multi-line prose after a single indent puts the
+            // continuation lines at the wrong column entirely. Multi-paragraph
+            // reasoning — which is most of what an event summary IS — came back
+            // as one run-on line with its paragraph breaks gone.
+            //
+            // Caught by the byte-identity round-trip (971-7muc criterion 2), not
+            // by any existing check: a folded scalar is valid YAML and the text
+            // stays plausible, which is the same signature as the argv mangling
+            // this order was filed for. lib.rs:1738 already wrote `|` here; the
+            // two writers simply disagreed, and only one of them was tested.
+            body.push_str(&format!("      summary: {}", block_scalar(summary, 8)));
         }
     }
     body
@@ -2310,6 +2321,98 @@ pub fn partition_measurements(document: &Value) -> (Vec<Value>, Vec<(Value, Stri
         }
     }
     (accepted, refused)
+}
+
+/// One hardware group in the matrix: every row observed on the same machine
+/// MODEL, listed by the substrate that observed it.
+///
+/// ORDER 805-r98w, second half.
+#[derive(Debug, Clone, PartialEq)]
+pub struct HardwareGroup {
+    /// The derived hardware identity shared by every row in this group.
+    pub fingerprint: String,
+    /// `(locus, host_id)` for each contributing row, sorted. `locus` is the
+    /// SUBSTRATE half of the key — `in-guest` vs `windows-host` — so a group
+    /// with more than one distinct locus is a controlled comparison: the
+    /// hardware is held fixed and the substrate is the only free variable.
+    pub observations: Vec<(String, String)>,
+}
+
+impl HardwareGroup {
+    /// True iff this group can isolate the substrate: same hardware, observed
+    /// through more than one substrate.
+    ///
+    /// This is the property the whole order was filed to obtain. It is reported
+    /// rather than assumed because — measured 2026-09-02 — the fleet does NOT
+    /// currently have one. yolanda and yoga were asserted for weeks to be a twin
+    /// pair; their fingerprints are hw2-f4e46bd13a0220cf and
+    /// hw2-e94acbd479cb8b80. Different SKU, different core counts, different
+    /// iGPU bin. A caller must be able to ask whether a control exists and get
+    /// `false`, instead of reading a grouping and assuming one does.
+    pub fn isolates_substrate(&self) -> bool {
+        let mut loci: Vec<&str> = self.observations.iter().map(|(l, _)| l.as_str()).collect();
+        loci.sort_unstable();
+        loci.dedup();
+        loci.len() > 1
+    }
+}
+
+/// Group folded capability rows by `(hardware fingerprint, substrate)`.
+///
+/// # Why this reads a field instead of deriving one
+///
+/// The fingerprint is computed ONCE, by the probe, and carried in the document
+/// (`hardware_fingerprint`). Re-deriving it here would be a second
+/// implementation of an identity function, which is precisely the defect this
+/// order spent a day removing: two implementations existed briefly across the
+/// fleet, disagreed on RAM source and rounding, and would have had two hosts
+/// comparing incommensurable strings while both looked correct.
+///
+/// # Rows without a fingerprint are EXCLUDED, never bucketed together
+///
+/// `hardware_fingerprint: None` means the probe refused to identify the
+/// machine — a blind document, e.g. one written before the probe could
+/// enumerate on that platform. Two documents that both failed to identify
+/// themselves are NOT thereby the same hardware, and grouping them would
+/// manufacture exactly the false twin this order exists to prevent. They are
+/// returned separately so a caller can see them rather than lose them.
+///
+/// Returns `(groups, unidentified)` where `unidentified` is `(locus, host_id)`
+/// for every row carrying no fingerprint.
+pub fn group_by_hardware(
+    matrix: &std::collections::BTreeMap<(String, String), CapabilityEntry>,
+) -> (Vec<HardwareGroup>, Vec<(String, String)>) {
+    let mut groups: std::collections::BTreeMap<String, Vec<(String, String)>> =
+        std::collections::BTreeMap::new();
+    let mut unidentified: Vec<(String, String)> = Vec::new();
+
+    for entry in matrix.values() {
+        let fp = entry
+            .document
+            .get("hardware_fingerprint")
+            .and_then(|v| v.as_str())
+            .filter(|v| !v.is_empty());
+        match fp {
+            Some(fp) => groups
+                .entry(fp.to_string())
+                .or_default()
+                .push((entry.locus.clone(), entry.host_id.clone())),
+            None => unidentified.push((entry.locus.clone(), entry.host_id.clone())),
+        }
+    }
+
+    unidentified.sort();
+    let groups = groups
+        .into_iter()
+        .map(|(fingerprint, mut observations)| {
+            observations.sort();
+            HardwareGroup {
+                fingerprint,
+                observations,
+            }
+        })
+        .collect();
+    (groups, unidentified)
 }
 
 /// The schedulable unit of the matrix: `(device_class, lane, engine)`
@@ -4259,6 +4362,124 @@ mod capability_matrix_tests {
             skipped[0].reason
         );
     }
+    // ---- order 805-r98w: grouping the matrix by hardware ----
+
+    fn cap_row(host_id: &str, locus: &str, fp: Option<&str>) -> CapabilityEntry {
+        let fp_line = match fp {
+            Some(fp) => format!(
+                "hardware_fingerprint: \"{fp}\"
+"
+            ),
+            None => String::new(),
+        };
+        let doc: Value = serde_yaml::from_str(&format!(
+            "schema_version: 2
+devices: []
+host:
+  host_id: {host_id}
+{fp_line}"
+        ))
+        .expect("fixture document must parse");
+        CapabilityEntry {
+            host_id: host_id.to_string(),
+            locus: locus.to_string(),
+            ts: "2026-09-02T00:00:00Z".to_string(),
+            host: "test".to_string(),
+            document: doc,
+            source: "test".to_string(),
+        }
+    }
+
+    fn matrix(
+        rows: Vec<CapabilityEntry>,
+    ) -> std::collections::BTreeMap<(String, String), CapabilityEntry> {
+        rows.into_iter()
+            .map(|r| ((r.host_id.clone(), r.locus.clone()), r))
+            .collect()
+    }
+
+    /// The matrix groups by DERIVED hardware, and reports honestly that the
+    /// fleet's supposed control does not exist.
+    ///
+    /// MEASURED 2026-09-02, which is why this test is written around a negative.
+    /// yolanda and yoga were asserted fleet-wide for weeks to be a twin pair —
+    /// the substrate control this whole order was filed to exploit. Their real
+    /// fingerprints are hw2-f4e46bd13a0220cf and hw2-e94acbd479cb8b80:
+    /// different SKU, different core counts, different iGPU bin. Grouping them
+    /// yields TWO groups, neither of which isolates the substrate.
+    #[test]
+    fn hardware_groups_report_whether_a_substrate_control_actually_exists() {
+        // The fleet as it really is: two machines, two different fingerprints.
+        let m = matrix(vec![
+            cap_row("yolanda", "windows-host", Some("hw2-f4e46bd13a0220cf")),
+            cap_row("yoga", "host-native", Some("hw2-e94acbd479cb8b80")),
+        ]);
+        let (groups, unidentified) = group_by_hardware(&m);
+        assert_eq!(
+            groups.len(),
+            2,
+            "different hardware must not merge: {groups:?}"
+        );
+        assert!(
+            groups.iter().all(|g| !g.isolates_substrate()),
+            "no group here holds hardware fixed across substrates: {groups:?}"
+        );
+        assert!(unidentified.is_empty());
+
+        // A REAL control: one machine observed through two substrates. On
+        // Windows this is the genuine case — the WSL2 guest and the Windows
+        // host both describe yolanda.
+        let m = matrix(vec![
+            cap_row("yolanda", "windows-host", Some("hw2-f4e46bd13a0220cf")),
+            cap_row("yolanda", "in-guest", Some("hw2-f4e46bd13a0220cf")),
+        ]);
+        let (groups, _) = group_by_hardware(&m);
+        assert_eq!(groups.len(), 1);
+        assert!(
+            groups[0].isolates_substrate(),
+            "same hardware seen through two substrates IS the control: {groups:?}"
+        );
+        assert_eq!(
+            groups[0].observations,
+            vec![
+                ("in-guest".to_string(), "yolanda".to_string()),
+                ("windows-host".to_string(), "yolanda".to_string()),
+            ]
+        );
+
+        // TWO ROWS THAT COULD NOT IDENTIFY THEMSELVES ARE NOT A GROUP. This is
+        // the false twin in its purest form: before the Windows probe could
+        // enumerate, every blind host produced an unidentifiable document, and
+        // bucketing them would have manufactured a control out of two failures
+        // to measure. They are reported separately, never merged, and never
+        // silently dropped.
+        let m = matrix(vec![
+            cap_row("yolanda", "windows-host", None),
+            cap_row("someone-else", "host-native", None),
+            cap_row("yoga", "host-native", Some("hw2-e94acbd479cb8b80")),
+        ]);
+        let (groups, unidentified) = group_by_hardware(&m);
+        assert_eq!(
+            groups.len(),
+            1,
+            "only the identified row groups: {groups:?}"
+        );
+        assert_eq!(
+            unidentified,
+            vec![
+                ("host-native".to_string(), "someone-else".to_string()),
+                ("windows-host".to_string(), "yolanda".to_string()),
+            ],
+            "unidentified rows must be surfaced, not merged and not dropped"
+        );
+
+        // An empty-string fingerprint is not an identity either.
+        let m = matrix(vec![cap_row("yolanda", "windows-host", Some(""))]);
+        let (groups, unidentified) = group_by_hardware(&m);
+        assert!(groups.is_empty(), "{groups:?}");
+        assert_eq!(unidentified.len(), 1);
+    }
+
     // ---- the schedulable unit ----
 
     fn doc_with_devices(devices: &str) -> Value {

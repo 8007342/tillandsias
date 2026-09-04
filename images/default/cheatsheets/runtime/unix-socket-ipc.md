@@ -20,7 +20,7 @@ pull_recipe: see-section-pull-on-demand
 
 # UNIX socket IPC
 
-@trace spec:container-health, spec:wsl-daemon-orchestration
+@trace spec:podman-idiomatic-patterns, spec:wsl-daemon-orchestration
 @cheatsheet runtime/systemd-socket-activation.md
 
 **Version baseline**: Linux 5.8+ (modern credential-passing semantics), macOS 10.15+, Windows WSL2

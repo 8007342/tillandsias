@@ -695,6 +695,20 @@ if ! mountpoint -q /home/forge/src; then
   mount -t virtiofs home-src /home/forge/src || true
 fi
 
+# Mount the guest-binary staging share (order 1019-ivia). Persisted for the
+# same reason as home-src above: cloud-init runs on first boot only, and a
+# mount issued here would evaporate on every later boot — after which
+# fetch-headless.sh finds nothing staged and falls back to downloading a
+# pinned release, which looks like a working boot running the wrong headless.
+# READ-ONLY: the guest installs FROM here and never writes back.
+mkdir -p /var/lib/tillandsias/guest-bin
+if ! grep -q "^guest-bin " /etc/fstab; then
+  echo "guest-bin /var/lib/tillandsias/guest-bin virtiofs ro,nofail 0 0" >> /etc/fstab
+fi
+if ! mountpoint -q /var/lib/tillandsias/guest-bin; then
+  mount -t virtiofs -o ro guest-bin /var/lib/tillandsias/guest-bin || true
+fi
+
 # Mount the host-backed model cache (order 804-deux). Same fstab reasoning as
 # home-src above. This is the path the inference container binds as
 # /home/ollama/.ollama/models, and it holds BOTH the model blobs and the
@@ -722,7 +736,7 @@ cat > /usr/local/lib/tillandsias/fetch-headless.sh << 'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 DEST="/usr/local/bin/tillandsias-headless"
-STAGED="/home/forge/src/.tillandsias/guest-bin/tillandsias-headless"
+STAGED="/var/lib/tillandsias/guest-bin/tillandsias-headless"
 if [[ -x "$STAGED" ]]; then
   install -D -m 0755 "$STAGED" "$DEST"
   exit 0
@@ -735,9 +749,9 @@ fi
 # (used to read the share during the 2026-08-18 instrumented boot), and under
 # `set -euo pipefail` a MISSING mountpoint binary would make `! mountpoint -q`
 # succeed and report "not mounted" for a share that is fine.
-if ! findmnt -n /home/forge/src >/dev/null 2>&1; then
+if ! findmnt -n /var/lib/tillandsias/guest-bin >/dev/null 2>&1; then
   echo "[tillandsias-fetch] staged_binary=unreachable reason=share-not-mounted path=$STAGED" >&2
-  echo "[tillandsias-fetch]   /home/forge/src is not mounted yet, so the host-staged binary is invisible to this unit." >&2
+  echo "[tillandsias-fetch]   /var/lib/tillandsias/guest-bin is not mounted yet, so the host-staged binary is invisible to this unit." >&2
 else
   echo "[tillandsias-fetch] staged_binary=absent path=$STAGED" >&2
 fi
@@ -905,12 +919,22 @@ fn model_cache_dir() -> std::path::PathBuf {
         .join("Library/Caches/tillandsias/models")
 }
 
-/// Guest floor — never allocate less than the 689-eux9 pinned policy gave.
-/// A 4 GiB / 4 vCPU guest is what every macOS host ran until 919-jii2, so a
-/// host too small for the headroom policy keeps exactly the behaviour it had
-/// rather than being handed a guest smaller than any previously shipped.
-const GUEST_FLOOR_MEMORY_BYTES: u64 = 4 * 1024 * 1024 * 1024;
-const GUEST_FLOOR_CPU_COUNT: usize = 4;
+/// Smallest guest we will BOOT. Not a floor that raises the allocation — the
+/// distinction is the whole of 978-juw4. The old `GUEST_FLOOR_MEMORY_BYTES`
+/// was applied as the lower bound of a `clamp()`, so on any host below 10 GiB
+/// (6 GiB reserve + 4 GiB floor) it silently raised the guest back ABOVE what
+/// `HOST_RESERVED_MEMORY_BYTES` had just computed, defeating the reserve on
+/// exactly the hosts the reserve exists to protect. Its rationale was that a
+/// small host "keeps exactly the behaviour it had" — but no host below 10 GiB
+/// had ever run this code (macneo, 8 GiB, was the first), so it preserved
+/// continuity for a population of size zero while over-committing a real
+/// machine into swap.
+///
+/// This constant instead makes the reserve authoritative and turns an
+/// unaffordable host into a LOUD REFUSAL rather than a quiet over-allocation:
+/// below this the forge cannot run, and saying so beats booting a guest that
+/// dies under its first container build.
+const GUEST_MIN_VIABLE_MEMORY_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 
 /// RAM left to the host: macOS itself, the tray, WindowServer, and whatever the
 /// operator is actually doing on the machine they are also running a forge on.
@@ -953,23 +977,29 @@ fn host_memory_bytes() -> u64 {
 /// (798-q4m9 / 807-bjjv comparability, preserved without re-pinning the size).
 ///
 /// MEMORY: half the host, less whatever `HOST_RESERVED_MEMORY_BYTES` demands,
-/// clamped into `[GUEST_FLOOR_MEMORY_BYTES, GUEST_MAX_MEMORY_BYTES]` and
-/// rounded down to a whole GiB. On the 16 GiB M5 of 919-jii2 that is 8 GiB —
-/// the allocation the packet asks for, reached by policy rather than hardcoded.
+/// capped at `GUEST_MAX_MEMORY_BYTES` and rounded down to a whole GiB. On the
+/// 16 GiB M5 of 919-jii2 that is 8 GiB — the allocation the packet asks for,
+/// reached by policy rather than hardcoded. The RESERVE IS AUTHORITATIVE: it
+/// is never overridden upward, which is what 978-juw4 fixed. The result may
+/// therefore come out below `GUEST_MIN_VIABLE_MEMORY_BYTES` on a host that is
+/// simply too small; `start()` refuses loudly in that case rather than booting.
 ///
-/// CPU: 80% of logical cores, never below the 4 the pinned policy gave (or the
-/// host's core count if it has fewer than 4). On a 10-core host that is 8.
+/// CPU: 80% of logical cores, always leaving the host at least one core where
+/// there is one to leave. On a 10-core host that is 8, unchanged. The old vCPU
+/// floor of 4 had the same defect as the memory floor — on a 4-core host it
+/// handed the guest every core the host had.
 fn guest_sizing(host_cores: usize, host_memory: u64) -> (usize, u64) {
     let half = host_memory / 2;
     let after_reserve = host_memory.saturating_sub(HOST_RESERVED_MEMORY_BYTES);
-    let memory = half
-        .min(after_reserve)
-        .clamp(GUEST_FLOOR_MEMORY_BYTES, GUEST_MAX_MEMORY_BYTES);
+    // No lower clamp: the reserve wins (978-juw4). `min` with the cap only.
+    let memory = half.min(after_reserve).min(GUEST_MAX_MEMORY_BYTES);
     let memory = memory / (1024 * 1024 * 1024) * (1024 * 1024 * 1024);
 
     let scaled = host_cores * 8 / 10;
-    let floor = GUEST_FLOOR_CPU_COUNT.min(host_cores.max(1));
-    let cpus = scaled.max(floor).max(1);
+    // Leave the host a core wherever there is one to leave; a 1-core host
+    // still gets 1 rather than 0.
+    let ceiling = host_cores.saturating_sub(1).max(1);
+    let cpus = scaled.max(1).min(ceiling);
     (cpus, memory)
 }
 
@@ -1002,7 +1032,10 @@ fn guest_sizing(host_cores: usize, host_memory: u64) -> (usize, u64) {
 fn guest_binary_fingerprint() -> Result<String, String> {
     use sha2::{Digest, Sha256};
 
-    let path = home_src_dir().join(".tillandsias/guest-bin/tillandsias-headless");
+    // ORDER 1019-ivia: the staged binary moved off the `home-src` share that
+    // 997-e4v2 retires. Declared once in core so this reader and the macOS
+    // tray's writer cannot drift.
+    let path = tillandsias_core::guest_bin_path::staged_guest_binary();
     let bytes = std::fs::read(&path)
         .map_err(|e| format!("read staged guest binary {}: {e}", path.display()))?;
     let digest = Sha256::digest(&bytes);
@@ -1017,50 +1050,40 @@ fn convert_qcow2_to_raw(
 ) -> Result<(), String> {
     on_phase("Converting Fedora Cloud image");
     let raw_part = raw_dest.with_extension("img.partial");
-    let status = std::process::Command::new("qemu-img")
-        .arg("convert")
-        .arg("-f")
-        .arg("qcow2")
-        .arg("-O")
-        .arg("raw")
-        .arg(qcow2_path)
-        .arg(&raw_part)
-        .status()
-        .map_err(|e| {
-            format!(
-                "spawn qemu-img: {e} (install qemu, e.g. `brew install qemu`, to convert Fedora Cloud qcow2)"
-            )
-        })?;
-    if !status.success() {
+
+    // PURE RUST, NO `qemu-img` (order 980-xcaf). This used to spawn
+    // `qemu-img convert` and then `qemu-img resize`, both as bare PATH
+    // lookups. A macOS .app started by LaunchServices gets
+    // PATH=/usr/bin:/bin:/usr/sbin:/sbin — measured with `ps eww` on a live
+    // tray, not assumed — so neither could ever resolve from a GUI launch, on
+    // any Mac, no matter what the operator had installed. First launch died
+    // with "missing qemu" and STAYED dead after `brew install qemu`, because
+    // Homebrew's prefix was never on the tray's PATH to begin with.
+    //
+    // The expander also GROWS the disk, which is what the resize did, and for
+    // the reason recorded at GUEST_DISK_SIZE_BYTES: the ~5 GB Fedora Cloud
+    // default is the hard wall every agent attach hit on 2026-07-11. The raw
+    // image stays sparse, so a 250 GiB virtual disk costs nothing until
+    // written — measured here at 11 GiB actual on a fresh provision.
+    let expanded = crate::qcow2::expand_to_raw(
+        qcow2_path,
+        &raw_part,
+        GUEST_DISK_SIZE_BYTES,
+        &|done, total| {
+            // checked_div rather than a `total > 0` guard around the division:
+            // clippy::manual_checked_ops (new in the 1.96 toolchain) refuses the
+            // guarded form, and the two are exactly equivalent here — a zero
+            // total yields None and reports no percentage, same as before.
+            if let Some(pct) = (done * 100).checked_div(total) {
+                on_phase(&format!("Converting Fedora Cloud image ({pct}%)"));
+            }
+        },
+    );
+    if let Err(e) = expanded {
         let _ = std::fs::remove_file(&raw_part);
-        return Err(format!("qemu-img convert failed: exit {status}"));
+        return Err(format!("expand qcow2 -> raw: {e}"));
     }
-    // Grow the raw disk before first boot. The Fedora Cloud qcow2 is a ~5 GB
-    // virtual disk — nowhere near enough once the forge-base image builds its
-    // full dev toolchain (558 packages: gcc, valgrind, delve, gopls, rust,
-    // node, python…) on top of the base OS, podman's overlay store for every
-    // enclave image, and a cloned project. Symptom before this fix
-    // (2026-07-11 operator session): EVERY agent/maintenance attach opened a
-    // PTY, streamed the forge-base package downloads, then died with
-    // 'installing package … needs NNN MB more space on the / filesystem' →
-    // 'Error: building at STEP "RUN microdnf install …"' → PtyClose code=1,
-    // i.e. a blank terminal that "times out". Fedora Cloud's cloud-init
-    // (cc_growpart + cc_resizefs) grows the root partition/filesystem to fill
-    // the disk on first boot, so simply enlarging the raw file here is enough.
-    // The raw image stays sparse, so a 64 GiB virtual disk does not consume
-    // 64 GiB on the host until actually written.
-    let resize = std::process::Command::new("qemu-img")
-        .arg("resize")
-        .arg("-f")
-        .arg("raw")
-        .arg(&raw_part)
-        .arg(GUEST_DISK_SIZE)
-        .status()
-        .map_err(|e| format!("spawn qemu-img resize: {e}"))?;
-    if !resize.success() {
-        let _ = std::fs::remove_file(&raw_part);
-        return Err(format!("qemu-img resize failed: exit {resize}"));
-    }
+
     std::fs::rename(&raw_part, raw_dest).map_err(|e| {
         let _ = std::fs::remove_file(&raw_part);
         format!(
@@ -1075,11 +1098,15 @@ fn convert_qcow2_to_raw(
 
 /// Virtual size the Fedora Cloud raw disk is grown to before first boot so
 /// the forge-base toolchain + podman overlay store + project checkouts fit.
-/// A string like "250G" for `qemu-img resize`. The raw image stays SPARSE,
-/// so this costs no host disk until actually written — the original ~5 GB
-/// disk was the hard wall every agent attach hit (2026-07-11). Generous by
-/// operator direction; trim later if needed. See `convert_qcow2_to_raw`.
-const GUEST_DISK_SIZE: &str = "250G";
+/// The raw image stays SPARSE, so this costs no host disk until actually
+/// written — the original ~5 GB disk was the hard wall every agent attach hit
+/// (2026-07-11). Generous by operator direction; trim later if needed.
+///
+/// BYTES, not a `"250G"` string, since 980-xcaf replaced `qemu-img resize`
+/// with `File::set_len` and there is no longer a command line to format for.
+/// See `convert_qcow2_to_raw`.
+const GUEST_DISK_SIZE_GIB: u64 = 250;
+const GUEST_DISK_SIZE_BYTES: u64 = GUEST_DISK_SIZE_GIB * 1024 * 1024 * 1024;
 
 /// Fetch the xz-compressed asset at `xz_url` to `xz_temp_dest`,
 /// decompress to `final_dest` via `xz -d`, then SHA-256-verify the
@@ -1187,22 +1214,52 @@ async fn fetch_then_decompress_xz_then_verify(
             .map_err(|e| format!("flush {}: {e}", xz_temp_dest.display()))?;
     }
 
-    // Step 2: decompress via `xz -d -c <temp>` → final_dest.
+    // Step 2: decompress in-process → final_dest.
+    //
+    // HYGIENE, NOT THE 980-xcaf FIX (this path is not reached by the live
+    // macOS provisioning route, which fetches a plain qcow2). Recorded as its
+    // own thing so the two are not confused. It was a bare-name subprocess
+    // spawn of the xz binary, which DOES NOT EXIST on macOS 26.6 —
+    // /usr/bin/xz is absent, and the only xz on the host that found this came
+    // from Homebrew as a transitive dependency of qemu, which is how the defect
+    // stayed masked. `xz2` was already a dependency of this crate and already
+    // used in pure Rust two files away (fetch.rs, materialize/oci.rs), so this
+    // was never a dependency — only an inconsistency.
     on_phase("Decompressing rootfs");
-    let final_out = std::fs::File::create(final_dest)
-        .map_err(|e| format!("create {}: {e}", final_dest.display()))?;
-    let xz_status = std::process::Command::new("xz")
-        .arg("-d")
-        .arg("-c")
-        .arg(xz_temp_dest)
-        .stdout(std::process::Stdio::from(final_out))
-        .stderr(std::process::Stdio::piped())
-        .status()
-        .map_err(|e| format!("spawn xz: {e} (is `xz` on $PATH?)"))?;
-    if !xz_status.success() {
-        let _ = std::fs::remove_file(final_dest);
-        let _ = std::fs::remove_file(xz_temp_dest);
-        return Err(format!("xz -d failed: exit {xz_status}"));
+    {
+        use std::io::{Read, Write};
+        let src = std::fs::File::open(xz_temp_dest)
+            .map_err(|e| format!("open {}: {e}", xz_temp_dest.display()))?;
+        let mut dec = xz2::read::XzDecoder::new(std::io::BufReader::with_capacity(1 << 20, src));
+        let final_out = std::fs::File::create(final_dest)
+            .map_err(|e| format!("create {}: {e}", final_dest.display()))?;
+        let mut out = std::io::BufWriter::with_capacity(1 << 20, final_out);
+        let mut buf = vec![0u8; 1 << 20];
+        loop {
+            let n = match dec.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => n,
+                Err(e) => {
+                    let _ = std::fs::remove_file(final_dest);
+                    let _ = std::fs::remove_file(xz_temp_dest);
+                    return Err(format!("xz decompress: {e}"));
+                }
+            };
+            if let Err(e) = out.write_all(&buf[..n]) {
+                let _ = std::fs::remove_file(final_dest);
+                let _ = std::fs::remove_file(xz_temp_dest);
+                return Err(format!("write {}: {e}", final_dest.display()));
+            }
+        }
+        // BufWriter::drop discards write errors, so a full disk on the last
+        // partial buffer would otherwise be reported as a SUCCESSFUL
+        // decompression and surface later as a SHA mismatch blaming the
+        // download — the same trap the fetch step above already names.
+        if let Err(e) = out.flush() {
+            let _ = std::fs::remove_file(final_dest);
+            let _ = std::fs::remove_file(xz_temp_dest);
+            return Err(format!("flush {}: {e}", final_dest.display()));
+        }
     }
     let _ = std::fs::remove_file(xz_temp_dest);
 
@@ -1781,6 +1838,24 @@ impl VmRuntime for VzRuntime {
             host_memory_bytes() / (1024 * 1024 * 1024),
         );
 
+        // 978-juw4: the reserve is authoritative, so a host too small to fund
+        // a usable guest now produces a number rather than being silently
+        // rounded up to a floor it cannot afford. Refuse LOUDLY here instead of
+        // booting a guest that dies under its first container build — the
+        // failure this replaces was a wedged forge with no error anywhere.
+        if guest_memory_bytes < GUEST_MIN_VIABLE_MEMORY_BYTES {
+            return Err(VmError::from(format!(
+                "host too small to run a forge: {} GiB of RAM leaves {} GiB for the guest after \
+                 the {} GiB host reserve, below the {} GiB minimum. Tillandsias needs about {} GiB \
+                 of physical memory on macOS.",
+                host_memory_bytes() / (1024 * 1024 * 1024),
+                guest_memory_bytes / (1024 * 1024 * 1024),
+                HOST_RESERVED_MEMORY_BYTES / (1024 * 1024 * 1024),
+                GUEST_MIN_VIABLE_MEMORY_BYTES / (1024 * 1024 * 1024),
+                (HOST_RESERVED_MEMORY_BYTES + GUEST_MIN_VIABLE_MEMORY_BYTES) / (1024 * 1024 * 1024),
+            )));
+        }
+
         // MEASUREMENT SEAM — NOT a scaling knob (798-q4m9 criterion 3).
         //
         // Deliberately NOT read from a config file or a menu: it is unset in
@@ -1813,6 +1888,28 @@ impl VmRuntime for VzRuntime {
             tag: "home-src".to_string(),
             read_only: false,
         }];
+
+        // ORDER 1019-ivia: the guest binary is staged HERE, not under ~/src.
+        // Same create-before-config discipline as the model cache below — VZ
+        // refuses to validate a share whose source directory is missing, and on
+        // a fresh host nothing has staged yet. READ-ONLY: the guest installs
+        // FROM this directory and never writes to it, so the share cannot be
+        // the path by which a guest corrupts the host's staged artifact.
+        let guest_bin = tillandsias_core::guest_bin_path::guest_bin_dir();
+        match std::fs::create_dir_all(&guest_bin) {
+            Ok(()) => shares.push(boot::VzShare {
+                host_dir: guest_bin,
+                tag: tillandsias_core::guest_bin_path::GUEST_BIN_SHARE_TAG.to_string(),
+                read_only: true,
+            }),
+            Err(err) => eprintln!(
+                "[tillandsias-vz] WARNING: could not create the guest-binary staging directory \
+                 {} ({err}). Booting WITHOUT the guest-bin share — the guest will fall back to \
+                 downloading a pinned release instead of installing the host's staged binary \
+                 (order 1019-ivia).",
+                tillandsias_core::guest_bin_path::guest_bin_dir().display()
+            ),
+        }
         match std::fs::create_dir_all(&model_cache) {
             Ok(()) => shares.push(boot::VzShare {
                 host_dir: model_cache,
@@ -1893,11 +1990,43 @@ impl VmRuntime for VzRuntime {
                     loop {
                         if let Ok(result) = lrx.try_recv() {
                             match result {
-                                Ok(h) => {
+                                Ok(mut h) => {
                                     eprintln!(
                                         "[vz] host vsock: listening on port {port} — a guest \
                                          may now connect to CID 2"
                                     );
+                                    // Order 830-xsk2. A listener with no relay
+                                    // accepts and serves nothing, which reads
+                                    // from the guest exactly like a dead
+                                    // service. Opt-in for the same reason the
+                                    // port is: naming a forward target is how a
+                                    // caller says the host-native engine is
+                                    // actually there.
+                                    match std::env::var("TILLANDSIAS_HOST_VSOCK_FORWARD_TO") {
+                                        Ok(t) => match t.trim().parse::<std::net::SocketAddr>() {
+                                            Ok(addr) => match h.0.forward_to(addr) {
+                                                Ok(()) => eprintln!(
+                                                    "[vz] host vsock: forwarding accepted \
+                                                     connections to {addr}"
+                                                ),
+                                                Err(e) => eprintln!(
+                                                    "[vz] host vsock: could not start the relay \
+                                                     to {addr}: {e}. Guest connections will be \
+                                                     accepted and closed unserved."
+                                                ),
+                                            },
+                                            Err(_) => eprintln!(
+                                                "[vz] host vsock: \
+                                                 TILLANDSIAS_HOST_VSOCK_FORWARD_TO={t:?} is not \
+                                                 a host:port address; not forwarding"
+                                            ),
+                                        },
+                                        Err(_) => eprintln!(
+                                            "[vz] host vsock: no \
+                                             TILLANDSIAS_HOST_VSOCK_FORWARD_TO set — accepting \
+                                             connections but forwarding nowhere"
+                                        ),
+                                    }
                                     if let Ok(mut g) = self.host_listener.lock() {
                                         *g = Some(h);
                                     }
@@ -2533,39 +2662,98 @@ mod tests {
         );
     }
 
+    /// 980-xcaf, THE GENERAL RULE. The qemu-img failure was one instance of a
+    /// class, so pin the class rather than the instance.
+    ///
+    /// A macOS `.app` launched by LaunchServices does not inherit the user's
+    /// shell PATH. Measured with `ps eww` on the live tray of a factory-fresh
+    /// Mac (macOS 26.6), it receives exactly:
+    ///
+    /// ```text
+    /// PATH=/usr/bin:/bin:/usr/sbin:/sbin
+    /// ```
+    ///
+    /// So a bare-name spawn of anything Homebrew provides can NEVER resolve on
+    /// a GUI launch, on any Mac, no matter what the operator installs. That is
+    /// why `brew install qemu` did not fix the reported failure and why the
+    /// shell-invoked `--provision` worked: two different PATHs, one binary.
+    ///
+    /// `/usr/bin/xz` does not exist on macOS either, which the same class of
+    /// bug hid until this host found it. Needs NO GUI to check: the assertion
+    /// is purely about what the provisioning path may name.
+    #[test]
+    fn provisioning_never_spawns_a_binary_absent_from_the_minimal_path() {
+        let source = include_str!("vz.rs");
+        // Ships with macOS and resolves under the minimal PATH. Verified on
+        // this host rather than assumed; anything added here must be too.
+        const RESOLVES_BARE: &[&str] = &["hdiutil"];
+        const MINIMAL_PATH_DIRS: &[&str] = &["/usr/bin/", "/bin/", "/usr/sbin/", "/sbin/"];
+
+        // Concatenated so this scan cannot match its own source.
+        let needle = format!("Command::{}(\"", "new");
+        let mut offenders = Vec::new();
+        for part in source.split(&needle).skip(1) {
+            let Some(binary) = part.split('"').next() else {
+                continue;
+            };
+            let ok = RESOLVES_BARE.contains(&binary)
+                || MINIMAL_PATH_DIRS.iter().any(|d| binary.starts_with(d));
+            if !ok {
+                offenders.push(binary.to_string());
+            }
+        }
+        assert!(
+            offenders.is_empty(),
+            "these spawns name binaries that a LaunchServices-started .app cannot resolve \
+             (PATH=/usr/bin:/bin:/usr/sbin:/sbin): {offenders:?}. Use an absolute system path, \
+             or do the work in-process. A Homebrew prefix is never on that PATH, so \
+             \"tell the operator to install it\" is not a fix."
+        );
+    }
+
     /// 2026-07-11: the raw disk MUST be grown past the ~5 GB Fedora Cloud
     /// default before first boot, or the forge-base image build runs the
     /// root filesystem out of space and every agent attach dies with a
-    /// blank timing-out terminal. Pin the resize (source scan — the resize
-    /// runs in the download-gated convert path) so it can't silently
-    /// regress, and require a roomy target.
+    /// blank timing-out terminal.
+    ///
+    /// RE-ANCHORED BY 980-xcaf, and the re-anchoring is the point rather than a
+    /// workaround. This guard used to assert the growth by pinning the spawn of
+    /// the qemu-img binary and its resize argument, so removing the subprocess
+    /// necessarily turns it red. What it was defending is the INVARIANT — the
+    /// disk is grown to a roomy size before first boot — not the mechanism, so
+    /// it now pins the invariant against whatever performs the growth.
+    ///
+    /// The no-subprocess needle is built by CONCATENATION so this scan cannot
+    /// match its own source, the same guard the placeholder scan above uses. A
+    /// self-matching needle here would have made the assertion permanently and
+    /// invisibly true.
     #[test]
     fn convert_grows_raw_disk_before_first_boot() {
         let source = include_str!("vz.rs");
         assert!(
-            source.contains("const GUEST_DISK_SIZE: &str"),
+            source.contains("const GUEST_DISK_SIZE_BYTES: u64"),
             "the guest disk-size constant must exist"
         );
         assert!(
-            source.contains("\"qemu-img\"")
-                && source.contains(".arg(\"resize\")")
-                && source.contains(".arg(GUEST_DISK_SIZE)"),
-            "convert_qcow2_to_raw must qemu-img resize the raw disk to GUEST_DISK_SIZE \
-             before first boot (else forge-base build fills the ~5 GB default)"
+            source.contains("GUEST_DISK_SIZE_BYTES,"),
+            "convert_qcow2_to_raw must grow the raw disk to GUEST_DISK_SIZE_BYTES before \
+             first boot (else the forge-base build fills the ~5 GB default)"
         );
-        // The size string must parse as a generous GiB value (>= 32 GiB).
-        let size = source
-            .split("const GUEST_DISK_SIZE: &str =")
+        let spawned_qemu = format!("\"qemu-{}\"", "img");
+        assert!(
+            !source.contains(&spawned_qemu),
+            "provisioning must not shell out to qemu-img: it cannot resolve under the \
+             minimal PATH a LaunchServices-started .app receives (980-xcaf)"
+        );
+        let gib: u64 = source
+            .split("const GUEST_DISK_SIZE_GIB: u64 =")
             .nth(1)
-            .and_then(|t| t.split('"').nth(1))
-            .expect("GUEST_DISK_SIZE literal");
-        let gib: u64 = size
-            .trim_end_matches(['G', 'g'])
-            .parse()
-            .expect("GUEST_DISK_SIZE must be an <N>G literal");
+            .and_then(|t| t.split(';').next())
+            .and_then(|t| t.trim().parse().ok())
+            .expect("GUEST_DISK_SIZE_GIB must be a plain integer literal");
         assert!(
             gib >= 32,
-            "guest disk must be >= 32 GiB for the forge toolchain + overlay store, got {size}"
+            "guest disk must be >= 32 GiB for the forge toolchain + overlay store, got {gib}"
         );
     }
 
@@ -2629,22 +2817,63 @@ mod tests {
         );
     }
 
-    /// The floor is the whole reason a small host is safe under 919-jii2: it
-    /// must never hand out less than the 4 GiB / 4 vCPU every macOS host ran
-    /// under the pinned policy.
+    /// 978-juw4 REPLACES `guest_sizing_never_drops_below_the_pinned_floor`.
+    ///
+    /// That test asserted `mem >= GUEST_FLOOR_MEMORY_BYTES` across (2c,4GiB),
+    /// (4c,8GiB), (8c,8GiB) and (1c,2GiB) — every one of them BELOW the 10 GiB
+    /// crossover. So the small-host case was never untested; it was tested and
+    /// pinned in the wrong direction, which is why the defect survived. The
+    /// floor's premise was that it preserved "the behaviour it had" for a small
+    /// host, but no host below 10 GiB had ever run this code.
+    ///
+    /// Below the crossover the RESERVE now wins. These are the cases the old
+    /// policy could not express.
     #[test]
-    fn guest_sizing_never_drops_below_the_pinned_floor() {
-        for (cores, gib) in [(2usize, 4u64), (4, 8), (8, 8), (1, 2)] {
-            let (cpus, mem) = guest_sizing(cores, gib * 1024 * 1024 * 1024);
+    fn guest_sizing_lets_the_reserve_win_below_the_crossover() {
+        let gib = 1024 * 1024 * 1024;
+        // 8 GiB / 6 cores — macneo, the host this order was filed from.
+        let (cpus, mem) = guest_sizing(6, 8 * gib);
+        assert_eq!(mem, 2 * gib, "8 GiB host: the 6 GiB reserve leaves 2 GiB");
+        assert_eq!(cpus, 4, "6-core host: 80% is 4, and the host keeps 2");
+        // 9 GiB: pre-clamp 3 GiB, which the old floor raised to 4.
+        let (_, mem) = guest_sizing(6, 9 * gib);
+        assert_eq!(mem, 3 * gib);
+        // 10 GiB: the crossover itself, where the old clamp was already inert.
+        // Identical under both policies — which is precisely why no test that
+        // only looked here could tell them apart.
+        let (_, mem) = guest_sizing(8, 10 * gib);
+        assert_eq!(mem, 4 * gib);
+    }
+
+    /// The policy must never hand the guest more memory than the host has.
+    /// The old floor did exactly that below ~4 GiB: a 2 GiB host was sized to a
+    /// 4 GiB guest, and the replaced test asserted that (1c, 2GiB) case was
+    /// correct. An unsatisfiable allocation is a different failure from an
+    /// unkind one.
+    #[test]
+    fn guest_sizing_never_exceeds_the_host() {
+        let gib = 1024 * 1024 * 1024;
+        for n in 1u64..=64 {
+            let (cpus, mem) = guest_sizing(4, n * gib);
             assert!(
-                mem >= GUEST_FLOOR_MEMORY_BYTES,
-                "{cores}c/{gib}GiB host must not go below the 4 GiB floor, got {mem}"
+                mem <= n * gib,
+                "{n} GiB host was sized to a {mem}-byte guest — more than it has"
             );
-            assert!(
-                cpus >= GUEST_FLOOR_CPU_COUNT.min(cores.max(1)),
-                "{cores}c host must not go below the vCPU floor, got {cpus}"
-            );
+            assert!(cpus >= 1, "{n} GiB host must still get at least one vCPU");
         }
+    }
+
+    /// vCPU had the same shape of defect as memory: the old floor of 4 handed a
+    /// 4-core host every core it owned. Leave the host one wherever there is
+    /// one to leave. The 919-jii2 10-core case is unchanged.
+    #[test]
+    fn guest_sizing_leaves_the_host_a_core() {
+        let gib = 1024 * 1024 * 1024;
+        assert_eq!(guest_sizing(10, 16 * gib).0, 8, "919-jii2 host: unchanged");
+        assert_eq!(guest_sizing(6, 8 * gib).0, 4, "macneo: 80% of 6");
+        assert_eq!(guest_sizing(4, 8 * gib).0, 3, "was 4 — the whole host");
+        assert_eq!(guest_sizing(2, 8 * gib).0, 1, "was 2 — the whole host");
+        assert_eq!(guest_sizing(1, 8 * gib).0, 1, "a 1-core host still boots");
     }
 
     /// The host of 919-jii2 — Mac17,3 / M5 / 10 cores / 16 GiB — is the case
@@ -2665,9 +2894,13 @@ mod tests {
         // 12 GiB: half is 6, but the host reserve allows only 6 — both agree.
         let (_, mem) = guest_sizing(8, 12 * 1024 * 1024 * 1024);
         assert_eq!(mem, 6 * 1024 * 1024 * 1024);
-        // 8 GiB: half is 4, reserve allows 2 — the floor wins, host is small.
+        // 8 GiB: half is 4, reserve allows 2 — the RESERVE wins (978-juw4).
+        // This assertion was INVERTED by that order. It previously pinned
+        // GUEST_FLOOR_MEMORY_BYTES here, i.e. it asserted the over-allocation
+        // itself was correct, with a comment that narrated the defect
+        // accurately ("the floor wins, host is small") and accepted it.
         let (_, mem) = guest_sizing(8, 8 * 1024 * 1024 * 1024);
-        assert_eq!(mem, GUEST_FLOOR_MEMORY_BYTES);
+        assert_eq!(mem, 2 * 1024 * 1024 * 1024);
         // 128 GiB: half is 64, well past what a forge uses — capped.
         let (_, mem) = guest_sizing(24, 128 * 1024 * 1024 * 1024);
         assert_eq!(mem, GUEST_MAX_MEMORY_BYTES);
@@ -3009,7 +3242,19 @@ mod tests {
     }
 
     /// The fetch script must prefer the staged host-provided binary over the
-    /// network fallback (virtio-fs /home/forge/src → staged guest binary).
+    /// network fallback (virtio-fs guest-bin share -> staged guest binary).
+    ///
+    /// WHAT THIS PIN IS FOR, so the next retirement does not read it as stale
+    /// (order 1019-ivia). It does NOT pin a path for tidiness: it pins the
+    /// DELIVERY CHANNEL by which the host gets its freshly built headless into
+    /// the guest. If this assertion goes red during a change that removes a
+    /// mount or a share, the correct response is almost never to repoint it —
+    /// it is to ask whether the change just deleted binary delivery. That is
+    /// exactly what happened on 997-e4v2: the packet retires the `home-src`
+    /// share, this path lived on it, and moving the pin would have removed
+    /// delivery on macOS silently, because fetch-headless.sh FALLS BACK to a
+    /// download rather than failing. Staging moved to the durable state dir
+    /// (1019-ivia) so the share can go without taking delivery with it.
     ///
     /// @trace spec:macos-native-tray.lifecycle.vz-guest@v1
     #[test]
@@ -3017,9 +3262,9 @@ mod tests {
         let source = include_str!("vz.rs");
 
         assert!(
-            source
-                .contains("STAGED=\"/home/forge/src/.tillandsias/guest-bin/tillandsias-headless\""),
-            "fetch script must define the staged binary path under /home/forge/src"
+            source.contains("STAGED=\"/var/lib/tillandsias/guest-bin/tillandsias-headless\"",),
+            "fetch script must define the staged binary path under the guest-bin share \
+             (1019-ivia moved it off /home/forge/src so 997-e4v2 can retire that mount)"
         );
         assert!(
             source.contains("if [[ -x \"$STAGED\" ]]; then"),

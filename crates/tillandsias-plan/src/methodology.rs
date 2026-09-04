@@ -491,6 +491,14 @@ pub fn answer_path_query(corpus: &Corpus, query: &str, file_filter: Option<&str>
 /// two are both refusals. There is no scoring, no stemming and no fallback,
 /// because every one of those is a mechanism for answering a question that was
 /// not actually asked.
+///
+/// ORDER 997-q8jm — SHOULD THIS TABLE GROW? DECIDED: NO, AND THAT IS THE POINT.
+/// A fixed eleven-entry table is a legitimate design and its limit is now
+/// STATED rather than discovered: the refusal names `methodology_path`, and a
+/// path-shaped question is answered as a path before routing is consulted. So
+/// the table only ever has to cover the prose forms worth blessing, and the
+/// long tail has a tool of its own instead of a growing substring index —
+/// which is what would reintroduce ranking through the back door.
 pub const CANONICAL_QUESTIONS: &[(&[&str], &str)] = &[
     (&["forge", "cycle"], "forge_cycle_budget.rule"),
     (&["python"], "tlatoani_hard_no_python.rule"),
@@ -536,10 +544,45 @@ pub fn route(question: &str) -> Option<&'static str> {
     }
 }
 
-/// Answer a QUESTION: route it to a path, then answer the path. An unrouted
-/// question is `unsupported` and says which paths it could have taken, so the
-/// agent can re-ask as a path query instead of being told "no".
+/// ORDER 997-q8jm — the example in the refusal below is the ONE path that used
+/// to work, and it worked for the wrong reason.
+///
+/// The refusal told the agent to "ask it a path". `answer_question` could not
+/// accept one: it routed prose through [`CANONICAL_QUESTIONS`] and nothing
+/// else. Asking `forge_cycle_budget.rule` — the refusal's own example —
+/// nevertheless returned an answer, because the words `forge` and `cycle` are
+/// substrings of it and hit the `forge+cycle` route. So the guidance appeared
+/// to work for anyone who tested it with the suggested example, and failed for
+/// every path that did not happen to spell a routing token.
+///
+/// Worse than a refusal, that coincidence could answer the WRONG path:
+/// `pull_merge_cadence.pre_push_gate` matched `push+merge` and was answered as
+/// `pre_push_gate.rule` — an adjacent key, cited exactly, never the one asked.
+///
+/// A path-shaped question is therefore tried AS A PATH first, and prose routing
+/// is only reached when that finds nothing. Path-shaped means: non-empty, no
+/// whitespace, and nothing outside `[A-Za-z0-9._-]` — deliberately syntactic,
+/// so it cannot depend on what the corpus happens to contain.
+fn looks_like_a_yaml_path(question: &str) -> bool {
+    let trimmed = question.trim();
+    !trimmed.is_empty()
+        && trimmed
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
+}
+
+/// Answer a QUESTION: try it as a path when it is shaped like one, otherwise
+/// route it to a path and answer that. An unrouted question is `unsupported`
+/// and NAMES the tool that takes a path, so the agent can re-ask somewhere the
+/// advice is true rather than looping on the same refusal.
 pub fn answer_question(corpus: &Corpus, question: &str, file_filter: Option<&str>) -> Envelope {
+    let path_shaped = looks_like_a_yaml_path(question);
+    if path_shaped {
+        let direct = answer_path_query(corpus, question, file_filter);
+        if direct.confidence() != Confidence::Unsupported {
+            return direct;
+        }
+    }
     match route(question) {
         Some(path) => answer_path_query(corpus, path, file_filter),
         None => {
@@ -547,12 +590,21 @@ pub fn answer_question(corpus: &Corpus, question: &str, file_filter: Option<&str
                 .iter()
                 .map(|(tokens, path)| format!("{} -> {path}", tokens.join("+")))
                 .collect();
+            let tried_as_a_path = if path_shaped {
+                " It was also tried AS a YAML path here and resolved to nothing, so the \
+                 path is wrong rather than the tool."
+            } else {
+                ""
+            };
             Envelope::unsupported(
                 format!(
                     "no canonical methodology question matches {:?} unambiguously. \
-                     This engine is a YAML PATH QUERY — ask it a path (e.g. \
-                     `forge_cycle_budget.rule`) rather than prose. Routed forms: {}",
+                     This tool (`methodology_ask`) routes PROSE through a fixed table. \
+                     The tool that takes a YAML path is `methodology_path` \
+                     (CLI: `tillandsias-plan methodology <yaml.path>`, e.g. \
+                     `forge_cycle_budget.rule`).{} Routed forms: {}",
                     question,
+                    tried_as_a_path,
                     candidates.join("; ")
                 ),
                 corpus.freshness(),
@@ -820,6 +872,96 @@ pub fn index_text(text: &str) -> Vec<Entry> {
 mod tests {
     use super::*;
     use crate::answer::verify;
+
+    /// ORDER 997-q8jm — FOLLOW THE REFUSAL'S OWN GUIDANCE, LITERALLY.
+    ///
+    /// The example path is EXTRACTED from the live refusal rather than typed
+    /// here, so the test cannot drift from the text it is checking: change the
+    /// advice and the test follows the new advice. Then the same advice is
+    /// applied to a path the routing table cannot spell, which is where the
+    /// old refusal looped — `forge_cycle_budget.rule` answered only because
+    /// `forge` and `cycle` are substrings of it.
+    #[test]
+    fn following_the_refusal_advice_literally_reaches_an_answer() {
+        let corpus = corpus();
+        let refusal = answer_question(&corpus, "how do I do the thing with the stuff", None);
+        assert_eq!(refusal.confidence(), Confidence::Unsupported);
+        let text = refusal.answer();
+
+        // The advice must NAME the tool that accepts a path. Before 997-q8jm it
+        // named none, and `methodology_ask` was the only tool in the sentence.
+        assert!(
+            text.contains("methodology_path"),
+            "the refusal must name the tool that takes a path: {text}"
+        );
+
+        // Pull the backticked example out of the advice and ask it back.
+        let example = text
+            .split("e.g. `")
+            .nth(1)
+            .and_then(|rest| rest.split('`').next())
+            .expect("the refusal offers a backticked example path");
+        assert!(
+            looks_like_a_yaml_path(example),
+            "the refusal's example must be path-shaped: {example:?}"
+        );
+        let followed = answer_question(&corpus, example, None);
+        assert_ne!(
+            followed.confidence(),
+            Confidence::Unsupported,
+            "following the refusal's own example must reach an answer: {}",
+            followed.answer()
+        );
+
+        // NEGATIVE CONTROL for the coincidence. This path spells no routing
+        // token, so it exercises the path lane and nothing else; under the old
+        // code it returned the identical refusal.
+        let unspellable = answer_question(&corpus, "mcp_first_read_path", None);
+        assert_ne!(
+            unspellable.confidence(),
+            Confidence::Unsupported,
+            "a path that spells no routing token must still resolve: {}",
+            unspellable.answer()
+        );
+
+        // And a path-shaped question that resolves to NOTHING must still be a
+        // refusal, saying so as a wrong path rather than a wrong tool.
+        let nonsense = answer_question(&corpus, "no_such_key.no_such_leaf", None);
+        assert_eq!(nonsense.confidence(), Confidence::Unsupported);
+        assert!(
+            nonsense.answer().contains("tried AS a YAML path"),
+            "a path-shaped miss must say the path is wrong: {}",
+            nonsense.answer()
+        );
+    }
+
+    /// ORDER 997-q8jm — a path must never be answered as an ADJACENT path.
+    ///
+    /// `pull_merge_cadence.pre_push_gate` contains both `push` and `merge`, so
+    /// prose routing sent it to `pre_push_gate.rule` and cited that exactly.
+    /// The citation was true about a key nobody asked for.
+    #[test]
+    fn a_path_shaped_question_is_never_routed_to_an_adjacent_path() {
+        let corpus = corpus();
+        let asked = "pull_merge_cadence.pre_push_gate";
+        let env = answer_question(&corpus, asked, None);
+        assert_ne!(env.confidence(), Confidence::Unsupported);
+        // The header quotes the query that was ACTUALLY executed. Asserting on
+        // the body would pass either way: the routed answer's yaml_path is
+        // `multi_host_development.pull_merge_cadence.pre_push_gate.rule`, which
+        // contains the asked string as a substring even when the asked path was
+        // never the query. That vacuous form of this assertion passed with the
+        // path lane disabled, which is how it was caught.
+        assert!(
+            env.answer()
+                .contains(&format!("methodology path query {asked:?}")),
+            "the path that was asked must be the query that ran: {}",
+            env.answer()
+        );
+        // The route it USED to take, proving the trap is still live and that
+        // the path lane is what avoids it.
+        assert_eq!(route(asked), Some("pre_push_gate.rule"));
+    }
 
     fn repo_root() -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")

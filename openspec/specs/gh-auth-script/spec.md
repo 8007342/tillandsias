@@ -12,6 +12,7 @@ The interactive GitHub Login user experience. Both the CLI entry point (`tilland
 ## Requirements
 
 ### Requirement: Single implementation behind tray and CLI entry points
+<!-- req-id: 4a8426ff -->
 
 The CLI flag `--github-login` and the tray menu item "GitHub Login" MUST invoke the same `runner::run_github_login` function. The tray handler MUST spawn a terminal that re-executes the Tillandsias binary with `--github-login`; it MUST NOT reimplement the flow.
 
@@ -35,6 +36,7 @@ The CLI flag `--github-login` and the tray menu item "GitHub Login" MUST invoke 
 - **THEN** `runner::run_github_login` MUST be invoked inline in the current terminal, with no popup
 
 ### Requirement: Non-interactive login is explicit and cannot hang on `/dev/tty`
+<!-- req-id: a8878caa -->
 
 The default GitHub login path MUST require a terminal. Automation MAY opt into
 stdin token delivery with `--github-login --with-token`; the token MUST flow
@@ -57,6 +59,7 @@ placed in argv, an environment variable, a project file, or host memory.
 - **AND** successful authentication MUST follow the same in-container Vault write and verification path as interactive login
 
 ### Requirement: Interactive login uses an ephemeral git-service-image container
+<!-- req-id: ffb548a7 -->
 
 The login flow MUST run `gh auth login` inside a dedicated, short-lived container started from the git service image. It MUST NOT exec into a long-lived per-project git service container.
 
@@ -79,6 +82,7 @@ The login flow MUST run `gh auth login` inside a dedicated, short-lived containe
 - **AND** `podman exec -it tillandsias-gh-login gh auth login --git-protocol https` MUST inherit the real TTY for the interactive device-code flow
 
 ### Requirement: Container verifies the session, writes the token to Vault, never reaches the host
+<!-- req-id: 2458b36e -->
 
 After interactive `gh auth login` succeeds, the git container MUST verify the session and write the OAuth token to Vault entirely inside the container — the token is never extracted or stored on the host.
 
@@ -119,6 +123,7 @@ After interactive `gh auth login` succeeds, the git container MUST verify the se
 - **AND** the token SHALL exist only inside the container and in Vault
 
 ### Requirement: Drop guard tears down the login container on every exit path
+<!-- req-id: 98d98496 -->
 
 The login container MUST be destroyed on every exit path so no `gh` on-disk state survives the flow.
 

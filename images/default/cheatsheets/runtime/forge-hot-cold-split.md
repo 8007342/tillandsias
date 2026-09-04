@@ -46,7 +46,7 @@ COLD paths (disk-backed):
 
 ## Third pattern: tmpfs-overlay lane
 
-@trace spec:forge-hot-cold-split-tmpfs-lane
+@trace spec:forge-hot-cold-split
 
 A third storage pattern sits BETWEEN HOT (hard cap, ENOSPC on overflow) and COLD (disk, no cap). It is a tmpfs view rooted on top of a COLD per-project cache directory, with LRU eviction across the tmpfs/disk boundary as a single per-project pool. **It is NOT a fifth HOT root** — the four HOT roots above remain unchanged.
 

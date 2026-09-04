@@ -9,6 +9,7 @@ active
 ## Requirements
 
 ### Requirement: Tray operations are concurrency-safe
+<!-- req-id: 7f2e8ba5 -->
 
 Tray state operations MUST tolerate rapid user actions and background task completion without corrupting active project, menu, or service state.
 

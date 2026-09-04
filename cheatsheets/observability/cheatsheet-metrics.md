@@ -16,7 +16,7 @@ committed_for_project: false
 
 # Cheatsheet Metrics System — Phase 4 Design
 
-@trace spec:cheatsheets-metrics-collection
+@trace spec:observability-metrics
 @cheatsheet runtime/external-logs.md
 
 **Use when**: you are designing or maintaining the cheatsheet metrics pipeline, which tracks how often agents successfully look up cheatsheet entries (hits), fall back to API calls (misses), and decide which entries to expand, compact, or delete.
@@ -180,7 +180,7 @@ This is **never real-time** and **never blocks agent execution**.
 ```bash
 #!/bin/bash
 # scripts/analyze-cheatsheet-metrics.sh
-# @trace spec:cheatsheets-metrics-collection
+# @trace spec:observability-metrics
 #
 # Post-session metrics aggregation — reads JSONL event stream from external-logs,
 # computes per-cheatsheet hit/miss/partial rates, and scores each entry.

@@ -14,6 +14,7 @@ runtime identity needed for stop, inspect, and event correlation.
 ## Requirements
 
 ### Requirement: Handle retains launch identity
+<!-- req-id: 86fdea38 -->
 
 The runtime SHALL return a typed handle that preserves the container name,
 image reference, and spec snapshot used to create the container.
@@ -24,6 +25,7 @@ image reference, and spec snapshot used to create the container.
 - **AND** the embedded spec can be inspected without rebuilding argv
 
 ### Requirement: Handle creation remains unit-testable
+<!-- req-id: d61556ff -->
 
 The handle layer SHALL remain a pure data boundary that can be constructed and
 tested in isolation without invoking Podman or the network.
@@ -34,6 +36,7 @@ tested in isolation without invoking Podman or the network.
 - **AND** the handle can still be used as the identity for lifecycle code
 
 ### Requirement: Event stream maps back to handle identity
+<!-- req-id: 1d64a42e -->
 
 The runtime event stream SHALL use the same container identity that the handle
 stores so lifecycle transitions can be matched deterministically.

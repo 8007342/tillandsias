@@ -534,6 +534,66 @@ write_convergence_artifacts() {
         fi
     done
 
+
+    # ── ORDER 977-j6qu: THE SCORE COMES FROM THE MODEL, NOT FROM THIS LOOP ────
+    #
+    # The loop above still classifies each check and builds the residual detail
+    # (which spec failed, why, at what weight) — that is reporting, and it stays
+    # here. What LEFT is the arithmetic: earned/denominator/residual are now
+    # computed by `tillandsias-plan score-checks`, which runs
+    # obligation::centicolon_function over a SpecState.
+    #
+    # WHY THIS MATTERS beyond tidiness. methodology/math-foundations.yaml
+    # describes a centicolon_function over the obligation lattice; this script
+    # accumulated `total_cc` itself. Two objects under one name, and the
+    # methodology's qualifier — monotone ONLY while obligation IDs are preserved
+    # and the denominator scope is unchanged — had nowhere to live, because a
+    # bare integer cannot say which side of that line it is on.
+    #
+    # THE NUMBERS ARE UNCHANGED TODAY, deliberately, and that is the evidence
+    # this wiring is faithful rather than a redefinition: a passing check
+    # establishes PositivelyTested, each weight is earned at exactly that bar,
+    # so the model reproduces what the loop computed. A green check witnesses
+    # that a test passed — it says nothing about RuntimeObserved or
+    # EvidenceBundled, and scoring it as though it did would be the model
+    # agreeing with whatever the shell already believed.
+    #
+    # FAIL LOUD, NEVER FALL BACK. An unavailable or refusing scorer must not
+    # silently restore the local arithmetic: that would be two scorers again,
+    # with the second one invisible and only reachable on the unhappy path.
+    local _score_json _score_rc=0
+    local _plan_bin=""
+    if [[ -f "$REPO_ROOT/scripts/plan-binary-probe.sh" ]]; then
+        # shellcheck source=scripts/plan-binary-probe.sh
+        . "$REPO_ROOT/scripts/plan-binary-probe.sh" 2>/dev/null || true
+    fi
+    if ! command -v resolve_plan_binary &>/dev/null || ! _plan_bin="$(resolve_plan_binary)" || [[ -z "$_plan_bin" ]]; then
+        echo "blocked:local-ci:no-plan-binary — the centicolon scorer lives in tillandsias-plan (977-j6qu); refusing to compute a second score here" >&2
+        return 1
+    fi
+    _score_json="$(
+        for check_id in "${CHECK_IDS[@]}"; do
+            local _w _st
+            _w="$(check_weight "$check_id")"
+            if [[ " ${FAILED_CHECKS[*]} " == *" ${check_id} "* ]]; then _st=fail; else _st=pass; fi
+            printf '%s %s %s\n' "$check_id" "$_w" "$_st"
+        done | "$_plan_bin" score-checks
+    )" || _score_rc=$?
+    if [[ $_score_rc -ne 0 || -z "$_score_json" ]]; then
+        echo "blocked:local-ci:scorer-refused (rc=$_score_rc) — see the score-checks verdict above" >&2
+        return 1
+    fi
+    total_cc="$("$JQ" -r '.denominator' <<<"$_score_json")"
+    passed_cc="$("$JQ" -r '.earned' <<<"$_score_json")"
+    residual_cc="$("$JQ" -r '.residual' <<<"$_score_json")"
+    local cc_regime
+    cc_regime="$("$JQ" -r '.regime' <<<"$_score_json")"
+    # THE REGIME IS REPORTED, NOT IMPLIED. Outside the monotone band a rise or
+    # fall must not be read as progress or regress, and a consumer that only
+    # sees the number has no way to know.
+    if [[ "$cc_regime" != monotone ]]; then
+        echo "note:local-ci:centicolon-regime:$cc_regime — this score is NOT comparable with the previous run" >&2
+    fi
     local failed_reasons_json
     if [[ -s "$failed_reasons_file" ]]; then
         failed_reasons_json="$("$JQ" -sc '.' "$failed_reasons_file")"
@@ -1137,7 +1197,17 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # pushes behind. Until that list is drained, a warm-cache ci-full beside
     # a live enclave WILL stop the stack during this check; the queue carries
     # the operational caution and the 878-79b5 supervisor restarts it.
-    if run_rust_test_on_host cargo test -p tillandsias-headless --bin tillandsias --features tray,listen-vsock --no-fail-fast 2>&1 | tee /tmp/tray-check.log; then
+    # 1021-hf9e / 880-tdwn: the headless bin suite shares process-global env seams and gives a
+    # different failure set per PARALLEL run (three forge-spec tests panicked with
+    # "TILLANDSIAS_PODMAN_BIN is unset at resolution time" in the 2026-09-04T16:39Z --ci-full);
+    # the gate already runs it serial (1003-444f) and serial measured faster. Same pin here.
+    # 1022-y7kc cause 12 (2026-09-04T20:50Z ci-full, SERIAL): 13 tests never seat a fake podman
+    # themselves and only ever passed on a seat leaked by a parallel neighbour (or, before
+    # 880-tdwn, on the REAL podman); serial exposed all 13 at the tripwire. The arm seats
+    # /bin/false — the same deterministic "not running" podman_false_seam() chooses — so an
+    # unseated test can never reach the real binary and a seated test still overrides it.
+    # Measured before the edit: same command with the seat, 658 passed / 0 failed in 44.9 s.
+    if run_rust_test_on_host env TILLANDSIAS_PODMAN_BIN=/bin/false cargo test -p tillandsias-headless --bin tillandsias --features tray,listen-vsock --no-fail-fast -- --test-threads=1 2>&1 | tee /tmp/tray-check.log; then
         log_pass "Tray + vsock-server feature tests pass"
         archive_check_log "tray-contract" "pass" /tmp/tray-check.log
     else
@@ -1341,6 +1411,106 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     else
         log_fail_missing_guard "spec-index-repo-relative-rung" "scripts/test-spec-index-repo-relative-rung.sh"
         archive_check_log "spec-index-repo-relative-rung" "skipped"
+    fi
+
+    # Order 1003-v3dc. The durable tier's LIVENESS test and the rung it falls
+    # back to. Wired beside the two guards above because it fails in the same
+    # invisible way they do: rung 3 used `[ -d ]` on a podman mountpoint, which
+    # under rootless podman fails with EACCES on a volume that exists, so
+    # "not permitted" was read as "absent" and the index silently demoted to
+    # rung 4 — which was `target/`, which `cargo clean` removes wholesale.
+    # Measured on lenovinha 2026-09-04: 23,154 embeddings in a GC target with
+    # `--where` reporting serving-exists=yes the whole time. The fixture drives
+    # the block EXTRACTED from the real carrier under a stub podman, and its
+    # EACCES arm uses a genuinely unreadable directory rather than a missing
+    # one, because a missing one cannot tell the two failures apart — which was
+    # the entire defect.
+    if [[ -f "scripts/test-spec-index-durable-tier-demotion.sh" ]]; then
+        if bash scripts/test-spec-index-durable-tier-demotion.sh 2>&1 | tee /tmp/spec-index-durable-tier-demotion.log; then
+            log_pass "Spec-index durable tier: not-permitted is distinguishable from absent, and rung 4 is not target/"
+            archive_check_log "spec-index-durable-tier-demotion" "pass" /tmp/spec-index-durable-tier-demotion.log
+        else
+            log_fail_tracked "spec-index-durable-tier-demotion" "Spec-index durable-tier demotion regression (see /tmp/spec-index-durable-tier-demotion.log)"
+            archive_check_log "spec-index-durable-tier-demotion" "fail" /tmp/spec-index-durable-tier-demotion.log
+        fi
+    else
+        log_fail_missing_guard "spec-index-durable-tier-demotion" "scripts/test-spec-index-durable-tier-demotion.sh"
+        archive_check_log "spec-index-durable-tier-demotion" "skipped"
+    fi
+
+    # Order 901-jtvi. A litmus step matched a tab-separated projection with
+    # `grep -qE '^hardware\t...'`. GNU grep's ERE does not define \t: it warns
+    # "stray \ before t" to stderr — which a -q step discards — and matches the
+    # bare letter, so the pattern could never match. It failed in the runner and
+    # passed every hand-check, because an interactive shell resolves a `grep`
+    # FUNCTION (ugrep) that DOES interpret \t, on three of three Linux hosts.
+    # Shell functions are not exported, so `bash -c` honestly disagrees with the
+    # author's next command. Three of us then spent an afternoon measuring pipe
+    # buffers for a SIGPIPE that never happened.
+    #
+    # Wired here rather than trusted to review for the reason the two sibling
+    # spec-index guards are: the failure is invisible at the surface everyone
+    # checks. The allowlist is measured against /usr/bin/grep, not recalled —
+    # \s and \w ARE GNU extensions and refusing them would red-flag ten
+    # committed lines, which is how a guard gets switched off.
+    if [[ -f "scripts/test-litmus-grep-escapes.sh" ]]; then
+        if bash scripts/test-litmus-grep-escapes.sh 2>&1 | tee /tmp/litmus-grep-escapes.log; then
+            log_pass "Litmus grep patterns use escapes GNU grep actually defines"
+            archive_check_log "litmus-grep-escapes" "pass" /tmp/litmus-grep-escapes.log
+        else
+            log_fail_tracked "litmus-grep-escapes" "Litmus grep-escape regression (see /tmp/litmus-grep-escapes.log)"
+            archive_check_log "litmus-grep-escapes" "fail" /tmp/litmus-grep-escapes.log
+        fi
+    else
+        log_fail_missing_guard "litmus-grep-escapes" "scripts/test-litmus-grep-escapes.sh"
+        archive_check_log "litmus-grep-escapes" "skipped"
+    fi
+
+    # Order 1018-5f5a. Every [FAIL] the litmus runner prints must carry the
+    # step's exit status. On 2026-09-04 a step that returned 1 was reported
+    # across three hosts as a SIGPIPE 141, because a reader with no number
+    # supplies one — and the nearest plausible mechanism was in a comment block
+    # they had just read. Three hosts measured pipe buffers for an afternoon
+    # against a failure that never involved a pipe. The same day it hid two of
+    # the release gate's eight causes.
+    #
+    # Wired here rather than trusted to review because the regression is a NEW
+    # [FAIL] site added without rc, which no reviewer reliably notices. Sites
+    # where no step exit exists carry an inline `# rc-exempt: <reason>` marker,
+    # so a new site must be classified deliberately instead of defaulting to
+    # silence.
+    if [[ -f "scripts/test-litmus-runner-reports-rc.sh" ]]; then
+        if bash scripts/test-litmus-runner-reports-rc.sh 2>&1 | tee /tmp/litmus-runner-rc.log; then
+            log_pass "Litmus runner reports the step exit status on every [FAIL]"
+            archive_check_log "litmus-runner-reports-rc" "pass" /tmp/litmus-runner-rc.log
+        else
+            log_fail_tracked "litmus-runner-reports-rc" "Litmus runner rc-reporting regression (see /tmp/litmus-runner-rc.log)"
+            archive_check_log "litmus-runner-reports-rc" "fail" /tmp/litmus-runner-rc.log
+        fi
+    else
+        log_fail_missing_guard "litmus-runner-reports-rc" "scripts/test-litmus-runner-reports-rc.sh"
+        archive_check_log "litmus-runner-reports-rc" "skipped"
+    fi
+
+    # Order 1004-inkc. `--expect none` disables the absent detection, which is
+    # that order's entire subject: a production caller passing it restores a
+    # health check that cannot fail on a DELETED service. The escape hatch was
+    # needed (empty now means "use the default", and three legacy fixture arms
+    # model a vault without a proxy while testing something else), so it is
+    # confined to the fixture and the confinement is CHECKED — a rule only an
+    # attentive reader honours is a suggestion, which is what 994-8r3w's unmet
+    # criterion 3 recorded about its own single-caller declaration.
+    if [[ -f "scripts/check-enclave-expect-none-is-fixture-only.sh" ]]; then
+        if bash scripts/check-enclave-expect-none-is-fixture-only.sh 2>&1 | tee /tmp/expect-none-fixture-only.log; then
+            log_pass "The enclave health check's absent-detection opt-out stays fixture-only"
+            archive_check_log "expect-none-fixture-only" "pass" /tmp/expect-none-fixture-only.log
+        else
+            log_fail_tracked "expect-none-fixture-only" "A production caller passes the expect-none opt-out (see /tmp/expect-none-fixture-only.log)"
+            archive_check_log "expect-none-fixture-only" "fail" /tmp/expect-none-fixture-only.log
+        fi
+    else
+        log_fail_missing_guard "expect-none-fixture-only" "scripts/check-enclave-expect-none-is-fixture-only.sh"
+        archive_check_log "expect-none-fixture-only" "skipped"
     fi
 
     # Order 765-mza8. Wired here, literally, for the same reason as the two

@@ -15,7 +15,7 @@ committed_for_project: false
 ---
 # Forge Standalone Troubleshooting
 
-@trace spec:forge-standalone, spec:default-image, spec:forge-container
+@trace spec:forge-standalone, spec:default-image
 
 **Use when**: You want only the forge container, one mounted project tree, and
 an interactive bash shell for troubleshooting or in-container development.

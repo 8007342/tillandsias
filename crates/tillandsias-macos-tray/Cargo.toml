@@ -19,6 +19,10 @@ tillandsias-host-shell = { path = "../tillandsias-host-shell" }
 tillandsias-secure-channel = { workspace = true }
 tillandsias-vm-layer = { path = "../tillandsias-vm-layer", features = ["recipe", "download"] }
 tokio = { workspace = true, features = ["full"] }
+# Order 795-5itp: the shared LengthDelimitedCodec instead of a hand-rolled
+# u32-BE reader, and the Sink/Stream extension traits Framed needs.
+tokio-util = { workspace = true }
+futures-util = { workspace = true }
 tracing = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }

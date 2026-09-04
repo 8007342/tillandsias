@@ -20,6 +20,7 @@ This spec ensures:
 ## Requirements
 
 ### Requirement: Stream activation on --debug flag
+<!-- req-id: a7412d08 -->
 
 When the tray is launched with `--debug`, diagnostic streaming MUST be enabled and MUST be connected to stdout/stderr.
 
@@ -41,6 +42,7 @@ When the tray is launched with `--debug`, diagnostic streaming MUST be enabled a
 - **AND** stdout MUST remain clean for user-facing text
 
 ### Requirement: Event structure and formatting
+<!-- req-id: d88a033d -->
 
 Each diagnostic event MUST have a consistent, parseable structure with timestamp, event type, container, and payload.
 
@@ -118,6 +120,7 @@ Each diagnostic event MUST have a consistent, parseable structure with timestamp
 - **AND** only the last N lines SHOULD be streamed (e.g., 1000, to prevent noise)
 
 ### Requirement: Event filtering and control
+<!-- req-id: 343853a1 -->
 
 The user SHOULD be able to control which events are streamed via command-line or environment variables.
 
@@ -137,6 +140,7 @@ The user SHOULD be able to control which events are streamed via command-line or
 - **AND** the default level SHOULD be `normal` (container events only)
 
 ### Requirement: Ephemeral stream lifecycle
+<!-- req-id: 280c3707 -->
 
 The diagnostic stream MUST exist only for the duration of the current tray session and MUST NOT be persisted.
 
@@ -157,6 +161,7 @@ The diagnostic stream MUST exist only for the duration of the current tray sessi
 - **AND** events SHOULD be available only in the scrollback terminal history or log files
 
 ### Requirement: Backpressure and flow control
+<!-- req-id: df74ac91 -->
 
 The stream MUST handle high event rates gracefully without overwhelming the terminal.
 
@@ -179,6 +184,7 @@ The stream MUST handle high event rates gracefully without overwhelming the term
 - **AND** events SHOULD be found in log files
 
 ### Requirement: Litmus test — diagnostic streaming activation and lifecycle
+<!-- req-id: 14d382af -->
 
 Critical verification paths:
 

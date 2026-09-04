@@ -217,6 +217,33 @@ fi
 # block that disagrees with the summary beside it.
 services_report="skipped"
 if [ -x "$ROOT/scripts/check-enclave-service-health.sh" ]; then
+    # ORDER 994-8r3w. TELL THE CHECK WHAT TO EXPECT, or its absent= counter is a
+    # structural constant. The absent-detection loop has always been correct and
+    # has never been given an expectation: EXPECTED defaults to empty and no
+    # production caller set it, so a service that had ceased to exist reported as
+    # healthy. MEASURED here 2026-09-03 with the proxy removed:
+    # `ok:enclave-service-health:services=3:up=3:down=0:dead=0:absent=0`.
+    #
+    # The list is DECLARED (images/default/enclave-services.txt) because a health
+    # check cannot derive what should exist from what does — that is circular.
+    # A Rust test keeps it in step with the dependency graph that launches them.
+    # ORDER 1004-inkc — THE SET AND ITS ANCHOR RULE NOW LIVE IN THE CHECK.
+    #
+    # This block used to read images/default/enclave-services.txt, apply the
+    # vault-anchor rule, and export TILLANDSIAS_ENCLAVE_EXPECTED_SERVICES before
+    # invoking the check. That made the verdict depend on WHO INVOKED IT: the
+    # same script run by hand — as an operator does, and as lenovinha did on
+    # 2026-09-04 — got no declaration at all and reported
+    # `ok:...:services=5:absent=0` on a host whose declared proxy had been
+    # DELETED. 994-8r3w named this as its own unmet criterion 3: "nothing yet
+    # fails if a future edit stops preflight exporting the variable."
+    #
+    # A guard whose answer depends on its caller is not a guard, so the default
+    # and the anchor moved into check-enclave-service-health.sh, where every
+    # invocation gets them. Preflight now just CONSUMES the verdict.
+    #
+    # Nothing is passed deliberately: an explicit --expect here would restore
+    # exactly the caller-supplied behaviour this order removed, one layer up.
     _svc_err="$(mktemp "${TMPDIR:-/tmp}/cycle-preflight-services.XXXXXX")"
     # --act (878-79b5): the unattended cycle is exactly the caller that must
     # FIX what it can prove needs fixing — four yoga cycles re-noted one
@@ -240,6 +267,33 @@ if [ -x "$ROOT/scripts/check-enclave-service-health.sh" ]; then
     rm -f "$_svc_err"
 fi
 plan_verdict="${plan_verdict}+services-${services_report}"
+
+# ORDER 975-rsgm. The service check answers "are the containers running?" and
+# cannot see a proxy that will START and then DIE because its certificate and
+# its private key no longer match. That is a real state this host sat in: five
+# cycles of `fail:enclave-service-start-failed:...:action=operator`, where the
+# cause was a CA regenerated without rotating the `tillandsias-ca-key` secret,
+# and squid's own last words named neither file.
+#
+# ADVISORY, never a gate — a desynced CA degrades egress, it does not make the
+# cycle unsafe, and a preflight that refuses on it would strand a host that can
+# still do most of its work.
+ca_report="skip"
+if [ -x "$ROOT/scripts/check-enclave-ca-consistency.sh" ]; then
+    _ca_err="$(mktemp)"
+    ca_line="$(bash "$ROOT/scripts/check-enclave-ca-consistency.sh" 2>"$_ca_err" | tail -1)"
+    case "$ca_line" in
+        ok:enclave-ca-consistent) ca_report="ok" ;;
+        desync:*|absent:*)
+            ca_report="${ca_line%%:*}"
+            cat "$_ca_err" >&2
+            ;;
+        skip:*) ca_report="skip" ;;
+        *) ca_report="no-verdict" ;;
+    esac
+    rm -f "$_ca_err"
+fi
+[ "$ca_report" = "ok" ] || [ "$ca_report" = "skip" ] && : || plan_verdict="${plan_verdict}+ca-${ca_report}"
 
 # Host-state security migration (order 791-swxt). Runs SILENTLY and never
 # touches this script's verdict line, so the pinned arity is unaffected.

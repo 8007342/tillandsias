@@ -48,11 +48,31 @@ case "$1" in
         eval "h=\"\${HEALTH_${key}:-}\"; l=\"\${LABEL_${key}:-}\""
         printf '%s|%s\n' "$h" "$l"
         ;;
+    secret)
+        # 975-rsgm: the CA key rotation the proxy's self-heal now performs
+        # before starting. STUB_SECRET_FAIL exercises the refusal branch —
+        # a rotation that cannot happen must NOT become a hopeful start.
+        exit "${STUB_SECRET_FAIL:-0}"
+        ;;
     start)
         # 878-79b5 acting arm: record the attempt so tests can assert an
         # operator stop was NOT fought; START_RC forces a failed start.
         [ -n "${START_LOG:-}" ] && printf 'start %s\n' "$2" >> "$START_LOG"
         exit "${START_RC:-0}"
+        ;;
+    container)
+        # ORDER 1004-inkc: `container exists <name>` is how the check's anchor
+        # rule asks whether this host has an enclave at all. Modelled against
+        # PS_OUT so the fake cannot disagree with itself — a stub that answered
+        # "yes" unconditionally would make the never-provisioned arm pass for
+        # the wrong reason, and one that answered "no" unconditionally would
+        # disable the default expected set in every scenario silently.
+        case "$2" in
+            exists)
+                printf '%s\n' "$PS_OUT" | cut -d'|' -f1 | grep -qx "$3" && exit 0
+                exit 1 ;;
+            *) exit 1 ;;
+        esac
         ;;
     *) exit 1 ;;
 esac
@@ -67,7 +87,17 @@ make_podman "$BIN"
 # nothing tests the harness, not the code — that trap cost a sibling a fixture
 # on 798-c4mq the same night.
 REALPATH_DIRS="/usr/bin:/bin"
-run() { PATH="$BIN:$REALPATH_DIRS" bash "$GUARD" "$@" 2>"$TMP/err"; }
+# ORDER 1004-inkc: the check now supplies its own expected set from
+# images/default/enclave-services.txt when a vault is present. Scenarios below
+# model a vault WITHOUT a proxy while testing something else entirely — exit
+# codes, origin labels, stale-healthy — and would otherwise start reporting a
+# proxy absence they were never written to model, coupling every legacy arm to
+# the fleet's declared set. `none` is the explicit opt-out, so each scenario
+# says whether the expected set is part of its subject.
+run() {
+    PATH="$BIN:$REALPATH_DIRS" TILLANDSIAS_ENCLAVE_EXPECTED_SERVICES="${EXPECT_OVERRIDE-none}" \
+        bash "$GUARD" "$@" 2>"$TMP/err"
+}
 
 now="$(date -u +%s)"
 
@@ -195,7 +225,12 @@ unset HEALTH_tillandsias_proxy
 export PS_OUT="tillandsias-proxy|running|0|${now}|0|0"
 out="$(run --expect tillandsias-git,tillandsias-proxy)"
 err="$(cat "$TMP/err")"
-if [ "$out" = "degraded:enclave-service-health:services=1:up=1:down=0:dead=0:absent=1" ]; then
+# ORDER 1004-inkc changed `services=` to count the EXPECTED set plus any extra
+# enclave containers found, so an absent member no longer shrinks the count:
+# this arm's expectation moves 1 -> 2 (one running proxy + one absent git). The
+# old value was the defect in miniature — a missing service made the total go
+# DOWN, which reads as "one fewer thing to worry about".
+if [ "$out" = "degraded:enclave-service-health:services=2:up=1:down=0:dead=0:absent=1" ]; then
     case "$err" in
         *"fail:enclave-service-absent:service=tillandsias-git:state=absent"*)
             ok "--expect names a missing service -> absent=1, service named" ;;
@@ -253,9 +288,23 @@ unset PS_RC
 # the flag itself. START_LOG records every start the stub receives, so "was
 # NOT fought" is an assertion on an empty file, not on absent output.
 SD="$TMP/act-state"
+# The acting arm must not depend on THIS host's CA state. Since 975-rsgm the
+# guard consults check-enclave-ca-consistency.sh before starting the proxy and
+# refuses (fail:enclave-ca-desync-unrepaired) when the pair disagrees; the real
+# check reads the live host, so scenarios 13-19 went red on every host whose CA
+# was desynced (macuahuitl and lenovinha, 2026-09-04, after 998-3z6g moved the
+# bundle) while proving nothing about the restart logic. Stub it to PASS here;
+# scenario 20 overrides with its own failing stub to exercise the refusal.
+cat > "$BIN/ca-consistency-ok.sh" <<'STUB'
+#!/usr/bin/env bash
+echo "ok:enclave-ca-consistent"
+exit 0
+STUB
+chmod +x "$BIN/ca-consistency-ok.sh"
 act_run() { # extra env via caller exports
     : > "$TMP/start.log"
     START_LOG="$TMP/start.log" TILLANDSIAS_CYCLE_STATE_DIR="$SD" \
+    TILLANDSIAS_CA_CONSISTENCY_CHECK="${TILLANDSIAS_CA_CONSISTENCY_CHECK:-$BIN/ca-consistency-ok.sh}" \
     TILLANDSIAS_ENCLAVE_ACT_GRACE_S=1800 \
         PATH="$BIN:$REALPATH_DIRS" bash "$GUARD" --act 2>"$TMP/err"
 }
@@ -361,6 +410,7 @@ else
     rm -rf "$SD"; mkdir -p "$SD"; : > "$TMP/start.log"
     export PS_OUT="$FRESH_STOP"
     START_LOG="$TMP/start.log" TILLANDSIAS_CYCLE_STATE_DIR="$SD" \
+    TILLANDSIAS_CA_CONSISTENCY_CHECK="${TILLANDSIAS_CA_CONSISTENCY_CHECK:-$BIN/ca-consistency-ok.sh}" \
         PATH="$BIN:$REALPATH_DIRS" bash "$MUT_ACT" --act >/dev/null 2>&1
     if grep -q "start tillandsias-proxy" "$TMP/start.log"; then
         ok "act mutation: without the grace guard the fresh stop IS fought — scenario 14 has teeth"
@@ -393,6 +443,111 @@ else
         *) bad "mutation: mutant did not pass 'healthy' through — control proves nothing: $mut_err" ;;
     esac
     unset HEALTH_tillandsias_vault
+fi
+
+
+# --------------------------------------------------------------- scenario 20
+# ORDER 975-rsgm. A DOWN PROXY WHOSE CA PAIR IS DESYNCED MUST NOT BE STARTED.
+#
+# `podman start` on that proxy "succeeds" and squid dies seconds later with
+# X509_check_private_key() — a message naming neither the certificate nor the
+# key. The self-heal previously reported
+# `fix:enclave-service-restarted:...:action=started` for an action that could
+# not work. It must now either repair the precondition or refuse and say why;
+# what it must never do is report success into a certain death.
+#
+# The consistency check is stubbed to FAIL and the secret rotation is stubbed to
+# FAIL too, so this arm exercises the refusal branch specifically.
+export PS_OUT="tillandsias-vault|running|0|$((now - 7200))|0|0
+tillandsias-proxy|exited|143|$((now - 7200))|$((now - 3600))|0"
+cat > "$BIN/check-enclave-ca-consistency.sh" <<'STUB'
+#!/usr/bin/env bash
+echo "desync:enclave-ca-key-secret"
+exit 1
+STUB
+chmod +x "$BIN/check-enclave-ca-consistency.sh"
+_prev_secret_behaviour="${STUB_SECRET_FAIL:-}"
+export STUB_SECRET_FAIL=1
+_fresh_state="$(mktemp -d "$TMP/state-ca.XXXXXX")"
+out="$(PATH="$BIN:$REALPATH_DIRS" TILLANDSIAS_CA_CONSISTENCY_CHECK="$BIN/check-enclave-ca-consistency.sh" TILLANDSIAS_CYCLE_STATE_DIR="$_fresh_state" bash "$GUARD" --act 2>"$TMP/err")"
+case "$(cat "$TMP/err")$out" in
+    *enclave-ca-desync-unrepaired*)
+        case "$(cat "$TMP/err")$out" in
+            *fix:enclave-service-restarted:service=tillandsias-proxy*)
+                bad "a desynced proxy was reported as restarted anyway" ;;
+            *) ok "a desynced proxy refuses with its own reason instead of a false restart" ;;
+        esac ;;
+    *) bad "desynced proxy did not produce enclave-ca-desync-unrepaired: $(cat "$TMP/err")$out" ;;
+esac
+rm -f "$BIN/check-enclave-ca-consistency.sh"
+unset STUB_SECRET_FAIL
+[ -n "$_prev_secret_behaviour" ] && export STUB_SECRET_FAIL="$_prev_secret_behaviour"
+
+# ------------------------------------------------------- scenario: 1004-inkc
+# REMOVED IS NOT HEALTHY — lenovinha's two readings, reproduced as a fixture.
+#
+# Measured on lenovinha-silverblue 2026-09-04, minutes apart, nothing repaired
+# between them:
+#   proxy DOWN     -> degraded:enclave-service-health:services=6:up=5:down=1
+#   proxy REMOVED  -> ok:enclave-service-health:services=5:up=5:down=0:dead=0:absent=0
+# The service went from stopped to NONEXISTENT and the verdict went from
+# degraded to ok, printing absent=0 while a required service was absent.
+#
+# The cause is that the enumeration walks what EXISTS: a deleted member is
+# invisible to it, and without a declaration it never reaches the absent loop
+# either. So `podman rm` satisfies the health check — a gate that deleting the
+# broken thing can pass is not a gate.
+#
+# THIS ARM USES NO --expect ON PURPOSE. Scenario 6 above already proves the
+# absent loop works when a declaration is PASSED IN; that arm passed throughout
+# the entire period this defect was live, which is exactly why it did not catch
+# it. What is under test here is that the check supplies its own expected set
+# from images/default/enclave-services.txt when nobody hands it one.
+_declared="$ROOT/images/default/enclave-services.txt"
+if [ ! -r "$_declared" ]; then
+    bad "1004-inkc: images/default/enclave-services.txt is unreadable — the default expected set cannot be tested"
+else
+    # (a) BOTH declared services running -> ok. The anchor host is provisioned.
+    export PS_OUT="tillandsias-vault|running|0|${now}|0|0
+tillandsias-proxy|running|0|${now}|0|0"
+    out="$(EXPECT_OVERRIDE= run)"
+    case "$out" in
+        ok:enclave-service-health:*absent=0*)
+            ok "1004-inkc(a) declared set present, no --expect -> ok" ;;
+        *) bad "1004-inkc(a) expected ok with absent=0, got '$out'" ;;
+    esac
+
+    # (b) THE DEFECT: the proxy ROW IS DELETED, no --expect. Vault still exists,
+    # so the host IS provisioned and the anchor rule must not excuse this.
+    export PS_OUT="tillandsias-vault|running|0|${now}|0|0"
+    out="$(EXPECT_OVERRIDE= run)"
+    err="$(cat "$TMP/err")"
+    case "$out" in
+        ok:*)
+            bad "1004-inkc(b) REMOVED READ AS HEALTHY — 'podman rm' satisfied the check: '$out'" ;;
+        degraded:enclave-service-health:*absent=0*)
+            bad "1004-inkc(b) degraded but absent=0 — the absent count is not computed: '$out'" ;;
+        degraded:enclave-service-health:*absent=[1-9]*)
+            case "$err" in
+                *"fail:enclave-service-absent:service=tillandsias-proxy"*)
+                    ok "1004-inkc(b) deleted required service -> degraded, absent>=1, proxy named" ;;
+                *) bad "1004-inkc(b) absent counted but tillandsias-proxy not named: $err" ;;
+            esac ;;
+        *) bad "1004-inkc(b) got '$out'" ;;
+    esac
+
+    # (c) THE ANCHOR RULE, and the reason this fix is not simply "always
+    # expect". A host that has NEVER provisioned an enclave has no vault, is
+    # missing nothing, and must still read ok. A check that fires on a
+    # correctly-configured laptop gets switched off, which is how the original
+    # gap survived — so this arm is as load-bearing as (b).
+    export PS_OUT=""
+    out="$(EXPECT_OVERRIDE= run)"
+    case "$out" in
+        ok:*|blocked:*)
+            ok "1004-inkc(c) never-provisioned host (no vault) -> not reported absent" ;;
+        *) bad "1004-inkc(c) unprovisioned host cried wolf: '$out'" ;;
+    esac
 fi
 
 echo "---"

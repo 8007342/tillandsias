@@ -38,3 +38,10 @@ tillandsias-podman = { path = "../tillandsias-podman" }
 mlua = { version = "0.10", features = ["vendored", "lua54", "send", "serialize"] }
 tokio = { workspace = true }
 chrono = { workspace = true }
+
+[dev-dependencies]
+# ORDER 977-dpbj. proptest, not quickcheck: integrated shrinking that respects
+# custom generators, plus seeded reproduction — this suite needs both, because
+# its generators are hand-built (comparable pairs cannot be drawn independently)
+# and a failing case must survive the run that found it.
+proptest = "1"

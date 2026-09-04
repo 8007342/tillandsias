@@ -14,6 +14,7 @@ Establish a Unix-socket control plane for out-of-band communication between the 
 ## Requirements
 
 ### Requirement: Socket Creation and Lifecycle
+<!-- req-id: 09d88b25 -->
 
 The tray process SHALL:
 
@@ -31,6 +32,7 @@ The tray process SHALL:
 - **THEN** socket is removed after all container teardown completes
 
 ### Requirement: Wire Format and Framing
+<!-- req-id: d2e56cbf -->
 
 Messages sent over the socket SHALL use postcard binary serialization (no JSON) with length-prefixed framing:
 
@@ -55,6 +57,7 @@ defaulted at 8 MiB and silently widened every reader here 128x.
 - **AND** deserializes the message into a strongly-typed enum
 
 ### Requirement: Message Types and Capability-Based Routing
+<!-- req-id: 89c005d3 -->
 
 The control protocol defines a typed message enum that grows over time:
 
@@ -75,6 +78,7 @@ Each message type is registered with the tray-side router at startup. Unrecogniz
 - **AND** other message types are not visible to the Otp consumer
 
 ### Requirement: Error Handling and Reliability
+<!-- req-id: c0d1d805 -->
 
 - Malformed messages (deserialization failures) are logged and the connection is closed
 - Socket read/write errors (EINTR, EPIPE, ECONNRESET) are logged but do not crash the tray

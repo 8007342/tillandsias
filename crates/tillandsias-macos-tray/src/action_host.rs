@@ -585,87 +585,6 @@ async fn request_vm_shutdown(vz: &VzRuntime, drain_timeout: Duration) -> Result<
     }
 }
 
-/// Map a wire `LocalProjectEntry` ({label, guest_path,
-/// last_seen_unix}) onto the shared menu `ProjectEntry` the local-
-/// projects submenu renders. `ProjectEntry::path` is the in-VM
-/// guest path (the VM mounts the host's `~/src/` via virtio-fs so
-/// the guest path is what "Attach Here" actually targets). `ready`
-/// defaults to false — per-project forge readiness isn't carried
-/// by `LocalProjectsReply` yet; a future PerProjectStatusReply
-/// would be the right place to populate it.
-fn local_entry_to_menu(
-    entry: &tillandsias_control_wire::LocalProjectEntry,
-) -> tillandsias_host_shell::menu_state::ProjectEntry {
-    tillandsias_host_shell::menu_state::ProjectEntry {
-        name: entry.label.clone(),
-        path: entry.guest_path.clone(),
-        ready: false,
-        full_name: None,
-    }
-}
-
-/// One-shot `EnumerateLocalProjects` over the in-VM control wire.
-/// Mirrors `poll_cloud_projects_once` but consumes Linux's
-/// `EnumerateLocalProjects` handler (commit `05cc3a7d`) — each host
-/// (including macOS) walks its in-VM mount of the host's `~/src/`
-/// via virtio-fs, returning one entry per visible directory.
-///
-/// Returns `Vec<ProjectEntry>` mapped from `LocalProjectEntry`.
-/// Best-effort: a transient wire error returns `Err(String)` so the
-/// caller can log + leave the last-known list untouched.
-///
-/// @trace spec:host-shell-architecture,
-///        plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 19)
-async fn poll_local_projects_once(
-    vz: &VzRuntime,
-) -> Result<Vec<tillandsias_host_shell::menu_state::ProjectEntry>, String> {
-    use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
-    use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
-    use tillandsias_host_shell::vsock_client::Client;
-
-    let connect_timeout = Duration::from_secs(5);
-    let stream = open_control_wire_stream(vz, CONTROL_WIRE_VSOCK_PORT, connect_timeout).await?;
-
-    let mut client = Client::from_stream(
-        Box::new(stream),
-        Transport::Vsock {
-            cid: TILLANDSIAS_GUEST_CID,
-            port: CONTROL_WIRE_VSOCK_PORT,
-        },
-    );
-    client
-        .handshake()
-        .await
-        .map_err(|e| format!("control-wire handshake: {e}"))?;
-
-    if let Err(err) =
-        crate::installation_uuid::deliver_credentials_and_check_handover(&mut client).await
-    {
-        tracing::warn!(%err, "credentials delivery / handover check failed during local projects poll");
-    }
-
-    let seq = client.allocate_seq();
-    let envelope = ControlEnvelope {
-        wire_version: WIRE_VERSION,
-        seq,
-        body: ControlMessage::EnumerateLocalProjects { seq },
-    };
-    let reply = client
-        .request(&envelope)
-        .await
-        .map_err(|e| format!("EnumerateLocalProjects: {e}"))?;
-
-    match reply.body {
-        ControlMessage::LocalProjectsReply { entries, .. } => {
-            Ok(entries.iter().map(local_entry_to_menu).collect())
-        }
-        ControlMessage::Error { code, message, .. } => Err(describe_wire_error(code, &message)),
-        other => Err(format!(
-            "unexpected reply to EnumerateLocalProjects: {other:?}"
-        )),
-    }
-}
-
 /// Map a wire `CloudProjectEntry` ({label, owner, repo,
 /// default_branch}) onto the shared menu `ProjectEntry` the cloud-
 /// projects submenu renders. `ProjectEntry::path` is the `owner/repo`
@@ -1280,9 +1199,18 @@ async fn run_pty_attach(
         .map_err(|e| format!("session socket bind {}: {e}", sock_path.display()))?;
     let sock_path_str = sock_path.to_string_lossy().into_owned();
 
-    if let Err(e) = crate::terminal_attach::spawn_terminal_pty_attach(&slave_path, &sock_path_str) {
-        eprintln!("[tillandsias-tray] terminal spawn failed: {e}");
-    }
+    // Whether a WINDOW WAS ASKED FOR is the discriminator the geometry
+    // fallback below needs (702-6jza D2): if this spawn failed there is no
+    // window to interrogate, and asking anyway is how a headless launch turns
+    // into a hang.
+    let terminal_spawned =
+        match crate::terminal_attach::spawn_terminal_pty_attach(&slave_path, &sock_path_str) {
+            Ok(()) => true,
+            Err(e) => {
+                eprintln!("[tillandsias-tray] terminal spawn failed: {e}");
+                false
+            }
+        };
 
     // Event-driven geometry gate (replaces the former 100ms seed poll): the
     // attach client's Hello carries the window's true size the instant the
@@ -1313,10 +1241,42 @@ async fn run_pty_attach(
             }
             early_client = Some(stream);
         }
-        _ => eprintln!(
-            "[tillandsias-tray] pty-attach: no attach client within 10s; \
-             launching at 24x80 (a late client will reconcile via resize)"
-        ),
+        _ => {
+            // ORDER 702-6jza D2. The client never reported. Do NOT birth the
+            // guest PTY at 24x80 that a real window contradicts: ASK THE
+            // WINDOW. Measured on this host 2026-09-02 — Terminal.app's actual
+            // window was 39x131 and its default profile 30x120, so 24x80 was
+            // wrong on both axes and the forge's first frame was laid out for
+            // a terminal nobody had.
+            //
+            // Only when a window was actually requested, and always bounded:
+            // see query_tagged_window_geometry on why the budget IS the
+            // headless negative control.
+            let queried = if terminal_spawned {
+                crate::terminal_attach::query_tagged_window_geometry(
+                    &sock_path_str,
+                    Duration::from_secs(3),
+                )
+                .await
+            } else {
+                None
+            };
+            match queried {
+                Some((rows, cols)) => {
+                    eprintln!(
+                        "[tillandsias-tray] pty-attach: no attach client within 10s; \
+                         seeding at the window's own {rows}x{cols} (a late client \
+                         will reconcile via resize)"
+                    );
+                    seed = (rows, cols);
+                }
+                None => eprintln!(
+                    "[tillandsias-tray] pty-attach: no attach client within 10s and no \
+                     window geometry (terminal_spawned={terminal_spawned}); launching at \
+                     24x80 (a late client will reconcile via resize)"
+                ),
+            }
+        }
     }
     eprintln!(
         "[tillandsias-tray] pty-attach: seeding forge at {}x{} (attach-client geometry)",
@@ -1511,9 +1471,18 @@ async fn run_start(
         vz.fetch_fedora_cloud_image(&manifest, on_phase)
             .await
             .map_err(|e| {
+                // NO LONGER TELLS THE OPERATOR TO INSTALL QEMU (980-xcaf).
+                // That advice could never have worked from a GUI launch: the
+                // tray's PATH is /usr/bin:/bin:/usr/sbin:/sbin, so a
+                // Homebrew-installed qemu-img was never reachable, and the
+                // operator who followed it hit the identical failure and
+                // reasonably concluded the install had not taken. Conversion
+                // is in-process now, so any failure here is ours.
                 format!(
                     "Fedora Cloud image fetch failed: {e}\n\n\
-                     Install qemu (`brew install qemu`) if conversion failed, \
+                     This is a download or disk-space problem, not a missing \
+                     tool — image conversion no longer needs anything \
+                     installed on the host. Check connectivity and free space, \
                      then retry Start VM."
                 )
             })?;
@@ -2197,19 +2166,20 @@ use tillandsias_host_shell::subscription_health::{
 };
 
 /// The exact topic set the dedicated push connection subscribes to. Slice 2
-/// widened this from `[VmStatus]` to all three topics now that the tray
-/// consumes the order 230/231 guest push sources; pinned by
-/// `push_subscribe_topics_is_all_four_slice3`. Slice 3 (order 155) added
-/// LocalProjects now that order 260 shipped its guest-side push source —
-/// so the tick loop's last steady-state poll (local projects) can be
-/// demoted to fallback-only like the others (SC-07), which is what lets
-/// the timer become a pure fallback path (SC-01/02).
+/// widened this from `[VmStatus]` to the guest push sources of orders 230/231;
+/// pinned by `push_subscribe_topics_has_no_local_projects`.
+///
+/// ORDER 997-e4v2 REMOVED LocalProjects. The tray no longer consumes local
+/// projects at all — Cloud is the only project path — so subscribing would ask
+/// the guest to push a list nothing reads. The wire VARIANT still exists and is
+/// deliberately untouched here: it comes out with the headless side once
+/// host-shell drops its consumer, because removing it before then breaks all
+/// three trays at once.
 fn push_subscribe_topics() -> Vec<tillandsias_control_wire::SubscriptionTopic> {
     vec![
         tillandsias_control_wire::SubscriptionTopic::VmStatus,
         tillandsias_control_wire::SubscriptionTopic::LoginState,
         tillandsias_control_wire::SubscriptionTopic::CloudProjects,
-        tillandsias_control_wire::SubscriptionTopic::LocalProjects,
     ]
 }
 
@@ -2375,27 +2345,6 @@ fn apply_cloud_projects(
     guard.cloud_projects = projects;
     drop(guard);
     eprintln!("[tillandsias-tray] cloud-projects: menu_state updated ({new_count} entries)");
-    true
-}
-
-/// Apply a live local-projects observation — from a poll reply or an
-/// unrequested `LocalProjectsPush` frame (full replacement list) — to the
-/// shared `MenuState`. Returns whether the menu needs a rebuild; idempotent
-/// on repeat. Slice 3 (order 155): shared by the push listener and the
-/// fallback tick poll so both surfaces stay byte-identical, mirroring
-/// `apply_cloud_projects`.
-fn apply_local_projects(
-    projects: Vec<tillandsias_host_shell::menu_state::ProjectEntry>,
-    menu_state: &Arc<Mutex<tillandsias_host_shell::menu_state::MenuState>>,
-) -> bool {
-    let new_count = projects.len();
-    let mut guard = menu_state.lock().unwrap();
-    if guard.local_projects == projects {
-        return false;
-    }
-    guard.local_projects = projects;
-    drop(guard);
-    eprintln!("[tillandsias-tray] local-projects: menu_state updated ({new_count} entries)");
     true
 }
 
@@ -2761,20 +2710,6 @@ async fn run_push_listener(
             tracing::debug!(%err, "cloud-projects initial-sync request failed; reconnecting");
             continue;
         }
-        // Slice 3 (order 155): prime local projects too — its push is
-        // change-gated like the others, so a subscriber joining a
-        // steady-state VM needs one EnumerateLocalProjects to render the
-        // current list. Reply routes through the LocalProjectsReply arm.
-        let seq = client.allocate_seq();
-        let prime_local = ControlEnvelope {
-            wire_version: WIRE_VERSION,
-            seq: client.allocate_seq(),
-            body: ControlMessage::EnumerateLocalProjects { seq },
-        };
-        if let Err(err) = client.send_envelope(&prime_local).await {
-            tracing::debug!(%err, "local-projects initial-sync request failed; reconnecting");
-            continue;
-        }
 
         loop {
             match client.next_envelope().await {
@@ -2887,22 +2822,6 @@ async fn run_push_listener(
                             );
                         }
                     }
-                    ControlMessage::LocalProjectsPush { entries, .. }
-                    | ControlMessage::LocalProjectsReply { entries, .. } => {
-                        // Slice 3 (order 155): LocalProjects now has a push
-                        // source (order 260), so the tick loop's last
-                        // steady-state poll rides the stream too. Same
-                        // shared applier as the fallback poll.
-                        let mapped = entries.iter().map(local_entry_to_menu).collect();
-                        if apply_local_projects(mapped, &menu_state) {
-                            dispatch_rebuild(
-                                &menu_state,
-                                &status_item,
-                                &status_menu_item,
-                                &self_handle,
-                            );
-                        }
-                    }
                     other => {
                         tracing::debug!("push stream: ignoring frame {}", other.kind());
                     }
@@ -2977,30 +2896,17 @@ fn spawn_vm_status_poller(
         loop {
             // Cloud + local projects: first tick + every 10 ticks.
             // The cadence rationale (slower than VmStatus) is in the
-            // cloud-poll docstring — gh repo list / local fs scan are
-            // both slow-changing relative to phase. Local goes first
-            // because `~/src/` walks are virtually free vs `gh`.
+            // cloud-poll docstring — `gh repo list` is slow-changing
+            // relative to phase. Order 997-e4v2 removed the local-projects
+            // poll that used to lead this block: there is no local project
+            // path any more.
             let mut rebuild_needed = false;
             if tick.is_multiple_of(10) {
-                // SC-07 (slice 3): local projects are now push-backed too
-                // (order 260 shipped LocalProjectsPush), so ALL three
-                // slow-cadence polls — local, cloud, login — are
-                // fallback-only. While the push subscription is delivering,
+                // SC-07 (slice 3): the remaining slow-cadence polls — cloud
+                // and login — are fallback-only. While the push subscription is delivering,
                 // the reader task owns every topic and this whole block is
                 // skipped; the tick loop is a pure fallback path (SC-01/02).
                 if should_poll_fallback(health.is_healthy()) {
-                    match poll_local_projects_once(&vz).await {
-                        Ok(projects) => {
-                            if apply_local_projects(projects, &menu_state) {
-                                rebuild_needed = true;
-                            }
-                        }
-                        Err(e) => {
-                            if vm_ever_ready.load(std::sync::atomic::Ordering::SeqCst) {
-                                eprintln!("[tillandsias-tray] local-projects poll: {e}");
-                            }
-                        }
-                    }
                     match poll_cloud_projects_once(&vz).await {
                         Ok((projects, confirmed)) => {
                             if apply_cloud_projects(projects, confirmed, &menu_state) {
@@ -3275,52 +3181,31 @@ mod tests {
     // tillandsias_host_shell::subscription_health alongside the hoisted
     // implementations — no local duplicate here.
 
-    /// Slice-3 topic pin: the dedicated push connection subscribes to all
-    /// FOUR topics now that order 260 shipped LocalProjectsPush and the
-    /// tray consumes it. Fails loud if the topic list drifts without
+    /// Topic pin: the dedicated push connection subscribes to exactly the
+    /// topics the reader loop consumes. Fails loud if the list drifts without
     /// matching reader-loop consumers (each topic here MUST have an arm in
     /// run_push_listener + an initial-sync prime).
+    ///
+    /// ORDER 997-e4v2 dropped LocalProjects, so this asserts its ABSENCE as
+    /// well as the remaining three. Asserting only the three would pass on a
+    /// list that had quietly regained a fourth, which is the shape this pin
+    /// exists to catch — the tray would resubscribe to a topic whose arm no
+    /// longer exists and silently drop every frame.
     #[test]
-    fn push_subscribe_topics_is_all_four_slice3() {
+    fn push_subscribe_topics_has_no_local_projects() {
         assert_eq!(
             push_subscribe_topics(),
             vec![
                 tillandsias_control_wire::SubscriptionTopic::VmStatus,
                 tillandsias_control_wire::SubscriptionTopic::LoginState,
                 tillandsias_control_wire::SubscriptionTopic::CloudProjects,
-                tillandsias_control_wire::SubscriptionTopic::LocalProjects,
             ]
         );
-    }
-
-    /// `apply_local_projects` reports a rebuild exactly on change and is
-    /// idempotent on repeat (slice 3 — shared by the push listener and the
-    /// fallback tick poll, mirroring apply_cloud_projects).
-    #[test]
-    fn apply_local_projects_reports_rebuild_only_on_change() {
-        use tillandsias_host_shell::menu_state::ProjectEntry;
-        let menu_state = Arc::new(Mutex::new(
-            tillandsias_host_shell::menu_state::MenuState::initial(),
-        ));
-        let mk = || {
-            vec![ProjectEntry {
-                name: "tillandsias".into(),
-                path: "/home/forge/src/tillandsias".into(),
-                ready: false,
-                full_name: None,
-            }]
-        };
         assert!(
-            apply_local_projects(mk(), &menu_state),
-            "first non-empty local list must request a rebuild"
-        );
-        assert!(
-            !apply_local_projects(mk(), &menu_state),
-            "identical local list must not re-request a rebuild"
-        );
-        assert!(
-            apply_local_projects(Vec::new(), &menu_state),
-            "clearing the list is a change and must request a rebuild"
+            !push_subscribe_topics()
+                .contains(&tillandsias_control_wire::SubscriptionTopic::LocalProjects),
+            "LocalProjects has no consumer since 997-e4v2; subscribing would ask the guest \
+             to push a list nothing reads"
         );
     }
 
@@ -3969,26 +3854,6 @@ mod tests {
             "chip must stay within budget: {text:?}"
         );
         assert!(text.ends_with('…'), "long event should ellipsize: {text:?}");
-    }
-
-    /// `local_entry_to_menu` translates a Linux-side
-    /// `LocalProjectEntry` (commit `05cc3a7d` — label + guest_path +
-    /// last_seen_unix) into the shared menu `ProjectEntry`
-    /// (name + path + ready). Path is the in-VM guest_path because
-    /// that's what "Attach Here" passes to the in-VM exec call.
-    /// Ready defaults to false until a per-project status reply
-    /// lands.
-    #[test]
-    fn local_entry_maps_label_to_name_and_guest_path() {
-        let wire = tillandsias_control_wire::LocalProjectEntry {
-            label: "tillandsias".to_string(),
-            guest_path: "/host-mnt/src/tillandsias".to_string(),
-            last_seen_unix: 1_700_000_000,
-        };
-        let menu = local_entry_to_menu(&wire);
-        assert_eq!(menu.name, "tillandsias");
-        assert_eq!(menu.path, "/host-mnt/src/tillandsias");
-        assert!(!menu.ready, "local entry ready defaults to false");
     }
 
     /// `cloud_entry_to_menu` produces the byte-identical `ProjectEntry`

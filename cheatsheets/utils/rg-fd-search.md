@@ -15,7 +15,7 @@ committed_for_project: false
 ---
 # ripgrep and fd
 
-@trace spec:agent-source-of-truth
+@trace spec:knowledge-source-of-truth
 
 **Version baseline**: ripgrep 14.1.0, fd 10.0.0 (Fedora 43)  
 **Use when**: Searching code/files (ripgrep) or finding files by name/pattern (fd)

@@ -9,6 +9,21 @@
 # eats stdin, probe B's step prints a marker. Both must execute.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Name the reader explicitly. The runner reads its OWN metadata (bindings, probe
+# yaml) through the compiled tillandsias-plan when one resolves, and falls back
+# to yq/grep otherwise (746-htj9). PROJECT_ROOT here is the TEMP root, whose
+# target/ is empty, so the resolve finds nothing and the fallback needs yq on
+# PATH — which no macOS host has. Without the override no probe ran at all, so
+# the fixture failed for a reason unrelated to stdin consumption.
+. "$ROOT/scripts/plan-binary-probe.sh"
+PLAN_BIN="$(cd "$ROOT" && resolve_plan_binary)" || {
+    echo "SKIP: no runnable tillandsias-plan to read the fixture's own metadata (956-llei)"
+    exit 0
+}
+# The probe prints a path relative to the checkout; the arm cds into the temp
+# root, so absolutize it here or the override names nothing.
+case "$PLAN_BIN" in /*) ;; *) PLAN_BIN="$ROOT/${PLAN_BIN#./}" ;; esac
+
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/litmus-stdin.XXXXXX")"; trap 'rm -rf "$tmp"' EXIT
 mkdir -p "$tmp/openspec/litmus-tests" "$tmp/methodology" "$tmp/target"
 ln -s "$ROOT/scripts" "$tmp/scripts"
@@ -55,7 +70,7 @@ critical_path:
     expected_behavior: "ok: SECOND-PROBE-RAN"
 EOF
 
-out="$(cd "$tmp" && bash "$tmp/scripts/run-litmus-test.sh" "$spec_slug" --phase pre-build 2>&1)" && rc=0 || rc=$?
+out="$(cd "$tmp" && TILLANDSIAS_PLAN_BIN="$PLAN_BIN" bash "$tmp/scripts/run-litmus-test.sh" "$spec_slug" --phase pre-build 2>&1)" && rc=0 || rc=$?
 pass=0; fail=0
 check() { if [ "$1" = ok ]; then pass=$((pass+1)); echo "ok   $2"; else fail=$((fail+1)); echo "FAIL $2"; fi; }
 grep -q "Executing ${a_name}" <<<"$out" && check ok "eater probe executed" || check FAIL "eater probe executed"

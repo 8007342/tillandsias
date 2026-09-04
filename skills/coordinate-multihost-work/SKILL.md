@@ -120,6 +120,99 @@ To guarantee convergence in finite time, the orchestrator MUST track and enforce
 -   A host waiting for remote integration MUST be assigned an independent
     fallback unless all eligible work is blocked.
 -   **Assign Stable Work Items**: Each assignment must specify: `id`, `owner_host`, `status`, dependencies, owned files, next concrete action, expected evidence, and `agent_status_packet` expectations.
+-   **Cross-host recurrence audit** (order 1001-q3zf). The meta-orchestration
+    handoff REQUIRES pasting the cycle-metrics output verbatim, which is how
+    the `recur:` and `skippable:` lines are meant to reach
+    `plan/loop_status.d/`. That is a rule, not an observed behaviour: on
+    2026-09-04 only 17 of 353 loop_status entries carried a `timing:` line,
+    none carried `recur:`, and the newest entry of every host had none. So
+    the audit has two outcomes and BOTH are findings. Once per pass, read the
+    NEWEST entry per host — the host set is derived from the file names, not
+    a roster that goes stale, and the grep is token-anchored because entries
+    arrive bare, as `- recur:` bullets, and inline inside backticked prose
+    joined by ` · ` or ` | `, so a `^recur:` grep undercounts. The stem is
+    everything after the `<timestamp>z-[<8hex>-]` prefix, NOT the text after
+    the last dash: session stems carry dashes of their own
+    (`lenovinha-tillandsias-forge`, `macuahuitl-tillandsias-forge`, and a
+    bare `forge`), and a last-dash split collapsed all three into one `forge`
+    row that read only lenovinha's newest entry while macuahuitl's five
+    entries got no row at all (adversarial review, 2026-09-04) — a dropped
+    host under-counts the two-or-more-hosts trigger below. Files that do not
+    carry the prefix (the README) are not hosts and are skipped:
+
+    ```bash
+    # A stem that is a PLATFORM LABEL is a shared bucket, not a host (order
+    # 1012-hu7d): `loop-status-append` without --host falls back to
+    # TILLANDSIAS_HOST_KIND, unset in agent shells, and writes under `linux`,
+    # `macos`, `windows`, `forge`, `linux-immutable` or `linux-mutable`. On
+    # 2026-09-04 the `linux` stem held 56 entries from at least three hosts,
+    # most of them the coordinator's own. Report buckets by count; never read
+    # one as a host, and never read a host as silent because its entries sit
+    # in a bucket — ask the host, or read the bucket's newest entry by hand.
+    buckets='^(linux|macos|windows|forge|linux-immutable|linux-mutable)$'
+    for h in $(ls plan/loop_status.d/*.md \
+               | grep -E '/[0-9]{8}t[0-9]{6}z-([0-9a-f]{8}-)?[^/]+\.md$' \
+               | sed -E 's#.*/[0-9]{8}t[0-9]{6}z-([0-9a-f]{8}-)?##; s/\.md$//' | sort -u); do
+      if printf '%s' "$h" | grep -qE "$buckets"; then
+        echo "unattributed-bucket $h entries=$(ls plan/loop_status.d/*.md | grep -cE "z-([0-9a-f]{8}-)?$h\.md$")"
+        continue
+      fi
+      # Sort by NAME, never by mtime: after a merge or checkout every file's mtime
+      # is the checkout time, and `ls -t` read yoga's 09:30Z backfill as newer
+      # than its 11:29Z entry (macuahuitl, 2026-09-04T12:09Z).
+      f=$(ls plan/loop_status.d/*.md | grep -E "z-([0-9a-f]{8}-)?$h\.md$" | sort -r | head -1)
+      [ -n "$f" ] || continue
+      l=$(grep -ho 'skippable: [^`|·]*' "$f" | tail -1)
+      echo "$h ${l:-NOT-PASTING ($f)}"
+    done
+    ```
+
+    Re-run the loop after editing it and confirm every multi-dash stem gets
+    its own row; the row count must equal the distinct-stem count.
+
+    An empty result for a host means THAT HOST IS NOT PASTING its
+    cycle-metrics — route it as a plain ask to that host ("paste the
+    cycle-metrics output verbatim in your handoff"); never read silence as
+    "no candidates". Parse a present entry FROM THE RIGHT — step names
+    contain colons; the step is everything before the first `:runs=`. When
+    the SAME step tops `skippable:` on two or more hosts, file ONE packet to
+    memoise or skip it, citing each host's `runs=`, `avg_ms=`, `fail_pct=`
+    and `saved_ms_upper=` (a bound, and say so: the log carries no input
+    identity, so nobody can claim a run would have hit a cache). Never act
+    on one host's reading alone — attach the regime; a step that is
+    invariant on a fat host may be the one that fails on a floor host. If
+    `recur:` shows a step's cumulative total rising cycle over cycle on every
+    host while `skippable:` never names it, that is the outcome-varying
+    repeat the tree-digest rung (named in the 1001-q3zf packet's
+    next_action) exists to measure; do not guess at it.
+-   **Every dispatch MUST carry the credential preflight** (order 982-sguu). A
+    dispatched task is an entry path into committable work that does NOT pass
+    through the meta-orchestration loop, so it skips that loop's Start-of-Cycle
+    credential check. Name this in the message and require it before the host
+    starts:
+
+    ```bash
+    scripts/check-credential-channel.sh    # blocked:* -> stop and report, do not work
+    ```
+
+    WHY THIS IS HERE AND NOT LEFT TO THE HOST. On 2026-09-03 I dispatched a
+    floor host a diagnosis ask and told it to skip the loop as a one-off. It
+    spent about ninety minutes producing measurements and discovered by a FAILED
+    PUSH, after all the work was done, that its upstream refuses writes. Every
+    layer of 756-2jnj behaved correctly; the host simply never went through the
+    door the guard is nailed to. That is the 2026-08-15 "detection too late"
+    shape the guard was built to eliminate, reproduced through a different entry
+    path, and the coordinator caused it.
+
+    The guard has ONE production caller in the whole tree
+    (`scripts/forge-validate.sh`) and is otherwise a manual step named only in
+    the meta-orchestration skill. `scripts/cycle-preflight.sh` does NOT run it —
+    it only mentions it in a comment explaining why it does not duplicate the
+    message. So a host that never enters the loop never runs it at all.
+
+    A `blocked:*` verdict means STOP AND REPORT, not work-then-discover. The
+    cost of skipping this is one host-cycle of finished work that cannot be
+    landed, and the coordinator then has to relay it by hand.
 
 ---
 
@@ -170,7 +263,8 @@ Run this before ending the loop whenever `origin/windows-next` or `origin/osx-ne
 
 Maintain the loop-status quick-start cache (under 80 lines per entry) as
 `## Cycle` entries: write each entry as a NEW fragment with
-`tillandsias-plan loop-status-append --host <host> --ts <ISO>`, and read the
+`tillandsias-plan loop-status-append --host <host> --ts <ISO> --file fragment.md`
+(`< fragment.md` and a bare path also work; order 1004-8vkv), and read the
 folded view with `tillandsias-plan loop-status` — NEVER edit the shared
 `plan/loop_status.md` directly, or a concurrent host's status write conflicts
 for the same reason the old monolithic ledger did (packet 582-nqw5):

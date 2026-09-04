@@ -16,6 +16,7 @@ supersedes the older `forge-standalone-runner` artifact set.
 ## Requirements
 
 ### Requirement: Standalone forge runner uses the forge image only
+<!-- req-id: 5eb85239 -->
 
 The standalone runner SHALL launch `tillandsias-forge:v<VERSION>` directly and
 MUST NOT start the proxy, git, inference, or tray stack.
@@ -27,6 +28,7 @@ MUST NOT start the proxy, git, inference, or tray stack.
 - **AND** no sidecar containers are created
 
 ### Requirement: Source mount is project-scoped
+<!-- req-id: 7e242820 -->
 
 The runner SHALL mount exactly the basename of `--src` at
 `/home/forge/src/<project>`.
@@ -37,6 +39,7 @@ The runner SHALL mount exactly the basename of `--src` at
 - **AND** no other host directory SHALL be mounted for project content
 
 ### Requirement: Interactive bash session
+<!-- req-id: d024cc77 -->
 
 The runner SHALL drop into an interactive bash session inside the forge image.
 
@@ -46,6 +49,7 @@ The runner SHALL drop into an interactive bash session inside the forge image.
 - **AND** the forge tools baked into the image are available on PATH
 
 ### Requirement: Full network access without enclave wiring
+<!-- req-id: ba637036 -->
 
 The standalone runner SHALL not apply the enclave network, proxy chain, or git
 mirror wiring. The container may use the normal Podman network so the operator
@@ -57,6 +61,7 @@ can reach external services while debugging.
 - **AND** no proxy or git sidecars are required
 
 ### Requirement: Runner is fail-fast and explicit
+<!-- req-id: 52d017d1 -->
 
 The runner SHALL fail with a clear error if `--src` is missing, invalid, or the
 forge image is absent.

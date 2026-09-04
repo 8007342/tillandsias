@@ -125,3 +125,54 @@ container image (`scripts/build-image.sh git lane` or `--ci-full`), recreate
 the stack, verify `git ls-remote <origin> 'refs/tillandsias/upstream-auth/*'`
 publishes `authorized/<epoch>`. Every forge cycle will continue to fail-closed
 at this gate until the probe publishes.
+
+## Update 2026-09-03T07:00Z (esmeraldinha forge, WSL2) — machinery PROVEN GOOD, credential still denied
+
+Supersedes the 2026-08-17T05:27Z "verdict refs STILL absent" entry AND the
+"smallest next action" above it, which told the operator to rebuild the
+`tillandsias-git` image. That rebuild is now known to be unnecessary on this
+host: the machinery works and the only broken thing is the token. Measured by
+esme-tillandsias-wsl2 and landed here by macuahuitl, because that host cannot
+push — which is itself order 982-sguu.
+
+Regime: esmeraldinha, N100/WSL2 forge, v56.9.2.1, mirror
+`git://git-o31ujllgc1il9hv1oiig/tillandsias`.
+
+VERDICT MACHINERY IS HEALTHY HERE — the 702-griq stale-image half is fixed on
+this host. `refs/tillandsias/upstream-auth/denied/permission/1788418668` was 48
+SECONDS old when read; `scripts/check-credential-channel.sh` printed
+`blocked:upstream-push-unauthorized` and exited 1 (true exit code, not a
+pipeline's). No diagnostic surface misreports: the container HEALTHCHECK is
+green throughout, but it is `nc` against the daemon port, scoped and documented
+as daemon readiness, and the purpose-built probe covers the write question. Not
+a lying-tool finding, and esme explicitly declined to record one.
+
+THE HOP IS MIRROR -> GITHUB ON WRITE, not forge -> mirror. Fetch and ls-remote
+rc=0 with the trunk advancing during the test; the mirror ACCEPTS the push, then
+its relay fails upstream and refuses the transaction atomically: "[relay]
+Pre-push fetch succeeded" then "Permission to 8007342/tillandsias.git denied to
+8007342" / 403. The latest/stable/unstable "would clobber existing tag" lines
+are the reconcile fallback after the real failure, not a second fault.
+
+CREDENTIAL IS PRESENT-AND-REFUSED, established four ways without reading the
+secret: relay-refs.sh's absent-credential branch never fired (so the Vault read
+of `secret/github/token` succeeded and the Agent sink is healthy — NOT the
+414/424 "do NOT run GitHub Login" case); the relay's own pre-push fetch used the
+same credential successfully; GitHub named the account before refusing; and
+probe-upstream-auth.sh's classifier chose `permission` while its `sso` and
+`unauthenticated` arms did not match, positively ruling out an SSO gap and an
+auth failure.
+
+DO NOT INFER A SCOPE PROBLEM FROM THE WORDING. "Denied to 8007342" on 8007342's
+own repo reads like a fine-grained-PAT scope fault and is not reliably that: on
+2026-08-15 the identical string was an EXPIRED PAT (809-w2xy). Expired,
+wrong-scope and removed-collaborator are indistinguishable from inside a forge.
+esme nearly filed the scope reading and stopped itself; recorded because the
+next reader will have the same instinct.
+
+**Smallest operator action, superseding the one above:** on esmeraldinha, renew
+the GitHub PAT at github.com/settings/tokens (check EXPIRY FIRST), confirm it
+carries repo write to 8007342/tillandsias, re-seed Vault `secret/github/token`
+on that host, and verify `git ls-remote <origin> 'refs/tillandsias/upstream-auth/*'`
+shows `authorized/<epoch>`. Do NOT import host credentials. Do NOT rebuild the
+git image for this.

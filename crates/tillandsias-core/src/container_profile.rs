@@ -275,6 +275,15 @@ pub fn forge_opencode_profile() -> ContainerProfile {
         pids_limit: 4096, // Compilers, language servers, AI tools — 512 was
         // reachable by one installer fork storm (667-se87/959-fpc5)
         read_only: false, // Forge needs mutable workspace
+        // ORDER 997-e4v2: THREE of forge-hot-cold-split's four HOT paths, and
+        // the fourth is deliberately absent HERE rather than forgotten.
+        // /home/forge/src is sized per launch by compute_hot_budget() from the
+        // project mirror's pack size, which `tmpfs_mounts: Vec<&'static str>`
+        // cannot express; it is emitted at the live launch site instead, by
+        // `forge_hot_src_tmpfs` in tillandsias-headless/src/main.rs. These
+        // constants have no non-test callers, so a reader who "completes" them
+        // here changes nothing that launches. Fix the type before trusting it.
+        // @trace order:997-e4v2, spec:forge-hot-cold-split
         tmpfs_mounts: vec![
             "/tmp:size=256m,mode=1777",
             "/run/user/1000:size=64m,mode=0700",
@@ -296,6 +305,15 @@ pub fn forge_claude_profile() -> ContainerProfile {
         pids_limit: 4096, // Compilers, language servers, AI tools — 512 was
         // reachable by one installer fork storm (667-se87/959-fpc5)
         read_only: false, // Forge needs mutable workspace
+        // ORDER 997-e4v2: THREE of forge-hot-cold-split's four HOT paths, and
+        // the fourth is deliberately absent HERE rather than forgotten.
+        // /home/forge/src is sized per launch by compute_hot_budget() from the
+        // project mirror's pack size, which `tmpfs_mounts: Vec<&'static str>`
+        // cannot express; it is emitted at the live launch site instead, by
+        // `forge_hot_src_tmpfs` in tillandsias-headless/src/main.rs. These
+        // constants have no non-test callers, so a reader who "completes" them
+        // here changes nothing that launches. Fix the type before trusting it.
+        // @trace order:997-e4v2, spec:forge-hot-cold-split
         tmpfs_mounts: vec![
             "/tmp:size=256m,mode=1777",
             "/run/user/1000:size=64m,mode=0700",
@@ -319,6 +337,15 @@ pub fn forge_opencode_web_profile() -> ContainerProfile {
         image_override: None,
         pids_limit: 4096, // 667-se87/959-fpc5
         read_only: false,
+        // ORDER 997-e4v2: THREE of forge-hot-cold-split's four HOT paths, and
+        // the fourth is deliberately absent HERE rather than forgotten.
+        // /home/forge/src is sized per launch by compute_hot_budget() from the
+        // project mirror's pack size, which `tmpfs_mounts: Vec<&'static str>`
+        // cannot express; it is emitted at the live launch site instead, by
+        // `forge_hot_src_tmpfs` in tillandsias-headless/src/main.rs. These
+        // constants have no non-test callers, so a reader who "completes" them
+        // here changes nothing that launches. Fix the type before trusting it.
+        // @trace order:997-e4v2, spec:forge-hot-cold-split
         tmpfs_mounts: vec![
             "/tmp:size=256m,mode=1777",
             "/run/user/1000:size=64m,mode=0700",
@@ -337,6 +364,15 @@ pub fn terminal_profile() -> ContainerProfile {
         mounts: common_forge_mounts(),
         pids_limit: 4096, // Same as forge (maintenance shell) — 667-se87/959-fpc5
         read_only: false, // Terminal needs mutable workspace
+        // ORDER 997-e4v2: THREE of forge-hot-cold-split's four HOT paths, and
+        // the fourth is deliberately absent HERE rather than forgotten.
+        // /home/forge/src is sized per launch by compute_hot_budget() from the
+        // project mirror's pack size, which `tmpfs_mounts: Vec<&'static str>`
+        // cannot express; it is emitted at the live launch site instead, by
+        // `forge_hot_src_tmpfs` in tillandsias-headless/src/main.rs. These
+        // constants have no non-test callers, so a reader who "completes" them
+        // here changes nothing that launches. Fix the type before trusting it.
+        // @trace order:997-e4v2, spec:forge-hot-cold-split
         tmpfs_mounts: vec![
             "/tmp:size=256m,mode=1777",
             "/run/user/1000:size=64m,mode=0700",

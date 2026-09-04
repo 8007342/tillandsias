@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# ORDER 998-qrwu: the CA directory comes from the ONE declaration
+# (images/default/ca-path.txt), never a literal — see scripts/lib-ca-path.sh.
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-ca-path.sh"
 # @trace order:801-kqme, spec:nix-cache-service
 #
 # nix-cache-service.sh — serve the persistent host nix store (order 795-h8er)
@@ -35,7 +38,7 @@
 # TWO TRUST MECHANISMS, NOT ONE. This is the correction to the framing that a
 # trusted CA alone is enough, and it must not be collapsed:
 #
-#   TRANSPORT  the stack CA (/tmp/tillandsias-ca) mints a leaf for `nix-cache`,
+#   TRANSPORT  the stack CA (${TILLANDSIAS_CA_DIR}) mints a leaf for `nix-cache`,
 #              exactly as vault_bootstrap.rs does for `vault`. This proves you
 #              are talking to OUR cache and not something else on the network.
 #   CONTENT    nix verifies an ed25519 signature on every path against
@@ -93,7 +96,7 @@ CONTAINER_NAME="${TILLANDSIAS_NIX_CACHE_CONTAINER:-tillandsias-nix-cache}"
 CHROOT_STORE="${TILLANDSIAS_NIX_CHROOT_STORE:-$HOME/.local/share/tillandsias/nix-store}"
 STATE_DIR="${TILLANDSIAS_NIX_CACHE_STATE:-$HOME/.local/share/tillandsias/nix-cache}"
 ENCLAVE_NET="${TILLANDSIAS_ENCLAVE_NET:-tillandsias-enclave}"
-CA_DIR="${TILLANDSIAS_CA_DIR:-/tmp/tillandsias-ca}"
+CA_DIR="${TILLANDSIAS_CA_DIR}"
 SERVICE_ALIAS="nix-cache"
 IN_PORT=5000
 HOST_PORT="${TILLANDSIAS_NIX_CACHE_HOST_PORT:-5111}"

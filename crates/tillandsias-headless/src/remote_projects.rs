@@ -313,7 +313,10 @@ fn run_git_image_shell(script: &str, extra_args: &[&str], debug: bool) -> Result
         "--env",
         "CURL_CA_BUNDLE=/etc/tillandsias/ca.crt",
         "--volume",
-        "/tmp/tillandsias-ca/intermediate.crt:/etc/tillandsias/ca.crt:ro",
+        &format!(
+            "{}/intermediate.crt:/etc/tillandsias/ca.crt:ro",
+            tillandsias_core::ca_path::ca_dir()
+        ),
     ]);
     // Pass the proxy env explicitly so `vault` is in no_proxy and vault-cli's
     // curl reaches https://vault:8200 directly. The global containers.conf
@@ -403,6 +406,110 @@ gh api user --jq .login
 /// @trace spec:tillandsias-vault, spec:tray-minimal-ux
 pub fn is_github_logged_in(debug: bool) -> bool {
     probe_github_username(debug).is_some()
+}
+
+/// ORDER 995-srbf — a credential observation that can tell INVALID from
+/// COULD-NOT-ASK.
+///
+/// [`probe_github_username`] returns `None` for both, and the login poll used
+/// it as a boolean. That conflation is why the truthful probe could not simply
+/// be moved onto a cadence: a podman hiccup, a torn-down proxy or a cold image
+/// would have logged the operator out, and a false demotion is far more visible
+/// than the stale `LoggedIn` this packet is about. The spec already has a name
+/// for the third state (`GithubUnreachable`); this is it, in code.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CredentialObservation {
+    /// The token was read from Vault AND accepted by the GitHub API.
+    Valid(String),
+    /// The API answered, and its answer was that this credential is no good —
+    /// or Vault holds no token at all. Demote on this, and only this.
+    Invalid(String),
+    /// No answer was obtained. Says nothing about the credential, so it must
+    /// NOT demote — but it must never be silent either, or a permanently
+    /// broken probe becomes indistinguishable from a healthy one.
+    Unreachable(String),
+}
+
+/// The verdict is carried in STDOUT, not in the exit status.
+///
+/// The runner collapses every non-zero exit into one `Err(String)`, so an
+/// exit-code protocol would have to be recovered by parsing that prose. A
+/// verdict line keeps the classification in one place — the script, which is
+/// the only context that can tell a 401 from a DNS failure — and leaves the
+/// transport failures (image missing, proxy down, timeout, podman absent) as
+/// the `Err` arm, which is exactly `Unreachable`.
+///
+/// `gh auth login --with-token` is deliberately NOT used: it validates against
+/// the API itself, so a bad token fails there and a second classification site
+/// appears. `GH_TOKEN` in the environment makes `gh api user` the single call
+/// whose outcome is being classified.
+const CREDENTIAL_VERDICT_SCRIPT: &str = r#"
+set -u
+export GH_PROMPT_DISABLED=1
+if ! TOKEN="$(vault-cli read -field=token secret/github/token 2>/dev/null)"; then
+  echo "verdict=unreachable reason=vault-read-failed"
+  exit 0
+fi
+if [ -z "$TOKEN" ]; then
+  echo "verdict=invalid reason=no-token-in-vault"
+  exit 0
+fi
+export GH_TOKEN="$TOKEN"
+err="$(mktemp)"
+if login="$(gh api user --jq .login 2>"$err")" && [ -n "$login" ]; then
+  echo "verdict=valid login=$login"
+  exit 0
+fi
+if grep -qE 'HTTP 40[13]|Bad credentials|401 Unauthorized' "$err"; then
+  echo "verdict=invalid reason=api-rejected-credential"
+  exit 0
+fi
+echo "verdict=unreachable reason=api-unanswered"
+exit 0
+"#;
+
+/// ORDER 995-srbf — ask GitHub whether this credential still works.
+///
+/// This is the truthful probe the login poll was missing. It costs a podman
+/// exec, so it belongs on a slow cadence or on a push refusal, never on a tick.
+pub fn observe_github_credential(debug: bool) -> CredentialObservation {
+    match run_git_image_shell(CREDENTIAL_VERDICT_SCRIPT, &[], debug) {
+        Ok(out) => parse_credential_verdict(&out),
+        Err(e) => CredentialObservation::Unreachable(format!("probe did not run: {e}")),
+    }
+}
+
+/// Parse the verdict line. Anything unrecognised is `Unreachable`: an
+/// unparseable answer is an answer we did not get, and guessing `Invalid` from
+/// it would demote on a script bug.
+pub fn parse_credential_verdict(out: &str) -> CredentialObservation {
+    let line = out
+        .lines()
+        .map(str::trim)
+        .find(|l| l.starts_with("verdict="))
+        .unwrap_or("");
+    let field = |key: &str| -> Option<String> {
+        line.split_whitespace()
+            .find_map(|tok| tok.strip_prefix(key).map(str::to_string))
+    };
+    match field("verdict=").as_deref() {
+        Some("valid") => match field("login=") {
+            Some(login) if !login.is_empty() => CredentialObservation::Valid(login),
+            // "valid" with no handle is not a usable valid: the handle IS the
+            // evidence the API answered about an account.
+            _ => CredentialObservation::Unreachable("valid verdict carried no login".to_string()),
+        },
+        Some("invalid") => CredentialObservation::Invalid(
+            field("reason=").unwrap_or_else(|| "unspecified".to_string()),
+        ),
+        Some("unreachable") => CredentialObservation::Unreachable(
+            field("reason=").unwrap_or_else(|| "unspecified".to_string()),
+        ),
+        _ => CredentialObservation::Unreachable(format!(
+            "no verdict line in probe output ({} bytes)",
+            out.len()
+        )),
+    }
 }
 
 fn fetch_github_projects(debug: bool) -> Result<Vec<GitHubProject>, String> {
@@ -644,7 +751,10 @@ exec gh repo clone "$1" "$2"
         "--env",
         "CURL_CA_BUNDLE=/etc/tillandsias/ca.crt",
         "--volume",
-        "/tmp/tillandsias-ca/intermediate.crt:/etc/tillandsias/ca.crt:ro",
+        &format!(
+            "{}/intermediate.crt:/etc/tillandsias/ca.crt:ro",
+            tillandsias_core::ca_path::ca_dir()
+        ),
         "--security-opt=label=disable",
         "--userns=keep-id",
         "-v",
@@ -749,6 +859,56 @@ image = "tillandsias-forge"
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// ORDER 995-srbf — the parser must never invent an `Invalid`.
+    ///
+    /// `Invalid` is the only verdict that demotes, so every unclear input has
+    /// to land in `Unreachable`. The hostile cases here are the ones that would
+    /// log the operator out on a script bug.
+    #[test]
+    fn a_credential_verdict_is_never_guessed_into_a_demotion() {
+        use CredentialObservation::*;
+        assert_eq!(
+            parse_credential_verdict("verdict=valid login=octocat\n"),
+            Valid("octocat".to_string())
+        );
+        assert_eq!(
+            parse_credential_verdict("verdict=invalid reason=api-rejected-credential\n"),
+            Invalid("api-rejected-credential".to_string())
+        );
+        assert!(matches!(
+            parse_credential_verdict("verdict=unreachable reason=api-unanswered\n"),
+            Unreachable(_)
+        ));
+
+        // Nothing at all — the probe ran and said nothing.
+        assert!(matches!(parse_credential_verdict(""), Unreachable(_)));
+        // Noise with no verdict line.
+        assert!(matches!(
+            parse_credential_verdict("gh: something went wrong\nretrying\n"),
+            Unreachable(_)
+        ));
+        // A verdict word that is not one of ours.
+        assert!(matches!(
+            parse_credential_verdict("verdict=probably\n"),
+            Unreachable(_)
+        ));
+        // "valid" with no handle is NOT a usable valid: the handle is the
+        // evidence that the API answered about an account.
+        assert!(matches!(
+            parse_credential_verdict("verdict=valid\n"),
+            Unreachable(_)
+        ));
+        assert!(matches!(
+            parse_credential_verdict("verdict=valid login=\n"),
+            Unreachable(_)
+        ));
+        // Leading noise must not hide a real verdict.
+        assert_eq!(
+            parse_credential_verdict("warning: cgroup\nverdict=invalid reason=no-token-in-vault\n"),
+            Invalid("no-token-in-vault".to_string())
+        );
+    }
     #[cfg(unix)]
     use std::os::unix::fs::symlink;
 

@@ -15,7 +15,7 @@ committed_for_project: false
 ---
 # SSH and rsync
 
-@trace spec:agent-source-of-truth
+@trace spec:knowledge-source-of-truth
 
 **Version baseline**: OpenSSH 8.7, rsync 3.2.7 (Fedora 43)  
 **Use when**: Connecting to remote systems, transferring files securely, or synchronizing directories

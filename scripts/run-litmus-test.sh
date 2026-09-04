@@ -77,7 +77,17 @@ readonly PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # Build/test DURATION telemetry (packet 682-emvg). Best-effort side-channel that
 # times the litmus suite; a timing failure must NEVER change the runner's exit.
-. "$(dirname "${BASH_SOURCE[0]}")/timing-log.sh" 2>/dev/null || true
+# The `-f` test is what makes the "best-effort" real. bash 3.2 — the system
+# shell on every macOS host — ABORTS a non-interactive shell when `.` cannot
+# find its file, and `|| true` does not save it (bash 4.4+ does not, which is
+# why this survived on Linux). So a runner copied somewhere without
+# timing-log.sh beside it died on this line before parsing anything, and a
+# timing side-channel changed the runner's exit after all. Verified:
+# `bash -c 'set -eo pipefail; . /nonexistent 2>/dev/null || true; echo X'`
+# prints nothing and exits 1 under 3.2.57.
+if [[ -f "$(dirname "${BASH_SOURCE[0]}")/timing-log.sh" ]]; then
+    . "$(dirname "${BASH_SOURCE[0]}")/timing-log.sh" 2>/dev/null || true
+fi
 command -v timing_emit >/dev/null 2>&1 || { timing_now_ms() { echo 0; }; timing_emit() { return 0; }; }
 readonly LITMUS_BINDINGS="${PROJECT_ROOT}/openspec/litmus-bindings.yaml"
 readonly LITMUS_TESTS_DIR="${PROJECT_ROOT}/openspec/litmus-tests"
@@ -428,7 +438,7 @@ log_test_result() {
             fi
             ;;
         FAIL)
-            printf '  %b[FAIL]%b spec=%s test=%s\n' "${RED}" "${NC}" "$spec_name" "$test_name" >&2
+            printf '  %b[FAIL]%b spec=%s test=%s\n' "${RED}" "${NC}" "$spec_name" "$test_name" >&2   # rc-exempt: spec/test-level reporter — no step exit in scope, the caller passes a message
             [[ -n "$message" ]] && printf '         %b%s%b\n' "${RED}" "$message" "${NC}" >&2
             TESTS_FAILED=$((TESTS_FAILED+1))
             ;;
@@ -1021,7 +1031,12 @@ run_rust_queries_for_litmus() {
     fi
 
     if [[ "$status" -ne 0 ]]; then
-        printf ' %b[FAIL]%b\n' "${RED}" "${NC}" >&2
+        # ORDER 1018-5f5a: the rc travels with the verdict. Without it a reader
+        # sees [FAIL] and whatever the check chose to print, and must SUPPLY a
+        # mechanism from memory — which is exactly how a step that returned 1
+        # (no match) was reported fleet-wide as a SIGPIPE 141 on 2026-09-04 and
+        # cost three hosts an afternoon.
+        printf ' %b[FAIL]%b rc=%s\n' "${RED}" "${NC}" "$status" >&2
         printf '%s\n' "$output" >&2
         return 1
     fi
@@ -1408,7 +1423,13 @@ run_litmus_test_file() {
         # — using it on a red is a finding to file, not a fix.
         if [[ $exit_code -ne 0 && -z "$step_success_pattern" && -z "$step_expected" ]]; then
             if [[ "${TILLANDSIAS_LITMUS_STRICT_EXIT:-1}" != "0" ]]; then
-                printf ' %b[FAIL]%b\n' "${RED}" "${NC}" >&2
+                # ORDER 1018-5f5a. This arm already NAMED the number on its
+                # detail line, and that was not enough: a reader scanning for a
+                # verdict, or a tool grepping one, reads the [FAIL] line. Making
+                # the grammar uniform — every [FAIL] carries rc= — is what lets
+                # "no rc on the line" mean "the runner did not know", instead of
+                # "it is somewhere below, on some arms".
+                printf ' %b[FAIL]%b rc=%s\n' "${RED}" "${NC}" "$exit_code" >&2
                 printf '%s\n' "         exit_code=${exit_code} (no success_pattern/expected_behavior declared — non-zero exit fails the step; strict-exit mode)" >&2
                 printf '%s\n' "         output=${step_output}" >&2
                 return 1
@@ -1423,14 +1444,26 @@ run_litmus_test_file() {
         # that rely on its keyword-matching logic.
         if [[ -n "$step_success_pattern" ]]; then
             if ! check_signal "$step_output" "$step_success_pattern" "$step_failure_pattern"; then
-                printf ' %b[FAIL]%b\n' "${RED}" "${NC}" >&2
+                # ORDER 1018-5f5a. A pattern miss and a CRASH look identical
+                # here without the rc: both print [FAIL] and whatever the step
+                # emitted. rc=1 says "ran, did not match"; rc=141 says "died of
+                # SIGPIPE mid-write"; rc=124 says "the timeout killed it". Those
+                # need three different responses, and the number is the only
+                # thing that separates them — the step's own output cannot, and
+                # on 2026-09-04 a step that piped through `tail -1` discarded
+                # the very lines a reader needed.
+                printf ' %b[FAIL]%b rc=%s\n' "${RED}" "${NC}" "$exit_code" >&2
                 printf '%s\n' "         success_pattern=${step_success_pattern}" >&2
                 [[ -n "$step_failure_pattern" ]] && printf '%s\n' "         failure_pattern=${step_failure_pattern}" >&2
                 printf '%s\n' "         output=${step_output}" >&2
                 return 1
             fi
         elif ! behavior_matches_output "$step_output" "$step_expected" "$exit_code"; then
-            printf ' %b[FAIL]%b\n' "${RED}" "${NC}" >&2
+            # ORDER 1018-5f5a: same reason as the success_pattern arm above.
+            # behavior_matches_output already CONSUMES $exit_code to decide, so
+            # printing it costs nothing and closes the gap between what the
+            # runner knew and what it told the reader.
+            printf ' %b[FAIL]%b rc=%s\n' "${RED}" "${NC}" "$exit_code" >&2
             printf '%s\n' "         expected=${step_expected}" >&2
             printf '%s\n' "         output=${step_output}" >&2
             # ORDER 868-p8xi. An expectation written as a regex alternation is
@@ -1459,7 +1492,7 @@ run_litmus_test_file() {
 
     for failure in "${failure_criteria[@]}"; do
         if grep -qE "$failure" <<<"$combined_output"; then
-            printf '  %b[FAIL]%b gating_points.failure matched: %s\n' "${RED}" "${NC}" "$failure" >&2
+            printf '  %b[FAIL]%b gating_points.failure matched: %s\n' "${RED}" "${NC}" "$failure" >&2   # rc-exempt: gating_points.failure regex matched the COMBINED output, not a step exit
             return 1
         fi
     done
@@ -1470,7 +1503,7 @@ run_litmus_test_file() {
                 return 0
             fi
         done
-        printf '  %b[FAIL]%b no gating_points.success criterion matched combined output\n' "${RED}" "${NC}" >&2
+        printf '  %b[FAIL]%b no gating_points.success criterion matched combined output\n' "${RED}" "${NC}" >&2   # rc-exempt: gating_points.success — no criterion matched combined output, not a step exit
         local first_success="${success_criteria[0]}"
         printf '         tried: %s\n' "${success_criteria[*]}" >&2
         return 1

@@ -9,6 +9,7 @@ Define the repository-side source binding, validation, and refresh tooling for
 cheatsheet provenance.
 ## Requirements
 ### Requirement: Verbatim source storage
+<!-- req-id: a2391700 -->
 
 Every cited URL SHALL have a deterministic on-disk path derived from the URL.
 The stored content SHALL be content-hashed (SHA-256) and accompanied by a
@@ -46,6 +47,7 @@ per-file YAML sidecar (`.meta.yaml`) and an entry in the central
   `publisher`, `license`, `redistribution`, `allowlist_match`, `render`, `cited_by`, `notes`
 
 ### Requirement: License allowlist gates bundling
+<!-- req-id: dd346192 -->
 
 Only sources from allowlisted domains SHALL be committed verbatim to the
 repository. Off-allowlist sources get a `.norepublish`-suffixed filename and
@@ -73,6 +75,7 @@ requiring redistribution of content we may not have rights to bundle.
 - **AND** the fetcher respects the updated allowlist on next run
 
 ### Requirement: Provenance binding
+<!-- req-id: 9391b9d2 -->
 
 Every cheatsheet's `## Provenance` section SHALL carry a `local:` field next
 to each cited URL that has been fetched, pointing to the verbatim on-disk file.
@@ -103,6 +106,7 @@ This allows maintainers to `cat cheatsheet-sources/...` to re-verify offline.
 - **THEN** `last_verified` is bumped to the fetch date
 
 ### Requirement: Validator invariants
+<!-- req-id: 7ea225b5 -->
 
 `scripts/check-cheatsheet-sources.sh` SHALL enforce four checks. Check violations
 at ERROR level cause `exit 1`. WARN-level violations print but exit 0.
@@ -137,6 +141,7 @@ at ERROR level cause `exit 1`. WARN-level violations print but exit 0.
 - **AND** the commit proceeds regardless (CRDT-convergence philosophy)
 
 ### Requirement: Hot/cold separation
+<!-- req-id: 8f5cd70c -->
 
 `cheatsheet-sources/` SHALL be COLD storage — host disk only. It MUST NOT be
 baked into any container image and MUST NOT be bind-mounted into forge
@@ -160,6 +165,7 @@ markers in `INDEX.md`, never the verbatim source bytes.
 - **AND** the mount is logged via the `accountability` channel
 
 ### Requirement: Refresh behaviour
+<!-- req-id: f8db9a1e -->
 
 `scripts/refresh-cheatsheet-sources.sh` SHALL re-fetch stored sources and
 surface drift (SHA mismatch) or removal (HTTP 404) by updating the sidecar's
