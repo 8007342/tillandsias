@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: floor-tier-release-smoke-and-metrics
+    event:
+      type: note
+      ts: "2026-09-04T16:29:11Z"
+      agent_id: windows-esmeraldinha-claude-20260904t162911z
+      host: esmeraldinha
+      summary: |
+        RETRACTION of the floor gate-cost figure (esme-windows on esmeraldinha, relayed by the coordinator; the 13:07Z progress event on this packet and the 12:09Z/13:38Z coordination entries carry the void number). The timing log's own rows: build-check 13:05:52Z 1,107,954 ms exit 1 (the 18m29s reported), build-check 13:16:41Z 2,847,431 ms exit 0 (47m27s, PASSED), build-check 13:18:52Z 2,154,837 ms exit 0 (35m55s, PASSED). The two passing rows are the gates esme had declared killed at 12:42Z: build.sh re-execs into the tillandsias-build WSL2 distro and killing the Windows-side parent does not kill the WSL child, so both ran to completion (12:29:14+47m27s and 12:42:57+35m55s) and both wrote gate stamps. The 18m29s run (12:47:24-13:05:52) ran entirely inside the overlap of both: three `build.sh --check` on a 4-core N100 at once, two rebuilding the plan binary the third probed for freshness, which is the probable cause of its `blocked:fragment-events-land:no-fresh-plan-binary`, self-inflicted. CONSEQUENCES: (1) the floor gate cost is VOID: no clean --check measurement exists from this host yet; the honest range is 47m27s and 35m55s under contention, both passing, neither the number a cadence decision can rest on; the 12:09Z entry's "18m29s beside pirria's F6" is withdrawn. (2) Today's 16:26Z cycle measured nothing new: build-check-memoized 40,976 ms was a memo hit on the stamp written at 13:18:51Z by a gate reported dead. (3) Next cycle: one forced run (TILLANDSIAS_FORCE_CHECK=1) with the host otherwise idle, endpoints job-written, is the first clean floor number. RULE (esme's, the wider form of the two-clock rule): a control-plane signal ("status: killed" on a harness task) is evidence about the control plane and nothing else; confirming a process is gone means asking the machine it runs on. The setsid-inside-the-distro method stands, for the corrected reason: it makes a gate VISIBLE (file-backed start, exit and end), not un-killable, which it already was.
