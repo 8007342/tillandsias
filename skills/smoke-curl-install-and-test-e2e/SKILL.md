@@ -280,7 +280,17 @@ Remove-Item Env:TILLANDSIAS_VERSION
 if ($installExit -ne 0) { throw "install failed (exit $installExit) — file a finding and STOP" }
 # The tray is the only installed surface on Windows; assert it resolves NOW,
 # not at §3 where a missing binary would read as a provision failure.
-$tray = (Get-Command tillandsias-tray.exe -ErrorAction Stop).Source
+#
+# MEASURED 2026-09-04 on yolanda (order 1004-vsh2): the installer does NOT put
+# its directory on PATH, so a bare `Get-Command tillandsias-tray.exe` THROWS on
+# a host where the install just succeeded — "not recognized as a name of a
+# cmdlet". The binary is at $env:LOCALAPPDATA\Programs\Tillandsias, which the
+# installer prints as its install path. Resolve PATH first (an operator may
+# have added it) and fall back to the install location; only then fail.
+$tray = (Get-Command tillandsias-tray.exe -ErrorAction SilentlyContinue |
+    Select-Object -First 1 -ExpandProperty Source)
+if (-not $tray) { $tray = "$env:LOCALAPPDATA\Programs\Tillandsias\tillandsias-tray.exe" }
+if (-not (Test-Path $tray)) { throw "tray not found on PATH or at $tray after a successful install" }
 "tray=$tray" | Tee-Object target\smoke-e2e\01-tray-path.txt
 # EXACT, not "contains": the tray answers --version / -V (windows-tray
 # main.rs), so the lane can confirm which release it is testing.
@@ -558,7 +568,12 @@ esmeraldinha (cold `--provision-once` exit 0 in 117 s, warm 18 s, wire Ready).
 
 ```powershell
 $ErrorActionPreference = 'Stop'
-$tray = (Get-Command tillandsias-tray.exe -ErrorAction Stop).Source
+# Same resolution as §1 — the installer does not add its directory to PATH
+# (measured 2026-09-04, order 1004-vsh2), so `Get-Command` alone throws here.
+$tray = (Get-Command tillandsias-tray.exe -ErrorAction SilentlyContinue |
+    Select-Object -First 1 -ExpandProperty Source)
+if (-not $tray) { $tray = "$env:LOCALAPPDATA\Programs\Tillandsias\tillandsias-tray.exe" }
+if (-not (Test-Path $tray)) { throw "tray not found on PATH or at $tray (did §1 run?)" }
 
 # Marker to prove the distro below was registered AFTER §2's unregister, not
 # inherited from it. An exit code cannot tell these apart.
@@ -603,8 +618,25 @@ if (-not $status.podman_ready) { throw "podman_ready is false at Ready" }
 # the host, this report is stale and the run is unfinished (the 2026-08-10
 # incident, same rule as the macOS block).
 & $tray --diagnose --json 2>&1 | Tee-Object target\smoke-e2e\03-diagnose.json
-if ($LASTEXITCODE -ne 0) { throw "diagnose failed (exit $LASTEXITCODE)" }
+$diagnoseExit = $LASTEXITCODE
+"diagnose_exit=$diagnoseExit" | Tee-Object target\smoke-e2e\03-diagnose-exit.txt
+# DO NOT assert `$diagnoseExit -eq 0`, and the reason is the note above.
+#
+# MEASURED 2026-09-04 on yolanda (order 1004-vsh2), inline in ONE script with
+# nothing interposed: --status-once read Ready / podman_ready=true, and
+# --diagnose seconds later exited 2 with distro_running=false and
+# wire.reachable=false. The tray log shows the wire closing ~15 s after
+# "provision-once: VM Ready". Nothing holds the guest open, so by the time the
+# LAST step runs the wire is legitimately down and diagnose reports that
+# truthfully. Requiring exit 0 here contradicts this block's own
+# "Ready is not durable after --provision-once" note, one screen up.
+#
+# So assert what diagnose is FOR at this point in the lane — a well-formed
+# report carrying this tray's identity — and record the exit code as data.
+# A missing or unparseable report is still a hard failure.
+if (-not (Test-Path target\smoke-e2e\03-diagnose.json)) { throw "diagnose wrote no report" }
 $diag = Get-Content target\smoke-e2e\03-diagnose.json -Raw | ConvertFrom-Json
+if (-not $diag) { throw "diagnose report is not valid JSON (exit $diagnoseExit)" }
 if ($diag.PSObject.Properties.Name -contains 'version') {
   if ($diag.version -ne $SmokeTag.TrimStart('v')) { throw "tray version '$($diag.version)' != release $SmokeTag" }
 } else {
