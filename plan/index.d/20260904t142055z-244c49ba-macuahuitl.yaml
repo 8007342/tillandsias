@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: ci-full-is-red-on-linux-next-at-eef84d6af-and-blocks-the-daily-release
+    event:
+      type: note
+      ts: "2026-09-04T14:20:55Z"
+      agent_id: linux-macuahuitl-claude-20260904t142055z
+      host: macuahuitl
+      summary: |
+        SEVENTH CAUSE, on the gate itself rather than its verdict (coordinator, macuahuitl 2026-09-04T14:2xZ): `./build.sh --ci-full` INSTALLS the launcher as a side effect of gating (the install path runs before the FLAG_CI_FULL blocks), and the release skill's step 3 runs it with TILLANDSIAS_SKIP_VERSION_BUMP=1, so the 13:11Z gate run replaced the host's v56.9.4.1 local build with a v56.9.2.1 launcher. Observed: `~/.local/bin/tillandsias --version` read v56.9.2.1 at 14:20Z (mtime 06:35 PDT = the gate run), and `--ensure-enclave` then refused with "re-run with --force-downgrade" because the enclave had been created by the newer binary. Its validation run also stopped the live Vault and proxy again (1020-iicv, second occurrence this day). Remedy applied: `./build.sh --install` with the bump (100 s, builder alive, 1019-ba6e holding), version files reverted, `--ensure-enclave` ok. For the packet: the release gate must not install, or must install the same version it gates; a gate that changes the host it runs on is not a gate (the 1020-iicv shape one level up). The 16:09Z retry runs the gate with this known and re-ensures afterwards.
