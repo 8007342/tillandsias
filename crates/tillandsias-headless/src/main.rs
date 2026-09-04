@@ -14012,6 +14012,73 @@ fn forge_tool_cache_volume(project_name: &str) -> String {
     format!("tillandsias-forge-cache-{project_name}")
 }
 
+/// The `/home/forge/src` tmpfs spec for a clone-only forge launch — the FOURTH
+/// hot path, and until now the missing one.
+///
+/// ORDER 997-e4v2. `openspec/specs/forge-hot-cold-split` mandates four kernel
+/// tmpfs mounts at container start and names `/home/forge/src` among them,
+/// sized per launch by `compute_hot_budget()` from the git mirror's pack size.
+/// Three of the four shipped; this one did not, and `compute_hot_budget()` /
+/// `parse_size_pack_kb()` sat with ZERO callers outside their own unit tests in
+/// a change ARCHIVED AS COMPLETE on 2026-04-27. What actually occupied the path
+/// was its opposite: a PERSISTENT drvfs mount of the Windows host's `~/src`,
+/// injected by the tray. The mount cannot be removed before this exists, or a
+/// forge launches with no project source at all — hence tmpfs first, mount
+/// second, never mount-first.
+///
+/// Clone-only lanes ONLY. Under the opt-in host-mount lane the caller has
+/// already bind-mounted the host checkout at `/home/forge/src/<project>`, and a
+/// tmpfs over its parent would mask it.
+///
+/// @trace order:997-e4v2
+/// @trace spec:forge-hot-cold-split (Requirement: HOT tier — RAM-backed tmpfs
+///   for finely curated paths; Per-launch project source budget)
+fn forge_hot_src_tmpfs(project_name: &str) -> String {
+    let budget = tillandsias_core::config::compute_hot_budget(
+        forge_mirror_pack_size_kb(project_name),
+        &tillandsias_core::config::ForgeConfig::default(),
+    );
+    format!("/home/forge/src:size={budget}m,mode=0755")
+}
+
+/// The project mirror's `size-pack` in KiB, or 0 when it cannot be read.
+///
+/// 0 is not a guess dressed as a measurement: `compute_hot_budget` clamps it UP
+/// to `HOT_PATH_BUDGET_FLOOR_MB`, which is exactly the spec's "Empty mirror
+/// returns floor (256 MB)" scenario. A fresh project has no mirror yet, and
+/// fail-closing a launch on an unreadable pack size would break the first
+/// launch of every project to protect a number that only tunes a cap.
+///
+/// @trace order:997-e4v2
+/// @trace spec:forge-hot-cold-split (Requirement: Per-launch project source
+///   budget — step 1, the mirror's `git count-objects -v -H`)
+fn forge_mirror_pack_size_kb(project_name: &str) -> u64 {
+    let mut inspect = podman_command();
+    inspect.args([
+        "volume",
+        "inspect",
+        &format!("tillandsias-mirror-{project_name}"),
+        "--format",
+        "{{.Mountpoint}}",
+    ]);
+    let Ok(mountpoint) = podman_command_output(inspect, false) else {
+        return 0;
+    };
+    if mountpoint.is_empty() {
+        return 0;
+    }
+    let Ok(output) = Command::new("git")
+        .args(["-C", &mountpoint, "count-objects", "-v", "-H"])
+        .output()
+    else {
+        return 0;
+    };
+    if !output.status.success() {
+        return 0;
+    }
+    tillandsias_core::config::parse_size_pack_kb(&String::from_utf8_lossy(&output.stdout))
+}
+
 /// In-container mount point of the DURABLE spec-index tier (order 801-a2by).
 /// Injected as `FORGE_SPEC_INDEX_ROOT` so nothing inside the enclave ever
 /// shells out to podman to find it.
@@ -14144,7 +14211,15 @@ fn build_forge_agent_run_args_with_vault(
             MountMode::ReadWrite,
         )
     } else {
-        spec
+        // ORDER 997-e4v2: the fourth HOT path. forge-hot-cold-split mandates
+        // /home/forge/src be a per-launch kernel tmpfs sized by
+        // compute_hot_budget(); three of four hot paths shipped and this one
+        // never did, which is why the persistent drvfs mount could occupy the
+        // path unnoticed. Clone-only lane only — under host-mount the arm above
+        // has bind-mounted the host checkout at /home/forge/src/<project>, and
+        // a tmpfs over its parent would mask it.
+        // @trace order:997-e4v2, spec:forge-hot-cold-split
+        spec.tmpfs(forge_hot_src_tmpfs(project_name))
     };
     let spec = spec
         // Persistent per-project tool/package cache (order 179). lib-common points
@@ -24619,6 +24694,77 @@ esac
         &tail[..end]
     }
 
+    /// ORDER 997-e4v2. The fourth HOT path is EMITTED, and by the spec's own
+    /// sizing function rather than a constant that merely looks like it.
+    ///
+    /// This is the test the archived 2026-04-27 change should have had.
+    /// `forge-hot-cold-split` mandates four tmpfs mounts and names
+    /// `/home/forge/src` among them; three shipped, and `compute_hot_budget()`
+    /// sat with ZERO non-test callers while the change was archived as
+    /// complete. An inert function with passing unit tests is exactly as green
+    /// as a wired one, so unit tests over `compute_hot_budget` could not have
+    /// caught this — only a test that reaches the LAUNCH PATH can.
+    ///
+    /// @trace order:997-e4v2, spec:forge-hot-cold-split
+    #[test]
+    fn forge_src_is_a_hot_tmpfs_sized_by_compute_hot_budget() {
+        let spec = forge_hot_src_tmpfs("a-project-with-no-mirror-on-this-host");
+
+        let (path, opts) = spec
+            .split_once(':')
+            .expect("tmpfs spec is <path>:<options>");
+        assert_eq!(path, "/home/forge/src", "the spec names this exact path");
+        assert!(
+            opts.contains("mode=0755"),
+            "spec table gives /home/forge/src mode 0755, got {opts:?}"
+        );
+
+        let size_mb: u32 = opts
+            .split(',')
+            .find_map(|o| o.strip_prefix("size="))
+            .and_then(|s| s.strip_suffix('m'))
+            .expect("every hot mount carries a kernel-enforced size cap")
+            .parse()
+            .expect("size cap is a plain MB integer");
+
+        // The bound, not a fixed number: this host may or may not have a
+        // mirror volume for the name above, and the assertion must be about
+        // the CLAMP the spec specifies, not about which arm ran.
+        let config = tillandsias_core::config::ForgeConfig::default();
+        assert!(
+            (tillandsias_core::config::HOT_PATH_BUDGET_FLOOR_MB..=config.hot_path_max_mb)
+                .contains(&size_mb),
+            "budget {size_mb} MB escaped the spec's [{}, {}] clamp",
+            tillandsias_core::config::HOT_PATH_BUDGET_FLOOR_MB,
+            config.hot_path_max_mb
+        );
+    }
+
+    /// The clone-only lane gets the tmpfs; the host-mount lane must NOT.
+    ///
+    /// A tmpfs on `/home/forge/src` would mask the bind mount its sibling arm
+    /// places at `/home/forge/src/<project>`, so the two are mutually
+    /// exclusive by construction. Pinned against the source because the arms
+    /// are chosen at launch by host configuration this test cannot set.
+    ///
+    /// @trace order:997-e4v2, spec:forge-hot-cold-split
+    #[test]
+    fn hot_src_tmpfs_is_clone_only_never_over_the_host_mount() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source_window(source, "let host_mount = forge_uses_host_mount();");
+
+        let call = window
+            .find("forge_hot_src_tmpfs(project_name)")
+            .expect("the clone-only lane must emit the /home/forge/src tmpfs");
+        let host_mount_bind = window
+            .find("format!(\"/home/forge/src/{project_name}\")")
+            .expect("the host-mount lane must still bind the host checkout");
+        assert!(
+            host_mount_bind < call,
+            "the tmpfs belongs to the ELSE arm; emitting it before or inside \
+             the host-mount arm would mask the bind mount"
+        );
+    }
     #[test]
     fn idiomatic_podman_launch_paths_do_not_bypass_shared_layer() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
