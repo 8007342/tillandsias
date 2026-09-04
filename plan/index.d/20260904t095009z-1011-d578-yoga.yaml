@@ -1,0 +1,77 @@
+packets:
+  - packet_id: rank-routing-disjointness-is-margin-thin-under-widened-pools
+    order: 1011-d578
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    title: "rank routing loses pairwise-disjoint epics when hosts' eligible pools converge — 1002-7jeg's bring-up lane crossed the margin"
+    status: ready
+    kind: bug
+    priority: p2
+    deliverable: rank routing that keeps epics pairwise disjoint when the frontier has room, regardless of how similar the hosts' pools are
+    depends_on: []
+    pickup_role: any
+    capability_tags: [plan, selector, scheduling, convergence]
+    estimated_hours: 4
+    unscoreable: >
+      litmus:capability-routing-shape case 1 IS the pin and it already exists —
+      it is red on trunk right now for exactly this reason, so the closure is
+      "case 1 green with the roster it already carries", not a new test. Naming
+      it as a verifiable_closure would be right, but the 885-92iu gate resolves
+      closures against litmus NAMES and case 1 is a step inside
+      litmus:capability-routing-shape rather than a test of its own; the honest
+      statement is that the pin exists at step granularity and the gate reads
+      test granularity. Recording that rather than inventing a second test that
+      would assert the same thing.
+    outcome: >
+      SELF-REPORTED REGRESSION from my own 1002-7jeg (a0801b14e), measured on
+      yoga 2026-09-04 and reported rather than left for the fleet to trip over.
+      litmus:capability-routing-shape case 1 (EC1, pairwise-disjoint epic
+      routing across the eight-identity roster) is RED on trunk. Measured both
+      directions on TODAY's ledger, same roster, same TILLANDSIAS_ROUTE_ROT=0:
+      the pre-1002-7jeg selector routes 8 hosts to 8 distinct epics; the
+      current selector routes them to 7, with macuahuitl moving off
+      harness-mcp-expert-validation onto convergence-velocity-milestone, where
+      mstudio already sat.
+      THE MECHANISM. Rank routing gives each host a distinct ORDINAL, but the
+      ordinal indexes the HOST'S OWN frontier. Disjointness therefore depends
+      on the hosts' frontiers agreeing about what occupies each slot. The
+      bring-up lane widened pools for every host with present-but-unusable
+      hardware — macuahuitl carries npu:intel:unusable, so it now sees the npu
+      packets, four of which sit in convergence-velocity-milestone — and that
+      re-ordered its frontier enough to collide. So the property is not
+      guaranteed by the mechanism; it is an emergent consequence of pools that
+      happen to differ, and it degrades as pools converge.
+      WHY THIS IS MARGIN, NOT A CLEAN BREAK, and why the packet says so: case 1
+      PASSED with the same selector code earlier the same day, before the
+      ledger moved (1002-7jeg completed, 1003-444f filed, 805-r98w claimed,
+      sibling work pulled). The change alone does not decide the outcome; it
+      narrows the margin and the ledger crossed it. A fix that only restores
+      today's ledger to green has not fixed anything.
+      SEVERITY IS EFFICIENCY, NOT CORRECTNESS, and the packet is explicit so
+      nobody escalates it wrongly: two hosts landing on the same EPIC do not
+      duplicate work. Claims are the separation mechanism and the only one —
+      status in_progress is what hides a packet from another host. The cost is
+      that fleet effort spreads over fewer epics than it could, which is what
+      847-wgy4's EC1 exists to protect.
+      WHY THE GATE DID NOT CATCH IT: litmus:capability-routing-shape is
+      `size: quick` and ./build.sh --check runs the instant tier, so the
+      landing gate never executed it. That is the same class as 1003-444f
+      (coverage the gate does not reach) pointed at litmus sizes rather than
+      cargo crates, and worth noting on that packet.
+      NOT REVERTING 1002-7jeg to fix this: it returned five permanently
+      unselectable packets to the fleet, and permanent starvation is a strictly
+      worse failure than reduced epic spread. The routing is the thing to fix.
+    exit_criteria:
+      - "with the eight-identity roster and frontier room, every host routes to a distinct epic regardless of how similar their eligible pools are — verified by making the pools deliberately IDENTICAL, not merely by restoring today's ledger to green"
+      - "the ordinal is taken against a frontier the hosts agree on, or the collision is resolved explicitly, rather than relying on pools happening to differ"
+      - "litmus:capability-routing-shape case 1 is green, and a mutation that makes two hosts' pools identical still keeps them disjoint"
+    events:
+      - type: progress
+        ts: "2026-09-04T09:50:09Z"
+        agent_id: "linux-yoga-claude-20260904t093006z"
+        host: yoga
+        summary: >
+          Filed against my own change, with both directions measured on the
+          same ledger and roster. Pre-change 8 distinct epics, post-change 7,
+          macuahuitl colliding with mstudio. Severity is epic spread, not
+          duplicated work, because claims separate hosts and epics do not.
