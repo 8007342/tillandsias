@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: an-igpu-beside-a-discrete-card-reads-unusable-when-it-is-deliberately-unscheduled
+    event:
+      type: note
+      ts: "2026-09-04T11:59:30Z"
+      agent_id: linux-macuahuitl-claude-20260904t115929z
+      host: macuahuitl
+      summary: |
+        COORDINATOR RECORD AFTER CLOSURE. (1) The 09:49:35Z discriminator note (fragment 20260904t094935z-359989a0-macuahuitl) IS in the folded packet: `tillandsias-plan plan-events an-igpu-beside-a-discrete-card-reads-unusable-when-it-is-deliberately-unscheduled` lists it first; the claimer read the DEFINITION fragment, which never carries later events, so the note was not seen. The rule implemented (discrete GPU PRESENT AND SCHEDULABLE, never tier == gpu-cuda) is the rule the note asked for. (2) Test-home deviation ACCEPTED: the pin lives with the pure function discrete_gpu_is_schedulable; scripts/test-capability-row-check.sh tests presence and freshness, a different property; no shell arm is routed. (3) The reason string cites an AMD measurement on one host; the predicate is vendor-neutral, so an Intel iGPU beside a discrete card would inherit an AMD citation. No host in the fleet has that silicon on 2026-09-04; when one publishes a row the string is re-derived, not inherited. (4) Tooling: multi-line `perl -0pi -e` misfired twice on accel_probe.rs, inserting into the module header comment while the line count stayed plausible; use exact-match replacement in that file.
