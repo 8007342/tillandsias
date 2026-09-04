@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: cloud-only-migration-interrupted-local-src-still-load-bearing
+    event:
+      type: progress
+      ts: "2026-09-04T08:42:36Z"
+      agent_id: windows-yolanda-opus5-20260904t084236z
+      host: yolanda
+      summary: |-
+        MOUNT SLICE LANDED (997-e4v2, slice 2 of 3). The persistent drvfs mount of the Windows host's ~/src is gone from provisioning, in the order the packet required: tmpfs first (slice 1, 6995e3a26), mount second.
+
+        WHAT WAS DELETED, in crates/tillandsias-windows-tray/src/wsl_lifecycle.rs: the home-forge-src.mount unit injection (the USERPROFILE-derived What=, Where=/home/forge/src, Type=drvfs unit written to /etc/systemd/system) and the `systemctl enable --now home-forge-src.mount` clause in the provisioning command. Nothing replaces it there. The forge gets its project source from the per-launch tmpfs wired in slice 1 and clones into it from the mirror.
+
+        FORWARD-ONLY WAS HONOURED AS AN ABSENCE, and the absence is pinned. The operator ruling of 2026-09-03 says an existing ~/src on any disk is ignored and left to rot: no migration, no detection, no warning, no cleanup. The tempting move here is a `systemctl disable home-forge-src.mount` so hosts that already enabled the unit stop mounting - and that is exactly the compatibility code the ruling forbids. A host that has the unit keeps it until its VM is rebuilt. Because that decision is invisible in a diff that only DELETES, the test asserts `systemctl disable` does not appear, so the next agent cannot restore it as an obvious kindness without meeting the ruling.
+
+        THREE ANCHORS MOVED, and this is the part that would have broken quietly. The deleted comment `// 5. home-forge-src.mount` was not just a comment: it was the START ANCHOR of the 798-emje provisioning window, used by BOTH the in-file Rust test and openspec/litmus-tests/litmus-guest-vsock-loopback-ordered-before-readiness-probe.yaml, which slice the region between it and `// Phase 3d:` to prove the vsock module is loaded before the units are started. Deleting the anchor would not have failed loudly - the awk window would have gone empty and the litmus would have reported FAIL with empty line numbers, or worse, a `.split(...).nth(1)` returning None and the test panicking on an unrelated message. Both now anchor on `// 5. HOST SRC MOUNT REMOVED`. The marker is deliberately slash-free: my first attempt used `THE HOST ~/src MOUNT IS GONE`, and the `/` inside it terminates the awk regex in the litmus command, which would have silently changed what that pin measures. Verified by running the litmus step by hand against the edited source: ok:module-load-precedes-unit-start (67<98), with both inner markers still inside the window - the pin measures the same property, not an empty region.
+
+        EVIDENCE. Two new tests, 24/24 green in tillandsias-windows-tray. provisioning_never_injects_the_host_src_drvfs_mount strips comments AND scopes to the production half of the file: the deletion deliberately leaves a long comment explaining what the unit was and why it went, so a whole-file `!contains` would fail on the explanation and pressure a future reader to delete the record to make the test pass - and it would also match the test's own assertion literal, making it a check that can only fail. the_replacement_hot_path_exists_in_the_headless_launcher asserts slice 1's forge_hot_src_tmpfs still exists across the crate boundary, so reverting the tmpfs cannot silently re-open the no-project-source hole from the other side.
+
+        NEGATIVE CONTROL ARMED. Re-introducing the unit path as a production statement turns provisioning_never_injects_the_host_src_drvfs_mount RED (23 passed, 1 failed), then green on restore, with the injected line confirmed absent afterwards. ./build.sh --check exits 0; the single `violation:` string in the full log is the pre-existing standing declared-closure debt of 4, which the gate itself labels not-a-gate.
+
+        OUT OF SCOPE, NAMED FOR WHOEVER TAKES SLICE 3: crates/tillandsias-vm-layer/src/vz.rs is a DIFFERENT lane and was deliberately not touched. It mounts /home/forge/src via virtiofs from an fstab line (vz.rs:692), and the systemd-generated home-forge-src.mount it depends on at vz.rs:791 (`After=`) comes from that fstab entry, not from the Windows tray. Removing the local ~/src path ENTIRELY eventually reaches it, but that is the macOS/VM half and it does not type-check here. Its pin at vz.rs:3113 asserts the After= edge, so deleting the fstab line without that test is a silent ordering regression (701-iu9b).
+
+        STILL OPEN: slice 3, the twelve-file menu/type removal. Cannot be finished on yolanda - macos-tray action_host.rs and menu_disabled_v2.rs do not type-check here - and host-shell menu_state.rs / menu_action.rs needs a heads-up to macbookair first, since all three trays consume it.

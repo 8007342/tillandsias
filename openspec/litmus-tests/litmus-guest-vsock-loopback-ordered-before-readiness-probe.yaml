@@ -74,7 +74,7 @@ critical_path:
     expected_behavior: "ok: wants-not-requires"
 
   - step: "provisioning loads the module BEFORE it starts the units (the clean-room race was our own statement order)"
-    command: "w=$(awk '/\\/\\/ 5\\. home-forge-src\\.mount/{f=1} /\\/\\/ Phase 3d:/{f=0} f' crates/tillandsias-windows-tray/src/wsl_lifecycle.rs); m=$(echo \"$w\" | grep -n '/etc/modules-load.d/tillandsias-vsock.conf' | head -1 | cut -d: -f1); e=$(echo \"$w\" | grep -n 'systemctl enable --now podman.socket' | head -1 | cut -d: -f1); [ -n \"$m\" ] && [ -n \"$e\" ] && [ \"$m\" -lt \"$e\" ] && echo \"ok: module-load-precedes-unit-start ($m<$e)\" || { echo \"FAIL: modprobe_line=$m enable_line=$e\"; exit 1; }"
+    command: "w=$(awk '/\\/\\/ 5\\. HOST SRC MOUNT REMOVED/{f=1} /\\/\\/ Phase 3d:/{f=0} f' crates/tillandsias-windows-tray/src/wsl_lifecycle.rs); m=$(echo \"$w\" | grep -n '/etc/modules-load.d/tillandsias-vsock.conf' | head -1 | cut -d: -f1); e=$(echo \"$w\" | grep -n 'systemctl enable --now podman.socket' | head -1 | cut -d: -f1); [ -n \"$m\" ] && [ -n \"$e\" ] && [ \"$m\" -lt \"$e\" ] && echo \"ok: module-load-precedes-unit-start ($m<$e)\" || { echo \"FAIL: modprobe_line=$m enable_line=$e\"; exit 1; }"
     timeout_ms: 5000
     expected_behavior: "ok: module-load-precedes-unit-start"
 
