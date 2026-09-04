@@ -3766,17 +3766,6 @@ fn tray_ui_state_to_menu_state(state: &TrayUiState) -> shared_menu::MenuState {
         shared_menu::GithubLoginState::Unknown
     };
 
-    let local_projects = state
-        .projects
-        .iter()
-        .map(|p| shared_menu::ProjectEntry {
-            name: p.name.clone(),
-            path: p.path.to_string_lossy().into_owned(),
-            ready: false,
-            full_name: None,
-        })
-        .collect();
-
     let cloud_projects = state
         .cloud_projects
         .iter()
@@ -3793,7 +3782,6 @@ fn tray_ui_state_to_menu_state(state: &TrayUiState) -> shared_menu::MenuState {
         status_text: state.status_text.clone(),
         version: state.version.clone(),
         login,
-        local_projects,
         cloud_projects,
         cloud_projects_loaded: state.last_fetched.is_some(),
         selected_agent: shared_menu::SelectedAgent::Claude,
@@ -3809,7 +3797,12 @@ fn tray_ui_state_to_menu_state(state: &TrayUiState) -> shared_menu::MenuState {
 /// These must stay stable: the `event()` handler dispatches on them.
 const MENU_ID_STATUS: i32 = 10;
 const MENU_ID_LOGIN: i32 = 20;
-const MENU_ID_LOCAL_PROJECTS: i32 = 21;
+// ORDER 997-e4v2 step 2: MENU_ID_LOCAL_PROJECTS = 21 is REMOVED here, and the
+// NUMBER 21 IS RETIRED, NOT FREED. Until step 3 removes the local row from the
+// shared id contract on the other platforms, 21 still means "local projects"
+// there. Reusing it for a new row mid-migration would make two menus disagree
+// about what row 21 is — the kind of split that is invisible until a client
+// built against one contract talks to a host built against the other.
 const MENU_ID_CLOUD_PROJECTS: i32 = 22;
 const MENU_ID_SEPARATOR: i32 = 29;
 const MENU_ID_VERSION: i32 = 30;
@@ -3824,7 +3817,6 @@ fn shared_id_to_int(id: &str) -> i32 {
     match id {
         shared_menu::ids::STATUS => MENU_ID_STATUS,
         shared_menu::ids::GITHUB_LOGIN => MENU_ID_LOGIN,
-        shared_menu::ids::LOCAL_PROJECTS => MENU_ID_LOCAL_PROJECTS,
         shared_menu::ids::CLOUD_PROJECTS => MENU_ID_CLOUD_PROJECTS,
         shared_menu::ids::SEPARATOR => MENU_ID_SEPARATOR,
         shared_menu::ids::VERSION => MENU_ID_VERSION,
@@ -3854,8 +3846,6 @@ fn shared_id_to_int(id: &str) -> i32 {
                     _ => return fallback_menu_id(other),
                 };
                 base + offset
-            } else if other == shared_menu::ids::LOCAL_PROJECTS_EMPTY {
-                LOADING_LOCAL_ID
             } else if other == shared_menu::ids::CLOUD_PROJECTS_EMPTY
                 || other == shared_menu::ids::CLOUD_PROJECTS_LOADING
             {
@@ -6574,7 +6564,11 @@ mod tests {
     #[test]
     fn menu_expands_when_authenticated() {
         // When `is_authenticated == true` the GitHubLogin row is replaced by
-        // the `~/src` + `Cloud` pair, giving 6 top-level items.
+        // the `Cloud` submenu, giving 5 top-level items.
+        //
+        // ORDER 997-e4v2 step 2: this was 6 and named the `~/src` + `Cloud`
+        // PAIR. The local row is retired from the shared menu here; the native
+        // scan plumbing behind it goes in step 3 with the wire.
         let state = TrayStateBuilder::new()
             .forge_available(true)
             .enclave_status(EnclaveStatus::AllHealthy)
@@ -6585,15 +6579,18 @@ mod tests {
         let top_level = &menu.2;
         assert_eq!(
             top_level.len(),
-            6,
-            "Expected 6 top-level items when authenticated, got {}",
+            5,
+            "Expected 5 top-level items when authenticated, got {}",
             top_level.len()
         );
 
         let label_list = labels(&menu);
+        // ORDER 997-e4v2 step 2: the `~/src` row is gone, so its presence
+        // assertion is replaced by an ABSENCE pin. Dropping the check entirely
+        // would leave the migration's own effect untested here.
         assert!(
-            label_list.iter().any(|l| l.contains("~/src")),
-            "Missing ~/src submenu. labels={:?}",
+            !label_list.iter().any(|l| l.contains("~/src")),
+            "~/src submenu must be gone when authenticated. labels={:?}",
             label_list
         );
         assert!(
@@ -6610,10 +6607,13 @@ mod tests {
             !label_list.iter().any(|l| l.contains("Reset Guest")),
             "Reset Guest menu leaf must be ABSENT (removed by operator order)"
         );
-        // The default local project from `TrayStateBuilder` is "test-project".
+        // ORDER 997-e4v2 step 2: "test-project" is the TrayStateBuilder's
+        // default LOCAL project, and local projects no longer reach the menu.
+        // Pinned as absent rather than deleted, so a regression that revives
+        // the local row is caught here and not only by the row count.
         assert!(
-            label_list.contains(&"test-project".to_string()),
-            "Local project submenu missing when authenticated"
+            !label_list.contains(&"test-project".to_string()),
+            "local project must not appear in the menu after step 2"
         );
     }
 
@@ -6784,8 +6784,24 @@ mod tests {
             .enclave_status(EnclaveStatus::AllHealthy)
             .forge_available(true)
             .build();
-        let labels_in = labels(&build_menu(&logged_in));
-        assert!(labels_in.iter().any(|l| l.contains("~/src")));
+        let menu_in = build_menu(&logged_in);
+        let labels_in = labels(&menu_in);
+        // ORDER 997-e4v2 step 2. This asserted the presence of `~/src`, but the
+        // property the arm is for is "a SUCCEEDED probe EXPANDS the menu" — the
+        // local row was merely the evidence, and it is retired. Assert the
+        // expanded shape directly instead of through a label that no longer
+        // exists: the authenticated top level, and the Cloud submenu that now
+        // carries the expansion.
+        assert_eq!(
+            menu_in.2.len(),
+            5,
+            "a succeeded probe must expand to the authenticated shape. labels={labels_in:?}"
+        );
+        assert!(
+            labels_in.iter().any(|l| l.contains("Cloud")),
+            "a succeeded probe must surface the Cloud submenu. labels={labels_in:?}"
+        );
+        assert!(!labels_in.iter().any(|l| l.contains("~/src")));
         assert!(!labels_in.iter().any(|l| l.contains("GitHubLogin")));
         assert!(!labels_in.iter().any(|l| l.contains("Logging in")));
     }
@@ -7020,14 +7036,24 @@ mod tests {
     // tree for every request and gnome-shell's client livelocked.
     #[test]
     fn get_layout_honors_parent_id_and_recursion_depth() {
+        // ORDER 997-e4v2 step 2 — REROOTED, NOT DELETED.
+        //
+        // This fixture was rooted at MENU_ID_LOCAL_PROJECTS, and that row is
+        // retired here. The contract it pins is NOT about the local submenu: it
+        // is that GetLayout returns the subtree rooted at the REQUESTED id,
+        // pruned to the REQUESTED depth. That contract is untouched by this
+        // migration — only the submenu it happened to exercise is going away.
+        // Deleting the test would discard a pin for a defect that cost four
+        // desktop sessions, for an unrelated reason. So it is rerooted onto the
+        // surviving Cloud submenu and proves exactly what it did before.
         let state = TrayStateBuilder::new()
             .forge_available(true)
             .enclave_status(EnclaveStatus::AllHealthy)
             .authenticated(true)
-            .projects(vec![ProjectEntry {
+            .cloud_projects(vec![ProjectEntry {
                 name: "tillandsias".to_string(),
                 path: PathBuf::from("/home/x/src/tillandsias"),
-                full_name: None,
+                full_name: Some("owner/tillandsias".to_string()),
             }])
             .build();
         let service = Arc::new(TrayService::new(state));
@@ -7046,11 +7072,11 @@ mod tests {
 
         // Submenu request roots at the REQUESTED id — the whole 944-jaef
         // defect in one assertion.
-        let local = MENU_ID_LOCAL_PROJECTS;
-        let (_, sub) = futures::executor::block_on(iface.get_layout(local, 1, Vec::new()))
+        let submenu = MENU_ID_CLOUD_PROJECTS;
+        let (_, sub) = futures::executor::block_on(iface.get_layout(submenu, 1, Vec::new()))
             .expect("submenu layout");
-        assert_eq!(sub.0, local, "reply must be rooted at the requested id");
-        assert!(!sub.2.is_empty(), "~/src submenu has the project child");
+        assert_eq!(sub.0, submenu, "reply must be rooted at the requested id");
+        assert!(!sub.2.is_empty(), "Cloud submenu has the project child");
         // Depth 1 means the project child appears but ITS children (the
         // per-agent leaves) are pruned — while children-display survives so
         // the shell still draws the arrow and asks deeper.
@@ -7142,7 +7168,36 @@ mod tests {
             .authenticated(true)
             .build();
         let after = build_menu(&after_state);
-        assert_eq!(after.2.len(), 6);
+        // ORDER 997-e4v2 step 2. This was `assert_eq!(after.2.len(), 6)`, and
+        // simply lowering it to 5 would make the test VACUOUS: `before` is also
+        // 5, so a row count no longer distinguishes the two states at all, and
+        // a test named "unauthenticated_to_authenticated" would pass while
+        // proving nothing about the transition.
+        //
+        // With the local row retired, what actually changes across the
+        // transition is WHICH rows are present — the GitHubLogin row is
+        // replaced by the Cloud submenu — so that is what is asserted.
+        assert_eq!(after.2.len(), 5);
+        let before_labels = labels(&before);
+        let after_labels = labels(&after);
+        // NOTE the SPACE: the rendered label is "🔑 GitHub Login". Several
+        // existing absence-assertions in this module test `contains("GitHubLogin")`
+        // without it, which can never match and therefore always pass — they are
+        // vacuous. Reported as a finding rather than fixed here, because that is
+        // a different migration from this one; using the wrong spelling in a
+        // PRESENCE assert simply fails, which is how this was found.
+        assert!(
+            before_labels.iter().any(|l| l.contains("GitHub Login")),
+            "unauthenticated menu must offer login. labels={before_labels:?}"
+        );
+        assert!(
+            !after_labels.iter().any(|l| l.contains("GitHub Login")),
+            "authenticated menu must not offer login. labels={after_labels:?}"
+        );
+        assert!(
+            after_labels.iter().any(|l| l.contains("Cloud")),
+            "authenticated menu must show the Cloud submenu. labels={after_labels:?}"
+        );
 
         // The status text moves from the verifying stack to the
         // "all ready" stack (with the OK suffix).
@@ -7175,7 +7230,10 @@ mod tests {
             .build();
         let menu = build_menu(&state);
         let top_level = &menu.2;
-        assert_eq!(top_level.len(), 6, "Failure must preserve menu shape");
+        // ORDER 997-e4v2 step 2: 6 -> 5, the local row is retired. The property
+        // under test is unchanged — a failed enclave changes the STATUS LABEL
+        // and nothing else about the shape.
+        assert_eq!(top_level.len(), 5, "Failure must preserve menu shape");
 
         let label_list = labels(&menu);
         // labels()[0] is the root menu container ("Tillandsias");
@@ -7186,7 +7244,11 @@ mod tests {
             "Status must show the failure marker, got {:?}",
             status_line
         );
-        assert!(label_list.iter().any(|l| l.contains("~/src")));
+        // ORDER 997-e4v2 step 2: was a PRESENCE assert on ~/src; the row is
+        // retired, so it becomes an absence pin and the surviving rows keep
+        // theirs. The point of this test is that failure changes only the
+        // status label, so the other rows must still be asserted.
+        assert!(!label_list.iter().any(|l| l.contains("~/src")));
         assert!(label_list.iter().any(|l| l.contains("Cloud")));
         assert!(label_list.iter().any(|l| l.contains("Quit Tillandsias")));
     }
@@ -7655,7 +7717,8 @@ mod tests {
             .build();
 
         let menu = build_menu(&state);
-        assert_eq!(menu.2.len(), 6, "Top-level must keep 6 rows on failure");
+        // ORDER 997-e4v2 step 2: 6 -> 5, the local row is retired.
+        assert_eq!(menu.2.len(), 5, "Top-level must keep 5 rows on failure");
 
         let label_list = labels(&menu);
         // labels()[0] is the root menu container ("Tillandsias");
@@ -7665,9 +7728,14 @@ mod tests {
             "Status row must show the failure marker, got {:?}",
             label_list[1]
         );
-        assert!(label_list.iter().any(|l| l.contains("~/src")));
+        // ORDER 997-e4v2 step 2. `project-beta` is seeded as a LOCAL project by
+        // this test's builder, so both it and the ~/src row it lived under are
+        // now absent. Pinned as absent rather than deleted: this test's job is
+        // that a failed enclave does not collapse the menu, and a regression
+        // that revived the local row would otherwise pass it silently.
+        assert!(!label_list.iter().any(|l| l.contains("~/src")));
         assert!(label_list.iter().any(|l| l.contains("Cloud")));
-        assert!(label_list.contains(&"project-beta".to_string()));
+        assert!(!label_list.contains(&"project-beta".to_string()));
     }
 
     // @trace spec:tray-minimal-ux
@@ -7983,7 +8051,6 @@ mod tests {
 
         assert_eq!(shared_id_to_int(ids::STATUS), 10);
         assert_eq!(shared_id_to_int(ids::GITHUB_LOGIN), 20);
-        assert_eq!(shared_id_to_int(ids::LOCAL_PROJECTS), 21);
         assert_eq!(shared_id_to_int(ids::CLOUD_PROJECTS), 22);
         assert_eq!(shared_id_to_int(ids::SEPARATOR), 29);
         assert_eq!(shared_id_to_int(ids::VERSION), 30);
@@ -8032,10 +8099,6 @@ mod tests {
         );
 
         // Placeholder and overflow IDs
-        assert_eq!(
-            shared_id_to_int(ids::LOCAL_PROJECTS_EMPTY),
-            LOADING_LOCAL_ID
-        );
         assert_eq!(
             shared_id_to_int(ids::CLOUD_PROJECTS_EMPTY),
             LOADING_CLOUD_ID

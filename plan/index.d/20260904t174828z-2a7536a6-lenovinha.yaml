@@ -1,0 +1,48 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: cloud-only-migration-interrupted-local-src-still-load-bearing
+    event:
+      type: evidence
+      ts: "2026-09-04T17:48:28Z"
+      agent_id: linux-lenovinha-claude-20260904t173540z
+      host: lenovinha
+      summary: |
+        LINUX HALF OF STEP 2 LANDED, WITH THE osx-next MERGE, AT 0b25215b6 (verified an ancestor of origin/linux-next before this event was written). 53fa82ad2 is now on linux-next, so the trunk carries both halves.
+
+        MEASURED INDEPENDENTLY, not inherited. Yoga's patch was unreadable (uncommitted on a dead tmpfs) and macuahuitl withdrew it as a reference; yoga sent its six as INTENT to compare against. I enumerated the five compile sites with the compiler rather than reconstructing a patch, and every number below is my own reading. Where yoga and I could be compared, we agreed: same six test names, same shapes, same four `~/src` assertions, same two local-name assertions.
+
+        THE FIVE COMPILE SITES: the MenuState construction and its `local_projects` binding, the shared_id_to_int arm for ids::LOCAL_PROJECTS, the LOCAL_PROJECTS_EMPTY placeholder arm, and two test assertions on those ids.
+
+        THE SIX TESTS — PRE-FIX ALL FAIL (602 passed, 6 failed), POST-FIX ALL PASS (608 passed, 0 failed):
+          menu_expands_when_authenticated                      left 5, right 6, "Expected 6 top-level items when authenticated"
+          menu_collapses_on_failed_enclave_status              left 5, right 6, "Top-level must keep 6 rows on failure"
+          failed_enclave_status_only_changes_the_status_label  left 5, right 6, "Failure must preserve menu shape"
+          state_transition_unauthenticated_to_authenticated    left 5, right 6, bare assert_eq
+          login_three_state_machine_renders_each_state         assertion failed: labels_in...contains("~/src")
+          get_layout_honors_parent_id_and_recursion_depth      944-jaef fixture rooted at MENU_ID_LOCAL_PROJECTS
+
+        PRESENCE ASSERTS BECAME ABSENCE PINS, NOT DELETIONS. Every `~/src` and local-project-name assertion (test-project from the builder default, project-beta seeded by its test) now asserts the row is GONE. Deleting them would leave this migration's own effect untested, and a regression reviving the local row would pass silently.
+
+        TWO JUDGEMENT CALLS, both made to avoid a test that passes while proving nothing — which is the failure mode this fleet has spent the day cataloguing.
+
+        1. state_transition_unauthenticated_to_authenticated asserted `after.2.len() == 6` while `before` is 5. Simply lowering it to 5 would have made a test NAMED for a transition assert 5 == 5 — vacuous, and green. What actually changes across the transition is WHICH rows are present, so it now asserts that the GitHub Login row is present before and absent after, and the Cloud submenu present after. The row count stays as a shape check but is no longer carrying the test's meaning.
+
+        2. get_layout_honors_parent_id_and_recursion_depth is REROOTED onto the Cloud submenu, not deleted — same conclusion yoga reached independently, and I would defend it the same way. The contract it pins is that GetLayout returns the subtree rooted at the REQUESTED id, pruned to the REQUESTED depth; the old handler returned the id-0 full tree for every request and gnome-shell livelocked, costing four desktop sessions. That contract is untouched by this migration. Only the submenu it happened to exercise is going away, so the fixture moves to `.cloud_projects(...)` with MENU_ID_CLOUD_PROJECTS as the requested id and proves exactly what it did before. Deleting a pin because an unrelated row moved is how contracts quietly stop being tested.
+
+        ID 21 REMOVED, NUMBER RETIRED. The constant is gone (clippy flags it dead once the reroot lands, as predicted) with a comment recording that 21 is NOT reused: until step 3 removes the local row from the shared id contract on the other platforms, 21 still means "local projects" there, and reusing it mid-migration would make two menus disagree about one row — invisible until a client built against one contract talks to a host built against the other.
+
+        SCOPE HELD. scan_project_root, refresh_local_projects, build_local_projects_submenu, LOCAL_BASE, LOADING_LOCAL_ID and ProjectScope::Local all survive, verified present after the change. Only LOADING_LOCAL_ID's two now-unreachable menu-mapping uses are gone; its definition and its use by the submenu builder are intact. Native plumbing goes to step 3 with the wire.
+
+        A PRE-EXISTING DEFECT FOUND, DELIBERATELY NOT FIXED HERE. Four absence assertions test `contains("GitHubLogin")` while the rendered label is "🔑 GitHub Login" WITH A SPACE — mod.rs:6596, 6692, 6722, 6800. They can never match, so they always pass: four vacuous guards. I found it because I used the same wrong spelling in a PRESENCE assert and it failed immediately, which is the asymmetry worth noting — a wrong string in a presence check fails loudly, in an absence check it is silent forever. NOT fixed in this slice: correcting them may turn a vacuous green into a real red, and that is a different migration from this one. Filed here for routing rather than folded in.
+
+        YOGA'S TWO NOT-MINE FAILURES: I did not hit either. The full tray suite is 608/608 both in parallel and under --test-threads=1, so the 1021-hf9e interference flake did not surface for me; 845-7a88's known red is outside this bin.
+
+        EVIDENCE: 0b25215b6 (verified on trunk). Tray suite 608 passed / 0 failed, pre-fix 602/6. clippy --features tray --all-targets clean. ./build.sh --check green 284s. The land script correctly chose MERGE over rebase ("unpushed set has 4 merge commits; MERGING"), so the osx-next merge is preserved rather than replayed.

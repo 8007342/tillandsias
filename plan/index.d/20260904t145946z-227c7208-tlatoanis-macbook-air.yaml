@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: cloud-only-migration-interrupted-local-src-still-load-bearing
+    field: status
+    value: ready
+    ts: "2026-09-04T14:59:46Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: cloud-only-migration-interrupted-local-src-still-load-bearing
+    event:
+      type: note
+      ts: "2026-09-04T14:59:46Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        released at cycle end: steps 1-2 landed (a98ea0038, 53fa82ad2); step 3 is the shared wire surface and stays last; vz.rs half blocked on 1019-ivia

@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: four-tray-absence-asserts-test-a-label-spelling-that-never-renders-so-they-pass-forever
+    order: 1028-3eiz
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [tray, testing, fail-loud, headless]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-headless/src/tray/mod.rs
+    title: |
+      Four absence assertions in the Linux tray tests check `contains("GitHubLogin")` while the rendered label is "🔑 GitHub Login" with a space, so they can never match and always pass; correcting the spelling may turn a vacuous green into a real red
+    context: |
+      FOUND by lenovinha 2026-09-04 while landing the Linux half of 997-e4v2
+      step 2 (0b25215b6), by making the same misspelling itself in a PRESENCE
+      assert and watching it fail on first run: tray/mod.rs lines 6596, 6692,
+      6722, 6800 (as of that commit) assert the absence of "GitHubLogin", a
+      string that never renders. Deliberately NOT fixed in that slice, because
+      fixing the spelling can change a guard's verdict, which is a different
+      migration. THE ASYMMETRY, which belongs beside the pre-fix rule: a wrong
+      string in a presence assert fails loudly the first time it runs; the
+      identical typo in an absence assert is silent forever and reads as a
+      passing guard. Absence assertions on string labels are therefore a
+      systematically riskier construction, and "it passes" is weaker evidence
+      there than anywhere else. Provenance: lenovinha measured; filed by the
+      coordinator.
+    exit_criteria:
+      - "each of the four asserts is repointed at the rendered label (or at the menu id, which cannot be misspelled into vacuity) and its verdict on the current tree is stated: still green for the right reason, or red and fixed; pre-fix result: PASSES vacuously (the string never renders), which is the defect"
+      - "a control proves the corrected assert can fail: with the login row present, the absence assert goes red; pre-fix result: FAILS (the current assert passes with the row present)"
+      - "a one-line rule lands where the tray tests' conventions live: absence asserts on labels use the id or the exact rendered string, with a presence twin somewhere in the suite; pre-fix result: FAILS"
+    unscoreable: |
+      The pin is the corrected asserts themselves plus their control, under
+      `cargo test -p tillandsias-headless --features tray tray::`; no litmus
+      wraps the tray suite (the grammar has no cargo-test form yet).

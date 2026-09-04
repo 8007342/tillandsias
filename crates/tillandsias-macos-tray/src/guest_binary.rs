@@ -58,10 +58,12 @@ pub(crate) fn bundle_resource_path() -> Option<PathBuf> {
 /// UNCONDITIONALLY, before its "already installed" short-circuit, so whatever
 /// last wrote here decides which headless the guest runs.
 pub(crate) fn staged_guest_binary_path() -> PathBuf {
-    host_src_dir()
-        .join(".tillandsias")
-        .join("guest-bin")
-        .join("tillandsias-headless")
+    // ORDER 1019-ivia: was `host_src_dir()/.tillandsias/guest-bin/...`, which
+    // reached the VM through the `home-src` virtio-fs share that 997-e4v2
+    // retires. Delivery would have gone with it — silently, because
+    // fetch-headless.sh falls back rather than failing. Declared once in core
+    // so this writer and vm-layer's reader cannot drift.
+    tillandsias_core::guest_bin_path::staged_guest_binary()
 }
 
 /// SHA-256 of a file, hex, or None when it cannot be read.

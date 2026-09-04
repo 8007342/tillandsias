@@ -323,7 +323,12 @@ mod tests {
         // Disabled/informational ids.
         assert_eq!(resolve(ids::STATUS), MenuAction::Inert);
         assert_eq!(resolve(ids::VERSION), MenuAction::Inert);
-        assert_eq!(resolve(ids::LOCAL_PROJECTS_EMPTY), MenuAction::Inert);
+        // 997-e4v2 removed the local-projects submenu and its id constants, so
+        // this asserts the LITERAL legacy id rather than a constant. Same
+        // reasoning as the reset-guest case below: a click can arrive from a
+        // menu built before the change, and it must be INERT rather than
+        // falling through to a resolver arm nothing renders any more.
+        assert_eq!(resolve("local-projects.empty"), MenuAction::Inert);
         // The removed reset-guest leaf (operator order, 2026-07-22; tray-ux
         // "UX curation governance"): even a stale click on the legacy id
         // must be INERT — no menu path may reach the guest reset. The

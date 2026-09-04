@@ -65,8 +65,6 @@ pub const MAX_CLOUD_PROJECTS_IN_MENU: usize = 10;
 /// match without coordination.
 pub mod ids {
     pub const STATUS: &str = "status";
-    pub const LOCAL_PROJECTS: &str = "local-projects";
-    pub const LOCAL_PROJECTS_EMPTY: &str = "local-projects.empty";
     pub const CLOUD_PROJECTS: &str = "cloud-projects";
     pub const CLOUD_PROJECTS_EMPTY: &str = "cloud-projects.empty";
     pub const CLOUD_PROJECTS_LOADING: &str = "cloud-projects.loading";
@@ -348,7 +346,6 @@ pub struct MenuState {
     pub status_text: String,
     pub version: String,
     pub login: GithubLoginState,
-    pub local_projects: Vec<ProjectEntry>,
     pub cloud_projects: Vec<ProjectEntry>,
     /// False until the first cloud-projects answer (push or refresh reply)
     /// lands. Distinguishes "still fetching your GitHub repos" from a
@@ -407,7 +404,6 @@ impl MenuState {
             // construction time, and claiming "signed out" before asking is
             // what put an actionable login leaf in front of signed-in users.
             login: GithubLoginState::Unknown,
-            local_projects: Vec::new(),
             cloud_projects: Vec::new(),
             cloud_projects_loaded: false,
             selected_agent: SelectedAgent::Claude,
@@ -603,8 +599,6 @@ pub fn build(state: &MenuState) -> MenuStructure {
             ));
         }
         GithubLoginState::LoggedIn { .. } => {
-            // Local projects — submenu with per-project agent leaves.
-            items.push(build_local_projects(state));
             // Cloud projects — submenu (cap + overflow).
             items.push(build_cloud_projects(state));
         }
@@ -628,22 +622,6 @@ pub fn build(state: &MenuState) -> MenuStructure {
     items.push(MenuItem::leaf(ids::QUIT, "\u{274C} Quit Tillandsias"));
 
     MenuStructure::Ready { items }
-}
-
-fn build_local_projects(state: &MenuState) -> MenuItem {
-    let mut children: Vec<MenuItem> = state
-        .local_projects
-        .iter()
-        .map(|p| build_project_submenu("local", p, state.podman_ready, state.target))
-        .collect();
-    if children.is_empty() {
-        children.push(MenuItem::disabled(
-            ids::LOCAL_PROJECTS_EMPTY,
-            "(no projects yet)",
-            "create a directory under ~/src",
-        ));
-    }
-    MenuItem::submenu(ids::LOCAL_PROJECTS, "\u{1F3E0} ~/src", children)
 }
 
 fn build_cloud_projects(state: &MenuState) -> MenuItem {
@@ -844,12 +822,6 @@ mod tests {
         ready.podman_ready = true;
         ready.login_runtime_ready = true;
         ready.cloud_projects_loaded = true;
-        ready.local_projects = vec![ProjectEntry {
-            name: "proj".to_string(),
-            path: "/home/u/src/proj".to_string(),
-            ready: true,
-            full_name: None,
-        }];
         ready.cloud_projects = vec![ProjectEntry {
             name: "repo".to_string(),
             path: "octocat/repo".to_string(),
@@ -926,14 +898,6 @@ mod tests {
     /// Agent selection lives inside each per-project submenu (7 leaves each).
     #[test]
     fn menu_structure_matches_linux_tray_parity() {
-        let local = (0..5)
-            .map(|i| ProjectEntry {
-                name: format!("local-{i}"),
-                path: format!("/home/u/src/local-{i}"),
-                ready: false,
-                full_name: None,
-            })
-            .collect::<Vec<_>>();
         let cloud = (0..22)
             .map(|i| ProjectEntry {
                 name: format!("cloud-{i}"),
@@ -949,7 +913,6 @@ mod tests {
             login: GithubLoginState::LoggedIn {
                 handle: "tlatoani".to_string(),
             },
-            local_projects: local,
             cloud_projects: cloud,
             cloud_projects_loaded: true,
             selected_agent: SelectedAgent::Claude,
@@ -967,12 +930,13 @@ mod tests {
             other => panic!("expected MenuStructure::Ready, got {other:?}"),
         };
 
-        // status + local + cloud + separator + version + quit
-        // = 6 top-level items (the unapproved reset-guest leaf was removed
-        // by operator order 2026-07-22; tray-ux "UX curation governance").
+        // status + cloud + separator + version + quit = 5 top-level items.
+        // Order 997-e4v2 removed the local-projects submenu: Cloud is the only
+        // project path, so the Linux-parity contract is five, not six. The
+        // unapproved reset-guest leaf went earlier (operator order 2026-07-22).
         assert_eq!(
             items.len(),
-            6,
+            5,
             "top-level item count (authenticated, Linux parity)"
         );
 
@@ -981,7 +945,6 @@ mod tests {
             actual_ids,
             vec![
                 ids::STATUS,
-                ids::LOCAL_PROJECTS,
                 ids::CLOUD_PROJECTS,
                 ids::SEPARATOR,
                 ids::VERSION,
@@ -1001,37 +964,15 @@ mod tests {
             );
         }
 
-        // Local projects: 5 children, each a submenu with 7 per-project
-        // leaves (Antigravity added 2026-07-11 for Linux parity).
-        let local_node = &items[1];
-        assert_eq!(local_node.children.len(), 5);
-        for child in &local_node.children {
-            assert_eq!(
-                child.children.len(),
-                7,
-                "each project has 7 agent/action leaves"
-            );
-            let verbs: Vec<&str> = child
-                .children
-                .iter()
-                .map(|l| l.id.rsplit('.').next().unwrap_or(""))
-                .collect();
-            assert_eq!(
-                verbs,
-                vec![
-                    "claude",
-                    "codex",
-                    "opencode",
-                    "antigravity",
-                    "opencode-web",
-                    "observatorium",
-                    "maintenance"
-                ]
-            );
-        }
-
         // Cloud projects: cap + 1 overflow leaf = 11 children.
-        let cloud_node = &items[2];
+        // 997-e4v2: looked up by ID, not by index. The local-projects submenu
+        // that used to sit at [1] is gone, and an index-based lookup silently
+        // became a different node when it went — which is how this test failed
+        // on a menu change rather than on a menu defect.
+        let cloud_node = items
+            .iter()
+            .find(|i| i.id == ids::CLOUD_PROJECTS)
+            .expect("cloud-projects submenu present");
         assert_eq!(
             cloud_node.children.len(),
             MAX_CLOUD_PROJECTS_IN_MENU + 1,
@@ -1056,12 +997,6 @@ mod tests {
             login: GithubLoginState::LoggedOut,
             login_runtime_ready: true,
             // Projects present but must NOT surface while logged out.
-            local_projects: vec![ProjectEntry {
-                name: "secret".into(),
-                path: "/home/u/src/secret".into(),
-                ready: false,
-                full_name: None,
-            }],
             ..MenuState::initial()
         };
         let items = match build(&state) {
@@ -1085,12 +1020,11 @@ mod tests {
         assert!(login.enabled);
         assert!(login.children.is_empty());
         // None of the gated bodies leaked through.
-        for gated in [ids::LOCAL_PROJECTS, ids::CLOUD_PROJECTS] {
-            assert!(
-                !ids_seen.contains(&gated),
-                "{gated} must be hidden while logged out",
-            );
-        }
+        assert!(
+            !ids_seen.contains(&ids::CLOUD_PROJECTS),
+            "{} must be hidden while logged out",
+            ids::CLOUD_PROJECTS,
+        );
     }
 
     /// Order 626-r7kq, THE regression pin: an unobserved sign-in state must
@@ -1133,12 +1067,11 @@ mod tests {
             // The auth-gated body must not leak either: unknown is not
             // logged-in any more than it is logged-out.
             let ids_seen: Vec<&str> = items.iter().map(|i| i.id.as_str()).collect();
-            for gated in [ids::LOCAL_PROJECTS, ids::CLOUD_PROJECTS] {
-                assert!(
-                    !ids_seen.contains(&gated),
-                    "{gated} must stay hidden while sign-in is unknown",
-                );
-            }
+            assert!(
+                !ids_seen.contains(&ids::CLOUD_PROJECTS),
+                "{} must stay hidden while sign-in is unknown",
+                ids::CLOUD_PROJECTS,
+            );
         }
     }
 
@@ -1239,12 +1172,6 @@ mod tests {
         let state = MenuState {
             login: GithubLoginState::LoggingIn,
             login_runtime_ready: true,
-            local_projects: vec![ProjectEntry {
-                name: "secret".into(),
-                path: "/home/u/src/secret".into(),
-                ready: false,
-                full_name: None,
-            }],
             ..MenuState::initial()
         };
         let items = match build(&state) {
@@ -1268,9 +1195,11 @@ mod tests {
         assert!(login.label.contains("Logging in"));
         assert_eq!(login.disabled_reason.as_deref(), Some("login in progress"));
         // The gated project body must NOT leak through mid-login.
-        for gated in [ids::LOCAL_PROJECTS, ids::CLOUD_PROJECTS] {
-            assert!(!ids_seen.contains(&gated), "{gated} hidden while LoggingIn");
-        }
+        assert!(
+            !ids_seen.contains(&ids::CLOUD_PROJECTS),
+            "{} hidden while LoggingIn",
+            ids::CLOUD_PROJECTS,
+        );
     }
 
     /// Per-project leaves are gated on podman_ready — when podman is not ready
@@ -1279,12 +1208,15 @@ mod tests {
     fn per_project_leaves_disabled_when_podman_not_ready() {
         let state = MenuState {
             login: GithubLoginState::LoggedIn { handle: "u".into() },
-            local_projects: vec![ProjectEntry {
+            // 997-e4v2: the per-project gating property is unchanged, but the
+            // only project path is now cloud, so it is exercised there.
+            cloud_projects: vec![ProjectEntry {
                 name: "myapp".into(),
-                path: "/home/u/src/myapp".into(),
+                path: "octocat/myapp".into(),
                 ready: false,
-                full_name: None,
+                full_name: Some("octocat/myapp".into()),
             }],
+            cloud_projects_loaded: true,
             podman_ready: false,
             ..MenuState::initial()
         };
@@ -1307,12 +1239,15 @@ mod tests {
     fn per_project_leaves_enabled_when_podman_ready() {
         let state = MenuState {
             login: GithubLoginState::LoggedIn { handle: "u".into() },
-            local_projects: vec![ProjectEntry {
+            // 997-e4v2: the per-project gating property is unchanged, but the
+            // only project path is now cloud, so it is exercised there.
+            cloud_projects: vec![ProjectEntry {
                 name: "myapp".into(),
-                path: "/home/u/src/myapp".into(),
+                path: "octocat/myapp".into(),
                 ready: false,
-                full_name: None,
+                full_name: Some("octocat/myapp".into()),
             }],
+            cloud_projects_loaded: true,
             podman_ready: true,
             ..MenuState::initial()
         };
@@ -1372,23 +1307,6 @@ mod tests {
     }
 
     #[test]
-    fn empty_local_projects_renders_placeholder() {
-        let state = MenuState {
-            login: GithubLoginState::LoggedIn { handle: "u".into() },
-            ..MenuState::initial()
-        };
-        let menu = build(&state);
-        let items = match menu {
-            MenuStructure::Ready { items } => items,
-            _ => panic!("expected Ready"),
-        };
-        let local = &items[1];
-        assert_eq!(local.children.len(), 1);
-        assert_eq!(local.children[0].id, ids::LOCAL_PROJECTS_EMPTY);
-        assert!(!local.children[0].enabled);
-    }
-
-    #[test]
     fn failed_menu_carries_retry_and_open_log() {
         let menu = MenuStructure::failed("rootfs checksum mismatch");
         let items = match menu {
@@ -1442,7 +1360,10 @@ mod tests {
             MenuStructure::Ready { items } => items,
             _ => panic!("expected Ready"),
         };
-        let cloud = &items[2];
+        let cloud = items
+            .iter()
+            .find(|i| i.id == ids::CLOUD_PROJECTS)
+            .expect("cloud-projects submenu present");
         assert_eq!(cloud.children.len(), 3);
         assert!(
             cloud
@@ -1466,7 +1387,10 @@ mod tests {
             MenuStructure::Ready { items } => items,
             _ => panic!("expected Ready"),
         };
-        let cloud = &items[2];
+        let cloud = items
+            .iter()
+            .find(|i| i.id == ids::CLOUD_PROJECTS)
+            .expect("cloud-projects submenu present");
         assert_eq!(cloud.children.len(), 1);
         assert_eq!(cloud.children[0].id, ids::CLOUD_PROJECTS_LOADING);
         assert_eq!(cloud.children[0].label, "(loading repos\u{2026})");
@@ -1481,7 +1405,10 @@ mod tests {
             MenuStructure::Ready { items } => items,
             _ => panic!("expected Ready"),
         };
-        let cloud = &items[2];
+        let cloud = items
+            .iter()
+            .find(|i| i.id == ids::CLOUD_PROJECTS)
+            .expect("cloud-projects submenu present");
         assert_eq!(cloud.children.len(), 1);
         assert_eq!(cloud.children[0].id, ids::CLOUD_PROJECTS_EMPTY);
         assert_eq!(cloud.children[0].label, "(no repos)");
@@ -1514,12 +1441,6 @@ mod tests {
                         target,
                         podman_ready,
                         login_runtime_ready: podman_ready,
-                        local_projects: vec![ProjectEntry {
-                            name: "myapp".into(),
-                            path: "/home/u/src/myapp".into(),
-                            ready: false,
-                            full_name: None,
-                        }],
                         ..MenuState::initial()
                     };
                     let menu = build(&state);
@@ -1560,9 +1481,8 @@ mod tests {
             ids::VERSION,
             ids::QUIT,
         ];
-        const APPROVED_LOGGED_IN: [&str; 6] = [
+        const APPROVED_LOGGED_IN: [&str; 5] = [
             ids::STATUS,
-            ids::LOCAL_PROJECTS,
             ids::CLOUD_PROJECTS,
             ids::SEPARATOR,
             ids::VERSION,
