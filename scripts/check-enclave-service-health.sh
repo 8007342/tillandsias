@@ -403,8 +403,8 @@ if [ -n "$details" ]; then
         echo "  NOTE: health=stale-healthy means podman still reports the LAST healthcheck result for a container that is no longer running. The service is dead; the word 'healthy' beside it is podman's stale record, not a reading." >&2
     fi
     echo "  CAUSE: an enclave service exited and nothing restarted it. rc>128 means it died of signal rc-128 (143=SIGTERM, 137=SIGKILL, 139=SIGSEGV); the in-container supervisors (767-es4w proxy, 767-nkkq forge harness) can only speak while their container lives, so a stopped container is silent by construction." >&2
-    echo "  REMEDY: 'podman logs <service>' for the last words, then RE-RUN THE ENCLAVE" >&2
-    echo "  ORCHESTRATION rather than 'podman start <service>'. Order 975-rsgm: a bare" >&2
+    echo "  REMEDY: 'podman logs <service>' for the last words, then bring the enclave up through" >&2
+    echo "  the orchestration: 'tillandsias --ensure-enclave' (idempotent), NOT 'podman start <service>' and NOT '--init', which only builds images (1004-xw3q). Order 975-rsgm: a bare" >&2
     echo "  'podman start' skips the preconditions the launch path establishes — for the" >&2
     echo "  proxy that is the CA key secret, and starting without it produces a DIFFERENT" >&2
     echo "  failure (squid: X509_check_private_key() failed) whose message names neither" >&2

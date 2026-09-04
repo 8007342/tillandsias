@@ -132,9 +132,30 @@ critical_path:
     timeout_ms: 20000
     expected_behavior: "PASS: build_check_mix label 2/2 (890-nkdz)"
 
+  # ── packet 1004-j4p4: a probe whose target is gone must go RED, not unknown ──
+  - step: "1004-j4p4: every scripts/*.sh the reporter probes exists and is executable, and the repo: traces= field is never a bare unknown"
+    # THE SHAPE. For four weeks the repo: block tested `-x` on a script retired
+    # on 2026-08-08; the test was false everywhere, the probe never ran, and
+    # every host printed traces=unknown every cycle — a well-formed nothing
+    # that reads as "someone else is looking". Two assertions, both
+    # behavioural: (1) each `$REPO_ROOT/scripts/<name>.sh` path the reporter
+    # names exists in this tree — and is executable when the reporter INVOKES
+    # it; a path it SOURCES (`. "$REPO_ROOT/...`) is a library and need only
+    # exist, plan-binary-probe.sh is mode 644 by design — so the next
+    # retirement turns this step red instead of turning a field to unknown;
+    # (2) the reporter, run for real against an empty usage log, prints a
+    # traces= value from the pinned set current|stale|unavailable:<reason>.
+    # Shown red against the pre-fix probe on 2026-09-04 (it reported
+    # probed-but-absent: scripts/generate-traces.sh and traces=unknown) and
+    # green after — the same command, so it distinguishes the two states.
+    command: "miss=''; while IFS= read -r l; do p=$(printf '%s' \"$l\" | grep -oE '[$]REPO_ROOT/scripts/[A-Za-z0-9_.-]+[.]sh' | head -1); p=${p#*REPO_ROOT/}; case \"$l\" in *'. \"$REPO_ROOT/'*|*'source \"$REPO_ROOT/'*) [ -f \"$p\" ] || miss=\"$miss $p(sourced-but-missing)\" ;; *) [ -x \"$p\" ] || miss=\"$miss $p(invoked-but-missing-or-not-executable)\" ;; esac; done < <(grep -E '[$]REPO_ROOT/scripts/[A-Za-z0-9_.-]+[.]sh' scripts/cycle-metrics.sh | sort -u); L=$(mktemp); : > $L; out=$(TILLANDSIAS_EXPERT_USAGE_LOG=$L scripts/cycle-metrics.sh 2>/dev/null | grep '^repo: '); rm -f $L; t=${out##*traces=}; t=${t%% *}; bad=''; [ -n \"$miss\" ] && bad=\"probed-but-absent:$miss\"; case \"$t\" in current|stale|unavailable:?*) ;; *) bad=\"$bad traces=${t:-<no-repo-line>}\" ;; esac; if [ -z \"$bad\" ]; then echo \"ok: probe targets exist, traces=$t\"; else echo \"observed:$bad\"; echo 'fail: the reporter probes a script that is not in the tree, or traces= is a bare unknown (1004-j4p4)'; fi"
+    timeout_ms: 30000
+    expected_behavior: "ok: probe targets exist"
+
 failure_modes:
   - "degraded folded into the answer-rate denominator, making a wrong artifact look like a hard question (order 531 recurrence)"
   - "answered reachable without citations, converting a quality signal into a gameable volume signal"
   - "substitution reported as an estimated number instead of unknown"
   - "the reporter exits non-zero and fails the cycle it was measuring"
   - "telemetry failure propagating into an expert tool call"
+  - "the reporter probes a script path that was retired, so a field prints a well-formed unknown every cycle and nobody notices the probe never ran (1004-j4p4)"
