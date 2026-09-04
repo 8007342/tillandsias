@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: ca-bundle-moves-to-a-durable-directory
+    event:
+      type: evidence
+      ts: "2026-09-04T07:11:02Z"
+      agent_id: linux-lenovinha-claude-20260904t071102z
+      host: lenovinha
+      summary: |
+        SECOND REGIME FOR THE 998-3z6g CLOSURE, AND IT DOES NOT HOLD AS WRITTEN. Run on lenovinha (Fedora Silverblue, rootless podman, installed app v56.9.2.1, tree at 4aaa24ba2), captured before and after. The closure is "remove the old dir, restart, observe the proxy reach Running unaided". On this host the proxy never reaches Running via the prescribed restart, and the reason is not the CA bundle.
+
+        BEFORE. tillandsias-proxy Exited(0) ~2h, five other services up; check-enclave-service-health.sh degraded:services=6:up=5:down=1; cycle-preflight fail:enclave-ca-desync-unrepaired:service=tillandsias-proxy:action=operator. ~/.local/state/tillandsias/ca/ absent.
+
+        AFTER `tillandsias --debug --init` (exit 0). CA directory still absent, proxy still Exited(0) with age unchanged, ca-desync verdict byte-identical. --init provisioned Vault (12 policies, 13 AppRoles), retagged images, and refreshed a CA — but it never touched the proxy. Repeated from a fully ABSENT proxy container: --init exits 0 and does not create or start it at all.
+
+        THE DIAGNOSTIC NAMES THE WRONG PATH ON THIS HOST, and this is the part to fix. cycle-preflight says intermediate.crt "is missing, and the proxy binds it by that path", naming ~/.local/state/tillandsias/ca/intermediate.crt. The live container binds /tmp/tillandsias-ca/intermediate.crt:/etc/squid/certs/intermediate.crt:ro — the OLD path. The check migrated to the post-998-3z6g location; the INSTALLED BINARY did not, because v56.9.2.1 predates 44a33f328 and still writes /tmp/tillandsias-ca (openssl req ... -out /tmp/tillandsias-ca/intermediate.crt.tmp, "refreshed CA bundle at /tmp/tillandsias-ca/intermediate.crt"). So a tree-side checker reports a missing file the running proxy never asked for. That is exactly the 975-rsgm failure mode the CA text was written to prevent — a message that sends the reader at the wrong subsystem — reproduced by the fix's own migration, on any host whose installed app predates it. It also means the CA was NEVER the blocker here: the bind source existed and was refreshed.
+
+        WHY THE PROXY WAS DOWN, plainly: nothing had started it. `tillandsias --help` documents --init as "Pre-build container images". The proxy is brought up by a forge LAUNCH, not by --init. So cycle-preflight's REMEDY — "re-run the enclave orchestration (`tillandsias --init`)" — prescribes a command that by its own help text does not orchestrate the enclave. Proof it comes up unaided once something actually launches it: scripts/orchestrate-enclave.sh created and started the proxy and it passed health on :3128 on attempt 2, with the CA at the /tmp path.
+
+        A CAUTION ON THAT SCRIPT, since the remedy text may send someone to it: orchestrate-enclave.sh ends with `podman rm -f` of proxy, git and inference. It is a demo/e2e path, not a restore path. I ran it and it left the proxy ABSENT rather than running; that is my doing and it is recorded rather than tidied away.
+
+        A GREEN THAT SHOULD NOT BE GREEN, found as a consequence. With the proxy DOWN, check-enclave-service-health.sh reported degraded:services=6:up=5:down=1. With the proxy REMOVED it reports ok:enclave-service-health:services=5:up=5:down=0:dead=0:absent=0. Deleting a broken service turns the verdict from degraded to ok, and `absent=0` is printed while a service is absent, because the checker enumerates the containers that exist rather than an expected set. A health gate that a `podman rm` can satisfy is the guard-nobody-honours shape.
+
+        HOST LEFT: builder, nix, nix-cache, dev-inference, vault up; proxy, git and inference containers absent, recreated on the next forge launch. Nothing hand-repaired — per the instruction, a proxy that does not come up unaided is a finding, not something to patch quietly.
