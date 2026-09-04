@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: spec-index-durable-tier-unreachable-under-rootless-podman
+    event:
+      type: evidence
+      ts: "2026-09-04T08:02:19Z"
+      agent_id: linux-lenovinha-claude-20260904t074603z
+      host: lenovinha
+      summary: |
+        ALL THREE REMEDIES LANDED, VERIFIED END-TO-END, AND THE PACKET'S OWN REPORT WAS INCOMPLETE IN ONE WAY THAT MATTERED.
+
+        CRITERION 1 (rung 4 is not target/) — MET, proven empirically the way metrics-log-path.sh proved its equivalent claim rather than by argument. Index published to both locations, then the sweep's effect applied: target/tillandsias-spec-index went 2 entries -> 0 while .cache/spec-index held 2 -> 2, and --where still resolved and served a live entry afterwards.
+
+        CRITERION 2 (EACCES distinguished from ENOENT) — MET, and without the container write probe the criterion suggested. A SUCCESSFUL `podman volume inspect` is itself the existence oracle: if podman names a mountpoint the volume EXISTS, so a subsequent stat failure can only be permission. `[ -d ]` is demoted from liveness test to reachability test. Named-but-unstattable is a DEMOTION and is reported; unknown-to-podman is absent and stays QUIET — reporting that would be a new defect, since a host with no volume is not degraded and a warning it cannot act on is noise. No reader gains a podman dependency: readers inside the enclave take rung 2 via FORGE_SPEC_INDEX_ROOT and never reach rung 3.
+
+        CRITERION 3 (the demotion is not silent) — MET IN SUBSTANCE, and I want the literal reading on the record rather than glossed. The criterion as I wrote it said `--where` must REFUSE to report serving-exists=yes while volume= and root= disagree. It still reports serving-exists=yes, because that line answers a different and still-true question: the serving directory does exist. What changed is that the report no longer leaves the reader to notice the discrepancy themselves — it now emits `spec-index:durable-tier=ok` or `spec-index:durable-tier=unavailable:<reason>` naming the volume that was skipped and why. I judged suppressing a true line worse than adding the missing conclusion; the defect was never a wrong line, it was an ABSENT CONCLUSION beside three true ones. If the coordinator wants the literal refusal instead, that is a small follow-up and I have not silently substituted my reading for the criterion.
+
+        CRITERION 4 (the unmeasured half stays unmeasured) — MET. Whether the forge, running INSIDE the user namespace, reaches rung 1 correctly is still not established. I did not measure it and have not asserted it in either direction; it needs a host with a running forge and is routed separately.
+
+        THE THING THE ISSUE FILE GOT WRONG, and it nearly shipped as the very defect this packet describes. The report said the resolution block lives in THREE files, pinned byte-identical by check-spec-index-resolution-agreement.sh. There is a FOURTH carrier: the ladder is also implemented in Rust, in crates/tillandsias-plan/src/spec_index.rs, and the shell agreement guard cannot see it. Changing only the shell side moved the PRODUCER to .cache/spec-index while leaving the CONSUMER — the grader, expert-serve, the whole Rust read path — on target/. I observed it as the accuracy record dropping to `partial rate=100% pass=28 graded=28 skipped=5 skipped_engines=spec.answer` immediately after deleting target/: producer and consumer disagreeing about where the index lives, which is 890-t9pu in a third subsystem and exactly what this packet warned about, briefly created by its own fix. Both sides now resolve .cache/spec-index and the grader is back to total=33 pass=31 fail=2 skipped=0. Worth propagating as a general caution: an agreement guard that pins N carriers is evidence about those N, and its green is not evidence about a carrier it cannot read.
+
+        A SECOND-ORDER CATCH: the Rust unit test asserted `!resolved.contains(".cache")` as a PROXY for "did not fall through to the HOME-derived rung". That proxy stopped being valid the moment rung 4 itself moved into .cache — it failed against a correct implementation. Replaced with the property itself: anchored under the checkout, and not under $HOME. A check that passes for a reason other than the one it names is what 931-p26p's arm 6 exists to prevent, and this was one.
+
+        INCIDENTAL, AND USEFUL AS A LIVE CONTROL: the mid-fix `partial rate=100% pass=28 graded=28 skipped=5` line is the 917-6iwv negative control firing in the wild rather than in its fixture. Every graded case passed, and the record still could not be mistaken for a complete run, because status=partial, the denominator and skipped_engines travelled with it. That is the shape the historical `rate=100%` beside `expert-answered-nothing` lacked.
+
+        EVIDENCE: gate green (307s, exit 0). test-spec-index-durable-tier-demotion.sh 7/7 — including a discrimination control run against the OLD block on identical input, where it silently resolves target/ with no reason while the new block resolves .cache/spec-index and names the demotion. check-spec-index-resolution-agreement.sh carriers=3-scenarios=4 plus selftest 5/5. test-spec-index-repo-relative-rung.sh 6/6. cargo test -p tillandsias-plan spec_index 5/5. New fixture wired into local-ci.sh beside its two sibling guards. Commit d2ce890b2.
