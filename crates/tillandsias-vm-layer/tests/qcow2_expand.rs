@@ -25,55 +25,112 @@ use sha2::{Digest, Sha256};
 use std::io::Read;
 use std::os::unix::fs::MetadataExt;
 
-const FIXTURE: &str = concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/tests/fixtures/mixed-clusters.qcow2"
-);
+#[path = "support/qcow2_fixture.rs"]
+mod qcow2_fixture;
 
-/// `qemu-img convert -f qcow2 -O raw` of the committed fixture, captured on
-/// macOS 26.6 with qemu 11.1.1. If this changes, the reader changed.
-const EXPECTED_SHA256: &str = "3a551799e962c822e0ed1e59002e26d1ce8d535d0a19682ac0e77b693834ea09";
+use qcow2_fixture::{CLUSTER, VIRTUAL_SIZE};
 
-const CLUSTER: u64 = 65536;
-const VIRTUAL_SIZE: u64 = 524288;
-
+/// Expand a freshly generated fixture. The qcow2 is built by
+/// `support/qcow2_fixture.rs` at test time rather than read from a tracked
+/// binary (order 1006-jfwv); the tempdir is returned so it outlives the path.
 fn expand(final_size: u64) -> (tempfile::TempDir, std::path::PathBuf) {
+    let (fx_dir, fixture) = qcow2_fixture::staged();
     let dir = tempfile::tempdir().expect("tempdir");
     let out = dir.path().join("expanded.raw");
-    let vs = tillandsias_vm_layer::qcow2::expand_to_raw(
-        std::path::Path::new(FIXTURE),
-        &out,
-        final_size,
-        &|_, _| {},
-    )
-    .expect("expand fixture");
+    let vs = tillandsias_vm_layer::qcow2::expand_to_raw(&fixture, &out, final_size, &|_, _| {})
+        .expect("expand fixture");
+    drop(fx_dir);
     assert_eq!(vs, VIRTUAL_SIZE, "fixture virtual size");
     (dir, out)
 }
 
-/// The whole-image assertion: byte-for-byte agreement with qemu-img.
+/// The whole-image assertion, against the bytes the fixture encodes.
+///
+/// ORDER 1006-jfwv. This used to compare a SHA-256 captured once from
+/// `qemu-img convert`; the fixture is now generated at test time, so this
+/// compares the reader against the bytes the generator encodes.
+///
+/// That sounds like a downgrade and is not, because
+/// `cross_check_against_qemu_img_when_available` re-derives the independent
+/// opinion on every run instead of trusting a constant captured on one host on
+/// one day — and it caught a genuinely invalid fixture the first time it ran.
+///
+/// Byte comparison rather than a hash: when this fails it says WHICH byte, and
+/// there is no opaque constant for a future edit to "update" until it passes.
+///
+/// Byte comparison rather than a hash constant: when this fails it says WHICH
+/// byte, and there is no longer an opaque constant for a future edit to
+/// "update" until it passes.
 #[test]
-fn expansion_matches_qemu_img_byte_for_byte() {
+fn expansion_matches_the_bytes_the_fixture_encodes() {
     let (_d, out) = expand(0);
-    let mut f = std::fs::File::open(&out).unwrap();
-    let mut h = Sha256::new();
-    let mut buf = vec![0u8; 1 << 16];
-    loop {
-        let n = f.read(&mut buf).unwrap();
-        if n == 0 {
-            break;
-        }
-        h.update(&buf[..n]);
+    let got = std::fs::read(&out).unwrap();
+    let want = qcow2_fixture::expected_raw();
+    assert_eq!(got.len(), want.len(), "expanded length");
+    if got != want {
+        let at = got
+            .iter()
+            .zip(&want)
+            .position(|(a, b)| a != b)
+            .expect("lengths equal but contents differ");
+        panic!(
+            "expansion differs at byte {at} (cluster {}): got {:#04x}, want {:#04x}",
+            at as u64 / CLUSTER,
+            got[at],
+            want[at]
+        );
     }
-    assert_eq!(
-        format!("{:x}", h.finalize()),
-        EXPECTED_SHA256,
-        "expanded fixture must be byte-identical to `qemu-img convert` output"
-    );
     assert_eq!(
         std::fs::metadata(&out).unwrap().len(),
         VIRTUAL_SIZE,
         "without a final_size the expansion stops at the image's virtual size"
+    );
+}
+
+/// The independent opinion, when the host can give one.
+///
+/// SKIPPING IS THE POINT HERE, unlike everywhere else in this suite. Order
+/// 980-xcaf removed the `qemu-img` dependency from the PRODUCT path precisely
+/// so a first launch works without it, so requiring it in a test would
+/// reintroduce the coupling the packet deleted. This arm therefore runs where
+/// qemu exists and says so loudly when it does not, rather than being silently
+/// absent — an unrun cross-check that nobody can see is worse than none.
+#[test]
+fn cross_check_against_qemu_img_when_available() {
+    let qemu = std::process::Command::new("qemu-img")
+        .arg("--version")
+        .output();
+    if qemu.is_err() {
+        eprintln!(
+            "SKIP cross_check_against_qemu_img_when_available: no qemu-img on this host. \
+             The reader is still pinned by expansion_matches_the_bytes_the_fixture_encodes; \
+             what is skipped is the INDEPENDENT confirmation of those bytes."
+        );
+        return;
+    }
+    let (fx_dir, fixture) = qcow2_fixture::staged();
+    let raw = fx_dir.path().join("qemu.raw");
+    let st = std::process::Command::new("qemu-img")
+        .args(["convert", "-f", "qcow2", "-O", "raw"])
+        .arg(&fixture)
+        .arg(&raw)
+        .status()
+        .expect("run qemu-img convert");
+    assert!(
+        st.success(),
+        "qemu-img convert failed on the generated fixture"
+    );
+    let theirs = std::fs::read(&raw).unwrap();
+    let ours = qcow2_fixture::expected_raw();
+    assert_eq!(
+        theirs.len(),
+        ours.len(),
+        "qemu-img and the fixture disagree on length"
+    );
+    assert!(
+        theirs == ours,
+        "qemu-img's expansion of the generated fixture differs from the bytes it encodes — \
+         the GENERATOR is wrong, not necessarily the reader"
     );
 }
 
