@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-selector-answers-from-a-ledger-the-trunk-has-moved-past
+    order: 1016-8u4s
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [selector, plan, multi-host, fail-loud, platform-branches]
+    estimated_hours: 2
+    owned_files:
+      - scripts/select-work-batch.sh
+    title: |
+      On a platform branch that has pulled but not yet merged origin/linux-next, the selector offers the trunk's finished packets as ready and a host claims them — the selector should refuse, or say so, when the trunk is not an ancestor of HEAD.
+    context: |
+      MEASURED by tlatoanis-macbook-air 2026-09-04: osx-next up to date after
+      the pull, 
+      returned 1001-q3zf as its p1 top pick and  agreed it was
+      ready, because the checkout had not merged origin/linux-next where the
+      coordinator's closure (f9eb79059, an hour earlier) lived. The host flipped
+      a COMPLETED packet to in_progress, caught it on the post-merge fold,
+      dropped the unpushed claim, and re-ran: different top pick, different
+      batch. The worker skill now orders the merge before §2.0 (landed with
+      this packet), which closes the discipline half; this packet is the
+      instrument half, so the ordering does not depend on a host remembering:
+      when  is false, the
+      selector and the plan_next/plan_ready readers should refuse with a
+      verdict naming the merge as the remedy, or at minimum prefix the batch
+      header with stale-trunk=<n commits> so the reader knows the ledger's age.
+      Same class as the meta-orchestration overlap check's "after the merge,
+      not before" and as 1014-xf2u's stale-base misattribution.
+      Provenance: macbookair measured; filed by the coordinator.
+    exit_criteria:
+      - select-work-batch.sh refuses (refused:stale-trunk:<n>) or prefixes its batch header with stale-trunk=<n> when origin/linux-next is not an ancestor of HEAD after a fetch, naming the merge as the remedy
+      - a fixture proves both the refusal on a stale platform branch and the clean pass on a merged one
+      - the meta-orchestration and advance-work skills cite the verdict beside the ordering rule
+    verifiable_closure: |
+      litmus:cycle-batch-triage-shape (bound, pre-build) gains the stale-trunk
+      arm; it does not exist yet and is this packet's deliverable.
