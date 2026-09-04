@@ -18082,10 +18082,11 @@ mod tests {
             main_window
                 .matches("run_cli_with_vault_credential_cleanup(debug")
                 .count(),
-            5,
-            "both status dispatches, OpenCode, forge-agent, and provider-login CLI \
-             dispatches must clean up (5 as of the provider-login dispatch; a new \
-             dispatch that wraps itself in the cleanup is compliance, not drift)"
+            6,
+            "both status dispatches, OpenCode, forge-agent, provider-login and \
+             ensure-enclave CLI dispatches must clean up (6 as of the \
+             ensure-enclave dispatch; a new dispatch that wraps itself in the \
+             cleanup is compliance, not drift)"
         );
         assert!(
             !main_window

@@ -2146,19 +2146,107 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # is that no gate ran `cargo test`; scoping it to one target recreated that
     # blind spot inside the fix. Dropping `--lib` covers the bin and integration
     # targets too, and cost ~0.0s: the bin suite is 23 assertions of pure text.
-    _step "Running plan ledger tests (cargo test -p tillandsias-plan, all targets)..."
-    _PLAN_TEST_TRANSCRIPT="$SCRIPT_DIR/target/test-transcript-plan-lib.log"
-    mkdir -p "$(dirname "$_PLAN_TEST_TRANSCRIPT")"
-    _plan_test_rc=0
-    _run cargo test -p tillandsias-plan --no-fail-fast --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1 |
-        tee "$_PLAN_TEST_TRANSCRIPT" || _plan_test_rc="${PIPESTATUS[0]}"
-    if ! _plan_baseline_verdict="$(bash "$SCRIPT_DIR/scripts/check-test-baseline.sh" --from "$_PLAN_TEST_TRANSCRIPT")"; then
-        _error "$_plan_baseline_verdict"
-        _error "the plan ledger suite's failure set moved (cargo rc=$_plan_test_rc) — transcript: $_PLAN_TEST_TRANSCRIPT"
+    # ORDER 1003-444f. THE GATE NOW RUNS EVERY WORKSPACE CRATE'S SUITE, and
+    # names the crates whose suites produced nothing.
+    #
+    # It used to run exactly ONE: `-p tillandsias-plan`. Measured on yoga
+    # 2026-09-04 by appending a deliberately-failing test to
+    # crates/tillandsias-core/src/ca_path.rs — the crate went red
+    # (`test result: FAILED. 201 passed; 1 failed`) and a forced
+    # `./build.sh --check` still returned rc=0. The same log printed
+    # `Checking tillandsias-core` twice: the gate COMPILED the crate and
+    # stopped one step short of running its suite. The coverage gap was one
+    # flag wide, not an architectural absence.
+    #
+    # WHY --workspace RATHER THAN A LIST OF CRATES. The comment above records
+    # that scoping the ratchet to one target recreated the blind spot inside
+    # the fix; a hand-maintained crate list is that mistake with more entries,
+    # and it goes stale silently the day someone adds a crate. `--workspace`
+    # IS the derivation: cargo enumerates the members, so a new crate is
+    # covered the day it lands rather than the day someone remembers it.
+    #
+    # WHAT IT COST, measured before it was written rather than defended after:
+    # `cargo test --workspace --no-fail-fast` is 61s on this host against a
+    # warm cache, versus a 103s gate. The crates were already being COMPILED by
+    # the gate, so the marginal cost is running assertions, and most of these
+    # suites are pure-assertion.
+    #
+    # --no-fail-fast is not optional here (829-g4xf). A suite that stops at its
+    # first failure hides its own tail: yolanda's windows-tray crate concealed
+    # TWO stale pins that way, the second invisible because the first aborted
+    # the run. Running every crate is not enough if each one stops early.
+    #
+    # WHAT THIS TURNED UP THE FIRST TIME IT RAN, which is the packet's own
+    # argument: two red targets in tillandsias-headless, invisible to every
+    # gate for as long as they had been red.
+    #   proxy_cache_policy::bumped_origin_tls_and_signed_url_logs_fail_closed
+    #     — already in test-known-red.txt (845-7a88), so it becomes `tolerated`
+    #       rather than a surprise; it had simply never been EXERCISED.
+    #   tests::foreground_git_mirror_lanes_revoke_issued_approle_accessors_on_return
+    #     — a stale COUNT pin, fixed in this commit. It asserted exactly 5 CLI
+    #       dispatches wrap themselves in the vault-credential cleanup; the
+    #       --ensure-enclave dispatch made it 6, and the assertion's own message
+    #       says "a new dispatch that wraps itself in the cleanup is compliance,
+    #       not drift". Same cause as the tray-contract pin fixed at ae85ee471
+    #       (1022-y7kc cause 1) — one change, two stale pins, and this one sat
+    #       in a target no gate ran.
+    _step "Running workspace tests (cargo test --workspace, all targets)..."
+    _WS_TEST_TRANSCRIPT="$SCRIPT_DIR/target/test-transcript-workspace-gate.log"
+    mkdir -p "$(dirname "$_WS_TEST_TRANSCRIPT")"
+    _ws_test_rc=0
+    # SERIAL, and it is not a tax. A ratchet compares FAILURE SETS, so it needs
+    # the set to be a function of the tree and nothing else. Measured on yoga
+    # 2026-09-04, clean tree, tillandsias-headless's bin target:
+    #   parallel run 1 -> 1 failure    (the stale count pin)
+    #   parallel run 2 -> 1 failure    (forge_credential_quarantine_mounts_present)
+    #   parallel run 3 -> 2 failures   (count pin + forge_agent_run_args_export_debug)
+    #   --test-threads=1 -> 1 failure, the count pin, every time
+    # Three runs, three different sets. Those tests share process-global state
+    # (the ca_path HOME race macbookair fixed in tillandsias-core is the same
+    # family), so under threads the loser of the race is whichever test got
+    # there second. A ratchet fed a non-deterministic set reports new-red on a
+    # coin flip, and a gate that fails at random is a gate that gets switched
+    # off.
+    #
+    # It is also FASTER here: 51.6s serial against 61s parallel, because the
+    # contention these suites create costs more than the threads win. So this
+    # buys determinism at negative cost on this host, and the interference is
+    # filed separately — serial execution is a mitigation, not a cure, and the
+    # shared state is still there for anyone who runs the suite by hand.
+    _run cargo test --workspace --no-fail-fast --manifest-path "$SCRIPT_DIR/Cargo.toml" \
+        -- --test-threads=1 2>&1 |
+        tee "$_WS_TEST_TRANSCRIPT" || _ws_test_rc="${PIPESTATUS[0]}"
+    if ! _ws_baseline_verdict="$(bash "$SCRIPT_DIR/scripts/check-test-baseline.sh" --from "$_WS_TEST_TRANSCRIPT")"; then
+        _error "$_ws_baseline_verdict"
+        _error "the workspace suite's failure set moved (cargo rc=$_ws_test_rc) — transcript: $_WS_TEST_TRANSCRIPT"
         _error "a ledger change every shape gate calls clean can still break what the expert system can ANSWER"
         exit 1
     fi
-    _info "$_plan_baseline_verdict"
+    _info "$_ws_baseline_verdict"
+
+    # CRITERION 3 (1003-444f) IS SATISFIED BY --workspace, NOT BY A SECOND
+    # CHECK, and the check I wrote first is deleted rather than shipped.
+    #
+    # I built scripts/check-workspace-test-coverage.sh to name crates whose
+    # suites produced nothing. It read the transcript's `Running …
+    # (target/debug/deps/<stem>-<hash>)` lines and matched <stem> against the
+    # workspace member names. That premise is false: the stem is a TARGET name,
+    # and target names have no reliable relation to package names.
+    # tillandsias-headless declares `name = "tillandsias"`; macos-tray and
+    # windows-tray BOTH declare `name = "tillandsias-tray"`; integration
+    # targets are named after their file in tests/. The check duly reported
+    # tillandsias-headless as silent in a run where its suite had just caught a
+    # red. A check that misreports is the defect this order is about, so it is
+    # gone.
+    #
+    # What replaces it is the structural fact, which needs no parsing: cargo
+    # enumerates the workspace members itself, so with --workspace there is no
+    # subset to name — every member is included by construction, and a member
+    # added tomorrow is included the day it lands. A crate whose tests are
+    # cfg'd out on this platform contributes `running 0 tests`, which is
+    # visible in the transcript and honest: there is nothing to run here, and
+    # the ratchet's ran= total (2199, from 331) is the figure that moves if
+    # that stops being true.
 
     _step "Checking plan order uniqueness (tillandsias-policy plan-orders)..."
     if ! _run cargo run -q --manifest-path "$SCRIPT_DIR/Cargo.toml" -p tillandsias-policy -- plan-orders 2>&1; then
