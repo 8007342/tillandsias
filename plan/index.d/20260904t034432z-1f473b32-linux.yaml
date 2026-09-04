@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: interactive-tui-amputated-to-work-around-argv-join
+    field: status
+    value: obsoleted
+    ts: "2026-09-04T03:44:32Z"
+    host: linux
+
+events:
+  - packet_id: interactive-tui-amputated-to-work-around-argv-join
+    event:
+      type: completed
+      ts: "2026-09-04T03:44:32Z"
+      host: linux
+      summary: |-
+        status 'obsoleted' with evidence_refs: Premise falsified by tlatoanis-macbook-air and false at filing time: build_opencode_forge_args pushes --interactive --tty under if !diagnostics && prompt.is_none(), and main.rs extracted as of the 2026-08-17 audit date carries that conditional verbatim. No amputation ever occurred, so criterion 2 is unsatisfiable as written and 'done' would record a fictional fix. Disposition per philosophy.obsolete_mechanism_live_intent.dispositions mechanism_live_intent_dead — retire deliberately, dependents checked: nothing depends on this row and its own dependency reads completed. Criterion 3 IS met and is the yield: the source comment's unmeasured claim that podman REFUSES --interactive --tty under a non-TTY shell is measured false — it warns and proceeds, container exit 0 — and both comments now carry the measurement with its bound.
