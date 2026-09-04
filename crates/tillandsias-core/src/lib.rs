@@ -9,6 +9,10 @@ pub mod container_profile;
 pub mod event;
 pub mod format;
 pub mod genus;
+/// Order 1019-ivia: where the host stages the guest binary. Declared once so
+/// the writer (macos-tray) and the readers (vm-layer, the guest fstab line)
+/// cannot drift, the way 998-qrwu did for the CA path.
+pub mod guest_bin_path;
 pub mod icons;
 pub mod image_builder;
 pub mod preflight;

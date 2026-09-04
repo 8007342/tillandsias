@@ -695,6 +695,20 @@ if ! mountpoint -q /home/forge/src; then
   mount -t virtiofs home-src /home/forge/src || true
 fi
 
+# Mount the guest-binary staging share (order 1019-ivia). Persisted for the
+# same reason as home-src above: cloud-init runs on first boot only, and a
+# mount issued here would evaporate on every later boot — after which
+# fetch-headless.sh finds nothing staged and falls back to downloading a
+# pinned release, which looks like a working boot running the wrong headless.
+# READ-ONLY: the guest installs FROM here and never writes back.
+mkdir -p /var/lib/tillandsias/guest-bin
+if ! grep -q "^guest-bin " /etc/fstab; then
+  echo "guest-bin /var/lib/tillandsias/guest-bin virtiofs ro,nofail 0 0" >> /etc/fstab
+fi
+if ! mountpoint -q /var/lib/tillandsias/guest-bin; then
+  mount -t virtiofs -o ro guest-bin /var/lib/tillandsias/guest-bin || true
+fi
+
 # Mount the host-backed model cache (order 804-deux). Same fstab reasoning as
 # home-src above. This is the path the inference container binds as
 # /home/ollama/.ollama/models, and it holds BOTH the model blobs and the
@@ -722,7 +736,7 @@ cat > /usr/local/lib/tillandsias/fetch-headless.sh << 'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 DEST="/usr/local/bin/tillandsias-headless"
-STAGED="/home/forge/src/.tillandsias/guest-bin/tillandsias-headless"
+STAGED="/var/lib/tillandsias/guest-bin/tillandsias-headless"
 if [[ -x "$STAGED" ]]; then
   install -D -m 0755 "$STAGED" "$DEST"
   exit 0
@@ -735,9 +749,9 @@ fi
 # (used to read the share during the 2026-08-18 instrumented boot), and under
 # `set -euo pipefail` a MISSING mountpoint binary would make `! mountpoint -q`
 # succeed and report "not mounted" for a share that is fine.
-if ! findmnt -n /home/forge/src >/dev/null 2>&1; then
+if ! findmnt -n /var/lib/tillandsias/guest-bin >/dev/null 2>&1; then
   echo "[tillandsias-fetch] staged_binary=unreachable reason=share-not-mounted path=$STAGED" >&2
-  echo "[tillandsias-fetch]   /home/forge/src is not mounted yet, so the host-staged binary is invisible to this unit." >&2
+  echo "[tillandsias-fetch]   /var/lib/tillandsias/guest-bin is not mounted yet, so the host-staged binary is invisible to this unit." >&2
 else
   echo "[tillandsias-fetch] staged_binary=absent path=$STAGED" >&2
 fi
@@ -1018,7 +1032,10 @@ fn guest_sizing(host_cores: usize, host_memory: u64) -> (usize, u64) {
 fn guest_binary_fingerprint() -> Result<String, String> {
     use sha2::{Digest, Sha256};
 
-    let path = home_src_dir().join(".tillandsias/guest-bin/tillandsias-headless");
+    // ORDER 1019-ivia: the staged binary moved off the `home-src` share that
+    // 997-e4v2 retires. Declared once in core so this reader and the macOS
+    // tray's writer cannot drift.
+    let path = tillandsias_core::guest_bin_path::staged_guest_binary();
     let bytes = std::fs::read(&path)
         .map_err(|e| format!("read staged guest binary {}: {e}", path.display()))?;
     let digest = Sha256::digest(&bytes);
@@ -1871,6 +1888,28 @@ impl VmRuntime for VzRuntime {
             tag: "home-src".to_string(),
             read_only: false,
         }];
+
+        // ORDER 1019-ivia: the guest binary is staged HERE, not under ~/src.
+        // Same create-before-config discipline as the model cache below — VZ
+        // refuses to validate a share whose source directory is missing, and on
+        // a fresh host nothing has staged yet. READ-ONLY: the guest installs
+        // FROM this directory and never writes to it, so the share cannot be
+        // the path by which a guest corrupts the host's staged artifact.
+        let guest_bin = tillandsias_core::guest_bin_path::guest_bin_dir();
+        match std::fs::create_dir_all(&guest_bin) {
+            Ok(()) => shares.push(boot::VzShare {
+                host_dir: guest_bin,
+                tag: tillandsias_core::guest_bin_path::GUEST_BIN_SHARE_TAG.to_string(),
+                read_only: true,
+            }),
+            Err(err) => eprintln!(
+                "[tillandsias-vz] WARNING: could not create the guest-binary staging directory \
+                 {} ({err}). Booting WITHOUT the guest-bin share — the guest will fall back to \
+                 downloading a pinned release instead of installing the host's staged binary \
+                 (order 1019-ivia).",
+                tillandsias_core::guest_bin_path::guest_bin_dir().display()
+            ),
+        }
         match std::fs::create_dir_all(&model_cache) {
             Ok(()) => shares.push(boot::VzShare {
                 host_dir: model_cache,
@@ -3203,7 +3242,19 @@ mod tests {
     }
 
     /// The fetch script must prefer the staged host-provided binary over the
-    /// network fallback (virtio-fs /home/forge/src → staged guest binary).
+    /// network fallback (virtio-fs guest-bin share -> staged guest binary).
+    ///
+    /// WHAT THIS PIN IS FOR, so the next retirement does not read it as stale
+    /// (order 1019-ivia). It does NOT pin a path for tidiness: it pins the
+    /// DELIVERY CHANNEL by which the host gets its freshly built headless into
+    /// the guest. If this assertion goes red during a change that removes a
+    /// mount or a share, the correct response is almost never to repoint it —
+    /// it is to ask whether the change just deleted binary delivery. That is
+    /// exactly what happened on 997-e4v2: the packet retires the `home-src`
+    /// share, this path lived on it, and moving the pin would have removed
+    /// delivery on macOS silently, because fetch-headless.sh FALLS BACK to a
+    /// download rather than failing. Staging moved to the durable state dir
+    /// (1019-ivia) so the share can go without taking delivery with it.
     ///
     /// @trace spec:macos-native-tray.lifecycle.vz-guest@v1
     #[test]
@@ -3211,9 +3262,9 @@ mod tests {
         let source = include_str!("vz.rs");
 
         assert!(
-            source
-                .contains("STAGED=\"/home/forge/src/.tillandsias/guest-bin/tillandsias-headless\""),
-            "fetch script must define the staged binary path under /home/forge/src"
+            source.contains("STAGED=\"/var/lib/tillandsias/guest-bin/tillandsias-headless\"",),
+            "fetch script must define the staged binary path under the guest-bin share \
+             (1019-ivia moved it off /home/forge/src so 997-e4v2 can retire that mount)"
         );
         assert!(
             source.contains("if [[ -x \"$STAGED\" ]]; then"),
