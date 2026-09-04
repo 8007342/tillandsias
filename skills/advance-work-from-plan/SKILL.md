@@ -368,6 +368,17 @@ Hard rules:
 - **Pre-commit hooks and release signing** are not optional.
 - **Acquire the smoke lock for source-mutating migrations**: Destructive, file-moving, or source-mutating directory migrations (e.g., file-restructuring tasks) MUST run under the shared smoke lock `build-install-smoke-e2e` (using `scripts/with-smoke-lock.sh`) or a corresponding lease, so that concurrent E2E gates do not read or execute from a half-migrated or half-restructured tree.
 
+- **Check and test with the gate's feature set, and quote the set beside the
+  count.** `cargo check -p tillandsias-headless --features tray` does NOT
+  compile the vsock surfaces (vsock_server.rs, vsock_client.rs, the
+  control_dispatch.rs arms behind `listen-vsock`); on 2026-09-04 macbookair
+  spent six rounds getting truthful zero-error results about code the check was
+  not compiling, and every "588 passed" it reported that day was the same suite
+  under `--features tray` — the gate's set, `--features tray,listen-vsock`, runs
+  635. A count whose denominator depends on flags nobody states is not
+  falsifiable; "635 passed under tray,listen-vsock" is. Use the gate's set, and
+  write the set next to the number in every claim.
+
 ---
 
 ## 6 — Commit, Push & Checkpoint

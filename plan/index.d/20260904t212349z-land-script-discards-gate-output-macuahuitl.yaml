@@ -1,0 +1,50 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: land-on-platform-branch-discards-the-gates-output-so-a-refusal-can-never-name-its-step
+    order: 1033-iycs
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: any
+    capability_tags: [scripts, gate, landing, fail-loud, evidence, multi-host]
+    estimated_hours: 2
+    owned_files:
+      - scripts/land-on-platform-branch.sh
+    title: |
+      land-on-platform-branch.sh discards the gate's entire output, so `refused:land:gate-failed` can never name a step or a log — in the file whose own header records that discarding the push's output was the defect
+    context: |
+      FOUND by macbookair 2026-09-04 landing 997-e4v2 step 3 on osx-next. scripts/land-on-platform-branch.sh:89-92 runs
+      `./build.sh --check >/dev/null 2>&1` and on failure prints exactly `refused:land:gate-failed — run ./build.sh --check to see why`
+      and exits 3. THE VERBATIM REFUSAL, everything the tool emitted: "land: attempt 1/4 — fetch + integrate onto origin/osx-next /
+      land: attempt 1 — unpushed set has 2 merge commit(s); MERGING (rebase would replay them) / land: attempt 1 — gate (./build.sh --check) /
+      refused:land:gate-failed — run ./build.sh --check to see why". No step, no reason, no log path. The standalone re-run on the same
+      commit graph, no edits between, returned GATE_EXIT=0 with `ok:test-baseline:ran=2283 new-red=0 tolerated=1 stale=0` (~300 s later,
+      not seconds: yolanda's relay said seconds and macbookair corrected it), and the retry landed 1afc06443 clean. So the one instance is
+      IRREPRODUCIBLE BY CONSTRUCTION: the remedy text re-runs a DIFFERENT invocation against a tree the land's own integrate step may
+      have changed, and nothing recorded what the gate saw. The same file's header (lines 14-24) records that an earlier version discarded
+      `git push` output and reported LANDED for a refused push — "NEITHER a zero exit status NOR a ref-update line in the output is sufficient
+      evidence that a commit landed" — and applied the lesson to the push call while the gate call two lines above still discards
+      everything. Whether the gate is non-deterministic (1022-y7kc cause 8 candidate: the archive sweep's transient scratch tripping the
+      stamp hash; 765-tkq2 memoisation) cannot be answered until a refusal carries its evidence; "re-run it" is a workaround that hides
+      how often this happens.
+    exit_criteria:
+      - "the gate's stdout+stderr are captured to a per-attempt log under the boundary tmp or $GIT_DIR, and the refusal names that path and the first failing step's line; pre-fix result: FAILS (the refusal is four lines with no path)"
+      - "a fixture drives the land script with a stub ./build.sh that fails on a named step and asserts the refusal quotes the step and the log path; pre-fix result: FAILS"
+      - "the next real refusal on any host is diagnosed from the captured log without a re-run, recorded on this packet with the step named"
+    unscoreable: |
+      The pin is a shell fixture driving the land script with a stub gate
+      (no litmus lane exists for the landing tool yet); the claimer names one
+      if they add it.
+    events:
+      - type: note
+        ts: "2026-09-04T21:23:49Z"
+        host: macuahuitl
+        summary: |
+          FILED by the coordinator from macbookair's instance (2026-09-04, landing
+          997-e4v2 step 3 on osx-next) relayed through yolanda; the elapsed was
+          minutes, not the seconds first relayed, corrected by the finder. The
+          one-line fix (capture the gate to a log and name it in the refusal) is
+          the next action, filed rather than landed as a drive-by so the instance
+          travels with it.
