@@ -120,6 +120,31 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: missing backend is loud"
 
+  # ── The AMD lane: backend dir is a proxy, the USERSPACE is the lane ─────
+  # ORDER 520. The gpu-rocm tier maps to the `vulkan` backend (order 482) and
+  # that mapping is now MEASURED, not merely reasoned: on yoga (gfx1152, AMD
+  # Radeon 840M / RADV KRACKAN1) ollama enumerated `library=Vulkan type=iGPU
+  # total=7.9 GiB` and qwen2.5:0.5b loaded with size_vram == size (572,228,893
+  # B) — fully resident, 2026-09-04. The ROCm release asset is NOT fetched and
+  # is NOT needed: Vulkan is the AMD lane.
+  #
+  # What made the lane dead before 917-zkge was one layer BELOW the backend: a
+  # Vulkan backend cannot enumerate without a Vulkan userspace (the loader plus
+  # an ICD). The backend dir existed, the manifest said core+vulkan, every
+  # artifact read as configured, and every model still ran on the CPU. So this
+  # asserts the USERSPACE ships, which is the thing a backend-dir check cannot
+  # see.
+  - step: "the gpu-rocm tier selects the vulkan backend (no rocm asset is fetched)"
+    command: "awk '/gpu-rocm\\)/,/;;/' images/inference/entrypoint.sh | grep -q 'vulkan' && echo 'ok: rocm tier -> vulkan backend'"
+    timeout_ms: 3000
+    expected_behavior: "ok: rocm tier -> vulkan backend"
+
+  - step: "the image ships the Vulkan userspace the AMD lane needs to PLACE"
+    command: "grep -q 'vulkan-loader' images/inference/Containerfile && grep -q 'mesa-vulkan-drivers' images/inference/Containerfile && echo 'ok: vulkan userspace present'"
+    timeout_ms: 3000
+    expected_behavior: "ok: vulkan userspace present"
+
+
   # ── Tuning policy: grammar + every branch, stubbed ──────────────────────
   - step: "tuning helper exists and documents the pinned one-line grammar"
     command: "test -f images/inference/engine-tuning.sh && grep -Fq 'tuning: tier=<tier> flash_attn=<0|1> kv_cache=<f16|q8_0> num_parallel=<N> vram_mb=<N>' images/inference/engine-tuning.sh && echo 'ok: tuning grammar documented'"
