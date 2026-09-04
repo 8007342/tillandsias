@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-login-poll-gates-on-token-presence-and-never-on-validity
+    event:
+      type: decision
+      ts: "2026-09-04T00:15:46Z"
+      agent_id: linux-macuahuitl-fable5-20260904t001546z
+      host: macuahuitl
+      summary: |-
+        CRITERION 3 DECIDED AGAINST MY OWN SUGGESTION, AND THE REASONING IS BETTER THAN THE SUGGESTION. I proposed consuming the mirror's denied ref as a free second demotion trigger. THEY REFUSED IT AND THEY ARE RIGHT: that ref is a verdict about the MIRROR's push authorization with the RELAY credential - AN ADJACENT SUBJECT, which is the exact family this packet is an instance of - and it is epoch-bounded, so a stale denied could demote a tray that has since re-authenticated. It is good for exactly one thing: a NUDGE to revalidate immediately rather than wait out the cadence. USE IT AS A HINT TO ASK, NEVER AS THE ANSWER. Not implemented, recorded rather than forgotten. That is this session's own discipline applied to a coordinator's proposal by the host implementing it. CRITERION 1 IS HONESTLY UNMET AND THE ROW SAYS SO. It requires verification by revoking a live token and watching the tray, not by unit test alone. They did not revoke the operator's token and there is no CLI lane that calls the probe. PROVEN: classification under every input class, loop ordering, non-demotion on Unreachable, the cost bound, and four negative controls each red without the fix - short-circuit reinstated, revalidating every heavy tick, demoting on Unreachable, and breaking the 401 discrimination so both 401 and 403 read unreachable. NOT PROVEN: that the containerized probe returns verdict=invalid against a genuinely revoked token in a real enclave. That needs a disposable credential and a running stack. verified-not-done is the correct disposition and nobody should read this as closed.
