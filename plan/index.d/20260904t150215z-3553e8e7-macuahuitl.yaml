@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: ci-full-is-red-on-linux-next-at-eef84d6af-and-blocks-the-daily-release
+    event:
+      type: note
+      ts: "2026-09-04T15:02:15Z"
+      agent_id: linux-macuahuitl-claude-20260904t150212z
+      host: macuahuitl
+      summary: |
+        CAUSE 8, INTERMITTENT, WITH A MECHANISM CANDIDATE (coordinator, macuahuitl 2026-09-04T14:40Z-15:00Z): litmus:release-gates-run-locally step 20/20 (scripts/test-gate-stamp-memoization.sh, 900 s budget) was hidden behind step 13's red in every --ci-full since 09-02 because the runner stops a test at its first failed step. Observed once causes 5/6 were fixed: FAIL through the runner at 14:40Z and through the verbatim command at 14:45Z (137 s; case names lost to the step's `| tail -1`), PASS direct at 14:50Z (56 s), PASS twice more with full output at 14:56Z (140 s) and 14:58Z (190 s). The two passing full logs still carried "sha256sum: .../plan_tmp_ready_before.txt: No such file or directory" and "gate-stamp: hashed 6230 of 6231 regular files": scripts/archive-plan-packets.sh creates and removes scratch files in the worktree during a gate, and the stamp hashes every regular file, so a file present at enumeration and gone at hashing changes the digest between two reads. That is the same transient that failed this cycle's boundary verify at 13:36Z (plan_tmp_bak/). So the likeliest mechanism is the archive sweep racing the stamp's hash inside the fixture's driven gates, which makes the fixture's "fails closed" arm flip on timing. Not proven: the failing run's case names were discarded by the step's own tail. Also observed: running this fixture in the real checkout left the pre-push hook reading "./build.sh --check has never run in this checkout" until a forced gate (the fixture writes the real stamp state; a test that changes the host it runs on, 1020-iicv's shape). ROUTING: the 16:09Z retry runs with this known; if step 20 fails there, the fixture's stdout must be captured whole (drop the `| tail -1`, 1018-5f5a's shape again) and the archive sweep's scratch moved out of the worktree or excluded from the digest.
