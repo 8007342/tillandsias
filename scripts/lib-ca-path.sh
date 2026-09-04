@@ -21,12 +21,24 @@ _lcp_manifest="$_lcp_root/images/default/ca-path.txt"
 
 if [ -z "${TILLANDSIAS_CA_DIR:-}" ]; then
     if [ -r "$_lcp_manifest" ]; then
-        TILLANDSIAS_CA_DIR="$(
+        _lcp_tmpl="$(
             grep -v '^[[:space:]]*#' "$_lcp_manifest" \
               | grep -v '^[[:space:]]*$' \
               | head -1 \
               | tr -d '[:space:]'
         )"
+        # EXPAND THE TEMPLATE. 998-3z6g made the manifest HOME-relative because
+        # no static path serves both a rootless Linux host and a root-run guest:
+        # /var/lib works in the guest BECAUSE it is root and is unwritable here
+        # for the same reason, and /tmp works everywhere and is the bug.
+        #
+        # This substitution must match tillandsias-core::ca_path EXACTLY. A
+        # template with two expanders is a new way for one declaration to mean
+        # two things — the defect the single-sourcing removed — so a test runs
+        # THIS file and compares its answer with the Rust one rather than
+        # reimplementing either.
+        TILLANDSIAS_CA_DIR="${_lcp_tmpl//\$\{HOME\}/$HOME}"
+        unset _lcp_tmpl
         export TILLANDSIAS_CA_DIR
     else
         # FAIL LOUD rather than falling back to a literal. A fallback here would

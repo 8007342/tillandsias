@@ -1664,7 +1664,7 @@ const ENCLAVE_NO_PROXY_BASE: &str =
 /// read through tillandsias-core, which both this crate and tillandsias-macos-tray
 /// depend on. It was a literal in 38 places; 975-rsgm has to move it off /tmp,
 /// and a partial move fails only on the recovery path.
-fn ca_dir() -> &'static str {
+fn ca_dir() -> String {
     tillandsias_core::ca_path::ca_dir()
 }
 
