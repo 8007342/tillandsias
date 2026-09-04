@@ -227,24 +227,23 @@ if [ -x "$ROOT/scripts/check-enclave-service-health.sh" ]; then
     # The list is DECLARED (images/default/enclave-services.txt) because a health
     # check cannot derive what should exist from what does — that is circular.
     # A Rust test keeps it in step with the dependency graph that launches them.
-    _expected_file="$ROOT/images/default/enclave-services.txt"
-    # ONLY EXPECT SERVICES ON A HOST THAT HAS AN ENCLAVE AT ALL. A machine that
-    # has never provisioned one is not missing anything, and reporting it as
-    # absent would be the cry-wolf failure this file's own header warns about —
-    # a check that fires on correctly-configured hosts gets switched off, which
-    # is how the original gap survived.
+    # ORDER 1004-inkc — THE SET AND ITS ANCHOR RULE NOW LIVE IN THE CHECK.
     #
-    # Vault is the anchor: every other persistent service depends on it in the
-    # graph, so its presence is what distinguishes "provisioned and degraded"
-    # from "never provisioned".
-    if [ -r "$_expected_file" ] && podman container exists tillandsias-vault 2>/dev/null; then
-        TILLANDSIAS_ENCLAVE_EXPECTED_SERVICES="$(
-            grep -v '^[[:space:]]*#' "$_expected_file" \
-              | grep -v '^[[:space:]]*$' \
-              | tr '\n' ',' | sed 's/,$//'
-        )"
-        export TILLANDSIAS_ENCLAVE_EXPECTED_SERVICES
-    fi
+    # This block used to read images/default/enclave-services.txt, apply the
+    # vault-anchor rule, and export TILLANDSIAS_ENCLAVE_EXPECTED_SERVICES before
+    # invoking the check. That made the verdict depend on WHO INVOKED IT: the
+    # same script run by hand — as an operator does, and as lenovinha did on
+    # 2026-09-04 — got no declaration at all and reported
+    # `ok:...:services=5:absent=0` on a host whose declared proxy had been
+    # DELETED. 994-8r3w named this as its own unmet criterion 3: "nothing yet
+    # fails if a future edit stops preflight exporting the variable."
+    #
+    # A guard whose answer depends on its caller is not a guard, so the default
+    # and the anchor moved into check-enclave-service-health.sh, where every
+    # invocation gets them. Preflight now just CONSUMES the verdict.
+    #
+    # Nothing is passed deliberately: an explicit --expect here would restore
+    # exactly the caller-supplied behaviour this order removed, one layer up.
     _svc_err="$(mktemp "${TMPDIR:-/tmp}/cycle-preflight-services.XXXXXX")"
     # --act (878-79b5): the unattended cycle is exactly the caller that must
     # FIX what it can prove needs fixing — four yoga cycles re-noted one

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-operators-gh-token-is-revoked-two-or-three-times-a-day-on-several-hosts-while-the-coordinator-never-re-logs-in
+    event:
+      type: progress
+      ts: "2026-09-04T20:22:03Z"
+      agent_id: linux-pirria-claude-20260904t202203z
+      host: pirria
+      summary: |
+        SECOND EVICTION UNDER OBSERVATION, and it FALSIFIES cap-by-age (pirria-cachyos, relayed by the coordinator): at 20:20:36Z pirria's token reads fingerprint 4df91890…6f67, IDENTICAL to its 15:21:55Z baseline, and `gh auth status` says "The token in keyring is invalid": same bytes, now rejected server-side, the local copy proven untouched by fingerprint. Created 15:06Z, valid at 17:16Z, dead by 20:20Z, about five hours old, while tokens days old are alive on other hosts (lenovinha, macbookair and yolanda all pushed successfully within the last two hours). A five-hour-old token cannot be the oldest of ten while older ones survive, so "the eleventh authorization revokes the oldest" did not kill pirria or macneo. THE SEQUENCE AS A TWO-STEP: macneo authenticated ~14:40Z, pirria 15:06Z, macneo dead by ~15:20Z; pirria lived while nothing else logged in and died in the window after the operator "refreshed github auth" somewhere. In both cases the victim died when the NEXT login happened elsewhere and the survivor was the most recent login. HYPOTHESIS H5: one live token per (user, OAuth app) grant — a new device-flow authorization revokes the previous token of the same grant, so only the most recent login survives; explains the 2-3x/day cadence (= the fleet's login count), the coordinator's immunity (macuahuitl is where the operator logs in most; its gho_ token is valid at 20:2xZ, which fits if the refresh was here), the OS-independence, and the self-reinforcing loop. UNDER H5 THE DAYS-OLD SURVIVORS ARE THE ANOMALY and the fastest test: either they do not use gh's OAuth grant (lenovinha and yoga have reported `ok:gh-credentials-store`, the repo-local store helper, possibly PAT-backed), or they have not validated recently (an unused revoked token looks healthy until a fresh `gh auth status`). TEST, one command per host, no logins: `gh auth token | cut -c1-8` (prefix only: gho_ = OAuth grant, ghp_ = classic PAT, github_pat_ = fine-grained PAT, both immune by construction) plus a FRESH `gh auth status`, and the credential channel's verdict (store vs keyring). If the survivors are PAT- or store-backed the picture closes today and the fix is already proven in-fleet; if they are all gho_ and validate fresh, H5 is wrong too and the security log decides. Pirria's revoked token is KEPT as is (known fingerprint, creation 15:06Z, death window 17:16Z-20:20Z) for the operator's oauth_access.destroy correlation; no re-auth there until the log is read.

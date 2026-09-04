@@ -2,21 +2,37 @@
 # @trace order:998-qrwu, order:975-rsgm
 #
 # check-ca-path-literals.sh — the `/tmp/tillandsias-ca` literal count may not
-# GROW while the single-sourcing (998-qrwu) and the relocation (998-3z6g) are
-# pending.
+# GROW. It is now a REGRESSION PIN against the old path coming back, not a
+# ratchet over pending debt: 998-qrwu single-sourced the path and 998-3z6g
+# moved it off /tmp, and both have landed.
 #
-# WHY A RATCHET RATHER THAN A REFUSAL. The path is a literal in 36 places across
-# 16 files today, measured 2026-09-03. Redding the trunk on that standing debt
-# would switch this off within a day — the failure the fleet has already
-# demonstrated twice this week. What a ratchet CAN do is stop the number rising
-# while the migration is planned, so 998-qrwu has a fixed target instead of a
-# moving one.
+# WHAT THIS GUARD DOES NOT WATCH, stated because two hosts assumed otherwise on
+# 2026-09-04: its subject is the PRE-migration literal `/tmp/tillandsias-ca`.
+# It has never watched the post-migration CA directory, and it has never
+# watched the state ROOT those paths share. A duplicate of the root got past it
+# for that reason — there was no guard to get past. The root has its own guard
+# (1027-539s); do not read a green verdict here as coverage of either.
 #
-# WHY IT MATTERS THAT IT NOT GROW. 975-rsgm's remaining half moves this
-# directory off /tmp. Every literal that exists at that moment is a site that
-# must move with it, and a missed one fails in the quietest possible way: it
-# points at a directory that is not there, on a recovery path that only runs
-# when something is already wrong. That is where nobody is watching.
+# WHY A RATCHET RATHER THAN A REFUSAL, and it is history now. The path was a
+# literal in 38 places across 16 files, measured 2026-09-03. Reddening the
+# trunk on that standing debt would have switched this off within a day, so the
+# ratchet held the number still while 998-qrwu removed them.
+#
+# WHY IT MATTERED THAT IT NOT GROW. 975-rsgm had to move this directory off
+# /tmp, and every literal alive at that moment was a site that had to move with
+# it. A missed one fails in the quietest possible way: it points at a directory
+# that is not there, on a recovery path that only runs when something is
+# already wrong. That is where nobody is watching.
+#
+# THE SURVIVING OCCURRENCE, and it is not debt. BASELINE is 1, and the one hit
+# is in images/default/cheatsheets/runtime/low-end-cpu-inference-floor.md,
+# where the sentence explicitly says the cause is PAST — it explains a symptom
+# (every pull returns 000) by naming the volatile path that used to cause it.
+# Rewriting that literal to the new path would make a true account false: the
+# proxy never failed because the state dir was wiped, it failed because /tmp
+# was. This is NOT a blanket exemption — the occurrence is correct only for as
+# long as its surrounding sentence keeps saying it is history. If the count
+# rises, the new one is almost certainly not.
 #
 # Grammar (one line on stdout, nothing else):
 #   ^(ok:ca-path-literals:[0-9]+ of [0-9]+|violation:ca-path-literals-grew:[0-9]+ of [0-9]+)$
