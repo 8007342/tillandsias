@@ -141,9 +141,22 @@ To guarantee convergence in finite time, the orchestrator MUST track and enforce
     carry the prefix (the README) are not hosts and are skipped:
 
     ```bash
+    # A stem that is a PLATFORM LABEL is a shared bucket, not a host (order
+    # 1012-hu7d): `loop-status-append` without --host falls back to
+    # TILLANDSIAS_HOST_KIND, unset in agent shells, and writes under `linux`,
+    # `macos`, `windows`, `forge`, `linux-immutable` or `linux-mutable`. On
+    # 2026-09-04 the `linux` stem held 56 entries from at least three hosts,
+    # most of them the coordinator's own. Report buckets by count; never read
+    # one as a host, and never read a host as silent because its entries sit
+    # in a bucket — ask the host, or read the bucket's newest entry by hand.
+    buckets='^(linux|macos|windows|forge|linux-immutable|linux-mutable)$'
     for h in $(ls plan/loop_status.d/*.md \
                | grep -E '/[0-9]{8}t[0-9]{6}z-([0-9a-f]{8}-)?[^/]+\.md$' \
                | sed -E 's#.*/[0-9]{8}t[0-9]{6}z-([0-9a-f]{8}-)?##; s/\.md$//' | sort -u); do
+      if printf '%s' "$h" | grep -qE "$buckets"; then
+        echo "unattributed-bucket $h entries=$(ls plan/loop_status.d/*.md | grep -cE "z-([0-9a-f]{8}-)?$h\.md$")"
+        continue
+      fi
       f=$(ls -t plan/loop_status.d/*.md | grep -E "z-([0-9a-f]{8}-)?$h\.md$" | head -1)
       [ -n "$f" ] || continue
       l=$(grep -ho 'skippable: [^`|·]*' "$f" | tail -1)
