@@ -36,7 +36,18 @@ fn ca_template() -> &'static str {
 /// this file exists to remove. A test pins the agreement.
 pub fn ca_dir() -> String {
     let home = std::env::var("HOME").unwrap_or_default();
-    expand_home(ca_template(), &home)
+    expand_home(&ca_dir_template_owned(), &home)
+}
+
+/// The CA directory as a TEMPLATE: the declared root with this consumer's leaf
+/// appended, `${HOME}` still unexpanded.
+///
+/// ORDER 1027-539s. The manifest now declares the ROOT, so composing the leaf
+/// is this module's job. Every accessor goes through here rather than each one
+/// remembering to append `/ca` — a leaf appended in two places is the same
+/// defect one directory down.
+fn ca_dir_template_owned() -> String {
+    format!("{}/ca", ca_template())
 }
 
 /// The substitution itself, over an explicit base.
@@ -51,6 +62,14 @@ pub fn ca_dir() -> String {
 /// tests needed to reach it.
 fn expand_home(template: &str, home: &str) -> String {
     template.replace("${HOME}", home)
+}
+
+/// The declared state ROOT with `${HOME}` substituted (1027-539s).
+///
+/// Exposed so `guest_bin_path` derives its root from the SAME manifest instead
+/// of holding a second copy — the N=2 duplication 1027-539s exists to remove.
+pub fn state_root_expanded(home: &str) -> String {
+    expand_home(ca_template(), home)
 }
 
 /// The UNEXPANDED template, for a caller that emits a string to be executed on
@@ -72,8 +91,14 @@ fn expand_home(template: &str, home: &str) -> String {
 ///
 /// The RECEIVING shell is the expander here. That is a third expander only in
 /// appearance: it is the only one standing in the filesystem the path names.
-pub fn ca_dir_template() -> &'static str {
-    ca_template()
+///
+/// ORDER 1027-539s: this now COMPOSES the leaf. The manifest declares the ROOT,
+/// so returning `ca_template()` raw would hand callers `${HOME}/.local/state/
+/// tillandsias` where they mean the CA directory — and the guest would create
+/// it and write intermediate.key there, succeeding exactly as the 1002-9xmb bug
+/// above succeeded. Pinned by `template_composes_the_ca_leaf`.
+pub fn ca_dir_template() -> String {
+    ca_dir_template_owned()
 }
 
 #[cfg(test)]
@@ -137,7 +162,12 @@ mod expansion_tests {
     #[test]
     fn rust_and_shell_expand_to_the_same_path() {
         let home = "/home/agreement-probe";
-        let rust = expand_home(ca_template(), home);
+        // 1027-539s: compare the COMPOSED CA directory, not the bare root. The
+        // manifest declares the root and each runtime appends its own leaf, so
+        // the agreement this test exists to prove now covers COMPOSITION as
+        // well as expansion — two ways for one declaration to mean two things
+        // instead of one.
+        let rust = expand_home(&ca_dir_template(), home);
 
         let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
         let out = std::process::Command::new("bash")
@@ -154,6 +184,65 @@ mod expansion_tests {
             rust, shell,
             "Rust and shell disagree about the CA directory — one declaration, \
              two meanings, which is the defect the single-sourcing removed"
+        );
+    }
+}
+
+#[cfg(test)]
+mod root_composition_tests {
+    use super::*;
+
+    /// THE MANIFEST DECLARES THE ROOT, NOT THE CA DIRECTORY (1027-539s).
+    #[test]
+    fn manifest_declares_the_root_not_the_leaf() {
+        assert!(
+            !ca_template().ends_with("/ca"),
+            "the manifest value must be the ROOT; a value ending in /ca means \
+             someone re-appended the leaf to the declaration and every consumer \
+             now doubles it: {:?}",
+            ca_template()
+        );
+    }
+
+    /// THE TEMPLATE ACCESSOR MUST COMPOSE THE LEAF.
+    ///
+    /// Its callers emit shell for another filesystem (the macOS tray's guest
+    /// preamble). Returning the bare root would have them create
+    /// `${HOME}/.local/state/tillandsias` and write intermediate.key there — and
+    /// in the guest, running as root, that SUCCEEDS: mkdir works, openssl
+    /// writes, perms 600, exit 0. Identical shape to the 1002-9xmb bug this
+    /// accessor was added to fix, one directory up.
+    #[test]
+    fn template_composes_the_ca_leaf() {
+        let t = ca_dir_template();
+        assert!(
+            t.ends_with("/ca"),
+            "ca_dir_template() must return the CA directory, not the root: {t:?}"
+        );
+        assert!(
+            t.starts_with("${HOME}/"),
+            "it must stay UNEXPANDED — the receiving shell is the expander: {t:?}"
+        );
+    }
+
+    /// NO MIGRATION: the composed CA path is byte-identical to what the manifest
+    /// declared before 1027-539s.
+    ///
+    /// This is the property that let this land alone. 998-3z6g had to MOVE a
+    /// directory, which meant recreating every container that had bound the old
+    /// path; root + "/ca" reproduces the same string, so nothing rebinds.
+    /// Asserted against a literal rather than trusting concatenation.
+    #[test]
+    fn the_ca_path_is_byte_identical_to_the_pre_split_value() {
+        assert_eq!(
+            ca_dir_template(),
+            "${HOME}/.local/state/tillandsias/ca",
+            "the CA directory changed — that is a MIGRATION (containers bind the \
+             old path in stored definitions and must be recreated), not a refactor"
+        );
+        assert_eq!(
+            expand_home(&ca_dir_template(), "/home/probe"),
+            "/home/probe/.local/state/tillandsias/ca"
         );
     }
 }

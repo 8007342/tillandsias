@@ -26,12 +26,16 @@
 
 use std::path::PathBuf;
 
-/// `${HOME}/.local/state/tillandsias` — the durable per-user state root.
+/// The durable per-user state root, DERIVED FROM THE MANIFEST (1027-539s).
+///
+/// This used to hard-code `.local/state/tillandsias`, which made the root a
+/// SECOND declaration of a string `images/default/ca-path.txt` already owned —
+/// 998-qrwu's defect at N=2 instead of N=38. It now reads the same manifest
+/// `ca_path` does, so moving the root moves BOTH the CA bundle and guest-binary
+/// staging, and a ratchet has one subject to count instead of two.
 fn xdg_state_root() -> PathBuf {
-    std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("/tmp"))
-        .join(".local/state/tillandsias")
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    PathBuf::from(crate::ca_path::state_root_expanded(&home))
 }
 
 /// HOST directory the tray stages the guest binary into.
@@ -73,9 +77,20 @@ mod tests {
         unsafe { std::env::set_var("HOME", "/home/probe") };
         let p = staged_guest_binary();
         let s = p.to_string_lossy();
+        // 1027-539s: the expectation is DERIVED from the manifest, not written
+        // as a literal — a hard-coded root here would be the very copy this
+        // module was changed to remove, sitting in the test that proves it was
+        // removed. It also means this file needs no exemption from
+        // scripts/check-state-root-literals.sh, which is that guard's own
+        // accidental test: an exemption here would mean the derivation was
+        // abandoned.
+        let want = format!(
+            "{}/guest-bin/",
+            crate::ca_path::state_root_expanded("/home/probe")
+        );
         assert!(
-            s.starts_with("/home/probe/.local/state/tillandsias/guest-bin/"),
-            "staged path must derive from the state root, got {s}"
+            s.starts_with(&want),
+            "staged path must derive from the state root ({want}), got {s}"
         );
         assert!(
             !s.contains("/src/"),
