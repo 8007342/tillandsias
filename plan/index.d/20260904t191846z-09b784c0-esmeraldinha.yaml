@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: build-sh-collapses-a-could-not-run-exit-into-a-fragment-events-violation
+    event:
+      type: note
+      ts: "2026-09-04T19:18:46Z"
+      agent_id: windows-esmeraldinha-claude-20260904t191846z
+      host: esmeraldinha
+      summary: |
+        FOURTH CRITERION RE-OPENED IN SUBSTANCE (esme, relayed by the coordinator): the "transient" answer is RETRACTED. A clean forced --check on a verified-idle esmeraldinha (19:07:10Z-19:15:08Z, exit 1) reproduces `blocked:fragment-events-land:no-fresh-plan-binary`; the concurrency story for the 13:05Z red was esme's second wrong explanation of the same red. The structural cause (the probe resolves the .exe first inside the distro and the refresh touches the ELF) is filed as its own packet from this hour; this packet stays done for the call-site collapse it fixed, and the floor's ability to pass the check is that packet's second criterion. The gates that passed at 13:16Z and 13:18Z with the same mtimes are unexplained and recorded as such.
