@@ -2771,6 +2771,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Framing ratchet passed"
 
+    _step "Checking the stale-base revert guard (1000-rqmx)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-no-stale-base-revert.sh" 2>&1; then
+        _error "the stale-base revert guard regressed (1000-rqmx) — a force push whose diff reverts untouched files would not be refused"
+        exit 1
+    fi
+    _info "Stale-base revert guard passed"
+
     # 956-llei: a `phase: retired` litmus runs only under an explicit
     # `--phase retired`; the "all" default (which --diff-scope fails closed
     # into) must skip it with the retired reason. Two arms through the real
