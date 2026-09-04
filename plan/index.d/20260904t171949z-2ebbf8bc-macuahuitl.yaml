@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: ci-full-is-red-on-linux-next-at-eef84d6af-and-blocks-the-daily-release
+    event:
+      type: progress
+      ts: "2026-09-04T17:19:49Z"
+      agent_id: linux-macuahuitl-claude-20260904t171949z
+      host: macuahuitl
+      summary: |
+        SECOND RETRY of the release gate, --ci-full at 16:39:55Z-17:15:28Z on linux-next 998959a4f (coordinator): RED, three checks, causes 9-11 (causes 1-8 stayed fixed: the gate-stamp step 20 memoisation intermittent did NOT recur, and step 13 passed). Cause 9: tray-contract, three tillandsias-podman forge-spec tests panicked with the 880-tdwn env race ("TILLANDSIAS_PODMAN_BIN is unset at resolution time ... a parallel test dropped the seam") because scripts/local-ci.sh:1200 ran the headless bin suite in PARALLEL while the gate's own arm is serial since 1003-444f; that is 1021-hf9e's flake at a second caller. FIXED: local-ci.sh's arm now passes `-- --test-threads=1` (comment names the packet); pre-fix result FAILS (three panics), post-fix pending the next --ci-full. Cause 10: litmus-runner-reports-rc, lenovinha's 1018-5f5a fixture: arms A and B pass, arm C ("the rule PASSES the pre-fix runner — it cannot have caught this defect") FAILS inside the gate while lenovinha's direct run had it red; routed to lenovinha (the pre-fix runner the arm constructs is not the pre-fix runner under the gate). Cause 11: litmus:forge-standard-gitconfig-path step 1/4 TIMEOUT at its 30 s budget, cpu.pressure 0% ("NOT contended at kill time; genuinely too slow"), while the same spec run alone through the runner afterwards passes the test in 1.7 s; classified intermittent, mechanism unknown (the step is scripts/test-forge-standard-gitconfig-path.sh; a 30 s wait with no CPU contention points at a blocking git or network operation), routed to the next --ci-full with the step's rc now printed. Also observed again: the bare --ci-full INSTALLED a v56.9.2.1 launcher over the v56.9.4.1 local build without bumping (cause 7 stands; --ci-full does not bump, only --install does), reinstalled afterwards. PR #105 stays open; the next retry is the 20:09Z meta cycle.

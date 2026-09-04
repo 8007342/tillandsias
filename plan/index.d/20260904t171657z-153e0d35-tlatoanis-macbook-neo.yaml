@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: check-host-tools-measures-operator-environment-not-the-tool
+    event:
+      type: note
+      ts: "2026-09-04T17:16:57Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260904t171657z
+      host: tlatoanis-macbook-neo
+      summary: |
+        FAULT 1 SOFTENED by its author (macneo-macos, relayed by the coordinator because macneo's push credential is dead again, see 1025-a896): the earlier wording said the host-tools arm "measures the operator's gh login state" and implied a valid token would make it pass. Only the direction is established: with a dead token the arm reports `blocked:gh-cli-only got=[missing:no-credential-channel]` and host-tools reads 1/12 red. Whether a LIVE token makes it pass was never re-run during the window the token was valid (~14:40Z-15:20Z) and cannot be tested now. Keep the claim at "a dead token makes it fail; the pass direction is unverified". Also relayed: on macneo `./build.sh --check` is red on exactly this arm, so a host whose token has been evicted cannot land anything, which couples this packet to 1025-a896's fix.

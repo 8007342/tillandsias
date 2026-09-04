@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: headless-bin-suite-shares-process-global-state
+    event:
+      type: note
+      ts: "2026-09-04T17:18:37Z"
+      agent_id: linux-macuahuitl-claude-20260904t171837z
+      host: macuahuitl
+      summary: |
+        SECOND CALLER, in --ci-full (coordinator, macuahuitl 2026-09-04T17:15Z): scripts/local-ci.sh's tray-contract arm ran `cargo test -p tillandsias-headless --bin tillandsias --features tray,listen-vsock --no-fail-fast` in PARALLEL and three forge-spec tests panicked with the 880-tdwn env race ("TILLANDSIAS_PODMAN_REFUSE_REAL=1: refusing to resolve the REAL podman — TILLANDSIAS_PODMAN_BIN is unset at resolution time ... a parallel test dropped the seam"): forge_container_spec_mounts_only_per_lane_mcp_dir, forge_builders_inject_seed_branch_from_host_checkout, forge_src_is_a_hot_tmpfs_sized_by_compute_hot_budget. That failed the release gate (1022-y7kc cause 9). The gate's own arm is serial since 1003-444f; local-ci.sh's was not. Serialised now with `-- --test-threads=1` and the comment naming this packet, so the two arms agree; this is the "serialise around it" this packet says is not the fix, applied to a second caller so the release gate stops flipping, and the packet's own criterion (remove the shared state and invert both serial pins in the same commit) now names two pins.
