@@ -1,0 +1,100 @@
+packets:
+  - packet_id: scorable-obligation-patterns-match-prose-that-mentions-the-tool
+    order: 1036-jamx
+    status: implemented
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    release_target: stable-milestone-v1
+    capability_tags:
+      - testing
+      - fail-loud
+    estimated_hours: 2
+    verifiable_closure: |
+      bash scripts/test-scorable-obligation-gate.sh reports
+      'PASS: scorable-obligation gate 15/15 (977-448j)', and with the anchoring
+      reverted to the substring match it reports 12/15 with lenovinha's three
+      prose arms failing.
+    title: |
+      The scorable-obligation gate matched its tokens anywhere in the packet, so a closure saying in plain English that a row is unscoreable passed the gate whose whole purpose is to make that statement explicit.
+    deliverable: |
+      A closure is scorable when it NAMES something runnable, not when the
+      packet happens to contain the word. What must not persist is a gate that
+      accepts "cargo test would not cover it, so judgement is required".
+    context: |
+      FOUND 2026-09-04 by lenovinha-silverblue, as the second-host review of
+      1033-ev5r that macuahuitl required BECAUSE that widening was written by
+      the author whose row it unblocked. The review returned NO on the refusal
+      and kept the principle. It was the right call and the process worked.
+
+      LENOVINHA'S TWO INSTANCES, verbatim, both of which PASSED:
+        "We have not run cargo test on this yet; someone should before v0.6."
+        "This is hard to verify; cargo test would not cover it, so judgement
+         is required."
+      The second is the damning one: a closure stating IN PLAIN ENGLISH that
+      the row is unscoreable, satisfying the gate that exists to make exactly
+      that statement explicit and greppable.
+
+      WHY MY NEGATIVE CONTROL MISSED IT, which is the part worth recording.
+      1033-ev5r shipped with an arm called "prose about testing is still
+      refused", and I argued at the time that an accept-only test would be
+      satisfied by a gate that refuses nothing. That reasoning was right. The
+      arm was not: its text AVOIDED the literal string `cargo test`, so it
+      exercised the shape that was ALREADY refused before my change and never
+      reached the branch the widening added. A SABOTAGE ARM THAT CANNOT REACH
+      THE NEW CODE PATH PROVES NOTHING ABOUT IT — the same finding recorded on
+      1029-5wvd hours earlier, where a mutation that silently failed to apply
+      produced a green indistinguishable from a blind guard. There I caught it;
+      here I wrote the mirror image and did not.
+
+      THE HOLE IS OLDER THAN THE WIDENING, which is why the fix anchors all
+      four patterns rather than narrowing the one I added. `*scripts/*.sh*`
+      admits "We never wrote scripts/foo.sh for this" and `*litmus:*` admits
+      any prose naming a litmus test. `cargo test` merely appears in English
+      prose far more often, so the pre-existing weakness became reachable.
+
+      AND THE MATCH WAS WIDER THAN EITHER OF US SAID. The awk flattened the
+      WHOLE packet into one buffer, so the tokens matched anywhere at all —
+      title, context, notes, an event summary. The closure field was never
+      isolated. So the gate did not check closures; it checked whether the
+      packet mentioned a tool.
+    outcome: |
+      The awk now extracts the `verifiable_closure` block's FIRST NON-EMPTY
+      LINE and whether an `unscoreable:` field is present, emitting both
+      alongside the flattened body (which the tombstone/regime scan still
+      needs). Patterns are anchored to that line: it must LEAD with
+      `litmus:`, `scripts/<x>.sh`, `bash|sh scripts/<x>.sh`, `cargo test`,
+      `cargo run`, or `./build.sh` — or the packet must carry an explicit
+      `unscoreable:` field.
+
+      scripts/test-scorable-obligation-gate.sh 15/15, with lenovinha's two
+      sentences and the scripts/ twin as the three new refusal arms, plus two
+      positive controls (a closure LEADING with the command, and a
+      bash-prefixed script closure) so the refusal arms cannot be satisfied by
+      a gate that refuses everything.
+
+      MUTATION, run and quoted: reverting to the substring match against the
+      whole packet gives 12/15 —
+        FAIL: prose merely MENTIONING the tool is refused
+        FAIL: prose saying the row is unscoreable is refused
+        FAIL: prose mentioning a script is refused too
+      All three of lenovinha's shapes die with the anchoring and pass with it.
+      That mutation reaches the branch the 1033-ev5r control could not.
+    notes: |
+      1033-ev5r's PRINCIPLE stands and is not reverted: a closure naming a
+      cargo invocation is as mechanical as one naming a script. What was wrong
+      was the matching, not the admission.
+
+      Related: 1029-5wvd (a sabotage arm that never applied looks exactly like
+      a guard that never fires), 1035-qf8t.
+    events:
+      - ts: 2026-09-04T23:45:00Z
+        type: implemented
+        agent: macos-tlatoanis-macbook-air-claude-20260904t221329z
+        host: tlatoanis-macbook-air
+        note: |
+          Filed and fixed by the author of the defect, on lenovinha's review.
+          The second-host rule is what caught this; my own negative control
+          could not, because I wrote it against the shape I already knew was
+          refused rather than the one I had just admitted.

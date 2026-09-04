@@ -104,9 +104,15 @@ while IFS= read -r f; do
         [ -n "$block" ] || continue
         checked=$((checked + 1))
         pid="${block%%$'\x1f'*}"
-        body="${block#*$'\x1f'}"
-        case "$body" in
-            *litmus:*|*unscoreable:*|*scripts/*.sh*|*cargo\ test*)
+        _rest="${block#*$'\x1f'}"
+        unscoreable="${_rest%%$'\x1f'*}"
+        _rest2="${_rest#*$'\x1f'}"
+        body="${_rest2%%$'\x1f'*}"
+        whole="${_rest2#*$'\x1f'}"
+        # `body` is now the closure's FIRST LINE, not the whole packet, and the
+        # patterns are ANCHORED to it. See the header for why (1036-w2kd).
+        case "$unscoreable:$body" in
+            yes:*|no:litmus:*|no:scripts/*.sh*|no:bash\ scripts/*.sh*|no:sh\ scripts/*.sh*|no:cargo\ test*|no:cargo\ run*|no:./build.sh*|no:bash\ ./build.sh*)
                 # SCORABLE. Now the SECOND question, which is a different one:
                 # is the score it will produce COMPARABLE with the previous run?
                 # A row that tombstones an obligation changes the denominator
@@ -119,7 +125,7 @@ while IFS= read -r f; do
                 # it when a requirement's meaning changes. What would be wrong is
                 # letting the resulting score be read as comparable. So it is
                 # NAMED, loudly, and the gate still passes.
-                case "$body" in
+                case "$whole" in
                     *tombstone*)
                         regime_broken=$((regime_broken + 1))
                         rdetail="${rdetail}  ${f}: packet '${pid}' tombstones an obligation — its score is OUTSIDE the monotone regime and must not be compared with the previous run (977-448j)"$'\n'
@@ -132,12 +138,32 @@ while IFS= read -r f; do
                 ;;
         esac
     done < <(awk '
-        /^  - packet_id:|^    - packet_id:/ {
-            if (pid != "") { printf "%s\x1f%s\n", pid, buf }
-            pid = $NF; buf = ""; next
+        function flush() {
+            if (pid != "") printf "%s\x1f%s\x1f%s\x1f%s\n", pid, unscoreable, first, buf
         }
-        pid != "" { buf = buf " " $0 }
-        END { if (pid != "") printf "%s\x1f%s\n", pid, buf }
+        /^  - packet_id:|^    - packet_id:/ {
+            flush(); pid = $NF; first = ""; buf = ""; unscoreable = "no"; inclosure = 0; next
+        }
+        pid == "" { next }
+        { buf = buf " " $0 }
+        # An `unscoreable:` FIELD is a stated refusal and is scorable by itself.
+        /^[ \t]*unscoreable:[ \t]*[^ \t]/ { unscoreable = "yes"; inclosure = 0; next }
+        # verifiable_closure, block-scalar or inline.
+        /^[ \t]*verifiable_closure:[ \t]*[|>]/ { inclosure = 1; next }
+        /^[ \t]*verifiable_closure:[ \t]*[^ \t|>]/ {
+            if (first == "") { line = $0; sub(/^[ \t]*verifiable_closure:[ \t]*/, "", line); first = line }
+            inclosure = 0; next
+        }
+        # Any other key at field depth ends the block scalar.
+        /^[ \t]*[a-z_]+:([ \t]|$)/ { inclosure = 0; next }
+        inclosure == 1 {
+            if (first == "") {
+                line = $0; sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line)
+                if (line != "") first = line
+            }
+            next
+        }
+        END { flush() }
     ' "$f")
 done <<EOF
 $changed
