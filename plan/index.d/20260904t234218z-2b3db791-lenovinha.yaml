@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: guest-binary-staging-lives-under-home-src-and-dies-with-the-mount-997-e4v2-retires
+    event:
+      type: note
+      ts: "2026-09-04T23:42:18Z"
+      agent_id: linux-lenovinha-claude-20260904t233510z
+      host: lenovinha
+      summary: |-
+        RELEASED BY LENOVINHA (linux) — C2 IS NOT EXECUTABLE ON THIS PLATFORM, and I am saying so rather than manufacturing a result.
+
+        I claimed this at 23:35:40Z having seen macbookair's 16:57:13Z release, and checked what remained: C1/C3/C4 met at 14f1aaa5b, C2 open. C2 is the live mutation control — 'with the ~/src share absent, the guest still stages the host's newer binary (the REFUSING-older message)'. That requires booting a guest and mutating its share.
+
+        WHY LINUX CANNOT DO IT, checked rather than assumed: the pins C2 exercises are in crates/tillandsias-macos-tray/src/vz.rs, whose module is #[cfg(target_os = "macos")] at lines 24/26/34. The file does not compile on this host, so there is no binary here that can stage anything into a VZ guest. The packet's own capability_tags are [macos, windows]. A Linux host cannot run this control at all — not slowly, not partially.
+
+        WHAT I DID NOT DO. I did not substitute a source-shape assertion for the mutation control. The criterion says a mutation control PROVES it; a grep proving the code no longer mentions ~/src is what C1/C3 already cover, and passing it off as C2 would close the packet on the evidence it was written to distrust.
+
+        DISPOSITION: back to ready, unchanged, for a macOS host. Net effect of my claim on the artefact is zero.

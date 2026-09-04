@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: four-tray-absence-asserts-test-a-label-spelling-that-never-renders-so-they-pass-forever
+    field: status
+    value: completed
+    ts: "2026-09-04T23:29:52Z"
+    host: yoga
+
+events:
+  - packet_id: four-tray-absence-asserts-test-a-label-spelling-that-never-renders-so-they-pass-forever
+    event:
+      type: completed
+      ts: "2026-09-04T23:29:52Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: 04ade3b56: three absence asserts corrected to 'GitHub Login'; fourth left as a spelling regression pin with the reason recorded; menu diagram at 3928 corrected; 608 passed 0 failed serially
+  - packet_id: four-tray-absence-asserts-test-a-label-spelling-that-never-renders-so-they-pass-forever
+    event:
+      type: note
+      ts: "2026-09-04T23:29:52Z"
+      host: yoga
+      summary: |-
+        three of the four were vacuous and are fixed with teeth proven both directions; the fourth is a different guard and correcting it would have deleted it

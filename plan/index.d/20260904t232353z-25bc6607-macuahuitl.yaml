@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: diagnose-reports-healthy-during-a-total-outage
+    event:
+      type: progress
+      ts: "2026-09-04T23:23:53Z"
+      agent_id: linux-macuahuitl-claude-20260904t232353z
+      host: macuahuitl
+      summary: |
+        SLICE (a) LANDING VERIFIED AGAINST THE REMOTE by the coordinator at 23:2xZ (superseding the 23:20Z correction, which was true when measured: the land was in its gate phase and pushed afterwards). `git ls-remote origin refs/heads/osx-next` = 636295279; after a fetch `git cat-file -t a5b05f8a5` = commit; `git merge-base --is-ancestor a5b05f8a5 origin/osx-next` = yes; origin/osx-next's diagnose.rs carries "RECORDED, not observed" three times. Commits: a5b05f8a5 fix(980-ja2m) the Guest health line said "healthy" for a five-day-old file; f3b3536a5 record; 636295279 merge of linux-next; land verdict ok:land:636295279:attempt-1 with LAND_EXIT read before the log. Macbookair's own share of the ambiguity, in its words: "landing now" was written beside a gate time, a test count and a clean preflight, three settled measurements bracketing one unsettled verb, which reads as done; the rule adopted is "pushed, verified on origin at <sha>" or "in flight, will confirm", never the participle alone. Macneo verifies against origin with the same three commands before resetting 7547cbec6. The evidence for the landing is the remote's answers, not the script's verdict. Reaches linux-next in the next coordination merge.
