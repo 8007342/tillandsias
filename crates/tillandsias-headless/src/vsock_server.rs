@@ -7,8 +7,9 @@
 //! connection open for VM-lifecycle / cloud-refresh request frames.
 //!
 //! Phase-2 scope is the handshake + a small request/reply set
-//! (`VmStatusRequest`, `EnumerateLocalProjects`, `CloudRefreshRequest`,
-//! `VmShutdownRequest`). Full menu-state propagation lands in Phase 3+.
+//! (`VmStatusRequest`, `CloudRefreshRequest`, `VmShutdownRequest`). Full
+//! menu-state propagation lands in Phase 3+. (`EnumerateLocalProjects` was
+//! removed with the local-projects surface in 997-e4v2 step 3.)
 //!
 //! Linux-only, gated behind `feature = "listen-vsock"`.
 //!
@@ -243,11 +244,6 @@ pub struct VmStateHandle {
     /// Last pushed project list, `None` until first fetched. Full-replacement
     /// compare: `set_cloud_projects` pushes only when the list differs.
     cloud_projects: Arc<RwLock<Option<Vec<CloudProjectEntry>>>>,
-    /// Broadcast fan-out for `LocalProjectsPush` (order 260). Same
-    /// subscriber semantics as `vm_status_tx`.
-    /// Last pushed VM-local project list, `None` until first scanned.
-    /// Full-replacement compare (order 260): `set_local_projects` pushes
-    /// only when the list differs.
     /// Monotonic counter for the `seq` field carried inside each push
     /// message (distinct from the per-request `ControlEnvelope.seq`, which
     /// pushes don't have a request to reply to). Shared across all push
