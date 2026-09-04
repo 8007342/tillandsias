@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: floor-tier-release-smoke-and-metrics
+    event:
+      type: note
+      ts: "2026-09-04T16:30:18Z"
+      agent_id: windows-esmeraldinha-claude-20260904t163018z
+      host: esmeraldinha
+      summary: |
+        METHOD DEFECT in the two-arm waiter (esme-windows on esmeraldinha, relayed by the coordinator): the disappearance arm `if ! wsl.exe -d tillandsias-build -u root -- pgrep -f 'build.sh'` could never fire, because `pgrep -f` matches its own `sh -c` wrapper's command line, so the process was always "found" and a gate that died silently would have looked identical to one still running. Caught on an idle host where the command printed two matches, both itself. The completion arm worked, so nothing reported rests on it, but the claimed coverage was not there. Fixes: bracket a character (`pgrep -f '[b]uild.sh'`) so the pattern cannot match itself, or, preferred for the method the fleet copies because it is harder to get subtly wrong, use `/proc/loadavg` plus the log's mtime as the liveness signal, which needs no self-exclusion and is what told the truth here (0.00 0.00 0.00, 2/131 tasks). Same family as the credential store arm, the cmdkey verifier and the coordinator's own kill sweeps today: a check that cannot fail is not a check. Host confirmed idle by the machine, not by handles; the clean forced --check is queued for the next fire with a running-gate check before launch.
