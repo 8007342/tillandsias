@@ -1513,6 +1513,27 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
         archive_check_log "expect-none-fixture-only" "skipped"
     fi
 
+    # Order 1009-gccx. The gate's cheap deciders must stay AHEAD of its
+    # compiles. A fifth to a third of gate runs end red on defects decidable in
+    # milliseconds, and before this order they were discovered after clippy, the
+    # workspace suite and the litmus phases had already run — measured on this
+    # host, one planted exec-bit defect went from 222s to 2s to refusal.
+    # This fixture pins the ORDER, not the individual checks: asserting only
+    # "the gate refuses" would pass equally with the guard back at the end,
+    # which is the state the order exists to leave.
+    if [[ -f "scripts/test-gate-fast-refusals.sh" ]]; then
+        if bash scripts/test-gate-fast-refusals.sh 2>&1 | tee /tmp/gate-fast-refusals.log; then
+            log_pass "The gate's sub-second deciders run before its first compile"
+            archive_check_log "gate-fast-refusals" "pass" /tmp/gate-fast-refusals.log
+        else
+            log_fail_tracked "gate-fast-refusals" "Gate fast-refusal ordering regression (see /tmp/gate-fast-refusals.log)"
+            archive_check_log "gate-fast-refusals" "fail" /tmp/gate-fast-refusals.log
+        fi
+    else
+        log_fail_missing_guard "gate-fast-refusals" "scripts/test-gate-fast-refusals.sh"
+        archive_check_log "gate-fast-refusals" "skipped"
+    fi
+
     # Order 765-mza8. Wired here, literally, for the same reason as the two
     # above. A dead `inputs:` glob is silent by construction: it cannot make a
     # test run, only skip, so nothing else in this suite would ever go red for
