@@ -157,6 +157,11 @@ const USAGE: &str = concat!(
     "                                     schedulable (device_class, lane, engine) triples, and its\n",
     "                                     present-but-unusable devices. Distinct from `capabilities`\n",
     "                                     above, which reports THIS BINARY's subcommands.\n",
+    "                                     `--by-hardware` (805-r98w) re-keys it on (fingerprint,\n",
+    "                                     substrate) and reports control=yes|no per hardware group,\n",
+    "                                     so a caller can ASK whether a substrate control exists\n",
+    "                                     rather than assume one; unidentified rows are listed, never\n",
+    "                                     bucketed together.\n",
     "           experts-probe             ORDER 718-ja7g. Which expert TIER is live on this host, as\n",
     "                                     ONE line: l0 (file-backed, always ready) / l1 (retrieval —\n",
     "                                     needs BOTH an embeddings endpoint and a built index) / l2\n",
@@ -3797,6 +3802,62 @@ fn main() {
                         accels.iter().cloned().collect::<Vec<_>>().join(",")
                     };
                     println!("{host_id}\t{tier}\t{accel_csv}");
+                }
+                log_cli_usage(&subcommand, "answered", start_time.elapsed().as_millis());
+                return;
+            }
+
+            // ORDER 805-r98w, second half. `--by-hardware` is the SUBSTRATE-
+            // CONTROL projection: the matrix keyed on (hardware fingerprint,
+            // substrate) instead of on hostname, so rows sharing a machine
+            // model sit together and the substrate is the only free variable
+            // between them.
+            //
+            // WHY THIS ARM EXISTS AT ALL. `fragments::group_by_hardware` and
+            // `HardwareGroup::isolates_substrate` landed with four tests and
+            // NO production caller — the grouping was computable but not
+            // reachable, so every actual reader of the matrix still keyed on
+            // hostname and the control the order was filed to obtain could not
+            // be asked for. A function nobody can invoke does not deliver the
+            // capability; this is the face that does.
+            //
+            // WHAT IT PRINTS, and why the negative answer is the point:
+            //   hardware  <fingerprint>  loci=<n>  control=<yes|no>  <locus:host ...>
+            //   unidentified  <locus>:<host_id>
+            // `control=no` is the expected reading today. yolanda and yoga were
+            // asserted for weeks to be a twin pair and are not — hw2-f4e46bd13a0220cf
+            // against hw2-e94acbd479cb8b80, different SKU, core counts and iGPU
+            // bin. A caller must be able to ASK whether a control exists and be
+            // told no, rather than read a grouping and assume one does; that
+            // assumption is the whole defect this order removed.
+            //
+            // Unidentified rows are listed, never bucketed. A document with no
+            // fingerprint means the probe refused to identify the machine, and
+            // two machines that both failed to identify themselves are not
+            // thereby the same machine — grouping them would manufacture the
+            // false twin this order exists to prevent. Absent and
+            // "identified as nothing" are different facts (843-624y).
+            if args.iter().any(|a| a == "--by-hardware") {
+                let (groups, unidentified) =
+                    tillandsias_plan::fragments::group_by_hardware(&matrix);
+                for g in &groups {
+                    let obs = g
+                        .observations
+                        .iter()
+                        .map(|(locus, host)| format!("{locus}:{host}"))
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    let control = if g.isolates_substrate() { "yes" } else { "no" };
+                    println!(
+                        "hardware\t{}\tloci={}\tcontrol={}\t{}",
+                        g.fingerprint,
+                        g.observations.len(),
+                        control,
+                        obs
+                    );
+                }
+                for (locus, host) in &unidentified {
+                    println!("unidentified\t{locus}:{host}");
                 }
                 log_cli_usage(&subcommand, "answered", start_time.elapsed().as_millis());
                 return;
