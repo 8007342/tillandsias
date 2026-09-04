@@ -1428,6 +1428,34 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
         archive_check_log "spec-index-durable-tier-demotion" "skipped"
     fi
 
+    # Order 901-jtvi. A litmus step matched a tab-separated projection with
+    # `grep -qE '^hardware\t...'`. GNU grep's ERE does not define \t: it warns
+    # "stray \ before t" to stderr — which a -q step discards — and matches the
+    # bare letter, so the pattern could never match. It failed in the runner and
+    # passed every hand-check, because an interactive shell resolves a `grep`
+    # FUNCTION (ugrep) that DOES interpret \t, on three of three Linux hosts.
+    # Shell functions are not exported, so `bash -c` honestly disagrees with the
+    # author's next command. Three of us then spent an afternoon measuring pipe
+    # buffers for a SIGPIPE that never happened.
+    #
+    # Wired here rather than trusted to review for the reason the two sibling
+    # spec-index guards are: the failure is invisible at the surface everyone
+    # checks. The allowlist is measured against /usr/bin/grep, not recalled —
+    # \s and \w ARE GNU extensions and refusing them would red-flag ten
+    # committed lines, which is how a guard gets switched off.
+    if [[ -f "scripts/test-litmus-grep-escapes.sh" ]]; then
+        if bash scripts/test-litmus-grep-escapes.sh 2>&1 | tee /tmp/litmus-grep-escapes.log; then
+            log_pass "Litmus grep patterns use escapes GNU grep actually defines"
+            archive_check_log "litmus-grep-escapes" "pass" /tmp/litmus-grep-escapes.log
+        else
+            log_fail_tracked "litmus-grep-escapes" "Litmus grep-escape regression (see /tmp/litmus-grep-escapes.log)"
+            archive_check_log "litmus-grep-escapes" "fail" /tmp/litmus-grep-escapes.log
+        fi
+    else
+        log_fail_missing_guard "litmus-grep-escapes" "scripts/test-litmus-grep-escapes.sh"
+        archive_check_log "litmus-grep-escapes" "skipped"
+    fi
+
     # Order 765-mza8. Wired here, literally, for the same reason as the two
     # above. A dead `inputs:` glob is silent by construction: it cannot make a
     # test run, only skip, so nothing else in this suite would ever go red for
