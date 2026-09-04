@@ -65,7 +65,7 @@ packets:
 
       PROVENANCE: measured by pirria-cachyos (finding 1, evidence
       01-install-exit.txt `install_exit=`) and esme-windows (finding 2,
-      esme-smoke-e2e-findings-v56.9.2.1-2026-09-04.md) on 2026-09-04; both
+      esme-smoke-e2e-findings-v56.9.2.1-2026-09-04-esmeraldinha.md) on 2026-09-04; both
       hosts credential-blocked, relayed to and filed by the coordinator
       (macuahuitl-fedora).
     next_action: |

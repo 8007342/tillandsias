@@ -33,7 +33,7 @@ packets:
         esmeraldinha (Windows floor): install PASS (sha256 ok), purge PASS,
           cold --provision-once PASS in 117 s, warm re-provision 18 s, wire
           Ready. Six findings in
-          plan/issues/smoke-e2e-findings-v56.9.2.1-2026-09-04.md: Ready not
+          plan/issues/smoke-e2e-findings-v56.9.2.1-2026-09-04-esmeraldinha.md: Ready not
           durable after --provision-once (wire lost ~48 s idle, 3x reproduced,
           --diagnose cannot tell idled-out from failed); the 804-ckst cmdkey
           verifier is true in both directions (unearned-green class); the

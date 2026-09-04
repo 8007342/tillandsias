@@ -16,7 +16,7 @@ packets:
       transferred) on an x86_64-only fleet — find the dependency path, scope it to x86, re-measure.
     context: |
       FOUND by esme-windows running /smoke-curl-install-and-test-e2e on release v56.9.2.1
-      (plan/issues/smoke-e2e-findings-v56.9.2.1-2026-09-04.md, packet
+      (plan/issues/smoke-e2e-findings-v56.9.2.1-2026-09-04-esmeraldinha.md, packet
       smoke-finding/guest-pulls-full-multiarch-qemu-user-static). The guest dnf transaction in
       target/smoke-e2e/03-provision.log carried 53 `qemu-user-static-*` lines, including or1k, ppc,
       s390x and sh4. THE 53 IS LOG LINES (download, install and progress redraws), NOT PACKAGES; the

@@ -15,7 +15,7 @@ packets:
       On Windows, `--provision-once` reports Ready and exits 0, then WSL2 idles the guest out within a minute and `--diagnose` reports it exactly like a provision that never came up.
     context: |
       FOUND by esme-windows during the v56.9.2.1 floor smoke
-      (plan/issues/smoke-e2e-findings-v56.9.2.1-2026-09-04.md, packet
+      (plan/issues/smoke-e2e-findings-v56.9.2.1-2026-09-04-esmeraldinha.md, packet
       smoke-finding/windows-ready-not-durable-after-provision-once,
       discovered 2026-09-04T06:55:00Z by /smoke-curl-install-and-test-e2e).
 

@@ -1,4 +1,4 @@
-# Smoke e2e findings — release v56.9.2.1 — 2026-09-04 — esmeraldinha (windows floor)
+# Smoke e2e findings — release v56.9.2.1 — 2026-09-04 — esmeraldinha (windows floor); pirria's Linux floor report for the same tag is smoke-e2e-findings-v56.9.2.1-2026-09-04.md
 
 - lane: windows / `windows-next`
 - host: ESMERALDINHA — Intel N100, 4c/4t, 15.8 GB RAM, Win11 Home 26200, WSL 2.7.12.0 (kernel 6.18.33.2-2)
