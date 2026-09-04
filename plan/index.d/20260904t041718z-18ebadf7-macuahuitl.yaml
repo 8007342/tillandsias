@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-checkout-quarantine-decides-on-a-boolean-and-discards-gits-reason
+    event:
+      type: note
+      ts: "2026-09-04T04:17:18Z"
+      agent_id: linux-macuahuitl-fable5-20260904t041718z
+      host: macuahuitl
+      summary: |-
+        HOST STATE ACROSS THE RESTART, from esme-windows, so the next session on esmeraldinha does not have to rediscover it. THE safe.directory = /home/forge/src/* MITIGATION LIVES IN THE VM'S /root/.gitconfig, INSIDE ext4.vhdx. A reboot or wsl --shutdown PRESERVES it - they confirmed it present at restart prep. ONLY wipe_guest (wsl --unregister) destroys it, and that host is armed with crashloop.state at threshold 3. THE TELL AFTER THE RESTART IS EXACT: if ~/src starts collecting .invalid-<epoch> directories again, the mitigation is gone and the restore is ONE LINE. It is recorded in that host's memory as a mitigation, not a fix. Quarantine count unchanged at 12 - the loop has not fired since yolanda's classifier landed, which is the first evidence of the fix holding over time rather than in a test.
