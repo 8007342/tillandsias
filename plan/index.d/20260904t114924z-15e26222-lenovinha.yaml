@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: an-igpu-beside-a-discrete-card-reads-unusable-when-it-is-deliberately-unscheduled
+    event:
+      type: evidence
+      ts: "2026-09-04T11:49:24Z"
+      agent_id: linux-lenovinha-claude-20260904t113511z
+      host: lenovinha
+      summary: |
+        ALL THREE CRITERIA MET, TWO OF THEM DEMONSTRATED ON THE REAL HOST RATHER THAN IN A FIXTURE, AND ONE DELIBERATE DEVIATION RECORDED.
+
+        CRITERION 1 — the row. Verified by republishing lenovinha's capability row from the rebuilt probe and rendering the matrix:
+          present-unscheduled: gpu/Cezanne [Radeon Vega Series / Radeon Vega Mobile Series] (policy:discrete-gpu-preferred; measured lenovinha 2026-09-04, both models fully resident size_vram==size: decode 4.3-4.9x, embed 3.1x in favour of the discrete card)
+        `grep -c present-unusable` over that host block returns 0, so the device is named once and never as unusable. It is also never `usable`: the underlying record still carries usable=false and unusable_reason=rocm-runtime-missing, because that is what was actually probed.
+
+        CRITERION 2 — yoga unchanged. Rendered in the same run, byte-identical to before: `present-unscheduled: gpu/Krackan [Radeon 840M / 860M Graphics] (usable; no engine covers lanes [host-native])`. Its NPU line is untouched too. Nothing on a host whose only GPU is integrated moves.
+
+        CRITERION 3 — the two-host arm, WITH A DEVIATION I want on the record rather than glossed. The packet names scripts/test-capability-row-check.sh. I did not put it there. That fixture drives check-capability-row.sh and tests whether a row is PRESENT and FRESH — a different property from how a device is CLASSIFIED — and it cannot reach this decision without fabricating a sysfs tree for the Rust probe to walk. The discriminator is a pure function, so it is pinned where it lives, in accel_probe's test module. If the coordinator wants a shell-level arm as well, that is a follow-up and I have not silently substituted my judgement for the criterion.
+
+        THE DESIGN CHOICE THAT MATTERS, stated because it was the whole question. There were three candidate encodings and two of them are lies:
+          present-unusable  — what it said. TRUE reason, FALSE implication: every reader concludes the device does not work.
+          usable            — the obvious "fix". Also false, and more dangerous: a scheduler that believed it would place work on the Vega and lose 3-4x.
+          a third fact      — what landed. `policy_unscheduled` travels BESIDE the capability reading; usable stays false and rocm-runtime-missing is preserved verbatim, because that is what the probe actually measured.
+        I deliberately did NOT implement this by flipping `usable` upstream. The probe reads sysfs and a ROCm runtime; it cannot verify a Vulkan lane. Deriving usability from a policy check would assert on EVERY host a capability that was measured on ONE — an AMD iGPU beside a discrete card on a host with no Vulkan userspace at all would inherit a claim nobody made.
+
+        THE DISCRIMINATOR, and why the packet's own wording is not what I implemented. The packet says "an iGPU on a host whose tier is gpu-cuda". I keyed on "a discrete GPU is present AND SCHEDULABLE" instead. effective_inference_tier() downgrades gpu-cuda to cpu when no CDI spec exists, and on such a host the integrated part is the ONLY accelerator — the best lane available, not a rejected one. Keying on the tier label would stamp "deliberately deprioritised, the discrete card is better" onto the best device the host has. That fails toward a worse falsehood than the one this packet fixes: the current row at least errs toward "unusable", where the tier-keyed version would err toward "correctly deprioritised" on a host with nothing else. The coordinator agreed this refinement was on the packet; it was not in the fragment I read, so it is restated here in full.
+        "Schedulable" means what the matrix means: usable AND at least one lane. A discrete card with no driver, or none proven, is not a better option and deprioritises nothing.
+
+        THE TEST SPLIT, and it is the same mistake I caught in 1003-v3dc appearing again. My first draft put all four arms against `igpu_policy_unscheduled_reason`. That function takes a BOOLEAN, so "no discrete card" and "a discrete card that cannot be scheduled" are the SAME INPUT to it — my CDI-absent arm was a byte-for-byte duplicate of the yoga arm and proved nothing, while reading as though it proved the thing I had specifically asked for. The discrimination happens at the call site, so the CDI-absent case is now its own test against `discrete_gpu_is_schedulable` over DeviceRecords, with a positive control so the negatives cannot pass vacuously.
+        MUTATION CONTROL RUN, because an arm that has never gone red is a claim and not a test: removing the `usable` check from the predicate — the tier-keyed shape, "a discrete card is present" without asking whether it can be scheduled — makes `a_present_but_unschedulable_discrete_card_deprioritises_nothing` FAIL, and restoring it makes it pass. That is the arm doing its job.
+
+        EVIDENCE: ./build.sh --check green, 188s, exit 0. cargo test -p tillandsias-headless --bins: both new tests pass. Matrix rendered from a freshly published row. Commit 89f6960d2.
+
+        NOT DONE: nothing was measured about Intel iGPUs beside discrete cards, and the rule will fire for them too the moment such a host publishes — the predicate is vendor-neutral by construction, but the reason string cites an AMD measurement on one host. If pirria or an Intel-plus-discrete host ever appears, that string will be citing evidence from different silicon and should be re-derived rather than inherited.

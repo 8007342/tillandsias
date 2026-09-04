@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: an-igpu-beside-a-discrete-card-reads-unusable-when-it-is-deliberately-unscheduled
+    field: status
+    value: completed
+    ts: "2026-09-04T11:49:24Z"
+    host: linux
+
+events:
+  - packet_id: an-igpu-beside-a-discrete-card-reads-unusable-when-it-is-deliberately-unscheduled
+    event:
+      type: completed
+      ts: "2026-09-04T11:49:24Z"
+      host: linux
+      summary: |-
+        status 'completed' with evidence_refs: 89f6960d2: ./build.sh --check green 188s exit 0; cargo test -p tillandsias-headless --bins igpu_beside_a_schedulable_discrete_card_is_policy_unscheduled + a_present_but_unschedulable_discrete_card_deprioritises_nothing both pass, with a mutation control proving the CDI-absent arm goes red without the usable check; matrix rendered from a freshly published row shows present-unscheduled with the policy reason and zero present-unusable lines for the Vega, yoga byte-identical
+  - packet_id: an-igpu-beside-a-discrete-card-reads-unusable-when-it-is-deliberately-unscheduled
+    event:
+      type: note
+      ts: "2026-09-04T11:49:24Z"
+      host: linux
+      summary: |-
+        all three criteria met; test home deviates from the named shell fixture with the reason recorded on the evidence event

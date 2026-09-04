@@ -17,6 +17,7 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
     git checkout <active-branch>  # linux-next, windows-next, or osx-next per host table
     git pull --ff-only origin <active-branch>
     scripts/check-committable-branch.sh
+    git merge --no-edit origin/linux-next   # platform branches: BEFORE §2.0, not only before push
     ```
     The last line is the executable Committable Branch Guard (order 476,
     pinned by `litmus:committable-branch-guard-shape`): it prints one verdict
@@ -27,6 +28,19 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
     (breach record 34e60965,
     `plan/issues/main-branch-direct-push-guard-2026-07-24.md`). Switch to
     your host's canonical branch or run the cycle read-only.
+    **On `osx-next` / `windows-next`, merge `origin/linux-next` HERE, before the
+    selector runs, not only before the push.** The selector and every
+    `plan_*` read answer from the WORKTREE ledger, and on a platform branch the
+    worktree is current only after that merge: between the pull and the merge
+    it still carries the trunk's state as of your last merge. MEASURED on
+    tlatoanis-macbook-air 2026-09-04: `osx-next` was up to date, the selector
+    returned 1001-q3zf as its p1 top pick, `plan_status` agreed it was `ready`,
+    and the host claimed it — a packet the coordinator had closed on the trunk
+    an hour earlier. The post-merge fold exposed it, the unpushed claim was
+    dropped, and the re-run selector returned a different batch. This is the
+    same ordering rule the meta-orchestration skill states for the overlap
+    check ("AFTER THE MERGE, NOT BEFORE"), applied to selection. The pre-push
+    merge (§6) still applies; this is the earlier one.
 1b. **Snapshot the startup boundary NOW — before any guard that writes.**
     Right after the pull and the branch guard, before the credential guard,
     the daily-maintenance body, the capability-row republish, the opsx sync,

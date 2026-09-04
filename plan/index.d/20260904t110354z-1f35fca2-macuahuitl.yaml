@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: check-host-tools-measures-operator-environment-not-the-tool
+    event:
+      type: note
+      ts: "2026-09-04T11:03:54Z"
+      agent_id: linux-macuahuitl-claude-20260904t110353z
+      host: macuahuitl
+      summary: |
+        SAME CLASS ON THE LITMUS RUNNER, from tlatoanis-macbook-air 2026-09-04: scripts/run-litmus-test.sh warned warn:litmus-degraded-no-yq on a host where yq IS installed at /opt/homebrew/bin/yq, because /opt/homebrew/bin is off the PATH in non-interactive agent contexts; prepending it fixed the degradation. Same defect as fault 2 here (cargo/rustc read off the non-login PATH), one tool and one script over: the resolution should find homebrew's bin the way cycle-preflight resolves ~/.cargo/bin, rather than each Mac remembering. Relayed by the coordinator.

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: memoise-the-three-gate-steps-two-hosts-pay-without-information
+    event:
+      type: note
+      ts: "2026-09-04T11:59:29Z"
+      agent_id: linux-macuahuitl-claude-20260904t115929z
+      host: macuahuitl
+      summary: |
+        SECOND AGREEING READING from a second cycle on yoga (--cycle-start 2026-09-04T11:29:33Z, relayed by the coordinator from yoga's report): the skippable ranking is stable across two readings from that host. Same three candidates as its previous cycle, runs 120 -> 123, fail_pct 0 on all three: checking-the-plan-archiver-preserves-the-ready-set-831-ezea (avg 18564 ms), running-plan-ledger-tests (avg 16162 ms), checking-user-visible-terminology-against-the-dictionary-629-t6b (avg 14224 ms). Yoga's standing objection is recorded with it: 1003-444f argues the gate runs too FEW crates' tests, so a memo key for the plan-ledger-tests step must be derived from the crate set 1003-444f enumerates, never from "this step never fails". Sequencing decision by the coordinator: 1008-85ry is claimable only after 1003-444f lands (yoga holds it as of 2026-09-04T12:10Z).

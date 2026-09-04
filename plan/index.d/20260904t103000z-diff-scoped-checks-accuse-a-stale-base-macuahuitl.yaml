@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: diff-scoped-gate-checks-accuse-the-change-when-the-base-is-stale
+    order: 1014-xf2u
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [gate, fail-loud, multi-host, stale-base, discoverability]
+    estimated_hours: 2
+    owned_files:
+      - scripts/check-litmus-expression-pinning-added.sh
+    title: |
+      A diff-scoped gate check on a branch with a stale base reads the trunk's newer content as something THIS change removed, and refuses naming a file the host never opened.
+    context: |
+      MEASURED by yolanda 2026-09-04 landing the 997-e4v2 Windows tray slice:
+      the 634-39ik expression-pinning gate REFUSED, naming
+      litmus-podman-container-spec-source-shape.yaml, a file the slice never
+      touched. The check diffs against origin/linux-next; the branch carried an
+      older copy of that file, so the diff read as the change REMOVING a
+      negative control and reverting the 972-6vaj signature pin that the
+      coordinator had landed on the trunk an hour earlier. Merging
+      origin/linux-next made it vanish. A stale base is indistinguishable from
+      a deliberate revert when a check reads only the diff — the same shape
+      1000-rqmx and 1001-i5ux closed on the push path, seen from the gate side
+      — and the current message sends the host hunting a file it never opened,
+      which cost one ten-minute gate run (1009-gccx). Every diff-scoped check
+      shares the exposure (check-issue-citation-convention, the added-fragment
+      checks, check-scorable-obligation-added, check-declared-closures-added).
+      Provenance: yolanda measured; filed by the coordinator.
+    exit_criteria:
+      - a diff-scoped check whose base is behind origin/linux-next for the files it examines refuses with a verdict that names the stale base and the merge as the remedy, never the file, before examining the diff
+      - the detection is shared by every diff-scoped check (one helper), not copied into each
+      - a fixture proves it with a branch whose base predates a trunk edit to an examined file
+    unscoreable: >
+      The pin is the shared-helper fixture, which does not exist until the helper
+      does; whoever lands it writes it and converts this row.

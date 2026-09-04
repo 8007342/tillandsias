@@ -205,4 +205,53 @@ else
     echo "ok: case 7 — naming format NOT RUN (nothing was filtered to name)"
 fi
 
-echo "PASS: capability routing (7/7)"
+
+# --- case 8 (1011-d578): where a host is POINTED is pool-independent ---------
+# EC1 (case 1) counts distinct epics, and whether it discriminates depends on
+# what the live ledger happens to hold — it passed on a broken selector hours
+# before it caught one. This case tests the PROPERTY instead, so it has teeth
+# regardless of the pool.
+#
+# Ordinal routing promises that distinct ranks give disjoint epics. That holds
+# only if every host's ordinal indexes the SAME list. Before 1011-d578 the list
+# was the host's OWN post-subtraction pool, so slot k named different epics on
+# different hosts and disjointness was emergent rather than guaranteed.
+#
+# The invariant, stated directly: hold rank and rotation fixed, vary ONLY the
+# host's own capabilities, and the epic it is pointed at must not move. Its own
+# pool still decides what it WORKS; it must not decide where it is POINTED.
+#
+# MUTATION CONTROL, measured 2026-09-04: against the pre-fix selector this case
+# FAILS — macuahuitl routes to harness-mcp-expert-validation with
+# `gpu:nvidia:usable` and to convergence-velocity-milestone once
+# `npu:intel:unusable` is added, purely because the extra tag widened its own
+# pool. Same rank, same rot, same ledger, different destination.
+mk_probe_roster() {
+    printf '%s\n' \
+        "hilaptop1	gpu-cuda	gpu:amd:unusable,gpu:nvidia:usable" \
+        "hilaptop2	cpu	gpu:amd:unusable,npu:amd:usable" \
+        "hilaptop3	gpu-rocm	gpu:amd:usable,npu:amd:usable" \
+        "lowlap1	cpu	none" \
+        "lowlap2	cpu	npu:intel:usable" \
+        "macuahuitl	gpu-cuda	$1" \
+        "mstudio	metal	gpu:apple:usable" \
+        "oldair	cpu	none" | sort
+}
+probe_epic=""
+for accels in "gpu:nvidia:usable" \
+              "gpu:nvidia:usable,npu:intel:unusable" \
+              "gpu:nvidia:usable,npu:intel:usable" \
+              "none"; do
+    e="$(TILLANDSIAS_CAP_HOSTS="$(mk_probe_roster "$accels")" \
+         TILLANDSIAS_WORKSTATION=macuahuitl TILLANDSIAS_HOST_TIER=general \
+         TILLANDSIAS_ROUTE_ROT=0 bash "$SEL" linux | epic_of)"
+    [ -n "$e" ] || fail "case 8: no epic routing with accels=$accels"
+    if [ -z "$probe_epic" ]; then
+        probe_epic="$e"
+    elif [ "$e" != "$probe_epic" ]; then
+        fail "case 8: the host's OWN capabilities moved where it is pointed — accels='$accels' routed to $e, but $probe_epic with the first set. The ordinal is indexing this host's filtered pool instead of the shared routing frontier (1011-d578)."
+    fi
+done
+echo "ok: case 8 — where a host is pointed is pool-independent (4 capability sets, all -> $probe_epic)"
+
+echo "PASS: capability routing (8/8)"

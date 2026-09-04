@@ -33,10 +33,10 @@ preconditions:
   - the ledger carries ready linux work (the fixture routes over the live pool)
 
 critical_path:
-  - step: "the seven-case routing fixture passes end to end"
-    command: "bash scripts/test-capability-routing.sh 2>&1 | tail -1 | grep -qx 'PASS: capability routing (7/7)' && echo 'ok: fixture 7/7'"
+  - step: "the eight-case routing fixture passes end to end"
+    command: "bash scripts/test-capability-routing.sh 2>&1 | tail -1 | grep -qx 'PASS: capability routing (8/8)' && echo 'ok: fixture 8/8'"
     timeout_ms: 120000
-    expected_behavior: "ok: fixture 7/7"
+    expected_behavior: "ok: fixture 8/8"
 
   - step: "the binary serves the routing roster projection"
     command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; out=$(\"$MFPLAN\" capability-matrix --hosts 2>/dev/null); printf '%s\\n' \"$out\" | awk -F'\\t' 'NF != 3 { bad = 1 } END { exit bad }' && echo 'ok: hosts projection is three tab-separated fields per row'"
@@ -52,7 +52,7 @@ critical_path:
   # The control=no reading is the expected one today and must stay askable —
   # yolanda and yoga were asserted for weeks to be a twin pair and are not.
   - step: "the matrix answers on (fingerprint, substrate), and says when there is NO control"
-    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; out=$(\"$MFPLAN\" capability-matrix --by-hardware 2>/dev/null); printf '%s\\n' \"$out\" | grep -qE '^hardware\\t[a-z0-9-]+\\tloci=[0-9]+\\tcontrol=(yes|no)\\t' || { echo \"FAIL: no hardware group row: $out\"; exit 1; }; printf '%s\\n' \"$out\" | awk -F'\\t' '/^hardware\\t/ { n = $3; sub(/loci=/, \"\", n); c = $4; sub(/control=/, \"\", c); if ((n > 1) != (c == \"yes\")) { print \"FAIL: loci=\" n \" disagrees with control=\" c; exit 1 } }' || exit 1; echo 'ok: hardware-keyed projection'"
+    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; out=$(\"$MFPLAN\" capability-matrix --by-hardware 2>/dev/null); case \"$out\" in *'control=yes'*|*'control=no'*) ;; *) echo \"FAIL: no hardware group row: $out\"; exit 1 ;; esac; bad=$(printf '%s\\n' \"$out\" | awk -F'\\t' '/^hardware\\t/ { n = $3; sub(/loci=/, \"\", n); c = $4; sub(/control=/, \"\", c); if ((n + 0 > 1) != (c == \"yes\")) print \"loci=\" n \" control=\" c }'); [ -z \"$bad\" ] || { echo \"FAIL: loci disagrees with control: $bad\"; exit 1; }; echo 'ok: hardware-keyed projection'"
     timeout_ms: 15000
     expected_behavior: "ok: hardware-keyed projection"
 
@@ -61,7 +61,7 @@ critical_path:
   # are not thereby the same machine, and bucketing them would manufacture the
   # exact false twin this order exists to prevent.
   - step: "unidentified rows are listed separately, never bucketed into a hardware group"
-    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; out=$(\"$MFPLAN\" capability-matrix --by-hardware 2>/dev/null); printf '%s\\n' \"$out\" | grep -qE '^unidentified\\t[a-z-]+:' || { echo 'ok: no unidentified rows in this ledger (nothing to bucket)'; exit 0; }; printf '%s\\n' \"$out\" | grep -E '^hardware\\t' | grep -q 'unidentified' && { echo 'FAIL: an unidentified row was folded into a hardware group'; exit 1; }; printf '%s\\n' \"$out\" | grep -cE '^hardware\\t\\t' | grep -qx 0 || { echo 'FAIL: a hardware row carries an empty fingerprint'; exit 1; }; echo 'ok: unidentified listed, not bucketed'"
+    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; out=$(\"$MFPLAN\" capability-matrix --by-hardware 2>/dev/null); case \"$out\" in *'unidentified	'*) ;; *) echo 'ok: no unidentified rows in this ledger (nothing to bucket)'; exit 0 ;; esac; leaked=$(printf '%s\\n' \"$out\" | awk -F'\\t' '/^hardware\\t/ && /unidentified/ { print }'); [ -z \"$leaked\" ] || { echo \"FAIL: an unidentified row was folded into a hardware group: $leaked\"; exit 1; }; empty=$(printf '%s\\n' \"$out\" | awk -F'\\t' '/^hardware\\t/ && $2 == \"\" { print }'); [ -z \"$empty\" ] || { echo 'FAIL: a hardware row carries an empty fingerprint'; exit 1; }; echo 'ok: unidentified listed, not bucketed'"
     timeout_ms: 15000
     expected_behavior: "ok: unidentified listed, not bucketed"
 
@@ -73,7 +73,7 @@ critical_path:
 observability:
   traces:
     - "@trace spec:ci-release"
-  expected_log: "capability routing pinned (disjointness, accel exclusion, bring-up lane, filter naming, anti-starvation, rowless degradation, tier mandate)"
+  expected_log: "capability routing pinned (disjointness, pool-independent routing, accel exclusion, bring-up lane, filter naming, anti-starvation, rowless degradation, tier mandate)"
   log_fields:
     spec: "ci-release"
     test: "capability-routing-shape"
@@ -91,6 +91,6 @@ rollback:
     rowless host), and the conditional route=/tier_filtered=/accel_filtered=
     output fields, and the 1002-7jeg bring-up lane (HOST_ACCELS_PRESENT: hardware
     present-but-unusable is OFFERED, absent is withheld) with accel_filtered
-    naming the tags it dropped; keep scripts/test-capability-routing.sh's seven
+    naming the tags it dropped; keep scripts/test-capability-routing.sh's eight
     cases green.
   command: "bash scripts/test-capability-routing.sh 2>&1 | tail -3"

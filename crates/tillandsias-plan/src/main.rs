@@ -4161,6 +4161,31 @@ fn main() {
                 // an engineering problem someone can see.
                 if let Some(devices) = entry.document["devices"].as_sequence() {
                     for d in devices {
+                        // ORDER 1011-zp59. A device left unscheduled by POLICY
+                        // belongs on this line whatever `usable` says, and it
+                        // is reported with ITS OWN reason.
+                        //
+                        // lenovinha's Vega has no ROCm runtime, so `usable` is
+                        // false and the unusable arm below would print
+                        // `present-unusable (rocm-runtime-missing)` — literally
+                        // true, and read by everyone as "this device does not
+                        // work". It works: measured through Vulkan, fully
+                        // resident. It is simply beaten 3-5x by the discrete
+                        // card beside it and is left off on purpose.
+                        //
+                        // Printing the policy reason here rather than flipping
+                        // `usable` upstream keeps the capability reading honest
+                        // (no Vulkan lane was probed) while making the row's
+                        // IMPLICATION true, which is the whole defect.
+                        if let Some(policy) = d["policy_unscheduled"].as_str() {
+                            println!(
+                                "  present-unscheduled: {}/{} ({})",
+                                d["device_class"].as_str().unwrap_or("?"),
+                                d["name"].as_str().unwrap_or("?"),
+                                policy
+                            );
+                            continue;
+                        }
                         if d["usable"].as_bool() != Some(true) {
                             continue;
                         }
@@ -4212,6 +4237,15 @@ fn main() {
                 // shows only what is schedulable cannot tell them apart.
                 if let Some(devices) = entry.document["devices"].as_sequence() {
                     for d in devices {
+                        // ORDER 1011-zp59. A policy-unscheduled device was
+                        // already reported above with its own reason. Falling
+                        // through to here would print BOTH lines for one
+                        // device, and the `present-unusable` one is exactly the
+                        // false implication this order removes — so the row
+                        // would still carry it, now contradicted two lines up.
+                        if d["policy_unscheduled"].as_str().is_some() {
+                            continue;
+                        }
                         if d["usable"].as_bool() == Some(false) {
                             // `os_status` is printed BESIDE the reason, not
                             // folded into it, because they are two independent

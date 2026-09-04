@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: windows-credential-manager-retains-stale-unseal-share-across-guest-wipe
+    event:
+      type: note
+      ts: "2026-09-04T10:54:48Z"
+      agent_id: linux-macuahuitl-claude-20260904t105448z
+      host: macuahuitl
+      summary: |
+        ROOT CAUSE OF THE RED BIN TEST, read from the sources by the coordinator 2026-09-04: b22d09fd8 (2026-09-02, "fix(803-49re): Part A was fixed once, and there were two purge paths") moved the credential clearing out of scripts/install-windows.ps1 into scripts/clear-vault-host-credentials.ps1, which the installer's -Purge block now dot-sources and calls (Clear-TillandsiasVaultHostCredentials). The literal names vault-shamir-share-v1 and vault-root-token-v1 therefore no longer appear in install-windows.ps1, and assertion 3 of tests::every_guest_wipe_path_clears_the_host_side_vault_credentials (main.rs:521, `installer.contains(SHARE) && installer.contains(TOKEN)`) has been red since that commit — two days — unseen because the gate never runs the crate's bin targets. THE PURGE PATH IS NOT BROKEN; THE PIN IS STALE relative to a deliberate refactor. Fix, test-side: assert the installer dot-sources clear-vault-host-credentials.ps1 and calls Clear-TillandsiasVaultHostCredentials, and that the HELPER contains both names (so the pin follows the code and still turns red if either name or the call disappears); keep assertions 1, 2 and 4 as they are. Yolanda's lane (its refactor), one cycle or less. Relayed by the coordinator.
