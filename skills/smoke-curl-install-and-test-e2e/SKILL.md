@@ -26,7 +26,7 @@ become `plan/issues/` work packets so they flow through the normal
 | immutable Linux | `scripts/install.sh` via release curl URL | `podman system reset --force` | `tillandsias --debug --init` |
 | mutable Linux | `scripts/install.sh` via release curl URL | `podman system reset --force` | `tillandsias --debug --init` |
 | macOS | `scripts/install-macos.sh` via release curl URL | remove Tillandsias app state/cache VM dirs | installed tray `--provision` + `--diagnose --json` |
-| Windows | `scripts/install-windows.ps1` release path when available | `wsl --unregister tillandsias`, cache purge, plus `vault-shamir-share-v1` + `vault-root-token-v1` cleared from Credential Manager (keeping `tillandsias-vm-uuid`) | installed tray provision/diagnose |
+| Windows | `scripts/install-windows.ps1` release path when available | `wsl --unregister tillandsias`, cache purge, plus `vault-shamir-share-v1` + `vault-root-token-v1` cleared from Credential Manager (keeping `tillandsias-vm-uuid`) | installed tray provision/diagnose — implemented by the §3 "Windows" block (`--provision-once`, `--status-once --json` polled to Ready, `--diagnose --json` LAST) |
 
 This is the only e2e install skill allowed on immutable Linux.
 
@@ -61,6 +61,23 @@ state and cache directories. On Windows, it is the `tillandsias` WSL2 distro and
 download cache.
 
 ## 0 — Pre-flight
+
+0. **Shell: every fenced `bash` block in this runbook runs under bash, and the
+   first line of each block asserts it.** `PIPESTATUS` is a bash array; under
+   zsh it expands EMPTY and zsh's `test "" -eq 0` is TRUE, so every exit-code
+   assertion below silently passes on a failed step (measured on pirria,
+   2026-09-04: the first install attempt recorded `install_exit=` and walked
+   on — the exact walk-past-a-failed-install 727-kmks wrote the assertions to
+   kill, reintroduced by shell choice; order 1004-fue3). Paste this line at the
+   top of every bash block, or run each block as `bash -c '...'`:
+   ```bash
+[ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh expands it empty'; exit 2; }
+   [ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh expands it empty'; exit 2; }
+   ```
+   Every assertion on a captured status also checks the capture is NON-EMPTY
+   (`test -n "$RC" && test "$RC" -eq 0`), so a void capture fails loud even if
+   the guard above is skipped. PowerShell blocks assert `$LASTEXITCODE` and
+   `$?` instead; there is no PIPESTATUS there.
 
 1. **Identify host + branch** (Linux → `linux-next`, macOS → `osx-next`,
    Windows → `windows-next`). The `--opencode` forge lane is Linux/Podman today.
@@ -164,15 +181,16 @@ would ignore the daily prerelease). Real users are unaffected: with the env
 unset the installer defaults to the stable channel.
 
 ```bash
+[ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh expands it empty'; exit 2; }
 TILLANDSIAS_SMOKE_LOCK_LOG=target/smoke-e2e/00-smoke-lock.log \
   scripts/with-smoke-lock.sh --name release-smoke-e2e -- \
   bash -c "curl -fsSL '${SMOKE_BASE}/install.sh' | TILLANDSIAS_RELEASE_BASE='${SMOKE_BASE}' bash" 2>&1 \
   | tee target/smoke-e2e/01-install.log
 INSTALL_RC=${PIPESTATUS[0]}; printf 'install_exit=%s\n' "$INSTALL_RC" | tee target/smoke-e2e/01-install-exit.txt
-test "$INSTALL_RC" -eq 0
+test -n "$INSTALL_RC" && test "$INSTALL_RC" -eq 0
 hash -r
 tillandsias --version | tee target/smoke-e2e/01-version.txt
-test "${PIPESTATUS[0]}" -eq 0
+_rc=${PIPESTATUS[0]}; test -n "$_rc" && test "$_rc" -eq 0
 # The comment used to say "must equal $SMOKE_TAG". Now it is checked.
 grep -qF "${SMOKE_TAG#v}" target/smoke-e2e/01-version.txt
 ```
@@ -188,11 +206,12 @@ grep -qF "${SMOKE_TAG#v}" target/smoke-e2e/01-version.txt
 macOS:
 
 ```bash
+[ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh expands it empty'; exit 2; }
 curl -fsSL "${SMOKE_BASE}/install-macos.sh" | TILLANDSIAS_RELEASE_BASE="${SMOKE_BASE}" bash 2>&1 \
   | tee target/smoke-e2e/01-install-macos.log
 INSTALL_RC=${PIPESTATUS[0]}; printf 'install_exit=%s\n' "$INSTALL_RC" \
   | tee target/smoke-e2e/01-install-macos-exit.txt
-test "$INSTALL_RC" -eq 0
+test -n "$INSTALL_RC" && test "$INSTALL_RC" -eq 0
 
 # install-macos.sh extracts to /Applications — but FALLS BACK to
 # ~/Applications when /Applications is not writable, and this runbook then
@@ -204,7 +223,7 @@ test -d "/Applications/Tillandsias.app"
 
 "/Applications/Tillandsias.app/Contents/MacOS/tillandsias-tray" --version 2>&1 \
   | tee target/smoke-e2e/01-version.txt
-test "${PIPESTATUS[0]}" -eq 0
+_rc=${PIPESTATUS[0]}; test -n "$_rc" && test "$_rc" -eq 0
 # EXACT, not `>=` and not "contains 0.4". Assertable at all only since
 # 635-bhkb: every macOS build answered `0.1.0` before it, so this lane could
 # not confirm which release it was testing even in principle.
@@ -233,11 +252,44 @@ which is stable-only by GitHub semantics):
 ```powershell
 # $SmokeTag from pre-flight, e.g. v0.3.260721.1 (strip/keep the leading v —
 # the installer normalizes both).
+$ErrorActionPreference = 'Stop'
+New-Item -ItemType Directory -Force target\smoke-e2e | Out-Null
 $env:TILLANDSIAS_VERSION = $SmokeTag
-irm "https://github.com/8007342/tillandsias/releases/download/$SmokeTag/install-windows.ps1" | iex `
-  *>&1 | Tee-Object target\smoke-e2e\01-install-windows.log
+$installExit = 0
+try {
+  $script = irm "https://github.com/8007342/tillandsias/releases/download/$SmokeTag/install-windows.ps1"
+  Invoke-Expression $script *>&1 | Tee-Object target\smoke-e2e\01-install-windows.log
+  if ($LASTEXITCODE) { $installExit = $LASTEXITCODE }
+} catch {
+  $_ | Out-String | Tee-Object -Append target\smoke-e2e\01-install-windows.log
+  $installExit = 1
+}
 Remove-Item Env:TILLANDSIAS_VERSION
+"install_exit=$installExit" | Tee-Object target\smoke-e2e\01-install-exit.txt
+if ($installExit -ne 0) { throw "install failed (exit $installExit) — file a finding and STOP" }
+# The tray is the only installed surface on Windows; assert it resolves NOW,
+# not at §3 where a missing binary would read as a provision failure.
+$tray = (Get-Command tillandsias-tray.exe -ErrorAction Stop).Source
+"tray=$tray" | Tee-Object target\smoke-e2e\01-tray-path.txt
+# EXACT, not "contains": the tray answers --version / -V (windows-tray
+# main.rs), so the lane can confirm which release it is testing.
+& $tray --version 2>&1 | Tee-Object target\smoke-e2e\01-version.txt | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "tray --version failed (exit $LASTEXITCODE)" }
+$installedVersion = (Get-Content target\smoke-e2e\01-version.txt -Raw).Trim()
+if ($installedVersion -notmatch [regex]::Escape($SmokeTag.TrimStart('v'))) {
+  throw "installed tray version '$installedVersion' does not carry release $SmokeTag"
+}
 ```
+
+> Same three assertions the Linux lane got on 727-kmks and macOS on
+> 2026-08-26, added 2026-09-04 (order 1004-fue3): the old block piped `iex`
+> into `Tee-Object` and asserted nothing, so a failed installer exited 0 and
+> the smoke walked on — the shape the Linux lane had already been fixed for.
+> The release-tag pin on this lane is the installer's `TILLANDSIAS_VERSION`
+> (an exact tag: a tag that does not exist fails the download and trips the
+> exit assertion). The tray's OWN version is asserted above from `--version` (the flag
+> exists in windows-tray main.rs); the `.version` field of `--diagnose --json`
+> is a second surface, asserted in §3 only when the build reports it.
 
 Verify the installed version matches the release tag from Step 0. If the install
 script errors, the version mismatches, or `tillandsias` is not on `PATH`
@@ -252,11 +304,12 @@ If `TILLANDSIAS_DESTRUCTIVE_RESET_OK=0`, stop here, write a plan blocker, and
 push it. Otherwise run the reset immediately; on Linux this step is mandatory.
 
 ```bash
+[ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh expands it empty'; exit 2; }
 TILLANDSIAS_SMOKE_LOCK_LOG=target/smoke-e2e/00-smoke-lock.log \
   scripts/with-smoke-lock.sh --name release-smoke-e2e -- \
   podman system reset --force 2>&1 | tee target/smoke-e2e/02-reset.log
 RESET_RC=${PIPESTATUS[0]}; printf 'reset_exit=%s\n' "$RESET_RC" | tee target/smoke-e2e/02-reset-exit.txt
-test "$RESET_RC" -eq 0
+test -n "$RESET_RC" && test "$RESET_RC" -eq 0
 ```
 
 Confirm afterward that the store is empty:
@@ -367,11 +420,12 @@ metered or slow link pays it every time.
 ## 3 — Fresh init from a pristine state
 
 ```bash
+[ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh expands it empty'; exit 2; }
 TILLANDSIAS_SMOKE_LOCK_LOG=target/smoke-e2e/00-smoke-lock.log \
   scripts/with-smoke-lock.sh --name release-smoke-e2e -- \
   tillandsias --debug --init 2>&1 | tee target/smoke-e2e/03-init.log
-INIT_RC=${PIPESTATUS[0]}
-echo "init exit: $INIT_RC"
+INIT_RC=${PIPESTATUS[0]}; printf 'init_exit=%s\n' "$INIT_RC" | tee target/smoke-e2e/03-init-exit.txt
+test -n "$INIT_RC" && test "$INIT_RC" -eq 0
 ```
 
 **Observe carefully.** This is the highest-signal step — a clean-room `--init`
@@ -400,6 +454,7 @@ written. Added 2026-08-26, before this lane's first run against a published
 release.
 
 ```bash
+[ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh expands it empty'; exit 2; }
 APP="/Applications/Tillandsias.app/Contents/MacOS/tillandsias-tray"
 IMG="$HOME/Library/Application Support/tillandsias/rootfs.img"
 
@@ -410,7 +465,7 @@ touch target/smoke-e2e/03-destruction-marker
 "$APP" --provision 2>&1 | tee target/smoke-e2e/03-provision.log
 PROVISION_RC=${PIPESTATUS[0]}
 printf 'provision_exit=%s\n' "$PROVISION_RC" | tee target/smoke-e2e/03-provision-exit.txt
-test "$PROVISION_RC" -eq 0
+test -n "$PROVISION_RC" && test "$PROVISION_RC" -eq 0
 
 # A fresh image, not a survivor. An exit code cannot tell these apart.
 test -f "$IMG"
@@ -421,7 +476,7 @@ test "$IMG" -nt target/smoke-e2e/03-destruction-marker
 # incident: 4/4 PASS on a health check taken before one more mutating step
 # wedged the host for 25 minutes).
 "$APP" --diagnose --json 2>&1 | tee target/smoke-e2e/03-diagnose.json
-test "${PIPESTATUS[0]}" -eq 0
+_rc=${PIPESTATUS[0]}; test -n "$_rc" && test "$_rc" -eq 0
 
 jq -e '.provisioned == true'    target/smoke-e2e/03-diagnose.json
 jq -e '.rootfs_present == true' target/smoke-e2e/03-diagnose.json
@@ -442,6 +497,86 @@ jq -e --arg v "${SMOKE_TAG#v}" '.version == $v' target/smoke-e2e/03-diagnose.jso
 > been bitten by twice. Exercise the guest/tray skew check under
 > `--with-metrics` if you want it, and note that it is a mutating step, so the
 > `--diagnose` above must then be re-run after it.
+
+### Windows
+
+**Neither block above runs on Windows and there is no `tillandsias` CLI there
+either** — the installed surface is `tillandsias-tray.exe`, and its
+provisioning flag is `--provision-once`, NOT the macOS `--provision` (the two
+are not interchangeable: `tillandsias-tray.exe --help`). The Host Matrix has
+promised this lane since the Windows installer shipped; no block matched it,
+so every Windows run improvised and no two runs were comparable. Added
+2026-09-04 (order 1004-fue3) from esme-windows's improvised v56.9.2.1 run on
+esmeraldinha (cold `--provision-once` exit 0 in 117 s, warm 18 s, wire Ready).
+
+```powershell
+$ErrorActionPreference = 'Stop'
+$tray = (Get-Command tillandsias-tray.exe -ErrorAction Stop).Source
+
+# Marker to prove the distro below was registered AFTER §2's unregister, not
+# inherited from it. An exit code cannot tell these apart.
+New-Item -ItemType File -Force target\smoke-e2e\03-destruction-marker | Out-Null
+
+# Cold provision from pristine. `--provision-once` provisions and EXITS; it is
+# the headless form the tray's own --help prescribes for scripted use.
+& $tray --provision-once *>&1 | Tee-Object target\smoke-e2e\03-provision.log
+$provisionExit = $LASTEXITCODE
+"provision_exit=$provisionExit" | Tee-Object target\smoke-e2e\03-provision-exit.txt
+if ($provisionExit -ne 0) { throw "provision-once failed (exit $provisionExit)" }
+
+# A fresh distro, not a survivor: it must exist, and its rootfs must postdate
+# the marker (WSL2 keeps each distro's ext4.vhdx under LOCALAPPDATA).
+$distros = (wsl.exe -l -q) -replace "`0", '' | ForEach-Object { $_.Trim() }
+if ($distros -notcontains 'tillandsias') { throw "distro 'tillandsias' not registered after provision" }
+$vhdx = Get-ChildItem -Path $env:LOCALAPPDATA -Recurse -Filter ext4.vhdx -ErrorAction SilentlyContinue |
+  Where-Object { $_.FullName -match 'tillandsias' } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+if (-not $vhdx) { throw "no ext4.vhdx for the tillandsias distro under $env:LOCALAPPDATA" }
+if ($vhdx.LastWriteTime -lt (Get-Item target\smoke-e2e\03-destruction-marker).LastWriteTime) {
+  throw "rootfs $($vhdx.FullName) predates the destruction marker — a survivor, not a fresh provision"
+}
+
+# Wire state at provision exit, POLLED to Ready: `--status-once --json` is
+# read-only, and Ready can lag the provision exit by a few seconds; it can
+# also LAPSE later (see the note below), so the poll starts immediately and
+# gives up loudly rather than sleeping first.
+$deadline = (Get-Date).AddSeconds(60); $status = $null; $statusExit = 1
+do {
+  & $tray --status-once --json 2>&1 | Tee-Object target\smoke-e2e\03-status.json | Out-Null
+  $statusExit = $LASTEXITCODE
+  if ($statusExit -eq 0) { $status = Get-Content target\smoke-e2e\03-status.json -Raw | ConvertFrom-Json }
+  if ($status -and $status.phase -eq 'Ready') { break }
+  Start-Sleep -Seconds 5
+} while ((Get-Date) -lt $deadline)
+"status_exit=$statusExit phase=$($status.phase) podman_ready=$($status.podman_ready)" | Tee-Object target\smoke-e2e\03-status-summary.txt
+if ($statusExit -ne 0) { throw "status-once failed (exit $statusExit)" }
+if ($status.phase -ne 'Ready') { throw "phase is '$($status.phase)' after 60 s, expected Ready" }
+if (-not $status.podman_ready) { throw "podman_ready is false at Ready" }
+
+# LAST — after every mutating step above. If anything below this line mutates
+# the host, this report is stale and the run is unfinished (the 2026-08-10
+# incident, same rule as the macOS block).
+& $tray --diagnose --json 2>&1 | Tee-Object target\smoke-e2e\03-diagnose.json
+if ($LASTEXITCODE -ne 0) { throw "diagnose failed (exit $LASTEXITCODE)" }
+$diag = Get-Content target\smoke-e2e\03-diagnose.json -Raw | ConvertFrom-Json
+if ($diag.PSObject.Properties.Name -contains 'version') {
+  if ($diag.version -ne $SmokeTag.TrimStart('v')) { throw "tray version '$($diag.version)' != release $SmokeTag" }
+} else {
+  "diagnose --json carries no 'version' field on this build — the release-tag assertion for the tray is UNMET, record it as a finding" |
+    Tee-Object -Append target\smoke-e2e\03-diagnose-notes.txt
+}
+```
+
+> **Ready is not durable after `--provision-once`** (esme, finding
+> `smoke-finding/windows-ready-not-durable-after-provision-once`, order
+> 1004-* series): nothing holds the guest open once the headless provision
+> exits, so a `--status-once` taken a minute later can read exit 1 while the
+> block above, taken immediately, reads Ready. Both are true. This block
+> asserts the state AT provision exit, which is what the lane promises; do not
+> re-run `--status-once` later and file its exit 1 as a provision failure.
+>
+> **Every assertion here reads `$LASTEXITCODE` from a native call, never
+> `$?` from a pipeline** — `$?` after `... | Tee-Object` is Tee-Object's
+> status, which is how the §1 Windows install asserted nothing for a year.
 
 ---
 

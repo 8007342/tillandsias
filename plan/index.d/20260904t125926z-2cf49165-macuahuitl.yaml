@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: headless-shutdown-escalation-sigkills-every-running-tillandsias-container-without-the-ownership-filter
+    event:
+      type: progress
+      ts: "2026-09-04T12:59:26Z"
+      agent_id: linux-macuahuitl-claude-20260904t125926z
+      host: macuahuitl
+      summary: |
+        FIX LANDED IN THE SAME CYCLE (coordinator, macuahuitl 2026-09-04 ~13:00Z). Cause pinned in code: the shutdown's verification phase re-listed `tillandsias-` containers and escalated to SIGKILL on `state == "running"` alone (main.rs, the loop below the 936-kdev comment block). Fix: a shared pure predicate `shutdown_escalation_targets` (running AND is_stack_managed_name) used by BOTH the graceful-stop phase and the escalation; `ContainerListEntry` re-exported from tillandsias-podman for the signature. Criterion 1: MET. Criterion 2: MET with the mutation control run and pasted: post-fix `cargo test -p tillandsias-headless shutdown_escalation` -> 1 passed; with the ownership check deleted from the predicate -> FAILED (panicked at main.rs:18585, "only OWNED and RUNNING containers may be escalated to SIGKILL"); restored -> 1 passed. Criterion 3 (install completes, containers alive): measurement running now with job-written start/end stamps; NOTE that the graceful STOP phase still stops the host's live Vault and proxy on every headless exit because they are owned (application-lifetime) — the install-validation instance is an application by that definition, so vault and proxy will be stopped gracefully even with this fix. That is a second, separate defect (the install validation must not tear down the operator's live enclave) and gets its own packet; criterion 3 is read as "builder alive and the build completes", with vault/proxy recorded as observed.

@@ -6390,6 +6390,25 @@ const SHARED_STACK_SCOPES: &[(&str, SharedStackScope)] = &[
     ("tillandsias-inference", SharedStackScope::LaneScoped),
 ];
 
+/// The containers a shutdown phase may act on: RUNNING and OWNED. The
+/// graceful-stop phase has filtered by ownership since 936-kdev; the SIGKILL
+/// escalation below it re-listed every `tillandsias-` container and filtered
+/// on state alone, so the 5-second install-validation instance inside
+/// `./build.sh --install` SIGKILLed `tillandsias-builder` — the toolbox the
+/// build was running in — four seconds after "app.stopped", and the build
+/// died rc=137 with the live Vault and proxy (measured on macuahuitl
+/// 2026-09-04 at 01:09Z and 12:42:21Z; order 1019-ba6e). Both phases now
+/// share this one predicate, so ownership cannot be honoured in one loop and
+/// forgotten in the next.
+fn shutdown_escalation_targets(
+    containers: Vec<tillandsias_podman::ContainerListEntry>,
+) -> Vec<tillandsias_podman::ContainerListEntry> {
+    containers
+        .into_iter()
+        .filter(|c| c.state == "running" && is_stack_managed_name(&c.name))
+        .collect()
+}
+
 /// Is `name` a container THIS APPLICATION creates and therefore may stop?
 /// (936-kdev). The `tillandsias-` prefix alone is NOT ownership: the
 /// developer build toolbox (`tillandsias-builder`) and dev-substrate
@@ -16583,10 +16602,7 @@ pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
                 // stopper). Ownership is decided by is_stack_managed_name —
                 // the same vocabulary the teardown and reset scopes speak —
                 // never by prefix alone.
-                let running_at_start: Vec<_> = containers
-                    .iter()
-                    .filter(|c| c.state == "running" && is_stack_managed_name(&c.name))
-                    .collect();
+                let running_at_start = shutdown_escalation_targets(containers);
 
                 if !running_at_start.is_empty() {
                     info!(
@@ -16623,10 +16639,9 @@ pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
                     .await
                     {
                         Ok(Ok(remaining)) => {
-                            let running: Vec<_> = remaining
-                                .into_iter()
-                                .filter(|c| c.state == "running")
-                                .collect();
+                            // 1019-ba6e: ownership, not prefix — the same
+                            // predicate the stop phase applied.
+                            let running = shutdown_escalation_targets(remaining);
                             if running.is_empty() {
                                 debug!(
                                     "verification clean: zero running managed containers remain"
@@ -18546,6 +18561,32 @@ mod tests {
         assert!(is_stack_managed_name("tillandsias-vault"));
         assert!(is_stack_managed_name("tillandsias-myproj-forge"));
         assert!(is_stack_managed_name("tillandsias-git-myproj"));
+    }
+
+    /// 1019-ba6e: the SIGKILL escalation must consult ownership exactly as
+    /// the graceful stop does. Before the fix it filtered on state alone and
+    /// killed the developer toolbox the build was running in.
+    #[test]
+    fn shutdown_escalation_targets_only_owned_running_containers() {
+        let entry = |name: &str, state: &str| tillandsias_podman::ContainerListEntry {
+            name: name.to_string(),
+            state: state.to_string(),
+            exit_code: 0,
+            exited_at: 0,
+            restarts: 0,
+        };
+        let targets = shutdown_escalation_targets(vec![
+            entry("tillandsias-builder", "running"),
+            entry("tillandsias-dev-inference", "running"),
+            entry("tillandsias-vault", "running"),
+            entry("tillandsias-proxy", "exited"),
+        ]);
+        let names: Vec<&str> = targets.iter().map(|c| c.name.as_str()).collect();
+        assert_eq!(
+            names,
+            vec!["tillandsias-vault"],
+            "only OWNED and RUNNING containers may be escalated to SIGKILL"
+        );
     }
 
     /// Order 477 (the packet's steady-state criterion): after the LAST lane

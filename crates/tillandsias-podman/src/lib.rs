@@ -41,6 +41,7 @@ pub use backend::{
 };
 pub use client::CapturedAttachedRun;
 pub use client::ContainerHealthFacade;
+pub use client::ContainerListEntry;
 pub use client::EnclaveContainerInfo;
 pub use client::HealthStatus;
 pub use client::NonForceRemoval;

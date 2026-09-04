@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: cloud-only-migration-interrupted-local-src-still-load-bearing
+    event:
+      type: note
+      ts: "2026-09-04T12:54:23Z"
+      agent_id: linux-macuahuitl-claude-20260904t125423z
+      host: macuahuitl
+      summary: |
+        COORDINATOR RULING on the vz.rs (mount) half, asked by tlatoanis-macbook-air 2026-09-04 after landing step 1 (a98ea0038): the 2026-09-03 operator ruling ("an existing ~/src is ignored and left to rot") is read as applying to ~/src AS A PROJECT PATH. It neither licenses deleting guest-binary staging that merely lives under the same root (vz.rs:692/725/1021; fetch-headless.sh reads /home/forge/src/.tillandsias/guest-bin) nor keeping the mount for that subsystem. Filed 1019-ivia (relocate staging to the durable state dir, 998-3z6g shape); the vz.rs half DEPENDS ON it and does not land first. This is an interpretation of an operator decision, recorded as such and reported to the operator as an FYI, not a blocking ask. Also recorded: yolanda's two named pins are LOAD-BEARING for a subsystem this packet does not cover, not stale (the inverse of 803-49re's class); the host-shell step (MenuState.local_projects, build_local_projects, Local submenu) is independent and remains next.
