@@ -52,6 +52,12 @@ packets:
       - "the escalation phase kills only containers is_stack_managed_name accepts, through a pure function shutdown_escalation_targets that both phases share; pre-fix result: FAILS (no such function; the loop filters on state only)"
       - "a unit test feeds the function a running tillandsias-builder, tillandsias-dev-inference and tillandsias-vault and asserts only vault is targeted; mutation control: dropping the ownership check makes it fail; pre-fix result: FAILS"
       - "./build.sh --install completes on macuahuitl with tillandsias-builder, tillandsias-vault and tillandsias-proxy still running afterwards (podman ps), measured with start and end timestamps; pre-fix result: FAILS (rc=137, 12:42:21Z)"
-    verifiable_closure: |
-      cargo test -p tillandsias-headless shutdown_escalation (the unit test
-      above) plus the install measurement; the closure event pastes both.
+    unscoreable: |
+      The pin is a cargo unit test, not a litmus: `cargo test -p
+      tillandsias-headless shutdown_escalation` (added by this packet, with the
+      mutation control pasted on its progress event), and the scorable-
+      obligation grammar has no cargo-test form yet (filed 2026-09-04 in the
+      1005-* series). The install measurement (criterion 3) is host-bound and
+      needs podman. Intended litmus shape, for when the grammar admits it: an
+      arm in the headless shutdown litmus lane that greps the escalation loop
+      for shutdown_escalation_targets and runs the unit test.
