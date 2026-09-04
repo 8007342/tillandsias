@@ -1,0 +1,99 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: smoke-runbook-assumes-bash-and-has-no-windows-lane
+    order: 1004-fue3
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [testing, docs, windows, smoke, fail-loud]
+    estimated_hours: 3
+    owned_files:
+      - skills/smoke-curl-install-and-test-e2e/SKILL.md
+    title: |
+      The published-release smoke runbook assumes a shell it never names and promises a Windows lane it never writes: under zsh every PIPESTATUS assertion compares against an empty string, and §3 has no Windows block at all.
+    context: |
+      TWO FINDINGS FROM THE TWO FLOOR SMOKES OF v56.9.2.1 ON 2026-09-04, SAME
+      ROOT: skills/smoke-curl-install-and-test-e2e/SKILL.md assumes a shell and
+      a lane that it never specifies, so what a run asserts depends on who runs
+      it and where.
+
+      FINDING 1 — pirria-cachyos: THE EXIT-CODE ASSERTIONS ARE VOID UNDER zsh.
+      pirria's tool shell is zsh. The §1 Linux block reads
+        INSTALL_RC=${PIPESTATUS[0]}; printf 'install_exit=%s\n' "$INSTALL_RC" ...
+        test "$INSTALL_RC" -eq 0
+      (SKILL.md:171-172). `PIPESTATUS` is a bash array; under zsh it expanded
+      EMPTY, so the first install attempt recorded `install_exit=` in
+      target/smoke-e2e/01-install-exit.txt and `test "" -eq 0` compared against
+      an empty string. That is exactly the walk-past-a-failed-curl-install that
+      727-kmks wrote the three assertions to kill, reintroduced one level up by
+      shell choice. Every PIPESTATUS site has it: §1 (lines ~171, 175, 193,
+      207), §2 (~258), §3 (~373, 411, 424). The PASSes pirria reported were real
+      only because pirria re-ran every assertion under explicit bash by hand,
+      which is precisely the protection-for-whoever-remembers that 1000-rqmx
+      names as not a fix.
+
+      FINDING 2 — esme-windows: THERE IS NO WINDOWS §3 BLOCK. §3 has a Linux
+      block (SKILL.md:369) and a macOS block (SKILL.md:393); the Host Matrix
+      (SKILL.md:29) promises Windows "installed tray provision/diagnose", and
+      no Windows block exists. The nearest block is not copyable: the macOS
+      flag is `--provision` (SKILL.md:410); the Windows tray's flag is
+      `--provision-once` (`tillandsias-tray.exe --help`). And §1's Windows
+      install snippet (SKILL.md:233-239, `irm ... | iex | Tee-Object`) never
+      received the 727-kmks exit-code assertions that Linux got on 727-kmks
+      and macOS got on 2026-08-26. Same shape as the macOS gap closed
+      2026-08-26: the matrix promises a lane the runbook does not make
+      executable, so every Windows run improvises and runs are not comparable
+      to each other. esme's run improvised `--provision-once` (cold exit 0,
+      117 s; warm exit 0, 18 s) -> `--status-once --json` (reachable,
+      wire_version 2, phase Ready, podman_ready true) -> `--diagnose --json`
+      as the post-condition after the last mutating step, following the
+      forced-wait pattern the tray's own `--help` prescribes for its
+      GUI-subsystem binary.
+
+      WHY ONE PACKET: both defects are the runbook asserting less than it
+      claims to assert, and the fix to each touches the same file's same
+      sections. Fixing the shell without adding the Windows lane leaves
+      Windows improvising; adding a Windows block whose assertions the
+      caller's shell can void repeats finding 1 on a new lane.
+
+      RELATED, NOT DUPLICATED: the §0.2b awk defects (gawk fatal on `\|` /
+      `\(`, and `$0` substituted by the skill argument) are a separate
+      runbook packet; esme's Ready-not-durable and 804-ckst cmdkey verifier
+      findings are runtime/verifier packets of their own.
+
+      PROVENANCE: measured by pirria-cachyos (finding 1, evidence
+      01-install-exit.txt `install_exit=`) and esme-windows (finding 2,
+      esme-smoke-e2e-findings-v56.9.2.1-2026-09-04-esmeraldinha.md) on 2026-09-04; both
+      hosts credential-blocked, relayed to and filed by the coordinator
+      (macuahuitl-fedora).
+    next_action: |
+      Wrap every assertion block in the runbook so it executes under explicit
+      bash regardless of the caller's shell — `bash -c '...'` per block or a
+      shebang'd script the skill invokes — then write the Windows §3 block
+      from esme's sequence with asserted exit codes, and carry the 727-kmks
+      assertions into the §1 Windows PowerShell snippet ($LASTEXITCODE after
+      the install, an asserted `--version` equal to $SmokeTag, PATH check).
+      The zsh fixture named under unscoreable is the thing to write first,
+      because it is the only way to prove the caller's shell can no longer
+      void an assertion.
+    exit_criteria:
+      - every PIPESTATUS/exit-code assertion block in SKILL.md §1, §2 and §3 runs under explicit bash (bash -c or a shebang the skill invokes), so the caller's shell cannot void it
+      - running the §1 Linux block from a zsh caller against a failing install records a non-empty install_exit and stops; it no longer walks past
+      - a Windows §3 block exists with the sequence --provision-once, --status-once --json polled to phase Ready, then --diagnose --json as the post-condition after the last mutating step, each with an asserted exit code
+      - the Windows §3 block uses --provision-once, not the macOS --provision flag
+      - the §1 Windows PowerShell snippet carries the 727-kmks assertions (install exit code, installed --version equal to the release tag, tray on PATH) and STOPs on any of them
+      - the Host Matrix row for Windows names the block that implements it
+    unscoreable: >
+      A skill body has no litmus that executes it under a foreign shell today:
+      no scripts/*.sh runs SKILL.md blocks, and openspec/litmus-bindings.yaml
+      binds nothing for smoke-curl-install-and-test-e2e. Naming an arm that
+      does not exist is the dead-reference failure this fleet recorded three
+      times on 2026-09-03. The intended pin is a fixture that extracts the §1
+      block from SKILL.md, runs it under zsh with a stubbed failing installer,
+      and asserts a non-empty exit record and a non-zero exit — the negative
+      side is the whole point, since the defect is a green that ran no test.
+      Whoever takes this should write that fixture first and bind it; the
+      Windows §3 block stays unscoreable on Linux hosts and is proven by esme
+      re-running the lane against the next published release.

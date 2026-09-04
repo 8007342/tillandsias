@@ -1,0 +1,131 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: loop-status-append-reads-stdin-and-blocks-on-a-path
+    order: 1004-8vkv
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [tooling, plan, finalize, fail-loud, multi-host]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-plan/src/main.rs
+      - crates/tillandsias-plan/src/loop_status.rs
+      - scripts/test-loop-status-append-input.sh
+      - >
+        skills/meta-orchestration/SKILL.md
+      - >
+        skills/coordinate-multihost-work/SKILL.md
+      - >
+        skills/advance-work-from-plan/SKILL.md
+    title: |
+      `tillandsias-plan loop-status-append <file>` ignores the path, reads STDIN, and on an inherited socket stdin blocks forever — two misleading outcomes and no usage error on every host's finalize path.
+    context: |
+      MEASURED by lenovinha-silverblue, 2026-09-04, on its own finalize step:
+      `tillandsias-plan loop-status-append <file>` does not read the file. It
+      reads the fragment from STDIN and names the output fragment itself. Given
+      a path argument and an inherited socket stdin it BLOCKED FOREVER — 26
+      minutes at 0.0% CPU in unix_stream_data_wait on fd 0 before /proc was
+      checked and the wait was recognised for what it was. Re-run with a closed
+      stdin, the same invocation reported "fragment carries no `## Cycle`
+      section" against a fragment byte-identical in its first bytes to one that
+      had worked. Two misleading outcomes, one silent and one false, and no
+      usage error in either. The correct invocation is
+      `loop-status-append < fragment.md`.
+
+      WHERE IT LIVES. The dispatch arm at
+      crates/tillandsias-plan/src/main.rs:1918-1937 takes the text from `--file F`
+      when that flag is present and otherwise
+      calls read_to_string on stdin; a bare positional argument matches neither
+      branch and is dropped without a word. The usage line at main.rs:467
+      advertises `[--file F]` and says "stdin or --file", so a documented file
+      form EXISTS — the finder did not know it, and nothing on the failure path
+      names it. The refusal text at loop_status.rs:162 ("fragment carries no
+      `## Cycle` section", via append() at loop_status.rs:549) is the same
+      whether stdin delivered zero bytes or a real fragment with the wrong
+      heading level, which is why the closed-stdin run read as a malformed
+      fragment rather than as an empty read. pirria's 2026-08-31 smoke found the
+      same message behind `--help`
+      (plan/issues/smoke-e2e-findings-v0.4.260830.5-linux-2026-08-31-pirria.md:81-91):
+      the flag is parsed, stdin is read, and the empty read is reported as a
+      shape defect. Same mechanism, third surface.
+
+      WHY P1 AND NOT A PAPERCUT. This is the write every host makes at the end
+      of every cycle, and the hang is invisible: a forge agent's stdin is a
+      socket by construction, the process sits at 0.0% CPU, and nothing in the
+      cycle times out on it. A host that hits it looks exactly like a host
+      mid-analysis (the fleet's own rule: idleness is established by asking,
+      not inferred), so the 26 minutes were spent BEFORE anyone could tell the
+      difference. The false "no `## Cycle` section" outcome is the worse of the
+      two, because it sends the reader to edit a fragment that was never read.
+
+      WHAT THE FIX IS, in order of the exit criteria: (1) a bare positional is
+      either honoured as the file or refused with a usage error that names BOTH
+      sanctioned forms — `< fragment.md` and `--file fragment.md`; refusing is
+      acceptable, dropping it is not. (2) stdin is inspected before it is
+      waited on: a tty, a socket, or a character device with nothing to read
+      is refused within a bounded time (an fstat plus a poll with a short
+      timeout is enough on every platform the crate ships to); a pipe or a
+      regular file is read as today. (3) The empty-read outcome names what it
+      read — byte count and first line — so `read 0 bytes from stdin` is a
+      different sentence from `fragment (312 bytes, first line "# Cycle ...")
+      carries no ## Cycle section`. (4) The three skills that name the command
+      show the stdin form: skills/advance-work-from-plan/SKILL.md:488-491
+      already does, with this incident cited — as an UNCOMMITTED working-tree
+      edit on macuahuitl at filing time, so whoever takes this checks HEAD
+      before assuming it landed; skills/meta-orchestration/SKILL.md:1929 and
+      :1946 and skills/coordinate-multihost-work/SKILL.md:250 still show the
+      bare command with no input form at all.
+
+      NOT THIS ORDER: widening the `## Cycle` grammar (the `# Cycle`
+      single-hash tolerance question is its own older thread), and the
+      `--help` exit code, which falls out of (2) and (3) but is pirria's
+      smoke-finding to close against its own evidence.
+
+      Provenance: measured by lenovinha-silverblue on 2026-09-04 (fleet board
+      entry, 26-minute wait read from /proc); filed by the coordinator on
+      macuahuitl at lenovinha's request.
+    next_action: |
+      Start with the fixture, because it is what makes the two bad outcomes
+      reproducible on a host that has not lived through them: a script that
+      runs the binary with a path argument and a socket on fd 0 under
+      `timeout 10`, and asserts exit != 124 with a usage error on stderr; then
+      the same with `</dev/null` asserting the message carries `0 bytes`; then
+      `< fragment.md` and `--file fragment.md` both writing the same fragment
+      (the positive control that keeps the refusal from refusing everything).
+      Then main.rs:1918-1937, then loop_status.rs:162, then the two skills.
+      The fixture is the closure; bind it as a litmus under
+      methodology-accountability next to litmus:loop-status-fragment-overlay
+      so the pin has a spec.
+    exit_criteria:
+      - >
+        a bare path argument to loop-status-append is either read as the fragment or refused with a usage
+        error that names both `< fragment.md` and `--file fragment.md`; it is never silently dropped
+      - >
+        an inherited stdin that is not a pipe or regular file with data (tty, socket, empty character
+        device) is refused within a bounded time, never waited on; pinned under `timeout` with a socket on
+        fd 0
+      - >
+        the "no ## Cycle section" refusal names what was read (byte count and first line), so an empty
+        stdin is a different message from a malformed fragment
+      - >
+        skills/meta-orchestration/SKILL.md and skills/coordinate-multihost-work/SKILL.md show the stdin
+        form wherever they name loop-status-append, as skills/advance-work-from-plan/SKILL.md already does
+      - >
+        the positive control holds: `< fragment.md` and `--file fragment.md` both still write the
+        fragment, and litmus:loop-status-fragment-overlay stays green
+    unscoreable: >
+      No existing fixture invokes loop-status-append with a path argument or a
+      non-pipe stdin. litmus:loop-status-fragment-overlay (bound under
+      methodology-accountability) and scripts/test-ledger-ts-guard.sh scenario 9
+      both feed the fragment on a pipe, so both would stay green with the defect
+      in place, and naming either as the closure would be the dead-reference
+      shape this fleet recorded three times on 2026-09-03. The intended pin is
+      scripts/test-loop-status-append-input.sh: it invokes the binary with a path
+      argument and a socket on fd 0 under `timeout 10` and asserts a usage error
+      rather than exit 124, invokes it with `</dev/null` and asserts the
+      message names 0 bytes, and invokes it with `< fragment.md` and
+      `--file fragment.md` as the positive control; bound as
+      litmus:loop-status-append-input-shape under methodology-accountability.
+      Whoever takes this writes that fixture first, and it becomes the closure.

@@ -603,27 +603,83 @@ fi
 # Same subtract-don't-project mechanism as TOOL_CAP_TAGS above, but the
 # presence test reads the host's own capability-matrix row instead of
 # `command -v`: a packet tagged for an accelerator this host lacks is never
-# offered to it. Enrolling a tag here asserts "no host without USABLE
-# <hardware> can make progress on ANY packet tagged <tag>".
+# offered to it.
+#
+# ORDER 1002-7jeg NARROWED WHAT "LACKS" MEANS, because the original reading
+# starved the work that would have lifted it. This block used to assert "no
+# host without USABLE <hardware> can make progress on ANY packet tagged
+# <tag>", building the set from `:usable` states alone. That assertion is
+# false for BRING-UP work, whose entire deliverable is to move a device from
+# present to usable: such a packet is tagged for the device by construction,
+# and the host that can lift it is precisely the one whose device is present
+# but not yet usable — the host this filter hid it from.
+#
+# Measured fleet-wide on 2026-09-04: the only npu states anywhere were
+# `npu:Intel NPU:unusable`, `npu:AMD XDNA:unusable` and `npu:amd:unusable`.
+# No host reported a usable NPU, so no host could hold `npu` in HOST_ACCELS,
+# and all five ready npu-tagged packets (802-2536, 805-r98w, 854-8p9d,
+# 917-6iwv, 917-n3n9) were unselectable by EVERY host in the fleet —
+# permanently, and signalled only by a bare `accel_filtered=N` naming
+# nothing. Self-sealing: the packets that would make the NPU usable could not
+# be selected until the NPU was usable. It defeated direct assignment too;
+# 917-6iwv reached lenovinha only because the coordinator assigned it by hand.
+#
+# So there are now TWO states, and only the second subtracts:
+#   present-but-unusable  -> the BRING-UP lane. Offered. This host has the
+#                            hardware and lacks only the engine, which is the
+#                            thing the packet exists to supply.
+#   absent entirely       -> subtracted, exactly as before. No amount of work
+#                            here conjures a device that is not in the box.
+# "Lacks the engine" and "lacks the hardware" are different states; only the
+# latter is grounds to withhold the work.
 #
 # A host with NO matrix row (and no TILLANDSIAS_HOST_ACCELS seam) skips the
-# subtraction entirely — exit criterion 4: an unprobed host degrades to
-# today's behaviour, never to an emptier pool than today's.
+# subtraction entirely — 847-wgy4 exit criterion 4: an unprobed host degrades
+# to today's behaviour, never to an emptier pool than today's.
 ACCEL_CAP_TAGS="cuda rocm npu metal"
 ACCEL_FILTERED=0
+ACCEL_FILTERED_TAGS=""
+ACCEL_BRINGUP_TAGS=""
 if [ -n "${TILLANDSIAS_HOST_ACCELS+x}" ] || [ -n "$MY_CAP_LINE" ]; then
     if [ -n "${TILLANDSIAS_HOST_ACCELS+x}" ]; then
         HOST_ACCELS=" ${TILLANDSIAS_HOST_ACCELS} "
+        # Seam parity: a caller that stubs the usable set must be able to stub
+        # the present set too, or the fixture cannot reach the bring-up branch.
+        # Set-even-empty, like HOST_ACCELS itself, so a caller can assert "this
+        # host has NO device present" and get the pure subtraction back.
+        if [ -n "${TILLANDSIAS_HOST_ACCELS_PRESENT+x}" ]; then
+            HOST_ACCELS_PRESENT=" ${TILLANDSIAS_HOST_ACCELS_PRESENT} "
+        else
+            # Unset (not empty) means the caller is speaking only about usable
+            # accelerators, so present collapses to usable and this reduces to
+            # the pre-1002-7jeg behaviour for that caller.
+            HOST_ACCELS_PRESENT="$HOST_ACCELS"
+        fi
     else
         HOST_ACCELS=" "
+        HOST_ACCELS_PRESENT=" "
         _accels="$(printf '%s' "$MY_CAP_LINE" | cut -f3)"
         case "$_accels" in *"gpu:nvidia:usable"*) HOST_ACCELS="${HOST_ACCELS}cuda " ;; esac
         case "$_accels" in *"gpu:amd:usable"*)    HOST_ACCELS="${HOST_ACCELS}rocm " ;; esac
         case "$_accels" in *"npu:"*":usable"*)    HOST_ACCELS="${HOST_ACCELS}npu " ;; esac
         case "$_accels" in *"gpu:apple:usable"*)  HOST_ACCELS="${HOST_ACCELS}metal " ;; esac
+        # PRESENT is state-blind on purpose: it asks "is the device in the
+        # box?", not "does it work?". Any state token — usable, unusable,
+        # present-unscheduled, or one not yet invented — counts as present,
+        # so a new state word cannot silently re-strand a device class.
+        case "$_accels" in *"gpu:nvidia:"*) HOST_ACCELS_PRESENT="${HOST_ACCELS_PRESENT}cuda " ;; esac
+        case "$_accels" in *"gpu:amd:"*)    HOST_ACCELS_PRESENT="${HOST_ACCELS_PRESENT}rocm " ;; esac
+        case "$_accels" in *"npu:"*)        HOST_ACCELS_PRESENT="${HOST_ACCELS_PRESENT}npu " ;; esac
+        case "$_accels" in *"gpu:apple:"*)  HOST_ACCELS_PRESENT="${HOST_ACCELS_PRESENT}metal " ;; esac
     fi
     for accel in $ACCEL_CAP_TAGS; do
         case "$HOST_ACCELS" in *" ${accel} "*) continue ;; esac
+        # The bring-up lane: hardware present, engine not yet. Offer it.
+        case "$HOST_ACCELS_PRESENT" in
+            *" ${accel} "*)
+                ACCEL_BRINGUP_TAGS="${ACCEL_BRINGUP_TAGS}${ACCEL_BRINGUP_TAGS:+,}${accel}"
+                continue ;;
+        esac
         accel_err="$(mktemp)"
         accel_rows="$("$PLAN" select-rows --status ready --claimable-by "$ROLE" \
             "${REL_ARG[@]+"${REL_ARG[@]}"}" --tag "$accel" --limit 400 2>"$accel_err")"
@@ -643,12 +699,20 @@ if [ -n "${TILLANDSIAS_HOST_ACCELS+x}" ] || [ -n "$MY_CAP_LINE" ]; then
                 !in_pool { drop[$4] = 1; next }
                 !($4 in drop)')"
         after_n="$(printf '%s\n' "$rows" | grep -c .)"
-        ACCEL_FILTERED=$((ACCEL_FILTERED + before_n - after_n))
+        _accel_dropped=$((before_n - after_n))
+        ACCEL_FILTERED=$((ACCEL_FILTERED + _accel_dropped))
+        # Criterion 3: a bare count names nothing, and a reader who sees it
+        # cannot tell a correct subtraction from a starved device class. Carry
+        # the tag and how many it took, so the triage line is legible without
+        # re-running the query by hand.
+        if [ "$_accel_dropped" -gt 0 ]; then
+            ACCEL_FILTERED_TAGS="${ACCEL_FILTERED_TAGS}${ACCEL_FILTERED_TAGS:+,}${accel}:${_accel_dropped}"
+        fi
     done
 fi
 
 if [ -z "$rows" ]; then
-    echo "refused:no-eligible-work:every ready packet claimable by role ${ROLE} needs an accelerator this host lacks (accel_filtered=${ACCEL_FILTERED})"
+    echo "refused:no-eligible-work:every ready packet claimable by role ${ROLE} needs an accelerator this host lacks (accel_filtered=${ACCEL_FILTERED}(${ACCEL_FILTERED_TAGS}))"
     exit 1
 fi
 
@@ -971,11 +1035,12 @@ urgency_unscored="$(printf '%s\n' "$rows" | awk -F'\t' '$1==99' | grep -c .)"
 # caps_filtered rides the triage line ONLY when the host-capability subtraction
 # dropped rows (same conditional idiom as the header's `urgent=`), so a fully
 # capable host emits byte-identical output to the pre-filter selector.
-printf 'triage: eligible=%s grouped=%s ungrouped=%s epics=%s urgency_unscored=%s%s%s%s\n' \
+printf 'triage: eligible=%s grouped=%s ungrouped=%s epics=%s urgency_unscored=%s%s%s%s%s\n' \
     "$eligible" "$grouped" "$ungrouped" "$epics" "$urgency_unscored" \
     "$( [ "${CAPS_FILTERED:-0}" -gt 0 ] && printf ' caps_filtered=%s' "$CAPS_FILTERED" )" \
     "$( [ "${TIER_FILTERED:-0}" -gt 0 ] && printf ' tier_filtered=%s' "$TIER_FILTERED" )" \
-    "$( [ "${ACCEL_FILTERED:-0}" -gt 0 ] && printf ' accel_filtered=%s' "$ACCEL_FILTERED" )"
+    "$( [ "${ACCEL_FILTERED:-0}" -gt 0 ] && printf ' accel_filtered=%s(%s)' "$ACCEL_FILTERED" "$ACCEL_FILTERED_TAGS" )" \
+    "$( [ -n "${ACCEL_BRINGUP_TAGS:-}" ] && printf ' accel_bringup=%s' "$ACCEL_BRINGUP_TAGS" )"
 # The frontier is printed so a cycle can justify its choice, and so a human can
 # see what it did NOT pick. An unexplained selection is unauditable.
 printf '%s\n' "$scored" | head -n "$k" | while IFS=$'\t' read -r sc e c b n; do

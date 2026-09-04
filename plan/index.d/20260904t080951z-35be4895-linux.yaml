@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: macos-model-cache-dies-with-the-vm-directory
+    field: next_action
+    value: 'Re-measure on a host with a WARM model cache (macbookair): macneo measured the cold case at 514 MB transferred and 64 s / 357 s wall clock on a never-populated image, so the ~2.47 GB title figure is unverified in magnitude. Check first whether the guest binary staging dir outside the VM directory is the durable-path precedent the fix should follow, since it already survives the destroy.'
+    ts: "2026-09-04T08:09:51Z"
+    host: linux

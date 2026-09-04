@@ -104,6 +104,28 @@ Capture: `DIAG_EXIT` (must be 0=provisioned or 2=degraded; 1=hard-failure
 is a build regression), parsed `DIAG_JSON` keys (use `jq` if available),
 `LAUNCH_STATUS`, `QUIT_STATUS`.
 
+**The launch above inherits YOUR shell's environment and proves nothing about
+a GUI launch.** A LaunchServices-started .app gets
+`PATH=/usr/bin:/bin:/usr/sbin:/sbin`, and a bare-name spawn that resolves in
+your terminal (through `/opt/homebrew/bin`, `~/.cargo/bin`, `~/.local/bin`) is
+unreachable there (980-xcaf). BOTH `open -a <name>` and `open <path-to-.app>`
+mask this: `open` propagates the calling terminal's environment into a process
+that is otherwise a genuine LaunchServices launch (ppid 1, launchd), and
+`launchctl getenv PATH` is empty, so there is no session variable to clear —
+only Finder, Dock or Spotlight gives the clean environment. Measured on
+tlatoanis-macbook-neo 2026-09-04. To reproduce the GUI regime from a terminal,
+strip the environment and VERIFY it on the live process:
+
+```bash
+env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin HOME="$HOME" \
+    ./dist/Tillandsias.app/Contents/MacOS/tillandsias-tray &
+TRAY_PID=$!; sleep 3
+ps eww -p "$TRAY_PID" | tr ' ' '\n' | grep '^PATH='   # must print exactly the minimal PATH
+```
+
+An installed `qemu` under `/opt/homebrew` does not perturb this measurement
+either way; it is invisible under the minimal PATH.
+
 Per macos-native-tray.invariant.diagnose-exit-codes: exit 1 from
 `--diagnose --json` is a failure mode worth surfacing — file as
 `section_kind=diagnose-hard-failure` even if build itself was green.

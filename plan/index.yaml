@@ -572,6 +572,78 @@ capabilities:
         host_kind: windows
         system_ram_gb: 15.161788940429688
       timestamp: "2026-08-23T01:54:56Z"
+  - ts: "2026-09-04T06:51:38Z"
+    host: macos
+    locus: bare-metal
+    document:
+      {
+        "schema_version": 3,
+        "legacy_tier": "metal",
+        "devices": [
+          {
+            "device_class": "cpu",
+            "vendor": "apple",
+            "name": "Apple Silicon CPU",
+            "device_node": null,
+            "fw_version": null,
+            "driver": null,
+            "usable": true,
+            "unusable_reason": null,
+            "lanes": [
+              "container",
+              "host-native"
+            ],
+            "memory_bandwidth_gbps": null,
+            "memory_bandwidth_source": "unknown",
+            "cpu_flags": [
+              "neon"
+            ],
+            "cpu_cores": {
+              "physical": 6,
+              "logical": 6
+            },
+            "system_ram_gb": null,
+            "memory_model": null
+          },
+          {
+            "device_class": "gpu",
+            "vendor": "apple",
+            "name": "Apple Metal GPU",
+            "device_node": null,
+            "fw_version": null,
+            "driver": null,
+            "usable": true,
+            "unusable_reason": null,
+            "lanes": [
+              "host-native"
+            ],
+            "memory_bandwidth_gbps": null,
+            "memory_bandwidth_source": "unknown",
+            "cpu_flags": null,
+            "cpu_cores": null,
+            "system_ram_gb": null,
+            "memory_model": null
+          }
+        ],
+        "engines": [],
+        "measurements": [],
+        "host": {
+          "is_battery_present": false,
+          "kernel_release": "25.6.0",
+          "host_id": "tlatoanis-macbook-neo",
+          "host_id_source": "node-name",
+          "host_kind": "macos",
+          "side": "macos-host"
+        },
+        "timestamp": "2026-09-04T06:51:38.592558+00:00",
+        "probe_identity": "56.9.2+a6b1e08d1464d15a",
+        "enumeration_gaps": [
+          "npu",
+          "container-lane"
+        ],
+        "hardware_fingerprint": "hw2-15343879d48b5915",
+        "render_nodes": []
+      }
 plan_index:
   version: v1
   root: plan/

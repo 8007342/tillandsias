@@ -1,0 +1,136 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: floor-tier-release-smoke-and-metrics
+    order: 1004-pg9p
+    status: ready
+    kind: verification
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [low-end, testing, release, measurement, smoke]
+    estimated_hours: 3
+    multi_cycle: true
+    title: |
+      Standing floor-tier packet: every published release gets a curl-install smoke on a floor host (esmeraldinha Windows, pirria CachyOS), its findings filed, and the host's three recurrence lines pasted into the handoff — the tier's queue is otherwise empty.
+    context: |
+      WHY THIS ROW EXISTS. On 2026-09-04 the selector refused BOTH floor hosts:
+        esme-windows   (Intel N100, 4c/4t, 15.8 GB)  -> refused:no-tier-work
+        pirria-cachyos (Alder Lake-N)                -> refused:no-tier-work
+      because no ready packet carried the [low-end] tag. A low-end host's pool
+      is EXACTLY the tier-tagged work (scripts/select-work-batch.sh:450-493,
+      tier gate 847-wgy4); the mandate forbids it the general queue. An empty
+      tier queue is therefore a coordinator failure, not an idle host, and the
+      2026-09-04 fleet board named this row as the primary thing to file for
+      both hosts (fleet-board-2026-09-04.md, esme-windows and pirria-cachyos
+      entries). This packet is the standing answer: it is tagged low-end, it
+      is multi-cycle, and it never runs out because every release re-opens it.
+
+      WHAT THE TIER IS FOR, MEASURED. Both floor smokes of v56.9.2.1 on
+      2026-09-04 PASSED THE RELEASE ITSELF and produced ELEVEN FINDINGS between
+      them — that is the value this tier exists to produce, and no fat host
+      would have produced it, because the floor is the only place the cold
+      path is cold by construction (806-a4tu):
+        esmeraldinha (Windows floor): install PASS (sha256 ok), purge PASS,
+          cold --provision-once PASS in 117 s, warm re-provision 18 s, wire
+          Ready. Six findings in
+          plan/issues/smoke-e2e-findings-v56.9.2.1-2026-09-04-esmeraldinha.md: Ready not
+          durable after --provision-once (wire lost ~48 s idle, 3x reproduced,
+          --diagnose cannot tell idled-out from failed); the 804-ckst cmdkey
+          verifier is true in both directions (unearned-green class); the
+          runbook §0.2b awk is fatal under gawk 5.4.0; windows-next lacked the
+          stale-base push guard; the guest cold-pulls 18 qemu-user-static rpms
+          (170.6 MB installed, x86_64-only would save 161.0 MB / 94.3%; the
+          number that travels is 35.7 MB / 8 s of a 233.2 MB / 39 s
+          transaction); and the runbook has no Windows §3 block.
+        pirria (CachyOS floor): green through Step 3 — install PASS, reset
+          PASS, init PASS in 6m42s, vault healthy, the 738059bc brick did not
+          reproduce. Relayed findings: the runbook's PIPESTATUS assertions are
+          void under zsh (evidence 01-install-exit.txt `install_exit=`);
+          podman system reset leaves /tmp/tillandsias-ca and --init refreshes
+          vault TLS from it, so destruction must clear ca_dir() via
+          scripts/lib-ca-path.sh; an EVENT on 998-3z6g (v56.9.2.1 ships the
+          /tmp CA, fix 44a33f328 unreleased); and the skill body's awk `$0`
+          at SKILL.md lines 79/86/106/113 is substituted by the skill argument,
+          so the ledger-row match and the DISTILLED arm are dead when invoked
+          with a tag.
+      Both hosts were MEASURING ONLY: esmeraldinha's keyring holds a dead gho_
+      OAuth token (401, expiry unreadable) while
+      scripts/check-credential-channel.sh still answered ok:gh-credentials-store
+      (line 325, file presence, no push probe), so its report reached the
+      ledger through the coordinator. That relay path is part of this packet,
+      not an exception to it.
+
+      THE THREE LINES, AND WHY THE FLOOR'S READING IS THE VALUABLE ONE. Order
+      1001-q3zf added repeat:/recur:/skippable: to scripts/cycle-metrics.sh,
+      computed from the host's OWN timing log (scripts/metrics-log-path.sh),
+      and routed them into the handoff. The floor's gate is the slowest in the
+      fleet, so an outcome-invariant step that costs 14 s on macuahuitl costs
+      minutes on an N100; skippable:'s saved_ms_upper is largest exactly where
+      the cycle budget is smallest. On 2026-09-04 ZERO loop-status entries in
+      plan/loop_status.d/ carried a skippable: line and the newest floor
+      entries predate the reporter (pirria 2026-08-25, windows 2026-08-23), so
+      today the fleet has no floor reading at all. Pass --cycle-start with the
+      host's own Start-Of-Cycle UTC or repeat: is meaningless.
+
+      HOW A CYCLE DISCHARGES ONE ROUND. (1) Find the newest published release
+      (`gh release list`, or the ledger row in README.md; v56.9.2.1 at filing).
+      (2) Run the ./skills/smoke-curl-install-and-test-e2e skill against it on
+      the floor host — it is destructive by design; salvage uncommitted work
+      first. (3) File EVERY finding as a packet in plan/issues/ (the
+      smoke-e2e-findings-<tag>-<date>.md shape) — or, when the host's
+      credential is dead, hand the verbatim report to the coordinator, who
+      files it and says so in the provenance line. Do not fold a finding into
+      prose. (4) Paste the three recurrence lines from
+      `scripts/cycle-metrics.sh --cycle-start <utc>` into the handoff's
+      loop-status entry, with the regime (host, tier, release) attached — an
+      n=1 reading relayed without its conditions becomes a fleet rule that is
+      wrong on the fat hosts. (5) Record the release tag smoked in the
+      handoff so the next cycle can see whether a NEW release has appeared;
+      if none has, the round is the metrics paste only, and that is still a
+      discharge.
+
+      NOT THIS PACKET: fixing any finding the smoke produces (each gets its
+      own order), the runbook defects already relayed above (they are being
+      filed separately from the 2026-09-04 relays), and the credential
+      renewal on esmeraldinha (operator ask, not a packet).
+
+      Provenance: measured by esme-windows and pirria-cachyos on 2026-09-04
+      (release v56.9.2.1); filed by macuahuitl (coordinator) because both
+      floor hosts were refused tier work that morning.
+    next_action: |
+      First floor host to pick this up: check `gh release list --limit 1`
+      against the tag named in the newest floor loop-status entry. If it is
+      still v56.9.2.1 there is no new release to smoke, so the round is the
+      metrics paste — run scripts/cycle-metrics.sh --cycle-start <your
+      Start-Of-Cycle UTC> and put repeat:/recur:/skippable: in the handoff
+      with host, tier and release attached; that alone produces the fleet's
+      first floor skippable: reading. If a newer tag exists, run the smoke
+      skill on it, file findings, then paste the lines. esmeraldinha: the
+      803-49re login walk (NOT CHECKED in the v56.9.2.1 run) is the biggest
+      gap and needs the operator's `gh auth refresh` first — do not block the
+      round on it.
+    exit_criteria:
+      - |
+        every release published since v56.9.2.1 has a floor smoke report (plan/issues/smoke-e2e-findings-<tag>-<date>.md or a coordinator-filed relay naming the floor host) from at least one floor host
+      - |
+        each floor host's newest entry in plan/loop_status.d/ carries the three lines repeat:, recur: and skippable: with host, tier and release tag attached
+      - |
+        every finding from a floor smoke is a packet in plan/issues/ or plan/index.d/, never prose only; a relay through the coordinator names the host that measured
+      - |
+        TILLANDSIAS_HOST_TIER=low-end scripts/select-work-batch.sh <role> --seed <host> offers this row (its batch: line names it) instead of refused:no-tier-work while it is ready and unleased
+    unscoreable: >
+      This is a MEASUREMENT CAMPAIGN and the closure is data existing per
+      release on the floor, not a test turning green — the same reasoning as
+      997-pdgf. No litmus can assert "the newest release has a floor smoke
+      report and the floor's newest handoff carries skippable:" without
+      becoming a fleet-state assertion that goes red the moment a floor host
+      is merely powered off, and naming a litmus that does not exist is the
+      dead-reference failure this fleet recorded three times on 2026-09-03.
+      What IS pinnable: the selector's tier arm (litmus:capability-routing-shape
+      already covers the no-tier-work refusal shape) and the recurrence-line
+      grammar (litmus:cycle-metrics-recurrence-shape, 1001-q3zf); the intended
+      pin for this row is a coordinator audit step that reads the newest
+      loop-status entry per floor host and reports missing:<host> when the
+      three lines or the release tag are absent — file it as its own order
+      once two floor rounds have been pasted, so the audit is written against
+      real entries rather than an imagined shape.

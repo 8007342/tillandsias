@@ -381,14 +381,78 @@ agent_observability_protocol:
             tool count is flat across forty cycles is behaving; one that doubles
             is the thing this instrumentation exists to catch.
         step_repetition:
-          line: "repeat: <step>=<n> ... top3"
+          line: "repeat: window=<since=<utc>|3h> steps=<n> top3=<entries|-> source=<path|absent>"
           question: "Which methodology steps are paid REPEATEDLY inside one cycle?"
           rule: >
             The expensive step is rarely the slow one; it is the one paid many
             times. A gate re-run after every rebase (982-cs43) costs its
             duration TIMES the number of rounds, and only the product is
             actionable. Report the top three by count, not by duration —
-            duration is already covered by `timing`.
+            duration is already covered by `timing`. Emitted by
+            scripts/cycle-metrics.sh over the timing log (order 1001-q3zf);
+            the window is the cycle's own start, passed as
+            `--cycle-start <Start-Of-Cycle UTC>`, else the last three hours.
+            Entries are `<step>=<count>`, count desc then step asc.
+          review: >
+            Did any host act on a repeat: top3 — merge two rounds into one,
+            or stop re-running a gate the rebase did not invalidate? If no
+            cycle has, the line is a count nobody reads and is retired.
+        # ── order 1001-q3zf: the two CROSS-CYCLE lines the operator asked for ──
+        # "add metrics to each host's iterations to detect repeated work that
+        # just wastes work every cycle, and expensive work that may be cached
+        # or skipped" (2026-09-03). The data already existed — the timing log
+        # held 48,790 records on macuahuitl, and one gate step had run 361
+        # times at 13.9 s never failing — and only the reporter was missing.
+        cross_cycle_recurrence:
+          line: "recur: window=<n>d runs=<n> steps=<n> top3=<entries|-> source=<path|absent>"
+          question: "Which steps are paid on EVERY cycle, and what do they cost cumulatively?"
+          rule: >
+            Over the last N days (default 7), a step RECURS when it ran at
+            least twice. Entries are
+            `<step>:runs=<n>:total_ms=<t>:avg_ms=<a>:fail_pct=<p>`, top three
+            by total_ms desc then step asc — the cumulative cost, not the
+            mean, because a cheap step paid three hundred times outranks an
+            expensive one paid twice. Step names may contain colons
+            (`step:...`, `check:litmus-pre-build`): parse an entry FROM THE
+            RIGHT — the trailing `:key=value` fields never contain a colon,
+            and the step is everything before the first `:runs=`.
+          review: >
+            Does the recur: top3 still name steps a cycle pays by DESIGN
+            (gates, suites), or has it filled with steps paid by habit? If a
+            release boundary passes and no packet cites a recur: number, say
+            why the line stays.
+        skippable_candidates:
+          line: "skippable: candidates=<n> floor_ms=<f> min_runs=<m> top3=<entries|-> source=<path|absent>"
+          question: "Which expensive, repeated, outcome-invariant steps could be memoised or skipped?"
+          honest_limit: >
+            A CANDIDATE is a step with runs >= min_runs (default 5), avg_ms >=
+            floor_ms (default 2000) and an outcome that NEVER changed in the
+            window (fail_pct 0 or 100, decided on raw counts, never on the
+            rounded percentage). Its `saved_ms_upper` is total_ms - avg_ms:
+            an UPPER BOUND on what a perfect skip could have saved, and it
+            MUST be named as a bound at every surface. The timing log carries
+            no input identity, so this line cannot say a run WOULD have hit a
+            cache — only that its outcome matched every other run. Quoting it
+            as a saving is the proxy-as-measurement defect proxy_discipline
+            exists to prevent. The named next rung, deliberately not part of
+            order 1001-q3zf, is a TREE DIGEST on timing records, so exact
+            repeats become measurable rather than bounded.
+          rule: >
+            Entries are
+            `<step>:runs=<n>:avg_ms=<a>:fail_pct=<p>:saved_ms_upper=<s>`, top
+            three by saved_ms_upper desc then step asc; parsed from the right
+            like recur:. This is the operator's "repeated work that wastes
+            every cycle / expensive work that may be cached or skipped"
+            instrument, and it is a candidate list, not a decision: a
+            memoise-or-skip packet is filed only when the same step tops
+            skippable: on two or more hosts (attach the regime; never act on
+            one host's reading alone), by the coordinator's cross-host
+            recurrence audit in skills/coordinate-multihost-work.
+          review: >
+            Has a skippable: candidate been memoised or skipped, and did the
+            host's recur: total for that step then FALL? If a candidate was
+            skipped and its total did not fall, the bound was not a proxy
+            for anything and the line is retired or re-derived.
       candidate_remedies_NOT_ADOPTED:
         rule: >
           /compact, /clear, and sub-agent delegation are CANDIDATES. None is

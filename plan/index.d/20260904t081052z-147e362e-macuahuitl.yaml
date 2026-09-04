@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: ca-bundle-moves-to-a-durable-directory
+    event:
+      type: note
+      ts: "2026-09-04T08:10:52Z"
+      agent_id: linux-macuahuitl-claude-20260904t081052z
+      host: macuahuitl
+      summary: |
+        RELEASE LAG AND A CHECK AHEAD OF ITS RUNTIME, two hosts, one night. pirria (floor Linux, curl smoke of v56.9.2.1): the released binary ships the CA bundle in /tmp, which is exactly what this packet moved; the fix 44a33f328 landed 2026-09-03T22:20-0700, the release was cut 2026-09-02, so the preflight's ca-absent on a host running the old release is CONSISTENT, not a fault; the next release closes it. lenovinha (second regime, live proxy): the running proxy binds /tmp/tillandsias-ca/intermediate.crt, the OLD path, and --init refreshed that file, while the migrated checker reports ~/.local/state/tillandsias/ca missing and says the proxy binds it by that path. It does not. The CHECK moved before the RUNTIME on every host whose installed app predates 44a33f328, which reproduces the 975-rsgm shape this packet was written to prevent. Also: tillandsias --init exits 0 without creating or starting the proxy (its own --help: pre-build container images), so the closure as written has no restart that does what it says. Residual filed as its own packet this window (linux-mutable lane): install an app at or after 44a33f328 first, name a real proxy restart trigger, and fix the preflight remedy text. Coordinator relay; the measurements are pirria's and lenovinha's.

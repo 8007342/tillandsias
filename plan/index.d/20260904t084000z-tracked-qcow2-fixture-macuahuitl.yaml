@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: vm-layer-test-fixture-is-a-tracked-binary
+    order: 1006-jfwv
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [macos, vm-layer, testing, gate, tracked-binaries]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-vm-layer/tests/fixtures/mixed-clusters.qcow2
+      - scripts/check-no-tracked-binaries.sh
+    title: |
+      980-xcaf's fix committed a 448 KB qcow2 test fixture, and the dev-build litmus that forbids tracked binaries has been red on every branch since, unseen because the gate runs no litmus.
+    context: |
+      FOUND by the coordinator's litmus run on the merged union, 2026-09-04
+      (instant pre-build suite, 474 specs, executed 290): litmus:no-tracked-
+      binaries-shape is red because `scripts/check-no-tracked-binaries.sh`
+      answers `blocked:tracked-binaries:crates/tillandsias-vm-layer/tests/
+      fixtures/mixed-clusters.qcow2`. The file (458,752 bytes) arrived in
+      cadbd0e57 "fix(980-xcaf): provisioning no longer shells out to qemu-img,
+      so first launch works from a GUI" on 2026-09-03T00:09-0700 and is on
+      linux-next, osx-next and windows-next alike. Re-run alone on a quiet host
+      the spec is still red, so it is not a contention artefact. It predates
+      tonight's merges: the union is no worse than the trunk, and nobody saw it
+      because ./build.sh --check runs no litmus (748-tkjx) and the full
+      pre-build suite had not been run since.
+      WHY IT MATTERS beyond hygiene: the check exists because a tracked binary
+      poisons every clone and cannot be reviewed; a fixture that the vm-layer's
+      raw-image tests need is a legitimate need with an illegitimate home.
+      Provenance: found by macuahuitl (coordinator) on the union run; the fix
+      belongs to the macOS lane that owns the vm-layer tests.
+    exit_criteria:
+      - the mixed-clusters fixture is generated at test time (or fetched to an ignored path) rather than tracked, and the vm-layer tests that used it still pass
+      - scripts/check-no-tracked-binaries.sh answers ok on the tree, and litmus:no-tracked-binaries-shape is green in the pre-build instant suite
+      - if a tracked fixture is genuinely required, the check gains an explicit allowlist entry with a reason, never a widened pattern
+    verifiable_closure: |
+      litmus:no-tracked-binaries-shape (spec dev-build, pre-build, bound) turns
+      green: scripts/run-litmus-test.sh dev-build --phase pre-build --size instant.

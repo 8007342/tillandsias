@@ -641,6 +641,7 @@ specs:
   - litmus:timing-telemetry-implausible-guard-shape
   - litmus:cycle-flow-telemetry-shape
   - litmus:build-test-timing-telemetry-shape
+  - litmus:cycle-metrics-recurrence-shape
   - litmus:order-id-collision-free
   - litmus:ledger-fragment-convergence
   - litmus:plan-compaction-format-preservation
