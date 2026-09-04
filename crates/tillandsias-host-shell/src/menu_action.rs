@@ -18,14 +18,12 @@ use crate::menu_state::{SelectedAgent, ids};
 /// Which project list a clicked project entry came from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProjectScope {
-    Local,
     Cloud,
 }
 
 impl ProjectScope {
     fn parse(s: &str) -> Option<Self> {
         match s {
-            "local" => Some(ProjectScope::Local),
             "cloud" => Some(ProjectScope::Cloud),
             _ => None,
         }
@@ -239,9 +237,9 @@ mod tests {
             ("antigravity", Antigravity),
         ] {
             assert_eq!(
-                resolve(&format!("project.local.myapp.{verb}")),
+                resolve(&format!("project.cloud.myapp.{verb}")),
                 MenuAction::Attach {
-                    scope: ProjectScope::Local,
+                    scope: ProjectScope::Cloud,
                     name: "myapp".to_string(),
                     agent
                 }
@@ -260,9 +258,9 @@ mod tests {
     #[test]
     fn resolves_per_project_web_and_observatorium() {
         assert_eq!(
-            resolve("project.local.myapp.opencode-web"),
+            resolve("project.cloud.myapp.opencode-web"),
             MenuAction::ProjectOpenCodeWeb {
-                scope: ProjectScope::Local,
+                scope: ProjectScope::Cloud,
                 name: "myapp".to_string()
             }
         );
@@ -290,9 +288,9 @@ mod tests {
     #[test]
     fn resolves_legacy_attach_verb_as_claude() {
         assert_eq!(
-            resolve("project.local.myapp.attach"),
+            resolve("project.cloud.myapp.attach"),
             MenuAction::Attach {
-                scope: ProjectScope::Local,
+                scope: ProjectScope::Cloud,
                 name: "myapp".to_string(),
                 agent: SelectedAgent::Claude,
             }
@@ -303,9 +301,9 @@ mod tests {
     #[test]
     fn resolves_project_name_with_dots() {
         assert_eq!(
-            resolve("project.local.my.dotted.app.claude"),
+            resolve("project.cloud.my.dotted.app.claude"),
             MenuAction::Attach {
-                scope: ProjectScope::Local,
+                scope: ProjectScope::Cloud,
                 name: "my.dotted.app".to_string(),
                 agent: SelectedAgent::Claude,
             }
@@ -329,6 +327,18 @@ mod tests {
         // menu built before the change, and it must be INERT rather than
         // falling through to a resolver arm nothing renders any more.
         assert_eq!(resolve("local-projects.empty"), MenuAction::Inert);
+        // 997-e4v2 step 3: ProjectScope::Local is gone, so `local` no longer
+        // parses as a scope. These ids can still ARRIVE — from a menu built
+        // before the change, or a stale desktop entry — and must be INERT
+        // rather than falling through to a resolver arm that no longer exists.
+        // Asserted as LITERALS because there is no constant left to name them,
+        // same as the reset-guest legacy id above.
+        assert_eq!(resolve("project.local.myapp.claude"), MenuAction::Inert);
+        assert_eq!(resolve("project.local.myapp.attach"), MenuAction::Inert);
+        assert_eq!(
+            resolve("project.local.myapp.opencode-web"),
+            MenuAction::Inert
+        );
         // The removed reset-guest leaf (operator order, 2026-07-22; tray-ux
         // "UX curation governance"): even a stale click on the legacy id
         // must be INERT — no menu path may reach the guest reset. The
