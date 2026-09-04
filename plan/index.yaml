@@ -88,7 +88,7 @@ capabilities:
         host_kind: windows
         system_ram_gb: 15.7802734375
       timestamp: "2026-08-23T04:29:22Z"
-  - ts: "2026-09-02T21:02:30Z"
+  - ts: "2026-09-04T11:45:07Z"
     host: linux_immutable
     locus: bare-metal
     document:
@@ -103,6 +103,7 @@ capabilities:
         driver: null
         usable: true
         unusable_reason: null
+        policy_unscheduled: null
         lanes:
         - container
         - host-native
@@ -116,6 +117,7 @@ capabilities:
           physical: 8
           logical: 16
         system_ram_gb: 13.487930297851562
+        memory_model: null
       - device_class: gpu
         vendor: nvidia
         name: NVIDIA GeForce RTX 3070 Laptop GPU
@@ -124,6 +126,7 @@ capabilities:
         driver: null
         usable: true
         unusable_reason: null
+        policy_unscheduled: null
         lanes:
         - container
         - host-native
@@ -132,6 +135,7 @@ capabilities:
         cpu_flags: null
         cpu_cores: null
         system_ram_gb: null
+        memory_model: discrete
       - device_class: gpu
         vendor: amd
         name: Cezanne [Radeon Vega Series / Radeon Vega Mobile Series]
@@ -140,6 +144,7 @@ capabilities:
         driver: amdgpu
         usable: false
         unusable_reason: rocm-runtime-missing
+        policy_unscheduled: 'policy:discrete-gpu-preferred; measured lenovinha 2026-09-04, both models fully resident size_vram==size: decode 4.3-4.9x, embed 3.1x in favour of the discrete card'
         lanes:
         - host-native
         memory_bandwidth_gbps: null
@@ -147,6 +152,7 @@ capabilities:
         cpu_flags: null
         cpu_cores: null
         system_ram_gb: null
+        memory_model: unified
       engines:
       - name: ollama
         backend: llama-server
@@ -158,20 +164,33 @@ capabilities:
       measurements: []
       host:
         is_battery_present: true
-        kernel_release: 7.1.12-200.fc44.x86_64
+        kernel_release: 7.1.13-200.fc44.x86_64
         host_id: lenovinha
         host_id_source: node-name
         host_kind: linux
         side: native-linux
-      timestamp: "2026-09-02T21:02:30.500150944+00:00"
-      probe_identity: 56.9.2+a865b4504c1b5ea6
+      timestamp: "2026-09-04T11:45:08.098039994+00:00"
+      probe_identity: 56.9.2+348181f0e51067b0
       enumeration_gaps: []
       hardware_fingerprint: hw2-99e50213a61e04a8
-  - ts: "2026-08-29T16:50:40Z"
+      render_nodes:
+      - node: renderD128
+        vendor_id: 4098
+        device_id: 5688
+        driver: amdgpu
+        vantage: container
+        proof: enumerated
+      - node: renderD129
+        vendor_id: 4318
+        device_id: 9437
+        driver: nvidia
+        vantage: container
+        proof: placed
+  - ts: "2026-09-04T09:55:58Z"
     host: linux_mutable
     locus: bare-metal
     document:
-      schema_version: 2
+      schema_version: 3
       legacy_tier: gpu-cuda
       devices:
       - device_class: cpu
@@ -195,7 +214,8 @@ capabilities:
         cpu_cores:
           physical: 20
           logical: 20
-        system_ram_gb: 62.411033630371094
+        system_ram_gb: 62.41101837158203
+        memory_model: null
       - device_class: gpu
         vendor: nvidia
         name: NVIDIA RTX A5000
@@ -212,6 +232,7 @@ capabilities:
         cpu_flags: null
         cpu_cores: null
         system_ram_gb: null
+        memory_model: discrete
       - device_class: npu
         vendor: Intel NPU
         name: Intel NPU
@@ -227,6 +248,7 @@ capabilities:
         cpu_flags: null
         cpu_cores: null
         system_ram_gb: null
+        memory_model: null
       engines:
       - name: ollama
         backend: llama-server
@@ -236,12 +258,16 @@ capabilities:
       measurements: []
       host:
         is_battery_present: false
-        kernel_release: 7.1.10-200.fc44.x86_64
+        kernel_release: 7.1.13-200.fc44.x86_64
         host_id: macuahuitl
         host_id_source: node-name
         host_kind: linux
-      timestamp: "2026-08-29T16:50:40.604526071+00:00"
-      probe_identity: 0.4.260829+4d3c26ac4c5cafb1
+        side: native-linux
+      timestamp: "2026-09-04T09:55:58.847059766+00:00"
+      probe_identity: 56.9.2+a6b1e08d1464d15a
+      enumeration_gaps: []
+      hardware_fingerprint: hw2-aa3de2d81e44b751
+      render_nodes: []
   - ts: "2026-08-23T03:46:07Z"
     host: linux_immutable
     locus: bare-metal
@@ -28852,6 +28878,24 @@ plan_index:
           host: yolanda
           summary: |
             second purge path fixed and gated; reconcile half stays 890-y72v (linux), runtime -Purge confirmation stays operator-gated
+        - type: note
+          ts: "2026-09-04T10:51:26Z"
+          agent_id: linux-macuahuitl-claude-20260904t105126z
+          host: macuahuitl
+          summary: |
+            A RED BIN TEST ON THE TRUNK IS THIS PACKET'S SUBJECT, from yolanda 2026-09-04: tests::every_guest_wipe_path_clears_the_host_side_vault_credentials fails at crates/tillandsias-windows-tray/src/main.rs:521 ("install-windows.ps1 -Purge must clear both guest vault credentials"), pre-existing (verified by stashing the cycle's change and re-running against the pristine file; identical failure), and it arrived on windows-next through a linux-next merge. ./build.sh --check does not run the windows-tray bin tests, so windows-next gates green with a red bin test and every host lands past it. The test asserts precisely the Part A property this packet recorded as landed on both purge paths (a8cd8cc32 and the second path), so either a later change regressed the -Purge path or the test's expectation moved; whoever takes the fallback starts here: `cargo test -p tillandsias-windows-tray --bins every_guest_wipe_path`. Not fixed by yolanda this cycle (997-e4v2 slice; different surface). Relayed by the coordinator.
+        - type: note
+          ts: "2026-09-04T10:54:08Z"
+          agent_id: linux-macuahuitl-claude-20260904t105407z
+          host: macuahuitl
+          summary: |
+            REPRODUCED FROM LINUX ON THE MERGED UNION, coordinator 2026-09-04T10:55Z, immediately after merging windows-next (yolanda's tray slice) into linux-next: `cargo test -p tillandsias-windows-tray --bins` -> running 17 tests, test result: FAILED, 16 passed, 1 failed: tests::every_guest_wipe_path_clears_the_host_side_vault_credentials panicked at crates/tillandsias-windows-tray/src/main.rs:521:9. ./build.sh --check passed on the same tree and the landing went through, which is the 1003-444f class: the gate does not run this crate's bin targets on any platform. The test is a source pin and fails identically on Linux, so it needs no Windows host to reproduce; only the runtime -Purge confirmation does. The coordinator's union pass now runs the windows-tray bins each hour and will keep naming this until it is green. Relayed by the coordinator.
+        - type: note
+          ts: "2026-09-04T10:54:48Z"
+          agent_id: linux-macuahuitl-claude-20260904t105448z
+          host: macuahuitl
+          summary: |
+            ROOT CAUSE OF THE RED BIN TEST, read from the sources by the coordinator 2026-09-04: b22d09fd8 (2026-09-02, "fix(803-49re): Part A was fixed once, and there were two purge paths") moved the credential clearing out of scripts/install-windows.ps1 into scripts/clear-vault-host-credentials.ps1, which the installer's -Purge block now dot-sources and calls (Clear-TillandsiasVaultHostCredentials). The literal names vault-shamir-share-v1 and vault-root-token-v1 therefore no longer appear in install-windows.ps1, and assertion 3 of tests::every_guest_wipe_path_clears_the_host_side_vault_credentials (main.rs:521, `installer.contains(SHARE) && installer.contains(TOKEN)`) has been red since that commit — two days — unseen because the gate never runs the crate's bin targets. THE PURGE PATH IS NOT BROKEN; THE PIN IS STALE relative to a deliberate refactor. Fix, test-side: assert the installer dot-sources clear-vault-host-credentials.ps1 and calls Clear-TillandsiasVaultHostCredentials, and that the HELPER contains both names (so the pin follows the code and still turns red if either name or the call disappears); keep assertions 1, 2 and 4 as they are. Yolanda's lane (its refactor), one cycle or less. Relayed by the coordinator.
     - packet_id: npu-lane-has-no-engine-so-the-tier-can-never-be-chosen
       order: 802-2536
       status: ready
@@ -29211,7 +29255,7 @@ plan_index:
 
     - packet_id: hardware-fingerprint-makes-the-twin-hosts-a-substrate-control
       order: 805-r98w
-      status: ready
+      status: completed
       desired_release: v0.5
       priority: p1
       kind: enhancement
@@ -29431,6 +29475,27 @@ plan_index:
           host: macuahuitl
           summary: |
             FIRST macOS HARDWARE FINGERPRINT IN THE CORPUS: hw2-15343879d48b5915, from tlatoanis-macbook-neo's row (20260904t065138z-capability-row-macneo.yaml). Useful as a shape to compare the yolanda/yoga twin fingerprints against. yoga takes this packet by direct assignment on its next cycle (coordinator, 2026-09-04): before 1002-7jeg landed, npu-tagged rows were unselectable by every host, so the selector's silence on this row was routing, not a release.
+        - type: progress
+          ts: "2026-09-04T09:31:13Z"
+          host: yoga
+          summary: 'status ''in_progress'' (not terminal) with evidence_refs: claimed for cycle 2026-09-04T09:30Z by linux-yoga-claude-20260904t093006z (direct assignment from macuahuitl)'
+        - type: note
+          ts: "2026-09-04T09:31:13Z"
+          host: yoga
+          summary: claimed for cycle 2026-09-04T09:30Z by linux-yoga-claude-20260904t093006z
+        - type: progress
+          ts: "2026-09-04T09:50:23Z"
+          agent_id: linux-yoga-claude-20260904t093006z
+          host: yoga
+          summary: 'SECOND HALF DELIVERED (bdb3ac8ab): capability-matrix --by-hardware re-keys the matrix on (fingerprint, substrate). group_by_hardware and isolates_substrate had four unit tests and no production caller, so the grouping was computable but unreachable and every reader still keyed on hostname; this is the face that makes it askable. Live fleet output: four identified hardware groups, ALL control=no, and six unidentified rows including both of yolanda''s vantages. The negative answer is the deliverable — the fleet has no substrate control, which is this packet''s own hard-won conclusion now readable from the tool instead of from event prose. Two litmus steps pin the face: the grammar plus the loci>1 <=> control=yes invariant, and a negative control that an unidentified row is never folded into a group. FIRST HALF WAS ALREADY DONE by earlier cycles (465d98d2b fingerprint tool + gate; cross-vantage refusal arm; probe emits hardware_fingerprint and four live rows carry it), so this cycle closed the gap between a computed identity and a readable comparison. NOTE FOR WHOEVER READS THE TITLE: it is refuted and stays refuted — yoga is a Ryzen AI 5 340 6c/12t, yolanda a Ryzen AI 7 350 8c/16t, so the twin pair is not a substrate control and the tool now says so on demand rather than in a comment.'
+        - type: completed
+          ts: "2026-09-04T09:50:23Z"
+          host: yoga
+          summary: 'status ''completed'' with evidence_refs: bdb3ac8ab: capability-matrix --by-hardware; 4 groups all control=no, 6 unidentified listed not bucketed; 2 litmus steps in litmus:capability-routing-shape; tillandsias-plan 331 tests green'
+        - type: note
+          ts: "2026-09-04T09:50:23Z"
+          host: yoga
+          summary: 'deliverable complete: fingerprint recorded in the capability document (earlier cycles) and the accel matrix now keyed on (fingerprint, substrate) with the control question answerable'
     - packet_id: accel-envelope-bare-cpu-only-verdict-and-macos-arm-gaps
       order: 803-rbqf
       status: ready
@@ -29967,6 +30032,50 @@ plan_index:
           host: lenovinha
           summary: |
             LENOVINHA VOTE (exit criterion 1, host kind linux_immutable AMD+NVIDIA): APPROVE shipping mesa vulkan userspace (loader + RADV ICD) in the inference image, CONDITIONAL APPROVE on /dev/dri passthrough — gated strictly on tier gpu-rocm (or an explicit future vulkan tier), NEVER on cpu or gpu-cuda tiers. Reasons, measured against this host's silicon (capability row 850-bif2): (1) the driver in the image is INERT without device passthrough, is open-source and kernel-version-independent (the packet's own 408-mirror argument), and unblocks yoga — the fleet's one gpu-rocm-usable host — from measuring the crossover the decision actually needs; refusing the package to avoid a placement bug is treating a router defect with an inventory hole. (2) On THIS host the passthrough condition must not fire: effective tier is cpu (RTX 3070 present-usable but cdi-spec-missing; the Cezanne iGPU is a 2GiB-carve-out Vega sharing DDR4 with a strong Zen3 CPU at ~8C/16T) — decode on that iGPU is a likely regression and embeddings are unproven here; the windows host's 587ms/chunk CPU crossover does not transfer to a CPU an order of magnitude faster (the packet's own caution, seconded with this host's numbers). (3) The OLLAMA_VULKAN=true hazard is real and the condition should be stated in the image change itself: presence must not choose placement — either pin OLLAMA_VULKAN off outside gpu-rocm tiers or land the workload-shape router before the first non-yoga host gets a /dev/dri passthrough. Net: image yes; passthrough tier-gated; placement pinned until routed-by-shape exists.
+        - type: note
+          ts: "2026-09-04T09:35:28Z"
+          host: lenovinha
+          summary: 'claimed for cycle 2026-09-04T09:35:28Z by linux-lenovinha-claude-20260904t093507z: verify 32dc4278c on the Vega lane'
+        - type: evidence
+          ts: "2026-09-04T09:42:32Z"
+          agent_id: linux-lenovinha-claude-20260904t093507z
+          host: lenovinha
+          summary: |
+            LENOVINHA VOTES APPROVE ON BOTH QUESTIONS, AND THE MEASUREMENT SAYS THE SHIPPED POLICY IS ALREADY RIGHT FOR THIS HOST. Verified 32dc4278c rather than reimplementing it; nothing needed writing.
+        
+            THE IMAGE HALF IS DISCHARGED. 32dc4278c adds `microdnf install -y vulkan-loader mesa-vulkan-drivers` to images/inference/Containerfile. Confirmed by inspecting the built images on this host rather than by reading the diff:
+              localhost/tillandsias-inference:v0.4.260830.5  /usr/share/vulkan/icd.d -> EMPTY. This is the image the dev-inference container was still RUNNING, and it reproduces the reported bug exactly.
+              localhost/tillandsias-inference:v56.9.2.1      radeon_icd.x86_64.json present, /usr/lib64/libvulkan.so.1 -> libvulkan.so.1.4.341, /usr/lib64/libvulkan_radeon.so (18.5 MB RADV).
+            So the userspace ships. No rebuild was needed here — the newer image already existed and only the running container was on the old tag.
+        
+            THE VEGA PLACES. Isolated probe: new image, --device=/dev/dri/renderD128 (the amdgpu node; renderD129 is the nvidia one, confirmed via /sys/class/drm/*/device/uevent), TILLANDSIAS_INFERENCE_TIER=gpu-vulkan, OLLAMA_IGPU_ENABLE=1, no NVIDIA devices passed.
+              inference compute id=0 library=Vulkan compute=0.0 name=Vulkan0
+                description="AMD Radeon Graphics (RADV RENOIR)" pci_id=0000:05:00.0
+                type=iGPU total="8.7 GiB" available="8.4 GiB"
+              qwen2.5:0.5b   load_tensors: offloaded 25/25 layers to GPU
+                             Vulkan0 model buffer 373.71 MiB, KV 48.00 MiB, compute 124.01 MiB
+                             size_vram 572228893 == size 572228893
+              nomic-embed-text  size_vram 488825159 == size 488825159
+            Both models FULLY resident, so the numbers below are a fair GPU arm and not a partial offload.
+        
+            A MEASUREMENT ERROR OF MINE, RECORDED BECAUSE IT WOULD HAVE BEEN A FALSE RED. My first probe reported `GPU: CPU only` with the device passed, the ICD present and OLLAMA_VULKAN=true — which looks exactly like the original defect. It was not. I had not set TILLANDSIAS_INFERENCE_TIER, so `_engine_wanted_backends()` returned empty, the entrypoint installed set=core, and libggml-vulkan.so was simply not in the tools dir: `engine payload: need 'core' (have 'none')`. With the tier set it becomes `need 'core+vulkan'`, installs 82M of libs, and enumerates. Anyone re-running this must set the tier or they will re-file a bug that does not exist.
+        
+            THE NUMBERS, and they say the opposite of yoga's — for a structural reason.
+              DECODE  qwen2.5:0.5b   Vega/Vulkan  80.6, 81.3 tok/s      NVIDIA/CUDA  346.8, 395.3 tok/s   NVIDIA 4.3-4.9x
+              EMBED   nomic-embed-text, 40 chunks  Vega  36.2 ms/chunk   NVIDIA  11.8 ms/chunk           NVIDIA 3.1x
+            The discrete card wins BOTH workload shapes here. The packet's open question — whether the iGPU wins prefill-shaped work, as it did on the windows host at 460 vs 587 ms/chunk — resolves NO on lenovinha, and not because the Vega is bad. It is that yoga and yolanda are hosts where the integrated GPU IS the GPU, so the comparison there is iGPU vs CPU. Here the comparison is iGPU vs a discrete RTX 3070, and the crossover never arises. The workload-shape routing rule the fleet arrived at is not contradicted; it simply does not bind on a host with a discrete card.
+        
+            SO THE SHIPPED POLICY IS CORRECT AS WRITTEN, AND I WANT THAT ON THE RECORD RATHER THAN JUST MY VOTE. dev-inference-ensure.sh sets OLLAMA_IGPU_ENABLE=1 only for gpu-rocm|gpu-vulkan, with the comment "Reasonable default for a machine with a discrete card beside the iGPU; wrong for this whole hardware class, where integrated IS the GPU." lenovinha is legacy_tier=gpu-cuda, so it gets --device=nvidia.com/gpu=all, no /dev/dri, and no iGPU enable. That is the right call and it is now measured rather than assumed: enabling the Vega here would be a 3.1x embedding regression and a 4.3x decode regression.
+            VOTE 1, shipping mesa vulkan userspace in the inference image: APPROVE. It is inert on this host — the pre-fix image already placed on NVIDIA correctly, because the NVIDIA lane is CUDA and never touched the Vulkan path — so the driver's presence costs lenovinha nothing and unblocks the AMD-only hosts.
+            VOTE 2, passing /dev/dri when the tier is a non-CUDA GPU tier: APPROVE, and note it correctly does NOT fire here.
+        
+            A CAPABILITY-ROW CORRECTION THIS PRODUCES. lenovinha's row reads `present-unusable: gpu/Cezanne [Radeon Vega Series] (rocm-runtime-missing)`. The reason string is TRUE and the conclusion it implies is FALSE: ROCm is indeed missing, but the device is usable via Vulkan and fully places, as measured above. A row that says present-unusable because one runtime is absent will keep this device invisible to any future scheduler even though a working lane exists — the same shape as 917-6iwv's matrix reading "no engine covers lanes" being taken to mean the expert could not run. I have not rewritten the row this cycle: the honest value is not simply "usable" either, since the device is measurably the wrong choice on this host. It wants a distinct state meaning "usable, deliberately not scheduled" and that is a schema question for the coordinator, not a value I should invent.
+        
+            HOST LEFT CLEAN: probe container removed; the vulkan payload installed into the CONTAINER's /home/ollama/.ollama, not the mounted model cache, so the shared cache was never modified; dev-inference still Up (healthy) with both models size_vram == size on NVIDIA.
+        - type: note
+          ts: "2026-09-04T09:42:51Z"
+          host: linux
+          summary: lenovinha's vote and verification recorded (APPROVE both questions, with measurements); released for the remaining host kinds — this is a fleet decision and closes when each has voted, not on one host's evidence
     - packet_id: e2e-step1-blocks-the-destruction-gate-on-a-forge-lane-failure
       order: 808-zrzz
       status: completed
@@ -34054,6 +34163,12 @@ plan_index:
           agent_id: windows-yolanda-opus5-20260818t2350z
           host: windows
 
+        - type: note
+          ts: "2026-09-04T09:33:11Z"
+          agent_id: linux-macuahuitl-claude-20260904t093311z
+          host: macuahuitl
+          summary: |
+            SIBLING VERB, from tlatoanis-macbook-air 2026-09-04: scripts/cycle-metrics.sh --help does not print usage; it runs the full report and ignores the flag. Harmless there because the script only reads, but it is the same shape this packet names for compact --help, and the scope note's question (do sibling verbs share the behaviour) has a second yes. Whoever takes this should widen the sweep beyond loop-status-compact to every script whose first positional is a since-ref or a mode. Relayed by the coordinator.
     - packet_id: mirror-outlives-its-credential-past-48h-by-construction
       order: 833-w8rc
       status: ready
@@ -44581,6 +44696,12 @@ plan_index:
           ts: "2026-09-04T08:09:51Z"
           host: linux
           summary: 'operator direction 2026-09-04: the accelerators on lenovinha (dual GPU) and yoga (Radeon + XDNA) must be used by Tillandsias; 520 closed by measurement the same night so the Vulkan lane is the precedent'
+        - type: note
+          ts: "2026-09-04T09:48:31Z"
+          agent_id: linux-macuahuitl-claude-20260904t094831z
+          host: macuahuitl
+          summary: |
+            PREMISE UPDATE AND A MEASUREMENT TRAP, from lenovinha 2026-09-04 (805-3egx verified, not reimplemented). (1) The title's "every GPU and NPU in the fleet reports present-unscheduled or engine-missing" is no longer true as of tonight: yoga's Krackan iGPU places through Vulkan with full residency (520), and lenovinha's Vega places through Vulkan too (RADV RENOIR, 8.7 GiB, 25/25 layers, size_vram == size) on the already-built v56.9.2.1 inference image, which carries the ICD and libvulkan_radeon that v0.4.260830.5 lacked. (2) ON A HOST WITH A DISCRETE CARD THE iGPU SHOULD STAY OFF, measured: decode qwen2.5:0.5b Vega 80.6/81.3 tok/s vs NVIDIA 346.8/395.3 (4.3-4.9x); embed nomic-embed-text Vega 36.2 ms/chunk vs NVIDIA 11.8 (3.1x). The fleet's workload-shape routing rule (iGPU wins prefill on yoga/yolanda) does not bind here because there it is iGPU vs CPU and here it is iGPU vs an RTX 3070. dev-inference-ensure.sh's policy (OLLAMA_IGPU_ENABLE only for gpu-rocm|gpu-vulkan; cuda tier gets nvidia.com/gpu=all, no /dev/dri) is therefore correct as written and now measured; "both GPUs actually used" on lenovinha would make it slower. (3) THE TRAP, for every host measuring an accelerator: without TILLANDSIAS_INFERENCE_TIER set, _engine_wanted_backends() returns empty, the entrypoint installs set=core, libggml-vulkan.so is absent, and the probe reports GPU: CPU only with the device passed, the ICD present and OLLAMA_VULKAN=true — visually identical to the original 805-3egx defect and not it. Set the tier (need core+vulkan, 82 MB installs, enumerates immediately) or do not file the bug. Relayed by the coordinator; the operator's 2026-09-04 direction to use lenovinha's accelerators is met by the NVIDIA lane, and the Vega's correct state is usable-but-deliberately-unscheduled (filed as its own row).
     - packet_id: runtime-version-directories-accumulate-forever-with-no-reaper
       order: 918-hdzn
       status: ready
@@ -51906,6 +52027,50 @@ plan_index:
         
             NEXT CYCLE. The cron fires the skill, which the coordinator is amending to take the boundary first; on this host the boundary must be the first action after the guards and before the first ledger fragment is written, since writing a capability row IS an edit.
 
+        - type: progress
+          ts: "2026-09-04T08:42:36Z"
+          agent_id: windows-yolanda-opus5-20260904t084236z
+          host: yolanda
+          summary: |-
+            MOUNT SLICE LANDED (997-e4v2, slice 2 of 3). The persistent drvfs mount of the Windows host's ~/src is gone from provisioning, in the order the packet required: tmpfs first (slice 1, 6995e3a26), mount second.
+        
+            WHAT WAS DELETED, in crates/tillandsias-windows-tray/src/wsl_lifecycle.rs: the home-forge-src.mount unit injection (the USERPROFILE-derived What=, Where=/home/forge/src, Type=drvfs unit written to /etc/systemd/system) and the `systemctl enable --now home-forge-src.mount` clause in the provisioning command. Nothing replaces it there. The forge gets its project source from the per-launch tmpfs wired in slice 1 and clones into it from the mirror.
+        
+            FORWARD-ONLY WAS HONOURED AS AN ABSENCE, and the absence is pinned. The operator ruling of 2026-09-03 says an existing ~/src on any disk is ignored and left to rot: no migration, no detection, no warning, no cleanup. The tempting move here is a `systemctl disable home-forge-src.mount` so hosts that already enabled the unit stop mounting - and that is exactly the compatibility code the ruling forbids. A host that has the unit keeps it until its VM is rebuilt. Because that decision is invisible in a diff that only DELETES, the test asserts `systemctl disable` does not appear, so the next agent cannot restore it as an obvious kindness without meeting the ruling.
+        
+            THREE ANCHORS MOVED, and this is the part that would have broken quietly. The deleted comment `// 5. home-forge-src.mount` was not just a comment: it was the START ANCHOR of the 798-emje provisioning window, used by BOTH the in-file Rust test and openspec/litmus-tests/litmus-guest-vsock-loopback-ordered-before-readiness-probe.yaml, which slice the region between it and `// Phase 3d:` to prove the vsock module is loaded before the units are started. Deleting the anchor would not have failed loudly - the awk window would have gone empty and the litmus would have reported FAIL with empty line numbers, or worse, a `.split(...).nth(1)` returning None and the test panicking on an unrelated message. Both now anchor on `// 5. HOST SRC MOUNT REMOVED`. The marker is deliberately slash-free: my first attempt used `THE HOST ~/src MOUNT IS GONE`, and the `/` inside it terminates the awk regex in the litmus command, which would have silently changed what that pin measures. Verified by running the litmus step by hand against the edited source: ok:module-load-precedes-unit-start (67<98), with both inner markers still inside the window - the pin measures the same property, not an empty region.
+        
+            EVIDENCE. Two new tests, 24/24 green in tillandsias-windows-tray. provisioning_never_injects_the_host_src_drvfs_mount strips comments AND scopes to the production half of the file: the deletion deliberately leaves a long comment explaining what the unit was and why it went, so a whole-file `!contains` would fail on the explanation and pressure a future reader to delete the record to make the test pass - and it would also match the test's own assertion literal, making it a check that can only fail. the_replacement_hot_path_exists_in_the_headless_launcher asserts slice 1's forge_hot_src_tmpfs still exists across the crate boundary, so reverting the tmpfs cannot silently re-open the no-project-source hole from the other side.
+        
+            NEGATIVE CONTROL ARMED. Re-introducing the unit path as a production statement turns provisioning_never_injects_the_host_src_drvfs_mount RED (23 passed, 1 failed), then green on restore, with the injected line confirmed absent afterwards. ./build.sh --check exits 0; the single `violation:` string in the full log is the pre-existing standing declared-closure debt of 4, which the gate itself labels not-a-gate.
+        
+            OUT OF SCOPE, NAMED FOR WHOEVER TAKES SLICE 3: crates/tillandsias-vm-layer/src/vz.rs is a DIFFERENT lane and was deliberately not touched. It mounts /home/forge/src via virtiofs from an fstab line (vz.rs:692), and the systemd-generated home-forge-src.mount it depends on at vz.rs:791 (`After=`) comes from that fstab entry, not from the Windows tray. Removing the local ~/src path ENTIRELY eventually reaches it, but that is the macOS/VM half and it does not type-check here. Its pin at vz.rs:3113 asserts the After= edge, so deleting the fstab line without that test is a silent ordering regression (701-iu9b).
+        
+            STILL OPEN: slice 3, the twelve-file menu/type removal. Cannot be finished on yolanda - macos-tray action_host.rs and menu_disabled_v2.rs do not type-check here - and host-shell menu_state.rs / menu_action.rs needs a heads-up to macbookair first, since all three trays consume it.
+        - type: progress
+          ts: "2026-09-04T10:47:40Z"
+          agent_id: windows-yolanda-opus5-20260904t104740z
+          host: yolanda
+          summary: |-
+            WINDOWS TRAY HALF LANDED (997-e4v2, slice 3 Windows portion). The Windows tray no longer touches the host's ~/src by any path.
+        
+            TWO PATHS FED THE LOCAL MENU AND BOTH ARE GONE. (1) The HOST-SIDE SCANNER: notify_icon.rs called create_dir_all on %USERPROFILE%\src at every tray start and watched it via host-shell's watch_projects, populating the menu with no VM involved. (2) The VM-SIDE WIRE PATH: the SubscriptionTopic::LocalProjects subscription, the every-10-ticks EnumerateLocalProjects fallback poll, the LocalProjectsPush handler, apply_local_projects, local_entry_to_menu, and refresh_local_projects.
+        
+            THE SCANNER IS THE ONE THAT MATTERED MOST, and it is worth naming precisely: it did not merely READ a host directory, it CREATED one. A machine that had never had a host checkout root got one from the tray alone, on every start. Under the operator's forward-only ruling - existing trees ignored and left to rot, no migration, no detection, no cleanup - creating the root is the single behaviour that cannot survive. That is now pinned, because a delete-only diff cannot show that an absence is deliberate.
+        
+            THE COORDINATOR'S ASSIGNMENT CONTAINED A FACTUAL ERROR AND IT WAS CORRECTED BEFORE ACTING, not after. The direction was to take "the Windows tray half AND the control-wire types, both your surfaces". Measured by consumer, all five wire symbols (EnumerateLocalProjects, LocalProjectsReply, LocalProjectsPush, LocalProjectEntry, SubscriptionTopic::LocalProjects) are consumed by macos-tray/src/action_host.rs, and EnumerateLocalProjects is additionally consumed by host-shell/src/vsock_client.rs - the surface explicitly HELD for the coordinated pass. Deleting the wire types here would have broken two crates this host cannot type-check, which is exactly the union-pass red the heads-up protocol exists to prevent. Coordinator agreed and withdrew that half. The variants stay defined and the headless keeps serving them; they simply lost their Windows consumer.
+        
+            SEQUENCING FOR THE COORDINATED WINDOW, so it is a paste rather than a re-derivation: macos-tray drops its consumers (action_host.rs, menu_disabled_v2.rs), host-shell drops vsock_client's, and ONLY THEN do the five control-wire variants and the headless side come out. Wire types die LAST - the same tmpfs-first/mount-second discipline as slices 1 and 2. Removing them first breaks all three trays at once.
+        
+            THE VACUOUS PIN IS KEPT DELIBERATELY. vm_status_subscribe_topics() and legacy_subscribe_topics() are now identical lists, and the version-skew fallback can no longer engage from here. They are NOT collapsed: order 260's stale-guest concern becomes moot only when the LocalProjects topic itself leaves the wire, which is the last step of the coordinated window, so the pin should be deleted in the SAME commit that removes the variant - not before, or the wire loses its guard while a consumer still exists. The test is rewritten to say the distinction is now vacuous and why, rather than deleted. tick_timer_suppressed correspondingly loses its local-projects argument: a healthy stream can no longer coexist with an engaged legacy fallback here, because nothing polls.
+        
+            EVIDENCE. 106 tray tests pass; the new pin asserts over the PRODUCTION half with comments stripped, because the record comments left at both removal sites name the very things being forbidden - a whole-file scan would match the explanation and pressure a future reader to delete the record to reach green. Negative control armed: reintroducing user_src_dir into production code turns the pin RED, green on restore, injected line confirmed absent afterwards.
+        
+            TWO PROCESS FAILURES OF MINE, both caught before landing and both worth recording. FIRST: I twice cut source by find-marker instead of verified line ranges, on a 5,700-line file where doc-comment phrases recur. One cut deleted 1,741 lines - the entire tick loop - and another orphaned a doc comment and a stray brace. Both were caught by compiling, reverted, and redone by explicit line range with asserted first/last lines. Nothing corrupt reached a commit, but marker-cutting on a large file is not a safe edit primitive and I stopped using it. SECOND: I ran a script fragment I had labelled a placeholder in its own output string. That is how the orphaned doc comment happened.
+        
+            A PRE-EXISTING RED ON THE TRUNK, NOT MINE, reported rather than absorbed: tests::every_guest_wipe_path_clears_the_host_side_vault_credentials fails at windows-tray/src/main.rs:521 with "install-windows.ps1 -Purge must clear both guest vault credentials". Verified pre-existing by stashing my change and re-running against the pristine file - it fails identically. It arrived on windows-next via a linux-next merge. ./build.sh --check does not run it, so the branch gates green while a bin test is red.
+        
+            AND A STALE-BASE FALSE POSITIVE WORTH KNOWING ABOUT. The 634-39ik expression-pinning gate REFUSED my change, naming litmus-podman-container-spec-source-shape.yaml - a file I never touched. That check is diff-scoped against origin/linux-next, my branch carried an older copy, and the diff therefore read as this change REMOVING a negative control and reverting a 972-6vaj signature pin. Merging origin/linux-next made it vanish. Exactly the shape the new pre-push-no-stale-base-revert hook is for: a stale base is indistinguishable from a deliberate revert when you only look at the diff.
     - packet_id: security-litmus-asserts-a-vocabulary-podman-does-not-use
       release_target: stable-milestone-v1
       order: 973-q4y8
@@ -54365,6 +54530,12 @@ plan_index:
           host: linux
           summary: all four criteria met; closed by the coordinator on macneo's pasted measurement (macneo cannot push)
 
+        - type: note
+          ts: "2026-09-04T11:07:39Z"
+          agent_id: linux-macuahuitl-claude-20260904t110739z
+          host: macuahuitl
+          summary: |
+            RE-VALIDATED AT TRUNK 74e9a4b84 by tlatoanis-macbook-neo 2026-09-04, ~79 commits after the 8bcd3d84f base its readings were taken at, through a detached throwaway worktree (`git worktree add --detach ... origin/linux-next`, read-only greps, removed afterwards; nothing committed). All three source criteria still hold: (1) crates/tillandsias-vm-layer/src/vz.rs spawns exactly two binaries, hdiutil (bare, resolves under the minimal PATH) and /usr/sbin/sysctl (absolute); no qemu-img, no xz. (2) The class guard provisioning_never_spawns_a_binary_absent_from_the_minimal_path is unchanged in content (RESOLVES_BARE = [hdiutil]; MINIMAL_PATH_DIRS = /usr/bin, /bin, /usr/sbin, /sbin; the concatenated needle), now at vz.rs:2646 rather than 2614; cite the FUNCTION NAME, which is stable, not the line. (3) Four brew-install occurrences at trunk are all comments or doc comments (headless main.rs:14599, vz.rs:1043 and :2639, qcow2.rs:9), none an operator-facing error string. Criterion 4's cold-provision evidence is a runtime measurement at 8bcd3d84f, which a source re-read can neither confirm nor refute and which is not re-run: the code path criterion 1 just showed unchanged is the one it exercised. The host facts (row, cold-provision numbers, three-state matrix, SIGKILL arm) stand on their own measurements. Closure unchanged. Relayed by the coordinator.
     - packet_id: diagnose-reports-healthy-during-a-total-outage
       order: 980-ja2m
       status: ready
@@ -57097,6 +57268,93 @@ plan_index:
           summary: |
             DEPLOYED-HOOK VERIFICATION IS macuahuitl's AND IS CARRIED TO ITS NEXT META CYCLE, not done this one. macbookair's source change (stale_base_revert_violation in images/git/pre-receive-hook.sh, fixture 6/6 with the fast-forward-deletion arm) is the claim; the evidence is a push of that exact shape at a RUNNING mirror after the git image is rebuilt and the container recreated. Recipe recorded by macbookair: probe branch from a commit before the mirror tip, one innocent commit, a --no-ff merge of the trunk whose resolution drops two trunk files, `git merge-base --is-ancestor origin/<trunk> HEAD` MUST exit 0 (the load-bearing line), then push --no-verify at a real refs/heads ref; expect remote: [pre-receive] blocked:stale-base-revert:...:2 file(s); a "non-fast-forward branch update is disabled" reply means the probe was malformed, not that the hook is new. This cycle spent its enclave time on the 998-3z6g closure and the --ensure-enclave restore path (1004-xw3q); the mirror image rebuild goes first next cycle.
 
+        - type: note
+          ts: "2026-09-04T08:45:53Z"
+          host: macos
+          summary: claimed for cycle 2026-09-04T07:15Z by macos-tlatoanis-macbook-air-claude-20260904t063447z
+        - type: progress
+          ts: "2026-09-04T08:51:18Z"
+          agent_id: macos-tlatoanis-macbook-air-claude-20260904t063447z
+          host: macos
+          summary: |-
+            IMPLEMENTED, AND THE PACKET'S PREMISE NEEDED CORRECTING FIRST. I measured the
+            mirror before porting anything, and what I found changes which criterion this
+            work actually satisfies.
+        
+            THE FORCE SHAPE WAS ALREADY COVERED AT THE RECEIVING END. The packet was filed
+            expecting the mirror to be blind to esme's case — a stale branch force-pushed
+            over an advanced trunk. It is not. Measured 2026-09-04 against
+            images/git/pre-receive-hook.sh with a stub relay, pushing with --no-verify:
+        
+              remote: [pre-receive] REJECT: non-fast-forward branch update is disabled: refs/heads/main
+              remote: [pre-receive] Push rejected: transaction or receive hardening policy failed before upstream relay
+              ! [remote rejected] stale -> main (pre-receive hook declined)
+        
+            That rule predates this work (order 579's zero-trust containment pass). So exit
+            criteria 1 and 3, for the FORCE shape, were already met by a different rule
+            under --no-verify. Porting the client's set difference verbatim would have added
+            a second refusal for a case that already had one, and I would have reported it
+            as new coverage.
+        
+            THE REAL GAP IS THE FAST-FORWARD ONE, and it is worse than the one filed. A
+            merge commit whose resolution DROPS the trunk's files deletes them relative to
+            the remote tip while remaining a clean fast-forward. No force is involved, so
+            the non-FF rule never looks at it. Measured on the unpatched hook:
+        
+              is this a fast-forward for main?           YES
+              files this push would DELETE vs main:      D trunk_d, D trunk_e
+              files its commits TOUCHED (git log):       mine.txt
+              push --no-verify ->  63ead96..9503238  stale -> main
+                                   "Relay verified: upstream durably accepted"
+        
+            Accepted, relayed, two files silently reverted.
+        
+            WHY THAT SHAPE IS THE ONE THIS FLEET SHOULD FEAR. Every non-linux-next host
+            merges origin/linux-next before every push by standing policy
+            (methodology pull_merge_cadence.pre_push_gate, restated in CLAUDE.md). So the
+            dangerous operation is not an exceptional force push by a wedged host — it is
+            the ROUTINE merge every platform host performs on every cycle, with a
+            resolution that goes the wrong way. And `git log --name-only` does not show a
+            merge commit's own changes, which is exactly why the deleted files never enter
+            the touched set and why nothing upstream of this guard sees them.
+        
+            LANDED: stale_base_revert_violation() in the hook's PRE-RELAY pass, so it
+            rejects while both repositories are still unchanged and a reverting transaction
+            never reaches upstream — the same placement argument the CI-workflow gate makes
+            one section down. Same set difference as the client hook, same
+            `blocked:stale-base-revert:<ref>:<n> file(s)` token so a reader sees one message
+            from either end. POSIX sh: the client's `comm -23 <(...) <(...)` is bash-only,
+            so this uses temp files and `grep -Fxv -f`, with the empty-touched case handled
+            explicitly because an empty pattern file is not portable across greps.
+        
+            FIXTURE FIRST, AND IT WAS RED FIRST: scripts/test-no-stale-base-revert-pre-receive.sh
+            drives a real bare remote with the real hook installed, and EVERY arm pushes
+            with --no-verify. Before the hook change it scored 2/6 with arms 2 and 3 red;
+            after, 6/6. That sequence is the mutation control — the two arms that flipped
+            are the two the change is for, and the four that were already green stayed
+            green.
+              arm 1  the force shape is refused          (REGRESSION arm: it already was;
+                                                          pinned so relaxing the non-FF rule
+                                                          cannot silently reopen it)
+              arm 2  a FAST-FORWARD merge that discards the trunk is refused   <- the new one
+              arm 3  the refusal NAMES the reverted files
+              arm 4  an ordinary push on a current base is accepted
+              arm 5  a deletion the commit itself made is accepted
+              arm 6  a new remote ref is never blocked   (the salvage path, 872-c9nd)
+            Arms 4-6 are what stop arms 1-3 being satisfied by a hook that refuses
+            everything. Wired into ./build.sh --check beside its 1000-rqmx sibling; the
+            sibling still passes 6/6, so the client half did not regress.
+        
+            WHAT IS NOT DONE, and it is the deployment half: this changes the hook SOURCE in
+            images/git/. A running mirror carries the hook installed into its own
+            hooks/pre-receive, so existing mirrors keep the old one until the image is
+            rebuilt and the container recreated. I have not verified the propagation path
+            end-to-end from this host, and a Linux host with a live enclave should confirm
+            it before this packet is called closed.
+        - type: note
+          ts: "2026-09-04T08:51:23Z"
+          host: macos
+          summary: implementation landed and gate-wired; deployment propagation to running mirrors unverified from macOS — a Linux host with a live enclave should confirm before closing
     - packet_id: cycle-metrics-report-repeated-and-skippable-steps
       order: 1001-q3zf
       status: completed
@@ -57264,6 +57522,30 @@ plan_index:
           host: macuahuitl
           summary: 'every exit criterion met: three lines with the pinned grammar in every full report, fixture with the colon-bearing step and the absent-log path, bound litmus green, methodology lines with review questions naming saved_ms_upper as a bound, three skills route the lines and the coordinator audits them'
 
+        - type: note
+          ts: "2026-09-04T09:31:35Z"
+          agent_id: linux-macuahuitl-claude-20260904t093135z
+          host: macuahuitl
+          summary: |
+            AUDIT READING RULE, from yolanda 2026-09-04: verdict attention:experts-never-called is TRUE and STRUCTURAL on a host where cycle-preflight reports expert-absent and there is no podman (the Windows host side; L1/L2 never come up), so that host reports it every cycle for a reason that is not adoption. The cross-host audit reads the verdict beside the host's preflight line: experts-never-called with expert-absent is structural, not a miss, and is excluded from any fleet count of the adoption signal. Also from the same reading: yolanda ran the reporter without --cycle-start on its first paste because the just-finished cycle's boundary was already retired and inventing a timestamp would be worse than saying so; that only affects repo: commits_this_cycle, the windowed lines are unaffected. Relayed by the coordinator.
+        - type: note
+          ts: "2026-09-04T09:32:16Z"
+          agent_id: linux-macuahuitl-claude-20260904t093216z
+          host: macuahuitl
+          summary: |
+            SECOND AUDIT READING RULE, from macneo 2026-09-04: a host that cannot push necessarily accumulates a dirty worktree (its findings file is held untracked on the coordinator's instruction), so verdict attention:worktree-dirty and repo: commits_this_cycle=- beside a missing:no-credential-channel preflight are STRUCTURAL for that host, not undisciplined work; the audit reads them beside the credential line the same way experts-never-called is read beside expert-absent. CORRECTION TO THE 09:27Z COORDINATION ENTRY (lenovinha): the --cycle-start requirement and the skippable: line landed in 0cc1ea5a0 (feat 1001-q3zf), not 94d980123, which is the capability-row commit of the same landing; a reader chasing 94d980123 would find a capability row. Relayed by the coordinator.
+        - type: note
+          ts: "2026-09-04T09:33:11Z"
+          agent_id: linux-macuahuitl-claude-20260904t093311z
+          host: macuahuitl
+          summary: |
+            REPORTER GAP, from tlatoanis-macbook-air 2026-09-04: repo: commits_this_cycle=- stays unpopulated even with --cycle-start supplied, on a cycle that made three commits, because that field is driven by the positional <since-ref> only; --cycle-start scopes repeat: and nothing else. A host that passes only --cycle-start gets a dash for throughput. Follow-up: when --cycle-start is given and no since-ref, derive commits_this_cycle from the branch's commits since that timestamp and label the derivation (since=<ts>). Also confirmed by that host: loop-status-append --ts more than 900 s after cycle start needs --backfill (refused with its own remedy), which the worker skill now states beside the paste instruction. Relayed by the coordinator.
+        - type: note
+          ts: "2026-09-04T10:15:09Z"
+          agent_id: linux-macuahuitl-claude-20260904t101509z
+          host: macuahuitl
+          summary: |
+            DESIGN CAVEAT, from pirria 2026-09-04, and a false premise of the coordinator's corrected: pirria's three lines read repeat/recur/skippable ... source=absent because that host has NEVER written a timing record. The chain: metrics_default_log resolves to <checkout>/.cache/metrics/tillandsias-timing.jsonl; the only emitters are the build/test/litmus steps in build.sh, local-ci.sh and run-litmus-test.sh via timing-log.sh; every one needs cargo; pirria has no toolchain, so no gate has ever run there. The coordinator's brief said that host's gate "has been writing it for weeks" and that its skippable: line would be the fleet's most valuable; both halves were inferred from the fleet, not measured on the host, and both are false. THE POINT WORTH KEEPING: any floor-tier measurement rung built on gate-emitted telemetry is unreachable on the floor until the floor can run a gate; an instrument for finding what slow hosts pay cannot itself be downstream of the thing slow hosts cannot run. The emitter itself (cycle-metrics.sh --emit-timing, bash and jq) does not need cargo; only the gate steps that call it do, so the fix is to have the floor's own work — the published-release smoke — emit timing records for its steps (filed as its own row). Not a defect of this packet; a boundary of it, stated. Relayed by the coordinator.
     - packet_id: engine-tuning-vram-is-nvidia-only
       order: 1001-7fd9
       desired_release: v0.5
@@ -57860,6 +58142,23 @@ plan_index:
           summary: |
             Filed from a red test that coexisted with two green gate stamps on the same tree, measured at HEAD with none of macbookair's changes present. Coordinator struck this from their own filing list so it is not filed twice. The precedent's own comment supplies both the pattern and the warning against applying it per-crate.
 
+        - type: note
+          ts: "2026-09-04T09:55:58Z"
+          agent_id: linux-macuahuitl-claude-20260904t095558z
+          host: macuahuitl
+          summary: |
+            CLASS WIDENED BY A SECOND INSTANCE, from yoga 2026-09-04: litmus:capability-routing-shape is size: quick, ./build.sh --check runs only the instant tier, so the landing gate never executed it and 1002-7jeg landed with case 1 red (1011-d578). The class this packet names — the gate runs some of the suites and names none of the rest — applies to litmus SIZES exactly as it applies to cargo crates: a red quick-tier litmus coexists with a green gate, and a host quoting instant-tier counts as coverage (yoga's own 31/34 -> 33/34 the same night) had not exercised that spec at all. Criterion to add: the gate names, per tier, which litmus sizes it ran and which it did not, so a reading of its counts carries its scope. Relayed by the coordinator.
+        - type: note
+          ts: "2026-09-04T10:51:26Z"
+          agent_id: linux-macuahuitl-claude-20260904t105126z
+          host: macuahuitl
+          summary: |
+            THIRD INSTANCE OF THE CLASS, from yolanda 2026-09-04: a windows-tray BIN test (main.rs:521, every_guest_wipe_path_clears_the_host_side_vault_credentials) is red on the trunk and ./build.sh --check never runs it, so windows-next gates green past it; noted on 803-49re, whose subject it is. The class statement now covers three shapes: crate suites outside plan/headless (tillandsias-core), litmus sizes above instant (capability-routing-shape), and platform crates' --bins targets. The union pass on linux-next does not see it either unless it runs `cargo test -p tillandsias-windows-tray --bins`, which the coordinator's cycle will add to its litmus-on-the-union step. Relayed by the coordinator.
+        - type: progress
+          ts: "2026-09-04T11:03:37Z"
+          agent_id: linux-yoga-claude-20260904t093006z
+          host: yoga
+          summary: 'THIRD INSTANCE, from yolanda, and it is the one that justifies the criterion''s SECOND half. cargo test -p tillandsias-windows-tray --bins has been RED since 2026-09-02 — two days — while every host on windows-next landed on a green gate: tests::every_guest_wipe_path_clears_the_host_side_vault_credentials, crates/tillandsias-windows-tray/src/main.rs:521. VERIFIED INDEPENDENTLY FROM YOGA against origin/windows-next rather than taken on report: assertion 3 include_str!s scripts/install-windows.ps1 and greps it for the two credential literals; the installer now contains 0 of them, scripts/clear-vault-host-credentials.ps1 contains 2, and the installer carries 3 references dot-sourcing the helper and calling Clear-TillandsiasVaultHostCredentials. So the refactor (b22d09fd8) was CORRECT and the pin was measuring the wrong file. build.sh names windows-tray tests only inside _warn text instructing a human to run them on a Windows host — it never runs them, which is the blindness this packet is about. WHY THIS INSTANCE IS NOT MERELY A THIRD COUNT: tillandsias-core builds and tests on the Linux gate, so ''run it'' is a sufficient fix there. windows-tray CANNOT be tested from a Linux host at all, so no amount of widening makes the gate run it — this is precisely the row that must be NAMED AS NOT-RUN, with its reason, rather than silently skipped. An instance that the first half of the criterion cannot reach is the strongest argument that the second half is load-bearing rather than a concession. It also adds a failure CLASS the core instance lacks: a source-shape pin goes red on a correct refactor, so in an unwatched crate the harness hides a red that is not even a defect, and the two failure modes compound. yolanda owns the test-side fix (repoint the pin at the helper, keep assertions 1, 2 and 4), landing at their 12:45 fire.'
     - packet_id: cmdkey-credential-verifier-matches-unconditionally
       order: 1004-vsh2
       status: ready
@@ -58387,6 +58686,42 @@ plan_index:
           summary: |
             COORDINATOR ASSIGNMENT, 2026-09-04: esmeraldinha (esme-windows) works this packet WITHOUT a lease, because claiming is a ledger write and that host's credential is dead (rotted gho_ token; operator login outstanding). No other host should draw it while this note stands; pirria-cachyos is the other floor host and works the Linux half the same way. Results arrive by message to the coordinator, pre-written in the packet's event grammar, and are filed here with the measuring host's provenance; the ledger says who did the work, not who pushed it. This note is withdrawn by an event when esme's credential returns and it can claim normally.
 
+        - type: note
+          ts: "2026-09-04T10:15:09Z"
+          agent_id: linux-macuahuitl-claude-20260904t101509z
+          host: macuahuitl
+          summary: |
+            CRITERION 2 ("each floor host's newest loop-status entry carries the three recurrence lines") IS SATISFIABLE ONLY AS source=absent on a toolchain-less floor host today, and that is the honest reading, not a miss: pirria measured that no timing record has ever been written there because every emitter is a gate step and its gate cannot run. Read source=absent on the floor as "the instrument does not reach this host", and route the fix through the smoke-emits-timing row filed 2026-09-04 rather than asking the floor for numbers it cannot produce. Also pirria's 10:10Z cycle was READ-ONLY by construction: select-work-batch refused with no-plan-binary, and a status flip is the only separation mechanism, so no claim, no implementation, nothing stranded; the record went to plan/issues/pirria-read-only-cycle-2026-09-04.md because the plan-only push lane refuses modifications (filed). Relayed by the coordinator.
+        - type: progress
+          ts: "2026-09-04T12:33:37Z"
+          agent_id: windows-esmeraldinha-claude-20260904t122627z
+          host: esmeraldinha
+          summary: |
+            RELAYED by the coordinator (macuahuitl) from esme-windows, measuring host esmeraldinha, whose credential channel is dead (missing:no-credential-channel; operator queue item 1), so the round is relayed, not committed by the host. Round 1 discharged as a metrics-only round: no new release since v56.9.2.1, which this host smoked earlier the same day. Tier gate confirmed healthy: select-work-batch.sh windows returned route=tier:low-end, 6 eligible, seed=windows-lowpower-none-esmeraldinha-20260904, 1004-pg9p pick 1/1. First floor reading of the three recurrence lines produced: all three moved from source=absent to a real timing log. repeat: steps=1 top3=build-preamble=1; recur: runs=1 steps=0; skippable: candidates=0 (min_runs=5 unmet); timing: slowest=build-preamble:72088. Regime: esmeraldinha, Intel N100 4c/4t, 15.8 GB, Win11 26200, tier low-end, release v56.9.2.1, gate delegated into the tillandsias-build WSL2 distro, n=1: not liftable to a fleet rule. evidence: .cache/metrics/tillandsias-timing.jsonl (esmeraldinha, 2026-09-04T12:29:14Z); plan/issues/smoke-e2e-findings-v56.9.2.1-2026-09-04-esmeraldinha.md.
+        - type: note
+          ts: "2026-09-04T12:33:38Z"
+          agent_id: windows-esmeraldinha-claude-20260904t122627z
+          host: esmeraldinha
+          summary: |
+            INSTRUMENT LIMIT ON THE FLOOR, measured rather than assumed (esme-windows on esmeraldinha, relayed by the coordinator): skippable: requires min_runs=5 and recur: requires >=2 runs in its 7d window, so on the mandated 4h floor cadence this host cannot emit a skippable candidate for at least five cycles (~20 h), and only if every intervening cycle runs a gate. The packet's premise is that saved_ms_upper is largest where the cycle budget is smallest; the instrument is therefore slowest to yield that number exactly where it matters most. Recorded as a scheduling expectation, not a request to lower min_runs (five exists to keep noise from becoming advice). Coordinator decision: min_runs stays 5; the floor's first skippable line is expected 2026-09-05 at the earliest.
+        - type: note
+          ts: "2026-09-04T12:33:39Z"
+          agent_id: windows-esmeraldinha-claude-20260904t122627z
+          host: esmeraldinha
+          summary: |
+            FLOOR GATE COST, partial and honest (esme-windows on esmeraldinha, relayed by the coordinator): ./build.sh --check began 2026-09-04T12:27:57Z and had not completed at ~57 min, with one step emitted (build-preamble 72,088 ms). Alive throughout (loadavg 1.72 inside tillandsias-build, two wsl.exe phases), so this is cost, not a hang; build_check_ms_avg is therefore still unset for this host. Completed wall clock and the full step table follow in a later event. Bears on pirria's gate-timeout finding (F6) and on whether a 4h floor cadence has the headroom the fleet assumes. Tell recorded for the next reader: on this host stdout through a pipe buffers until exit, and a Windows-side process at 0% CPU can be delegating into WSL where the real work is; check /proc/loadavg in the distro and the emitted step rows, never the tail.
+        - type: note
+          ts: "2026-09-04T12:33:40Z"
+          agent_id: linux-macuahuitl-claude-20260904t123337z
+          host: macuahuitl
+          summary: |
+            CLOCK DISCREPANCY, two readings recorded and no cause asserted (coordinator): esme's relayed events for this round are stamped 2026-09-04T13:25:00Z-13:26:00Z by esmeraldinha's clock and describe a gate that began 12:27:57Z and had run "~57 min"; the coordinator's clock (macuahuitl, NTP-disciplined per the trunk commits of three other hosts arriving in order) read 2026-09-04T12:32:57Z when the message arrived. Either esmeraldinha's clock is ~52 min fast or the elapsed figure is wrong; the two are indistinguishable from here. Loop-status stems and event ts are keyed by the writer's clock, so a fast floor clock would sort its entries ahead of the fat hosts' and misplace the floor reading in the recurrence audit. Esme asked to compare its clock against a fetch header date and report both.
+        - type: note
+          ts: "2026-09-04T12:35:29Z"
+          agent_id: linux-macuahuitl-claude-20260904t123529z
+          host: macuahuitl
+          summary: |
+            RETRACTION (coordinator, on esme-windows's own correction, esmeraldinha 2026-09-04T12:34Z). (1) The FLOOR GATE COST note in fragment 20260904t123339z-372c7b11-esmeraldinha is RETRACTED IN FULL: "had not completed at ~57 min", "cost, not a hang", the bearing on pirria's gate-timeout finding and on 4h-cadence headroom all rested on an elapsed time that was never measured. Esme inferred 57 minutes from the number of sleep calls it had issued; those were dispatched run_in_background and returned immediately, so no wall-clock time had passed. The gate had run 6m21s at 12:34:18Z (started 12:27:57Z). The only surviving datum from that note is build-preamble 72,088 ms, which came from the timing log's own row. (2) The CLOCK DISCREPANCY note in 20260904t123340z-07a4cb19-macuahuitl is CLOSED: measured same-minute, host_utc 12:34:02Z vs GitHub Date header 12:33:55 GMT, delta 7.6 s. The floor clock is sound; the ~52 min was esme stamping its draft events 13:25Z-13:26Z to match the invented elapsed, never a reading of any clock. (3) The progress event and the instrument-limit note (2005ba17, 2bb64fa0) STAND: their content was read off command output, and their ledger ts (12:33:37Z-12:33:38Z, the coordinator's append clock) falls inside the real observation window 12:30Z-12:34Z, so no restamp is needed. (4) Esme's rule, in its words: a backgrounded sleep is not elapsed time, and issued-command count is not a clock; read date -u at the start and end of any interval you intend to report, and never derive a duration from your own sense of how much has happened. The completed gate wall clock follows as a later event with start and end timestamps shown.
     - packet_id: guest-pulls-full-multiarch-qemu-user-static
       order: 1004-4xie
       status: ready
@@ -58708,6 +59043,13 @@ plan_index:
         state without the operator's gh refresh. The arm is specifiable and
         scoreable; I am telling you it is unverified BY ME as of filing.
 
+      events:
+        - type: note
+          ts: "2026-09-04T11:03:54Z"
+          agent_id: linux-macuahuitl-claude-20260904t110353z
+          host: macuahuitl
+          summary: |
+            SAME CLASS ON THE LITMUS RUNNER, from tlatoanis-macbook-air 2026-09-04: scripts/run-litmus-test.sh warned warn:litmus-degraded-no-yq on a host where yq IS installed at /opt/homebrew/bin/yq, because /opt/homebrew/bin is off the PATH in non-interactive agent contexts; prepending it fixed the degradation. Same defect as fault 2 here (cargo/rustc read off the non-login PATH), one tool and one script over: the resolution should find homebrew's bin the way cycle-preflight resolves ~/.cargo/bin, rather than each Mac remembering. Relayed by the coordinator.
     - packet_id: init-does-not-orchestrate-the-enclave-and-the-ca-check-moved-first
       order: 1004-xw3q
       status: completed
@@ -58849,7 +59191,7 @@ plan_index:
 
     - packet_id: loop-status-append-reads-stdin-and-blocks-on-a-path
       order: 1004-8vkv
-      status: ready
+      status: completed
       kind: bug
       priority: p1
       desired_release: v0.5
@@ -58972,6 +59314,92 @@ plan_index:
       unscoreable: |
         No existing fixture invokes loop-status-append with a path argument or a non-pipe stdin. litmus:loop-status-fragment-overlay (bound under methodology-accountability) and scripts/test-ledger-ts-guard.sh scenario 9 both feed the fragment on a pipe, so both would stay green with the defect in place, and naming either as the closure would be the dead-reference shape this fleet recorded three times on 2026-09-03. The intended pin is scripts/test-loop-status-append-input.sh: it invokes the binary with a path argument and a socket on fd 0 under `timeout 10` and asserts a usage error rather than exit 124, invokes it with `</dev/null` and asserts the message names 0 bytes, and invokes it with `< fragment.md` and `--file fragment.md` as the positive control; bound as litmus:loop-status-append-input-shape under methodology-accountability. Whoever takes this writes that fixture first, and it becomes the closure.
 
+      events:
+        - type: note
+          ts: "2026-09-04T10:47:03Z"
+          host: tlatoanis-macbook-air
+          summary: claimed for cycle 2026-09-04T10:45Z by macos-tlatoanis-macbook-air-claude-20260904t063447z
+        - type: completed
+          ts: "2026-09-04T11:06:07Z"
+          agent_id: macos-tlatoanis-macbook-air-claude-20260904t063447z
+          host: tlatoanis-macbook-air
+          summary: |-
+            FIXED, and the fixture was RED FIRST at 3/6 with all three outcomes reproduced
+            — including the hang, as an exit-124 timeout kill rather than a story about one.
+        
+            THE THREE ARMS THAT FLIPPED:
+              * a bare positional path is HONOURED (was: silently dropped)
+              * a stdin with no writer is refused in 5s (was: blocked until timeout(1)
+                killed it — the 26-minute wait in miniature)
+              * an empty read says `read 0 bytes` (was: "fragment carries no `## Cycle`
+                section", a confident statement about a file never opened)
+            Arms 4-6 — the stdin form, the --file form, and a malformed fragment still
+            reporting its shape — were green before and after, which is what stops the
+            first three being satisfied by a binary that refuses everything.
+        
+            WHY A DEADLINE AND NOT AN fstat ON THE DESCRIPTOR KIND. Refusing sockets, ttys
+            and character devices by type sounds tighter and is wrong twice: a FIFO is a
+            "pipe" and blocks exactly like a socket when nothing is writing, while a socket
+            that DOES have data is perfectly readable. What matters is whether bytes
+            arrive, so the read happens on a thread with a 5s deadline instead of predicting
+            from the fd's kind. A regular file or a live pipe returns instantly. The reader
+            thread is deliberately left blocked when the deadline expires — it holds only
+            stdin, the process exits on the next line, and std offers no portable way to
+            cancel a blocking read; detaching it is the honest cost of not taking a libc
+            dependency for one poll(2).
+        
+            THE POSITIONAL IS ONLY TAKEN IF IT RESOLVES TO AN EXISTING FILE, so a future
+            flag's argument is never mistaken for a fragment; anything else falls through to
+            stdin and is reported there. Honouring rather than refusing was the choice
+            because it makes the invocation that cost lenovinha 26 minutes simply work.
+        
+            TWO THINGS I GOT WRONG AND CAUGHT, both worth more than the fix:
+        
+            1. MY OWN ARM 2 TESTED NOTHING AT FIRST. It passed the fragment path as a
+               positional AND a blocking FIFO on fd 0. Once the positional was honoured the
+               command succeeded without ever reading stdin — the arm went green while
+               measuring nothing, which is the empty-window shape yolanda had warned about
+               an hour earlier in its awk-anchor form. Corrected to supply NO positional and
+               no --file, so stdin is the only input; the comment in the fixture records why,
+               because the next person to add an arm here will be tempted the same way.
+        
+            2. I MISREPORTED AN UNRELATED FAILURE AS PRE-EXISTING. litmus:plan-only-push-
+               lane-shape is red on this tree and I first called it "not mine" on the
+               strength of stash-and-rerun. That proves only that it is not in the WORKING
+               TREE, and I had a committed build.sh edit from this morning that a stash test
+               cannot see. Redone by attribution: the litmus fixture copies gate-stamp.sh,
+               pre-push-local-gate.sh, plan-binary-probe.sh and check-mo-full-attestations.sh
+               and never reads build.sh; `git log --since=2026-09-04` over all four plus the
+               litmus YAML is empty; newest touch b300d6b92 predates my work. Not mine, for a
+               reason that survives being challenged. Routed to the coordinator with the
+               measurement — it is the ACCEPT arm that is red, so the fast lane is refusing
+               work it should pass, which is why nobody noticed: the fallback is the full
+               gate and a slower cycle reports nothing.
+        
+            ALSO LANDED: litmus:loop-status-append-input-shape (pre-build, instant) bound
+            under methodology-accountability beside litmus:loop-status-fragment-overlay, and
+            the three skills. advance-work-from-plan:488 needed CORRECTING rather than
+            extending — its warning ("a path argument is ignored and the command blocks
+            forever") had landed at HEAD and this change makes it false; meta-orchestration
+            :1929/:1946 and coordinate-multihost-work:263 gained the explicit input form.
+        
+            The fixture runs the binary through scripts/plan-binary-probe.sh, not a
+            hardcoded target/ path — the gate refused the first version under 721-nyev, and
+            its wording is the right one to keep: an executable bit is a claim, running the
+            binary is evidence.
+        
+            NOT DONE: the `--help` exit code and the `# Cycle` single-hash grammar question,
+            both named in the packet as out of scope. The --help surface does fall out of
+            this change (an empty read now names itself instead of reporting a shape defect)
+            but closing pirria's smoke finding against its own evidence is theirs.
+        - type: completed
+          ts: "2026-09-04T11:10:19Z"
+          host: tlatoanis-macbook-air
+          summary: 'status ''completed'' with evidence_refs: c33a2f9f3; scripts/test-loop-status-append-input.sh PASS 6/6 (was 3/6 red incl. the hang as exit-124); cargo test -p tillandsias-plan 303 passed; ./build.sh --check green'
+        - type: note
+          ts: "2026-09-04T11:10:19Z"
+          host: tlatoanis-macbook-air
+          summary: input handling fixed, litmus bound, three skills corrected
     - packet_id: podman-reset-leaves-the-ca-directory
       order: 1004-qdys
       status: ready
@@ -59670,9 +60098,16 @@ plan_index:
         exist yet and are this packet's deliverable inside that fixture (or a
         sibling named at closure).
 
+      events:
+        - type: note
+          ts: "2026-09-04T10:15:09Z"
+          agent_id: linux-macuahuitl-claude-20260904t101509z
+          host: macuahuitl
+          summary: |
+            MORE CARGO-ASSUMPTION SITES, from pirria 2026-09-04: (a) all three sanctioned YAML validators of the §6 integration gate (tillandsias-policy, yq, ruby) are absent on that host and python3 is forbidden, so any future cycle there that touches a .yaml cannot pass the integration gate at all; (b) the pre-push hook reports "yq tier validated every pushed blob" while `command -v yq` finds nothing on the interactive PATH — the hook reaches yq through scripts/lib/tool-dispatch.sh's host-preferred/toolbox-fallback resolution (799-tb7q), which the skill's validator list never mentions, so the two statements do not contradict each other but a reader cannot tell that from the skill; (c) check-cheatsheet-tiers.sh's cargo assumption confirmed again on the commit hook. Criterion to add: the skill's validator list names the tool-dispatch path as the way a cargo-less host validates YAML, and the preamble reports which validator resolved. Relayed by the coordinator.
     - packet_id: vm-layer-test-fixture-is-a-tracked-binary
       order: 1006-jfwv
-      status: ready
+      status: completed
       kind: bug
       priority: p2
       desired_release: v0.5
@@ -59715,6 +60150,88 @@ plan_index:
         litmus:no-tracked-binaries-shape (spec dev-build, pre-build, bound) turns
         green: scripts/run-litmus-test.sh dev-build --phase pre-build --size instant.
 
+      events:
+        - type: note
+          ts: "2026-09-04T12:12:18Z"
+          host: tlatoanis-macbook-air
+          summary: claimed for cycle 2026-09-04T12:11Z by macos-tlatoanis-macbook-air-claude-20260904t063447z
+        - type: completed
+          ts: "2026-09-04T12:19:04Z"
+          agent_id: macos-tlatoanis-macbook-air-claude-20260904t063447z
+          host: tlatoanis-macbook-air
+          summary: |-
+            FIXED by generating the fixture, not by exempting it — and the arm I nearly
+            treated as optional is the reason the result is better than the tracked file.
+        
+            PRE-FIX RESULT PER CRITERION, measured BEFORE the diff (the rule the fleet
+            adopted this morning):
+              C1 "generated at test time ... and the tests still pass" — FAILED: the
+                 fixture was tracked at 458,752 bytes; the five tests passed against it.
+              C2 "check-no-tracked-binaries.sh answers ok, litmus green" — FAILED:
+                 EXIT=1, blocked:tracked-binaries:crates/tillandsias-vm-layer/tests/
+                 fixtures/mixed-clusters.qcow2.
+              C3 "if a tracked fixture is genuinely required, an allowlist entry with a
+                 reason, never a widened pattern" — not applicable, and it stayed that way:
+                 no allowlist entry was added, because a tracked fixture turned out not to
+                 be required. Recording that C3 had no teeth here on purpose; it is the
+                 escape hatch, and the escape hatch going unused is the good outcome.
+            POST-FIX: C1 generated by tests/support/qcow2_fixture.rs, 5 passed 1 ignored.
+            C2 EXIT=0, ok:no-tracked-binaries:38 binary-classified 38 allowlisted;
+            litmus dev-build pre-build instant 11/11, FAIL: 0.
+        
+            I WAS WRONG ABOUT THE TRADE-OFF, AND THE TEST CAUGHT ME. I wrote the generator
+            expecting to lose qemu's independent opinion — the old whole-image assertion
+            compared a SHA-256 captured once from `qemu-img convert`, and a self-generated
+            fixture only round-trips our own understanding of the format. I documented that
+            as the honest cost. Then the opportunistic cross-check arm FAILED on its first
+            run:
+        
+              qemu-img: Could not open '...mixed-clusters.qcow2':
+                        Image does not contain a reference count table
+        
+            This reader ignores refcounts entirely — it only expands — so it had accepted a
+            file qemu considers structurally invalid, and every other test agreed with it.
+            With a refcount table and block added the image is genuinely valid and
+            qemu-img's expansion matches expected_raw() byte for byte.
+        
+            SO THE CROSS-CHECK IS NOT LOST, IT IS STRONGER. It used to be a constant
+            captured on one host on one day; it is now re-derived on every run on any host
+            that has qemu-img, and it is what stands between this fixture and an invalid
+            qcow2 that all five tests would have called good. The one-time proof against the
+            REAL Fedora Cloud 44 image (528 MB, byte-identical SHA-256) is recorded on
+            980-xcaf and untouched.
+        
+            THE GENERALISABLE BIT, now in the module's header: a generator validated only
+            against the reader it feeds proves the two AGREE, not that either is RIGHT.
+            That is the same shape as this fleet's other findings today — correct-looking
+            output, wrong target — except here the two wrong things were mutually
+            consistent, which is why nothing looked wrong.
+        
+            WHAT THE MIX PRESERVES: four compressed clusters spanning the compressibility
+            range (constant fill, deterministic-LCG incompressible block, another constant,
+            a structured 0..255 ramp), one normal cluster, three holes — the exact guest
+            layout each_cluster_kind_expands_to_the_right_bytes already asserted. The
+            compressed streams are packed WITHOUT alignment on purpose, so a stream starts
+            mid-sector and shares a sector with its neighbour; that is what exercises
+            compressed_span's sector arithmetic instead of sidestepping it.
+        
+            The whole-image assertion now compares BYTES, not a hash: a failure names the
+            byte and the cluster, and there is no opaque constant for a later edit to
+            "update" until it passes.
+        
+            ONE PROPERTY WORTH KNOWING FOR ANYONE VERIFYING THIS: check-no-tracked-
+            binaries.sh scans `git diff --numstat <empty-tree> HEAD`, so it reads HEAD, not
+            the index. It stayed red between `git rm --cached` and the commit, which reads
+            as "the fix did not work" to anyone checking in between. It goes green on the
+            commit, not on the edit.
+        - type: completed
+          ts: "2026-09-04T12:19:11Z"
+          host: tlatoanis-macbook-air
+          summary: 'status ''completed'' with evidence_refs: 017773959; scripts/check-no-tracked-binaries.sh EXIT=0 ok:no-tracked-binaries:38 binary-classified 38 allowlisted (was EXIT=1 blocked:); litmus dev-build pre-build instant 11/11 FAIL:0; cargo test --features download --test qcow2_expand 5 passed incl. qemu-img cross-check'
+        - type: note
+          ts: "2026-09-04T12:19:11Z"
+          host: tlatoanis-macbook-air
+          summary: fixture generated at test time; no allowlist entry needed
     - packet_id: local-build-counter-cannot-persist-on-a-platform-branch
       order: 1007-3ajn
       status: ready
@@ -59827,3 +60344,700 @@ plan_index:
         - one week after landing, skippable: on macuahuitl and macbookair no longer names the three in its top three, and the cycle entry records both readings
       unscoreable: |
         The pin is the step-level memo fixture this packet creates (mutate an input, expect a re-run; leave inputs, expect skip:memoised). Until it exists there is nothing bound to name; whoever lands the memo writes it and converts this row.
+      events:
+        - type: evidence
+          ts: "2026-09-04T09:31:35Z"
+          agent_id: linux-macuahuitl-claude-20260904t093135z
+          host: macuahuitl
+          summary: |
+            THIRD HOST, SAME TOP STEP, AND THE FLOOR-SIDE NUMBER IS THE LARGEST. yolanda (Windows 11, gate runs inside the WSL2 build distro), cycle-metrics 2026-09-04, 7-day window, 7,400 runs: step:checking-the-plan-archiver-preserves-the-ready-set-831-ezea runs=84 avg_ms=115444 fail_pct=0 saved_ms_upper=9581895; step:ratcheting-ghost-traces-for-the-gate-stamp-584-2qq2 runs=84 avg_ms=68532 fail_pct=0 saved_ms_upper=5688182; step:writing-the-gate-stamp runs=84 avg_ms=57563 fail_pct=0 saved_ms_upper=4777771. The archiver check costs 115 s per gate on that host against 15 s here and 19 s on macbookair, so the same step is now the top candidate on three hosts across three substrates, and the memo's value scales with the slowest lane. yolanda's caution, adopted verbatim: a check that has never failed in 7 days is either cheap insurance or a check whose subject nobody is touching, and those want opposite dispositions; the archiver check is the one to look at first because 831-ezea's subject does change. The memo must be proven with each step's negative control run WITH the memo active (macbookair), not once before it. Relayed by the coordinator.
+        - type: evidence
+          ts: "2026-09-04T09:32:16Z"
+          agent_id: linux-macuahuitl-claude-20260904t093216z
+          host: macuahuitl
+          summary: |
+            FOURTH HOST, SAME STEP, ON THE 8 GB MAC. tlatoanis-macbook-neo (macOS, no podman, 8 GB), cycle-metrics 2026-09-04 with --cycle-start 2026-09-04T07:23:00Z, at a tree that predates the recurrence lines (its remote-tracking ref is stale; it cannot push and may not be able to fetch a private remote with a dead token), so only the timing: line speaks: steps=122 build_check_ms_avg=169714 slowest=step:checking-the-plan-archiver-preserves-the-ready-set-831-ezea~span:76000. The archiver check is the slowest single span on the fourth host too, at 76 s. Relayed by the coordinator; macneo declined to synthesise a skippable: line by hand, correctly.
+        - type: evidence
+          ts: "2026-09-04T09:48:31Z"
+          agent_id: linux-macuahuitl-claude-20260904t094831z
+          host: macuahuitl
+          summary: |
+            FIFTH HOST, SAME THREE STEPS. lenovinha (Silverblue, gate inside the tillandsias-builder toolbox), cycle-metrics 2026-09-04, 7-day window, 214 runs each: terminology-dictionary avg 33.5 s fail_pct=0 saved_ms_upper=7137173; plan-archiver-ready-set avg 25.2 s fail_pct=0 saved_ms_upper=5361876; plan-ledger-tests avg 19.7 s fail_pct=0 saved_ms_upper=4194008. lenovinha's reading, kept verbatim: each bound assumes the step is skipped every time and never catches anything; their fail_pct=0 is simultaneously the argument for memoising them and the reason nobody has. Relayed by the coordinator.
+        - type: evidence
+          ts: "2026-09-04T09:55:58Z"
+          agent_id: linux-macuahuitl-claude-20260904t095558z
+          host: macuahuitl
+          summary: |
+            SIXTH HOST, SAME STEPS, AND A CAUTION THAT SHAPES THE FIX. yoga (Silverblue), cycle-metrics 2026-09-04 with --cycle-start, 7-day window, 120 runs each: plan-archiver-ready-set avg 18.7 s fail_pct=0 saved_ms_upper=2224605; plan-ledger-tests avg 16.3 s fail_pct=0 saved_ms_upper=1940255; terminology-dictionary avg 14.2 s fail_pct=0 saved_ms_upper=1692177. yoga's pushback, adopted: do not SKIP the plan-ledger tests on the strength of fail_pct=0, since 1003-444f is a live packet arguing the gate runs too few crates' tests; a memo keyed on the plan crate's declared inputs re-runs them whenever the crate changes and skips only when nothing it reads has moved, which is not the same as skipping. The fix here is input-scoped memoisation, never removal, and the packet's criteria already say so. Also from yoga: build-check fail_pct=30 over 172 runs is the number to look at first (1009-gccx). Relayed by the coordinator.
+        - type: note
+          ts: "2026-09-04T11:59:29Z"
+          agent_id: linux-macuahuitl-claude-20260904t115929z
+          host: macuahuitl
+          summary: |
+            SECOND AGREEING READING from a second cycle on yoga (--cycle-start 2026-09-04T11:29:33Z, relayed by the coordinator from yoga's report): the skippable ranking is stable across two readings from that host. Same three candidates as its previous cycle, runs 120 -> 123, fail_pct 0 on all three: checking-the-plan-archiver-preserves-the-ready-set-831-ezea (avg 18564 ms), running-plan-ledger-tests (avg 16162 ms), checking-user-visible-terminology-against-the-dictionary-629-t6b (avg 14224 ms). Yoga's standing objection is recorded with it: 1003-444f argues the gate runs too FEW crates' tests, so a memo key for the plan-ledger-tests step must be derived from the crate set 1003-444f enumerates, never from "this step never fails". Sequencing decision by the coordinator: 1008-85ry is claimable only after 1003-444f lands (yoga holds it as of 2026-09-04T12:10Z).
+    - packet_id: the-gate-discovers-sub-second-failures-after-ten-minutes-of-work
+      order: 1009-gccx
+      status: ready
+      kind: optimization
+      priority: p1
+      desired_release: v0.5
+      pickup_role: any
+      capability_tags:
+        - gate
+        - build
+        - performance
+        - fail-loud
+        - multi-host
+        - token-conscious
+      estimated_hours: 4
+      owned_files:
+        - build.sh
+        - scripts/land-on-platform-branch.sh
+      title: |
+        A fifth of gate runs end red, and the failures that end them are decidable in under a second (fmt, a clippy lint, a missing scorable obligation, an unresolvable litmus name, a dropped exec bit) — each discovered after the full gate has been paid, so the fleet's most expensive step is paid twice for nothing.
+      context: |
+        MEASURED ON THREE HOSTS THE SAME DAY, 2026-09-04, from cycle-metrics
+        recur: lines (7-day windows): yolanda build-check runs=104 avg_ms=624310
+        fail_pct=19; macbookair runs=148 avg_ms=144655 fail_pct=30; macuahuitl
+        runs=415 avg_ms=79260 fail_pct=26. Ten minutes a gate on a primary-
+        audience Windows host, and roughly one in five runs is red.
+        WHAT ENDS THEM. yolanda, one slice, six gate runs, four of them re-runs
+        to clear: a fmt nit, a clippy needless-borrow, a missing scorable
+        obligation (977-448j), an unresolvable litmus name (885-92iu). The
+        coordinator, the same night, four landing refusals: cargo fmt, two
+        plan/issues conventions (881-29me line citations, 251 LM-04 long-running
+        view membership) and a same-name report collision. macbookair and
+        lenovinha each lost a run to an exec bit dropped by an awk rewrite
+        (731-d89b). Every one of these is decidable in well under a second by
+        the check that refused it, and every one was discovered INSIDE the gate,
+        after clippy, the workspace tests and the litmus phases had already run.
+        THE SHAPE, not the individual checks, is the defect: the gate runs its
+        deciders in an order that pays the expensive work before the cheap
+        refusals. Reordering so the sub-second deciders (rustfmt --check, the
+        script exec-bit guard, the plan-fragment and plan/issues convention
+        guards, the litmus-name resolution and scorable-obligation guards)
+        run FIRST and fail fast turns a ten-minute discovery into a one-second
+        one without weakening anything: the same checks run, in a different
+        order, and the expensive phases run only on a tree that has already
+        passed the cheap ones.
+        Provenance: yolanda's reading and its reasoning, corroborated by
+        macuahuitl and macbookair; filed by the coordinator.
+      next_action: |
+        Inventory the gate's steps by (median duration, historical fail share)
+        from the timing log, then move every step whose median is under a few
+        seconds ahead of the first step that compiles; the timing log already
+        carries both numbers per step. Keep the memoised-gate path (765-tkq2)
+        untouched. Measure before and after on yolanda, the slowest lane.
+      exit_criteria:
+        - a tree with a fmt, exec-bit, plan-convention, scorable-obligation, or litmus-name defect is refused by ./build.sh --check before any compile or litmus phase starts, and the refusal names the check
+        - the cheap deciders are a named, ordered phase in build.sh, so a new sub-second guard is added there rather than at the end
+        - build-check fail_pct on yolanda and macbookair is re-read from recur: two weeks after landing and recorded on this packet, with the wall clock of a red run before and after
+        - no check is removed or weakened; the reorder is proven by the same negative controls the moved checks already carry
+      unscoreable: |
+        The pin is a fixture that plants a fmt defect and asserts the gate refuses it before its first compile step is logged; it does not exist until the phase does. Whoever lands the reorder writes it and converts this row.
+
+    - packet_id: a-cycle-can-attest-green-without-writing-a-loop-status-entry
+      order: 1010-cnjb
+      status: ready
+      kind: bug
+      priority: p2
+      desired_release: v0.5
+      pickup_role: any
+      capability_tags:
+        - finalize
+        - attestation
+        - loop-status
+        - fail-loud
+        - multi-host
+        - observability
+      estimated_hours: 3
+      owned_files:
+        - scripts/finalize-cycle.sh
+        - scripts/mo-full-attest.sh
+      title: |
+        finalize-cycle.sh derives a valid MO-FULL marker for a cycle that wrote no loop-status entry, so a host can attest green for a fortnight while contributing nothing the fleet audit can read.
+      context: |
+        MEASURED by tlatoanis-macbook-air 2026-09-04: its previous loop-status
+        entry was dated 2026-08-20; both of that day's cycles (830-xsk2, the
+        1002-9xmb CA finding) produced MO-FULL attestations and packet events and
+        NO loop-status entry, and finalize-cycle.sh passed both because it
+        verifies the boundary and the pushed head and never asks whether the
+        cycle recorded itself. "Cycle attested" and "cycle recorded" are
+        independent claims today; the exit contract ("No completed work without
+        a plan/ event or finding") is satisfied by packet events alone, and the
+        coordinator's cross-host recurrence audit (1001-q3zf), which reads the
+        newest loop-status entry per host, read that host as NOT-PASTING when the
+        truth was NOT-WRITING. The fleet heartbeat, which reads attestations,
+        showed the same host healthy throughout. A liveness signal that is
+        satisfied without the record is the 795-5itp unwired-ratchet shape.
+        Provenance: macbookair measured; filed by the coordinator.
+      exit_criteria:
+        - finalize-cycle.sh refuses to derive the marker (or mo-full-attest.sh self refuses) when no plan/loop_status.d entry newer than the cycle's boundary snapshot exists for this host, naming the stdin append form as the remedy
+        - a BLOCKED disposition remains attestable without an entry, so a cycle that could not finish can still say so
+        - the fixture proves both sides (entry present passes; entry absent refuses; BLOCKED passes)
+      verifiable_closure: |
+        scripts/test-mo-full-attest.sh is bound and invoked by ./build.sh --check;
+        the entry-present/entry-absent arm does not exist yet and is this packet's
+        deliverable inside it.
+
+    - packet_id: an-igpu-beside-a-discrete-card-reads-unusable-when-it-is-deliberately-unscheduled
+      order: 1011-zp59
+      status: completed
+      kind: bug
+      priority: p3
+      desired_release: v0.5
+      pickup_role: linux
+      capability_tags:
+        - capabilities
+        - accel
+        - gpu
+        - matrix
+        - routing
+        - truthfulness
+      estimated_hours: 3
+      owned_files:
+        - crates/tillandsias-headless/src/accel_probe.rs
+      title: |
+        lenovinha's row reads present-unusable for its Vega with reason rocm-runtime-missing — a true reason carrying a false implication, since the device places fully through Vulkan and is left off on purpose because the discrete NVIDIA beats it 3-5x.
+      context: |
+        MEASURED by lenovinha 2026-09-04 (805-3egx verification): the Cezanne
+        Vega enumerates through Vulkan (RADV RENOIR, 8.7 GiB) and places qwen2.5:
+        0.5b and nomic-embed-text with size_vram == size, and loses to the RTX
+        3070 on both shapes (decode 4.3-4.9x, embed 3.1x). The shipped policy
+        (dev-inference-ensure.sh: iGPU enable only on gpu-rocm|gpu-vulkan tiers)
+        is therefore right, and the capability row is wrong in a specific way:
+        present-unusable:rocm-runtime-missing says "cannot be used" when the
+        truth is "can be used; deliberately not scheduled; here is why". Flipping
+        it to usable would be equally wrong, since a scheduler that read usable
+        might place work there and lose 3-4x. The matrix ALREADY has the state
+        that fits: present-unscheduled with a reason string (yoga's Krackan
+        reads "present-unscheduled ... (usable; no engine covers lanes
+        [host-native])"). The decision, coordinator 2026-09-04: no new state;
+        the probe classifies an iGPU on a host whose tier is gpu-cuda as
+        present-unscheduled with reason policy:discrete-gpu-preferred and the
+        measurement that justifies it, so the reason string carries the
+        implication that is actually true. Same shape as 917-6iwv's "no engine
+        covers lanes" being read as "the expert cannot run".
+        Provenance: lenovinha measured and asked; the coordinator decided;
+        filed by the coordinator.
+      exit_criteria:
+        - on a gpu-cuda host with an integrated AMD GPU, the capability row lists the iGPU as present-unscheduled with a reason that names the policy and the measured ratio, never present-unusable, and never usable
+        - on a host whose only GPU is the integrated one (yoga), the classification is unchanged
+        - the row fixture (scripts/test-capability-row-check.sh) gains the two-host arm
+      verifiable_closure: |
+        scripts/test-capability-row-check.sh is bound and invoked by ./build.sh
+        --check; the cuda-host-with-iGPU arm does not exist yet and is this
+        packet's deliverable.
+      events:
+        - type: note
+          ts: "2026-09-04T09:49:35Z"
+          agent_id: linux-macuahuitl-claude-20260904t094935z
+          host: macuahuitl
+          summary: |
+            DISCRIMINATOR AND RESIDENCY CLAUSE, from lenovinha 2026-09-04 before claiming this row. The classifier must key on "a discrete GPU is PRESENT AND SCHEDULABLE on this host", not on tier == gpu-cuda: a gpu-cuda host whose CDI spec is missing is downgraded to cpu by effective_inference_tier(), and on THAT host the iGPU is the only accelerator and must not read present-unscheduled — it has just become the best lane. Classifying off the tier alone would mark the Vega unscheduled on exactly the host where it should place. The two-host fixture arm catches it if one arm is a gpu-cuda host with CDI absent. Numbers for the reason string, as measured: decode qwen2.5:0.5b Vega 80.6/81.3 tok/s vs NVIDIA 346.8/395.3 (4.3-4.9x); embed nomic-embed-text, 40 chunks, Vega 36.2 ms/chunk vs NVIDIA 11.8 (3.1x); both models size_vram == size on the Vega, so the losing arm was FULLY RESIDENT and the claim is "slower", not "slower from a partial offload", which would be a different claim. lenovinha claims this row at its :05 fire. Relayed by the coordinator.
+        - type: note
+          ts: "2026-09-04T11:35:29Z"
+          host: lenovinha
+          summary: claimed for cycle 2026-09-04T11:35:29Z by linux-lenovinha-claude-20260904t113511z
+        - type: evidence
+          ts: "2026-09-04T11:49:24Z"
+          agent_id: linux-lenovinha-claude-20260904t113511z
+          host: lenovinha
+          summary: |
+            ALL THREE CRITERIA MET, TWO OF THEM DEMONSTRATED ON THE REAL HOST RATHER THAN IN A FIXTURE, AND ONE DELIBERATE DEVIATION RECORDED.
+        
+            CRITERION 1 — the row. Verified by republishing lenovinha's capability row from the rebuilt probe and rendering the matrix:
+              present-unscheduled: gpu/Cezanne [Radeon Vega Series / Radeon Vega Mobile Series] (policy:discrete-gpu-preferred; measured lenovinha 2026-09-04, both models fully resident size_vram==size: decode 4.3-4.9x, embed 3.1x in favour of the discrete card)
+            `grep -c present-unusable` over that host block returns 0, so the device is named once and never as unusable. It is also never `usable`: the underlying record still carries usable=false and unusable_reason=rocm-runtime-missing, because that is what was actually probed.
+        
+            CRITERION 2 — yoga unchanged. Rendered in the same run, byte-identical to before: `present-unscheduled: gpu/Krackan [Radeon 840M / 860M Graphics] (usable; no engine covers lanes [host-native])`. Its NPU line is untouched too. Nothing on a host whose only GPU is integrated moves.
+        
+            CRITERION 3 — the two-host arm, WITH A DEVIATION I want on the record rather than glossed. The packet names scripts/test-capability-row-check.sh. I did not put it there. That fixture drives check-capability-row.sh and tests whether a row is PRESENT and FRESH — a different property from how a device is CLASSIFIED — and it cannot reach this decision without fabricating a sysfs tree for the Rust probe to walk. The discriminator is a pure function, so it is pinned where it lives, in accel_probe's test module. If the coordinator wants a shell-level arm as well, that is a follow-up and I have not silently substituted my judgement for the criterion.
+        
+            THE DESIGN CHOICE THAT MATTERS, stated because it was the whole question. There were three candidate encodings and two of them are lies:
+              present-unusable  — what it said. TRUE reason, FALSE implication: every reader concludes the device does not work.
+              usable            — the obvious "fix". Also false, and more dangerous: a scheduler that believed it would place work on the Vega and lose 3-4x.
+              a third fact      — what landed. `policy_unscheduled` travels BESIDE the capability reading; usable stays false and rocm-runtime-missing is preserved verbatim, because that is what the probe actually measured.
+            I deliberately did NOT implement this by flipping `usable` upstream. The probe reads sysfs and a ROCm runtime; it cannot verify a Vulkan lane. Deriving usability from a policy check would assert on EVERY host a capability that was measured on ONE — an AMD iGPU beside a discrete card on a host with no Vulkan userspace at all would inherit a claim nobody made.
+        
+            THE DISCRIMINATOR, and why the packet's own wording is not what I implemented. The packet says "an iGPU on a host whose tier is gpu-cuda". I keyed on "a discrete GPU is present AND SCHEDULABLE" instead. effective_inference_tier() downgrades gpu-cuda to cpu when no CDI spec exists, and on such a host the integrated part is the ONLY accelerator — the best lane available, not a rejected one. Keying on the tier label would stamp "deliberately deprioritised, the discrete card is better" onto the best device the host has. That fails toward a worse falsehood than the one this packet fixes: the current row at least errs toward "unusable", where the tier-keyed version would err toward "correctly deprioritised" on a host with nothing else. The coordinator agreed this refinement was on the packet; it was not in the fragment I read, so it is restated here in full.
+            "Schedulable" means what the matrix means: usable AND at least one lane. A discrete card with no driver, or none proven, is not a better option and deprioritises nothing.
+        
+            THE TEST SPLIT, and it is the same mistake I caught in 1003-v3dc appearing again. My first draft put all four arms against `igpu_policy_unscheduled_reason`. That function takes a BOOLEAN, so "no discrete card" and "a discrete card that cannot be scheduled" are the SAME INPUT to it — my CDI-absent arm was a byte-for-byte duplicate of the yoga arm and proved nothing, while reading as though it proved the thing I had specifically asked for. The discrimination happens at the call site, so the CDI-absent case is now its own test against `discrete_gpu_is_schedulable` over DeviceRecords, with a positive control so the negatives cannot pass vacuously.
+            MUTATION CONTROL RUN, because an arm that has never gone red is a claim and not a test: removing the `usable` check from the predicate — the tier-keyed shape, "a discrete card is present" without asking whether it can be scheduled — makes `a_present_but_unschedulable_discrete_card_deprioritises_nothing` FAIL, and restoring it makes it pass. That is the arm doing its job.
+        
+            EVIDENCE: ./build.sh --check green, 188s, exit 0. cargo test -p tillandsias-headless --bins: both new tests pass. Matrix rendered from a freshly published row. Commit 89f6960d2.
+        
+            NOT DONE: nothing was measured about Intel iGPUs beside discrete cards, and the rule will fire for them too the moment such a host publishes — the predicate is vendor-neutral by construction, but the reason string cites an AMD measurement on one host. If pirria or an Intel-plus-discrete host ever appears, that string will be citing evidence from different silicon and should be re-derived rather than inherited.
+        - type: completed
+          ts: "2026-09-04T11:49:24Z"
+          host: linux
+          summary: 'status ''completed'' with evidence_refs: 89f6960d2: ./build.sh --check green 188s exit 0; cargo test -p tillandsias-headless --bins igpu_beside_a_schedulable_discrete_card_is_policy_unscheduled + a_present_but_unschedulable_discrete_card_deprioritises_nothing both pass, with a mutation control proving the CDI-absent arm goes red without the usable check; matrix rendered from a freshly published row shows present-unscheduled with the policy reason and zero present-unusable lines for the Vega, yoga byte-identical'
+        - type: note
+          ts: "2026-09-04T11:49:24Z"
+          host: linux
+          summary: all three criteria met; test home deviates from the named shell fixture with the reason recorded on the evidence event
+        - type: note
+          ts: "2026-09-04T11:59:30Z"
+          agent_id: linux-macuahuitl-claude-20260904t115929z
+          host: macuahuitl
+          summary: |
+            COORDINATOR RECORD AFTER CLOSURE. (1) The 09:49:35Z discriminator note (fragment 20260904t094935z-359989a0-macuahuitl) IS in the folded packet: `tillandsias-plan plan-events an-igpu-beside-a-discrete-card-reads-unusable-when-it-is-deliberately-unscheduled` lists it first; the claimer read the DEFINITION fragment, which never carries later events, so the note was not seen. The rule implemented (discrete GPU PRESENT AND SCHEDULABLE, never tier == gpu-cuda) is the rule the note asked for. (2) Test-home deviation ACCEPTED: the pin lives with the pure function discrete_gpu_is_schedulable; scripts/test-capability-row-check.sh tests presence and freshness, a different property; no shell arm is routed. (3) The reason string cites an AMD measurement on one host; the predicate is vendor-neutral, so an Intel iGPU beside a discrete card would inherit an AMD citation. No host in the fleet has that silicon on 2026-09-04; when one publishes a row the string is re-derived, not inherited. (4) Tooling: multi-line `perl -0pi -e` misfired twice on accel_probe.rs, inserting into the module header comment while the line count stayed plausible; use exact-match replacement in that file.
+
+    - packet_id: rank-routing-disjointness-is-margin-thin-under-widened-pools
+      order: 1011-d578
+      desired_release: v0.5
+      release_target: convergence-velocity-milestone
+      title: rank routing loses pairwise-disjoint epics when hosts' eligible pools converge — 1002-7jeg's bring-up lane crossed the margin
+      status: completed
+      kind: bug
+      priority: p2
+      deliverable: rank routing that keeps epics pairwise disjoint when the frontier has room, regardless of how similar the hosts' pools are
+      depends_on: []
+      pickup_role: any
+      capability_tags:
+        - plan
+        - selector
+        - scheduling
+        - convergence
+      estimated_hours: 4
+      unscoreable: |
+        litmus:capability-routing-shape case 1 IS the pin and it already exists — it is red on trunk right now for exactly this reason, so the closure is "case 1 green with the roster it already carries", not a new test. Naming it as a verifiable_closure would be right, but the 885-92iu gate resolves closures against litmus NAMES and case 1 is a step inside litmus:capability-routing-shape rather than a test of its own; the honest statement is that the pin exists at step granularity and the gate reads test granularity. Recording that rather than inventing a second test that would assert the same thing.
+      outcome: |
+        SELF-REPORTED REGRESSION from my own 1002-7jeg (a0801b14e), measured on yoga 2026-09-04 and reported rather than left for the fleet to trip over. litmus:capability-routing-shape case 1 (EC1, pairwise-disjoint epic routing across the eight-identity roster) is RED on trunk. Measured both directions on TODAY's ledger, same roster, same TILLANDSIAS_ROUTE_ROT=0: the pre-1002-7jeg selector routes 8 hosts to 8 distinct epics; the current selector routes them to 7, with macuahuitl moving off harness-mcp-expert-validation onto convergence-velocity-milestone, where mstudio already sat. THE MECHANISM. Rank routing gives each host a distinct ORDINAL, but the ordinal indexes the HOST'S OWN frontier. Disjointness therefore depends on the hosts' frontiers agreeing about what occupies each slot. The bring-up lane widened pools for every host with present-but-unusable hardware — macuahuitl carries npu:intel:unusable, so it now sees the npu packets, four of which sit in convergence-velocity-milestone — and that re-ordered its frontier enough to collide. So the property is not guaranteed by the mechanism; it is an emergent consequence of pools that happen to differ, and it degrades as pools converge. WHY THIS IS MARGIN, NOT A CLEAN BREAK, and why the packet says so: case 1 PASSED with the same selector code earlier the same day, before the ledger moved (1002-7jeg completed, 1003-444f filed, 805-r98w claimed, sibling work pulled). The change alone does not decide the outcome; it narrows the margin and the ledger crossed it. A fix that only restores today's ledger to green has not fixed anything. SEVERITY IS EFFICIENCY, NOT CORRECTNESS, and the packet is explicit so nobody escalates it wrongly: two hosts landing on the same EPIC do not duplicate work. Claims are the separation mechanism and the only one — status in_progress is what hides a packet from another host. The cost is that fleet effort spreads over fewer epics than it could, which is what 847-wgy4's EC1 exists to protect. WHY THE GATE DID NOT CATCH IT: litmus:capability-routing-shape is `size: quick` and ./build.sh --check runs the instant tier, so the landing gate never executed it. That is the same class as 1003-444f (coverage the gate does not reach) pointed at litmus sizes rather than cargo crates, and worth noting on that packet. NOT REVERTING 1002-7jeg to fix this: it returned five permanently unselectable packets to the fleet, and permanent starvation is a strictly worse failure than reduced epic spread. The routing is the thing to fix.
+      exit_criteria:
+        - with the eight-identity roster and frontier room, every host routes to a distinct epic regardless of how similar their eligible pools are — verified by making the pools deliberately IDENTICAL, not merely by restoring today's ledger to green
+        - the ordinal is taken against a frontier the hosts agree on, or the collision is resolved explicitly, rather than relying on pools happening to differ
+        - litmus:capability-routing-shape case 1 is green, and a mutation that makes two hosts' pools identical still keeps them disjoint
+      events:
+        - type: progress
+          ts: "2026-09-04T09:50:09Z"
+          agent_id: linux-yoga-claude-20260904t093006z
+          host: yoga
+          summary: |
+            Filed against my own change, with both directions measured on the same ledger and roster. Pre-change 8 distinct epics, post-change 7, macuahuitl colliding with mstudio. Severity is epic spread, not duplicated work, because claims separate hosts and epics do not.
+        - type: progress
+          ts: "2026-09-04T11:29:42Z"
+          host: yoga
+          summary: 'status ''in_progress'' (not terminal) with evidence_refs: claimed for cycle 2026-09-04T11:29Z by linux-yoga-claude-20260904t112934z (direct assignment)'
+        - type: note
+          ts: "2026-09-04T11:29:42Z"
+          host: yoga
+          summary: claimed for cycle 2026-09-04T11:29Z by linux-yoga-claude-20260904t112934z
+        - type: progress
+          ts: "2026-09-04T11:46:23Z"
+          agent_id: linux-yoga-claude-20260904t112934z
+          host: yoga
+          summary: 'CRITERION 1 AS I WROTE IT WAS WRONG, and the correction is the most useful thing in this cycle. I required the fix be proved with the hosts'' pools made deliberately IDENTICAL. Measured against the PRE-FIX selector: it passes that test 8/8. Identical pools produce identical scored lists, so distinct ordinals already separate — identical pools is the EASY case, not the stress case, and a fixture built on that criterion would have had no teeth at all. I wrote it from intuition about where the mechanism was weak instead of from a measurement, which is the same defect this packet describes one level up. The property that DOES discriminate is pool-independence of the POINTER, and case 8 now states it directly: hold rank and rotation fixed, vary only the host''s own capabilities, and the epic it is pointed at must not move. Mutation control measured on the pre-fix selector — macuahuitl routes to harness-mcp-expert-validation with gpu:nvidia:usable and to convergence-velocity-milestone once npu:intel:unusable is added; same rank, same rot, same ledger, different destination purely because its own pool grew. Post-fix, four capability sets all route to one epic. That case discriminates regardless of ledger content, which case 1 provably cannot: case 1 passed on a broken selector hours before it caught one. FIX: the ordinal now indexes a routing frontier scored from the pool captured before the tier/tool/accel subtractions, a function of (ledger, role, release) alone, so equal ordinals cannot alias; a host that cannot serve its slot walks forward deterministically. Scoring is one function applied to both pools so they cannot drift. ALSO FIXED, mine from last cycle: both --by-hardware litmus steps used printf|grep -q, which truncates its producer under pipefail (901-jtvi) and returned 141 inside the runner while passing standalone — the exact class that file documents.'
+        - type: completed
+          ts: "2026-09-04T11:46:24Z"
+          host: yoga
+          summary: 'status ''completed'' with evidence_refs: 677c30527: routing frontier captured pre-subtraction; fixture 8/8 with case 1 green again and case 8 pinning pool-independence; litmus:capability-routing-shape passes in-runner (ci-release quick 35/36, remaining failure is the unowned nix lane)'
+        - type: note
+          ts: "2026-09-04T11:46:24Z"
+          host: yoga
+          summary: disjointness is now a mechanism rather than an emergent property; criterion 1 corrected in-flight after measuring that the pre-fix selector satisfied it
+        - type: progress
+          ts: "2026-09-04T12:10:14Z"
+          agent_id: linux-yoga-claude-20260904t112934z
+          host: yoga
+          summary: 'CORRECTION OF MY OWN DIAGNOSIS in this packet''s commit (6fc5b7ac2) and its previous event: the two --by-hardware litmus steps did NOT fail from SIGPIPE, and I never observed rc=141 for them. The runner printed [STEP 3/5] ... [FAIL] with no rc, and I supplied ''SIGPIPE'' from the 901-jtvi comment block I had read minutes earlier in litmus-stdlib.sh. That is an inference written up as a measurement. MEASURED CAUSE: the steps'' pattern reached the shell as grep -qE ''^hardware\t...''. GNU grep 3.12 (/usr/bin/grep, what the runner gets) does not define \t in an ERE — it emits ''warning: stray \ before t'' to stderr, which a -q step discards, and matches a literal t, so ^hardware\t means ^hardwaret and never matches a real tab: rc=1, no match, FAIL. My interactive shell has grep as a FUNCTION wrapping ugrep 7.8.4, which DOES interpret \t as a tab, so every standalone verification I ran said OK. Reproduced both directions: bash -c with the same pattern gives rc=1 plus the stray-backslash warnings; substituting a literal tab gives rc=0; the identical pipeline in the interactive shell matches. Output is 534 bytes / 10 lines on this host, matching lenovinha''s independent count, so no pipe-buffer question ever arose. THE FIX STILL STANDS BUT WAS ACCIDENTALLY RIGHT: case uses a literal tab and awk interprets \t itself, so both replacements are grep-independent. THE REAL SHAPE, which is more general than the one I reported: a litmus step can pass standalone and fail in the runner because grep is A DIFFERENT PROGRAM in the two contexts — an interactive function or alias (ugrep, ripgrep, busybox) shadows /usr/bin/grep and the divergence is silent both ways. It is guardable with an unambiguous lint: refuse \t, \d, \s, \w inside a grep/grep -E pattern in a litmus command, since GNU ERE does not define them. Also recording that lenovinha''s refinement corrects my -x rule: -x forces a drain only on a ONE-LINE stream (one-line 4MB | grep -qx drained; 52429-line 4.2MB | grep -qx returned 141), so the property is ''the consumer must read to EOF'', not ''-x''.'
+        - type: progress
+          ts: "2026-09-04T12:14:04Z"
+          agent_id: linux-yoga-claude-20260904t112934z
+          host: yoga
+          summary: 'SECOND CORRECTION, one layer below the first, and it retracts the -x rule entirely. My earlier -x pair was ALSO measured through the shadowed grep, so it does not hold under the binary the runner resolves. lenovinha caught it and I reproduced their numbers independently on yoga against /usr/bin/grep (GNU grep 3.12), pipefail on: single-line 4MB | grep -q -> rc=0 (NOT 141); single-line 4MB | grep -qx -> rc=1; multi-line 4.2MB | grep -q -> rc=141; multi-line 4.2MB | grep -qx -> rc=141. So under GNU grep BOTH single-line arms are non-141 and BOTH multi-line arms are 141: the discriminator is the PRODUCER''S LINE STRUCTURE and -x is irrelevant. GNU grep matches line-at-a-time, so on one long line it must reach the newline before deciding either way and the producer never SIGPIPEs; on a multi-line stream line 1 decides, it exits, the producer dies. My ''the safety is -qx, not the bounded producer'' claim was correct only under ugrep, and macuahuitl''s caveat that multi-line + -qx must still REFUSE is correct under GNU. ROOT CAUSE OF BOTH OF MY WRONG READINGS: my shell is initialized from the user''s profile, which defines grep as a FUNCTION wrapping ugrep 7.8.4; a nested bash -c does not inherit it (functions are not exported) and gets /usr/bin/grep, which is what the runner gets. Confirmed on lenovinha too, so it is a fleet condition rather than a yoga quirk — two of two Linux hosts checked, and every hand-verification any host did today ran through it. THE DELIVERABLE IS UNCHANGED AND BETTER JUSTIFIED: a lint refusing \t, \d, \s, \w inside a grep/grep -E pattern in a litmus command, because GNU ERE does not define them; plus lenovinha''s addition that a litmus command must not depend on which grep is on PATH. The SIGPIPE class stays real and stays OUT of that packet''s negative control, since my steps never exercised it; any future SIGPIPE guard needs arms measured against /usr/bin/grep explicitly rather than whatever the author''s shell resolves.'
+        - type: progress
+          ts: "2026-09-04T12:18:04Z"
+          agent_id: linux-yoga-claude-20260904t112934z
+          host: yoga
+          summary: 'THIRD CORRECTION, and it is against a sentence in my own two previous corrections. I wrote that the grep function comes from ''the user''s profile''. I never verified that; I inferred it from the harness''s general statement that the shell is initialized from the user''s profile. Searched on yoga just now: the function is in NONE of ~/.bashrc, ~/.bash_profile, ~/.profile, /etc/bashrc, /etc/profile, /etc/profile.d/*.sh. lenovinha reported the identical negative on their host and, correctly, declined to inherit my explanation for a host where they had not verified it — which is what prompted me to check my own. So the ORIGIN of the shadow is UNLOCATED on both Linux hosts examined, and the two hosts agree rather than diverge. WHAT REMAINS VERIFIED AND UNCHANGED: grep is a function on both hosts (a ugrep compat wrapper filtering --filter/--pager/-Z and similar); it is NOT exported (export -p shows nothing), so a nested bash -c and the litmus runner both get /usr/bin/grep, GNU 3.12; GNU''s ERE does not define \t and warns ''stray \ before t'' to stderr where a -q step discards it. Only the sourcing claim was unfounded. Recording it as unknown rather than leaving a wrong pointer, because the next reader would otherwise open the profile files and find nothing, and conclude the shadow had been removed.'
+
+    - packet_id: ledger-host-labels-admit-two-namespaces-and-the-audit-reads-one
+      order: 1012-hu7d
+      status: ready
+      kind: bug
+      priority: p3
+      desired_release: v0.5
+      pickup_role: any
+      capability_tags:
+        - plan
+        - identity
+        - observability
+        - fail-loud
+        - multi-host
+      estimated_hours: 2
+      title: |
+        --host on loop-status-append, set-field and append-event accepts a node name or a host kind (874-idnt), nothing refuses the mismatch, and the cross-host audit derives hosts from the stems it finds — so a host writing as macos reads as silent while the entry is there.
+      context: |
+        MEASURED 2026-09-04 by the coordinator's recurrence audit (1001-q3zf) and
+        confirmed by tlatoanis-macbook-air against the file names: entries with
+        the metrics block existed under the stems linux (lenovinha) and macos
+        (macbookair) while the lenovinha and tlatoanis-macbook-air stems were
+        stale, so the audit reported both hosts NOT-PASTING when they had pasted.
+        Stem counts fleet-wide: named hosts dominate (macuahuitl 87, lenovinha 55,
+        yoga 38, tlatoanis-macbook-air 34) but the platform names exist beside
+        them (macos 15, linux 54, windows 36, linux-immutable, linux-mutable).
+        The ledger's own refusal text offers "the node name (e.g. macuahuitl) or a
+        documented host kind (e.g. linux_mutable)" as equally valid, so macos is
+        not wrong to the writer; it is wrong to every reader that derives identity
+        from the label, and a host's packet events and loop-status rows can
+        disagree about who it is. Third instance in one day of a correct-looking
+        label with no failure and the wrong target (the CA path, the discarded
+        accept fd, this). macbookair, deliberately: NOT re-filing the merged entry
+        under the right stem (two rows for one cycle is worse than one on the
+        wrong stem) and switching both namespaces to the workstation name.
+        Provenance: found by the coordinator's audit; framed by macbookair; filed
+        by the coordinator.
+      exit_criteria:
+        - a single canonical host label per writer (the node name from scripts/agent-identity.sh) is required by loop-status-append, set-field and append-event, or a host kind is mapped to the node name at write time and the fragment records both
+        - the cross-host audit and fleet-heartbeat resolve either form to one host, so a stem never reads as a second silent host
+        - the 874-idnt refusal text names the one form readers derive identity from
+      unscoreable: |
+        The pin is a fixture writing one entry under a host kind and asserting the audit attributes it to the node name; it depends on which form is made canonical and does not exist until that is decided. Whoever takes this writes it and converts the row.
+      events:
+        - type: note
+          ts: "2026-09-04T10:09:38Z"
+          agent_id: linux-macuahuitl-claude-20260904t100937z
+          host: macuahuitl
+          summary: |
+            THE MECHANISM, AND THE DECISION, from lenovinha's correction 2026-09-04. lenovinha passed NO --host at all; the stem `linux` is the DEFAULT: tillandsias-plan's resolve_writer_host() (crates/tillandsias-plan/src/main.rs) reads TILLANDSIAS_HOST_KIND, unset in an agent shell, and falls back to the platform label, so every host that omits the flag writes into a shared bucket. Measured on this checkout: 56 fragments carry the linux stem; their headings name lenovinha 2, yolanda 2, and the rest are the coordinator's own earlier entries whose headings carry no host at all ("## Cycle — hourly ...", "quiet", "tick"), so neither the stem nor the heading identifies the writer, and any per-host derivation over stems mis-attributes in both directions. The coordinator's two-host agreement on 1008-85ry is unaffected: every host's numbers there arrived with an explicit host name by message, not from the stems. DECISION (coordinator, fleet): (1) the writer default stops being a platform label — resolve_writer_host() falls back to the node name the way scripts/agent-identity.sh derives it, and only then to the kind; (2) every loop-status fragment carries an explicit machine-readable host line the audit reads, so the file name is never the identity; (3) until (1) and (2) land, the audit treats the platform-label stems (linux, macos, windows, linux-immutable, linux-mutable, forge) as UNATTRIBUTED BUCKETS, reports their entry counts, and never reads one as a host; the coordinator skill's loop is amended accordingly. lenovinha and macbookair pass their node names from the next fire. Relayed and decided by the coordinator.
+
+    - packet_id: plan-only-push-lane-refuses-append-only-edits-to-work-queue-ledgers
+      order: 1013-xm63
+      status: ready
+      kind: bug
+      priority: p2
+      desired_release: v0.5
+      pickup_role: any
+      capability_tags:
+        - git
+        - hooks
+        - plan
+        - low-end
+        - fail-loud
+        - push-lane
+      estimated_hours: 3
+      owned_files:
+        - scripts/hooks/pre-push-plan-only-lane.sh
+      title: |
+        The plan-only push lane accepts NEW issue captures but refuses a MODIFIED file, and the worker skill's mandated work-queue ledger line is a modification by construction, so a cargo-less host can work and report but cannot comply.
+      context: |
+        MEASURED by pirria 2026-09-04 (no toolchain, read-only cycle): it wrote the
+        §6.3 work-queue line into plan/issues/linux-next-work-queue-2026-05-25.md,
+        committed, and the push was refused: "plan-only lane: not applicable —
+        '...work-queue-2026-05-25.md' has status 'M' in the outgoing diff; only
+        NEW issue captures qualify (full gate required)" followed by "pre-push
+        refused: ./build.sh --check has never run in this checkout". The lane's
+        fallback is the full gate, which needs cargo; --no-verify is forbidden by
+        the skill's own guardrails and pirria did not use it. The host complied by
+        filing a NEW capture (plan/issues/pirria-read-only-cycle-2026-09-04.md,
+        landed 39ebf5edb) instead of the ledger line the skill asks for — a
+        workaround that fragments that host's history away from the queue a
+        reader actually consults. The lane already validates new captures
+        (parse, citation convention, scorable obligations); an append-only edit
+        to a work-queue ledger is the same content under the same validation.
+        Provenance: pirria measured; filed by the coordinator.
+      exit_criteria:
+        - the plan-only lane accepts a modification to a plan/issues work-queue ledger when the diff is append-only (no deleted or changed lines), under the validation it applies to new captures
+        - a modification that deletes or rewrites existing lines is still refused to the full gate, with the refusal naming the non-append hunk
+        - a fixture proves both sides on a checkout with no gate stamp
+      verifiable_closure: |
+        scripts/test-pre-push-empty-ref-list.sh and the plan-only lane's own
+        fixture are bound and invoked by ./build.sh --check; the append-only arm
+        does not exist yet and is this packet's deliverable there.
+
+    - packet_id: the-smoke-runbook-emits-timing-records-so-toolchain-less-hosts-feed-the-recurrence-rung
+      order: 1013-qv7c
+      status: ready
+      kind: enhancement
+      priority: p3
+      desired_release: v0.5
+      pickup_role: any
+      capability_tags:
+        - metrics
+        - smoke
+        - low-end
+        - observability
+        - measure-before-optimize
+      estimated_hours: 3
+      depends_on:
+        - cycle-metrics-report-repeated-and-skippable-steps
+      title: |
+        A floor host with no toolchain has never written a timing record, because every emitter is a gate step; the published-release smoke it CAN run should emit one record per step so the recurrence rung reaches the slowest hosts.
+      context: |
+        MEASURED by pirria 2026-09-04: repeat:/recur:/skippable: all read
+        source=absent; .cache/metrics/ is an empty directory the probe created;
+        the only emitters (build.sh, local-ci.sh, run-litmus-test.sh through
+        timing-log.sh) need cargo, which that host lacks. The emitter itself,
+        cycle-metrics.sh --emit-timing, is bash and jq and needs no toolchain.
+        The smoke runbook's steps (curl install, destructive reset, --init from
+        pristine, the forge lane, the final health check) are exactly the slow
+        host's real work and today leave no timing trace; pirria measured them
+        by hand (reset 25 s, init 6m42s, forge lane 71m30s). Emitting them
+        through the same helper makes the floor visible to the rung built to
+        find what slow hosts pay, and makes cold provision a step the fleet can
+        compare across hosts and releases.
+        Provenance: pirria's finding and reasoning; filed by the coordinator.
+      exit_criteria:
+        - each smoke step wraps its command with timing-log.sh's timing_emit (step names pinned, phase smoke), best-effort so a metrics write can never fail the smoke
+        - |
+            a floor host with no toolchain shows a non-absent `timing:` source and a
+            `recur:` line after one smoke run
+
+        - the smoke's own runbook says the records exist and what they are named
+      unscoreable: |
+        The pin is the smoke fixture asserting a record per step after a run, which does not exist until the emits do; whoever lands them writes it and converts this row.
+
+    - packet_id: diff-scoped-gate-checks-accuse-the-change-when-the-base-is-stale
+      order: 1014-xf2u
+      status: ready
+      kind: bug
+      priority: p3
+      desired_release: v0.5
+      pickup_role: any
+      capability_tags:
+        - gate
+        - fail-loud
+        - multi-host
+        - stale-base
+        - discoverability
+      estimated_hours: 2
+      owned_files:
+        - scripts/check-litmus-expression-pinning-added.sh
+      title: |
+        A diff-scoped gate check on a branch with a stale base reads the trunk's newer content as something THIS change removed, and refuses naming a file the host never opened.
+      context: |
+        MEASURED by yolanda 2026-09-04 landing the 997-e4v2 Windows tray slice:
+        the 634-39ik expression-pinning gate REFUSED, naming
+        litmus-podman-container-spec-source-shape.yaml, a file the slice never
+        touched. The check diffs against origin/linux-next; the branch carried an
+        older copy of that file, so the diff read as the change REMOVING a
+        negative control and reverting the 972-6vaj signature pin that the
+        coordinator had landed on the trunk an hour earlier. Merging
+        origin/linux-next made it vanish. A stale base is indistinguishable from
+        a deliberate revert when a check reads only the diff — the same shape
+        1000-rqmx and 1001-i5ux closed on the push path, seen from the gate side
+        — and the current message sends the host hunting a file it never opened,
+        which cost one ten-minute gate run (1009-gccx). Every diff-scoped check
+        shares the exposure (check-issue-citation-convention, the added-fragment
+        checks, check-scorable-obligation-added, check-declared-closures-added).
+        Provenance: yolanda measured; filed by the coordinator.
+      exit_criteria:
+        - a diff-scoped check whose base is behind origin/linux-next for the files it examines refuses with a verdict that names the stale base and the merge as the remedy, never the file, before examining the diff
+        - the detection is shared by every diff-scoped check (one helper), not copied into each
+        - a fixture proves it with a branch whose base predates a trunk edit to an examined file
+      unscoreable: |
+        The pin is the shared-helper fixture, which does not exist until the helper does; whoever lands it writes it and converts this row.
+
+    - packet_id: plan-only-push-lane-refuses-a-legitimate-attestation-append
+      order: 1015-mq6d
+      status: ready
+      kind: bug
+      priority: p2
+      desired_release: v0.5
+      pickup_role: linux
+      capability_tags:
+        - git
+        - hooks
+        - push-lane
+        - attestation
+        - gate
+        - performance
+        - fail-loud
+      estimated_hours: 3
+      owned_files:
+        - scripts/hooks/pre-push-local-gate.sh
+        - scripts/check-mo-full-attestations.sh
+        - openspec/litmus-tests/litmus-plan-only-push-lane-shape.yaml
+      title: |
+        litmus:plan-only-push-lane-shape is red on its ACCEPT arm: the fast lane refuses a legitimate attestation append with "check-mo-full-attestations refused (full gate required)", so every host has silently paid the full gate for ledger-only pushes since b300d6b92.
+      context: |
+        MEASURED by tlatoanis-macbook-air 2026-09-04 while running the
+        methodology-accountability suite for its own litmus (pass rate 18/19 at
+        HEAD without its working tree, 19/20 with it): [FAIL]
+        spec=methodology-accountability test=litmus:plan-only-push-lane-shape,
+        output=FAIL: rc=1 before=8273aee9 after=8273aee9 (remote unmoved, push
+        refused), plan-only lane: validation FAILED — check-mo-full-attestations
+        refused (full gate required). The arm that fails is one of the two that
+        assert the lane ACCEPTS a legitimate attestation append
+        (lane-accepts-attestation-append / lane-accepts-first-attestation); the
+        fail-closed arm (a malformed attestation must be refused) is green. So
+        the lane refuses work it exists to pass, in the safe direction, which is
+        exactly why it sat unnoticed: a refused host runs the full gate (~145 s
+        to ~620 s by lane) and gets on with its cycle, and nobody reports a gate
+        that was merely slower than it needed to be. PRE-EXISTENCE CHECKED
+        PROPERLY, not by stash: the fixture copies gate-stamp.sh,
+        pre-push-local-gate.sh, plan-binary-probe.sh and
+        check-mo-full-attestations.sh into a temp repo and never reads
+        build.sh; git log --since=2026-09-04 over those four plus the litmus
+        YAML is empty; the newest touch is b300d6b92, whose subject reads "the
+        plan fast lane leaves the gate stamp alone (930)". A lane that stops
+        touching the stamp and a lane that then cannot satisfy a
+        stamp-dependent check are adjacent; that is a pointer, not a diagnosis.
+        The coordinator's own plan-only pushes today succeeded because they
+        carried index.d fragments, not attestation appends; finalize's record
+        commit goes through the full landing tool, so the refusal never
+        surfaced on this host either.
+        Provenance: macbookair measured and routed; filed by the coordinator;
+        unowned until claimed (the coordinator takes it in its next meta cycle
+        if it is still ready).
+      exit_criteria:
+        - litmus:plan-only-push-lane-shape is green on both accept arms and the fail-closed arm on the trunk
+        - an attestation-only push (plan/mo-full-attestations.d) goes through the fast lane without a full gate, measured by the lane's own verdict line on a real host
+        - the cause is named in the fix (b300d6b92's stamp change or otherwise), not only the symptom
+      verifiable_closure: |
+        litmus:plan-only-push-lane-shape (spec methodology-accountability, bound,
+        pre-build) turns green: scripts/run-litmus-test.sh methodology-accountability
+        --phase pre-build --size instant.
+
+    - packet_id: the-selector-answers-from-a-ledger-the-trunk-has-moved-past
+      order: 1016-8u4s
+      status: ready
+      kind: bug
+      priority: p2
+      desired_release: v0.5
+      pickup_role: any
+      capability_tags:
+        - selector
+        - plan
+        - multi-host
+        - fail-loud
+        - platform-branches
+      estimated_hours: 2
+      owned_files:
+        - scripts/select-work-batch.sh
+      title: |
+        On a platform branch that has pulled but not yet merged origin/linux-next, the selector offers the trunk's finished packets as ready and a host claims them — the selector should refuse, or say so, when the trunk is not an ancestor of HEAD.
+      context: |
+        MEASURED by tlatoanis-macbook-air 2026-09-04: osx-next up to date after
+        the pull, 
+        returned 1001-q3zf as its p1 top pick and  agreed it was
+        ready, because the checkout had not merged origin/linux-next where the
+        coordinator's closure (f9eb79059, an hour earlier) lived. The host flipped
+        a COMPLETED packet to in_progress, caught it on the post-merge fold,
+        dropped the unpushed claim, and re-ran: different top pick, different
+        batch. The worker skill now orders the merge before §2.0 (landed with
+        this packet), which closes the discipline half; this packet is the
+        instrument half, so the ordering does not depend on a host remembering:
+        when  is false, the
+        selector and the plan_next/plan_ready readers should refuse with a
+        verdict naming the merge as the remedy, or at minimum prefix the batch
+        header with stale-trunk=<n commits> so the reader knows the ledger's age.
+        Same class as the meta-orchestration overlap check's "after the merge,
+        not before" and as 1014-xf2u's stale-base misattribution.
+        Provenance: macbookair measured; filed by the coordinator.
+      exit_criteria:
+        - select-work-batch.sh refuses (refused:stale-trunk:<n>) or prefixes its batch header with stale-trunk=<n> when origin/linux-next is not an ancestor of HEAD after a fetch, naming the merge as the remedy
+        - a fixture proves both the refusal on a stale platform branch and the clean pass on a merged one
+        - the meta-orchestration and advance-work skills cite the verdict beside the ordering rule
+      verifiable_closure: |
+        litmus:cycle-batch-triage-shape (bound, pre-build) gains the stale-trunk
+        arm; it does not exist yet and is this packet's deliverable.
+      events:
+        - type: note
+          ts: "2026-09-04T11:18:38Z"
+          agent_id: linux-macuahuitl-claude-20260904t111838z
+          host: macuahuitl
+          summary: |
+            CORRECTION TO THIS ROW'S CONTEXT, same day, by its filer. The fragment was written through an UNQUOTED heredoc so the order token could be interpolated, and the shell executed the backticked spans in the prose before the file was written — the exact 971-7muc defect, in the coordinator's own hands, landed and immutable. Three spans are missing from the context and are restated here verbatim: (1) the command that returned the stale pick was `select-work-batch.sh macos --seed tlatoanis-macbook-air`; (2) the reader that agreed the packet was ready was `plan_status`; (3) the ancestry test the selector should apply is `git merge-base --is-ancestor origin/linux-next HEAD`, false on a platform branch that has pulled but not merged the trunk. The exit criteria and the closure are intact. Rule kept by the filer: write fragments through a QUOTED heredoc and substitute the order with sed afterwards, or through the --summary-file path, never through argv or an unquoted heredoc.
+
+    - packet_id: cycle-metrics-windows-have-no-end-bound-so-a-backfill-absorbs-later-cycles
+      order: 1017-punm
+      status: ready
+      kind: bug
+      priority: p2
+      desired_release: v0.5
+      pickup_role: any
+      capability_tags:
+        - metrics
+        - observability
+        - plan
+        - fail-loud
+        - shell
+      estimated_hours: 1
+      owned_files:
+        - scripts/cycle-metrics.sh
+        - scripts/test-cycle-metrics-recurrence.sh
+        - methodology/agent-observability.yaml
+      title: |
+        cycle-metrics.sh anchors the repeat/recur/skippable window at --cycle-start and leaves it open at NOW, so a later re-run silently absorbs every later cycle under a byte-identical window=since= label
+      context: |
+        MEASURED by yoga 2026-09-04 while backfilling its 09:30Z loop-status
+        entry. Same flag, same log, two readings:
+          09:50Z live: repeat: window=since=2026-09-04T09:30:06Z steps=154 top3=build-preamble=5,litmus:added-fragment-parse-gate-shape=4,litmus:ci-release-musl-binary-policy=4
+          12:0xZ rerun: repeat: window=since=2026-09-04T09:30:06Z steps=154 top3=build-preamble=13,build-check-memoized=7,build-check=6
+        The later reading has absorbed the 11:29Z cycle's steps into the 09:30Z
+        window; skippable: runs drifted 123 -> 124 the same way. Backfilling
+        from the re-run would have attributed one cycle's work to another inside
+        the ledger the cross-host recurrence audit reads, and nothing afterwards
+        could tell, because both lines carry the same window string. Yoga used
+        the transcript instead and recorded why (c8658dc5a).
+        The script (scripts/cycle-metrics.sh, CYCLE_START_TS at 470-478, the
+        repeat window at 947-983 and 1028-1029) has no end bound and prints
+        none. For a live reading the open end is correct, because the cycle's
+        end IS now; the defect is that the label does not say so, so a live
+        reading and a late re-run are indistinguishable on the page.
+        Provenance: yoga measured; filed by the coordinator, who owns the
+        1001-q3zf lines. Sample of one, filed anyway: this is a property of the
+        flag, not a frequency.
+      exit_criteria:
+        - 'every window label carries its end bound: window=since=<start>,until=<end> where until is the reading''s clock unless --cycle-end (or TILLANDSIAS_CYCLE_END_TS) is given; pre-fix result: FAILS (no until= is printed)'
+        - 'a re-run with --cycle-start and --cycle-end set to the original cycle''s span reproduces the original repeat/recur/skippable lines from the same log; pre-fix result: FAILS (the re-run absorbs later steps, measured above)'
+        - 'an unparsable --cycle-end reports until=<value>:unparsed steps=0 the way --cycle-start already does, never a silent open end; pre-fix result: FAILS (flag does not exist)'
+        - 'methodology/agent-observability.yaml context_cost_metrics names the backfill rule: a backfilled block must come from a bounded re-run or say it came from a transcript; pre-fix result: FAILS (no such rule)'
+      verifiable_closure: |
+        litmus:cycle-metrics-recurrence-shape (bound, pre-build) via
+        scripts/test-cycle-metrics-recurrence.sh gains the end-bound arms: a
+        fixture log with steps on both sides of --cycle-end, the bounded reading
+        excludes the later steps, the unbounded reading includes them and says
+        until=<now>, and the unparsed form is refused.
+
+    - packet_id: the-litmus-runner-prints-fail-without-the-step-exit-status-so-readers-supply-one
+      order: 1018-5f5a
+      status: ready
+      kind: bug
+      priority: p2
+      desired_release: v0.5
+      pickup_role: any
+      capability_tags:
+        - litmus
+        - fail-loud
+        - shell
+        - observability
+      estimated_hours: 1
+      owned_files:
+        - scripts/run-litmus-test.sh
+      title: |
+        run-litmus-test.sh prints [FAIL] for a step with no exit status and no stderr tail, so a reader supplies a mechanism from memory; on 2026-09-04 that became "SIGPIPE 141" in a commit message for a step that had exited 1 on a no-match
+      context: |
+        MEASURED 2026-09-04 by yoga, lenovinha and the coordinator. Yoga's two
+        --by-hardware litmus steps failed in the runner and passed by hand. The
+        runner printed `[FAIL] spec=... test=...` and `Check implementation`
+        (scripts/run-litmus-test.sh lines 441, 1034 and 1421 print no rc), and
+        yoga, having just read 901-jtvi's comment block, wrote "returned 141
+        inside the runner" into the record. Three hosts then measured SIGPIPE
+        thresholds for two hours. The real cause, found by lenovinha: the
+        agent's interactive shell on every Linux host checked (yoga, lenovinha,
+        macuahuitl: 3/3) defines `grep` as a function over ugrep, which
+        interprets `\t`; the runner resolves /usr/bin/grep (GNU 3.12), whose
+        ERE does not define `\t` (warns "stray \ before t", matches a literal
+        t). The step exited 1 on a no-match. A printed `rc=1` beside the
+        `[FAIL]` would have ended the hunt in one read, and the runner's own
+        line-1299 comment already says "Name the real reason (order 256)".
+        Provenance: yoga and lenovinha measured; filed by the coordinator. The
+        grep-shadow lint itself is lenovinha's deliverable on 901-jtvi.
+      exit_criteria:
+        - 'every step [FAIL] line carries the step''s exit status (rc=<n>) and, when the step wrote to stderr, its last line; pre-fix result: FAILS (lines 441, 1034, 1421 print neither)'
+        - 'a fixture step that exits 1 with no output, one that exits 141, and one that exits 124 on timeout each produce a [FAIL] line naming that number; pre-fix result: FAILS (all three print the same line)'
+        - 'the compact form (--compact) keeps the rc on the FAIL line; pre-fix result: FAILS'
+      unscoreable: |
+        The pin IS the deliverable, so at filing time there is no litmus to
+        name: naming the intended test up front produces a dangling reference,
+        which the 885-92iu gate correctly refuses (it refused this filing once,
+        2026-09-04T12:24Z, as it should). Intended shape, recorded here for the
+        claimer: a new litmus:litmus-runner-fail-line-shape bound under
+        methodology-accountability beside litmus:litmus-runner-backslash-
+        escaping-shape, with the three fixture steps in the criteria (exit 1
+        silent, exit 141, exit 124 on timeout) each producing a [FAIL] line
+        that names its number; the lint half of this class is 901-jtvi's.

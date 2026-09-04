@@ -5,17 +5,17 @@
 # corrects ANY field (642-fedr). Re-declaring the packet under
 # `packets:` would be a G-Set no-op and would silently do nothing.
 status:
-  - packet_id: loop-status-append-reads-stdin-and-blocks-on-a-path
+  - packet_id: smoke-runbook-assumes-bash-and-has-no-windows-lane
     field: status
     value: in_progress
-    ts: "2026-09-04T10:47:03Z"
-    host: tlatoanis-macbook-air
+    ts: "2026-09-04T12:42:11Z"
+    host: macuahuitl
 
 events:
-  - packet_id: loop-status-append-reads-stdin-and-blocks-on-a-path
+  - packet_id: smoke-runbook-assumes-bash-and-has-no-windows-lane
     event:
       type: note
-      ts: "2026-09-04T10:47:03Z"
-      host: tlatoanis-macbook-air
+      ts: "2026-09-04T12:42:11Z"
+      host: macuahuitl
       summary: |-
-        claimed for cycle 2026-09-04T10:45Z by macos-tlatoanis-macbook-air-claude-20260904t063447z
+        claimed for cycle 2026-09-04T12:39:39Z
