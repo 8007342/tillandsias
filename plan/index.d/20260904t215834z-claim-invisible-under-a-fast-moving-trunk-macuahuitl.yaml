@@ -1,0 +1,56 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-claim-is-invisible-to-every-other-host-for-as-long-as-its-push-takes-and-the-push-takes-longest-when-the-trunk-is-busiest
+    order: 1034-whsp
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: any
+    capability_tags: [plan, claims, multi-host, coordination, protocol, measurement]
+    estimated_hours: 4
+    owned_files:
+      - skills/advance-work-from-plan/SKILL.md
+      - crates/tillandsias-plan/src/main.rs
+      - scripts/land-on-platform-branch.sh
+    title: |
+      A claim fragment is invisible to every other host until its push lands, the push retries while the trunk moves, and so two hosts implemented 1009-gccx in parallel with claims 5m14s apart, each reading ready
+    context: |
+      MEASURED by yoga 2026-09-04 (814-iyu7 recurrence): 21:29:38Z yoga snapshots its boundary, credential preflight,
+      selector offers 1009-gccx; 21:30:0xZ plan_status reads READY; 21:30:46Z yoga's claim fragment written; 21:36:00Z
+      lenovinha's claim fragment written (the packet read ready to lenovinha exactly as it had to yoga); 21:40:45Z yoga's
+      claim COMMIT lands after FOUR push attempts, because the trunk was moving under the coordinator's release pushes;
+      21:49:03Z lenovinha lands the implementation. Yoga's earlier claim that day (1003-444f) landed in ONE attempt: the
+      failure is not constant, it appears when the trunk is busiest, which is when the most hosts are working, which is
+      when collisions are most likely; the mechanism is weakest precisely when it is needed most. The arbitration rule
+      (claim timestamp wins; push order is the weaker signal) says yoga won; yoga conceded because the rule decides who
+      CONTINUES, not who overwrites a landed, measured result, and re-landing would be the duplication the rule exists to
+      prevent. Cost: one four-hour packet's first slice written twice (yoga measured 140 s -> 0 s on its host, lenovinha
+      222 s -> 2 s; the second measurement is on 1009-gccx). CANDIDATE REMEDIES, all unmeasured, listed so the claimer
+      measures rather than picks: (a) shorten the claim path (claim fragment pushed alone, before any other read or write,
+      with more retries and a smaller window); (b) the selector re-reads origin immediately before returning a pick and
+      again immediately before the claim push; (c) a claim channel that does not ride the trunk (the mirror's refs, a
+      per-host claims branch, or the existing 1023-wrce reason-string recognition extended to an out-of-band store);
+      (d) the land tool's integrate step treating a claim-only push as always-mergeable so it never retries. FIRST check
+      what already exists before designing a replacement: expire-claims, 1023-wrce, the plan-only push lane, and the
+      mirror's verdict publication may already carry most of (c).
+    exit_criteria:
+      - "the collision is reproduced on two hosts (or one host with a simulated moving trunk) and the claim-visibility latency is measured under a moving trunk; pre-fix result: FAILS (ten minutes, four attempts, invisible throughout)"
+      - "after the chosen remedy, a second host's selector refuses or reroutes within one selector run of the first host's claim under the same moving-trunk conditions, measured; pre-fix result: FAILS"
+      - "the worker skill names the remedy and the arbitration rule together, and states what a host does when it discovers a landed duplicate (concede, record the second measurement on the packet, do not re-land)"
+    unscoreable: |
+      The pin is a two-host or simulated-trunk measurement of claim visibility;
+      no litmus lane covers cross-host claim timing yet, and the claimer names
+      one if it adds it.
+    events:
+      - type: note
+        ts: "2026-09-04T21:58:34Z"
+        host: macuahuitl
+        summary: |
+          FILED by the coordinator from yoga's measured timeline (relayed 21:5xZ).
+          Yoga's concession is recorded as the correct reading of 814-iyu7: the
+          timestamp rule decides who continues, never who overwrites a landed
+          result. Yoga's ordering guard (check-cheap-deciders-precede-compile.sh,
+          mutation-checked both directions) is offered to lenovinha against its
+          own order-pinning fixture on 1009-gccx; take or decline there.
