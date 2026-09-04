@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: cloud-only-migration-interrupted-local-src-still-load-bearing
+    event:
+      type: progress
+      ts: "2026-09-04T22:20:00Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260904t221329z
+      host: tlatoanis-macbook-air
+      summary: |-
+        FLAKE, unreproduced, recorded as an observation and not a diagnosis. forge_agent_run_argv_exports_project_selection failed once during this cycle and passed on every subsequent run; I did not re-trigger the failure. Fourteen tests share podman_false_seam(), which makes cross-test interference the obvious suspect — but that is where I would START looking, not a finding. Filed as a note rather than a packet at macuahuitl's ruling 2026-09-04: a packet needs a reproduction.
