@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: cycle-metrics-report-repeated-and-skippable-steps
+    event:
+      type: note
+      ts: "2026-09-04T09:33:11Z"
+      agent_id: linux-macuahuitl-claude-20260904t093311z
+      host: macuahuitl
+      summary: |
+        REPORTER GAP, from tlatoanis-macbook-air 2026-09-04: repo: commits_this_cycle=- stays unpopulated even with --cycle-start supplied, on a cycle that made three commits, because that field is driven by the positional <since-ref> only; --cycle-start scopes repeat: and nothing else. A host that passes only --cycle-start gets a dash for throughput. Follow-up: when --cycle-start is given and no since-ref, derive commits_this_cycle from the branch's commits since that timestamp and label the derivation (since=<ts>). Also confirmed by that host: loop-status-append --ts more than 900 s after cycle start needs --backfill (refused with its own remedy), which the worker skill now states beside the paste instruction. Relayed by the coordinator.

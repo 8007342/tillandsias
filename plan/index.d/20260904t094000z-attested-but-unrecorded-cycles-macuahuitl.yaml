@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-cycle-can-attest-green-without-writing-a-loop-status-entry
+    order: 1010-cnjb
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [finalize, attestation, loop-status, fail-loud, multi-host, observability]
+    estimated_hours: 3
+    owned_files:
+      - scripts/finalize-cycle.sh
+      - scripts/mo-full-attest.sh
+    title: |
+      finalize-cycle.sh derives a valid MO-FULL marker for a cycle that wrote no loop-status entry, so a host can attest green for a fortnight while contributing nothing the fleet audit can read.
+    context: |
+      MEASURED by tlatoanis-macbook-air 2026-09-04: its previous loop-status
+      entry was dated 2026-08-20; both of that day's cycles (830-xsk2, the
+      1002-9xmb CA finding) produced MO-FULL attestations and packet events and
+      NO loop-status entry, and finalize-cycle.sh passed both because it
+      verifies the boundary and the pushed head and never asks whether the
+      cycle recorded itself. "Cycle attested" and "cycle recorded" are
+      independent claims today; the exit contract ("No completed work without
+      a plan/ event or finding") is satisfied by packet events alone, and the
+      coordinator's cross-host recurrence audit (1001-q3zf), which reads the
+      newest loop-status entry per host, read that host as NOT-PASTING when the
+      truth was NOT-WRITING. The fleet heartbeat, which reads attestations,
+      showed the same host healthy throughout. A liveness signal that is
+      satisfied without the record is the 795-5itp unwired-ratchet shape.
+      Provenance: macbookair measured; filed by the coordinator.
+    exit_criteria:
+      - finalize-cycle.sh refuses to derive the marker (or mo-full-attest.sh self refuses) when no plan/loop_status.d entry newer than the cycle's boundary snapshot exists for this host, naming the stdin append form as the remedy
+      - a BLOCKED disposition remains attestable without an entry, so a cycle that could not finish can still say so
+      - the fixture proves both sides (entry present passes; entry absent refuses; BLOCKED passes)
+    verifiable_closure: |
+      scripts/test-mo-full-attest.sh is bound and invoked by ./build.sh --check;
+      the entry-present/entry-absent arm does not exist yet and is this packet's
+      deliverable inside it.

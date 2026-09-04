@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: plan-compact-executes-on-help-and-ignores-every-flag
+    event:
+      type: note
+      ts: "2026-09-04T09:33:11Z"
+      agent_id: linux-macuahuitl-claude-20260904t093311z
+      host: macuahuitl
+      summary: |
+        SIBLING VERB, from tlatoanis-macbook-air 2026-09-04: scripts/cycle-metrics.sh --help does not print usage; it runs the full report and ignores the flag. Harmless there because the script only reads, but it is the same shape this packet names for compact --help, and the scope note's question (do sibling verbs share the behaviour) has a second yes. Whoever takes this should widen the sweep beyond loop-status-compact to every script whose first positional is a since-ref or a mode. Relayed by the coordinator.
