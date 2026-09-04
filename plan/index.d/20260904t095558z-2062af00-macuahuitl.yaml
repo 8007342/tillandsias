@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: memoise-the-three-gate-steps-two-hosts-pay-without-information
+    event:
+      type: evidence
+      ts: "2026-09-04T09:55:58Z"
+      agent_id: linux-macuahuitl-claude-20260904t095558z
+      host: macuahuitl
+      summary: |
+        SIXTH HOST, SAME STEPS, AND A CAUTION THAT SHAPES THE FIX. yoga (Silverblue), cycle-metrics 2026-09-04 with --cycle-start, 7-day window, 120 runs each: plan-archiver-ready-set avg 18.7 s fail_pct=0 saved_ms_upper=2224605; plan-ledger-tests avg 16.3 s fail_pct=0 saved_ms_upper=1940255; terminology-dictionary avg 14.2 s fail_pct=0 saved_ms_upper=1692177. yoga's pushback, adopted: do not SKIP the plan-ledger tests on the strength of fail_pct=0, since 1003-444f is a live packet arguing the gate runs too few crates' tests; a memo keyed on the plan crate's declared inputs re-runs them whenever the crate changes and skips only when nothing it reads has moved, which is not the same as skipping. The fix here is input-scoped memoisation, never removal, and the packet's criteria already say so. Also from yoga: build-check fail_pct=30 over 172 runs is the number to look at first (1009-gccx). Relayed by the coordinator.
