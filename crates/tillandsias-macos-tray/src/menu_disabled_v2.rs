@@ -89,13 +89,15 @@ mod tests {
             login: GithubLoginState::LoggedIn {
                 handle: "bulloncito".to_string(),
             },
-            local_projects: vec![ProjectEntry {
+            // 997-e4v2: the per-project leaf properties these tests check are
+            // unchanged, but the only project path is cloud now, so the
+            // fixture supplies a cloud project instead of a local one.
+            cloud_projects: vec![ProjectEntry {
                 name: "tillandsias".to_string(),
-                path: "/home/u/src/tillandsias".to_string(),
+                path: "octocat/tillandsias".to_string(),
                 ready: true,
-                full_name: None,
+                full_name: Some("octocat/tillandsias".to_string()),
             }],
-            cloud_projects: Vec::new(),
             cloud_projects_loaded: true,
             selected_agent: SelectedAgent::Claude,
             gui_passthrough_available: true,
@@ -124,11 +126,11 @@ mod tests {
     #[test]
     fn render_marks_observatorium_disabled_with_v2_tooltip_on_macos() {
         let specs = render(&macos_ready_menu());
-        let local = specs
+        let projects = specs
             .iter()
-            .find(|s| s.id == ids::LOCAL_PROJECTS)
-            .expect("local-projects");
-        let proj = &local.children[0];
+            .find(|s| s.id == ids::CLOUD_PROJECTS)
+            .expect("cloud-projects");
+        let proj = &projects.children[0];
         let obs = proj
             .children
             .iter()
@@ -142,11 +144,11 @@ mod tests {
     #[test]
     fn render_marks_opencode_web_disabled_with_v2_tooltip_on_macos() {
         let specs = render(&macos_ready_menu());
-        let local = specs
+        let projects = specs
             .iter()
-            .find(|s| s.id == ids::LOCAL_PROJECTS)
-            .expect("local-projects");
-        let proj = &local.children[0];
+            .find(|s| s.id == ids::CLOUD_PROJECTS)
+            .expect("cloud-projects");
+        let proj = &projects.children[0];
         let web = proj
             .children
             .iter()
@@ -173,12 +175,12 @@ mod tests {
 
     /// @trace spec:macos-native-tray.ui.menu-parity@v1
     #[test]
-    fn render_ready_walks_local_projects_submenu() {
+    fn render_ready_walks_cloud_projects_submenu() {
         let specs = render(&macos_ready_menu());
         let projects = specs
             .iter()
-            .find(|s| s.id == ids::LOCAL_PROJECTS)
-            .expect("local-projects present");
+            .find(|s| s.id == ids::CLOUD_PROJECTS)
+            .expect("cloud-projects present");
         assert_eq!(projects.children.len(), 1);
         // Linux parity: each project has 7 leaves (Antigravity added
         // 2026-07-11).
@@ -199,11 +201,11 @@ mod tests {
             "top-level agents picker must be gone (Linux parity)"
         );
         // Per-project leaves include claude/codex/opencode as first 3 entries.
-        let local = specs
+        let projects = specs
             .iter()
-            .find(|s| s.id == ids::LOCAL_PROJECTS)
-            .expect("local-projects");
-        let proj = &local.children[0];
+            .find(|s| s.id == ids::CLOUD_PROJECTS)
+            .expect("cloud-projects");
+        let proj = &projects.children[0];
         let verbs: Vec<&str> = proj
             .children
             .iter()
@@ -220,11 +222,11 @@ mod tests {
     #[test]
     fn render_propagates_disabled_reason_into_tooltip() {
         let specs = render(&macos_ready_menu());
-        let local = specs
+        let projects = specs
             .iter()
-            .find(|s| s.id == ids::LOCAL_PROJECTS)
-            .expect("local-projects");
-        let proj = &local.children[0];
+            .find(|s| s.id == ids::CLOUD_PROJECTS)
+            .expect("cloud-projects");
+        let proj = &projects.children[0];
         let obs = proj
             .children
             .iter()
@@ -254,13 +256,13 @@ mod tests {
             top_ids,
             vec![
                 ids::STATUS,
-                ids::LOCAL_PROJECTS,
                 ids::CLOUD_PROJECTS,
                 ids::SEPARATOR,
                 ids::VERSION,
                 ids::QUIT,
             ],
-            "macOS authed Ready menu must match the 6-item Linux parity contract"
+            "macOS authed Ready menu must match the 5-item Linux parity contract \
+             (997-e4v2 removed the local-projects submenu)"
         );
         assert!(
             !top_ids.contains(&ids::GITHUB_LOGIN),

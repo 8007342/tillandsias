@@ -62,7 +62,8 @@ fn portable_menu_build_is_invokable_from_windows_tray_path() {
                 ids,
                 vec![
                     "status",
-                    "local-projects",
+                    // 997-e4v2 removed "local-projects": cloud is the only
+                    // project path, so the parity contract is five items.
                     "cloud-projects",
                     "---",
                     "version",
@@ -101,22 +102,25 @@ fn agent_picker_lists_three_agents_in_canonical_order() {
     state.gui_passthrough_available = true;
     state.podman_ready = true;
     state.login = GithubLoginState::LoggedIn { handle: "u".into() };
-    state.local_projects = vec![ProjectEntry {
+    // 997-e4v2: cloud is the only project path now; the per-project leaf
+    // properties this test checks are unchanged by the move.
+    state.cloud_projects = vec![ProjectEntry {
         name: "myapp".into(),
-        path: "/home/u/src/myapp".into(),
+        path: "octocat/myapp".into(),
         ready: false,
-        full_name: None,
+        full_name: Some("octocat/myapp".into()),
     }];
+    state.cloud_projects_loaded = true;
     let menu = build(&state);
     let items = match menu {
         MenuStructure::Ready { items } => items,
         _ => panic!("expected Ready"),
     };
-    let local = items
+    let projects = items
         .iter()
-        .find(|i| i.id == "local-projects")
-        .expect("local-projects present");
-    let proj = &local.children[0];
+        .find(|i| i.id == "cloud-projects")
+        .expect("cloud-projects present");
+    let proj = &projects.children[0];
     let verbs: Vec<&str> = proj
         .children
         .iter()
@@ -150,12 +154,13 @@ fn logged_in_state_gates_out_github_login_row() {
     state.login = GithubLoginState::LoggedIn {
         handle: "bulloncito".into(),
     };
-    state.local_projects = vec![ProjectEntry {
+    state.cloud_projects = vec![ProjectEntry {
         name: "a".into(),
-        path: "/x".into(),
+        path: "octocat/a".into(),
         ready: true,
-        full_name: None,
+        full_name: Some("octocat/a".into()),
     }];
+    state.cloud_projects_loaded = true;
     let menu = build(&state);
     let items = match menu {
         MenuStructure::Ready { items } => items,
@@ -165,8 +170,8 @@ fn logged_in_state_gates_out_github_login_row() {
         !items.iter().any(|i| i.id == "github-login"),
         "github-login must be gated out when authenticated"
     );
-    // The project body is what surfaces instead.
-    assert!(items.iter().any(|i| i.id == "local-projects"));
+    // The project body is what surfaces instead (997-e4v2: cloud only).
+    assert!(items.iter().any(|i| i.id == "cloud-projects"));
 }
 
 // The Credential Manager round-trip (CredWriteW/CredReadW/CredDeleteW) is

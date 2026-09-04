@@ -1,0 +1,79 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: cloud-only-migration-interrupted-local-src-still-load-bearing
+    event:
+      type: progress
+      ts: "2026-09-04T14:59:46Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260904t063447z
+      host: tlatoanis-macbook-air
+      summary: |-
+        STEP 2 OF 3 DONE (53fa82ad2, verified upstream). STEP 3 UNTOUCHED.
+
+        REMOVED: MenuState.local_projects, ids::LOCAL_PROJECTS and LOCAL_PROJECTS_EMPTY,
+        build_local_projects, and its render call. The Linux-parity contract is now FIVE
+        top-level items — status, cloud-projects, separator, version, quit — down from
+        six, and that is a product-visible change recorded in three parity tests rather
+        than absorbed silently.
+
+        The five control-wire variants and the headless side are exactly where they
+        were. Step 3 is the commit where they come out together with the topic-list
+        collapse and the fallback retry on the Windows side.
+
+        TESTS UPDATED RATHER THAN DELETED WHERE THE PROPERTY SURVIVED. The per-project
+        gating tests — podman-ready enable/disable, the v2 disabled tooltips, verb
+        order, the 7-leaf parity walk — used local projects only as a VEHICLE to reach a
+        project submenu. The property is unchanged; the only project path is cloud now,
+        so they exercise it there. Exactly one test was deleted outright,
+        empty_local_projects_renders_placeholder, because its subject no longer exists.
+
+        TWO THINGS THE TOOLING CAUGHT, both worth the fleet's attention:
+
+        1. INDEX-BASED LOOKUPS BROKE, AND THAT IS THE INTERESTING FAILURE. Several tests
+           reached the cloud submenu as `&items[2]`. With local-projects removed, index
+           2 silently became a different node, so the tests failed on a menu CHANGE
+           rather than a menu DEFECT — a positional assertion cannot tell those apart.
+           They now look the submenu up by id. Same family as the anchor-window class:
+           an assertion that identifies its subject by POSITION rather than by NAME goes
+           wrong quietly when the structure around it moves.
+
+        2. CLIPPY CAUGHT A VESTIGE OF MY OWN MECHANICAL EDIT. Reducing
+           `for gated in [LOCAL_PROJECTS, CLOUD_PROJECTS]` to a one-element list left
+           three degenerate single-element loops. `cargo test -p tillandsias-host-shell`
+           was GREEN on all three; the gate's clippy was not. A search-and-replace that
+           narrows a collection leaves the shape of the old collection behind, and the
+           test suite has no opinion about that.
+
+        DELIBERATELY KEPT FOR STEP 3: ProjectScope::Local in menu_action.rs. Nothing
+        renders those ids any more, so it is unreachable from the menu — but removing it
+        changes shared action ROUTING in the middle of a sequence whose whole point is
+        that the shared surface changes last, and a click can still arrive from a menu
+        built before this change. That is the reasoning the neighbouring reset-guest
+        case already uses. The test now asserts the LITERAL legacy id
+        "local-projects.empty" resolves Inert, since the constant is gone; asserting a
+        constant that no longer exists is not available, and asserting nothing would
+        have lost the property.
+
+        CROSS-HOST EDIT, DECLARED: windows-tray/tests/portable_smoke.rs. It is a
+        sibling's file and I edited it — two fixtures and the top-level parity list —
+        but it is portable BY DESIGN (its own header: "tests that run on the Linux dev
+        box ... menu state interop"), it compiles and runs on macOS, and it broke my own
+        gate rather than only Windows CI. So the change is verified here, not blind.
+        Nothing Windows-specific was touched.
+
+        VERIFIED: host-shell 92 passed; macos-tray 114 + 2 + 2 + 2; windows-tray 17 + 3;
+        ./build.sh --check EXIT=0; `git merge-base --is-ancestor 53fa82ad2
+        origin/osx-next` confirms the evidence sha is upstream (1024-c3h3: land first,
+        cite the landed sha — first cycle applying that ordering).
+
+        REMAINING ON THIS PACKET: step 3 (the five wire variants + headless side +
+        ProjectScope::Local + the Windows topic-list collapse and fallback retry, all in
+        one commit), and the vz.rs mount half, which stays blocked on 1019-ivia until
+        guest-binary staging moves off ~/src.
