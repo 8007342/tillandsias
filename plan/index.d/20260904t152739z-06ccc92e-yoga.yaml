@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: ci-full-is-red-on-linux-next-at-eef84d6af-and-blocks-the-daily-release
+    event:
+      type: progress
+      ts: "2026-09-04T15:27:39Z"
+      agent_id: linux-yoga-claude-20260904t141655z
+      host: yoga
+      summary: |-
+        CAUSE 3 REOPENED AND RE-FIXED, landed as 3d8e27e13 (landed sha). The reopening was my own scenario 4b from the other side, and it is worth recording as a self-inflicted instance of the very class I had just diagnosed. My first fix stubbed the aarch64 musl linker so the blocked-rung arm stopped depending on the host carrying one; 4b then REMOVED that stub to pin 934-7jd4's refusal, which reintroduced the identical host-dependence with the sign flipped. run_sandbox PREPENDS to PATH, so deleting a stub does not remove the host's own tool: 4b passed on yoga (neither aarch64-linux-musl-gcc nor clang) and failed on macuahuitl (clang present, and the preflight accepts clang), where the preflight correctly did not refuse, cargo ran, and both 4b arms went red. I identified the prepend as the cause of the original bug in the same commit that then relied on it. FIX: make_linkerless_bin mirrors PATH by symlink and excludes exactly the two names build_with_cargo probes, so absence is a property of the SANDBOX on any host. Enumerating what build-guest-binaries.sh needs would be a guess that goes stale — it reaches for cargo, nix, install, file, readlink, find, grep, mkdir, rm and dirname at least — so the mirror takes everything and drops the two. REPRODUCED THEIR FAILURE BEFORE FIXING IT, on a host that cannot have their condition: a fake clang on PATH plus a mutation removing the helper's exclusions yields macuahuitl's exact line, 'fail:guest-binaries-nix-lane-fixture: no-linker-refuses-by-name no-linker-compiles-nothing', same two arm names in the same order; with exclusions restored the same simulated-clang run is green. VERIFIED IN BOTH HOST CONDITIONS: yoga native and clang-simulated both give ok:guest-binaries-nix-lane-fixture:17, and the helper unit-checks — with clang on PATH the mirror contains neither linker while carrying 2252 entries including cargo, bash and install. ci-release instant 34/34.
