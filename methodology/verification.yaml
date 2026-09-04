@@ -284,6 +284,72 @@ verification:
           Same characterisation: results were read after the fact for whatever
           they seemed to say. See also peer_falsification in distributed-work.
         enforced_by: "judgment — the falsifier is filed as a ledger event before the reading (as 811-28eh did on 2026-09-02)"
+      - id: a_zero_is_evidence_only_if_the_check_ran
+        kind: judgment
+        rule: >
+          A count of zero, an empty result set, or a silent pass is evidence
+          ONLY once you know the command executed. Before reporting an absence,
+          confirm the check ran — a non-empty positive control in the same
+          invocation, or the command's own stderr read rather than discarded.
+          This is the general form of `a check that could not run never claims
+          what it would have found` (965-sxec), which the gate enforces for
+          gate-resident checks; the rule exists because the same failure recurs
+          in AD-HOC verification, where nothing enforces it.
+        earned_by: >
+          2026-09-04, verifying six landed bullets against origin: four checks
+          reported 0 and were never executed, because `$R:scripts/...` in zsh
+          hits the `:s` history modifier. Each printed `bad substitution` beside
+          its 0. A check that could not run reported the same 0 as a check that
+          ran and found nothing, and the zeros fitted the plausible story
+          ("those bullets did not land"). Caught only because stderr happened to
+          be interleaved; any pipe dropping stderr would have left four clean
+          zeros standing as evidence, and two present bullets would have been
+          reported missing to their author.
+        enforced_by: "judgment — recorded so it is not re-derived; the sibling mechanical rule is 965-sxec's gate arm"
+      - id: quoted_history_lives_in_comments_guards_scan_declarations
+        kind: judgment
+        rule: >
+          A comment explaining a rename or a narrowing MUST quote the claim it
+          replaced — a narrowing is unreadable without the sentence it narrowed,
+          and stripping the quote leaves "this used to say something else",
+          which is worthless. It follows that a codebase which explains itself
+          CONTAINS THE STRINGS IT FORBIDS. So a guard for a retired identifier
+          or a retired claim scans DECLARATIONS (`pub <field>:`, `fn <name>`),
+          never the bare substring, and assembles its needles at runtime so it
+          does not match its own text.
+        earned_by: >
+          980-ja2m, 2026-09-04: `vm_owner_live` and `and is still materializing
+          it` both survive deliberately in doc comments that explain why they
+          were retired, and a substring guard would trip on the documentation
+          that justifies the change. Ruled by macneo-macos, who owned the
+          design, after the reproducing host declined to adjudicate its own
+          comment.
+        enforced_by: >
+          scripts/check-tray-process-running-naming.sh is the worked example —
+          it forbids two DECLARATIONS, REQUIRES the new one (two forbid-arms
+          alone pass on a file with the field deleted, a different defect
+          wearing the fixed state's clothes), and builds its needles by
+          concatenation.
+      - id: an_explanation_offered_before_the_evidence_disarms_the_detector
+        kind: judgment
+        rule: >
+          Do not supply a probable cause for a failure that has not yet been
+          observed. A ready explanation arriving BEFORE the evidence stops the
+          search that would find the real cause, and it does most damage when
+          it travels beside something correct, which lends it credibility.
+          Corollary, absolute: A CHECKSUM MISMATCH IS NEVER EXPLAINABLE IN
+          ADVANCE. If it mismatches, the reassembly is wrong; no account of why
+          makes it right.
+        earned_by: >
+          Four instances in one day, 2026-09-04, across three hosts. "landing
+          now" beside three settled measurements, read as landed. "If you see
+          unknown, the jq did not apply" — a symptom with two causes, sending
+          the reader to the wrong layer. "If your reassembly shows two
+          backslashes, that is transport doubling" — written by the author who
+          had doubled them, which would have talked the reader out of the md5
+          that caught it. And a negative control written against the shape
+          already refused, so it agreed with its hypothesis without testing it.
+        enforced_by: "judgment — the mechanical half is that checksums and per-item origin checks are run before any narrative is offered"
     review_rule:
       id: threshold_of_zero_tests_only_the_comparison
       source: 886-yizb
