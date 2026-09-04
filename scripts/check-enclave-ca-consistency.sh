@@ -52,16 +52,18 @@ podman secret inspect "$SECRET" >/dev/null 2>&1 || { echo "skip:no-enclave-ca-se
 if [ ! -r "$CA_DIR/intermediate.crt" ]; then
     echo "absent:enclave-ca-bundle"
     {
-        echo "  $CA_DIR/intermediate.crt is missing, and the proxy binds it by that"
-        echo "  path — podman recorded the bind SOURCE at container creation, so"
-        echo "  \`podman start tillandsias-proxy\` cannot succeed until it exists."
+        echo "  $CA_DIR/intermediate.crt is missing. A proxy CREATED at or after 998-3z6g binds it by that"
+        echo "  path (podman records the bind SOURCE at container creation), so it cannot start until the"
+        echo "  bundle exists; an older container may still bind the previous /tmp path — run"
+        echo "  scripts/check-ca-bind-migration.sh to see which containers bind which path, and recreate"
+        echo "  (never restart) the stale ones."
         echo "  The bundle is materialized by the enclave orchestration, not by the"
         echo "  container that binds it, so an absent bundle is a provisioning gap"
         echo "  rather than a fault of the proxy (975-rsgm). Before 998-3z6g this"
         echo "  directory lived in /tmp and a reboot alone was enough to cause it."
-        echo "  REMEDY: re-run the enclave orchestration (\`tillandsias --init\`) —"
-        echo "  and see the desync warning below, because regenerating the bundle"
-        echo "  alone leaves the proxy's key secret stale."
+        echo "  REMEDY: bring the enclave up through the orchestration: \`tillandsias --ensure-enclave\`"
+        echo "  (idempotent; the same ensure a lane launch runs). NOT \`tillandsias --init\`, which only"
+        echo "  builds images and never touches the proxy (1004-xw3q, measured 2026-09-04)."
     } >&2
     exit 1
 fi
@@ -95,8 +97,8 @@ if [ "$cert_mod" != "$secret_mod" ]; then
         echo "  path only, so a proxy brought up with \`podman start\` — which the"
         echo "  health check's self-heal and its printed remedy both do — keeps the"
         echo "  old key (975-rsgm)."
-        echo "  REMEDY: bring the proxy up through the orchestration rather than"
-        echo "  \`podman start\`, so the secret is refreshed from the current bundle."
+        echo "  REMEDY: bring the proxy up through the orchestration — \`tillandsias --ensure-enclave\`,"
+        echo "  which refreshes the secret from the current bundle — never \`podman start\` and not \`--init\`."
     } >&2
     exit 1
 fi

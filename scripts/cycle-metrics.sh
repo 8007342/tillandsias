@@ -48,7 +48,7 @@
 #   plan:    packets=<n> ready=<n> blocked=<n> pending=<n>
 #   flow:    cycles=<n> avg_completed_per_cycle=<x> avg_commits_per_cycle=<y> \
 #            overhead_ratio=<commits-per-completed|-> source=<path|absent>
-#   repo:    commits_this_cycle=<n|-> worktree=<clean|dirty> traces=<current|stale|unknown>
+#   repo:    commits_this_cycle=<n|-> worktree=<clean|dirty> traces=<current|stale|unavailable:<reason>>
 #   verdict: <ok|attention>:<reason>
 #   repeat:    window=<since=<utc>|3h> steps=<n> top3=<entries|-> source=<path|absent>
 #   recur:     window=<n>d runs=<n> steps=<n> top3=<entries|-> source=<path|absent>
@@ -457,7 +457,7 @@ fi
 
 # --experts-only prints just the expert blocks and skips the plan/repo/verdict
 # work. Those blocks shell out to `tillandsias-plan check` and
-# `generate-traces.sh --check`, which are real scans over the whole repo and take
+# `trace-coverage.sh --gate`, which are real scans over the whole repo and take
 # seconds; the expert numbers are pure arithmetic over one log. Worth having as
 # its own mode rather than a test-only affordance: "how are the experts doing
 # right now" is the question asked most often, and it should not cost a repo
@@ -1075,16 +1075,41 @@ if [ -n "$SINCE_REF" ] && git -C "$REPO_ROOT" rev-parse --verify "$SINCE_REF" >/
     # merged. The merge commit itself still counts: making it was cycle work.
     commits="$(git -C "$REPO_ROOT" rev-list --count --first-parent "${SINCE_REF}..HEAD" 2>/dev/null || echo -)"
 fi
-traces="unknown"
-if [ -x "$REPO_ROOT/scripts/generate-traces.sh" ]; then
-    if out="$("$REPO_ROOT/scripts/generate-traces.sh" --check 2>/dev/null)"; then
-        case "$out" in
-            *ok:trace-indexes-current*) traces="current" ;;
-            *stale:trace-indexes*) traces="stale" ;;
-        esac
-    else
-        traces="stale"
-    fi
+# traces= is read from `scripts/trace-coverage.sh --gate`, the ghost-trace
+# ratchet that REPLACED the rendered trace index (order 625, 2026-08-08).
+#
+# ORDER 1004-j4p4 — THIS BLOCK PROBED A SCRIPT THAT NO LONGER EXISTED. Until
+# 2026-09-04 it tested `-x` on the retired index generator; the test was false
+# on every checkout, the probe never ran, and the line printed traces=unknown
+# on every host every cycle for four weeks — a well-formed nothing that no
+# reader could tell from "did not look". So the value set carries no bare
+# unknown any more: a checker that is missing or not executable is NAMED
+# (`unavailable:<reason>`), which a reader can act on where unknown was not.
+#
+# Why the gate and not validate-traces.sh: both exit 0 on this tree and both
+# are cheap (measured 2026-09-04 on macuahuitl: --gate 0.3s, validate-traces.sh
+# 1.5s), but the gate prints a pinned one-line verdict (`ok:ghost-trace-gate`)
+# where validate-traces prints a count that must be parsed, and the gate is the
+# checker whose own header names itself the retired generator's replacement.
+#
+# The probe's exit code sets the FIELD, never the reporter's: gate exit 0 is
+# current, exit 1 (a new ghost, or a baseline that must be pruned) is stale,
+# any other exit is an unavailable: that carries the code.
+traces_probe="$REPO_ROOT/scripts/trace-coverage.sh"
+if [ ! -e "$traces_probe" ]; then
+    traces="unavailable:probe-missing:scripts/trace-coverage.sh"
+elif [ ! -x "$traces_probe" ]; then
+    traces="unavailable:probe-not-executable:scripts/trace-coverage.sh"
+else
+    out="$("$traces_probe" --gate 2>/dev/null)"; traces_rc=$?
+    case "$traces_rc" in
+        0) case "$out" in
+               *ok:ghost-trace-gate*) traces="current" ;;
+               *) traces="unavailable:probe-verdict-unrecognised" ;;
+           esac ;;
+        1) traces="stale" ;;
+        *) traces="unavailable:probe-exit-${traces_rc}" ;;
+    esac
 fi
 printf 'repo: commits_this_cycle=%s worktree=%s traces=%s\n' "$commits" "$worktree" "$traces"
 
@@ -1095,7 +1120,11 @@ verdict="ok:nothing-flagged"
 if [ "$worktree" = "dirty" ]; then
     verdict="attention:worktree-dirty"
 elif [ "$traces" = "stale" ]; then
-    verdict="attention:trace-indexes-stale"
+    verdict="attention:ghost-trace-gate-red"
+elif [ "${traces#unavailable:}" != "$traces" ]; then
+    # 1004-j4p4: a probe whose target is gone must surface in the verdict,
+    # not only in a field nobody reads — that is how the last one hid.
+    verdict="attention:traces-probe-${traces#unavailable:}"
 elif [ "$degraded" -gt 0 ]; then
     verdict="attention:experts-degraded-${degraded}-calls-could-not-run"
 elif [ "$calls" -gt 0 ] && [ "$graded" -gt 0 ] && [ "$answered" -eq 0 ]; then

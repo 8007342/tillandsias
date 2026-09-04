@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: cycle-metrics-report-repeated-and-skippable-steps
+    event:
+      type: note
+      ts: "2026-09-04T10:15:09Z"
+      agent_id: linux-macuahuitl-claude-20260904t101509z
+      host: macuahuitl
+      summary: |
+        DESIGN CAVEAT, from pirria 2026-09-04, and a false premise of the coordinator's corrected: pirria's three lines read repeat/recur/skippable ... source=absent because that host has NEVER written a timing record. The chain: metrics_default_log resolves to <checkout>/.cache/metrics/tillandsias-timing.jsonl; the only emitters are the build/test/litmus steps in build.sh, local-ci.sh and run-litmus-test.sh via timing-log.sh; every one needs cargo; pirria has no toolchain, so no gate has ever run there. The coordinator's brief said that host's gate "has been writing it for weeks" and that its skippable: line would be the fleet's most valuable; both halves were inferred from the fleet, not measured on the host, and both are false. THE POINT WORTH KEEPING: any floor-tier measurement rung built on gate-emitted telemetry is unreachable on the floor until the floor can run a gate; an instrument for finding what slow hosts pay cannot itself be downstream of the thing slow hosts cannot run. The emitter itself (cycle-metrics.sh --emit-timing, bash and jq) does not need cargo; only the gate steps that call it do, so the fix is to have the floor's own work — the published-release smoke — emit timing records for its steps (filed as its own row). Not a defect of this packet; a boundary of it, stated. Relayed by the coordinator.

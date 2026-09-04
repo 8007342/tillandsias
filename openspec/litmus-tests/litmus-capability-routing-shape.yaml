@@ -43,6 +43,28 @@ critical_path:
     timeout_ms: 10000
     expected_behavior: "ok: hosts projection"
 
+
+  # ORDER 805-r98w, second half. The (fingerprint, substrate) projection.
+  # group_by_hardware and isolates_substrate landed with four unit tests and no
+  # production caller, so the grouping was computable but unreachable and every
+  # reader still keyed the matrix on hostname. This pins the FACE, not the
+  # function: a projection nobody can invoke does not deliver the capability.
+  # The control=no reading is the expected one today and must stay askable —
+  # yolanda and yoga were asserted for weeks to be a twin pair and are not.
+  - step: "the matrix answers on (fingerprint, substrate), and says when there is NO control"
+    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; out=$(\"$MFPLAN\" capability-matrix --by-hardware 2>/dev/null); printf '%s\\n' \"$out\" | grep -qE '^hardware\\t[a-z0-9-]+\\tloci=[0-9]+\\tcontrol=(yes|no)\\t' || { echo \"FAIL: no hardware group row: $out\"; exit 1; }; printf '%s\\n' \"$out\" | awk -F'\\t' '/^hardware\\t/ { n = $3; sub(/loci=/, \"\", n); c = $4; sub(/control=/, \"\", c); if ((n > 1) != (c == \"yes\")) { print \"FAIL: loci=\" n \" disagrees with control=\" c; exit 1 } }' || exit 1; echo 'ok: hardware-keyed projection'"
+    timeout_ms: 15000
+    expected_behavior: "ok: hardware-keyed projection"
+
+  # NEGATIVE CONTROL: a row the probe could not identify must be LISTED, never
+  # folded into a group. Two machines that both failed to identify themselves
+  # are not thereby the same machine, and bucketing them would manufacture the
+  # exact false twin this order exists to prevent.
+  - step: "unidentified rows are listed separately, never bucketed into a hardware group"
+    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; out=$(\"$MFPLAN\" capability-matrix --by-hardware 2>/dev/null); printf '%s\\n' \"$out\" | grep -qE '^unidentified\\t[a-z-]+:' || { echo 'ok: no unidentified rows in this ledger (nothing to bucket)'; exit 0; }; printf '%s\\n' \"$out\" | grep -E '^hardware\\t' | grep -q 'unidentified' && { echo 'FAIL: an unidentified row was folded into a hardware group'; exit 1; }; printf '%s\\n' \"$out\" | grep -cE '^hardware\\t\\t' | grep -qx 0 || { echo 'FAIL: a hardware row carries an empty fingerprint'; exit 1; }; echo 'ok: unidentified listed, not bucketed'"
+    timeout_ms: 15000
+    expected_behavior: "ok: unidentified listed, not bucketed"
+
   - step: "the skill's fleet section reflects that routing landed"
     command: "grep -q 'check-capability-row.sh' skills/meta-orchestration/SKILL.md && ! grep -q 'Until capability-aware routing lands (847-wgy4)' skills/meta-orchestration/SKILL.md && echo 'ok: skill updated'"
     timeout_ms: 3000

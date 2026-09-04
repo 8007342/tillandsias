@@ -327,6 +327,8 @@ fn main() {
     let init = user_args.iter().any(|a| a == "--init");
     let force = user_args.iter().any(|a| a == "--force");
     let status_check = user_args.iter().any(|a| a == "--status-check");
+    // Order 1004-xw3q: the restore path the health guard's remedy names.
+    let ensure_enclave = user_args.iter().any(|a| a == "--ensure-enclave");
     let inference_tier = user_args.iter().any(|a| a == "--inference-tier");
     // Order 480 follow-up: make the capability probe observable from the host.
     // Until this flag existed the probe had no caller at all, so there was no
@@ -605,6 +607,7 @@ fn main() {
         "--fresh",
         "--record-measurement",
         "--status-check",
+        "--ensure-enclave",
         "--github-login",
         "--with-token",
         "--claude-login",
@@ -676,6 +679,7 @@ fn main() {
         || observatorium
         || init
         || status_check
+        || ensure_enclave
         || inference_tier
         || capabilities
         || github_login
@@ -907,6 +911,19 @@ fn main() {
     // @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
     if reset_guest {
         if let Err(e) = run_reset_guest(debug) {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+        return;
+    }
+
+    // Order 1004-xw3q: a standalone restore path. Top-level and returning, NOT
+    // nested under `if init` like `--status-check` is: the first draft mirrored
+    // that block, and `tillandsias --ensure-enclave` alone then fell through
+    // into the app's service path and sat idle until the shutdown handler tore
+    // Vault down (measured 2026-09-04, three runs, no podman call ever made).
+    if ensure_enclave {
+        if let Err(e) = run_cli_with_vault_credential_cleanup(debug, || run_ensure_enclave(debug)) {
             eprintln!("Error: {}", e);
             std::process::exit(1);
         }
@@ -1415,6 +1432,9 @@ fn print_usage(version: &str) {
          Destructive by design; you'll re-authenticate once"
     );
     println!("  --status-check Verify services are online through a representative stack smoke");
+    println!(
+        "  --ensure-enclave Bring the application-lifetime enclave services (network, Vault, egress proxy) up idempotently without launching a lane — the restore path after a reboot or a stopped proxy; --init only builds images"
+    );
     println!("  --github-login Authenticate GitHub and store the token in Vault");
     println!("  --with-token   Read a GitHub token from stdin; requires --github-login");
     println!(
@@ -8882,6 +8902,44 @@ fn run_cache_verify(debug: bool) -> Result<(), String> {
 /// Run the representative end-to-end stack smoke after images exist.
 ///
 /// @trace spec:dev-build, spec:enclave-network, spec:proxy-container, spec:git-mirror-service, spec:inference-container, spec:default-image, spec:observability-convergence
+/// `--ensure-enclave`: bring the application-lifetime enclave services up
+/// idempotently — the network, Vault, and the egress proxy (whose CA bundle and
+/// key secret `ensure_proxy_running` refreshes on the way) — WITHOUT launching a
+/// lane. This is the restore path the health guard's remedy names.
+///
+/// WHY IT EXISTS (order 1004-xw3q, measured on lenovinha and pirria
+/// 2026-09-04). Every remedy text said "re-run the enclave orchestration
+/// (`tillandsias --init`)", and `--init` exits 0 without creating or starting
+/// the proxy: its own help calls it "Pre-build container images". The real
+/// orchestration is `ensure_proxy_running`, reached only from a lane launch or
+/// a standalone login flow, so a host whose proxy died after a reboot had no
+/// command that would bring it back short of launching a forge — and the one
+/// script whose name says "orchestrate" (`scripts/orchestrate-enclave.sh`) is an
+/// e2e path that ends by removing the proxy. A remedy that names a command
+/// which does not do the thing is the 975-rsgm shape one level up.
+///
+/// Idempotent by construction: every step reuses what is already running.
+/// Litmus/fake podman mode skips Vault exactly as `--init` does.
+///
+/// @trace order:1004-xw3q
+fn run_ensure_enclave(debug: bool) -> Result<(), String> {
+    require_desktop_user_session("tillandsias --ensure-enclave")?;
+    report_runtime_lane("--ensure-enclave", debug);
+    ensure_enclave_network(debug)?;
+    #[cfg(feature = "vault")]
+    if std::env::var_os("LITMUS_PODMAN_MODE").is_none() {
+        vault_bootstrap::ensure_vault_running(debug)?;
+    }
+    ensure_proxy_running(debug)?;
+    let proxy = if crate::vault_bootstrap::container_running("tillandsias-proxy") {
+        "running"
+    } else {
+        "not-running"
+    };
+    println!("ok:enclave-ensured:proxy={proxy}");
+    Ok(())
+}
+
 fn run_status_check(debug: bool) -> Result<(), String> {
     require_desktop_user_session("tillandsias --status-check")?;
     report_runtime_lane("--status-check", debug);

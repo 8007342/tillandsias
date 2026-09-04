@@ -257,6 +257,88 @@ find_diff_base() {
     return 1
 }
 
+# --- Stale-base revert guard (order 1001-i5ux; client half is 1000-rqmx) ---
+# @trace spec:git-mirror-service
+#
+# Refuse a push whose diff DELETES files its own commits never touched.
+#
+# THE CLIENT HALF CANNOT BIND A HOST. scripts/hooks/pre-push-no-stale-base-revert.sh
+# applies exactly this set difference, but it is per-checkout and --no-verify
+# skips it — and every attempt in the case that prompted it used --no-verify
+# legitimately. The receiving end sees every push however it was invoked.
+#
+# WHAT THIS ACTUALLY ADDS HERE, measured 2026-09-04 rather than assumed, because
+# it is NOT the shape the packet was filed for. The force-push case is ALREADY
+# refused above by "non-fast-forward branch update is disabled", under
+# --no-verify — so at the receiving end that shape was covered before this guard
+# existed.
+#
+# The gap is the FAST-FORWARD one. A merge commit whose resolution DROPS the
+# trunk's files deletes them relative to the remote tip while remaining a clean
+# fast-forward: no force, and no rule above looks at it. Measured on the
+# unpatched hook, such a push was accepted and relayed with two files silently
+# reverted.
+#
+# It is also the shape this fleet is most exposed to, because every non-trunk
+# host merges the trunk before every push by standing policy — so the dangerous
+# operation is the routine one. `git log --name-only` does not show a merge
+# commit's own changes, which is exactly why those deletions appear in the diff
+# and never in the touched set.
+#
+#   touched   = paths the OUTGOING COMMITS changed  (git log --name-only)
+#   deleted   = paths the PUSH'S DIFF removes       (git diff, status D)
+#   violation = deleted MINUS touched
+#
+# A deletion a commit actually made appears in both sets and passes.
+#
+# Runs in the PRE-RELAY pass on purpose: it rejects while both repositories are
+# still unchanged, so a reverting transaction never reaches upstream.
+#
+# Verdict token matches the client hook, so a reader sees the same message from
+# either end: blocked:stale-base-revert:<ref>:<n> file(s)
+stale_base_revert_violation() {
+    local oldsha="$1"
+    local newsha="$2"
+    local refname="$3"
+    local touched="$TMPDIR_WORK/sbr-touched"
+    local deleted="$TMPDIR_WORK/sbr-deleted"
+    local unexplained="$TMPDIR_WORK/sbr-unexplained"
+    local n=0
+    local reverted=""
+
+    git log --format= --name-only "$oldsha..$newsha" 2>/dev/null | sort -u > "$touched"
+    git diff --name-status "$oldsha..$newsha" 2>/dev/null |
+        awk '$1 == "D" { print $2 }' | sort -u > "$deleted"
+    [ -s "$deleted" ] || return 0
+
+    if [ -s "$touched" ]; then
+        grep -Fxv -f "$touched" "$deleted" > "$unexplained" 2>/dev/null || true
+    else
+        # An empty pattern file is not portable across greps, and "no commit
+        # touched anything" means the whole deleted set is unexplained.
+        cp "$deleted" "$unexplained"
+    fi
+    n="$(grep -c . "$unexplained" 2>/dev/null || echo 0)"
+    [ "${n:-0}" -gt 0 ] || return 0
+
+    log_msg "blocked:stale-base-revert:${refname}:${n} file(s)"
+    log_msg "This push would DELETE ${n} file(s) that none of its own commits touched."
+    log_msg "That is what a stale base looks like: the branch is fine, and the DIFF"
+    log_msg "against the current remote reverts whatever landed underneath it."
+    log_msg "Files that would be reverted (first 20):"
+    head -20 "$unexplained" | while IFS= read -r reverted; do
+        [ -n "$reverted" ] || continue
+        log_msg "    $reverted"
+    done
+    if [ "$n" -gt 20 ]; then
+        log_msg "    ... and $((n - 20)) more"
+    fi
+    log_msg "Fix by merging the current remote and resolving in ITS favour for files"
+    log_msg "your own commits never touched, then pushing again."
+    log_msg "Unlike the client-side guard, --no-verify does not reach this one."
+    return 1
+}
+
 # --- Temp directory for extracted blobs ---
 TMPDIR_WORK="$(mktemp -d 2>/dev/null || mktemp -d -t 'git-pre-receive')"
 trap 'rm -rf "$TMPDIR_WORK"' EXIT
@@ -372,6 +454,19 @@ while read -r OLDSHA NEWSHA REFNAME EXTRA; do
             if [ "$OLDSHA" != "$ZERO_SHA" ] \
                && ! git merge-base --is-ancestor "$OLDSHA" "$NEWSHA" 2>/dev/null; then
                 log_msg "REJECT: non-fast-forward branch update is disabled: $REFNAME"
+                RECEIVE_POLICY_REJECTED=1
+            fi
+            ;;
+    esac
+
+    # Stale-base revert guard (order 1001-i5ux). AFTER the fast-forward check
+    # on purpose: a non-fast-forward update is already refused above, so what
+    # reaches here is the fast-forward shape — a merge whose resolution drops
+    # the trunk's files — which nothing before this looked at.
+    case "$REFNAME" in
+        refs/heads/*)
+            if [ "$OLDSHA" != "$ZERO_SHA" ] \
+               && ! stale_base_revert_violation "$OLDSHA" "$NEWSHA" "$REFNAME"; then
                 RECEIVE_POLICY_REJECTED=1
             fi
             ;;

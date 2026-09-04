@@ -259,9 +259,23 @@ unset PS_RC
 # the flag itself. START_LOG records every start the stub receives, so "was
 # NOT fought" is an assertion on an empty file, not on absent output.
 SD="$TMP/act-state"
+# The acting arm must not depend on THIS host's CA state. Since 975-rsgm the
+# guard consults check-enclave-ca-consistency.sh before starting the proxy and
+# refuses (fail:enclave-ca-desync-unrepaired) when the pair disagrees; the real
+# check reads the live host, so scenarios 13-19 went red on every host whose CA
+# was desynced (macuahuitl and lenovinha, 2026-09-04, after 998-3z6g moved the
+# bundle) while proving nothing about the restart logic. Stub it to PASS here;
+# scenario 20 overrides with its own failing stub to exercise the refusal.
+cat > "$BIN/ca-consistency-ok.sh" <<'STUB'
+#!/usr/bin/env bash
+echo "ok:enclave-ca-consistent"
+exit 0
+STUB
+chmod +x "$BIN/ca-consistency-ok.sh"
 act_run() { # extra env via caller exports
     : > "$TMP/start.log"
     START_LOG="$TMP/start.log" TILLANDSIAS_CYCLE_STATE_DIR="$SD" \
+    TILLANDSIAS_CA_CONSISTENCY_CHECK="${TILLANDSIAS_CA_CONSISTENCY_CHECK:-$BIN/ca-consistency-ok.sh}" \
     TILLANDSIAS_ENCLAVE_ACT_GRACE_S=1800 \
         PATH="$BIN:$REALPATH_DIRS" bash "$GUARD" --act 2>"$TMP/err"
 }
@@ -367,6 +381,7 @@ else
     rm -rf "$SD"; mkdir -p "$SD"; : > "$TMP/start.log"
     export PS_OUT="$FRESH_STOP"
     START_LOG="$TMP/start.log" TILLANDSIAS_CYCLE_STATE_DIR="$SD" \
+    TILLANDSIAS_CA_CONSISTENCY_CHECK="${TILLANDSIAS_CA_CONSISTENCY_CHECK:-$BIN/ca-consistency-ok.sh}" \
         PATH="$BIN:$REALPATH_DIRS" bash "$MUT_ACT" --act >/dev/null 2>&1
     if grep -q "start tillandsias-proxy" "$TMP/start.log"; then
         ok "act mutation: without the grace guard the fresh stop IS fought — scenario 14 has teeth"

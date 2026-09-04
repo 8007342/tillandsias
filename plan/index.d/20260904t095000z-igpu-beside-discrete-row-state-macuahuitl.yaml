@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: an-igpu-beside-a-discrete-card-reads-unusable-when-it-is-deliberately-unscheduled
+    order: 1011-zp59
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [capabilities, accel, gpu, matrix, routing, truthfulness]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-headless/src/accel_probe.rs
+    title: |
+      lenovinha's row reads present-unusable for its Vega with reason rocm-runtime-missing — a true reason carrying a false implication, since the device places fully through Vulkan and is left off on purpose because the discrete NVIDIA beats it 3-5x.
+    context: |
+      MEASURED by lenovinha 2026-09-04 (805-3egx verification): the Cezanne
+      Vega enumerates through Vulkan (RADV RENOIR, 8.7 GiB) and places qwen2.5:
+      0.5b and nomic-embed-text with size_vram == size, and loses to the RTX
+      3070 on both shapes (decode 4.3-4.9x, embed 3.1x). The shipped policy
+      (dev-inference-ensure.sh: iGPU enable only on gpu-rocm|gpu-vulkan tiers)
+      is therefore right, and the capability row is wrong in a specific way:
+      present-unusable:rocm-runtime-missing says "cannot be used" when the
+      truth is "can be used; deliberately not scheduled; here is why". Flipping
+      it to usable would be equally wrong, since a scheduler that read usable
+      might place work there and lose 3-4x. The matrix ALREADY has the state
+      that fits: present-unscheduled with a reason string (yoga's Krackan
+      reads "present-unscheduled ... (usable; no engine covers lanes
+      [host-native])"). The decision, coordinator 2026-09-04: no new state;
+      the probe classifies an iGPU on a host whose tier is gpu-cuda as
+      present-unscheduled with reason policy:discrete-gpu-preferred and the
+      measurement that justifies it, so the reason string carries the
+      implication that is actually true. Same shape as 917-6iwv's "no engine
+      covers lanes" being read as "the expert cannot run".
+      Provenance: lenovinha measured and asked; the coordinator decided;
+      filed by the coordinator.
+    exit_criteria:
+      - on a gpu-cuda host with an integrated AMD GPU, the capability row lists the iGPU as present-unscheduled with a reason that names the policy and the measured ratio, never present-unusable, and never usable
+      - on a host whose only GPU is the integrated one (yoga), the classification is unchanged
+      - the row fixture (scripts/test-capability-row-check.sh) gains the two-host arm
+    verifiable_closure: |
+      scripts/test-capability-row-check.sh is bound and invoked by ./build.sh
+      --check; the cuda-host-with-iGPU arm does not exist yet and is this
+      packet's deliverable.
