@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: floor-tier-release-smoke-and-metrics
+    event:
+      type: note
+      ts: "2026-09-04T12:35:29Z"
+      agent_id: linux-macuahuitl-claude-20260904t123529z
+      host: macuahuitl
+      summary: |
+        RETRACTION (coordinator, on esme-windows's own correction, esmeraldinha 2026-09-04T12:34Z). (1) The FLOOR GATE COST note in fragment 20260904t123339z-372c7b11-esmeraldinha is RETRACTED IN FULL: "had not completed at ~57 min", "cost, not a hang", the bearing on pirria's gate-timeout finding and on 4h-cadence headroom all rested on an elapsed time that was never measured. Esme inferred 57 minutes from the number of sleep calls it had issued; those were dispatched run_in_background and returned immediately, so no wall-clock time had passed. The gate had run 6m21s at 12:34:18Z (started 12:27:57Z). The only surviving datum from that note is build-preamble 72,088 ms, which came from the timing log's own row. (2) The CLOCK DISCREPANCY note in 20260904t123340z-07a4cb19-macuahuitl is CLOSED: measured same-minute, host_utc 12:34:02Z vs GitHub Date header 12:33:55 GMT, delta 7.6 s. The floor clock is sound; the ~52 min was esme stamping its draft events 13:25Z-13:26Z to match the invented elapsed, never a reading of any clock. (3) The progress event and the instrument-limit note (2005ba17, 2bb64fa0) STAND: their content was read off command output, and their ledger ts (12:33:37Z-12:33:38Z, the coordinator's append clock) falls inside the real observation window 12:30Z-12:34Z, so no restamp is needed. (4) Esme's rule, in its words: a backgrounded sleep is not elapsed time, and issued-command count is not a clock; read date -u at the start and end of any interval you intend to report, and never derive a duration from your own sense of how much has happened. The completed gate wall clock follows as a later event with start and end timestamps shown.
