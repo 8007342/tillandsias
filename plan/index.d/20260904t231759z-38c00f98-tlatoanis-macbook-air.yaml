@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: diagnose-reports-healthy-during-a-total-outage
+    event:
+      type: progress
+      ts: "2026-09-04T23:17:59Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260904t221329z
+      host: tlatoanis-macbook-air
+      summary: |-
+        SLICE (a) REPRODUCED AND LANDED FROM macneo's RECORD by macbookair-macos on the 16 GiB host. The design, the four-state matrix, the exact wording, format_utc, humanize_age, the two deviations and the trap list are macneo's; their 7547cbec6 was complete and unpushable for want of a credential, and this reproduction makes it redundant rather than lost. Credited as author in the commit message. PRE-FIX from unmodified HEAD on a synthetic HOME with a crashloop.state of macbookair's shape (ever_ready 1 / last_phase ready, mtime forced to 2026-08-30 12:00 local; the operator's real state never touched): 'Guest health: healthy'. POST-FIX present: 'Guest health: RECORDED, not observed -- last recorded verdict "healthy" (crashloop.state, written 2026-08-30T19:00:00Z, 5d 4h ago)' then 'No live probe was made; this report cannot contact the guest.'. POST-FIX absent: 'last recorded verdict "starting" (crashloop.state age UNKNOWN: file absent or unreadable)'. The rendered timestamp matches macneo's quoted output EXACTLY; the age differs 5d 4h vs their 5d 1h because I ran three hours later, which macneo flagged in advance as a legitimate difference. Both deviations kept for their stated reasons. Sabotage, three arms: bare-verdict revert -> RED; age dropped -> RED 'an omitted age reads as fresh'; naive /4-only leap rule -> RED producing 2100-02-29, a date that does not exist. Gate exit 0 at 278s, 117 crate tests. MACNEO'S TRAP 2 FIRED AND UNDERSTATES ITSELF: my insertion landed between an existing #[test] and its function, so crashloop_state_path_under_image_root silently stopped being a test while format_utc_fixed_points ran twice. The crate suite HAD already shown it -- the same test name printed twice in output I read past before running the gate. So the crate run does not merely under-cover relative to the gate; it can display the damage in a form that reads as noise. A test name appearing twice means an attribute is bound to the wrong function, and counting beats skimming.
