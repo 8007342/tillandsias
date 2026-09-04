@@ -1,0 +1,55 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: plan-only-push-lane-refuses-a-legitimate-attestation-append
+    order: 1015-mq6d
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [git, hooks, push-lane, attestation, gate, performance, fail-loud]
+    estimated_hours: 3
+    owned_files:
+      - scripts/hooks/pre-push-local-gate.sh
+      - scripts/check-mo-full-attestations.sh
+      - openspec/litmus-tests/litmus-plan-only-push-lane-shape.yaml
+    title: |
+      litmus:plan-only-push-lane-shape is red on its ACCEPT arm: the fast lane refuses a legitimate attestation append with "check-mo-full-attestations refused (full gate required)", so every host has silently paid the full gate for ledger-only pushes since b300d6b92.
+    context: |
+      MEASURED by tlatoanis-macbook-air 2026-09-04 while running the
+      methodology-accountability suite for its own litmus (pass rate 18/19 at
+      HEAD without its working tree, 19/20 with it): [FAIL]
+      spec=methodology-accountability test=litmus:plan-only-push-lane-shape,
+      output=FAIL: rc=1 before=8273aee9 after=8273aee9 (remote unmoved, push
+      refused), plan-only lane: validation FAILED — check-mo-full-attestations
+      refused (full gate required). The arm that fails is one of the two that
+      assert the lane ACCEPTS a legitimate attestation append
+      (lane-accepts-attestation-append / lane-accepts-first-attestation); the
+      fail-closed arm (a malformed attestation must be refused) is green. So
+      the lane refuses work it exists to pass, in the safe direction, which is
+      exactly why it sat unnoticed: a refused host runs the full gate (~145 s
+      to ~620 s by lane) and gets on with its cycle, and nobody reports a gate
+      that was merely slower than it needed to be. PRE-EXISTENCE CHECKED
+      PROPERLY, not by stash: the fixture copies gate-stamp.sh,
+      pre-push-local-gate.sh, plan-binary-probe.sh and
+      check-mo-full-attestations.sh into a temp repo and never reads
+      build.sh; git log --since=2026-09-04 over those four plus the litmus
+      YAML is empty; the newest touch is b300d6b92, whose subject reads "the
+      plan fast lane leaves the gate stamp alone (930)". A lane that stops
+      touching the stamp and a lane that then cannot satisfy a
+      stamp-dependent check are adjacent; that is a pointer, not a diagnosis.
+      The coordinator's own plan-only pushes today succeeded because they
+      carried index.d fragments, not attestation appends; finalize's record
+      commit goes through the full landing tool, so the refusal never
+      surfaced on this host either.
+      Provenance: macbookair measured and routed; filed by the coordinator;
+      unowned until claimed (the coordinator takes it in its next meta cycle
+      if it is still ready).
+    exit_criteria:
+      - litmus:plan-only-push-lane-shape is green on both accept arms and the fail-closed arm on the trunk
+      - an attestation-only push (plan/mo-full-attestations.d) goes through the fast lane without a full gate, measured by the lane's own verdict line on a real host
+      - the cause is named in the fix (b300d6b92's stamp change or otherwise), not only the symptom
+    verifiable_closure: |
+      litmus:plan-only-push-lane-shape (spec methodology-accountability, bound,
+      pre-build) turns green: scripts/run-litmus-test.sh methodology-accountability
+      --phase pre-build --size instant.
