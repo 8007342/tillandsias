@@ -1364,6 +1364,22 @@ backstop, not a guarantee. The file is the guarantee.
 Pinned by `scripts/test-ledger-prose-roundtrip.sh`, which asserts byte-identity
 for text containing backticks, `$(...)` and `$VAR`.
 
+### Multi-line `perl -0pi` edits are FORBIDDEN on this tree (hard rule, 2026-09-04)
+
+Three source corruptions in one day, all the same shape: a multi-line
+`perl -0pi -e 's|...|...|'` edit landed its replacement inside a file's
+HEADER COMMENT (accel_probe.rs twice, a fixture header once) instead of at
+the intended site, the line count stayed plausible, and only the compiler or
+a read of the diff's DELETIONS caught it. The author had filed the warning for
+the fleet at 11:49Z and hit it twice more in the same afternoon.
+
+Edit by exact-match, single-string replacement only: the Edit tool, a
+`python3` script that asserts the anchor occurs exactly once before writing,
+or `sed` on ONE addressed line. After any scripted edit, read the diff's
+removed lines before committing, not the count of them. A tool whose failure
+mode is "plausible file, wrong place" is not a tool for a tree whose gates
+grep for shapes.
+
 **Never compute "the next free order" yourself.** That number comes from a
 ledger snapshot which is stale the moment another host commits, so two hosts
 filing in the same window pick the SAME number deterministically. It happened

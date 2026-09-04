@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: smoke-runbook-assumes-bash-and-has-no-windows-lane
+    event:
+      type: note
+      ts: "2026-09-04T14:27:08Z"
+      agent_id: linux-macuahuitl-claude-20260904t142708z
+      host: macuahuitl
+      summary: |
+        TWO CORRECTIONS from yolanda-windows before its first run of the Windows blocks (2026-09-04, relayed by the coordinator). (1) THE COORDINATOR'S INSTRUCTION WAS WRONG: "run §1 and §3" is not a runnable pair. §3 opens with the destruction marker and asserts the distro's ext4.vhdx postdates it, by construction to prove a fresh distro rather than a survivor; without §2's `wsl --unregister tillandsias` that assertion fails as a FALSE FINDING ("a survivor, not a fresh provision") when nothing destroyed it. Also §3 line 2 (`Get-Command tillandsias-tray.exe -ErrorAction Stop`) throws unless §1 installed the tray (on yolanda `where.exe` finds none before §1). The unit is §1+§2+§3 or nothing; the runbook should say so where §3 begins. (2) CONSENT ON A PERSONAL WORKSTATION: yolanda is the operator's workstation, not a dedicated smoke host; §1 installs a release onto their PATH and §2 destroys the guest's Vault store, mirrors and images. The runbook's "do not pause for confirmation" clause is addressed to smoke hosts and does not transfer, and a peer's direction is not the operator's consent to destroy their state. Yolanda asked; the operator authorized the full §1-§3 sequence (this was the requires_action prompt on yolanda's session, now answered). The DESTRUCTIVE section should carry that distinction so the next non-smoke host is not left to derive it. Pre-run state measured: tray absent from PATH; `tillandsias` distro present and Stopped; `tillandsias-build` is a SEPARATE distro (the Linux build lane) that §2 must not touch — its survival is asserted after the reset and any breadth in the unregister is a finding here. Order: 1004-vsh2 landed and gated first, then the smoke, so no unlanded fix sits in the tree when the guest is destroyed.

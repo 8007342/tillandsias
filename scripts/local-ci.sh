@@ -1456,6 +1456,32 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
         archive_check_log "litmus-grep-escapes" "skipped"
     fi
 
+    # Order 1018-5f5a. Every [FAIL] the litmus runner prints must carry the
+    # step's exit status. On 2026-09-04 a step that returned 1 was reported
+    # across three hosts as a SIGPIPE 141, because a reader with no number
+    # supplies one — and the nearest plausible mechanism was in a comment block
+    # they had just read. Three hosts measured pipe buffers for an afternoon
+    # against a failure that never involved a pipe. The same day it hid two of
+    # the release gate's eight causes.
+    #
+    # Wired here rather than trusted to review because the regression is a NEW
+    # [FAIL] site added without rc, which no reviewer reliably notices. Sites
+    # where no step exit exists carry an inline `# rc-exempt: <reason>` marker,
+    # so a new site must be classified deliberately instead of defaulting to
+    # silence.
+    if [[ -f "scripts/test-litmus-runner-reports-rc.sh" ]]; then
+        if bash scripts/test-litmus-runner-reports-rc.sh 2>&1 | tee /tmp/litmus-runner-rc.log; then
+            log_pass "Litmus runner reports the step exit status on every [FAIL]"
+            archive_check_log "litmus-runner-reports-rc" "pass" /tmp/litmus-runner-rc.log
+        else
+            log_fail_tracked "litmus-runner-reports-rc" "Litmus runner rc-reporting regression (see /tmp/litmus-runner-rc.log)"
+            archive_check_log "litmus-runner-reports-rc" "fail" /tmp/litmus-runner-rc.log
+        fi
+    else
+        log_fail_missing_guard "litmus-runner-reports-rc" "scripts/test-litmus-runner-reports-rc.sh"
+        archive_check_log "litmus-runner-reports-rc" "skipped"
+    fi
+
     # Order 765-mza8. Wired here, literally, for the same reason as the two
     # above. A dead `inputs:` glob is silent by construction: it cannot make a
     # test run, only skip, so nothing else in this suite would ever go red for
