@@ -100,16 +100,47 @@ else
     bad "armB [FAIL] printf without rc= at line(s): $(printf '%s' "$missing" | tr '\n' ' ')"
 fi
 
-# ── ARM C: the control — the rule must go RED on the pre-fix runner ─────────
+# ── ARM C: the control — the rule must go RED on a pre-fix shape ────────────
+#
+# THIS ARM WAS ITSELF BROKEN, and the way it broke is the defect this whole
+# fixture exists to catch, so it is recorded rather than quietly repaired.
+#
+# It used to read the pre-fix runner as `git show HEAD~1:scripts/run-litmus-test.sh`.
+# HEAD~1 IS A MOVING REF. That expression named the pre-fix runner for exactly
+# as long as my fix was the newest commit; the moment anything else landed on
+# linux-next it named a commit that ALREADY CARRIED the fix, the rule passed,
+# and the control reported that it had no teeth — correctly, about itself.
+# Measured 2026-09-04: the fixture read 5/5 on my host at commit time and 4/5
+# in macuahuitl's --ci-full an hour later, with nothing about the RULE changed
+# between them. A guard whose verdict depends on how many commits have landed
+# since is not a guard.
+#
+# The replacement depends on NOTHING outside this file: a literal pre-fix shape,
+# written here, that the rule must refuse. It cannot drift with history, cannot
+# skip on a shallow clone (that skip was a silent no-teeth mode of its own), and
+# cannot differ between a direct run and a run inside the gate — which were the
+# three ways the old arm could be wrong.
+#
+# It is deliberately NOT pinned to a fixed SHA either. A fixed SHA is stable but
+# still absent in a shallow clone, and re-introduces the skip path. The property
+# under test is "the rule refuses a [FAIL] printf with no rc", and that property
+# does not need git to state it.
 prev="$(mktemp)"
-if git show 'HEAD~1:scripts/run-litmus-test.sh' > "$prev" 2>/dev/null && [ -s "$prev" ]; then
-    if [ -n "$(_rule "$prev")" ]; then
-        ok "armC the rule refuses the pre-fix runner (it has teeth)"
-    else
-        bad "armC the rule PASSES the pre-fix runner — it cannot have caught this defect"
-    fi
+cat > "$prev" <<'PREFIX_SHAPE'
+# A verbatim pre-fix shape: the two forms the runner actually used before
+# 1018-5f5a, plus one exempt line that must NOT be counted as a violation.
+            printf '  %b[FAIL]%b spec=%s test=%s\n' "${RED}" "${NC}" "$spec_name" "$test_name" >&2
+                printf ' %b[FAIL]%b\n' "${RED}" "${NC}" >&2
+        printf '  %b[FAIL]%b gating_points.failure matched: %s\n' "${RED}" "${NC}" "$failure" >&2   # rc-exempt: not a step exit
+PREFIX_SHAPE
+hits="$(_rule "$prev")"
+n_hits="$(printf '%s' "$hits" | /usr/bin/grep -c . || true)"
+if [ "$n_hits" = "2" ]; then
+    ok "armC the rule refuses both pre-fix [FAIL] forms and honours the exemption (it has teeth)"
+elif [ "$n_hits" = "0" ]; then
+    bad "armC the rule PASSES a pre-fix shape — it cannot have caught this defect"
 else
-    echo "  skip: armC — HEAD~1 runner unavailable (shallow clone?)"
+    bad "armC expected exactly 2 refusals from the pre-fix shape (the exempt line must not count), got $n_hits"
 fi
 rm -f "$prev"
 

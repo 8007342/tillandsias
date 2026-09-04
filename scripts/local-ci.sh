@@ -1197,7 +1197,11 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # pushes behind. Until that list is drained, a warm-cache ci-full beside
     # a live enclave WILL stop the stack during this check; the queue carries
     # the operational caution and the 878-79b5 supervisor restarts it.
-    if run_rust_test_on_host cargo test -p tillandsias-headless --bin tillandsias --features tray,listen-vsock --no-fail-fast 2>&1 | tee /tmp/tray-check.log; then
+    # 1021-hf9e / 880-tdwn: the headless bin suite shares process-global env seams and gives a
+    # different failure set per PARALLEL run (three forge-spec tests panicked with
+    # "TILLANDSIAS_PODMAN_BIN is unset at resolution time" in the 2026-09-04T16:39Z --ci-full);
+    # the gate already runs it serial (1003-444f) and serial measured faster. Same pin here.
+    if run_rust_test_on_host cargo test -p tillandsias-headless --bin tillandsias --features tray,listen-vsock --no-fail-fast -- --test-threads=1 2>&1 | tee /tmp/tray-check.log; then
         log_pass "Tray + vsock-server feature tests pass"
         archive_check_log "tray-contract" "pass" /tmp/tray-check.log
     else
