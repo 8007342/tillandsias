@@ -487,6 +487,28 @@ mod tests {
     /// the release passed its smoke and failed for the operator forty minutes
     /// later. A pin that covers one site would not have caught it.
     ///
+    /// WHAT THIS PROVES, AND WHAT IT DOES NOT. It proves the WIRING: that a
+    /// helper owning both credential names exists, that both purge paths reach
+    /// it, and that the preserved anchor is stated beside the deletions. It
+    /// does NOT prove that a purge actually clears a credential — every
+    /// assertion here is over source TEXT, so a consistently renamed function
+    /// or a gutted helper body would satisfy all of it.
+    ///
+    /// Stated because a pin and the code it pins are the pair macbookair
+    /// measured on 1006-jfwv: a qcow2 generator validated only against our own
+    /// reader produced five green tests on a file `qemu-img` refuses to open,
+    /// because generator and reader were consistently wrong together. Agreement
+    /// between two artifacts is not evidence about reality, and that is harder
+    /// to notice than a pin measuring nothing — mutual consistency leaves no
+    /// empty window to inspect.
+    ///
+    /// The independent checks that do NOT come from this file:
+    /// `scripts/check-purge-clears-vault-credentials.sh` refuses a purge path
+    /// that unregisters the distro without calling the helper (a second reader,
+    /// not this one), and the behaviour itself is only observable on a real
+    /// Windows host with a real `cmdkey`. Neither is a substitute for the
+    /// other; the gap is named here rather than left for a reader to discover.
+    ///
     /// @trace order:803-49re, order:804-ckst
     #[test]
     fn every_guest_wipe_path_clears_the_host_side_vault_credentials() {
@@ -516,12 +538,60 @@ mod tests {
             "reset_guest_once must clear the host vault credentials after the wipe"
         );
 
-        // 3. The installer's -Purge clears them, and keeps the install anchor.
-        let installer = include_str!("../../../scripts/install-windows.ps1");
+        // 3. BOTH purge paths clear them — by calling the one helper that owns
+        //    the credential names, not by carrying the names themselves.
+        //
+        //    REPOINTED (997-e4v2 cycle, defect filed on this packet). This
+        //    assertion used to grep install-windows.ps1 for SHARE and TOKEN
+        //    directly. Commit b22d09fd8 — Part A of this very packet — moved
+        //    the clearing into scripts/clear-vault-host-credentials.ps1 so the
+        //    second purge path could not diverge from the first, which is the
+        //    fix this packet exists to make. The literals legitimately left the
+        //    installer, and the pin kept grepping the file they had left: a
+        //    CORRECT refactor turned its own pin red, and it stayed red for two
+        //    days because ./build.sh --check never runs this crate's bins
+        //    (1003-444f). The pin now follows the code.
+        //
+        //    Asserted as call-plus-ownership rather than as text in one file:
+        //    each purge path must DOT-SOURCE the helper and CALL it, and the
+        //    helper must own both names. That still goes red if a call site
+        //    drops the helper, if the function is renamed, or if a credential
+        //    stops being cleared — while surviving the next move of the names,
+        //    because it no longer cares which file holds them.
+        //
+        //    `include_str!` resolves at COMPILE time, so a helper that is
+        //    deleted or renamed fails the build outright rather than silently
+        //    matching nothing. A grep-shaped pin against a missing file is the
+        //    empty-window failure — it reports success over an empty haystack.
+        const HELPER: &str = "clear-vault-host-credentials.ps1";
+        const CALL: &str = "Clear-TillandsiasVaultHostCredentials";
+        let helper = include_str!("../../../scripts/clear-vault-host-credentials.ps1");
         assert!(
-            installer.contains(SHARE) && installer.contains(TOKEN),
-            "install-windows.ps1 -Purge must clear both guest vault credentials"
+            helper.contains(SHARE) && helper.contains(TOKEN),
+            "the shared clearing helper must name both guest vault credentials"
         );
+
+        let installer = include_str!("../../../scripts/install-windows.ps1");
+        let local_installer = include_str!("../../../scripts/build-and-install-windows-local.ps1");
+        //    BOTH paths, because "there are TWO purge paths" is what made this
+        //    a p1: Part A landed on one installer and the developer-facing one
+        //    still reproduced the incident.
+        for (src, which) in [
+            (installer, "install-windows.ps1"),
+            (local_installer, "build-and-install-windows-local.ps1"),
+        ] {
+            assert!(
+                src.contains(HELPER),
+                "{which} -Purge must dot-source {HELPER} — a purge path that \
+                 does not is the second-copy divergence this packet exists to \
+                 close"
+            );
+            assert!(
+                src.contains(CALL),
+                "{which} -Purge must call {CALL}; dot-sourcing without calling \
+                 clears nothing"
+            );
+        }
 
         // 4. Both e2e runbooks name them in their destructive-reset step —
         //    804-ckst's verifiable closure, stated as a grep and pinned as one.
@@ -538,9 +608,16 @@ mod tests {
         // 5. The installation anchor is preserved everywhere. Each artifact
         //    must SAY so, so a later editor cannot read the deletions as
         //    "clear the credential store" and take this one too.
+        //    The installer's entry moved to the HELPER for the same reason as
+        //    assertion 3: the clearing is there now, and the "this one is
+        //    preserved" statement belongs beside the deletions it qualifies,
+        //    not in a file that no longer performs them. This arm was red too —
+        //    the installer names the UUID zero times since b22d09fd8 — and
+        //    nobody saw it, because assertion 3 failed first and stopped the
+        //    test. One unwatched crate hid two stale pins, not one.
         for (src, which) in [
             (cred, "windows credential module"),
-            (installer, "installer"),
+            (helper, "clearing helper"),
             (curl_e2e, "curl-install runbook"),
             (build_e2e, "local-build runbook"),
         ] {
