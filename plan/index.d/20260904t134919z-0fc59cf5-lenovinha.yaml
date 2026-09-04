@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: local-expert-system-in-toolboxes-on-accelerated-hosts
+    field: status
+    value: in_progress
+    ts: "2026-09-04T13:49:19Z"
+    host: lenovinha
+
+events:
+  - packet_id: local-expert-system-in-toolboxes-on-accelerated-hosts
+    event:
+      type: note
+      ts: "2026-09-04T13:49:19Z"
+      host: lenovinha
+      summary: |-
+        claimed 2026-09-04T13:49:18Z: release blocker, two groundtruth misses (cause 4 on 1022-y7kc)

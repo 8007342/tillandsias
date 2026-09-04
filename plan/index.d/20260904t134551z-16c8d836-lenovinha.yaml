@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-test-and-runbook-tier-composes-with-shell-pipes-instead-of-steps
+    event:
+      type: evidence
+      ts: "2026-09-04T13:45:51Z"
+      agent_id: linux-lenovinha-claude-20260904t133515z
+      host: lenovinha
+      summary: |
+        THE DELIVERABLE SHIPPED, AND THE RULE IT WAS SCOPED WITH WAS HALF WRONG — corrected by measurement before it could red-flag working code.
+
+        WHAT LANDED: scripts/check-litmus-grep-escapes.sh (full corpus, no diff-scoping needed), the rule itself in scripts/lib/litmus-grep-escapes.awk so the fixture runs the REAL extraction rather than a second copy of it, scripts/test-litmus-grep-escapes.sh at 8/8, wired into local-ci.sh beside the two spec-index guards. Commit 5326cb97d, gate green 229s.
+
+        THE SCOPED RULE WAS "refuse \t \d \s \w". MEASURED against /usr/bin/grep 3.12 by checking for the `stray \` warning rather than by recalling PCRE:
+          defined (GNU extensions): \s \S \w \W \b \B \< \>  and \1..\9
+          UNDEFINED (warns stray)  : \t \d \n \r \0 \p \x \u \e \a
+        `\s` and `\w` are real GNU extensions: no warning, correct matches, and TEN COMMITTED LINES ACROSS SIX FILES use them. Refusing them would have made the guard a false-positive generator on working code on its first run, and a guard that fires on working code gets switched off. So the refusal set is the second row, expressed as an allowlist of the first, so a future GNU release adding an escape does not turn this into noise.
+
+        THE FIRST DRAFT REPORTED 31 VIOLATIONS AGAINST A CORPUS WITH ZERO, and every one was the extraction reading the whole command line instead of the pattern:
+          - `\n` inside an awk program that follows a grep on the same line (most of them)
+          - `grep -qF 'Servicing\\RebootPending'` — -F interprets NO regex, so no escape in it can be undefined
+          - `grep -P '[^\x00-\x7F]'` — -P is PCRE, where \x IS defined (measured: `grep -qP 'a\tb'` matches a real tab, no warning)
+        It now extracts only the grep PATTERN ARGUMENT, skips -F and -P, and strips `$(printf '...')` first — that idiom appears twelve times in litmus-cycle-batch-triage-shape.yaml and is the CORRECT one, since the backslash is consumed by printf and grep never sees it. Refusing it would have refused the remedy the guard itself recommends.
+
+        PRE-FIX RESULT, per the new fleet rule: the guard PASSES on the committed corpus — 421 files, 0 violations. That is the defect and not evidence, because the only two instances were fixed by 6fc5b7ac2 before this guard existed. Arm 1 therefore runs it against the REAL pre-fix file and requires refusal AT LINES 55 AND 64 rather than merely non-zero; arm 8 pins that a fresh violation is still caught. Four of the eight arms are false-positive controls, and they are the ones that make it adoptable.
+
+        THE CAUSE, for the record. GNU grep warns `stray \ before t` FOUR TIMES on stderr, naming the defect exactly — and the step is `-q`, so the runner discarded it. The step then failed in the runner and passed every hand-check, because an interactive shell resolves a `grep` FUNCTION (ugrep compat wrapper) that DOES interpret \t. Functions are not exported, so `bash -c` honestly reports /usr/bin/grep while the author's very next command still gets ugrep. Measured on three of three Linux hosts (lenovinha, yoga, macuahuitl). The function's origin was searched for on two and NOT located — not ~/.bashrc, ~/.bash_profile, ~/.profile, /etc/bashrc, /etc/profile, /etc/profile.d — and is recorded as an unexplained condition rather than explained away, because a wrong pointer would send the next reader to open those files, find nothing, and conclude the shadow was gone. Three lines let a fourth host check itself: `type grep`; `/usr/bin/grep --version | head -1`; `env -i /bin/bash -c 'command -v grep'`.
+
+        SIGPIPE IS DELIBERATELY OUT OF SCOPE. The class is real and I measured it against /usr/bin/grep — a multi-line producer into `grep -q` OR `grep -qx` returns 141 (20/20 each), while a single 4 MB line drains and returns 0/1 — but it is NOT what happened here, and 792-ksr8 owns that surface. Note for whoever widens it: the `-x` discriminator that circulated today is an artefact of ugrep and inverts under GNU, where the producer's line structure decides and the consumer flag does not.
+
+        SEPARATE FINDING, not folded into this commit so it does not look adjudicated: 792-ksr8's header justifies exempting `printf '%s' "$short_var" | grep -q` with a size discriminator (0 false failures below ~6 KB, certain above ~19 KB). It does not reproduce on lenovinha: clean at 256 KB, 141 from the first run at 1 MB. Two regimes that disagree, both with hosts and dates.
+
+        NOT DONE, named rather than implied: the guard reads litmus YAML only. The same escape class in scripts/*.sh is unguarded, and I did not widen onto it this cycle — the corpus there is far larger and would need its own pre-fix count before anyone can say whether a full-corpus rule is viable or it needs 634-39ik's diff-scoping. That is the follow-up I would name.

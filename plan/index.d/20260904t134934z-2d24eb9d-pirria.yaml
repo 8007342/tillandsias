@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: smoke-runbook-assumes-bash-and-has-no-windows-lane
+    event:
+      type: evidence
+      ts: "2026-09-04T13:49:34Z"
+      agent_id: linux-pirria-claude-20260904t134934z
+      host: pirria
+      summary: |
+        CRITERION 2 MET, measured by pirria-cachyos on pirria (zsh 5.9 as the agent tool shell) at linux-next dd8000cf1, relayed by the coordinator (no plan binary on pirria). PROBE 1, the guard fires: `zsh -c '[ -n "${BASH_VERSION:-}" ] || { echo "FAIL: ..."; exit 2; }; echo walked-past'` prints the FAIL line, rc=2, no "walked-past". PROBE 2, the old shape: `zsh -c 'test "${PIPESTATUS[0]}" -eq 0 && echo "old assertion PASSED with an empty capture"'` prints that line, rc=0. CORRECTION TO THE FILING, and it strengthens it: the earlier report said the old assertion "compares against an empty string", implying it might error; it does not. zsh's `test` coerces the empty string to 0 in a numeric comparison, so `test "" -eq 0` SUCCEEDS silently: the old shape AFFIRMATIVELY REPORTS SUCCESS on a capture that never happened. A false green, not a gap; a transcript auditor sees a passing assertion, not a missing one. PROBE 3, the §1 Linux block run verbatim under plain zsh (`zsh s1.zsh`, SMOKE_TAG/SMOKE_BASE exported for v56.9.2.1, any stale 01-install-exit.txt deleted first): stops at the guard, rc=2, curl never runs, the smoke lock is never taken, and target/smoke-e2e/01-install-exit.txt does not exist — no empty install_exit is recorded. Also confirmed the layering: the guard states the intent and `test -n "$INSTALL_RC" && test "$INSTALL_RC" -eq 0` enforces it on any shell where BASH_VERSION happens to be defined. Credential preflight on pirria: ok:gh-keyring-push-verified-refstate-refused; nothing claimed. Remaining for completion: one Windows run of §1 and §3 (yolanda, 15:45Z).

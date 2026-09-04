@@ -18084,9 +18084,10 @@ mod tests {
                 .count(),
             6,
             "both status dispatches, OpenCode, forge-agent, provider-login and \
-             ensure-enclave CLI dispatches must clean up (6 as of the \
-             ensure-enclave dispatch; a new dispatch that wraps itself in the \
-             cleanup is compliance, not drift)"
+             --ensure-enclave CLI dispatches must clean up (6 as of the \
+             --ensure-enclave dispatch, 998-3z6g; a new dispatch that wraps \
+             itself in the cleanup is compliance, not drift — bump this count \
+             and name the dispatch, as 1003-444f's class requires)"
         );
         assert!(
             !main_window
