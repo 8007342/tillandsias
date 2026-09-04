@@ -1,0 +1,65 @@
+events:
+  - packet_id: ca-bundle-moves-to-a-durable-directory
+    event:
+      type: progress
+      ts: "2026-09-04T03:18:06Z"
+      agent_id: linux-yoga-claude-20260904t030929z
+      host: yoga
+      summary: |
+        MIGRATION MACHINERY LANDED; THE VALUE IS NOT CHANGED, and I found a
+        constraint that means this is not the one-line edit 998-qrwu left it as.
+
+        THE DETECTOR: scripts/check-ca-bind-migration.sh. Podman records a bind
+        SOURCE in the stored container definition at CREATION, so changing
+        ca-path.txt makes every NEW container correct and leaves every EXISTING
+        one binding a path that will not be there — `podman start` then fails
+        with `crun: cannot stat <old>/intermediate.crt`, which is 975-rsgm's own
+        failure reintroduced by its fix. It checks EVERY container, not just the
+        proxy: remote_projects.rs mounts the same bundle into the git-login
+        containers, and a migration that fixed only the proxy would leave those
+        failing on a path nobody looks at. It REPORTS and never acts —
+        recreating the enclave's only egress path is a mutation with a blast
+        radius, and a check that silently rebuilt containers would be worse than
+        the failure it fixes.
+
+        VERIFIED AGAINST A REAL STALE BIND, not just a clean host. This host has
+        no CA-binding container at all (the proxy is absent), so `ok:0` proved
+        nothing — I created a throwaway container binding a stale path, got
+        `migrate:ca-bind-stale:1` naming it and the declared directory, then
+        removed it and confirmed the host returned to its prior state. A
+        detector that has only ever seen the healthy case is the shape I have
+        spent this week catching.
+
+        THE CONSTRAINT THAT CHANGES THE PACKET, and it is the reason I did not
+        pick a value. `ca_dir()` is consumed on two different filesystems:
+          * on Linux it is a HOST path, bind-mounted into containers;
+          * on macOS the same string appears in proxy_exec_preamble, which is
+            exec'd INSIDE THE GUEST VM (HOME=/root, XDG_RUNTIME_DIR=/run/user/0,
+            `exec /usr/local/bin/tillandsias-headless`).
+        That is CONSISTENT — in both cases it means "the path on the machine
+        where tillandsias-headless runs" — so 998-qrwu's single declaration is
+        right and is not conflating two things. I checked that specifically,
+        because if it had been conflating them the single-sourcing would have
+        been a defect rather than a fix.
+
+        BUT THE DURABLE CHOICE IS NOT A STATIC LITERAL. The requirement is a
+        directory that survives a reboot on a Linux host AND is valid inside a
+        guest. A per-user location (`$HOME/.local/state/tillandsias/ca`) satisfies
+        both — `$HOME` is /root in the guest — but it is a DERIVATION, not the
+        static string ca-path.txt currently holds, and a bind spec needs it
+        expanded before use. A system location (`/var/lib/tillandsias/ca`) is
+        static but needs privileges this lane does not have.
+
+        SO THE REMAINING WORK IS A DECISION, NOT AN EDIT: either ca-path.txt
+        gains a value the readers expand, or ca_path::ca_dir() becomes a
+        function over an env/HOME base with the file holding only the leaf. Both
+        change the CONTRACT 998-qrwu just established, so I am surfacing it
+        rather than picking — this is the second time in two cycles that the
+        obvious next step turned out to be a design question wearing an
+        implementation's clothes.
+
+        ALSO OUTSTANDING: I asked macbook-macos to confirm the interpolated
+        preamble is accepted by a real guest. `cargo test -p tillandsias-macos-tray`
+        is 44/44 here and says only that the string BUILDS — the crate is
+        cfg-gated to a stub off Darwin. No answer yet, and I will not change the
+        value into a lane I cannot exercise without one.
