@@ -1,0 +1,61 @@
+events:
+  - packet_id: ca-bundle-moves-to-a-durable-directory
+    event:
+      type: note
+      ts: "2026-09-04T03:18:54Z"
+      agent_id: linux-yoga-claude-20260904t030929z
+      host: yoga
+      summary: |
+        THE LOCATION DECISION IS NOW EVIDENCED FROM BOTH SIDES, and the two
+        measurements together rule out a static literal.
+
+        GUEST SIDE (macbook-macos, real Mac VM, via --exec-guest, running the
+        exact one-line shape format! emits):
+          ca_dir() = /tmp/tillandsias-ca  -> key=present perms=600 crt=present, exit 0
+          ca_dir() = /var/lib/tillandsias-ca
+                                          -> key=present perms=600 owner=root
+                                             survives_reboot_dir=yes, exit 0
+        So the interpolation is robust to the MOVE, not merely correct at
+        today's value — which is the half that actually de-risks this packet.
+        They also confirmed ca_dir() skips the manifest's 22 comment lines and
+        returns only the value: had it naively included the file, the preamble
+        would still have COMPILED and produced garbage shell.
+
+        HOST SIDE (yoga, measured this cycle):
+          uid 1000, rootless. `mkdir -p /var/lib/tillandsias-ca` ->
+          "Permission non accordée". /var/lib is NOT writable.
+          Writable and durable here: $HOME/.local/state, $HOME/.local/share.
+
+        SO A SINGLE STATIC LITERAL CANNOT SERVE BOTH LANES. /var/lib works in
+        the guest precisely because the guest runs as root, and fails on a
+        rootless Linux host for the same reason. /tmp works everywhere and is
+        the bug.
+
+        RECOMMENDATION, offered with the evidence rather than as a decision I am
+        entitled to make alone: a HOME-relative path
+        (`$HOME/.local/state/tillandsias/ca`) is the only candidate measured to
+        satisfy both — durable on a rootless Linux host, and equally creatable
+        in the guest where HOME=/root. That requires ca_path::ca_dir() to become
+        a DERIVATION over a base rather than the static string the manifest
+        holds today, which changes the contract 998-qrwu established one cycle
+        ago. Whoever takes this should make that contract change deliberately.
+
+        macbook DECLINED to own the Darwin half separately and I agree with
+        their reasoning: the macOS consumer is eight interpolations in one
+        function, now verified against two values, and splitting it would put a
+        lane boundary through a change whose entire point is that the path is
+        declared once. They offered to re-run the two guest commands against
+        whatever value is chosen — a five-minute check now the harness exists.
+
+        ONE CAVEAT THEY VOLUNTEERED AND I AM PRESERVING: their first attempt
+        flattened the block with `tr '\n' ' '`, which ate the newlines
+        terminating `fi`, and the guest correctly refused it with a syntax
+        error. That was their harness, not this change. Recorded because a bare
+        "syntax error from the guest" in a transcript would read as a finding
+        about the preamble and is not one.
+
+        AND WHAT THEY DID NOT RUN, stated so nobody reads more into it: not the
+        whole preamble. It ends `podman rm tillandsias-proxy` and `exec
+        tillandsias-headless`, which would have taken over the session doing the
+        measuring. They ran the CA block — the part this change touches — and
+        left the two lines around it alone. This is not a full-preamble e2e.
