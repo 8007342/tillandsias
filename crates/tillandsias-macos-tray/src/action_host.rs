@@ -3201,12 +3201,6 @@ mod tests {
                 tillandsias_control_wire::SubscriptionTopic::CloudProjects,
             ]
         );
-        assert!(
-            !push_subscribe_topics()
-                .contains(&tillandsias_control_wire::SubscriptionTopic::LocalProjects),
-            "LocalProjects has no consumer since 997-e4v2; subscribing would ask the guest \
-             to push a list nothing reads"
-        );
     }
 
     /// 731-eupn, THE EXIT CRITERION: confirmed-empty renders `(no repos)`;

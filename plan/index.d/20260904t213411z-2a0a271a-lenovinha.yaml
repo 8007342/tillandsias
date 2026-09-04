@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: proxy-parse-gate-test-still-asserts-exec-squid-after-supervisor-change
+    event:
+      type: evidence
+      ts: "2026-09-04T21:34:11Z"
+      agent_id: linux-lenovinha-claude-20260904t211931z
+      host: lenovinha
+      summary: |
+        FIXED AND LANDED 9cac76676 (verified an ancestor of origin/linux-next before this event was written). The trunk-red that blocked ./build.sh --check for every host is gone.
+
+        PRE-FIX RESULT, quoted red first as the criterion requires:
+          thread 'bumped_origin_tls_and_signed_url_logs_fail_closed' panicked at
+          crates/tillandsias-headless/tests/proxy_cache_policy.rs:112:5
+          Squid launch
+          test result: FAILED. 0 passed; 1 failed; 2 filtered out
+        POST-FIX: test result: ok. 3 passed; 0 failed. Gate green 226s.
+
+        A CORRECTION TO THE ASSIGNMENT, stated because it would have cost the next person the same detour: I was told scripts/test-squid-supervisor.sh was the test. It is not — it passes 8/8 and always did. The failing test is the Rust one this packet's own owned_files names, crates/tillandsias-headless/tests/proxy_cache_policy.rs. I ran the shell suite first on the instruction, got a clean 8/8, and went to the packet rather than concluding there was nothing to fix.
+
+        THE OPEN QUESTION THE PACKET ASKED ME TO SETTLE — does the supervisor preserve parse-before-serve end-to-end — IS SETTLED, YES, and the reasoning matters more than the verdict. The supervisor relaunches on crash with `"$@" &` and does NOT re-run `squid -k parse`. That looks like a gap and is not one: the parse runs in the entrypoint at :84, BEFORE the supervisor is exec'd at :97, so it precedes every Squid launch in the container's life, restarts included. The config is immutable for that lifetime, so a restart has nothing new to validate. The property WOULD break if the config could change at runtime — a reload or a live config mount — and that condition is now written at the assertion so the next person has somewhere to catch it rather than re-deriving this.
+
+        I ASSERTED THE SUPERVISOR, NOT THE SUBSTRING, and the packet offered both. `squid -N` is still present in the supervised line, so the one-word fix passes — and would ALSO pass for a future bare `exec squid -N` that dropped the supervisor entirely, silently undoing 767-es4w and restoring the uncounted-crash state it was written to end. The OLD assertion had exactly that weakness. Pinning the supervised form costs nothing and closes it.
+        MUTATION CONTROLS, both fire with distinct messages rather than a generic failure:
+          bare `exec squid -N`   -> "Squid must be launched under squid-supervisor (767-es4w)"
+          supervisor without -N  -> "the supervisor must still launch Squid in no-daemon mode"
+
+        REMOVED FROM test-known-red.txt, AND THE GATE MADE ME DO IT — correctly. After the fix, ./build.sh --check FAILED with `stale=1 first=proxy_cache_policy::bumped_origin_...`: a known-red that has started passing makes the NEXT break of that same test invisible, and that file's own header warns a stale entry must not become the reason the file is ignored. So the removal is half the fix, not bookkeeping.
+        Worth recording: the entry's stated cause was WRONG and is likely why it sat two weeks. It read "fails on any host without a working Squid launch in the test environment", which invites every reader to conclude it is environmental and not theirs. The test never launched Squid at all — it reads entrypoint.sh as text. A known-red whose description misattributes the cause is worse than an unexplained one, because it actively redirects the person who could have fixed it.
+
+        The land merged origin/linux-next immediately before pushing as instructed and inherited the release in flight: tag v56.9.4.1 and the VERSION bump arrived in the same merge.

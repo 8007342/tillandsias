@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: proxy-parse-gate-test-still-asserts-exec-squid-after-supervisor-change
+    field: status
+    value: completed
+    ts: "2026-09-04T21:34:12Z"
+    host: linux
+
+events:
+  - packet_id: proxy-parse-gate-test-still-asserts-exec-squid-after-supervisor-change
+    event:
+      type: completed
+      ts: "2026-09-04T21:34:12Z"
+      host: linux
+      summary: |-
+        status 'completed' with evidence_refs: 9cac76676 (verified ancestor of origin/linux-next): pre-fix panic at proxy_cache_policy.rs:112 'Squid launch'; post-fix 3 passed 0 failed; two mutation controls fire with distinct messages; removed from test-known-red.txt after the gate refused with stale=1; ./build.sh --check green 226s
+  - packet_id: proxy-parse-gate-test-still-asserts-exec-squid-after-supervisor-change
+    event:
+      type: note
+      ts: "2026-09-04T21:34:12Z"
+      host: linux
+      summary: |-
+        assertion pins the supervised launch and parse-before-serve ordering rather than a drifted literal; the supervisor's no-reparse-on-restart established as correct and the runtime-config caveat written at the assertion

@@ -29,15 +29,40 @@ use serde::{Deserialize, Serialize};
 /// variant does NOT bump this — postcard's additive enum encoding handles
 /// that case as `Error::UnknownVariant` on older readers.
 ///
-/// **Version 2** (this revision): introduces the `transport` module + new
-/// VM-lifecycle / remote-enumeration variants required by the cross-platform
-/// host shells. Breaking because new consumers will reject older `Hello`
-/// frames carrying `wire_version: 1`; the upgrade is gated on the
-/// Windows/macOS host-shell wave landing simultaneously with the in-VM
-/// headless's `--listen-vsock` mode.
+/// **Version 2**: introduced the `transport` module + new VM-lifecycle /
+/// remote-enumeration variants required by the cross-platform host shells.
+/// Breaking because new consumers reject older `Hello` frames carrying
+/// `wire_version: 1`.
+///
+/// **Version 3** (this revision, order 997-e4v2): REMOVES
+/// `EnumerateLocalProjects`, `LocalProjectsReply` and `LocalProjectsPush`.
+/// AND NOTHING ELSE — if a diff bumps this constant for a second reason, that
+/// reason is a stowaway and belongs in its own version (890-y72v's
+/// `DeliverCredentialsReply` discriminator is ruled to version 4).
+///
+/// REMOVAL IS NOT THE INVERSE OF ADDITION, which is why this bump exists at
+/// all. The note above says adding a variant needs no bump — true, because
+/// postcard's additive encoding gives an older reader `UnknownVariant` on a
+/// TRAILING addition. Removal from the MIDDLE renumbers every later variant:
+/// measured before this change, `EnumerateLocalProjects`=10,
+/// `LocalProjectsReply`=11, `CloudRefreshRequest`=12. Delete 10 and 11 and
+/// `CloudRefreshRequest` INHERITS INDEX 10 — and both carry `{seq: u64}`, an
+/// identical payload shape. An old peer would not see a malformed frame; it
+/// would decode a structurally valid WRONG VARIANT and answer a cloud refresh
+/// with a local-projects reply, with no error at either end. The frames behind
+/// the hole are the credential and pty traffic.
+///
+/// So the bump is the guard: the handshake refuses a mismatched peer at
+/// `vsock_server.rs` and `host-shell/src/vsock_client.rs` BEFORE any frame is
+/// decoded. A refused connection is loud and recoverable; a misdecoded
+/// credentials frame is neither.
+///
+/// `SubscriptionTopic::LocalProjects` was TRAILING in its own enum and
+/// renumbers nothing; it is removed here for tidiness, not for safety.
 ///
 /// @trace spec:vsock-transport, spec:host-shell-architecture
-pub const WIRE_VERSION: u16 = 2;
+/// @trace order:997-e4v2
+pub const WIRE_VERSION: u16 = 3;
 
 pub mod guest_transport;
 pub mod transport;
@@ -361,17 +386,6 @@ pub enum ControlMessage {
     ///
     /// @trace spec:vsock-transport, spec:vm-provisioning-lifecycle
     VmShutdownRequest { seq: u64, drain_timeout_ms: u32 },
-    /// Host → in-VM headless: enumerate projects mounted into the VM.
-    ///
-    /// @trace spec:host-shell-architecture
-    EnumerateLocalProjects { seq: u64 },
-    /// In-VM headless → host: response with each visible project.
-    ///
-    /// @trace spec:host-shell-architecture
-    LocalProjectsReply {
-        seq_in_reply_to: u64,
-        entries: Vec<LocalProjectEntry>,
-    },
     /// Host → in-VM headless: refresh the cloud-side project list (`gh` is
     /// invoked inside the VM where the GitHub token lives).
     ///
@@ -510,15 +524,6 @@ pub enum ControlMessage {
     CloudProjectsPush {
         seq: u64,
         projects: Vec<CloudProjectEntry>,
-    },
-    /// In-VM headless → host: pushed when the VM-visible local project list
-    /// changes (guest-side reconciliation of the bind-mount root — the same
-    /// scan that backs `LocalProjectsReply`). Full replacement list each
-    /// time. Trailing addition: additive, no wire version bump (order 260 —
-    /// retires the host tray's last steady-state wire poll).
-    LocalProjectsPush {
-        seq: u64,
-        entries: Vec<LocalProjectEntry>,
     },
     /// Guest → host: a liveness heartbeat that also SAYS SOMETHING (order
     /// 723-2yb3). Trailing addition, appended per this enum's own rule.
@@ -673,11 +678,18 @@ pub enum SubscriptionTopic {
     VmStatus,
     LoginState,
     CloudProjects,
-    /// Order 260: VM-visible local projects (bind-mount root reconciliation).
-    LocalProjects,
 }
 
-/// A single VM-visible project entry returned by `LocalProjectsReply`.
+/// A single VM-visible project entry.
+///
+/// ORDER 997-e4v2: the wire variants that carried this
+/// (`EnumerateLocalProjects`, `LocalProjectsReply`, `LocalProjectsPush`) are
+/// GONE. The type is deliberately RETAINED because
+/// `tillandsias-headless/src/local_projects.rs` still returns it — order 505's
+/// project-label validation is fed by `scan_project_root`, and 1031-q4pb owns
+/// giving that control a source outside this crate. It is a plain struct with
+/// no discriminant, so keeping it changes no byte of the encoding. It dies with
+/// that validation, not with the wire.
 ///
 /// @trace spec:host-shell-architecture
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -845,8 +857,6 @@ impl ControlMessage {
             ControlMessage::VmStatusRequest { .. } => "VmStatusRequest",
             ControlMessage::VmStatusReply { .. } => "VmStatusReply",
             ControlMessage::VmShutdownRequest { .. } => "VmShutdownRequest",
-            ControlMessage::EnumerateLocalProjects { .. } => "EnumerateLocalProjects",
-            ControlMessage::LocalProjectsReply { .. } => "LocalProjectsReply",
             ControlMessage::CloudRefreshRequest { .. } => "CloudRefreshRequest",
             ControlMessage::CloudRefreshReply { .. } => "CloudRefreshReply",
             ControlMessage::PtyOpen { .. } => "PtyOpen",
@@ -865,7 +875,6 @@ impl ControlMessage {
             ControlMessage::VmStatusPush { .. } => "VmStatusPush",
             ControlMessage::LoginStatePush { .. } => "LoginStatePush",
             ControlMessage::CloudProjectsPush { .. } => "CloudProjectsPush",
-            ControlMessage::LocalProjectsPush { .. } => "LocalProjectsPush",
             ControlMessage::MetricsSnapshotRequest { .. } => "MetricsSnapshotRequest",
             ControlMessage::MetricsSnapshotReply { .. } => "MetricsSnapshotReply",
             ControlMessage::PtyStdinEof { .. } => "PtyStdinEof",
@@ -2087,15 +2096,23 @@ mod tests {
         });
     }
 
+    /// The constant is pinned so a bump cannot be incidental — it has to be
+    /// someone editing this number and saying why. It caught the 997-e4v2 bump
+    /// as designed, which is the only evidence that it works.
+    ///
+    /// v2: the `transport` module + VM-lifecycle / remote-enumeration variants
+    /// for the cross-platform host shells.
+    /// v3 (997-e4v2): removal of `EnumerateLocalProjects`,
+    /// `LocalProjectsReply` and `LocalProjectsPush`. A mid-enum removal
+    /// renumbers every later variant, so an un-bumped peer would decode a
+    /// structurally valid WRONG variant rather than fail — see the
+    /// `WIRE_VERSION` doc for the measured indices.
+    ///
+    /// @trace spec:vsock-transport, spec:host-shell-architecture
+    /// @trace order:997-e4v2
     #[test]
-    fn wire_version_constant_is_two() {
-        // Bumped to v2 when the `transport` module + VM-lifecycle / remote
-        // enumeration variants landed for the cross-platform host shells.
-        // Further bumps require an additive OpenSpec change with a
-        // tombstoned-compat shim per project convention.
-        //
-        // @trace spec:vsock-transport, spec:host-shell-architecture
-        assert_eq!(WIRE_VERSION, 2);
+    fn wire_version_constant_is_three() {
+        assert_eq!(WIRE_VERSION, 3);
     }
 
     #[test]
@@ -2338,17 +2355,6 @@ mod tests {
                 "VmShutdownRequest",
             ),
             (
-                ControlMessage::EnumerateLocalProjects { seq: 1 },
-                "EnumerateLocalProjects",
-            ),
-            (
-                ControlMessage::LocalProjectsReply {
-                    seq_in_reply_to: 1,
-                    entries: vec![],
-                },
-                "LocalProjectsReply",
-            ),
-            (
                 ControlMessage::CloudRefreshRequest { seq: 1 },
                 "CloudRefreshRequest",
             ),
@@ -2390,13 +2396,6 @@ mod tests {
                     projects: vec![],
                 },
                 "CloudProjectsPush",
-            ),
-            (
-                ControlMessage::LocalProjectsPush {
-                    seq: 1,
-                    entries: vec![],
-                },
-                "LocalProjectsPush",
             ),
             (
                 ControlMessage::MetricsSnapshotRequest { seq: 1 },
@@ -2473,7 +2472,6 @@ mod tests {
                     SubscriptionTopic::VmStatus,
                     SubscriptionTopic::LoginState,
                     SubscriptionTopic::CloudProjects,
-                    SubscriptionTopic::LocalProjects,
                 ],
             },
         });
@@ -2536,32 +2534,6 @@ mod tests {
             body: ControlMessage::CloudProjectsPush {
                 seq: 205,
                 projects: vec![],
-            },
-        });
-    }
-
-    /// Order 260: LocalProjectsPush is a TRAILING variant — round-trips and
-    /// must never disturb the encoding of earlier variants (additive rule).
-    #[test]
-    fn local_projects_push_roundtrip() {
-        roundtrip(&ControlEnvelope {
-            wire_version: WIRE_VERSION,
-            seq: 207,
-            body: ControlMessage::LocalProjectsPush {
-                seq: 207,
-                entries: vec![LocalProjectEntry {
-                    label: "tillandsias".into(),
-                    guest_path: "/home/forge/src/tillandsias".into(),
-                    last_seen_unix: 1_752_000_000,
-                }],
-            },
-        });
-        roundtrip(&ControlEnvelope {
-            wire_version: WIRE_VERSION,
-            seq: 208,
-            body: ControlMessage::LocalProjectsPush {
-                seq: 208,
-                entries: vec![],
             },
         });
     }

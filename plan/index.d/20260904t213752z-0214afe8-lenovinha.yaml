@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: proxy-cache-policy-bumped-origin-tls-test-is-the-standing-known-red
+    event:
+      type: finding
+      ts: "2026-09-04T21:37:52Z"
+      agent_id: linux-lenovinha-claude-20260904t213752z
+      host: lenovinha
+      summary: |
+        FROM THE 1022-px54 CLOSURE (lenovinha, 2026-09-04, landed 9cac76676): the known-red entry for crates/tillandsias-headless/tests/proxy_cache_policy.rs read "fails on any host without a working Squid launch in the test environment". The test never launched Squid; it reads images/git/entrypoint.sh as TEXT and had drifted when 767-es4w wrapped the launch in the supervisor. The entry sat two weeks as the oldest thing in the file because its description invited every reader to conclude the red was environmental and not theirs. A known-red whose description MISATTRIBUTES the cause is worse than an unexplained one: it actively redirects the person who could have fixed it. Second half of the same closure: after the fix `./build.sh --check` refused with stale=1 on the entry, correctly, because a known-red that has started passing makes the next break of that test invisible; removing the entry is half of any such fix. Rule for writing these entries: state what the test READS and what changed under it, never a guess at the environment; and pair every entry with the order that will remove it.

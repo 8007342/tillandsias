@@ -1201,7 +1201,13 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # different failure set per PARALLEL run (three forge-spec tests panicked with
     # "TILLANDSIAS_PODMAN_BIN is unset at resolution time" in the 2026-09-04T16:39Z --ci-full);
     # the gate already runs it serial (1003-444f) and serial measured faster. Same pin here.
-    if run_rust_test_on_host cargo test -p tillandsias-headless --bin tillandsias --features tray,listen-vsock --no-fail-fast -- --test-threads=1 2>&1 | tee /tmp/tray-check.log; then
+    # 1022-y7kc cause 12 (2026-09-04T20:50Z ci-full, SERIAL): 13 tests never seat a fake podman
+    # themselves and only ever passed on a seat leaked by a parallel neighbour (or, before
+    # 880-tdwn, on the REAL podman); serial exposed all 13 at the tripwire. The arm seats
+    # /bin/false — the same deterministic "not running" podman_false_seam() chooses — so an
+    # unseated test can never reach the real binary and a seated test still overrides it.
+    # Measured before the edit: same command with the seat, 658 passed / 0 failed in 44.9 s.
+    if run_rust_test_on_host env TILLANDSIAS_PODMAN_BIN=/bin/false cargo test -p tillandsias-headless --bin tillandsias --features tray,listen-vsock --no-fail-fast -- --test-threads=1 2>&1 | tee /tmp/tray-check.log; then
         log_pass "Tray + vsock-server feature tests pass"
         archive_check_log "tray-contract" "pass" /tmp/tray-check.log
     else
@@ -1499,12 +1505,33 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
             log_pass "The enclave health check's absent-detection opt-out stays fixture-only"
             archive_check_log "expect-none-fixture-only" "pass" /tmp/expect-none-fixture-only.log
         else
-            log_fail_tracked "expect-none-fixture-only" "A production caller passes --expect none (see /tmp/expect-none-fixture-only.log)"
+            log_fail_tracked "expect-none-fixture-only" "A production caller passes the expect-none opt-out (see /tmp/expect-none-fixture-only.log)"
             archive_check_log "expect-none-fixture-only" "fail" /tmp/expect-none-fixture-only.log
         fi
     else
         log_fail_missing_guard "expect-none-fixture-only" "scripts/check-enclave-expect-none-is-fixture-only.sh"
         archive_check_log "expect-none-fixture-only" "skipped"
+    fi
+
+    # Order 1009-gccx. The gate's cheap deciders must stay AHEAD of its
+    # compiles. A fifth to a third of gate runs end red on defects decidable in
+    # milliseconds, and before this order they were discovered after clippy, the
+    # workspace suite and the litmus phases had already run — measured on this
+    # host, one planted exec-bit defect went from 222s to 2s to refusal.
+    # This fixture pins the ORDER, not the individual checks: asserting only
+    # "the gate refuses" would pass equally with the guard back at the end,
+    # which is the state the order exists to leave.
+    if [[ -f "scripts/test-gate-fast-refusals.sh" ]]; then
+        if bash scripts/test-gate-fast-refusals.sh 2>&1 | tee /tmp/gate-fast-refusals.log; then
+            log_pass "The gate's sub-second deciders run before its first compile"
+            archive_check_log "gate-fast-refusals" "pass" /tmp/gate-fast-refusals.log
+        else
+            log_fail_tracked "gate-fast-refusals" "Gate fast-refusal ordering regression (see /tmp/gate-fast-refusals.log)"
+            archive_check_log "gate-fast-refusals" "fail" /tmp/gate-fast-refusals.log
+        fi
+    else
+        log_fail_missing_guard "gate-fast-refusals" "scripts/test-gate-fast-refusals.sh"
+        archive_check_log "gate-fast-refusals" "skipped"
     fi
 
     # Order 765-mza8. Wired here, literally, for the same reason as the two

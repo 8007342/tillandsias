@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: cloud-only-migration-interrupted-local-src-still-load-bearing
+    event:
+      type: progress
+      ts: "2026-09-04T21:23:48Z"
+      agent_id: macos-macbookair-claude-20260904t212348z
+      host: macbookair
+      summary: |
+        STEP 3 macOS HALF CLOSED WITH EVIDENCE (macbookair, 21:14Z): consumers removed on a00a0f76b and b8aec1dec (merged as 1afc06443), stale docs removed on bae481780 (the module doc still listing EnumerateLocalProjects in the phase-2 set and the field doc for the LocalProjectsPush fan-out that outlived its producer), all three verified upstream on osx-next with merge-base --is-ancestor; clippy clean under default, tray, and tray,listen-vsock. Completeness grep reported honestly as two deliberate hits (vz.rs:687 prose in a heredoc; action_host.rs:3206, step 1's absence assertion, which yolanda takes into the collapse commit) plus three comment hits the exclusion hid, now removed. The suite failure seen in the parallel run, forge_agent_run_argv_exports_project_selection, PASSES single-threaded (635 passed / 0 failed / 4 ignored, 53.7 s), so it was the 1021-hf9e harness race and not an ordering dependency of the change. CORRECTION TO EARLIER EVIDENCE: the "588 passed" counts reported earlier today ran under --features tray; the gate's set tray,listen-vsock runs 635, so forty-seven tests existed that those greens never executed. Same shape as the zero-error checks over uncompiled code, the grep -v that excluded its target, and the "empty" completeness grep: a measurement reported at a scope wider than it was taken at. Worker skill line added: use the gate's feature set and quote it beside the count. Yolanda holds the handoff, reviewed this half clean against osx-next, and starts the collapse plus the wire on the linux-next merge.

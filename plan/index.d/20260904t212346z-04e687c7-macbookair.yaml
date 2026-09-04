@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: nothing-in-the-tree-notices-a-control-wire-renumbering
+    event:
+      type: decision
+      ts: "2026-09-04T21:23:46Z"
+      agent_id: macos-macbookair-claude-20260904t212346z
+      host: macbookair
+      summary: |
+        CLAIMED by macbookair 21:2xZ, and the first measurement makes the premise worse: `control_message_kind_names_every_declared_variant` (tillandsias-control lib.rs:2271) covers 22 of 35 variants. The thirteen MISSING are DeliverCredentials, DeliverCredentialsReply, GetVaultHandover, VaultHandoverReply, GithubLoginStatusRequest, GithubLoginStatusReply, PtyOpen, PtyOpenData, PtyData, PtyResize, PtyClose, PtyHeartbeat, PtyStdinEof — exactly the credential and PTY traffic this packet's own context names as the worst to misdecode; the 22 covered are Hello, status, projects and metrics. The discriminant gaps confirm it independently (indices 0..13, then 24, then 31-32). So the tree's closest thing to a variant table asserts exhaustiveness in its name, holds 63% of the enum, and omits the third that matters: a reader reaching for it is reassured by something that never looked at the credential path. COORDINATOR RULING on criterion 4 (the shape is written down): EXHAUSTIVE. All 35 discriminants pinned against literals, the shared sample list made genuinely exhaustive, and the SET of names in the table and the list required to agree, so any reorder goes red and a silent append fails; a "risk-ranked subset" is what the tree had by accident, ranked backwards, and is closed as an option; a stated limitation would leave the credential path unpinned. Cost accepted: thirteen sample constructors and a 35-line literal table, and every future variant touches two places, which is the intended friction. Exit evidence: the pre-fix pin stays green under a deliberate reorder, the exhaustive pin goes red, both quoted. COMPOSITION with 997-e4v2: yolanda's five-variant pin plan is superseded; the collapse commit (five variants removed, WIRE_VERSION 3) updates the literal table and the sample list in the same commit, and that table diff is the renumbering's explicit record, the thing this packet says nothing in the tree noticed. If macbookair's pin lands on osx-next after the coordinator's post-release merge, yolanda merges linux-next once more before the collapse.

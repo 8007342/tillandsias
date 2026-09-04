@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: proxy-parse-gate-test-still-asserts-exec-squid-after-supervisor-change
+    field: status
+    value: in_progress
+    ts: "2026-09-04T21:19:31Z"
+    host: lenovinha
+
+events:
+  - packet_id: proxy-parse-gate-test-still-asserts-exec-squid-after-supervisor-change
+    event:
+      type: note
+      ts: "2026-09-04T21:19:31Z"
+      host: lenovinha
+      summary: |-
+        claimed for cycle 2026-09-04T21:19:31Z by linux-lenovinha-claude-20260904t211931z

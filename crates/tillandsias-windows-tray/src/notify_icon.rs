@@ -1769,25 +1769,20 @@ fn should_poll_vm_status(push_stream_healthy: bool) -> bool {
     !push_stream_healthy
 }
 
-/// The exact topic set the push listener subscribes to — all four push
-/// topics since orders 230/231 landed the headless LoginStatePush /
-/// CloudProjectsPush sources (order 154 slice 2) and order 260 landed
-/// LocalProjectsPush (slice 3). Pinned by
+/// The exact topic set the push listener subscribes to. Pinned by
 /// `subscribe_topics_cover_all_push_topics`.
+///
+/// ORDER 997-e4v2: `legacy_subscribe_topics` is GONE, and so is the
+/// version-skew fallback that used it. It existed because
+/// `SubscriptionTopic::LocalProjects` was a trailing postcard variant an
+/// older guest could not decode, so a full-list subscribe had to be able to
+/// downgrade. The topic no longer exists on the wire, so there is nothing to
+/// downgrade FROM: the two lists had already become identical, and a retry
+/// against an identical list is not a fallback, it is a second attempt
+/// wearing the name of one. It was kept until this commit deliberately — the
+/// pin and the fallback die WITH the variant, not before it, or the wire
+/// loses its guard while a consumer still exists.
 fn vm_status_subscribe_topics() -> Vec<tillandsias_control_wire::SubscriptionTopic> {
-    vec![
-        tillandsias_control_wire::SubscriptionTopic::VmStatus,
-        tillandsias_control_wire::SubscriptionTopic::LoginState,
-        tillandsias_control_wire::SubscriptionTopic::CloudProjects,
-    ]
-}
-
-/// The pre-order-260 topic list, used as the version-skew fallback when a
-/// stale guest cannot decode `SubscriptionTopic::LocalProjects` (a trailing
-/// postcard variant is an unknown discriminant to an older decoder). Must
-/// stay exactly `vm_status_subscribe_topics()` minus `LocalProjects` —
-/// pinned by `legacy_topics_are_full_topics_minus_local_projects`.
-fn legacy_subscribe_topics() -> Vec<tillandsias_control_wire::SubscriptionTopic> {
     vec![
         tillandsias_control_wire::SubscriptionTopic::VmStatus,
         tillandsias_control_wire::SubscriptionTopic::LoginState,
@@ -2029,25 +2024,12 @@ async fn run_vm_status_push_listener(hwnd: HwndHandle) {
         // that predates order 260 cannot DECODE a Subscribe naming it — and
         // would otherwise reject the whole subscription, regressing VmStatus/
         // Login/Cloud pushes to polls until the guest is refreshed. Try the
-        // full list first; on failure resubscribe with the legacy list.
-        //
-        // ORDER 997-e4v2: the two lists are now IDENTICAL, because the tray
-        // no longer asks for LocalProjects — so this is presently a plain
-        // retry on a fresh connection, not a version-skew downgrade. The
-        // shape is kept deliberately rather than collapsed: order 260's
-        // stale-guest concern becomes moot only when the topic leaves the
-        // wire, which is the last step of the coordinated tray window, and
-        // the fallback should go in the same commit as the variant.
-        let established = match try_subscribe(vm_status_subscribe_topics()).await {
-            Ok(c) => Ok(c),
-            Err(first_err) => {
-                tracing::debug!(
-                    %first_err,
-                    "topic subscribe failed; retrying once on a fresh connection"
-                );
-                try_subscribe(legacy_subscribe_topics()).await
-            }
-        };
+        // ORDER 997-e4v2: ONE attempt. The second one was the version-skew
+        // fallback for a topic that no longer exists on the wire; retrying an
+        // identical list buys nothing and hides a real connect failure behind
+        // a duplicate attempt. Reconnect is handled by the backoff loop below,
+        // which is where it belonged all along.
+        let established = try_subscribe(vm_status_subscribe_topics()).await;
 
         let mut client = match established {
             Ok(c) => c,
@@ -3932,6 +3914,33 @@ pub(crate) fn launch_pty(intent: &PtyIntent, project: Option<&str>) -> Result<()
     // argv_survives_wt_reparse guard (order 795-zshi) is deleted: it always
     // returned true for the shapes launch_spec actually emits.
     // @trace plan/issues/windows-github-login-blank-terminal-2026-08-09.md
+    // ORDER 823-u5zf. RECORD WHICH HOST WAS CHOSEN, because the packet's own
+    // closure asks for a lane "OBSERVED opening in Windows Terminal rather than
+    // conhost" and until this line there was nothing to observe it WITH.
+    //
+    // Three observables were tried on yolanda 2026-09-04 and all three are
+    // incapable of answering it: counting WindowsTerminal processes (it reuses
+    // ONE process, so a new window is a tab and the count never moves);
+    // inspecting wsl.exe parentage (a lane into a missing project exits before
+    // any child persists); and reading this log, which carried no spawn record
+    // at all. So the criterion could only ever be met by a human watching a
+    // screen — once, unrepeatably, on one host.
+    //
+    // One line makes it checkable by any host forever, including headless ones
+    // and CI. `terminal=` is the decision, not a paraphrase of it: it is
+    // emitted from the SAME branch that selects the spawn, so it cannot drift
+    // from what actually ran the way a separate predicate would.
+    let terminal = if matches!(intent, PtyIntent::GithubLogin) {
+        "conhost"
+    } else {
+        "windows-terminal"
+    };
+    tracing::info!(
+        %terminal,
+        intent = ?intent,
+        project = project.unwrap_or("-"),
+        "spawning in-VM PTY"
+    );
     let spawn_result = if matches!(intent, PtyIntent::GithubLogin) {
         spawn_wsl_console(distro, &argv)
     } else {
@@ -4213,6 +4222,65 @@ mod tests {
         );
     }
 
+    /// ORDER 823-u5zf: the spawn decision is LOGGED, and the log agrees with
+    /// the branch that runs.
+    ///
+    /// The packet's closure wants a lane observed opening in Windows Terminal
+    /// rather than conhost. Three process-level observables cannot answer that
+    /// (Windows Terminal reuses one process; a lane into a missing project
+    /// leaves no child; the log carried no spawn record), so the criterion was
+    /// only ever checkable by a human watching a screen once. The log line
+    /// makes it checkable anywhere — and this test makes the LOG honest, which
+    /// is the part that would otherwise rot: a `terminal=` string that drifted
+    /// from the branch it describes would be worse than no log at all, because
+    /// it would be believed.
+    ///
+    /// Asserted over the production source with comments stripped, so the
+    /// explanatory comment above the branch cannot satisfy it.
+    ///
+    /// @trace order:823-u5zf
+    #[test]
+    fn the_logged_terminal_matches_the_branch_that_spawns() {
+        let source = include_str!("notify_icon.rs");
+        let production = source
+            .split("#[cfg(test)]")
+            .next()
+            .expect("the file has a production half");
+        let code: String = production
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join(
+                "
+",
+            );
+
+        // The label and the spawn must be selected by the SAME predicate.
+        let label_arm = code
+            .find("let terminal = if matches!(intent, PtyIntent::GithubLogin)")
+            .expect("the spawn decision must be labelled for the log");
+        let spawn_arm = code
+            .find("let spawn_result = if matches!(intent, PtyIntent::GithubLogin)")
+            .expect("the spawn must still branch on GithubLogin");
+        assert!(
+            label_arm < spawn_arm,
+            "the log label must be derived from the same predicate as the spawn, \
+             immediately before it — otherwise the two can disagree and the log \
+             becomes a confident lie about which terminal opened"
+        );
+
+        // And the labels must name the two real hosts, not be free text.
+        assert!(
+            code.contains("\"conhost\"") && code.contains("\"windows-terminal\""),
+            "the log must name conhost and windows-terminal explicitly (823-u5zf)"
+        );
+        assert!(
+            code.contains("spawning in-VM PTY"),
+            "the spawn record must be emitted, or the closure criterion is \
+             unobservable again"
+        );
+    }
+
     /// Order 823-u5zf + 836-smm2: launch_spec now emits verbatim argv whose
     /// tokens are safe for wt.exe re-parsing, so all non-login lanes route
     /// through wt.exe unconditionally. This test pins the invariant that makes
@@ -4425,33 +4493,6 @@ mod tests {
                  it, but this tray is no longer a consumer (997-e4v2)"
             );
         }
-    }
-
-    /// ORDER 997-e4v2: this distinction is now VACUOUS, and that is the point
-    /// of keeping the test rather than deleting it.
-    ///
-    /// The Windows tray no longer subscribes to `SubscriptionTopic::
-    /// LocalProjects`, so the "full" list and the pre-order-260 "legacy" list
-    /// are the same three topics and the version-skew fallback can never
-    /// engage from here. The two functions are deliberately NOT collapsed:
-    /// order 260's stale-guest concern becomes moot only when the topic itself
-    /// leaves the wire, which is the last step of the coordinated tray window
-    /// (macos-tray and host-shell drop their consumers first, then the
-    /// control-wire variants come out). This pin should be deleted in the SAME
-    /// commit that removes the variant — not before, or the wire loses its
-    /// guard while a consumer still exists.
-    #[test]
-    fn legacy_topics_equal_full_topics_now_that_local_projects_is_unsubscribed() {
-        assert_eq!(
-            legacy_subscribe_topics(),
-            vm_status_subscribe_topics(),
-            "with LocalProjects unsubscribed the fallback list is the full              list; if these diverge again, a topic was added without deciding              whether a stale guest can decode it (order 260, 997-e4v2)"
-        );
-        assert!(
-            !vm_status_subscribe_topics()
-                .contains(&tillandsias_control_wire::SubscriptionTopic::LocalProjects),
-            "the Windows tray must not ask for local projects (997-e4v2)"
-        );
     }
 
     /// SC-07: the steady-state VmStatusRequest poll is fallback-only —
