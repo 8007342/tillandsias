@@ -37,7 +37,13 @@ if [ -z "${TILLANDSIAS_CA_DIR:-}" ]; then
         # two things — the defect the single-sourcing removed — so a test runs
         # THIS file and compares its answer with the Rust one rather than
         # reimplementing either.
-        TILLANDSIAS_CA_DIR="${_lcp_tmpl//\$\{HOME\}/$HOME}"
+        # ORDER 1027-539s: the manifest declares the ROOT; this reader appends
+        # its own leaf, exactly as tillandsias-core::ca_path does. The composed
+        # value is byte-identical to what the manifest used to declare, so
+        # nothing rebinds and no container is recreated.
+        _lcp_root_expanded="${_lcp_tmpl//\$\{HOME\}/$HOME}"
+        TILLANDSIAS_CA_DIR="$_lcp_root_expanded/ca"
+        unset _lcp_root_expanded
         unset _lcp_tmpl
         export TILLANDSIAS_CA_DIR
     else

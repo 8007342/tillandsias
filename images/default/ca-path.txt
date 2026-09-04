@@ -45,4 +45,39 @@
 # the shell. A test asserts the two produce the same string, because a template
 # with two expanders is a new way for one declaration to mean two things — which
 # is the defect this file was created to remove, not a licence to reintroduce it.
-${HOME}/.local/state/tillandsias/ca
+# ── ORDER 1027-539s: THIS VALUE IS THE ROOT, NOT THE CA DIRECTORY ───────────
+#
+# It used to be `${HOME}/.local/state/tillandsias/ca`. 1019-ivia needed the same
+# durable root for guest-binary staging, found nothing declaring it, and wrote a
+# second copy in Rust — 998-qrwu's defect at N=2 instead of N=38. So the ROOT is
+# what is declared here and each consumer appends its own leaf:
+#
+#   tillandsias-core::ca_path        -> <root>/ca          (the CA bundle)
+#   tillandsias-core::guest_bin_path -> <root>/guest-bin   (staged guest binary)
+#   scripts/lib-ca-path.sh           -> <root>/ca          (the shell reader)
+#
+# The resulting CA path is BYTE-IDENTICAL to what this file declared before, so
+# there is NO MIGRATION: nothing rebinds, no container is recreated. That is
+# what let this land on its own, unlike 998-3z6g which had to move a directory.
+#
+# ── DO NOT MAKE THIS HONOUR XDG_STATE_HOME ─────────────────────────────────
+#
+# Someone will propose it, because the XDG state dir elsewhere in this repo DOES
+# honour it — tillandsias-core::config::log_dir/state_dir (via dirs::state_dir),
+# scripts/uninstall.sh's platform table, scripts/build-image.sh's telemetry dir,
+# tillandsias-logging's event_collector. Those are a DIFFERENT CONCEPT that
+# happens to be the same string on a default Linux host, and they are correct:
+# platform-idiomatic, environment-honouring, deliberately ~/Library/Logs on
+# macOS.
+#
+# This root is not that. 998-3z6g chose HOME-relative BY MEASUREMENT because it
+# was the only candidate identical on a rootless Linux host AND inside the guest
+# where HOME=/root, and the CA bundle must be byte-identical on both sides of the
+# VM boundary. Honouring XDG_STATE_HOME would make it environment-dependent and
+# reintroduce exactly the host/guest divergence that measurement removed.
+#
+# Harmonising the two is not a cleanup. Pointing uninstall.sh's LOG_DIR at this
+# root would delete ~/.local/state on a Mac and leave ~/Library/Logs behind — an
+# uninstall that silently fails to uninstall, on the platform where the
+# divergence is deliberate.
+${HOME}/.local/state/tillandsias

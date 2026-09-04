@@ -2806,6 +2806,16 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
 
+    # 1027-539s. SIBLING of the check above, not a widening of it: that one
+    # counts the PRE-migration `/tmp/tillandsias-ca`, this one counts the state
+    # ROOT the manifest now declares. Neither has ever watched the other's
+    # subject, which is how a second root literal landed in 1019-ivia without
+    # tripping anything.
+    _step "Checking the state root has one declaration (1027-539s)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-state-root-literals.sh" 2>&1; then
+        exit 1
+    fi
+
     # 967-6ax6 criterion 1. Ratchets the container NAME the accel-proof
     # producers look for against the name dev-inference-ensure.sh creates. It
     # reads source only; the one `podman exec` in the file is prose describing
