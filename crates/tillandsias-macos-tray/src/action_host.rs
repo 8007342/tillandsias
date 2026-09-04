@@ -3947,7 +3947,7 @@ mod tests {
         use tillandsias_host_shell::pty::{PtyIntent, intent_for_action};
 
         let action = MenuAction::Attach {
-            scope: ProjectScope::Local,
+            scope: ProjectScope::Cloud,
             name: "myproj".to_string(),
             agent: SelectedAgent::OpenCode,
         };
@@ -3964,7 +3964,7 @@ mod tests {
         );
 
         let maintain = MenuAction::Maintain {
-            scope: ProjectScope::Local,
+            scope: ProjectScope::Cloud,
             name: "myproj".to_string(),
         };
         let (m_intent, m_project) = intent_for_action(&maintain, SelectedAgent::OpenCode)

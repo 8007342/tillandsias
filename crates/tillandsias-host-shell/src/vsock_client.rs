@@ -51,7 +51,10 @@ pub const DEFAULT_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(2);
 pub const STANDARD_HOST_CAPABILITIES: &[&str] = &[
     "VmStatusRequest",
     "VmShutdownRequest",
-    "EnumerateLocalProjects",
+    // 997-e4v2 step 3: "EnumerateLocalProjects" left with the wire variant. A
+    // capability string is a PROMISE — advertising an RPC the guest no longer
+    // implements is worse than not advertising it, because a peer selects on
+    // this list.
     "CloudRefreshRequest",
     "pty.attach@v1",
 ];
@@ -384,11 +387,7 @@ mod capability_tests {
 
     #[test]
     fn standard_capabilities_include_core_rpc_set() {
-        for cap in &[
-            "VmStatusRequest",
-            "VmShutdownRequest",
-            "EnumerateLocalProjects",
-        ] {
+        for cap in &["VmStatusRequest", "VmShutdownRequest"] {
             assert!(
                 STANDARD_HOST_CAPABILITIES.contains(cap),
                 "STANDARD_HOST_CAPABILITIES must include \"{cap}\""

@@ -1382,7 +1382,7 @@ mod tests {
         assert_eq!(
             intent_for_action(
                 &MenuAction::Attach {
-                    scope: ProjectScope::Local,
+                    scope: ProjectScope::Cloud,
                     name: "myapp".to_string(),
                     agent: SelectedAgent::Codex,
                 },

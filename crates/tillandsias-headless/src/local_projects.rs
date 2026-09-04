@@ -55,6 +55,13 @@ pub fn host_project_root() -> PathBuf {
 /// matching the prior stub behaviour.
 ///
 /// @trace spec:host-shell-architecture
+// 997-e4v2 step 3 / 1031-q4pb: the wire enumerator that used to call this from
+// a non-tray build is gone, and the four remaining callers (order 505 label
+// validation in main.rs x3 and the MCP tool-socket guard in tray/mod.rs) are ALL
+// behind `feature = "tray"`. So this is dead in a default build and load-bearing
+// in a tray one. Scoped rather than blanket-allowed so a tray build still
+// reports it if 1031-q4pb removes the last real caller.
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
 pub fn scan_project_root(root: &Path) -> Vec<LocalProjectEntry> {
     let Ok(entries) = std::fs::read_dir(root) else {
         return Vec::new();
