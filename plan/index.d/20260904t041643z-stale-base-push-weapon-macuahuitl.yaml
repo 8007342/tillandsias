@@ -1,0 +1,65 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: an-unpushable-branch-on-a-fast-moving-trunk-becomes-a-weapon
+    order: 1000-rqmx
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [gate, push, fail-loud, multi-host, data-loss]
+    estimated_hours: 4
+    title: |
+      A host that cannot push accumulates a commit whose base goes stale, so the push it is waiting to make would revert everyone else's work — and nothing warns it.
+    context: |
+      FOUND by esme-tillandsias-wsl2 across a whole session of being unable to
+      push, and relayed minutes before the 2026-09-04 fleet restart because it
+      would otherwise have died with the container. THREE INSTANCES IN ONE
+      SESSION, the last appearing in the ninety seconds between their final
+      state check and their message.
+      THE COMMIT IS INNOCENT AND THE DIFF IS NOT. Theirs is ONE FILE, 3475
+      insertions, all their own session's work. But `git diff
+      origin/linux-next..HEAD` grew as the trunk advanced beneath it:
+        ~19:00Z  108 files, ~6,900 deletions - would have reverted work from
+                 macuahuitl, yoga, lenovinha, pirria, yolanda and
+                 tlatoanis-macbook-air, including yoga's 579-question band results
+        ~19:10Z  2 more fragments
+        ~04:00Z  139 files, 5,096 deletions
+      THE PRE-PUSH GATE WOULD NOT HAVE CAUGHT IT. Every attempt they made was
+      --no-verify, correctly: the gate had already passed them and the MIRROR was
+      refusing at the relay, so the local gate was not the thing saying no.
+      WHY THIS IS A FLEET RISK RATHER THAN ONE HOST'S HOUSEKEEPING, and this is
+      the part that makes it p1: they ran a BACKGROUND RETRY LOOP - fetch,
+      rebase, push, sleep, repeat - waiting for the credential to come back. It
+      rebased each time, so it was SAFE BY LUCK RATHER THAN BY DESIGN. THE
+      OBVIOUS NAIVE VERSION - `sleep; git push` with no rebase - WOULD HAVE
+      SILENTLY REVERTED A HUNDRED-PLUS FILES THE MOMENT THE CREDENTIAL
+      RECOVERED, hours after any human stopped watching. A blocked host waiting
+      to push is exactly the situation in which somebody writes that loop, and
+      the fleet had at least TWO blocked hosts that day (esme, and pirria
+      stranded on a salvage branch).
+      TWO MITIGATIONS, AND THEY ARE NOT EQUIVALENT. (1) A retry loop must
+      re-fetch and rebase before every attempt and abort if the diff touches
+      files the commit does not. (2) THE PRE-PUSH GATE REFUSES A PUSH WHOSE DIFF
+      DELETES FILES THE OUTGOING COMMITS NEVER TOUCHED. esme's own judgement,
+      which I adopt: the second is the real fix, because the first only protects
+      whoever remembers - the same reasoning that made the landing tool worth
+      more than a documented sequence.
+      RELATED, NOT DUPLICATED: 982-sguu is the credential preflight (a host
+      learns it cannot push BEFORE working); this is what happens to the branch
+      of a host that already knows and is waiting. Different mechanism, adjacent
+      cause.
+    unscoreable: >
+      No existing litmus covers pre-push diff shape, and naming one that does not
+      exist is the dead-reference failure this fleet recorded three times on
+      2026-09-03. What would make it scoreable is a fixture that constructs a
+      stale-base branch — one innocent commit, a trunk advanced beneath it — and
+      asserts the gate refuses the push while the same commit rebased is
+      accepted. That test is the packet's real deliverable and whoever takes this
+      should write it first.
+    exit_criteria:
+      - a push whose diff deletes files the outgoing commits never touched is refused, regardless of how the push was invoked
+      - the refusal names the deleted-but-untouched files, so the reader sees what would have been reverted rather than a count
+      - verified by constructing a stale-base branch and pushing it, not by reasoning - the same commit rebased must be accepted
+      - --no-verify is considered explicitly: state whether this check can be bypassed and why that is or is not acceptable, since every attempt in the observed case used it legitimately
+      - a blocked host's retry loop is addressed or explicitly deferred to the gate; do not ship advice that only protects whoever remembers it

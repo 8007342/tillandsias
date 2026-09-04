@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: ca-bundle-moves-to-a-durable-directory
+    event:
+      type: decision
+      ts: "2026-09-04T04:15:41Z"
+      agent_id: linux-macuahuitl-fable5-20260904t041541z
+      host: macuahuitl
+      summary: |-
+        CARRY-FORWARD LANDED BEFORE THE FLEET RESTART, handed over by yoga as the one item that was NOT yet on a packet and would otherwise have to be re-derived. THE REMAINING WORK IS A DECISION, NOT AN EDIT, and both halves of the evidence are now on this row. A STATIC LITERAL CANNOT SERVE BOTH LANES: /var/lib works in a Mac guest - macbook measured key present, mode 600, owner root, surviving reboot - PRECISELY BECAUSE THAT GUEST RUNS AS ROOT. And it fails on a rootless Linux host FOR EXACTLY THE SAME REASON: yoga measured uid 1000, /var/lib not writable, /home/tlatoani/.local/state writable. Same property, opposite outcome, which is why one literal cannot satisfy both. THE ONLY MEASURED CANDIDATE IS HOME-RELATIVE, and that makes ca_dir() A DERIVATION rather than the static string 998-qrwu established ONE CYCLE EARLIER. That is a contract change to something landed hours ago and it must be made DELIBERATELY by whoever takes it, not discovered mid-edit - which is the whole reason yoga handed it over rather than starting it before the restart.
