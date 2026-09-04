@@ -2733,6 +2733,36 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # that looks like protection and provides none, and audit-guard-activation
     # fails --ci-full on exactly that. Both of these are STATIC — they read
     # source and nothing else — so --check is their surface.
+    # ORDER 1022-y7kc cause 2, the fifth orphan. lenovinha's guard, wired here
+    # with their go-ahead: build.sh was mine while 1003-444f was open and two
+    # of us editing it inside one hour is how the merge conflict earlier this
+    # cycle happened.
+    #
+    # It refuses \t, \d, \s and \w inside a grep/grep -E pattern in a litmus
+    # command, because GNU ERE does not define them. GNU grep warns "stray \
+    # before t" on STDERR — which a `-q` step discards — and then matches a
+    # literal `t`, so the pattern silently never matches. That is not
+    # hypothetical: it is how two --by-hardware steps of mine passed every
+    # standalone check and failed in the runner, and I misdiagnosed it as
+    # SIGPIPE from a comment block I had just read. The divergence is silent in
+    # both directions, because an interactive shell here has `grep` shadowed by
+    # a ugrep wrapper that DOES interpret those escapes, so hand-verification
+    # and the runner disagree without either being wrong about itself.
+    #
+    # STATIC and unconditional — it reads openspec/litmus-tests/*.yaml and
+    # nothing else, no podman, no network, no host state — so it has no skip
+    # path and cannot be green-in-name-only. Measured green on two hosts:
+    # `ok:litmus-grep-escapes:421 checked` on yoga and on lenovinha at HEAD.
+    #
+    # Call the .sh, never scripts/lib/litmus-grep-escapes.awk: the awk holds
+    # the rule but expects to be driven with the file list and is not an entry
+    # point. The 8-arm fixture (scripts/test-litmus-grep-escapes.sh) is already
+    # wired into local-ci.sh, so --check needs only the check itself.
+    _step "Checking litmus grep patterns use no GNU-undefined escapes (901-jtvi)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-grep-escapes.sh" 2>&1; then
+        exit 1
+    fi
+
     _step "Checking the CA path has one declaration (998-3z6g)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-ca-path-literals.sh" 2>&1; then
         exit 1
