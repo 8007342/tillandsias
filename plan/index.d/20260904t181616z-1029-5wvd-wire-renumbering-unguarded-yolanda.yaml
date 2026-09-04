@@ -1,0 +1,118 @@
+packets:
+  - packet_id: nothing-in-the-tree-notices-a-control-wire-renumbering
+    order: 1029-5wvd
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    release_target: stable-milestone-v1
+    capability_tags:
+      - architecture
+      - fail-loud
+      - wire
+    estimated_hours: 4
+    title: |
+      A pure reorder of two ControlMessage variants silently repoints every frame index, and the whole gate stays green — 64/64 crate tests and ./build.sh --check exit 0.
+    deliverable: |
+      An accidental renumbering of the control wire is DETECTED before it is
+      pushed. What must not persist is the current state: the only gate any
+      host runs before pushing cannot see a change that alters the meaning of
+      every frame on the wire.
+    context: |
+      MEASURED 2026-09-04 by macbookair-macos on the post-merge tree, as the
+      mutation arm of a review protocol for 997-e4v2's wire commit. Executed,
+      not predicted.
+
+      THE MUTATION. Swap two ADJACENT variant declarations in
+      crates/tillandsias-control-wire/src/lib.rs — VmShutdownRequest and
+      EnumerateLocalProjects. A pure reorder: no signature change, no removal,
+      no added or deleted variant. A postcard probe confirms it took:
+      EnumerateLocalProjects moves 9 -> 10 in the encoding.
+
+      THE RESULT.
+        cargo test -p tillandsias-control-wire   64 passed, 0 failed
+        ./build.sh --check                       exit 0
+
+      That is a change which would misdecode against any peer built before or
+      after it, landing on a clean green.
+
+      WHY NOTHING SEES IT, read in the crate rather than inferred:
+
+      1. THE WIRE TESTS ARE ROUND-TRIP ONLY. `roundtrip()` (lib.rs:1980) is
+         `encode(envelope)` then `decode(&encoded)` then `assert_eq!`. Both
+         halves come from THE SAME BUILD, so the assertion holds under ANY
+         consistent numbering. It proves postcard is self-consistent — which it
+         is — and says nothing about what a different build would read.
+
+      2. `control_message_kind_names_every_declared_variant` (lib.rs:2270) maps
+         variants to names BY PATTERN MATCH, and a pattern match does not care
+         which index a variant occupies. Its own comment says the wire shape
+         "doesn't matter for the name lookup". That is true of what it tests,
+         and it is the closest thing in the crate to a variant table — so it is
+         the test a reader reaches for and is falsely reassured by.
+
+      3. THERE IS NO EXPECTED-BYTE LITERAL ANYWHERE IN THE CRATE. The only byte
+         arrays are a 1 MiB payload-size fixture and the credential-marker scan.
+         Nothing in the file is independent of the code it checks.
+
+      WHY IT MATTERS MORE THAN A STYLE POINT. postcard encodes enum variants by
+      INDEX, and ControlMessage carries the credential and pty traffic:
+      DeliverCredentials, GetVaultHandover, PtyOpen/Data/Resize/Close. A
+      renumbering does not produce a malformed frame — it produces a
+      STRUCTURALLY VALID DECODE INTO THE WRONG VARIANT wherever the payload
+      shapes happen to match. The 997-e4v2 removal creates exactly such a pair:
+      EnumerateLocalProjects `{seq: u64}` at 10 and CloudRefreshRequest
+      `{seq: u64}` at 12, which inherits index 10 once 10 and 11 are removed.
+
+      WHAT 997-e4v2 DOES AND DOES NOT CLOSE. Its wire commit bumps WIRE_VERSION
+      to 3, which protects PEERS: the handshake refuses a mismatched version at
+      vsock_server.rs:938 and vsock_client.rs:200 before any frame is decoded.
+      It also adds a golden-discriminant pin over a RISK-RANKED SUBSET of about
+      five variants. Neither closes this. The version bump does nothing about an
+      accidental reorder INSIDE a version, and a five-of-thirty-five pin leaves
+      a reorder of unlisted variants green. This packet is the residual, filed
+      deliberately so the subset pin is not mistaken for the guard.
+
+      THE SHAPE, because it is the sixth instance in one day and the pattern is
+      the finding: an ENCODER AND A DECODER FROM ONE BUILD AGREEING WITH EACH
+      OTHER, read as evidence about the wire. Siblings measured the same day: a
+      qcow2 generator validated only against our own reader, passing five tests
+      on a file qemu-img refuses to open (1006-jfwv); a fixture that grepped
+      build.sh for strings instead of executing the branch, passing 5/5 over a
+      routing made unreachable (1021-a944). Every layer succeeds and the result
+      is nonsense. A proxy for the thing, read as the thing.
+    exit_criteria:
+      - |
+          The mutation is DETECTED. Swapping VmShutdownRequest and
+          EnumerateLocalProjects makes some check in ./build.sh --check go red.
+          Pre-fix result: GREEN — 64/64 crate tests and gate exit 0. That
+          expectation IS the defect, and it is the reproduction.
+      - |
+          The guard's SCOPE is stated where a reader meets it: whether it covers
+          every variant or a named subset, and what a reorder outside that set
+          still does. A green subset pin read as "the wire cannot renumber" is
+          the same over-reading of a proxy this packet is about.
+      - |
+          Whatever is added is itself sabotage-tested, by someone other than its
+          author, against the mutation above — not merely observed to pass.
+      - |
+          The decision is written down: exhaustive generated pin, a narrower
+          risk-ranked set, or an accepted limitation stated in the source. An
+          undecided middle is how the subset comes to be read as the whole.
+    verifiable_closure: |
+      unscoreable: the pin's shape is the packet's open question, so naming a
+      litmus now would name one for a fix nobody has chosen — the dishonest-pin
+      shape the 977-448j gate exists to stop. The obligation is stated instead
+      and the litmus lands with the fix.
+
+      Intended either way: a check that turns RED under the measured mutation
+      (swap VmShutdownRequest and EnumerateLocalProjects), with the mutation
+      itself as the negative control, and green on restore.
+    notes: |
+      Reproduction owned by macbookair-macos, who measured it; filed by yolanda
+      from 997-e4v2's wire review at their agreement. The tree was restored and
+      `git diff` on the crate confirmed empty after the mutation.
+
+      Do NOT close this on 997-e4v2's landing. That commit makes the immediate
+      collision safe and leaves the standing property untouched.

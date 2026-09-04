@@ -1,0 +1,64 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: on-a-shared-windows-wsl-checkout-the-plan-binary-probe-resolves-the-exe-and-refreshes-the-elf-so-the-floor-gate-never-completes
+    order: 1030-i2p8
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [windows, wsl, low-end, build, gate, plan, fail-loud]
+    estimated_hours: 3
+    owned_files:
+      - scripts/plan-binary-probe.sh
+      - build.sh
+    title: |
+      Inside the tillandsias-build WSL2 distro on a shared Windows/WSL checkout, resolve_plan_binary tries and runs target/release/tillandsias-plan.exe first (WSL interop executes it), a git checkout bumps two plan-crate source mtimes past it, plan_binary_is_stale says stale, and the refresh path touches the ELF at plan-binary-probe.sh:183 while resolution keeps returning the .exe, so every floor gate refuses at "no fresh plan binary" and never completes
+    context: |
+      MEASURED by esme-windows on esmeraldinha 2026-09-04 with a CLEAN forced
+      gate on a verified-idle host (loadavg 0.00, no concurrent gate,
+      TILLANDSIAS_FORCE_CHECK=1; endpoints job-written): gate6_start
+      19:07:10Z, exit=1, gate6_end 19:15:08Z (7m58s to the failure). Same two
+      lines as the 13:05Z red: `blocked:fragment-events-land:no-fresh-plan-
+      binary` then "an event is attached to no packet" (the collapse 1021-a944
+      fixed on the trunk at 43e33dd5d/4131bd5a7; esme's checkout predates
+      it). This RETRACTS esme's concurrency explanation of the 13:05Z red and
+      re-opens the question 1021-a944's fourth criterion was closed on
+      ("transient"): it is STRUCTURAL. Read from the code and probed inside
+      the distro: resolve_plan_binary tries `.exe` FIRST by design and is a
+      run-don't-stat probe; inside the distro it resolves
+      ./target/release/tillandsias-plan.exe (PE32+, mtime 06:38:35Z) with
+      resolve_rc=0. plan_binary_is_stale finds two newer files,
+      crates/tillandsias-plan/src/main.rs and spec_index.rs, both 12:25:39Z =
+      esme's `git pull --ff-only` (git rewrites files at checkout and bumps
+      mtimes, the case the predicate's own comment chose mtimes to catch).
+      ensure_fresh_plan_binary returns 2 (stale, could not refresh here). The
+      refresh at plan-binary-probe.sh:183 touches
+      ${CARGO_TARGET_DIR:-target}/release/tillandsias-plan — the ELF (now
+      19:15:08Z, fresher than both sources) — while resolution returns the
+      .exe (still 06:38:35Z): the thing touched is not the thing resolved. So
+      the floor is red on this check whenever a pull touches those two files
+      and the .exe is older, which is common, not exotic, and explains why it
+      started today. NOT ESTABLISHED, stated rather than guessed: (1) why
+      gates 1 and 2 passed this same step at 13:16:41Z and 13:18:51Z with the
+      .exe already stale by these mtimes; (2) whether cargo is on PATH in the
+      gate's own environment (esme's `cargo ABSENT` came from a bare `bash
+      script.sh` probe, not the gate's env; gates 1 and 2 ran clippy, so cargo
+      reached build.sh there). Yolanda's C4 fix on 1021-a944 (PATH plus a
+      CARGO_TARGET_DIR outside the shared tree) is the other half of the same
+      shape and may already avoid this by moving the ELF; whether the probe
+      then still resolves the .exe first is the question to answer with a
+      measurement. Consequence for 1004-pg9p: there is still NO clean floor
+      gate cost; 7m58s is a lower bound to this failure on an idle host; the
+      only completed runs (47m27s, 35m55s) were contended.
+      Provenance: esme measured and read the predicate; filed by the
+      coordinator.
+    exit_criteria:
+      - "the probe resolves the artifact native to the locus it runs in (the ELF inside a Linux distro, the .exe on the Windows side) or, failing that, refreshes THE ARTIFACT IT RESOLVED; a fixture with both artifacts present and the sources touched newer than the .exe reproduces the refusal on Linux and passes after the fix; pre-fix result: FAILS (esme, 19:15:08Z)"
+      - "a clean forced ./build.sh --check completes on esmeraldinha inside the distro with job-written endpoints, giving 1004-pg9p its first floor gate cost; pre-fix result: FAILS (7m58s to the refusal)"
+      - "the two unestablished questions above are answered from measurement or explicitly left open with what was tried; pre-fix result: FAILS"
+    unscoreable: |
+      The pin is a fixture for scripts/plan-binary-probe.sh with two artifacts
+      that does not exist yet (885-92iu forward reference); intended home:
+      litmus:plan-binary-probe-shape or the bound litmus that pins the probe,
+      named by the claimer as the first act.
