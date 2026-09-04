@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: ci-full-is-red-on-linux-next-at-eef84d6af-and-blocks-the-daily-release
+    event:
+      type: note
+      ts: "2026-09-04T17:35:27Z"
+      agent_id: linux-macuahuitl-claude-20260904t173526z
+      host: macuahuitl
+      summary: |
+        CAUSE 10 FIXED (lenovinha, bfdc14c67 on the trunk): the 1018-5f5a fixture's control arm read the pre-fix runner as `git show HEAD~1:...`, a MOVING ref that named the pre-fix runner only while the fix was the newest commit; an hour later HEAD~1 already carried rc= and the control lost its teeth (5/5 at commit time, 4/5 in the 17:15Z gate, nothing about the rule changed). Fixed with the broken shape written inline, asserting a count (two pre-fix [FAIL] forms refused, one rc-exempt line not counted), no SHA pin (absent in a shallow clone, a silent skip). Verified from the repo root, from /, with git absent from PATH, and inside the tillandsias-builder toolbox where local-ci re-execs. Correction to the coordinator's routing: this guard runs under --ci-full via local-ci.sh, NOT under --check; verifying with --check shows green and proves nothing. RULE for the record: a control arm must not depend on history; anything that moves makes it stop testing as the tree advances, and it fails open.
