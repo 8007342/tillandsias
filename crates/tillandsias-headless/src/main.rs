@@ -923,8 +923,7 @@ fn main() {
     // into the app's service path and sat idle until the shutdown handler tore
     // Vault down (measured 2026-09-04, three runs, no podman call ever made).
     if ensure_enclave {
-        if let Err(e) = run_cli_with_vault_credential_cleanup(debug, || run_ensure_enclave(debug))
-        {
+        if let Err(e) = run_cli_with_vault_credential_cleanup(debug, || run_ensure_enclave(debug)) {
             eprintln!("Error: {}", e);
             std::process::exit(1);
         }
