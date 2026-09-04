@@ -1,0 +1,62 @@
+packets:
+  - packet_id: stale-base-revert-guard-is-client-side-only
+    order: 1001-i5ux
+    status: ready
+    kind: enhancement
+    priority: p2
+    pickup_role: any
+    desired_release: v0.5
+    capability_tags: [gate, push, multi-host, data-loss, mirror]
+    estimated_hours: 3
+    owned_files:
+      - images/git/
+      - scripts/hooks/pre-push-no-stale-base-revert.sh
+    title: |
+      The stale-base revert guard runs in a pre-push hook, so it is per-checkout and --no-verify skips it — the only invocation-independent place is the receiving end.
+    context: |
+      SPLIT OUT OF 1000-rqmx rather than left implied. That packet's first exit
+      criterion asks that a reverting push be refused "regardless of how the
+      push was invoked", and its fourth asks for --no-verify to be considered
+      explicitly. Those two pull against each other and a client hook cannot
+      satisfy both: git offers no unskippable hook, and every attempt in the
+      observed case used --no-verify legitimately, because the local gate had
+      already passed and the MIRROR was refusing at the relay.
+
+      SO THE CLIENT HALF IS DONE AND BOUNDED. The hook refuses a --force and a
+      --force-with-lease whose diff deletes files the outgoing commits never
+      touched, names the files, and is proven by a fixture that constructs a
+      stale-base branch against a real remote. What it cannot do is bind a host
+      that has not run scripts/install-hooks.sh, or one that passes
+      --no-verify.
+
+      THE INVOCATION-INDEPENDENT PLACE IS THE RECEIVING END. A pre-receive hook
+      on the enclave git mirror sees every push regardless of how the client
+      invoked it, and can apply the same set difference — deleted-minus-touched
+      — with the same verdict grammar. That is the only version that is true to
+      1000-rqmx's first criterion as literally written.
+
+      NOT URGENT, AND SAY SO: the client hook covers the case that actually
+      occurred, and a blocked host reaching for --no-verify now gets the file
+      list before it decides. This closes the gap between "warned" and "cannot".
+    next_action: |
+      Port the set-difference from scripts/hooks/pre-push-no-stale-base-revert.sh
+      into a pre-receive hook on the mirror. The logic is unchanged and already
+      has a fixture; what is new is where it runs and how it is deployed to the
+      mirror image. Reuse scripts/test-no-stale-base-revert.sh's construction
+      (real bare remote, stale branch, advanced trunk) and add an arm that
+      pushes with --no-verify and is STILL refused — that arm is the whole point
+      and is the one the client-side guard cannot pass.
+    exit_criteria:
+      - |
+          A push whose diff deletes files its commits never touched is refused
+          by the RECEIVING end, verified with --no-verify on the client, which
+          the client-side guard cannot catch.
+      - |
+          The refusal names the files, matching the client hook's grammar so a
+          reader sees the same message from either end.
+      - |
+          A host with no hooks installed at all is still refused — that is the
+          case the client half structurally cannot cover.
+    verifiable_closure: |
+      A fixture pushes a stale-base branch with --no-verify to a mirror-shaped
+      remote and the push is refused naming the reverted files.

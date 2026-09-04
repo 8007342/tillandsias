@@ -36,7 +36,44 @@ fn ca_template() -> &'static str {
 /// this file exists to remove. A test pins the agreement.
 pub fn ca_dir() -> String {
     let home = std::env::var("HOME").unwrap_or_default();
-    ca_template().replace("${HOME}", &home)
+    expand_home(ca_template(), &home)
+}
+
+/// The substitution itself, over an explicit base.
+///
+/// SPLIT OUT SO IT CAN BE TESTED WITHOUT MUTATING THE PROCESS (order
+/// 1002-9xmb). `HOME` is process-global and cargo runs tests concurrently in
+/// one process, so three tests calling `set_var("HOME", ...)` raced: on
+/// osx-next at 724691251 the agreement test failed on every full-suite run,
+/// reading `/home/probe` — the OTHER test's value — against its own
+/// `/home/agreement-probe`. Passing the base in removes the shared mutable
+/// state rather than serialising access to it, and removes the `unsafe` the
+/// tests needed to reach it.
+fn expand_home(template: &str, home: &str) -> String {
+    template.replace("${HOME}", home)
+}
+
+/// The UNEXPANDED template, for a caller that emits a string to be executed on
+/// a DIFFERENT filesystem than the one this process runs on.
+///
+/// ORDER 1002-9xmb. `ca_dir()` substitutes the CALLING process's `HOME`, which
+/// is right for a caller that will itself touch the directory and wrong for one
+/// that is composing a shell command for somewhere else. The macOS tray is the
+/// second kind: its proxy preamble runs IN THE GUEST, where it sets
+/// `HOME=/root`, but the path was being expanded on the host — so a Mac emitted
+/// `/Users/<you>/.local/state/tillandsias/ca` for the guest to create.
+///
+/// MEASURED IN A LIVE GUEST 2026-09-04: that wrong path SUCCEEDS. mkdir -p as
+/// root creates it, openssl writes into it, perms 600, owner root, exit 0. So
+/// nothing fails, nothing logs, and the CA simply lives in a directory named
+/// after the host user, at a path that differs per developer. A silent success
+/// is why this needs a distinct accessor rather than a comment telling callers
+/// to be careful.
+///
+/// The RECEIVING shell is the expander here. That is a third expander only in
+/// appearance: it is the only one standing in the filesystem the path names.
+pub fn ca_dir_template() -> &'static str {
+    ca_template()
 }
 
 #[cfg(test)]
@@ -60,9 +97,7 @@ mod tests {
 
     #[test]
     fn ca_dir_is_absolute_and_unslashed() {
-        // SAFETY: single-threaded test; HOME is restored by the process exit.
-        unsafe { std::env::set_var("HOME", "/home/probe") };
-        let d = ca_dir();
+        let d = expand_home(ca_template(), "/home/probe");
         assert!(d.starts_with('/'), "CA dir must be absolute, got {d:?}");
         assert!(
             !d.ends_with('/'),
@@ -82,8 +117,7 @@ mod expansion_tests {
     /// process happened to have.
     #[test]
     fn expansion_leaves_no_placeholder() {
-        unsafe { std::env::set_var("HOME", "/home/probe") };
-        let d = ca_dir();
+        let d = expand_home(ca_template(), "/home/probe");
         assert!(
             !d.contains("${"),
             "unexpanded placeholder survived into the path: {d:?}"
@@ -103,8 +137,7 @@ mod expansion_tests {
     #[test]
     fn rust_and_shell_expand_to_the_same_path() {
         let home = "/home/agreement-probe";
-        unsafe { std::env::set_var("HOME", home) };
-        let rust = ca_dir();
+        let rust = expand_home(ca_template(), home);
 
         let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
         let out = std::process::Command::new("bash")

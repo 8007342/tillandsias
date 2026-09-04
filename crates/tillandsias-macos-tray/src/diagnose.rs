@@ -903,7 +903,15 @@ pub fn exec_guest_main(argv: Vec<String>, required_cap: Option<&'static str>) ->
 /// as a path value — which is exactly why it escaped every earlier attempt to
 /// single-source it, and why 975-rsgm could not move the directory safely.
 fn proxy_exec_preamble(headless_arg: &str) -> String {
-    let ca = tillandsias_core::ca_path::ca_dir();
+    // ORDER 1002-9xmb: the TEMPLATE, not the expansion. This string is exec'd
+    // IN THE GUEST, and the very next thing it does is `export HOME=/root`.
+    // `ca_dir()` would substitute the HOST's HOME here, so a Mac emitted
+    // `/Users/<you>/.local/state/tillandsias/ca` for the guest to create — and
+    // measured in a live guest, that path SUCCEEDS: mkdir as root, openssl
+    // writes, perms 600, owner root, exit 0. Nothing fails, so nothing would
+    // ever have reported it. The guest shell expands `${HOME}` itself, which
+    // is the only expansion standing in the filesystem the path names.
+    let ca = tillandsias_core::ca_path::ca_dir_template();
     format!(
         "export HOME=/root; export XDG_RUNTIME_DIR=/run/user/0; \
          export TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200; \
@@ -1914,10 +1922,52 @@ mod tests {
         {
             let ca_needle = format!(
                 "chmod 600 {}/intermediate.key",
-                tillandsias_core::ca_path::ca_dir()
+                tillandsias_core::ca_path::ca_dir_template()
             );
             assert!(p.contains(&ca_needle), "preamble lost {ca_needle:?}: {p}");
         }
+    }
+
+    /// THE HOST'S HOME MUST NEVER APPEAR IN A STRING THE GUEST EXECUTES.
+    ///
+    /// ORDER 1002-9xmb. `ca_dir()` expands `${HOME}` from the CALLING process,
+    /// and this preamble is composed on the Mac but run in the Linux guest,
+    /// which sets `HOME=/root` in its own first statement. Expanding on the
+    /// host therefore emitted `/Users/<you>/.local/state/tillandsias/ca` for
+    /// the guest to create.
+    ///
+    /// WHY THIS NEEDS A TEST AND NOT A COMMENT: measured in a live guest
+    /// 2026-09-04, the wrong path SUCCEEDS — mkdir -p as root, openssl writes
+    /// the key, perms 600, owner root, exit 0. There is no failure anywhere
+    /// for a probe, a gate, or an operator to notice; the CA just lives at a
+    /// per-developer path inside the guest. Only a test that reads the emitted
+    /// string can catch it.
+    #[test]
+    fn the_preamble_never_bakes_in_the_hosts_home() {
+        let p = super::proxy_exec_preamble("--github-login");
+        assert!(
+            p.contains("${HOME}/"),
+            "the CA path must reach the guest as a TEMPLATE for the guest shell \
+             to expand; an already-expanded path carries this Mac's HOME: {p}"
+        );
+        if let Ok(host_home) = std::env::var("HOME")
+            && host_home.starts_with('/')
+            && host_home != "/root"
+        {
+            assert!(
+                !p.contains(&host_home),
+                "the host HOME {host_home:?} leaked into a guest command: {p}"
+            );
+        }
+        // The expander must be set up BEFORE the first use, or the guest shell
+        // expands an empty HOME and the path becomes /.local/state/... at the
+        // filesystem root — which, being root, would also succeed.
+        let export_at = p.find("export HOME=/root").expect("HOME export");
+        let first_use = p.find("${HOME}/").expect("templated CA path");
+        assert!(
+            export_at < first_use,
+            "HOME must be exported before the CA path that expands it: {p}"
+        );
     }
 
     use super::parse_aarch64_qcow2_sha;
@@ -2289,7 +2339,10 @@ mod tests {
         // is exactly how it survived a literal audit — and it would have kept
         // matching the OLD path after 975-rsgm moves the directory, so this test
         // would have gone quietly vacuous rather than failing.
-        let key = format!("{}/intermediate.key", tillandsias_core::ca_path::ca_dir());
+        let key = format!(
+            "{}/intermediate.key",
+            tillandsias_core::ca_path::ca_dir_template()
+        );
 
         // 795-zshi slice 5 moved these assertions from the two call sites'
         // SOURCE WINDOWS onto the BUILT preamble. The windows stopped containing

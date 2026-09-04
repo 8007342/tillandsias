@@ -62,6 +62,7 @@ git -C "$proj" config user.email f@x; git -C "$proj" config user.name f
 cp "$ROOT/scripts/install-hooks.sh" "$proj/scripts/"
 for h in pre-commit-openspec.sh pre-push-local-gate.sh pre-push-linux-next-merged.sh \
          pre-push-version-guard.sh pre-push-main-branch-affordance.sh \
+         pre-push-no-stale-base-revert.sh \
          post-commit-dashboard-refresh.sh post-commit-expert-refresh.sh; do
     cp "$ROOT/scripts/hooks/$h" "$proj/scripts/hooks/"
 done

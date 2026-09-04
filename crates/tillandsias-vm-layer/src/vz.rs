@@ -1951,11 +1951,43 @@ impl VmRuntime for VzRuntime {
                     loop {
                         if let Ok(result) = lrx.try_recv() {
                             match result {
-                                Ok(h) => {
+                                Ok(mut h) => {
                                     eprintln!(
                                         "[vz] host vsock: listening on port {port} — a guest \
                                          may now connect to CID 2"
                                     );
+                                    // Order 830-xsk2. A listener with no relay
+                                    // accepts and serves nothing, which reads
+                                    // from the guest exactly like a dead
+                                    // service. Opt-in for the same reason the
+                                    // port is: naming a forward target is how a
+                                    // caller says the host-native engine is
+                                    // actually there.
+                                    match std::env::var("TILLANDSIAS_HOST_VSOCK_FORWARD_TO") {
+                                        Ok(t) => match t.trim().parse::<std::net::SocketAddr>() {
+                                            Ok(addr) => match h.0.forward_to(addr) {
+                                                Ok(()) => eprintln!(
+                                                    "[vz] host vsock: forwarding accepted \
+                                                     connections to {addr}"
+                                                ),
+                                                Err(e) => eprintln!(
+                                                    "[vz] host vsock: could not start the relay \
+                                                     to {addr}: {e}. Guest connections will be \
+                                                     accepted and closed unserved."
+                                                ),
+                                            },
+                                            Err(_) => eprintln!(
+                                                "[vz] host vsock: \
+                                                 TILLANDSIAS_HOST_VSOCK_FORWARD_TO={t:?} is not \
+                                                 a host:port address; not forwarding"
+                                            ),
+                                        },
+                                        Err(_) => eprintln!(
+                                            "[vz] host vsock: no \
+                                             TILLANDSIAS_HOST_VSOCK_FORWARD_TO set — accepting \
+                                             connections but forwarding nowhere"
+                                        ),
+                                    }
                                     if let Ok(mut g) = self.host_listener.lock() {
                                         *g = Some(h);
                                     }
