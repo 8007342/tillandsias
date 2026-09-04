@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-litmus-runner-prints-fail-without-the-step-exit-status-so-readers-supply-one
+    order: 1018-5f5a
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [litmus, fail-loud, shell, observability]
+    estimated_hours: 1
+    owned_files:
+      - scripts/run-litmus-test.sh
+    title: |
+      run-litmus-test.sh prints [FAIL] for a step with no exit status and no stderr tail, so a reader supplies a mechanism from memory; on 2026-09-04 that became "SIGPIPE 141" in a commit message for a step that had exited 1 on a no-match
+    context: |
+      MEASURED 2026-09-04 by yoga, lenovinha and the coordinator. Yoga's two
+      --by-hardware litmus steps failed in the runner and passed by hand. The
+      runner printed `[FAIL] spec=... test=...` and `Check implementation`
+      (scripts/run-litmus-test.sh lines 441, 1034 and 1421 print no rc), and
+      yoga, having just read 901-jtvi's comment block, wrote "returned 141
+      inside the runner" into the record. Three hosts then measured SIGPIPE
+      thresholds for two hours. The real cause, found by lenovinha: the
+      agent's interactive shell on every Linux host checked (yoga, lenovinha,
+      macuahuitl: 3/3) defines `grep` as a function over ugrep, which
+      interprets `\t`; the runner resolves /usr/bin/grep (GNU 3.12), whose
+      ERE does not define `\t` (warns "stray \ before t", matches a literal
+      t). The step exited 1 on a no-match. A printed `rc=1` beside the
+      `[FAIL]` would have ended the hunt in one read, and the runner's own
+      line-1299 comment already says "Name the real reason (order 256)".
+      Provenance: yoga and lenovinha measured; filed by the coordinator. The
+      grep-shadow lint itself is lenovinha's deliverable on 901-jtvi.
+    exit_criteria:
+      - "every step [FAIL] line carries the step's exit status (rc=<n>) and, when the step wrote to stderr, its last line; pre-fix result: FAILS (lines 441, 1034, 1421 print neither)"
+      - "a fixture step that exits 1 with no output, one that exits 141, and one that exits 124 on timeout each produce a [FAIL] line naming that number; pre-fix result: FAILS (all three print the same line)"
+      - "the compact form (--compact) keeps the rc on the FAIL line; pre-fix result: FAILS"
+    verifiable_closure: |
+      litmus:litmus-runner-shape or the nearest bound runner-shape litmus in
+      openspec/litmus-bindings.yaml gains the rc-on-fail arm with the three
+      fixture steps above; naming which one is the claimer's first act.
