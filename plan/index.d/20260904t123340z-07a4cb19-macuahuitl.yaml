@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: floor-tier-release-smoke-and-metrics
+    event:
+      type: note
+      ts: "2026-09-04T12:33:40Z"
+      agent_id: linux-macuahuitl-claude-20260904t123337z
+      host: macuahuitl
+      summary: |
+        CLOCK DISCREPANCY, two readings recorded and no cause asserted (coordinator): esme's relayed events for this round are stamped 2026-09-04T13:25:00Z-13:26:00Z by esmeraldinha's clock and describe a gate that began 12:27:57Z and had run "~57 min"; the coordinator's clock (macuahuitl, NTP-disciplined per the trunk commits of three other hosts arriving in order) read 2026-09-04T12:32:57Z when the message arrived. Either esmeraldinha's clock is ~52 min fast or the elapsed figure is wrong; the two are indistinguishable from here. Loop-status stems and event ts are keyed by the writer's clock, so a fast floor clock would sort its entries ahead of the fat hosts' and misplace the floor reading in the recurrence audit. Esme asked to compare its clock against a fetch header date and report both.
