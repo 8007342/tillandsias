@@ -1582,6 +1582,75 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Formatting check passed"
 
+    # ── FAST REFUSALS (order 1009-gccx) ─────────────────────────────────────
+    #
+    # ADD NEW SUB-SECOND GUARDS HERE, not at the end of the gate.
+    #
+    # THE DEFECT THIS CLOSES. Roughly a fifth to a third of gate runs end red,
+    # and the checks that end them are decidable in milliseconds — but they used
+    # to run AFTER everything expensive. Measured from the timing log, the five
+    # guards below cost 12ms, 43ms, 92ms, 458ms and 869ms; they sat at build.sh
+    # lines 2584-3210, behind the terminology dictionary (33s), the ruby
+    # could-not-run check (23s), the plan archiver (23s), the plan-ledger tests
+    # (18s) and the workspace suite (79s). So a tree whose only fault was a
+    # dropped exec bit paid the entire gate to be told in 92ms.
+    #
+    # That is not hypothetical: on 2026-09-04 an awk rewrite dropped the exec
+    # bit on scripts/local-ci.sh, and both macbookair and lenovinha lost a full
+    # gate run to 731-d89b discovering it at the end. The same day cost yolanda
+    # four re-runs (fmt, a clippy lint, 977-448j, 885-92iu) and the coordinator
+    # four landing refusals.
+    #
+    # NOTHING IS REMOVED OR WEAKENED — the same checks run, with the same
+    # negative controls, in a different order. Only the ORDER changes, so the
+    # expensive phases run on a tree that has already passed the cheap ones.
+    #
+    # WHAT BELONGS HERE, and the line is measured rather than felt: a guard
+    # whose median is UNDER A SECOND and which can decide from the working tree
+    # alone. `checking plan/long-running.md matches the live multi_cycle set`
+    # (251 LM-04) is deliberately NOT here — it measures 4.1s, which is more
+    # than the clippy pass it would jump ahead of (2.3s), so hoisting it would
+    # add more to every GREEN run than it saves on the red ones. If a guard here
+    # ever grows past a second, it belongs back in the body.
+    _step "Fast refusals: sub-second deciders before any compile (1009-gccx)..."
+
+    if ! _run bash "$SCRIPT_DIR/scripts/check-scorable-obligation-added.sh" 2>&1; then
+        _error "this change files a packet with no scorable obligation — name a litmus:<test> in its verifiable_closure (977-448j)"
+        exit 1
+    fi
+
+    if ! _run bash "$SCRIPT_DIR/scripts/check-issue-citation-convention.sh" 2>&1; then
+        _error "a newly added plan/issues citation names a source LINE (881-29me) — see the verdict line above"
+        exit 1
+    fi
+
+    if ! _run bash "$SCRIPT_DIR/scripts/check-script-exec-bits.sh" 2>&1; then
+        _error "a script is invoked by path but tracked non-executable (731-d89b) — see the verdict line above"
+        exit 1
+    fi
+
+    # NOT HERE: check-declared-closures-added.sh (885-92iu). It was hoisted in
+    # the first cut of 1009-gccx and that was WRONG — caught by yoga, confirmed
+    # by measurement here. It resolves a built `tillandsias-plan` and, when the
+    # binary is absent, emits `note: tillandsias-plan not built — declared-closures
+    # gate skipped` and PASSES. Nothing builds that binary before this phase, so
+    # hoisting it converted a gate into a no-op on any cold tree: exactly the
+    # "wired in name only" state this order exists to remove, introduced by the
+    # order itself. It stays in the body, after the workspace build, where it
+    # has a binary to resolve.
+    #
+    # THE RULE THIS ADDS to "median under a second, decidable from the working
+    # tree alone": a guard that DEGRADES TO A SKIP when a build artefact is
+    # missing must not be hoisted above the build. Speed is not the only axis —
+    # a faster check that cannot fail is worse than a slow one that can.
+
+    if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-pin-claims.sh" 2>&1; then
+        _error "a litmus pin claim does not resolve or execute (721-77yu) — see the verdict line above"
+        exit 1
+    fi
+
+    _info "Fast refusals passed"
+
     # 765-uti9 quick win (velocity audit F3): the dedicated `cargo check
     # --workspace` step was fully subsumed by the clippy pass below — same
     # virtual-manifest workspace, a strict SUPERSET of targets (--all-targets),
@@ -2581,14 +2650,20 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # while three slices landed against it and this gate stayed green.
     # Diff-scoped: standing debt is REPORTED by `tillandsias-plan
     # declared-closures` (exit 0), never redded here.
+
+    # ORDER 885-92iu, restored to the body by 1034-ihxw after 1009-gccx hoisted
+    # it in error. It resolves a built `tillandsias-plan`; with no binary it
+    # emits `note: tillandsias-plan not built` and PASSES, so above the build it
+    # is a no-op rather than a gate. It runs here, where a binary exists.
     _step "Checking that added fragments' declared closures resolve (885-92iu)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-declared-closures-added.sh" 2>&1; then
-        _error "this change files a packet whose verifiable_closure names a litmus test that does not exist or that no spec binds (885-92iu)"
+        _error "this change files a packet whose verifiable_closure names a litmus test that does not resolve (885-92iu)"
         exit 1
     fi
     _info "Declared-closure resolution check passed"
 
-    # ORDER 977-448j. The gate above refuses a NEW packet whose closure names a
+    # ORDER 977-448j. The GATE for this (moved to the fast-refusal phase near the
+    # top of --check by 1009-gccx) refuses a NEW packet whose closure names a
     # test that cannot run. It never asks whether a closure exists AT ALL — so a
     # new row with no pin, or a pin that is pure prose, passed it silently, and
     # that is exactly the row the retroactive backfill could not score (977-3dee
@@ -2602,12 +2677,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # Diff-scoped to NEW rows: the standing debt (451 of 563 packets carry no
     # verifiable_closure) is NOT redded here. A gate that reds the trunk on day
     # one gets switched off.
-    _step "Checking new packets carry something the scorer can read (977-448j)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-scorable-obligation-added.sh" 2>&1; then
-        _error "this change files a packet with no scorable obligation — name a litmus:<test> in its verifiable_closure, or state 'unscoreable: <reason>' (977-448j)"
-        exit 1
-    fi
-    _info "Scorable-obligation check passed"
 
     # ADVISORY, never a gate (885-92iu). The gate above refuses NEW debt; this
     # names the STANDING debt, every run, so it cannot go quiet the way
@@ -3038,12 +3107,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # the cited file has that many lines would PASS all six drifted citations.
     # Diff-scoped, because 1,282 citations already exist across 487 files and a
     # fleet-wide refusal would flip every host red at once (699-dycj).
-    _step "Checking new plan/issues citations name symbols, not lines (881-29me)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-issue-citation-convention.sh" 2>&1; then
-        _error "a newly added plan/issues citation names a source LINE (881-29me) — see the verdict line above"
-        exit 1
-    fi
-    _info "Issue-citation convention check passed"
 
     # Order 889-twhe. The plan-only fast lane admits NEW plan/issues captures,
     # which WIDENS what may bypass this gate — so the fixture proving each
@@ -3178,12 +3241,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Proxy permissive-port routing check passed"
 
-    _step "Checking litmus pin claims resolve and execute (721-77yu)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-pin-claims.sh" 2>&1; then
-        _error "a script claims a litmus pin that cannot execute (721-77yu) — see the verdict line above"
-        exit 1
-    fi
-    _info "Litmus pin-claim check passed"
 
     # Order 797-8dzt. A test that slices its own source between two SYMBOL
     # NAMES silently widens when one of those symbols is renamed away:
@@ -3193,7 +3250,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # `fn run_command_with_timeout`, a function no longer in that file, had
     # been unable to fail for as long as the bound had been missing, and
     # deleting the exact line it protected left it green. Same family as the
-    # pin-claim gate above: both ask whether an assertion can still fail.
+    # pin-claim gate (721-77yu, moved to the fast-refusal phase by 1009-gccx):
+    # both ask whether an assertion can still fail.
     _step "Checking source-slice bounds still resolve (797-8dzt)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-source-slice-bounds.sh" 2>&1; then
         _error "a source-slicing test is bounded by a symbol that no longer exists (797-8dzt) — see the verdict line above"
@@ -3207,12 +3265,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # error rather than the verdict it exists to produce. Narrow by design: a
     # `bash scripts/x.sh` caller works at any mode, and sourced libraries here
     # are correctly non-executable.
-    _step "Checking scripts invoked by path are executable (731-d89b)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-script-exec-bits.sh" 2>&1; then
-        _error "a script is invoked by path but tracked non-executable (731-d89b) — see the verdict line above"
-        exit 1
-    fi
-    _info "Script exec-bit check passed"
 
     # Order 795-jjw3. Exactly one module may construct a `wsl.exe` child, so a
     # cross-cutting policy about wsl.exe is set once rather than N times.

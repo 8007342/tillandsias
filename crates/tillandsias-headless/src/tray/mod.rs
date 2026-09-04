@@ -3925,7 +3925,7 @@ fn build_menu_layout(
 ///
 /// ```text
 /// 1. Status (disabled, live-updating)            id=1
-/// 2. 🔑 GitHubLogin                              id=20  (visible iff NOT authenticated)
+/// 2. 🔑 GitHub Login                             id=20  (visible iff NOT authenticated)
 ///    OR
 ///    🏠 ~/src >                                  id=21  (visible iff authenticated)
 ///    ☁️ Cloud >                                  id=22  (visible iff authenticated)
@@ -6508,8 +6508,8 @@ mod tests {
             "Missing Cloud submenu"
         );
         assert!(
-            !label_list.iter().any(|l| l.contains("GitHubLogin")),
-            "GitHubLogin must not appear when authenticated"
+            !label_list.iter().any(|l| l.contains("GitHub Login")),
+            "the GitHub Login row must not appear when authenticated"
         );
         // ABSENCE pin (operator order 2026-07-22, tray-ux "UX curation
         // governance"): no reset-guest leaf in the authenticated shape either.
@@ -6634,8 +6634,8 @@ mod tests {
             "Missing the transitional Logging in… row. labels={label_list:?}"
         );
         assert!(
-            !label_list.iter().any(|l| l.contains("GitHubLogin")),
-            "The actionable GitHubLogin row must not render mid-flow"
+            !label_list.iter().any(|l| l.contains("GitHub Login")),
+            "The actionable GitHub Login row must not render mid-flow"
         );
         assert!(!label_list.iter().any(|l| l.contains("~/src")));
         assert!(!label_list.iter().any(|l| l.contains("Cloud")));
@@ -6712,7 +6712,7 @@ mod tests {
             "a succeeded probe must surface the Cloud submenu. labels={labels_in:?}"
         );
         assert!(!labels_in.iter().any(|l| l.contains("~/src")));
-        assert!(!labels_in.iter().any(|l| l.contains("GitHubLogin")));
+        assert!(!labels_in.iter().any(|l| l.contains("GitHub Login")));
         assert!(!labels_in.iter().any(|l| l.contains("Logging in")));
     }
 
@@ -7090,12 +7090,18 @@ mod tests {
         assert_eq!(after.2.len(), 5);
         let before_labels = labels(&before);
         let after_labels = labels(&after);
-        // NOTE the SPACE: the rendered label is "🔑 GitHub Login". Several
-        // existing absence-assertions in this module test `contains("GitHubLogin")`
-        // without it, which can never match and therefore always pass — they are
-        // vacuous. Reported as a finding rather than fixed here, because that is
-        // a different migration from this one; using the wrong spelling in a
-        // PRESENCE assert simply fails, which is how this was found.
+        // NOTE the SPACE: the rendered label is "🔑 GitHub Login", pinned by
+        // tillandsias-host-shell/src/lib.rs:93. Three absence-assertions in
+        // this module tested `contains("GitHubLogin")` without it, which can
+        // never match and therefore always passed — vacuous. Corrected under
+        // 1028-3eiz; using the wrong spelling in a PRESENCE assert simply
+        // fails, which is how lenovinha found it.
+        //
+        // ONE un-spaced assert SURVIVES on purpose, and is not the same
+        // defect: the one in confirmed_signed_out_row_uses_canonical_github_
+        // spelling asserts the RETIRED spelling never renders. Its subject IS
+        // the un-spaced string, so it is a spelling regression pin rather than
+        // a login-row absence check, and correcting it would delete the guard.
         assert!(
             before_labels.iter().any(|l| l.contains("GitHub Login")),
             "unauthenticated menu must offer login. labels={before_labels:?}"

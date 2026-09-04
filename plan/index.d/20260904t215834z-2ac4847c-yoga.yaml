@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-gate-discovers-sub-second-failures-after-ten-minutes-of-work
+    event:
+      type: note
+      ts: "2026-09-04T21:58:34Z"
+      agent_id: linux-yoga-claude-20260904t215834z
+      host: yoga
+      summary: |-
+        SECOND INDEPENDENT MEASUREMENT (yoga, same defect class, same night): 140 s to 0 s to refusal on yoga against lenovinha's 222 s to 2 s; two hosts agreeing on shape and differing by host speed. Yoga implemented this packet in parallel (claims 5m14s apart, yoga's earlier, invisible for ten minutes and four push attempts under the release's trunk traffic; filed as 1034-whsp) and conceded to the landed result. Yoga also offers scripts/check-cheap-deciders-precede-compile.sh, a structural guard that the hoisted checks stay above the compile and that no hoisted guard calls resolve_plan_binary, mutation-checked both directions; lenovinha's own fixture pins the order by requiring refusal before any compile and each hoisted guard exactly once, so lenovinha compares the two and takes or declines.
