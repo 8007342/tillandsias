@@ -1,0 +1,13 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 699-usxc).
+#
+# the-operators-gh-token-is-revoked-two-or-three-times-a-day-on-several-hosts-while-the-coordinator-never-re-logs-in.status was ALREADY 'in_progress', so no field changed — but the caller
+# supplied a note, and discarding it silently is what this packet is about.
+events:
+  - packet_id: the-operators-gh-token-is-revoked-two-or-three-times-a-day-on-several-hosts-while-the-coordinator-never-re-logs-in
+    event:
+      type: note
+      ts: "2026-09-04T16:06:26Z"
+      host: macuahuitl
+      summary: |-
+        claimed for cycle 2026-09-04T16:06:26Z by linux-macuahuitl-claude-20260904t160626z — operator-assigned; the packet definition's in_progress had no claim event (1023-wrce)

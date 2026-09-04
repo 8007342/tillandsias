@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-litmus-runner-prints-fail-without-the-step-exit-status-so-readers-supply-one
+    event:
+      type: evidence
+      ts: "2026-09-04T15:56:13Z"
+      agent_id: linux-lenovinha-claude-20260904t153515z
+      host: lenovinha
+      summary: |
+        SHIPPED THE rc HALF; THE STDERR HALF WAS ALREADY SATISFIED, NOT SKIPPED FOR EXPENSE — and the filed scope was wrong in both directions.
+
+        PRE-FIX RESULT, per arm, stated as the fleet rule requires:
+          litmus-rust check arm        FAILS — [FAIL] then $output, no rc, though `status` was in scope
+          success_pattern miss arm     FAILS — pattern, failure_pattern, output; no rc, though $exit_code was in scope
+          expected_behavior miss arm   FAILS — expected, output; no rc, though behavior_matches_output CONSUMES $exit_code to decide
+          strict-exit arm              ALREADY NAMED IT on its detail line — the packet listed this as printing neither, and it did print exit_code
+        Post-fix: all four carry `rc=<n>` ON THE [FAIL] LINE. The strict-exit arm was changed even though it already named the number, because a reader scanning for a verdict — or a tool grepping one — reads the [FAIL] line. Uniform grammar is what lets "no rc on the line" mean "the runner did not know" rather than "it is below, on some arms".
+
+        SCOPE CORRECTED IN BOTH DIRECTIONS. The filing named lines 441, 1034 and 1421. 1421 already complied. And FIVE sites were not named: 1436, 1443, 1472, 1483, 1743. Of those, 1436 and 1443 are real step-exit sites and now carry rc; the other three are NOT step exits and carry an inline `# rc-exempt: <reason>` marker instead — the spec/test-level reporter (the caller passes a message, no exit in scope) and the two gating_points arms (a regex over COMBINED output, not a step's exit). The marker is the deliberate part: a new [FAIL] site must be classified rather than default to silence, and the fixture keys on the marker rather than on line numbers, which drift.
+
+        THE STDERR TAIL IS NOT AVAILABLE AND DOES NOT NEED TO BE. You asked me to say which half I shipped if the tail proved expensive. It is neither expensive nor missing: steps are captured with `>"$step_capture" 2>&1`, so stderr is MERGED into step_output and the runner already prints it in full at those arms. There is no separate stderr stream to tail without changing the capture to split streams, which would reorder interleaved output — a real cost for no gain, since the content is already reaching the reader. rc alone was the missing half, exactly as you predicted.
+        This also explains today's two hidden causes precisely. Cause 5's step "printed one line and no rc" because the STEP emitted one line; the runner faithfully printed what it got. Cause 8 lost its case names to the step's own `| tail -1` — discarded BEFORE the runner saw them, so no amount of runner output would have recovered them. Neither is fixed by printing more of what the runner has; both are fixed by the number the runner already knew and did not say.
+
+        FIXTURE 5/5, scripts/test-litmus-runner-reports-rc.sh, wired into local-ci.sh.
+          Arm A BEHAVIOURAL: the three shapes really produce 1, 141 and 124, executed through the runner's own line (`timeout --kill-after=10s Ns bash -c ... >cap 2>&1`). Without it the invariant would pin a grammar for exit codes nobody produces.
+          Arm B STATIC invariant: every [FAIL] printf carries rc=, exemptions honoured.
+          Arm C CONTROL: the rule run against the PRE-FIX runner FAILS. An invariant that has never gone red is a claim.
+
+        A MISTAKE OF MINE IN THE FIXTURE, recorded because it is the same class this packet is about. My first draft of arm A used a SINGLE-LINE 4 MB producer into `grep -q` and measured rc=0, so the arm reported "141 untested on this host". That is wrong and I had already measured why earlier today: GNU grep matches line-at-a-time and must reach the newline before deciding, so it DRAINS a single long line and the producer never dies. Only a multi-line stream lets grep settle on line 1 and exit with the rest in flight. The arm now uses a multi-line producer and gets 141. I nearly shipped a fixture that would have declared a testable property untestable — on the very host where I had measured it 20/20 four hours earlier.
+
+        LIMIT STATED RATHER THAN IMPLIED: arm B is STATIC. It is not an end-to-end assertion that a failing spec prints rc, because driving the real runner needs a spec registered in openspec/litmus-bindings.yaml, and a fixture that edits a shared registry — or rebuilds a temp PROJECT_ROOT with every sourced dependency — costs more than it proves. The behavioural and invariant halves are therefore separate, and the seam is named in the fixture header. Someone wanting true end-to-end coverage should add a permanently-bound always-failing spec, which is a different packet.
+
+        VERIFIED: runner still healthy end-to-end (accel-capability-probe 2/2, Status: [PASS]). ./build.sh --check green 250s exit 0.
+
+        EVIDENCE: 97fac228b, verified an ancestor of origin/linux-next BEFORE this event was written — first closure under 1024-c3h3's interim rule (land first, then cite the ok:land sha), rather than the pre-rebase local I would have cited this morning.

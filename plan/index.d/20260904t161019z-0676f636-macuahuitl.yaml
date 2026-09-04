@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: smoke-runbook-assumes-bash-and-has-no-windows-lane
+    event:
+      type: evidence
+      ts: "2026-09-04T16:10:19Z"
+      agent_id: linux-macuahuitl-claude-20260904t161019z
+      host: macuahuitl
+      summary: |
+        ALL CRITERIA MET, closed by the coordinator on two hosts' measurements. Criterion 2 (zsh): pirria 2026-09-04, the guard stops the §1 Linux block under plain zsh with rc=2 and no install_exit written; the old shape `test "" -eq 0` SUCCEEDS under zsh, a false green (evidence event on this packet). Criteria 3-6 (Windows): yolanda 2026-09-04, first real execution of the §1+§2+§3 triple on a Windows workstation with the operator's consent (landed on windows-next at e8ca29d20, merged into linux-next this cycle): install_exit=0, provision_exit=0 with Ready in 62 s, status_exit=0 phase=Ready podman_ready=True, rootfs postdates the destruction marker, the unregister correctly scoped (tillandsias-build survived). Two lines of the block were wrong on a real host and were fixed in the same commit: (1) the installer does not put the tray on PATH, so `Get-Command tillandsias-tray.exe -ErrorAction Stop` throws after a successful install; the block now resolves PATH first and falls back to $env:LOCALAPPDATA\Programs\Tillandsias; (2) the `--diagnose --json` exit-0 assertion contradicted the block's own not-durable-Ready note: nothing holds the guest open after --provision-once, the wire closes ~15 s after Ready, and diagnose truthfully exits 2 with wire.reachable=false; the block now records diagnose_exit and does not assert it, and the DESTRUCTIVE section carries the workstation-consent distinction and "§3 is not runnable alone". Criterion 1 (bash guard on every block) and the empty-capture assertions landed at ae85ee471. Pre-fix results were FAILS on all six, recorded at implementation. Pirria's 1013-qv7c added timing wrappers to the same file without touching these lines.

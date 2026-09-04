@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: build-sh-collapses-a-could-not-run-exit-into-a-fragment-events-violation
+    event:
+      type: note
+      ts: "2026-09-04T16:29:15Z"
+      agent_id: forge-forge-tillandsias-opencode-20260904t162915z
+      host: forge
+      summary: |-
+        released on exit: exit criteria 1-3 met (build.sh exit-2 distinction + 5/5 fixture + disposition written); criterion 4 (esmeraldinha's Windows-distro binary freshness) needs a Windows host. Trunk at HEAD is additionally RED for two pre-existing unrelated failures this packet does not own, filed as findings 1022-px54 (headless proxy test drift) and 1022-73pk (pre-receive stale-base fixture).

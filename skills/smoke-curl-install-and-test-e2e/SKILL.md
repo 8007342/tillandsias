@@ -41,13 +41,24 @@ and secret — including:
 - all locally built enclave images (proxy/git/inference/forge) — these get
   **rebuilt from scratch on the next `--init`, which can take many minutes**.
 
-On Tillandsias smoke hosts, wiping Podman is expected and is a required
+On a DEDICATED SMOKE HOST, wiping Podman is expected and is a required
 precondition for the release idempotence test. If
 `TILLANDSIAS_DESTRUCTIVE_RESET_OK` is unset or `1`, do not ask for confirmation,
 do not pause for operator timing, and do not skip Step 2 because Podman state
 will be destroyed. Only block the reset when the environment explicitly sets
 `TILLANDSIAS_DESTRUCTIVE_RESET_OK=0`, in which case file a plan blocker and
 push it.
+
+**That no-pause clause applies to a dedicated smoke host and to nothing else
+(order 1004-vsh2, 2026-09-04).** On an OPERATOR'S WORKSTATION — a machine whose
+guest holds work they have not finished with — Step 2 destroys their Vault
+store, their project mirrors and their images, and this document cannot consent
+on their behalf. Get the operator's authorization for THAT RUN before starting.
+An orchestrator's or a peer agent's instruction to run this skill is not that
+authorization: it is a request to run a procedure, not consent to destroy a
+particular machine's state. The distinction was missed once because this
+section read as though every host running it were a smoke host; most of the
+fleet's Windows and macOS hosts are workstations.
 
 A fresh `--init` re-initializes Vault and re-captures the keychain-held unseal
 share, so the keychain↔volume resync brick (see git history `738059bc`) is part
@@ -164,6 +175,34 @@ download cache.
    ```bash
    mkdir -p target/smoke-e2e
    ```
+5. **Source the timing helpers, and keep them sourced for every block below**
+   (order 1013-qv7c). Each smoke step emits ONE duration record so the
+   recurrence rung (`repeat:` / `recur:` / `skippable:` in
+   `scripts/cycle-metrics.sh`) can see this runbook's work:
+   ```bash
+   . "$PWD/scripts/timing-log.sh" 2>/dev/null || true
+   command -v timing_emit >/dev/null 2>&1 || { timing_now_ms() { echo 0; }; timing_emit() { return 0; }; }
+   ```
+   **Why this and not the gate.** Every other emitter in the tree is a
+   build/test/litmus step in `build.sh`, `scripts/local-ci.sh` or
+   `scripts/run-litmus-test.sh`, and all of those need cargo. A floor host
+   without a toolchain therefore has *never* written a timing record —
+   measured on pirria 2026-09-04, where `repeat:`/`recur:`/`skippable:` all
+   read `source=absent` and `.cache/metrics/` was an empty directory the probe
+   itself created. An instrument for finding what slow hosts pay cannot be
+   downstream of the thing slow hosts cannot run. `timing_emit` is bash and
+   `jq`, needs no toolchain, and the smoke is work the floor *can* do — so the
+   records come from here.
+
+   The emits are **best-effort by construction**: `timing_emit` wraps its whole
+   body and always returns 0, and the fallback stub above keeps every call site
+   unconditional and `set -e`-safe. A metrics write can never fail a smoke step.
+
+   Records are named `phase=smoke` with these pinned `step` values, one per
+   step below: `smoke-curl-install`, `smoke-destructive-reset`,
+   `smoke-init-pristine`, `smoke-forge-lane`, `smoke-health-check`. They land
+   in `<checkout>/.cache/metrics/tillandsias-timing.jsonl` (the same log the
+   gate steps write) and are read back by `scripts/cycle-metrics.sh`.
 
 ---
 
@@ -182,11 +221,13 @@ unset the installer defaults to the stable channel.
 
 ```bash
 [ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh expands it empty'; exit 2; }
+_T0="$(timing_now_ms)"
 TILLANDSIAS_SMOKE_LOCK_LOG=target/smoke-e2e/00-smoke-lock.log \
   scripts/with-smoke-lock.sh --name release-smoke-e2e -- \
   bash -c "curl -fsSL '${SMOKE_BASE}/install.sh' | TILLANDSIAS_RELEASE_BASE='${SMOKE_BASE}' bash" 2>&1 \
   | tee target/smoke-e2e/01-install.log
 INSTALL_RC=${PIPESTATUS[0]}; printf 'install_exit=%s\n' "$INSTALL_RC" | tee target/smoke-e2e/01-install-exit.txt
+timing_emit smoke-curl-install smoke "$_T0" "${INSTALL_RC:-1}" || true
 test -n "$INSTALL_RC" && test "$INSTALL_RC" -eq 0
 hash -r
 tillandsias --version | tee target/smoke-e2e/01-version.txt
@@ -269,7 +310,17 @@ Remove-Item Env:TILLANDSIAS_VERSION
 if ($installExit -ne 0) { throw "install failed (exit $installExit) — file a finding and STOP" }
 # The tray is the only installed surface on Windows; assert it resolves NOW,
 # not at §3 where a missing binary would read as a provision failure.
-$tray = (Get-Command tillandsias-tray.exe -ErrorAction Stop).Source
+#
+# MEASURED 2026-09-04 on yolanda (order 1004-vsh2): the installer does NOT put
+# its directory on PATH, so a bare `Get-Command tillandsias-tray.exe` THROWS on
+# a host where the install just succeeded — "not recognized as a name of a
+# cmdlet". The binary is at $env:LOCALAPPDATA\Programs\Tillandsias, which the
+# installer prints as its install path. Resolve PATH first (an operator may
+# have added it) and fall back to the install location; only then fail.
+$tray = (Get-Command tillandsias-tray.exe -ErrorAction SilentlyContinue |
+    Select-Object -First 1 -ExpandProperty Source)
+if (-not $tray) { $tray = "$env:LOCALAPPDATA\Programs\Tillandsias\tillandsias-tray.exe" }
+if (-not (Test-Path $tray)) { throw "tray not found on PATH or at $tray after a successful install" }
 "tray=$tray" | Tee-Object target\smoke-e2e\01-tray-path.txt
 # EXACT, not "contains": the tray answers --version / -V (windows-tray
 # main.rs), so the lane can confirm which release it is testing.
@@ -305,10 +356,12 @@ push it. Otherwise run the reset immediately; on Linux this step is mandatory.
 
 ```bash
 [ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh expands it empty'; exit 2; }
+_T0="$(timing_now_ms)"
 TILLANDSIAS_SMOKE_LOCK_LOG=target/smoke-e2e/00-smoke-lock.log \
   scripts/with-smoke-lock.sh --name release-smoke-e2e -- \
   podman system reset --force 2>&1 | tee target/smoke-e2e/02-reset.log
 RESET_RC=${PIPESTATUS[0]}; printf 'reset_exit=%s\n' "$RESET_RC" | tee target/smoke-e2e/02-reset-exit.txt
+timing_emit smoke-destructive-reset smoke "$_T0" "${RESET_RC:-1}" || true
 test -n "$RESET_RC" && test "$RESET_RC" -eq 0
 ```
 
@@ -379,13 +432,40 @@ Credential Manager untouched, and the tray treats it as authoritative:
 # 'tillandsias-vm-uuid' is deliberately PRESERVED -- it anchors the
 # INSTALLATION, not the guest, and the in-VM Vault derives its master key
 # from it. Only the two guest-vault entries go.
+#
+# ORDER 1004-vsh2. `cmdkey /list:<target>` ECHOES THE TARGET IN ITS HEADER
+# even when no such credential exists, so the obvious predicate
+# `$out -match [regex]::Escape($cred)` is TRUE FOR EVERY TARGET and the
+# verifier below threw on every run. Measured on yolanda 2026-09-04:
+#
+#   /list:definitely-not-a-real-target-12345  ->  exit 0, 4 lines
+#     "Currently stored credentials for definitely-not-a-real-target-12345:"
+#     "* NONE *"
+#   /list:<a target that exists>              ->  exit 0, 7 lines
+#     "Currently stored credentials for <target>:"
+#     "    Target: <target>"   <- the record, and the second echo
+#
+# THE EXIT CODE DOES NOT DISCRIMINATE: cmdkey returns 0 for both, so the
+# locale-proof status predicate is not available and was not used. Measured,
+# not assumed.
+#
+# So count the ECHOES OF THE TARGET NAME, which is the one string in that
+# output that Windows does not localize: the header echoes it once; a real
+# record echoes it again on its own `Target:` line. 1 = absent, >=2 = present.
+# Do NOT test for the absence of "* NONE *" or match the header text -- both
+# are LOCALIZED, and an English-text predicate trades a bug that fails on
+# every run for one that fails only on some operators' machines, which is
+# strictly worse because it fails where nobody is looking.
+function Test-TillandsiasCredPresent([string] $target) {
+    $out = & cmdkey.exe "/list:$target" 2>$null
+    (($out | Where-Object { $_ -match [regex]::Escape($target) }) | Measure-Object).Count -ge 2
+}
+
 foreach ($cred in @('vault-shamir-share-v1', 'vault-root-token-v1')) {
-    $listed = & cmdkey.exe /list:$cred 2>$null
-    if ($listed -match [regex]::Escape($cred)) { & cmdkey.exe /delete:$cred > $null 2>&1 }
+    if (Test-TillandsiasCredPresent $cred) { & cmdkey.exe "/delete:$cred" > $null 2>&1 }
 }
-$stillThere = @('vault-shamir-share-v1', 'vault-root-token-v1') | Where-Object {
-    (& cmdkey.exe /list:$_ 2>$null) -match [regex]::Escape($_)
-}
+$stillThere = @('vault-shamir-share-v1', 'vault-root-token-v1') |
+    Where-Object { Test-TillandsiasCredPresent $_ }
 if ($stillThere) { throw "host vault credentials survived the reset: $($stillThere -join ', ')" }
 ```
 
@@ -421,10 +501,12 @@ metered or slow link pays it every time.
 
 ```bash
 [ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh expands it empty'; exit 2; }
+_T0="$(timing_now_ms)"
 TILLANDSIAS_SMOKE_LOCK_LOG=target/smoke-e2e/00-smoke-lock.log \
   scripts/with-smoke-lock.sh --name release-smoke-e2e -- \
   tillandsias --debug --init 2>&1 | tee target/smoke-e2e/03-init.log
-INIT_RC=${PIPESTATUS[0]}; printf 'init_exit=%s\n' "$INIT_RC" | tee target/smoke-e2e/03-init-exit.txt
+INIT_RC=${PIPESTATUS[0]}
+timing_emit smoke-init-pristine smoke "$_T0" "${INIT_RC:-1}" || true; printf 'init_exit=%s\n' "$INIT_RC" | tee target/smoke-e2e/03-init-exit.txt
 test -n "$INIT_RC" && test "$INIT_RC" -eq 0
 ```
 
@@ -475,8 +557,11 @@ test "$IMG" -nt target/smoke-e2e/03-destruction-marker
 # the host, this report is stale and the run is unfinished (the 2026-08-10
 # incident: 4/4 PASS on a health check taken before one more mutating step
 # wedged the host for 25 minutes).
+_T0="$(timing_now_ms)"
 "$APP" --diagnose --json 2>&1 | tee target/smoke-e2e/03-diagnose.json
-_rc=${PIPESTATUS[0]}; test -n "$_rc" && test "$_rc" -eq 0
+_rc=${PIPESTATUS[0]}
+timing_emit smoke-health-check smoke "$_T0" "${_rc:-1}" || true
+test -n "$_rc" && test "$_rc" -eq 0
 
 jq -e '.provisioned == true'    target/smoke-e2e/03-diagnose.json
 jq -e '.rootfs_present == true' target/smoke-e2e/03-diagnose.json
@@ -500,6 +585,15 @@ jq -e --arg v "${SMOKE_TAG#v}" '.version == $v' target/smoke-e2e/03-diagnose.jso
 
 ### Windows
 
+> **This block is not runnable on its own.** It assumes §1 installed the tray
+> and §2 unregistered the distro. Run alone it fails twice and both failures
+> lie: `Get-Command tillandsias-tray.exe -ErrorAction Stop` throws on line 2 on
+> a host where §1 never installed it, and the destruction-marker assertion
+> reports "a survivor, not a fresh provision" when the truth is that nothing
+> destroyed it. The runnable unit is §1 + §2 + §3, never §1 + §3 (order
+> 1004-vsh2 — an instruction to run "§1 and §3" was issued and measured
+> unrunnable on yolanda before it was executed).
+
 **Neither block above runs on Windows and there is no `tillandsias` CLI there
 either** — the installed surface is `tillandsias-tray.exe`, and its
 provisioning flag is `--provision-once`, NOT the macOS `--provision` (the two
@@ -511,7 +605,12 @@ esmeraldinha (cold `--provision-once` exit 0 in 117 s, warm 18 s, wire Ready).
 
 ```powershell
 $ErrorActionPreference = 'Stop'
-$tray = (Get-Command tillandsias-tray.exe -ErrorAction Stop).Source
+# Same resolution as §1 — the installer does not add its directory to PATH
+# (measured 2026-09-04, order 1004-vsh2), so `Get-Command` alone throws here.
+$tray = (Get-Command tillandsias-tray.exe -ErrorAction SilentlyContinue |
+    Select-Object -First 1 -ExpandProperty Source)
+if (-not $tray) { $tray = "$env:LOCALAPPDATA\Programs\Tillandsias\tillandsias-tray.exe" }
+if (-not (Test-Path $tray)) { throw "tray not found on PATH or at $tray (did §1 run?)" }
 
 # Marker to prove the distro below was registered AFTER §2's unregister, not
 # inherited from it. An exit code cannot tell these apart.
@@ -556,8 +655,25 @@ if (-not $status.podman_ready) { throw "podman_ready is false at Ready" }
 # the host, this report is stale and the run is unfinished (the 2026-08-10
 # incident, same rule as the macOS block).
 & $tray --diagnose --json 2>&1 | Tee-Object target\smoke-e2e\03-diagnose.json
-if ($LASTEXITCODE -ne 0) { throw "diagnose failed (exit $LASTEXITCODE)" }
+$diagnoseExit = $LASTEXITCODE
+"diagnose_exit=$diagnoseExit" | Tee-Object target\smoke-e2e\03-diagnose-exit.txt
+# DO NOT assert `$diagnoseExit -eq 0`, and the reason is the note above.
+#
+# MEASURED 2026-09-04 on yolanda (order 1004-vsh2), inline in ONE script with
+# nothing interposed: --status-once read Ready / podman_ready=true, and
+# --diagnose seconds later exited 2 with distro_running=false and
+# wire.reachable=false. The tray log shows the wire closing ~15 s after
+# "provision-once: VM Ready". Nothing holds the guest open, so by the time the
+# LAST step runs the wire is legitimately down and diagnose reports that
+# truthfully. Requiring exit 0 here contradicts this block's own
+# "Ready is not durable after --provision-once" note, one screen up.
+#
+# So assert what diagnose is FOR at this point in the lane — a well-formed
+# report carrying this tray's identity — and record the exit code as data.
+# A missing or unparseable report is still a hard failure.
+if (-not (Test-Path target\smoke-e2e\03-diagnose.json)) { throw "diagnose wrote no report" }
 $diag = Get-Content target\smoke-e2e\03-diagnose.json -Raw | ConvertFrom-Json
+if (-not $diag) { throw "diagnose report is not valid JSON (exit $diagnoseExit)" }
 if ($diag.PSObject.Properties.Name -contains 'version') {
   if ($diag.version -ne $SmokeTag.TrimStart('v')) { throw "tray version '$($diag.version)' != release $SmokeTag" }
 } else {
@@ -583,11 +699,23 @@ if ($diag.PSObject.Properties.Name -contains 'version') {
 ## 4 — Forge continuous-enhancement run (only if Step 3 was clean)
 
 ```bash
+[ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh expands it empty'; exit 2; }
+_T0="$(timing_now_ms)"
 TILLANDSIAS_SMOKE_LOCK_LOG=target/smoke-e2e/00-smoke-lock.log \
   scripts/with-smoke-lock.sh --name release-smoke-e2e -- \
   env TILLANDSIAS_NO_TRAY=1 tillandsias . --opencode --prompt "Use the /meta-orchestration skill" 2>&1 \
   | tee target/smoke-e2e/04-opencode.log
+LANE_RC=${PIPESTATUS[0]}; printf 'opencode_exit=%s\n' "$LANE_RC" | tee target/smoke-e2e/04-opencode-exit.txt
+timing_emit smoke-forge-lane smoke "$_T0" "${LANE_RC:-1}" || true
 ```
+
+> The guard and the `LANE_RC` capture arrived with the timing wrapper
+> (1013-qv7c). This block had neither: it piped to `tee` and recorded no status
+> at all, so a forge lane that failed to launch left the same evidence as one
+> that completed. Emitting a duration without an exit code would have recorded
+> *how long the failure took* and called it a measurement, so the capture is
+> part of the record, not scope creep — the 727-kmks assertion shape, arriving
+> at the one step that never had it.
 
 This launches the full enclave + the OpenCode agent inside the forge, which runs
 [[forge-continuous-enhancement]] against the `tillandsias` checkout. Two streams
@@ -636,9 +764,47 @@ is up, taken by a concurrent watcher, never a grep for the trace. Take it while
 the lane is up, not after: lane-scoped containers are torn down on exit by
 design, and only the application-lifetime set must survive.
 
----
+### 4c — Final health check (Linux)
 
-## 5 — File findings as plan/issues work packets
+**LAST — after every mutating step above**, the same rule the macOS and Windows
+lanes already carry (the 2026-08-10 incident: 4/4 PASS on a health check taken
+before one more mutating step wedged the host for 25 minutes).
+
+```bash
+[ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh expands it empty'; exit 2; }
+_T0="$(timing_now_ms)"
+{
+  echo "=== containers ==="
+  podman ps --format '{{.Names}}\t{{.Status}}'
+  echo "=== vault health ==="
+  podman exec tillandsias-vault sh -c \
+    'curl -s --cacert /run/secrets/tillandsias-vault-tls-ca https://127.0.0.1:8200/v1/sys/health?standbyok=true'
+  echo
+  echo "=== version ==="
+  tillandsias --version
+} 2>&1 | tee target/smoke-e2e/05-health.log
+_rc=${PIPESTATUS[0]}
+timing_emit smoke-health-check smoke "$_T0" "${_rc:-1}" || true
+test -n "$_rc" && test "$_rc" -eq 0
+grep -q '"sealed":false' target/smoke-e2e/05-health.log
+grep -q '^tillandsias-proxy' target/smoke-e2e/05-health.log
+```
+
+Expect the application-lifetime set (`tillandsias-vault`, `tillandsias-proxy`,
+`tillandsias-router`) up and healthy, and the lane-scoped ones
+(`tillandsias-inference`, `tillandsias-git-*`, the forge) gone — §4b's teardown
+is by design, so their ABSENCE here is the pass, not a finding.
+
+> **There was no Linux health-check block until 1013-qv7c**, though the Host
+> Matrix promises the step and the macOS/Windows lanes both implement it. The
+> gap is not cosmetic: `tillandsias --diagnostics` reads like the command to
+> reach for and is NOT one — it is a MODIFIER ("stream real-time logs from all
+> enclave containers (implies `--debug`)"), so bare, with no subcommand, it
+> falls through to the default tray launch and starts a cloud refresh. Measured
+> on pirria 2026-09-04, which ran it as the final health check of the
+> v56.9.2.1 smoke and had to kill it: a "health check" that mutates is exactly
+> what the LAST rule above exists to prevent. The block above is what that run
+> used instead, after the fact.
 
 Each finding becomes a `### Work Packet:` entry so `/advance-work-from-plan` can
 claim and fix it. Append packets to a dated smoke report:

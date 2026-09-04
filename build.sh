@@ -1654,11 +1654,37 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # invisible. One sat here for fourteen hours being reported on every
     # compaction while three cycle reports called it a benign refusal.
     _step "Checking every fragment event lands on a real packet..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-fragment-events-land.sh" 2>&1; then
+    # ORDER 1021-a944. The script distinguishes could-not-run (exit 2, no fresh
+    # plan binary) from a real violation (exit 1, orphan events) on purpose.
+    # A bare `if ! _run` collapses both into one branch and reports the
+    # violation message for a run where the instrument never executed — an
+    # UNEARNED RED that sends the reader chasing a misfiled packet_id that does
+    # not exist. Follow the archiver's exit-code discipline (923-ws3r): capture
+    # the true code and name the could-not-run case with the script's own
+    # verdict line plus the remedy, so a gate that cannot RUN a check never
+    # asserts what the check would have found (965-sxec).
+    _events_land_rc=0
+    _run bash "$SCRIPT_DIR/scripts/check-fragment-events-land.sh" 2>&1 || _events_land_rc=$?
+    if [ "$_events_land_rc" -eq 2 ]; then
+        _error "check-fragment-events-land COULD NOT RUN (exit 2): no fresh plan binary — this says nothing about fragment events; rebuild the instrument (scripts/cycle-preflight.sh) (1021-a944)"
+        exit 1
+    elif [ "$_events_land_rc" -ne 0 ]; then
         _error "an event is attached to no packet — invisible, not merely unfolded"
         exit 1
     fi
     _info "All fragment events land"
+
+    # ORDER 1021-a944. The fixture for the branch above. It pins the VERDICT
+    # TEXT, not the exit code alone: build.sh failed the same way either way and
+    # what regressed is what this call site SAYS — it named the silent-loss
+    # class on a run where the check never executed. A test that checked only
+    # the code would have stayed green through the incident.
+    _step "Checking a fragment-events check that could not run never claims what it would have found (1021-a944)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-fragment-events-verdict.sh" 2>&1; then
+        _error "the fragment-events could-not-run path regressed (1021-a944) — a gate that cannot RUN a check must never assert what the check would have FOUND"
+        exit 1
+    fi
+    _info "Fragment-events could-not-run verdict fixture passed"
 
     _step "Checking every ledger fragment is intact (whole overlay)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-all-fragments-intact.sh" 2>&1; then
