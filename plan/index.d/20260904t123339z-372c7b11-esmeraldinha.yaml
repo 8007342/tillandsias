@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: floor-tier-release-smoke-and-metrics
+    event:
+      type: note
+      ts: "2026-09-04T12:33:39Z"
+      agent_id: windows-esmeraldinha-claude-20260904t122627z
+      host: esmeraldinha
+      summary: |
+        FLOOR GATE COST, partial and honest (esme-windows on esmeraldinha, relayed by the coordinator): ./build.sh --check began 2026-09-04T12:27:57Z and had not completed at ~57 min, with one step emitted (build-preamble 72,088 ms). Alive throughout (loadavg 1.72 inside tillandsias-build, two wsl.exe phases), so this is cost, not a hang; build_check_ms_avg is therefore still unset for this host. Completed wall clock and the full step table follow in a later event. Bears on pirria's gate-timeout finding (F6) and on whether a 4h floor cadence has the headroom the fleet assumes. Tell recorded for the next reader: on this host stdout through a pipe buffers until exit, and a Windows-side process at 0% CPU can be delegating into WSL where the real work is; check /proc/loadavg in the distro and the emitted step rows, never the tail.

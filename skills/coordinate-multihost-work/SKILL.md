@@ -157,7 +157,10 @@ To guarantee convergence in finite time, the orchestrator MUST track and enforce
         echo "unattributed-bucket $h entries=$(ls plan/loop_status.d/*.md | grep -cE "z-([0-9a-f]{8}-)?$h\.md$")"
         continue
       fi
-      f=$(ls -t plan/loop_status.d/*.md | grep -E "z-([0-9a-f]{8}-)?$h\.md$" | head -1)
+      # Sort by NAME, never by mtime: after a merge or checkout every file's mtime
+      # is the checkout time, and `ls -t` read yoga's 09:30Z backfill as newer
+      # than its 11:29Z entry (macuahuitl, 2026-09-04T12:09Z).
+      f=$(ls plan/loop_status.d/*.md | grep -E "z-([0-9a-f]{8}-)?$h\.md$" | sort -r | head -1)
       [ -n "$f" ] || continue
       l=$(grep -ho 'skippable: [^`|·]*' "$f" | tail -1)
       echo "$h ${l:-NOT-PASTING ($f)}"
