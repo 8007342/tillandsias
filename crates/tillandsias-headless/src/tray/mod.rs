@@ -2220,7 +2220,7 @@ fn build_launch_spec(project: &ProjectEntry, kind: LaunchKind, image: &str) -> C
         .path
         .canonicalize()
         .unwrap_or_else(|_| project.path.clone());
-    let ca_cert = PathBuf::from("/tmp/tillandsias-ca/intermediate.crt");
+    let ca_cert = PathBuf::from(tillandsias_core::ca_path::ca_dir()).join("intermediate.crt");
     let no_proxy = enclave_no_proxy();
 
     let mut spec = ContainerSpec::new(image.to_string())

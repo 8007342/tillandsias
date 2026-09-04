@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# ORDER 998-qrwu: the CA directory comes from the ONE declaration
+# (images/default/ca-path.txt), never a literal — see scripts/lib-ca-path.sh.
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-ca-path.sh"
 # @trace spec:enclave-network, spec:proxy-container, spec:git-mirror-service, spec:inference-container, spec:default-image
 # Orchestrate the complete enclave stack with network setup and diagnostics
 # Usage: ./scripts/orchestrate-enclave.sh <project-path> <project-name>
@@ -13,7 +16,7 @@ set -euo pipefail
 # toolbox shares /tmp with the host bidirectionally — VERIFIED on lenovinha
 # 2026-08-26: a file the host wrote to /tmp is readable inside the container and
 # vice versa, and every CERTS_DIR here is under /tmp (mktemp -d, or
-# /tmp/tillandsias-ca). A caller whose write path is NOT shared would have the
+# ${TILLANDSIAS_CA_DIR}). A caller whose write path is NOT shared would have the
 # cert land where the caller cannot find it — a silent break, not an error.
 # Re-check the path before converting any further openssl site.
 # shellcheck source=scripts/lib/tool-dispatch.sh
@@ -128,11 +131,11 @@ fi
 # ===========================================================================
 # @trace spec:transparent-https-caching, spec:proxy-container, spec:certificate-authority
 # Generate ephemeral 30-day CA cert for entire enclave stack.
-# Stored at /tmp/tillandsias-ca/ so it persists across container restarts
+# Stored at ${TILLANDSIAS_CA_DIR}/ so it persists across container restarts
 # within a session, but is wiped on host reboot (ephemeral-first security).
 log_step "Setting up transparent HTTPS certificate authority..."
 
-CERTS_DIR="/tmp/tillandsias-ca"
+CERTS_DIR="${TILLANDSIAS_CA_DIR}"
 mkdir -p "$CERTS_DIR"
 
 # Idempotent: only generate if cert doesn't exist or is older than 25 days

@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# ORDER 998-qrwu: the CA directory comes from the ONE declaration
+# (images/default/ca-path.txt), never a literal — see scripts/lib-ca-path.sh.
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-ca-path.sh"
 # with-nix-builder.sh — transparent nix-in-container re-exec for crane builds
 #
 # When TILLANDSIAS_BUILD_LANE=container is set, routes nix builds through the
@@ -39,7 +42,7 @@
 #   - tillandsias-builder-nix (named volume) → /nix (warm build store)
 #   - ~/.local/share/tillandsias/nix-store → /host-store (per-host cache store)
 #   - $REPO_ROOT → /work (source tree)
-#   - /tmp/tillandsias-ca → /tmp/tillandsias-ca:ro (stack TLS CA, when present)
+#   - ${TILLANDSIAS_CA_DIR} → ${TILLANDSIAS_CA_DIR}:ro (stack TLS CA, when present)
 #   - a CA bundle → /run/tillandsias/ca-bundle.crt:ro (always: cache bundle
 #     when the cache answers, host system bundle otherwise — nix.conf's
 #     ssl-cert-file setting must resolve for upstream TLS)
@@ -78,7 +81,7 @@ _NB_CONTAINER_NAME="${TILLANDSIAS_NIX_BUILDER_CONTAINER:-tillandsias-nix-builder
 _NB_IMAGE_NAME="${TILLANDSIAS_NIX_BUILDER_IMAGE:-tillandsias-nix-builder}"
 _NB_NIX_VOLUME="${TILLANDSIAS_NIX_BUILDER_VOLUME:-tillandsias-builder-nix}"
 _NB_CHROOT_STORE="${TILLANDSIAS_NIX_CHROOT_STORE:-$HOME/.local/share/tillandsias/nix-store}"
-_NB_CA_DIR="${TILLANDSIAS_CA_DIR:-/tmp/tillandsias-ca}"
+_NB_CA_DIR="${TILLANDSIAS_CA_DIR}"
 _NB_CACHE_SCRIPT="${TILLANDSIAS_NIX_CACHE_SCRIPT:-$(cd "$(dirname "${_NB_SELF}")" && pwd)/nix-cache-service.sh}"
 # The in-container CA path. Must stay in step with images/builder/nix.conf's
 # ssl-cert-file setting — the conf pins it so cold builds verify upstream TLS.
@@ -231,7 +234,7 @@ _nix_builder_run_args() {
 
     # Mount TLS CA if present
     if [[ -d "$_NB_CA_DIR" ]]; then
-        args+=(-v "$_NB_CA_DIR:/tmp/tillandsias-ca:ro")
+        args+=(-v "$_NB_CA_DIR:${TILLANDSIAS_CA_DIR}:ro")
     fi
 
     # CA bundle at the path images/builder/nix.conf pins (see wiring above).

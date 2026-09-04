@@ -1,0 +1,66 @@
+events:
+  - packet_id: ca-bundle-path-is-written-in-sixteen-places
+    event:
+      type: progress
+      ts: "2026-09-04T01:21:40Z"
+      agent_id: linux-yoga-claude-20260904t010922z
+      host: yoga
+      summary: |
+        SINGLE-SOURCED: 38 literal occurrences down to 1, and the ratchet is
+        tightened from 38 to 1 so it cannot grow back. 998-3z6g can now move the
+        directory with one edit.
+
+        THE DECLARATION is images/default/ca-path.txt. Rust reads it with
+        include_str! through tillandsias-core::ca_path — the crate BOTH
+        tillandsias-headless and tillandsias-macos-tray already depend on, which
+        is what lets one declaration serve both. Shell reads the same file
+        through scripts/lib-ca-path.sh. Same pattern as capabilities.txt and
+        enclave-services.txt: the value travels inside the artifact, so a binary
+        cannot disagree with the file it compiled in.
+
+        THE HARD PART WAS NOT THE RUST. 8 of the 38 sites were inside an
+        EMBEDDED SHELL PREAMBLE in crates/tillandsias-macos-tray/src/diagnose.rs
+        — the path appears there as text in a format! string sent into a guest
+        VM, not as a path value. That is precisely why it escaped being
+        single-sourced before, and why 975-rsgm could not move the directory
+        safely: a `sed` over Rust paths would never have seen them.
+
+        TWO HIDDEN SITES THAT WOULD HAVE SURVIVED THE MIGRATION SILENTLY, both
+        in tests, both now built from the declaration:
+
+        (1) `let key = concat!("/tmp/tillandsias-ca/inter", "mediate.key")` —
+        the literal SPLIT ACROSS TWO STRINGS. Invisible to any grep by
+        construction, which is how it survived every earlier literal audit and
+        why my own ratchet counted 38 rather than 39. After 998-3z6g moves the
+        directory it would have kept matching the OLD path, so the test would
+        have gone quietly vacuous rather than failing — a guard that stops
+        guarding without saying so.
+
+        (2) A preamble assertion pinning `chmod 600 <literal>/intermediate.key`.
+        Its own comment records that this exact literal-pin failure had already
+        happened twice (701-iu9b in vz.rs, then again in this file) — my change
+        would have made it a third. Both needles are interpolated now, so they
+        follow the declaration.
+
+        VERIFIED: cargo test -p tillandsias-macos-tray 44/44,
+        -p tillandsias-core ca_path 2/2, headless and macos-tray both compile,
+        gate green. The two converted shell checks still answer correctly on
+        this host: check-enclave-ca-consistency.sh -> ok:enclave-ca-consistent,
+        check-enclave-service-health.sh -> ok. The ratchet is mutation-verified
+        at the new baseline: adding one literal gives
+        `violation:ca-path-literals-grew:2 of 1`.
+
+        WHAT THE REMAINING 1 IS: a prose mention in
+        images/default/cheatsheets/runtime/low-end-cpu-inference-floor.md. The
+        declaration file, its shell reader and the guard are excluded by name —
+        those are the places the path is SUPPOSED to appear. A cheatsheet
+        sentence is documentation and will read as stale after 998-3z6g rather
+        than break; noting it so the next host updates it deliberately instead
+        of discovering it.
+
+        SCOPE NOT CLAIMED: I cannot RUN the macOS lane. tillandsias-macos-tray
+        compiles and tests here because it is cfg-gated to a stub off Darwin, so
+        44/44 green says the preamble BUILDS with the interpolated path, not
+        that a Mac guest accepts it. The preamble is a string handed to a guest
+        VM this host has none of. A macOS host should confirm before 998-3z6g
+        lands, because that is when the value actually changes.

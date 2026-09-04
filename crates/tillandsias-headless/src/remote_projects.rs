@@ -313,7 +313,10 @@ fn run_git_image_shell(script: &str, extra_args: &[&str], debug: bool) -> Result
         "--env",
         "CURL_CA_BUNDLE=/etc/tillandsias/ca.crt",
         "--volume",
-        "/tmp/tillandsias-ca/intermediate.crt:/etc/tillandsias/ca.crt:ro",
+        &format!(
+            "{}/intermediate.crt:/etc/tillandsias/ca.crt:ro",
+            tillandsias_core::ca_path::ca_dir()
+        ),
     ]);
     // Pass the proxy env explicitly so `vault` is in no_proxy and vault-cli's
     // curl reaches https://vault:8200 directly. The global containers.conf
@@ -748,7 +751,10 @@ exec gh repo clone "$1" "$2"
         "--env",
         "CURL_CA_BUNDLE=/etc/tillandsias/ca.crt",
         "--volume",
-        "/tmp/tillandsias-ca/intermediate.crt:/etc/tillandsias/ca.crt:ro",
+        &format!(
+            "{}/intermediate.crt:/etc/tillandsias/ca.crt:ro",
+            tillandsias_core::ca_path::ca_dir()
+        ),
         "--security-opt=label=disable",
         "--userns=keep-id",
         "-v",

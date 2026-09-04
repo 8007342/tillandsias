@@ -1660,7 +1660,13 @@ const ENCLAVE_ONLY_NET: &str = "tillandsias-enclave";
 // CIDR entry never covers `https://nix-cache:5000`.
 const ENCLAVE_NO_PROXY_BASE: &str =
     "localhost,127.0.0.1,0.0.0.0,::1,vault,tillandsias-vault,inference,proxy,nix-cache";
-const CA_DIR: &str = "/tmp/tillandsias-ca";
+/// ORDER 998-qrwu. The path is declared ONCE in images/default/ca-path.txt and
+/// read through tillandsias-core, which both this crate and tillandsias-macos-tray
+/// depend on. It was a literal in 38 places; 975-rsgm has to move it off /tmp,
+/// and a partial move fails only on the recovery path.
+fn ca_dir() -> &'static str {
+    tillandsias_core::ca_path::ca_dir()
+}
 
 fn enclave_subnet() -> String {
     std::env::var(ENCLAVE_SUBNET_ENV)
@@ -3079,7 +3085,7 @@ fn enforce_ca_key_mode(_key: &Path) -> std::io::Result<()> {
 
 fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
     // @trace spec:secret-rotation, spec:reverse-proxy-internal
-    let certs_dir = PathBuf::from(CA_DIR);
+    let certs_dir = PathBuf::from(ca_dir());
 
     if std::env::var("TILLANDSIAS_HOST_KIND").as_deref() == Ok("forge") {
         // The forge environment does not have openssl CLI and is not responsible
@@ -3472,7 +3478,7 @@ fn ensure_proxy_running(debug: bool) -> Result<(), String> {
         //
         // Best-effort: an unreadable or absent key is not a reason to refuse
         // a proxy that is already serving.
-        let _ = enforce_ca_key_mode(&PathBuf::from(CA_DIR).join("intermediate.key"));
+        let _ = enforce_ca_key_mode(&PathBuf::from(ca_dir()).join("intermediate.key"));
         if debug {
             eprintln!("[tillandsias] enclave proxy already running");
         }
@@ -9571,7 +9577,7 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
         // the CA bundle MUST be materialized and mounted like every other
         // vault-talking container. On a fresh guest where login runs
         // BEFORE any forge launch (the recommended order), nothing else
-        // has created /tmp/tillandsias-ca yet: without this the flow
+        // has created the CA directory yet: without this the flow
         // collected the operator's token and THEN died with "CA bundle
         // not readable" (field repro 2026-07-22). ensure_ca_bundle is
         // idempotent.
@@ -19961,7 +19967,7 @@ mod tests {
             &PathBuf::from("/home/tlatoani/src/tillandsias"),
             "tillandsias",
             None,
-            &PathBuf::from("/tmp/tillandsias-ca"),
+            &PathBuf::from(ca_dir()),
             "0.2.260518",
             ForgeAgentMode::Claude,
             true,

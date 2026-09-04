@@ -897,21 +897,27 @@ pub fn exec_guest_main(argv: Vec<String>, required_cap: Option<&'static str>) ->
 /// to move guest-side or into the structured env field, exactly as slice 2 said.
 /// So this slice takes the reduction that IS real — one copy instead of two —
 /// and leaves the capability gate unspent for the slice that can use it.
+/// ORDER 998-qrwu: the CA directory is interpolated from the ONE declaration
+/// (images/ca-path.txt via tillandsias-core), not written eight times into this
+/// string. It is a SHELL preamble, so the path appears here as text rather than
+/// as a path value — which is exactly why it escaped every earlier attempt to
+/// single-source it, and why 975-rsgm could not move the directory safely.
 fn proxy_exec_preamble(headless_arg: &str) -> String {
+    let ca = tillandsias_core::ca_path::ca_dir();
     format!(
         "export HOME=/root; export XDG_RUNTIME_DIR=/run/user/0; \
          export TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200; \
          install -d -m 0700 \"$XDG_RUNTIME_DIR\"; \
          podman rm tillandsias-proxy 2>/dev/null || true; \
-         if ! test -s /tmp/tillandsias-ca/intermediate.key 2>/dev/null; then \
-           mkdir -p /tmp/tillandsias-ca && \
+         if ! test -s {ca}/intermediate.key 2>/dev/null; then \
+           mkdir -p {ca} && \
            openssl req -x509 -newkey rsa:2048 \
-             -keyout /tmp/tillandsias-ca/intermediate.key \
-             -out /tmp/tillandsias-ca/intermediate.crt \
+             -keyout {ca}/intermediate.key \
+             -out {ca}/intermediate.crt \
              -days 25 -nodes -subj '/CN=Tillandsias CA' 2>/dev/null && \
-           chmod 600 /tmp/tillandsias-ca/intermediate.key || true; \
+           chmod 600 {ca}/intermediate.key || true; \
          fi; \
-         chmod 600 /tmp/tillandsias-ca/intermediate.key 2>/dev/null || true; \
+         chmod 600 {ca}/intermediate.key 2>/dev/null || true; \
          exec /usr/local/bin/tillandsias-headless {headless_arg}"
     )
 }
@@ -1899,9 +1905,18 @@ mod tests {
             "install -d -m 0700",
             "openssl req -x509",
             "podman rm tillandsias-proxy",
-            "chmod 600 /tmp/tillandsias-ca/intermediate.key",
         ] {
             assert!(p.contains(needle), "preamble lost {needle:?}: {p}");
+        }
+        // ORDER 998-qrwu: the CA needle is INTERPOLATED, so it follows the
+        // declaration when 975-rsgm moves the directory instead of pinning a
+        // path the preamble no longer emits.
+        {
+            let ca_needle = format!(
+                "chmod 600 {}/intermediate.key",
+                tillandsias_core::ca_path::ca_dir()
+            );
+            assert!(p.contains(&ca_needle), "preamble lost {ca_needle:?}: {p}");
         }
     }
 
@@ -2269,7 +2284,12 @@ mod tests {
     #[test]
     fn guest_ca_preflight_never_widens_the_private_key() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/diagnose.rs"));
-        let key = concat!("/tmp/tillandsias-ca/inter", "mediate.key");
+        // ORDER 998-qrwu: built from the ONE declaration, not a split literal.
+        // The `concat!` form here was invisible to a grep by construction — which
+        // is exactly how it survived a literal audit — and it would have kept
+        // matching the OLD path after 975-rsgm moves the directory, so this test
+        // would have gone quietly vacuous rather than failing.
+        let key = format!("{}/intermediate.key", tillandsias_core::ca_path::ca_dir());
 
         // 795-zshi slice 5 moved these assertions from the two call sites'
         // SOURCE WINDOWS onto the BUILT preamble. The windows stopped containing

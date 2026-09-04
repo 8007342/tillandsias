@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# ORDER 998-qrwu: the CA directory comes from the ONE declaration
+# (images/default/ca-path.txt), never a literal — see scripts/lib-ca-path.sh.
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-ca-path.sh"
 # @trace order:801-kqme, spec:nix-cache-service
 #
 # test-nix-cache-service.sh — behavioural fixture for the enclave nix binary
@@ -40,7 +43,7 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SVC="$ROOT/scripts/nix-cache-service.sh"
 STATE_DIR="${TILLANDSIAS_NIX_CACHE_STATE:-$HOME/.local/share/tillandsias/nix-cache}"
-CA_DIR="${TILLANDSIAS_CA_DIR:-/tmp/tillandsias-ca}"
+CA_DIR="${TILLANDSIAS_CA_DIR}"
 CHROOT_STORE="${TILLANDSIAS_NIX_CHROOT_STORE:-$HOME/.local/share/tillandsias/nix-store}"
 HOST_PORT="${TILLANDSIAS_NIX_CACHE_HOST_PORT:-5111}"
 ENCLAVE_NET="${TILLANDSIAS_ENCLAVE_NET:-tillandsias-enclave}"

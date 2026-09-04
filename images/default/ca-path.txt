@@ -1,0 +1,23 @@
+# ORDER 998-qrwu. THE enclave CA bundle directory — one literal, read by every
+# lane.
+#
+# It was written as a literal in 38 places across 16 files (measured
+# 2026-09-03): 8 inside an embedded shell preamble in
+# crates/tillandsias-macos-tray/src/diagnose.rs, the rest across the headless
+# crate and a dozen scripts. 975-rsgm needs this directory MOVED off /tmp —
+# /tmp is volatile, and podman records a bind SOURCE at container creation, so a
+# reboot makes the proxy permanently unrestartable. Moving a path written in 38
+# places moves some and misses others, and a missed one points at a directory
+# that is not there, on a recovery path that only runs when something is already
+# wrong.
+#
+# So the path is declared HERE and nowhere else. Rust reads it with include_str!
+# (the manifest travels inside the artifact, the capabilities.txt pattern);
+# shell reads it through scripts/lib-ca-path.sh. A drift test asserts the two
+# agree, and scripts/check-ca-path-literals.sh ratchets the literal count so it
+# cannot grow back.
+#
+# CHANGING THIS VALUE IS NOT A CONSTANT CHANGE. Existing containers bind the OLD
+# path in their stored definitions and must be RECREATED, not restarted — that
+# migration is 998-3z6g, and it is why this rung lands first and alone.
+/tmp/tillandsias-ca

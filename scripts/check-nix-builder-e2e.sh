@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# ORDER 998-qrwu: the CA directory comes from the ONE declaration
+# (images/default/ca-path.txt), never a literal — see scripts/lib-ca-path.sh.
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-ca-path.sh"
 # check-nix-builder-e2e.sh — validate the nix cache + crane build end-to-end
 #
 # Runs a full `nix build .#tillandsias-x86_64-musl` inside the builder
@@ -24,7 +27,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CHROOT_STORE="${TILLANDSIAS_NIX_CHROOT_STORE:-$HOME/.local/share/tillandsias/nix-store}"
 NIX_CACHE_SCRIPT="${TILLANDSIAS_NIX_CACHE_SCRIPT:-$SCRIPT_DIR/nix-cache-service.sh}"
 IMAGE_NAME="${TILLANDSIAS_NIX_BUILDER_IMAGE:-tillandsias-nix-builder}"
-CA_DIR="${TILLANDSIAS_CA_DIR:-/tmp/tillandsias-ca}"
+CA_DIR="${TILLANDSIAS_CA_DIR}"
 
 DRY_RUN=0
 [[ "${1:-}" == "--dry-run" ]] && DRY_RUN=1
@@ -142,14 +145,14 @@ echo "[nix-e2e] Running nix build inside builder container..." >&2
 
 # The container mounts the persistent store and source tree; the stack TLS CA
 # and the cache CA bundle are mounted only when present on the host
-# (/tmp/tillandsias-ca is tmpfs — gone after a reboot; an unconditional -v of
+# (${TILLANDSIAS_CA_DIR} is tmpfs — gone after a reboot; an unconditional -v of
 # a missing path fails podman run outright).
 PODMAN_MOUNTS=(
     -v "$CHROOT_STORE:/host-store"
     -v "$REPO_ROOT:/work"
 )
 if [[ -d "$CA_DIR" ]]; then
-    PODMAN_MOUNTS+=(-v "$CA_DIR:/tmp/tillandsias-ca:ro")
+    PODMAN_MOUNTS+=(-v "$CA_DIR:${TILLANDSIAS_CA_DIR}:ro")
 fi
 if [[ -n "$CA_BUNDLE_HOST" ]]; then
     PODMAN_MOUNTS+=(-v "$CA_BUNDLE_HOST:$CA_BUNDLE_MOUNT:ro")

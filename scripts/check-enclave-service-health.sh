@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# ORDER 998-qrwu: the CA directory comes from the ONE declaration
+# (images/default/ca-path.txt), never a literal — see scripts/lib-ca-path.sh.
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-ca-path.sh"
 # @trace spec:runtime-diagnostics
 #
 # check-enclave-service-health.sh — ONE place that reports the health of the
@@ -344,7 +347,7 @@ if [ "$ACT" -eq 1 ] && [ -n "${down_list:-}" ]; then
         _ca_check="${TILLANDSIAS_CA_CONSISTENCY_CHECK:-$_HEALTH_DIR/check-enclave-ca-consistency.sh}"
         if [ "$name" = "tillandsias-proxy" ] && [ -x "$_ca_check" ]; then
             if ! bash "$_ca_check" >/dev/null 2>&1; then
-                _cadir="${TILLANDSIAS_CA_DIR:-/tmp/tillandsias-ca}"
+                _cadir="${TILLANDSIAS_CA_DIR}"
                 if [ -r "$_cadir/intermediate.key" ] \
                    && _run podman secret create --replace tillandsias-ca-key "$_cadir/intermediate.key" >/dev/null 2>&1; then
                     details="${details}fix:enclave-ca-key-rotated:service=${name}:action=secret-replaced

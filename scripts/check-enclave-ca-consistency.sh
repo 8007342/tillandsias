@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# ORDER 998-qrwu: the CA directory comes from the ONE declaration
+# (images/default/ca-path.txt), never a literal — see scripts/lib-ca-path.sh.
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-ca-path.sh"
 # @trace order:975-rsgm, spec:proxy-container
 #
 # check-enclave-ca-consistency.sh — is the enclave CA bundle present, and does
@@ -7,10 +10,10 @@
 # THE FAILURE THIS NAMES, measured on yoga 2026-09-03 over five cycles in which
 # cycle-preflight reported only `fail:enclave-service-start-failed:...:action=operator`:
 #
-#   1. /tmp is cleared, so /tmp/tillandsias-ca vanishes. The proxy binds
-#      `/tmp/tillandsias-ca/intermediate.crt` and podman recorded that SOURCE at
+#   1. /tmp is cleared, so ${TILLANDSIAS_CA_DIR} vanishes. The proxy binds
+#      `${TILLANDSIAS_CA_DIR}/intermediate.crt` and podman recorded that SOURCE at
 #      creation, so `podman start` can never succeed again on its own:
-#        crun: cannot stat `/tmp/tillandsias-ca/intermediate.crt`
+#        crun: cannot stat `${TILLANDSIAS_CA_DIR}/intermediate.crt`
 #   2. The documented remedy — re-run the enclave orchestration — DOES
 #      re-materialize the bundle, with a NEW keypair.
 #   3. But the proxy does not read its key from that bind. Only the CERT is
@@ -37,7 +40,7 @@
 #   ^(ok:enclave-ca-consistent|absent:enclave-ca-bundle|desync:enclave-ca-key-secret|skip:[a-z0-9-]+)$
 set -uo pipefail
 
-CA_DIR="${TILLANDSIAS_CA_DIR:-/tmp/tillandsias-ca}"
+CA_DIR="${TILLANDSIAS_CA_DIR}"
 SECRET="tillandsias-ca-key"
 
 command -v podman >/dev/null 2>&1 || { echo "skip:no-podman"; exit 0; }

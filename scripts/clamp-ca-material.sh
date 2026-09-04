@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# ORDER 998-qrwu: the CA directory comes from the ONE declaration
+# (images/default/ca-path.txt), never a literal — see scripts/lib-ca-path.sh.
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-ca-path.sh"
 # @trace spec:secret-rotation, spec:proxy-container
 #
 # clamp-ca-material.sh — re-clamp CA material that a PRE-FIX binary created
@@ -32,7 +35,7 @@
 #   scripts/clamp-ca-material.sh --selftest # fixtures, no host state touched
 set -uo pipefail
 
-CA_DIR="${TILLANDSIAS_CA_DIR:-/tmp/tillandsias-ca}"
+CA_DIR="${TILLANDSIAS_CA_DIR}"
 MODE="${1:-fix}"
 
 # Private material that must never be group/world readable. The .crt files are

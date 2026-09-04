@@ -24,7 +24,7 @@ set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 # The ratchet. Lower this when 998-qrwu removes literals; it must never rise.
-BASELINE="${TILLANDSIAS_CA_PATH_LITERAL_BASELINE:-38}"
+BASELINE="${TILLANDSIAS_CA_PATH_LITERAL_BASELINE:-1}"
 
 # The declaration itself is exempt once it exists — that is the ONE place the
 # path is allowed to be written, and 998-qrwu creates it.
@@ -37,6 +37,8 @@ BASELINE="${TILLANDSIAS_CA_PATH_LITERAL_BASELINE:-38}"
 count="$(grep -rho '/tmp/tillandsias-ca' \
             --exclude=check-ca-path-literals.sh \
             --exclude=ca_path.rs \
+            --exclude=ca-path.txt \
+            --exclude=lib-ca-path.sh \
             crates/ scripts/ images/ 2>/dev/null | wc -l | tr -d ' ')"
 
 if [ "$count" -gt "$BASELINE" ]; then

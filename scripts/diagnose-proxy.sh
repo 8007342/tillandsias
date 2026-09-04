@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# ORDER 998-qrwu: the CA directory comes from the ONE declaration
+# (images/default/ca-path.txt), never a literal — see scripts/lib-ca-path.sh.
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-ca-path.sh"
 # @trace spec:proxy-container, spec:enclave-network
 # Diagnose proxy container startup issues
 
@@ -12,7 +15,7 @@ set -euo pipefail
 # toolbox shares /tmp with the host bidirectionally — VERIFIED on lenovinha
 # 2026-08-26: a file the host wrote to /tmp is readable inside the container and
 # vice versa, and every CERTS_DIR here is under /tmp (mktemp -d, or
-# /tmp/tillandsias-ca). A caller whose write path is NOT shared would have the
+# ${TILLANDSIAS_CA_DIR}). A caller whose write path is NOT shared would have the
 # cert land where the caller cannot find it — a silent break, not an error.
 # Re-check the path before converting any further openssl site.
 # shellcheck source=scripts/lib/tool-dispatch.sh

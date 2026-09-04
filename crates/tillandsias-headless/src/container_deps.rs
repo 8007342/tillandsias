@@ -29,7 +29,7 @@ pub enum Service {
     EnclaveNetwork,
     /// `tillandsias-egress` (NAT) podman network.
     EgressNetwork,
-    /// Materialized CA bundle under `/tmp/tillandsias-ca`.
+    /// Materialized CA bundle under the directory declared in images/default/ca-path.txt.
     CaBundle,
     /// `tillandsias-vault` running, initialized, and unsealed.
     Vault,
