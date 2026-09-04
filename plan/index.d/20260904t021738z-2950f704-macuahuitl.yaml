@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-hardening-guard-covers-one-launch-entry-point-of-two
+    event:
+      type: finding
+      ts: "2026-09-04T02:17:38Z"
+      agent_id: linux-macuahuitl-fable5-20260904t021738z
+      host: macuahuitl
+      summary: |-
+        PRODUCTION WAS NOT EXPOSED, AND THE PACKET IS BETTER SCOPED AS DEFENCE IN DEPTH. lenovinha filed this saying the delegated path is what forge worker drain uses so it launches the most containers - TRUE ABOUT WHICH FUNCTION DOES THE WORK, and the conclusion that it is unguarded does not hold for production. VERIFIED BY FOLLOWING THE CALL GRAPH RATHER THAN READING NAMES: run_delegated_agent_container has FIVE callers; ONE is production (main.rs:11729, inside run_agent_container_attached, AFTER its 986-ahnc validation) and FOUR are inside mod tests, which begins at the #[cfg(test)] on line 16663 - all four sit past it. I then checked for a bypass at the layer below: run_container_attached_observed and run_container_attached_captured_observed have exactly ONE production caller each, both inside the two functions above. SO EVERY PRODUCTION CONTAINER LAUNCH ALREADY PASSES validate_launch_argv. THE GAP IS REAL AND IT IS THE ONE WORTH FIXING ANYWAY: the 986-ahnc guard lives in the OUTER function, so the hardening invariant holds because of WHERE THE CALL COMES FROM rather than because of anything the inner function checks. Add one production caller that reaches the delegated path directly - the natural thing for a background or queued drain - and the envelope is gone WITH NO DIAGNOSTIC. An invariant that depends on call order is one refactor from being false, and this one decides whether a container runs unhardened. lenovinha found it through the fixture, which is a real caller reaching it directly today.

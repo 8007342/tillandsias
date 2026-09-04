@@ -11554,6 +11554,49 @@ async fn run_delegated_agent_container(
         ));
     }
 
+    // ORDER 999-5m4e. THE INVARIANT IS LOCAL, NOT INHERITED FROM A CALL ORDER.
+    //
+    // Production today is NOT exposed and this is defence in depth, which is
+    // the honest framing. VERIFIED 2026-09-04: this function's only production
+    // caller is `run_agent_container_attached`, which validates first; its four
+    // other callers are inside `mod tests` (which begins at the #[cfg(test)] at
+    // line 16663, and all four sit past it). Every production container launch
+    // therefore already passes `validate_launch_argv`.
+    //
+    // SO WHY GUARD HERE TOO. The 986-ahnc guard lives in the OUTER function, so
+    // the hardening invariant holds because of WHERE THE CALL COMES FROM rather
+    // than because of anything this function checks. Add one production caller
+    // that reaches this directly — the natural thing to do for a background or
+    // queued drain — and the envelope is gone with no diagnostic. An invariant
+    // that depends on call order is one refactor from being false, and this one
+    // decides whether a container runs unhardened.
+    //
+    // The gap is not hypothetical in the test lane, which is how it was found:
+    // lenovinha-silverblue observed `delegated_result_fake_podman` handing the
+    // SAME bare argv to both entry points, the attached one refusing with the
+    // policy citation and this one launching it. That is this function accepting
+    // an argv the policy forbids — true of the fixture today and true of any
+    // future caller.
+    //
+    // "run" is prepended for the same reason as in the outer guard: the client
+    // adds it downstream, so `args` alone is not what podman receives.
+    {
+        let mut full = Vec::with_capacity(args.len() + 1);
+        full.push("run".to_string());
+        full.extend_from_slice(args);
+        if let Err(err) = tillandsias_podman::policy::validate_launch_argv(&full) {
+            eprintln!(
+                "[security] refusing to launch delegated {container_name}: {err}\n\
+                 [security] the launch argv lost part of the immutable hardening \
+                 envelope; see crates/tillandsias-podman/src/policy.rs \
+                 MANDATORY_HARDENING_FLAGS (orders 986-ahnc, 999-5m4e)"
+            );
+            return Err(format!(
+                "refusing to launch delegated {container_name}: hardening envelope violation: {err}"
+            ));
+        }
+    }
+
     // Invalidate any caller-preseeded result before spawning. Classification
     // never reads this file, and downstream readers see either this empty
     // current-generation placeholder or bytes captured by this run.
@@ -22549,6 +22592,73 @@ mod tests {
                 "{entry} must reject an unsupported result format BEFORE building container argv"
             );
         }
+    }
+
+    /// ORDER 999-5m4e. The hardening invariant must be LOCAL to the delegated
+    /// entry point, not inherited from whoever calls it.
+    ///
+    /// This is the negative control the packet needed and did not have. The
+    /// fixture above builds its argv FROM the policy constant — correctly, so
+    /// it cannot drift — which means it can no longer demonstrate the gap it
+    /// was used to find. A test that passes because the interesting case is
+    /// absent is the shape this fleet spent 2026-09-03 recording.
+    ///
+    /// So: hand this entry point a BARE argv directly and require it to refuse
+    /// before any podman process is spawned. It must not depend on
+    /// `run_agent_container_attached` having validated first, because the whole
+    /// point of 999-5m4e is that one future caller reaching here directly loses
+    /// the envelope with no diagnostic.
+    ///
+    /// MUTATION: delete the guard block in `run_delegated_agent_container` and
+    /// this test fails with its own message. It passes only while the check is
+    /// there.
+    #[test]
+    fn delegated_launch_refuses_an_argv_missing_the_hardening_envelope() {
+        let _pseam_lock = podman_seam_lock();
+        let _env = env_lock();
+        let identity = "worker-nc";
+        let name = forge_container_name_for_mode_with_instance(
+            "alpha",
+            ForgeAgentMode::OpenCode,
+            Some(identity),
+        );
+        // Deliberately BARE: --rm/--name and an image, and none of
+        // MANDATORY_HARDENING_FLAGS. This is what a future caller that skipped
+        // the outer guard would produce.
+        let bare = vec![
+            "--rm".to_string(),
+            "--name".to_string(),
+            name.clone(),
+            "localhost/tillandsias-forge:test".to_string(),
+        ];
+        let client = PodmanClient::new();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_io()
+            .enable_time()
+            .build()
+            .expect("test runtime");
+        let err = runtime
+            .block_on(run_delegated_agent_container(
+                &client,
+                "opencode",
+                &name,
+                &bare,
+                false,
+                &DelegatedRunConfig {
+                    timeout_secs: 3,
+                    result_file: None,
+                    instance_identity: identity.to_string(),
+                },
+            ))
+            .expect_err(
+                "the delegated entry point must REFUSE an argv missing the hardening \
+                 envelope — it launched instead, so the invariant depends on the caller \
+                 and one direct call loses the envelope silently (999-5m4e)",
+            );
+        assert!(
+            err.contains("hardening envelope violation"),
+            "refusal must name the hardening envelope so a reader knows what was lost, got: {err}"
+        );
     }
 
     #[cfg(unix)]

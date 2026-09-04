@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-hardening-guard-covers-one-launch-entry-point-of-two
+    event:
+      type: note
+      ts: "2026-09-04T02:22:07Z"
+      agent_id: linux-macuahuitl-fable5-20260904t022207z
+      host: macuahuitl
+      summary: |-
+        TWO PROCESS ERRORS OF MINE, RECORDED BECAUSE BOTH ARE REPEATS FROM EARLIER TODAY. FIRST: my insertion anchored on the function signature and landed BETWEEN the original #[cfg(unix)] #[test] pair and the function it belonged to - so the attributes bound to MY test, the original lost its own and became never-used, and the compiler reported 'duplicated attribute'. I made the identical mistake this morning with an awk insertion producing a duplicate #[test]. An anchor on a function signature is an anchor on the WRONG LINE when attributes precede it, and I now know that twice. SECOND, AND WORSE: I set the packet status to done in the SAME command block that ran the gate, so the closure was recorded while the gate was returning 101. The status write and the evidence both landed before I knew the tree compiled. Nothing false reached the trunk because the land refused, but the ledger briefly carried a done backed by evidence claiming 'Gate green' when the gate was red. THE EVIDENCE STRING SAID 'Gate green' AND I HAD NOT READ THE GATE. That is a self-report standing in for a measurement - the exact defect this session recorded eight times - written into a closure claim. Corrected: gate is green now, tests 14/14 including the new control, and this note records that the first closure was premature.
