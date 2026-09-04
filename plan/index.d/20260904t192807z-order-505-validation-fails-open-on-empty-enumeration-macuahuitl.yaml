@@ -1,0 +1,70 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: order-505s-project-label-validation-fails-open-when-the-local-enumeration-is-empty-and-enumerates-the-root-997-e4v2-retires
+    order: 1031-q4pb
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: linux
+    capability_tags: [security, headless, tray, projects, fail-loud, migration]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-headless/src/local_projects.rs
+      - crates/tillandsias-headless/src/main.rs
+    title: |
+      The three order-505 sites in headless main.rs (~16744, ~16824, ~16856) validate a project label by equality against scan_project_root(host_project_root()) — but only when that enumeration is NON-EMPTY, so an empty ~/src makes the check a no-op and the label flows unvalidated into paths and container names; and ~/src is the root 997-e4v2 retires, so the bypass becomes universal when the retirement completes
+    context: |
+      FOUND by tlatoanis-macbook-air 2026-09-04 on the first check of 997-e4v2
+      step 3, which would have deleted local_projects.rs: the module is not only
+      the menu's enumerator, it backs order 505 at three call sites, each
+      commented "project label MUST be validated by EQUALITY against enumerated
+      local projects (never sanitized) before use in paths or container names".
+      READ THE GUARD (verified on macuahuitl from source): `if
+      !known_projects.is_empty() && !known_projects.iter().any(|p| p.label ==
+      project_name) { return Err(..) }` — when the enumeration is empty the
+      whole condition is false, validation is SKIPPED, and project_name
+      proceeds into `format!("tillandsias-{project_name}-web")` and the like.
+      The empty case is a bypass, not a refusal, on a check whose own comment
+      says never sanitize. host_project_root() is $HOME/src (env override
+      TILLANDSIAS_HOST_PROJECT_ROOT, local_projects.rs:34-44), the directory
+      997-e4v2 exists to retire. All three sites are under #[cfg(feature =
+      "tray")], the host side. WHEN IT IS LIVE, measured not inferred:
+      slice 1 of 997-e4v2 (yolanda's per-launch tmpfs) is the FORGE's
+      /home/forge/src, not the host's ~/src, so it does not empty this
+      enumeration; the bypass is live TODAY on any host whose ~/src is empty
+      or absent (a fresh install), and becomes universal when ~/src retires
+      fleet-wide (776-jcf3). On macuahuitl ~/src holds 2 project
+      directories, so the check validates here today. Nobody named this
+      consequence in three days of sequencing the retirement.
+      THE DESIGN QUESTION, an operator-intent one: under cloud-only, what
+      should order 505 validate a label against? "Nothing, so allow" is the
+      current behaviour and the wrong default; "nothing, so deny" breaks every
+      launch on a host with no local checkouts. COORDINATOR'S PROPOSAL, for
+      the operator to overrule: the check validates by equality against the
+      set of project names the host actually knows — the local enumeration
+      while it exists, plus the cloud project cache the tray already holds
+      (cloud_projects) — and DENIES with a named reason when the label is in
+      neither or the set is empty; fail closed, never sanitize. The
+      enumeration source moves off ~/src in the same change, to wherever the
+      cloud-only checkouts live.
+      RULING for 997-e4v2 step 3 (2026-09-04T19:5xZ): the wire step proceeds
+      on the safe subset (the headless EnumerateLocalProjects handler,
+      refresh_local_projects, build_local_projects_submenu, LOCAL_BASE,
+      LOADING_LOCAL_ID, ProjectScope::Local, the vsock_client capability
+      string, the macos-tray test uses, hvsocket's doc comment) and does NOT
+      delete local_projects.rs, scan_project_root or host_project_root; the
+      module outlives the wire, which looks odd and is correct. This packet
+      is a prerequisite of the ~/src retirement (776-jcf3) and of any deletion
+      of the enumerator. Provenance: macbookair found and stopped; the
+      coordinator verified the guard's shape from source and files.
+    exit_criteria:
+      - "an empty enumeration DENIES a label with a named reason at all three sites (one shared helper, so the three cannot drift), and a unit test proves it with an empty root; pre-fix result: FAILS (empty root -> the label passes)"
+      - "the validation set under cloud-only is decided (coordinator's proposal above, or the operator's ruling) and implemented, with a test for a cloud-known label passing and an unknown label refused; pre-fix result: FAILS"
+      - "the enumeration source is no longer ~/src, so 776-jcf3 can retire it without silently disabling this check; pre-fix result: FAILS"
+      - "a control run on a host with an EMPTY ~/src launches a known cloud project and refuses a fabricated label; pre-fix result: FAILS (both pass today)"
+    unscoreable: |
+      The pin is a headless unit test over a shared validation helper with an
+      empty enumeration (the grammar has no cargo-test form yet) plus the live
+      control run; the claimer names the litmus lane if one applies.
