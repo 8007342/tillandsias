@@ -101,6 +101,114 @@ pub fn guest_health_verdict() -> String {
         .verdict()
 }
 
+/// Render a Unix timestamp as `YYYY-MM-DDTHH:MM:SSZ`.
+///
+/// A local civil-from-days conversion rather than a date crate: this binary
+/// ships to the fleet's most memory-constrained target and the dependency is
+/// not worth one timestamp. The algorithm is Howard Hinnant's days-from-civil
+/// inverted; the era arithmetic handles the /100 and /400 leap rules together,
+/// which a naive `year % 4` check gets wrong in 2000 and 2100 — both pinned as
+/// fixed points in `format_utc_fixed_points`.
+///
+/// @trace order:980-ja2m
+fn format_utc(secs: u64) -> String {
+    let days = (secs / 86_400) as i64;
+    let rem = secs % 86_400;
+    // Shift so the era starts 0000-03-01, which puts the leap day last in the
+    // year and makes the month arithmetic uniform.
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u64; // [0, 146096]
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365; // [0, 399]
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100); // [0, 365]
+    let mp = (5 * doy + 2) / 153; // [0, 11], March-based
+    let d = doy - (153 * mp + 2) / 5 + 1; // [1, 31]
+    let m = if mp < 10 { mp + 3 } else { mp - 9 }; // [1, 12]
+    let y = if m <= 2 { y + 1 } else { y };
+    format!(
+        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
+        y,
+        m,
+        d,
+        rem / 3600,
+        (rem % 3600) / 60,
+        rem % 60
+    )
+}
+
+/// Render an age in seconds as a short human string (`5d 1h`, `3h 12m`, `47s`).
+///
+/// @trace order:980-ja2m
+fn humanize_age(secs: u64) -> String {
+    let d = secs / 86_400;
+    let h = (secs % 86_400) / 3600;
+    let m = (secs % 3600) / 60;
+    if d > 0 {
+        format!("{d}d {h}h")
+    } else if h > 0 {
+        format!("{h}h {m}m")
+    } else if m > 0 {
+        format!("{m}m")
+    } else {
+        format!("{secs}s")
+    }
+}
+
+/// The `Guest health:` line, rendered so a RECORDED verdict cannot be read as a
+/// live observation.
+///
+/// THE DEFECT THIS EXISTS FOR (980-ja2m, filed macneo, instance macbookair on
+/// the 16 GiB host): `guest_health_verdict()` is a pure disk read of
+/// crashloop.state with no live probe and no VM contact, so `healthy` means
+/// "the last RECORDED phase was not a crash loop" and NEVER "a guest is alive
+/// now". Measured: `--diagnose --with-metrics` printed `Guest health: healthy`
+/// with no VM process running for the full 70 s sampled, FIVE DAYS after
+/// crashloop.state was written. The two cases were indistinguishable in the
+/// output.
+///
+/// WHY THE VERDICT WORD IS KEPT, QUOTED, INSIDE THE FRAMING rather than
+/// replaced: the pinned grammar `^(healthy|starting|crash-loop:<subsystem>)$`
+/// is the only place the report names WHICH subsystem is looping. Dropping the
+/// word to avoid the false-liveness reading would take that with it.
+///
+/// WHY THE `Guest health:` LABEL IS KEPT: windows-tray prints the same label
+/// (notify_icon.rs:2915) and two surface tests pin the literal (macos-tray
+/// main.rs:722, windows-tray main.rs:402). The Windows line carries the
+/// identical defect and is filed separately.
+///
+/// AN UNKNOWN AGE MUST NOT READ AS FRESH. If the file is absent or its mtime
+/// is unreadable, the age is printed as UNKNOWN rather than omitted — an
+/// omitted age is read as "just now" by exactly the reader this line is for.
+///
+/// @trace order:980-ja2m
+fn guest_health_report_line() -> String {
+    let verdict = guest_health_verdict();
+    let path = crashloop_state_path();
+    let age = std::fs::metadata(&path)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs());
+
+    match age {
+        Some(written) => {
+            let now = unix_now_secs();
+            let elapsed = now.saturating_sub(written);
+            format!(
+                "Guest health: RECORDED, not observed — last recorded verdict \
+                 \"{verdict}\" (crashloop.state, written {}, {} ago)",
+                format_utc(written),
+                humanize_age(elapsed)
+            )
+        }
+        None => format!(
+            "Guest health: RECORDED, not observed — last recorded verdict \
+             \"{verdict}\" (crashloop.state age UNKNOWN: file absent or unreadable)"
+        ),
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum SecureControlWireMode {
     Off,
@@ -444,7 +552,8 @@ fn print_human(r: &DiagnoseReport) {
     // restart/unseal/handshake pattern flips it to crash-loop:<subsystem>.
     // Additive — does NOT affect the 0/2/1 exit-code contract.
     // @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
-    println!("Guest health: {}", guest_health_verdict());
+    println!("{}", guest_health_report_line());
+    println!("No live probe was made; this report cannot contact the guest.");
     println!();
     // 701-kgvk. The guest reinstalls its headless binary from the staged copy on
     // EVERY boot, and that path is keyed only on $HOME — so an older .app
@@ -2576,6 +2685,81 @@ mod tests {
         assert!(
             tillandsias_control_wire::crashloop::verdict_matches_grammar(&v),
             "guest-health verdict {v:?} must match ^(healthy|starting|crash-loop:[a-z0-9-]+)$"
+        );
+    }
+
+    /// `format_utc` against fixed points chosen where a naive implementation
+    /// breaks, not where it is easy.
+    ///
+    /// 2000-02-29 is the case the `year % 4 == 0 && year % 100 != 0` rule gets
+    /// WRONG on its own: 2000 is divisible by 100 and IS a leap year because it
+    /// is divisible by 400. 2100-03-01 is the converse — divisible by 100, not
+    /// by 400, NOT a leap year — and the day after the February that a wrong
+    /// implementation gives 29 days. An implementation that handles only the
+    /// /4 rule passes 1970 and 2001 and fails both of these.
+    ///
+    /// @trace order:980-ja2m
+    #[test]
+    fn format_utc_fixed_points() {
+        assert_eq!(super::format_utc(0), "1970-01-01T00:00:00Z");
+        assert_eq!(super::format_utc(1_000_000_000), "2001-09-09T01:46:40Z");
+        assert_eq!(super::format_utc(951_825_600), "2000-02-29T12:00:00Z");
+        assert_eq!(super::format_utc(4_107_542_400), "2100-03-01T00:00:00Z");
+    }
+
+    /// @trace order:980-ja2m
+    #[test]
+    fn humanize_age_pins() {
+        assert_eq!(super::humanize_age(0), "0s");
+        assert_eq!(super::humanize_age(47), "47s");
+        assert_eq!(super::humanize_age(60), "1m");
+        assert_eq!(super::humanize_age(11_520), "3h 12m");
+        assert_eq!(super::humanize_age(436_800), "5d 1h");
+    }
+
+    /// THE GUARD WITH TEETH for 980-ja2m: the `Guest health:` line may not
+    /// print the bare verdict, and must name both its SOURCE and its AGE.
+    ///
+    /// The pre-fix line was exactly `Guest health: healthy` for a state file
+    /// five days old with no VM running. This asserts the shape that makes
+    /// that unreadable as a live observation — if someone reverts to printing
+    /// `guest_health_verdict()` directly, every arm here fails.
+    ///
+    /// @trace order:980-ja2m
+    #[test]
+    fn guest_health_line_names_source_and_age_and_is_never_the_bare_verdict() {
+        let line = super::guest_health_report_line();
+
+        // The bare-verdict shape is what the defect was. Reject it whatever
+        // the verdict word happens to be on this host.
+        for bare in ["healthy", "starting"] {
+            assert_ne!(
+                line,
+                format!("Guest health: {bare}"),
+                "the Guest health line is the bare verdict again — a RECORDED \
+                 disk read reading as a live observation (980-ja2m)"
+            );
+        }
+
+        assert!(
+            line.starts_with("Guest health:"),
+            "the label is pinned by two parity tests (macos main.rs:722, \
+             windows main.rs:402); got {line}"
+        );
+        assert!(
+            line.contains("RECORDED, not observed"),
+            "missing the framing that separates a record from an observation: {line}"
+        );
+        assert!(
+            line.contains("crashloop.state"),
+            "the line must name its SOURCE: {line}"
+        );
+        // Age is present either as a rendered timestamp or as an explicit
+        // UNKNOWN. An omitted age reads as "just now", which is the failure.
+        assert!(
+            line.contains(" ago)") || line.contains("age UNKNOWN"),
+            "the line must name its AGE, or say the age is unknown — an \
+             omitted age reads as fresh: {line}"
         );
     }
 
