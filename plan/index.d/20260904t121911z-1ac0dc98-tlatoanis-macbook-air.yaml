@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: vm-layer-test-fixture-is-a-tracked-binary
+    field: status
+    value: completed
+    ts: "2026-09-04T12:19:11Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: vm-layer-test-fixture-is-a-tracked-binary
+    event:
+      type: completed
+      ts: "2026-09-04T12:19:11Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: 017773959; scripts/check-no-tracked-binaries.sh EXIT=0 ok:no-tracked-binaries:38 binary-classified 38 allowlisted (was EXIT=1 blocked:); litmus dev-build pre-build instant 11/11 FAIL:0; cargo test --features download --test qcow2_expand 5 passed incl. qemu-img cross-check
+  - packet_id: vm-layer-test-fixture-is-a-tracked-binary
+    event:
+      type: note
+      ts: "2026-09-04T12:19:11Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        fixture generated at test time; no allowlist entry needed
