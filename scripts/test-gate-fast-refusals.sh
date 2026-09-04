@@ -67,6 +67,28 @@ for g in check-scorable-obligation-added check-issue-citation-convention \
     [ "$n" = "1" ] || bad "$g.sh is invoked $n times in build.sh (expected exactly 1)"
 done
 
+# ── THE GENERAL RULE (yoga-silverblue, merged here rather than kept separate) ─
+#
+# The arm below pins 885-92iu specifically. This one pins the CLASS: no hoisted
+# guard may resolve the plan binary at all, because such a guard degrades to a
+# SKIP when the binary is absent — which is exactly the cold tree a first run
+# presents. Speed is not the only axis: a faster check that cannot fail is worse
+# than a slow one that can.
+#
+# BOTH ARMS ARE KEPT, and yoga's caveat is the reason: `grep resolve_plan_binary`
+# is a SOURCE-SHAPE test. It catches this family and would MISS a guard that
+# degrades some other way — reading a target/ artefact directly, or shelling out
+# to a built binary by another name. The two fail differently: the specific arm
+# cannot be fooled about 885-92iu, the general one catches the class
+# approximately. Replacing either with the other would lose real coverage.
+for _h in check-scorable-obligation-added check-issue-citation-convention \
+          check-script-exec-bits check-litmus-pin-claims; do
+    if /usr/bin/grep -q 'resolve_plan_binary' "scripts/$_h.sh" 2>/dev/null; then
+        bad "hoisted guard $_h.sh calls resolve_plan_binary — on a cold tree it would SKIP, not refuse (the 885-92iu shape)"
+    fi
+done
+[ "$fail" -eq 0 ] && ok "no hoisted guard depends on a built binary"
+
 # 885-92iu is the exception, and the exception is the point (1034-ihxw): it
 # degrades to a SKIP when `tillandsias-plan` is unbuilt, so hoisting it above
 # the build turned a gate into a no-op on a cold tree. It must be invoked

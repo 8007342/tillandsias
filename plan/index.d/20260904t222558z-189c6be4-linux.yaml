@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-gate-stamp-reads-the-index-exec-bit-so-an-unstaged-chmod-memoises-green
+    field: status
+    value: completed
+    ts: "2026-09-04T22:25:58Z"
+    host: linux
+
+events:
+  - packet_id: the-gate-stamp-reads-the-index-exec-bit-so-an-unstaged-chmod-memoises-green
+    event:
+      type: completed
+      ts: "2026-09-04T22:25:58Z"
+      host: linux
+      summary: |-
+        status 'completed' with evidence_refs: 399415ee4 (verified ancestor of origin/linux-next): unforced ./build.sh --check rc=0 in 2s pre-fix -> rc=1 in 3s post-fix with violation:script-not-executable:1; gate-stamp compute byte-identical pre-fix -> differs and restores exactly post-fix; ok:gate-stamp-portable-digest-fixture:10; ok:test-gate-fast-refusals:4; ./build.sh --check green 217s
+  - packet_id: the-gate-stamp-reads-the-index-exec-bit-so-an-unstaged-chmod-memoises-green
+    event:
+      type: note
+      ts: "2026-09-04T22:25:58Z"
+      host: linux
+      summary: |-
+        the stamp's exec-bit field now carries the worktree mode as well as the index mode, zero added forks, memo policy untouched
