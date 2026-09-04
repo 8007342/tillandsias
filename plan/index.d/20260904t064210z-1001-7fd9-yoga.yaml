@@ -1,0 +1,53 @@
+packets:
+  - packet_id: engine-tuning-vram-is-nvidia-only
+    order: 1001-7fd9
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    title: "engine-tuning reads VRAM from nvidia-smi ONLY, so every AMD host tunes as if it had none"
+    status: ready
+    kind: bug
+    deliverable: a truthful VRAM reading on the AMD/Vulkan lane (or an explicit unknown), plus the litmus branch
+    depends_on: []
+    pickup_role: any
+    capability_tags: [inference, amd, gpu, vulkan, tuning]
+    estimated_hours: 3
+    outcome: >
+      Found 2026-09-04 on yoga (gfx1152) while measuring order 520.
+      images/inference/engine-tuning.sh derives TUNING_VRAM_MB from
+      `nvidia-smi --query-gpu=memory.total` and nothing else, so on any AMD
+      host the read fails, the `'' | *[!0-9]*` arm clamps it to 0, and the
+      host takes the bottom rung of the VRAM ladder. Measured live: the
+      container printed `tuning: tier=gpu-rocm ... vram_mb=0` and
+      `[inference] tier=T1 (RAM 14GB, VRAM 0GB)` in the SAME startup where
+      ollama enumerated `library=Vulkan ... total="7.9 GiB" available="7.5
+      GiB"` and then placed qwen2.5:0.5b with size_vram == size. So the
+      engine and the tuning policy disagreed about the same device, in the
+      same log, by 7.9 GiB.
+      THE TRAP, and why this is not a one-line patch: the obvious sysfs
+      source is WRONG on an iGPU. /sys/class/drm/card1/device/mem_info_vram_total
+      reads 536,870,912 (512 MiB) on this host — the dedicated carve-out, not
+      the GTT-backed pool the Vulkan device actually offers. Wiring that in
+      would replace `0` with `512`, which is still not 7.9 GiB and would read
+      as measured. The honest sources are the Vulkan enumeration itself
+      (vulkaninfo's deviceLocalMemory / the loader) or ollama's own discovery
+      line, and the ordering problem is real: engine-tuning.sh runs BEFORE the
+      server that produces that number.
+      Note the ladder is only consulted for lanes whose tuning was measured;
+      the vulkan/rocm lane is deliberately conservative today (order 520 proved
+      PLACEMENT, not the flash_attn/kv_cache sweep), so this is currently a
+      truthfulness defect in what is REPORTED to agents more than a throughput
+      loss. It becomes a throughput loss the moment the AMD lane is tuned.
+    exit_criteria:
+      - "on an AMD host the reported vram_mb either matches what the engine enumerates, or is an explicit unknown — never a 0 or a carve-out standing in for a measurement"
+      - "the iGPU carve-out source is rejected in a comment with its measured value, so the next reader does not re-introduce it"
+      - "litmus:inference-engine-payload-and-tuning gains the AMD VRAM branch"
+    events:
+      - type: progress
+        ts: "2026-09-04T06:42:10Z"
+        agent_id: "linux-yoga-claude-20260904t063730z"
+        host: yoga
+        summary: >
+          Filed from the order-520 measurement on yoga. Evidence is in the same
+          container startup: tuning said vram_mb=0, ollama said 7.9 GiB, the
+          model placed fully in VRAM. sysfs carve-out measured at 512 MiB and
+          rejected as a source.
