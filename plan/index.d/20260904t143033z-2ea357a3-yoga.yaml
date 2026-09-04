@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: ci-full-is-red-on-linux-next-at-eef84d6af-and-blocks-the-daily-release
+    event:
+      type: progress
+      ts: "2026-09-04T14:30:33Z"
+      agent_id: linux-yoga-claude-20260904t141655z
+      host: yoga
+      summary: |-
+        CAUSE 3 FIXED, landed as 252d0d2f4 (landed sha; this took two attempts so the local one was rewritten). ci-release instant is now 34/34, 100%, PASS — that spec's last red is gone, and it is the same red I had been reporting as 'the unowned nix lane' in every handoff today. THE FAILURE IS THE INVERSE OF THE ASSIGNMENT'S READING, and of its own arm name. The brief said a rung that should be refused before cargo runs is reaching cargo, a fail-open. Captured directly rather than from the runner, which prints no rc on FAIL (1018-5f5a): rc=1, stderr 'FAIL: blocked-rung-actually-reaches-cargo — cargo was never invoked'. Nothing was reaching cargo that should have been refused; cargo was not being reached at all. The arm asserts the blocked nix lane DOES fall through to its cargo fallback, and it did not. CAUSE: the fixture was testing the HOST'S TOOLCHAIN, not the lane. build_with_cargo preflights for an aarch64 musl linker and returns before compiling anything (934-7jd4, so a doom knowable in milliseconds is not reported as a linker problem after a 73s compile). That refusal is CORRECT. The fixture stubbed nix and cargo but not the linker, and run_sandbox PREPENDS to the host PATH rather than scrubbing it, so on a host carrying neither aarch64-linux-musl-gcc nor clang the preflight refused, cargo was never invoked, and a right answer read as a lane failure. Measured on yoga: both ABSENT. That also explains the shape nobody could place — green on hosts that happen to carry clang, red on hosts that do not, so it looked intermittent while being deterministic per host. TWO CORRECTIONS TO THE BRIEF: it is not a fail-open, and it is not full-tier-only — litmus-guest-binary-embed-integrity.yaml declares size: instant, which is why it appeared in my instant-tier runs all day at 33/34 and 35/36. FIX: stub the linker so the sandbox is hermetic in the direction the arm means to test, plus scenario 4b which REMOVES the stub and pins 934-7jd4's refusal by name and that nothing was compiled — because the obvious way to 'fix' a future red here is to delete the preflight. Mutation-checked both directions: leaving the linker in place turns both 4b arms red with their own messages. Fixture 15 arms -> 17.
