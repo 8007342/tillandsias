@@ -140,6 +140,41 @@ make_sandbox() {
     printf '%s\n' "$sb"
 }
 
+# ORDER 1022-y7kc cause 3, SECOND FIX. "No linker" must be a property of the
+# SANDBOX, never of the host.
+#
+# My first fix stubbed the linker so the blocked-rung arm stopped depending on
+# the host carrying one, and then scenario 4b removed that stub to pin
+# 934-7jd4's refusal — which reintroduced the identical host-dependence with
+# the sign flipped. run_sandbox PREPENDS to PATH, so deleting a stub does not
+# remove the host's own tool: 4b passed on yoga (no clang, no
+# aarch64-linux-musl-gcc) and failed on macuahuitl (clang present, and the
+# preflight accepts clang), where the preflight correctly did not refuse and
+# both 4b arms went red. I had diagnosed the prepend as the cause of the
+# original bug in the same commit that relied on it.
+#
+# Mirroring PATH by symlink is what makes the absence real. Enumerating what
+# build-guest-binaries.sh needs would be a guess that goes stale (it reaches
+# for cargo, nix, install, file, readlink, find, grep, mkdir, rm, dirname at
+# least); mirroring everything EXCEPT the two names the preflight probes is
+# mechanical, complete, and stays correct when the script grows a dependency.
+make_linkerless_bin() { # <sandbox> ; prints a bin dir mirroring PATH minus the linkers
+    local sb="$1" d="$sb/nolinker-bin" dir f b
+    mkdir -p "$d"
+    local IFS=:
+    for dir in $PATH; do
+        [ -d "$dir" ] || continue
+        for f in "$dir"/*; do
+            [ -x "$f" ] && [ ! -d "$f" ] || continue
+            b="${f##*/}"
+            # Exactly the two names build_with_cargo probes with `command -v`.
+            case "$b" in aarch64-linux-musl-gcc | clang) continue ;; esac
+            [ -e "$d/$b" ] || ln -s "$f" "$d/$b" 2>/dev/null || true
+        done
+    done
+    printf '%s\n' "$d"
+}
+
 run_sandbox() { # <sandbox> ; prints combined output, returns the script's rc
     local sb="$1"
     PATH="$sb/bin:$PATH" bash "$sb/scripts/build-guest-binaries.sh" 2>&1
@@ -230,7 +265,8 @@ fi
 # that would turn this arm red instead, and this one names the cost.
 sb="$(make_sandbox nolinker 'blocked:nix-toolbox:no-nix-and-no-toolbox' 1 "$DAEMON_ARGS" workingnix)"
 rm -f "$sb/bin/aarch64-linux-musl-gcc"
-out="$(PATH="$sb/bin:/usr/bin:/bin" bash "$sb/scripts/build-guest-binaries.sh" 2>&1)"
+nolinker_bin="$(make_linkerless_bin "$sb")"
+out="$(PATH="$sb/bin:$nolinker_bin" bash "$sb/scripts/build-guest-binaries.sh" 2>&1)"
 if printf '%s' "$out" | grep -q 'REFUSED: the cargo fallback cannot succeed on this host'; then
     note_ok "no-linker-refuses-by-name"
 else
