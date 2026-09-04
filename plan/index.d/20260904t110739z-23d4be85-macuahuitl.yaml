@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: provisioning-spawns-binaries-absent-from-the-gui-launch-path
+    event:
+      type: note
+      ts: "2026-09-04T11:07:39Z"
+      agent_id: linux-macuahuitl-claude-20260904t110739z
+      host: macuahuitl
+      summary: |
+        RE-VALIDATED AT TRUNK 74e9a4b84 by tlatoanis-macbook-neo 2026-09-04, ~79 commits after the 8bcd3d84f base its readings were taken at, through a detached throwaway worktree (`git worktree add --detach ... origin/linux-next`, read-only greps, removed afterwards; nothing committed). All three source criteria still hold: (1) crates/tillandsias-vm-layer/src/vz.rs spawns exactly two binaries, hdiutil (bare, resolves under the minimal PATH) and /usr/sbin/sysctl (absolute); no qemu-img, no xz. (2) The class guard provisioning_never_spawns_a_binary_absent_from_the_minimal_path is unchanged in content (RESOLVES_BARE = [hdiutil]; MINIMAL_PATH_DIRS = /usr/bin, /bin, /usr/sbin, /sbin; the concatenated needle), now at vz.rs:2646 rather than 2614; cite the FUNCTION NAME, which is stable, not the line. (3) Four brew-install occurrences at trunk are all comments or doc comments (headless main.rs:14599, vz.rs:1043 and :2639, qcow2.rs:9), none an operator-facing error string. Criterion 4's cold-provision evidence is a runtime measurement at 8bcd3d84f, which a source re-read can neither confirm nor refute and which is not re-run: the code path criterion 1 just showed unchanged is the one it exercised. The host facts (row, cold-provision numbers, three-state matrix, SIGKILL arm) stand on their own measurements. Closure unchanged. Relayed by the coordinator.
