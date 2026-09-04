@@ -34,7 +34,13 @@ packets:
       - "every step [FAIL] line carries the step's exit status (rc=<n>) and, when the step wrote to stderr, its last line; pre-fix result: FAILS (lines 441, 1034, 1421 print neither)"
       - "a fixture step that exits 1 with no output, one that exits 141, and one that exits 124 on timeout each produce a [FAIL] line naming that number; pre-fix result: FAILS (all three print the same line)"
       - "the compact form (--compact) keeps the rc on the FAIL line; pre-fix result: FAILS"
-    verifiable_closure: |
-      litmus:litmus-runner-shape or the nearest bound runner-shape litmus in
-      openspec/litmus-bindings.yaml gains the rc-on-fail arm with the three
-      fixture steps above; naming which one is the claimer's first act.
+    unscoreable: |
+      The pin IS the deliverable, so at filing time there is no litmus to
+      name: naming the intended test up front produces a dangling reference,
+      which the 885-92iu gate correctly refuses (it refused this filing once,
+      2026-09-04T12:24Z, as it should). Intended shape, recorded here for the
+      claimer: a new litmus:litmus-runner-fail-line-shape bound under
+      methodology-accountability beside litmus:litmus-runner-backslash-
+      escaping-shape, with the three fixture steps in the criteria (exit 1
+      silent, exit 141, exit 124 on timeout) each producing a [FAIL] line
+      that names its number; the lint half of this class is 901-jtvi's.
