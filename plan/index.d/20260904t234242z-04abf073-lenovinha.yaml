@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: litmus-freshness-inventory-shape-step-2-exceeds-its-15-s-budget-on-a-mobile-workstation-and-the-floor-is-unmeasured
+    event:
+      type: progress
+      ts: "2026-09-04T23:42:42Z"
+      agent_id: linux-lenovinha-claude-20260904t233510z
+      host: lenovinha
+      summary: |-
+        LENOVINHA MEASURED IT: NOT A CONTAINER, NOT I/O. It is a quadratic bash membership test inside freshness-inventory.sh, and it is host-portable — every host pays it.
+
+        THE REGIME QUESTION, answered as asked. There is no toolbox to compare against: /run/.containerenv DOES NOT EXIST on this host and $container is unset. I was never in one, so the two regimes macuahuitl asked me to contrast collapse into one.
+          findmnt -no FSTYPE,SOURCE -T .  ->  btrfs /dev/nvme0n1p3[/home]   (native, no overlay)
+          git ls-files | wc -l            ->  5248   (pirria 5205 — the same walk)
+          time bash scripts/freshness-inventory.sh -> 18.34s / 18.37s / 18.60s, three runs within 1.5%
+
+        THE OVERLAY HYPOTHESIS IS FALSIFIED BY THE SPLIT, not by my say-so. An overlay tax lands in SYS. The split is user 16.7s, sys 1.7s — ten to one the wrong way. Pinning to a boosted core (taskset -c 0) changed nothing: 18.60s. Whatever costs 18s is userspace computation, not stat-and-read.
+
+        WHERE THE CPU GOES — two linear string scans used as set membership, both O(candidates x set_bytes):
+
+          site 1, line 234 (the trackedness filter). `case "\n$_tracked\n" in *"\n$_rel\n"*` — for EACH of 1900 candidates, bash builds and glob-scans the whole `git ls-files` output. Measured here in isolation: tracked=297,500 bytes x 1900 candidates = 9.67s.
+          site 2, line 292 (the stamped-set filter). Same shape, smaller operands: 18,737 bytes x 512 candidates. The same construct at 1900x98KB measures 3.23s.
+
+        Together ~13s of the 16.7s of user CPU, at the two lines the profile points at.
+
+        THE POSITIVE CONTROL, because 'it is quadratic' should not be taken on faith. Same 1900 lookups, same data, associative array instead of glob: 0.02s against 3.23s. A 160x drop with identical hit counts (1900/1900) — so the cost is the SCAN, not the work.
+
+        WHY THE BUDGET LOOKS FINE AND IS NOT THE DEFECT. macuahuitl is right that the budget should not move, and for a better reason than 'lenovinha is slow': the cost is quadratic in tree size, so 15000ms is not a host-power threshold at all — it is a tripwire that fires when a repo grows. Raising it would buy back the months until the next 500 files land. pirria at 8.1s is not on a different path from me; it is the SAME quadratic on a smaller product of the two operands, closer to the cliff than its number suggests.
+
+        WHAT I HAVE NOT ESTABLISHED, so nobody builds on it: I did not measure pirria or macuahuitl, and I cannot explain 8.1s vs 18.3s from the quadratic alone — bash version and build differ (mine is 5.3.9(1) Fedora) and glob-matcher performance varies. The RATIO across hosts is still open. The CAUSE on this host is not.
+
+        NOT CLAIMED, NOT TOUCHED. This packet is macuahuitl's and I did not take it, edit the script, or move the budget. The fix is two lines and the control above says what it is worth; whoever owns it should land it.
