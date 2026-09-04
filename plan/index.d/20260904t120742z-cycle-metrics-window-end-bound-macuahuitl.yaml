@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: cycle-metrics-windows-have-no-end-bound-so-a-backfill-absorbs-later-cycles
+    order: 1017-punm
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [metrics, observability, plan, fail-loud, shell]
+    estimated_hours: 1
+    owned_files:
+      - scripts/cycle-metrics.sh
+      - scripts/test-cycle-metrics-recurrence.sh
+      - methodology/agent-observability.yaml
+    title: |
+      cycle-metrics.sh anchors the repeat/recur/skippable window at --cycle-start and leaves it open at NOW, so a later re-run silently absorbs every later cycle under a byte-identical window=since= label
+    context: |
+      MEASURED by yoga 2026-09-04 while backfilling its 09:30Z loop-status
+      entry. Same flag, same log, two readings:
+        09:50Z live: repeat: window=since=2026-09-04T09:30:06Z steps=154 top3=build-preamble=5,litmus:added-fragment-parse-gate-shape=4,litmus:ci-release-musl-binary-policy=4
+        12:0xZ rerun: repeat: window=since=2026-09-04T09:30:06Z steps=154 top3=build-preamble=13,build-check-memoized=7,build-check=6
+      The later reading has absorbed the 11:29Z cycle's steps into the 09:30Z
+      window; skippable: runs drifted 123 -> 124 the same way. Backfilling
+      from the re-run would have attributed one cycle's work to another inside
+      the ledger the cross-host recurrence audit reads, and nothing afterwards
+      could tell, because both lines carry the same window string. Yoga used
+      the transcript instead and recorded why (c8658dc5a).
+      The script (scripts/cycle-metrics.sh, CYCLE_START_TS at 470-478, the
+      repeat window at 947-983 and 1028-1029) has no end bound and prints
+      none. For a live reading the open end is correct, because the cycle's
+      end IS now; the defect is that the label does not say so, so a live
+      reading and a late re-run are indistinguishable on the page.
+      Provenance: yoga measured; filed by the coordinator, who owns the
+      1001-q3zf lines. Sample of one, filed anyway: this is a property of the
+      flag, not a frequency.
+    exit_criteria:
+      - "every window label carries its end bound: window=since=<start>,until=<end> where until is the reading's clock unless --cycle-end (or TILLANDSIAS_CYCLE_END_TS) is given; pre-fix result: FAILS (no until= is printed)"
+      - "a re-run with --cycle-start and --cycle-end set to the original cycle's span reproduces the original repeat/recur/skippable lines from the same log; pre-fix result: FAILS (the re-run absorbs later steps, measured above)"
+      - "an unparsable --cycle-end reports until=<value>:unparsed steps=0 the way --cycle-start already does, never a silent open end; pre-fix result: FAILS (flag does not exist)"
+      - "methodology/agent-observability.yaml context_cost_metrics names the backfill rule: a backfilled block must come from a bounded re-run or say it came from a transcript; pre-fix result: FAILS (no such rule)"
+    verifiable_closure: |
+      litmus:cycle-metrics-recurrence-shape (bound, pre-build) via
+      scripts/test-cycle-metrics-recurrence.sh gains the end-bound arms: a
+      fixture log with steps on both sides of --cycle-end, the bounded reading
+      excludes the later steps, the unbounded reading includes them and says
+      until=<now>, and the unparsed form is refused.
