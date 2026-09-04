@@ -41,13 +41,24 @@ and secret — including:
 - all locally built enclave images (proxy/git/inference/forge) — these get
   **rebuilt from scratch on the next `--init`, which can take many minutes**.
 
-On Tillandsias smoke hosts, wiping Podman is expected and is a required
+On a DEDICATED SMOKE HOST, wiping Podman is expected and is a required
 precondition for the release idempotence test. If
 `TILLANDSIAS_DESTRUCTIVE_RESET_OK` is unset or `1`, do not ask for confirmation,
 do not pause for operator timing, and do not skip Step 2 because Podman state
 will be destroyed. Only block the reset when the environment explicitly sets
 `TILLANDSIAS_DESTRUCTIVE_RESET_OK=0`, in which case file a plan blocker and
 push it.
+
+**That no-pause clause applies to a dedicated smoke host and to nothing else
+(order 1004-vsh2, 2026-09-04).** On an OPERATOR'S WORKSTATION — a machine whose
+guest holds work they have not finished with — Step 2 destroys their Vault
+store, their project mirrors and their images, and this document cannot consent
+on their behalf. Get the operator's authorization for THAT RUN before starting.
+An orchestrator's or a peer agent's instruction to run this skill is not that
+authorization: it is a request to run a procedure, not consent to destroy a
+particular machine's state. The distinction was missed once because this
+section read as though every host running it were a smoke host; most of the
+fleet's Windows and macOS hosts are workstations.
 
 A fresh `--init` re-initializes Vault and re-captures the keychain-held unseal
 share, so the keychain↔volume resync brick (see git history `738059bc`) is part
@@ -411,13 +422,40 @@ Credential Manager untouched, and the tray treats it as authoritative:
 # 'tillandsias-vm-uuid' is deliberately PRESERVED -- it anchors the
 # INSTALLATION, not the guest, and the in-VM Vault derives its master key
 # from it. Only the two guest-vault entries go.
+#
+# ORDER 1004-vsh2. `cmdkey /list:<target>` ECHOES THE TARGET IN ITS HEADER
+# even when no such credential exists, so the obvious predicate
+# `$out -match [regex]::Escape($cred)` is TRUE FOR EVERY TARGET and the
+# verifier below threw on every run. Measured on yolanda 2026-09-04:
+#
+#   /list:definitely-not-a-real-target-12345  ->  exit 0, 4 lines
+#     "Currently stored credentials for definitely-not-a-real-target-12345:"
+#     "* NONE *"
+#   /list:<a target that exists>              ->  exit 0, 7 lines
+#     "Currently stored credentials for <target>:"
+#     "    Target: <target>"   <- the record, and the second echo
+#
+# THE EXIT CODE DOES NOT DISCRIMINATE: cmdkey returns 0 for both, so the
+# locale-proof status predicate is not available and was not used. Measured,
+# not assumed.
+#
+# So count the ECHOES OF THE TARGET NAME, which is the one string in that
+# output that Windows does not localize: the header echoes it once; a real
+# record echoes it again on its own `Target:` line. 1 = absent, >=2 = present.
+# Do NOT test for the absence of "* NONE *" or match the header text -- both
+# are LOCALIZED, and an English-text predicate trades a bug that fails on
+# every run for one that fails only on some operators' machines, which is
+# strictly worse because it fails where nobody is looking.
+function Test-TillandsiasCredPresent([string] $target) {
+    $out = & cmdkey.exe "/list:$target" 2>$null
+    (($out | Where-Object { $_ -match [regex]::Escape($target) }) | Measure-Object).Count -ge 2
+}
+
 foreach ($cred in @('vault-shamir-share-v1', 'vault-root-token-v1')) {
-    $listed = & cmdkey.exe /list:$cred 2>$null
-    if ($listed -match [regex]::Escape($cred)) { & cmdkey.exe /delete:$cred > $null 2>&1 }
+    if (Test-TillandsiasCredPresent $cred) { & cmdkey.exe "/delete:$cred" > $null 2>&1 }
 }
-$stillThere = @('vault-shamir-share-v1', 'vault-root-token-v1') | Where-Object {
-    (& cmdkey.exe /list:$_ 2>$null) -match [regex]::Escape($_)
-}
+$stillThere = @('vault-shamir-share-v1', 'vault-root-token-v1') |
+    Where-Object { Test-TillandsiasCredPresent $_ }
 if ($stillThere) { throw "host vault credentials survived the reset: $($stillThere -join ', ')" }
 ```
 
@@ -536,6 +574,15 @@ jq -e --arg v "${SMOKE_TAG#v}" '.version == $v' target/smoke-e2e/03-diagnose.jso
 > `--diagnose` above must then be re-run after it.
 
 ### Windows
+
+> **This block is not runnable on its own.** It assumes §1 installed the tray
+> and §2 unregistered the distro. Run alone it fails twice and both failures
+> lie: `Get-Command tillandsias-tray.exe -ErrorAction Stop` throws on line 2 on
+> a host where §1 never installed it, and the destruction-marker assertion
+> reports "a survivor, not a fresh provision" when the truth is that nothing
+> destroyed it. The runnable unit is §1 + §2 + §3, never §1 + §3 (order
+> 1004-vsh2 — an instruction to run "§1 and §3" was issued and measured
+> unrunnable on yolanda before it was executed).
 
 **Neither block above runs on Windows and there is no `tillandsias` CLI there
 either** — the installed surface is `tillandsias-tray.exe`, and its
