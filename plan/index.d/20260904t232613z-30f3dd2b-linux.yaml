@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-gate-stamp-reads-the-index-exec-bit-so-an-unstaged-chmod-memoises-green
+    field: status
+    value: obsoleted
+    ts: "2026-09-04T23:26:13Z"
+    host: linux
+
+events:
+  - packet_id: the-gate-stamp-reads-the-index-exec-bit-so-an-unstaged-chmod-memoises-green
+    event:
+      type: completed
+      ts: "2026-09-04T23:26:13Z"
+      host: linux
+      summary: |-
+        status 'obsoleted' with evidence_refs: 0a1419ffe reverts 399415ee4; premise void per 889-8tcb (index sourcing is deliberate, drvfs deadlock); litmus:mode-only-regression-gate and litmus:gate-stamp-portable-digest both green after the revert
+  - packet_id: the-gate-stamp-reads-the-index-exec-bit-so-an-unstaged-chmod-memoises-green
+    event:
+      type: note
+      ts: "2026-09-04T23:26:13Z"
+      host: linux
+      summary: |-
+        the requested change is a documented Windows-critical design, not a defect; the real finding is memo scope and is filed separately
