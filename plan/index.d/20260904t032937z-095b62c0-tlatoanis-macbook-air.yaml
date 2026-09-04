@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: interactive-tui-amputated-to-work-around-argv-join
+    field: next_action
+    value: |-
+      DO NOT RE-INVESTIGATE THE PREMISE. It is false and was false when this was filed: build_opencode_forge_args pushes --interactive --tty under `if !diagnostics && prompt.is_none()`, so the interactive lane has the flags. The skip applies only to the PROMPTED lane (opencode run --auto, no TUI) and to diagnostics. That conditional was introduced 2026-06-18 in d761b4187, two months BEFORE the 2026-08-17 audit that filed this, and I verified it present in the source as of the audit date. The TUI was never amputated.
+
+      CRITERION 3 IS DONE: both in-code comments are amended and now distinguish the measured from the assumed. The measurement, from macOS against the guest's podman, is that `podman run --rm -it alpine true < /dev/null` WARNS ("input device is not a TTY ... might not work properly") and the container RUNS, exit 0 — it does not refuse before container start, which is what the comment had claimed. The SIGTTIN/SIGTTOU stopped-T observation is kept as a real recorded observation with an explicitly UNPROVEN mechanism.
+
+      TWO THINGS FOR THE AUTHOR TO DECIDE, neither of which a measuring host should decide alone:
+
+      (1) EXIT CRITERION 2 IS UNSATISFIABLE AS WRITTEN. Both its branches presuppose the amputation: there is nothing to restore, and the symptom cannot be reproduced on a lane that already carries the flags. Decide what closing this means now that the premise did not hold. I deliberately did not rewrite it.
+
+      (2) THE ONE THING STILL UNVERIFIED is whether an interactive opencode TUI actually works end to end on this lane — which is worth knowing on its own merits, just not as evidence about an amputation that never happened. It needs a human at a terminal or the CLI entry point 702-6jza names, because the PTY attach path has no non-GUI invocation and a TUI cannot be driven from an agent shell. "The container starts with the flags" is NOT that, and should not be recorded as if it were.
+    ts: "2026-09-04T03:29:37Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: interactive-tui-amputated-to-work-around-argv-join
+    event:
+      type: note
+      ts: "2026-09-04T03:29:37Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        premise falsified; criterion 3 met; criterion 2 unsatisfiable as written

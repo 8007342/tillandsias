@@ -6883,10 +6883,25 @@ fn build_opencode_forge_args(
 ) -> Vec<String> {
     // CLI mode attaches stdio (--interactive --tty) for a real shell; Web
     // mode detaches the container so the run() call returns and the host
-    // owns the lifecycle. Forcing --interactive --tty under a non-TTY shell
-    // (the way a tray launch or background script ends up) makes podman
-    // refuse with "input device is not a TTY" before any container start
-    // event fires.
+    // owns the lifecycle.
+    //
+    // CORRECTED 2026-09-04 (order 795-bmbq), because this comment asserted a
+    // mechanism nobody had measured. It said forcing --interactive --tty under
+    // a non-TTY shell "makes podman REFUSE with 'input device is not a TTY'
+    // BEFORE any container start event fires". Measured against the guest's
+    // own podman, from macOS over --exec-guest:
+    //
+    //   podman run --rm -it alpine true < /dev/null
+    //   -> level=warning msg="The input device is not a TTY. The --tty and
+    //      --interactive flags might not work properly"
+    //   -> container RAN, exit 0
+    //
+    // So podman WARNS AND PROCEEDS; it does not refuse, and the container does
+    // start. The flags are still skipped for the prompted and diagnostics
+    // lanes below, and that is still right — but for the reason given there,
+    // not because podman would reject the launch. (The podman VERSION was not
+    // captured in that run, so this bounds the claim to the guest image of
+    // that date; an older podman may genuinely have refused.)
     let mut args = vec![
         "--rm".into(),
         "--name".into(),
@@ -6908,9 +6923,23 @@ fn build_opencode_forge_args(
             // When a prompt is provided, the entrypoint execs
             // `opencode run --auto "<prompt>"` which is non-interactive.
             // (It passed --dangerously-skip-permissions until order 429; that
-            // flag does not exist in opencode and was silently swallowed.)  Skip --interactive --tty so podman does not
-            // attempt to claim the terminal (which causes SIGTTIN/SIGTTOU /
-            // stopped T state when the parent is in a harness PTY).
+            // flag does not exist in opencode and was silently swallowed.)
+            //
+            // Skip --interactive --tty for that lane. THE REASON IS THAT THE
+            // LANE IS NOT INTERACTIVE — `opencode run` reads no stdin and
+            // renders no TUI, so asking podman to allocate a tty for it buys
+            // nothing and hands the container a terminal to contend for.
+            //
+            // The SIGTTIN/SIGTTOU stopped-T observation behind this is real and
+            // is recorded in the linked findings file; what was never measured
+            // is that podman "claiming the terminal" is its cause. Order
+            // 795-bmbq re-examined that: see the corrected note above the args
+            // vector, where podman is shown to warn and proceed rather than
+            // refuse. The attribution is therefore left as an OBSERVATION with
+            // an unproven mechanism rather than restated as a cause.
+            //
+            // The interactive lane below is NOT amputated and was not at the
+            // 2026-08-17 audit either — 795-bmbq was filed believing it was.
             // @trace plan/issues/build-install-smoke-e2e-findings-2026-06-14.md
             if !diagnostics && prompt.is_none() {
                 args.push("--interactive".into());
