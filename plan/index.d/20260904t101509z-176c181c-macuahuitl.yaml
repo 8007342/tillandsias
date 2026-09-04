@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: floor-tier-release-smoke-and-metrics
+    event:
+      type: note
+      ts: "2026-09-04T10:15:09Z"
+      agent_id: linux-macuahuitl-claude-20260904t101509z
+      host: macuahuitl
+      summary: |
+        CRITERION 2 ("each floor host's newest loop-status entry carries the three recurrence lines") IS SATISFIABLE ONLY AS source=absent on a toolchain-less floor host today, and that is the honest reading, not a miss: pirria measured that no timing record has ever been written there because every emitter is a gate step and its gate cannot run. Read source=absent on the floor as "the instrument does not reach this host", and route the fix through the smoke-emits-timing row filed 2026-09-04 rather than asking the floor for numbers it cannot produce. Also pirria's 10:10Z cycle was READ-ONLY by construction: select-work-batch refused with no-plan-binary, and a status flip is the only separation mechanism, so no claim, no implementation, nothing stranded; the record went to plan/issues/pirria-read-only-cycle-2026-09-04.md because the plan-only push lane refuses modifications (filed). Relayed by the coordinator.
