@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-gate-discovers-sub-second-failures-after-ten-minutes-of-work
+    event:
+      type: evidence
+      ts: "2026-09-04T21:53:38Z"
+      agent_id: linux-lenovinha-claude-20260904t213535z
+      host: lenovinha
+      summary: |
+        LANDED 303a16611 (verified an ancestor of origin/linux-next before this event was written). The gate's sub-second deciders now run before its first compile.
+
+        THE MEASUREMENT, one planted exec-bit defect, TILLANDSIAS_FORCE_CHECK=1 on both runs, identical verdict (violation:script-not-executable:1) and identical rc=1:
+            before the reorder   222 seconds to refusal
+            after                  2 seconds to refusal
+        A green forced gate is 213s, inside the day's observed 212-284s range — nothing removed, nothing weakened, and the same ~1.5s of guards simply runs earlier.
+
+        WHICH GUARDS MOVED, chosen from the timing log rather than by feel (median over 266 runs): scorable-obligation 977-448j 12ms, issue-citation 881-29me 43ms, script-exec-bits 731-d89b 92ms, declared-closures 885-92iu 458ms, litmus-pin-claims 721-77yu 869ms. They sat at build.sh lines 2584-3210, BEHIND the terminology dictionary (33s), the ruby could-not-run check (23s), the plan archiver (23s), the plan-ledger tests (18s) and the workspace suite (79s).
+
+        WHAT DID NOT MOVE, and this is where the packet's "under a few seconds" needed a decision: `plan/long-running.md matches the live multi_cycle set` (251 LM-04) measures 4.1s, which is MORE than the clippy pass it would jump ahead of (2.3s). Hoisting it would add more to every GREEN run than it saves on the red ones. So the rule written into the phase is "median under a second, decidable from the working tree alone", and LM-04 stays in the body. If a hoisted guard ever grows past a second it belongs back there too.
+
+        A FINDING THAT CHANGED MY ASSUMPTION, worth carrying: clippy averages 2.3s, not the expensive step everyone pictures. The ten minutes is not the compile — it is the accumulation of ledger and litmus phases (33s + 23s + 23s + 18s + 79s and a long tail). So "before the first compile" is the right PLACE for the phase but the wrong REASON to describe the win; the win is being before the expensive middle, and the phase sits before clippy because that is the earliest unambiguous boundary, not because clippy is costly.
+
+        THE FIXTURE PINS THE ORDER, NOT THE CHECKS. scripts/test-gate-fast-refusals.sh, 3/3, wired into local-ci.sh. Asserting only "the gate refuses" would pass equally with the guard back at the end of the run — which is precisely the state this order exists to leave — so the behavioural arm requires the refusal to arrive with NO compile entered, and the static arms require the phase to precede the first compile step and each hoisted guard to appear EXACTLY ONCE in build.sh (a duplicate is how a "move" that was really a copy would hide).
+
+        TWO MEASUREMENT TRAPS, both mine, both recorded because each produced a plausible wrong number:
+        1. THE MEMO DEFEATS THIS MEASUREMENT SILENTLY. The gate memoises on tree bytes plus toolchain (765-tkq2), and a chmod changes NEITHER — so an unforced run returned rc=0 in 2s on a tree carrying the planted defect. A green. That is also a small standing fact worth knowing independently of this packet: a mode-only regression does not invalidate the gate stamp, so the exec-bit guard cannot fire on a memoised run.
+        2. MY FIRST "BEFORE" MEASURED THE FIX. I snapshotted build.sh to /tmp AFTER inserting the new phase, then restored that snapshot as the baseline; it refused in 4s and I nearly recorded 4s as the pre-fix number. Caught because 4s was implausible for a check at line 3269 — the implausibility, not any process, is what saved it.
+        Both are why the fixture forces the memo off and why every number above names its conditions.
