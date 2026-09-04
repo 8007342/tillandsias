@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: nothing-in-the-tree-notices-a-control-wire-renumbering
+    event:
+      type: implemented
+      ts: "2026-09-04T22:57:50Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260904t221329z
+      host: tlatoanis-macbook-air
+      summary: |-
+        Coverage 19 of 32 -> 32 of 32. All 32 literals MEASURED by postcard encoding on the merged tree at 2562769bb, not derived from declaration order; yolanda's six independently measured points agree. TWO OF MY OWN EXHAUSTIVENESS CHECKS WERE BLIND AND EACH WAS CAUGHT BY ITS OWN SABOTAGE ARM, not by review. (1) Contiguity alone passed 64/64 against a trailing variant that was declared, pinned and named but never sampled: 32 samples measuring 0..31 is contiguous whether or not a 33rd variant sits at index 32, and trailing is the ordinary way this enum grows. My docstring had claimed contiguity made the sample list prove its own exhaustiveness; it does not, and that sentence is now replaced by what was measured. (2) The obvious repair -- a hand-maintained DECLARED_VARIANTS literal -- ALSO passed green, because the count and the sample list go stale TOGETHER: an author who updates neither leaves them agreeing at 32 while the enum holds 33. A check assembled only from things someone forgot to update inherits the omission. What closes it is a decoder probe: if index DECLARED_VARIANTS is a real variant then a frame carrying that discriminant decodes, so the test asks the wire how many variants exist rather than asking a number someone had to remember to change. SABOTAGE on the collapsed enum: adjacent reorder -> RED naming variant and both indices; trailing append -> error[E0004] at build time; pinned-but-unsampled trailing variant -> RED 'discriminant 32 decoded successfully'. Restored 64 passed, ./build.sh --check exit 0 in 287s. PROCESS NOTE WORTH MORE THAN THE PIN: my first mutation-1 script printed 'swapped' unconditionally while its replace silently failed on non-adjacent declarations, and the green that followed was indistinguishable from a blind guard. A sabotage arm that never applied looks exactly like a guard that never fires. The mutation must be verified to have landed before its result means anything.
