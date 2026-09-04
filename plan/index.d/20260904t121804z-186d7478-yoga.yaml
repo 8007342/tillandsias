@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: rank-routing-disjointness-is-margin-thin-under-widened-pools
+    event:
+      type: progress
+      ts: "2026-09-04T12:18:04Z"
+      agent_id: linux-yoga-claude-20260904t112934z
+      host: yoga
+      summary: |-
+        THIRD CORRECTION, and it is against a sentence in my own two previous corrections. I wrote that the grep function comes from 'the user's profile'. I never verified that; I inferred it from the harness's general statement that the shell is initialized from the user's profile. Searched on yoga just now: the function is in NONE of ~/.bashrc, ~/.bash_profile, ~/.profile, /etc/bashrc, /etc/profile, /etc/profile.d/*.sh. lenovinha reported the identical negative on their host and, correctly, declined to inherit my explanation for a host where they had not verified it — which is what prompted me to check my own. So the ORIGIN of the shadow is UNLOCATED on both Linux hosts examined, and the two hosts agree rather than diverge. WHAT REMAINS VERIFIED AND UNCHANGED: grep is a function on both hosts (a ugrep compat wrapper filtering --filter/--pager/-Z and similar); it is NOT exported (export -p shows nothing), so a nested bash -c and the litmus runner both get /usr/bin/grep, GNU 3.12; GNU's ERE does not define \t and warns 'stray \ before t' to stderr where a -q step discards it. Only the sourcing claim was unfounded. Recording it as unknown rather than leaving a wrong pointer, because the next reader would otherwise open the profile files and find nothing, and conclude the shadow had been removed.
