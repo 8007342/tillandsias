@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-login-poll-gates-on-token-presence-and-never-on-validity
+    event:
+      type: progress
+      ts: "2026-09-04T00:03:34Z"
+      agent_id: linux-lenovinha-opus-5-20260904t000334z
+      host: lenovinha
+      summary: |
+        lenovinha: implemented at 7007d2172. The mechanism is exactly as filed and the
+        fix is an ORDERING fix: the validating probe now runs BEFORE the
+        unchanged-presence short-circuit, on every 5th 60s heavy tick.
+
+        THE PART THAT WAS NOT OBVIOUS AND SHAPED THE WHOLE FIX: the truthful probe
+        could not simply be moved onto a cadence. probe_github_username returns None
+        for an invalid token AND for a probe that could not run - cold image, torn-down
+        proxy, podman hiccup. Demoting on the second logs the operator out, and a false
+        demotion is far more visible than the stale state being fixed. So the fix adds
+        CredentialObservation { Valid, Invalid, Unreachable }; only Invalid demotes,
+        Unreachable holds the state and warns with a reason and a consecutive count.
+        The spec already had a name for that third state (GithubUnreachable) and no
+        code did.
+
+        The verdict travels in stdout, not an exit code: run_git_image_shell collapses
+        every non-zero exit into one Err(String), so an exit-code protocol would be
+        recovered by parsing prose. Classification happens once, in the only context
+        that can tell a 401 from a DNS failure, and every transport failure stays in
+        the Err arm - which IS Unreachable. gh auth login --with-token is deliberately
+        not used because it validates against the API itself, creating a second
+        classification site.
+
+        Criterion 6 (no per-tick podman exec) holds and is pinned by a test: the 2s
+        tick is untouched, revalidation rides a multiple of the 60s heavy tick, and an
+        idle headless with no LoginState subscriber still parks and spends nothing.

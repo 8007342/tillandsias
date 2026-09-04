@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-login-poll-gates-on-token-presence-and-never-on-validity
+    event:
+      type: progress
+      ts: "2026-09-04T00:03:34Z"
+      agent_id: linux-lenovinha-opus-5-20260904t000334z
+      host: lenovinha
+      summary: |
+        lenovinha: verification, and one criterion NOT met.
+
+        VERIFIED BY MAKING IT FAIL, four controls, each red without the fix:
+        reinstating the short-circuit ahead of the revalidation; revalidating on every
+        heavy tick (the hot-path criterion); demoting on Unreachable; and breaking the
+        script's 401 discrimination, which turns both the 401 and 403 cases into
+        unreachable.
+
+        scripts/test-credential-verdict-script.sh (7/7) EXTRACTS the shell literal from
+        remote_projects.rs rather than copying it, so it cannot drift, stubs gh and
+        vault-cli on PATH, and needs no podman, vault or network. Wired into
+        ./build.sh --check - a fixture nothing runs is not a fixture.
+
+        CRITERION 1 IS NOT SATISFIED AND I AM NOT CLAIMING IT. It says "verified by
+        revoking a live token and watching the tray, not by unit test alone". I did not
+        revoke the operator's live GitHub token, and there is no CLI lane that calls
+        the probe, so no live tray was watched demoting. What IS proven: the
+        classification logic under every input class, the loop ordering, the
+        non-demotion on unreachable, and the cost bound. What is NOT proven: that the
+        containerized probe returns verdict=invalid against a genuinely revoked token
+        in the real enclave. That needs a disposable credential and a running stack.
+        Whoever has one should run it before this is called closed.

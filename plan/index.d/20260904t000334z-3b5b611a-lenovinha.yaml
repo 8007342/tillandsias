@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-login-poll-gates-on-token-presence-and-never-on-validity
+    event:
+      type: progress
+      ts: "2026-09-04T00:03:34Z"
+      agent_id: linux-lenovinha-opus-5-20260904t000334z
+      host: lenovinha
+      summary: |
+        lenovinha: criterion 3 DECIDED - do NOT consume the mirror's denied ref as a
+        demotion trigger. Recorded rather than left forgotten.
+
+        refs/tillandsias/upstream-auth/denied/<reason>/<epoch> is a verdict about the
+        MIRROR's push authorization to GitHub, obtained with the Vault-backed relay
+        credential. Demoting the tray's login state on it would be a verdict about an
+        adjacent subject - the same defect family this fleet keeps hitting, and the one
+        this packet is an instance of. It is also epoch-bounded and can be up to
+        MIRROR_RECONCILE_INTERVAL stale, so a denied verdict could demote a tray that
+        has since been re-authenticated.
+
+        What it IS good for, and what I did not implement: a NUDGE. A fresh denied
+        verdict is a legitimate reason to revalidate IMMEDIATELY rather than wait out
+        the cadence - use it as a hint to ask GitHub, never as the answer. That would
+        need guest-side ls-remote plumbing and belongs in its own packet.
+
+        CRITERIA 4 AND 5, and the spec was worse than gapped. It FORBADE the fix:
+        "Background re-probing every N seconds is forbidden", citing the tray-app
+        responsiveness invariant. That invariant's subject is the TRAY EVENT LOOP; the
+        guest headless is not it and already polls there on a 2s/60s cadence. Stating
+        the ban unscoped is what made the honest fix look prohibited - the requirement
+        it protects is responsiveness, not staleness, and read literally it forbade the
+        only mechanism that can observe a mid-session expiry at all. The clause is
+        SUPERSEDED with that scope rather than removed, per
+        convergence.spec_change_must_not_remove_validated_invariant_without_exception.
+        Two requirements added (b39297a1, a15921a9), ids stamped by the 976-suab
+        generator. The four state names now map to CredentialObservation;
+        CredentialMissing and CredentialInvalid collapse to one variant carrying a
+        reason because the state table gates them identically, and the distinction
+        survives in the reason string that reaches the log.
