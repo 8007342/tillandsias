@@ -491,6 +491,16 @@ If the proxy is absent, also check `04-opencode.log` for the unconditional
 teardown trace (`no active lane containers; cleaning project + shared stack`)
 to identify the actor, and file the finding with that line as evidence.
 
+**The trace alone is NOT the finding.** A healthy run prints that same line
+WITH a `keeping application-lifetime: tillandsias-vault, tillandsias-proxy,
+tillandsias-router, tillandsias-nix-cache` clause — that is the order-298 fix
+working, not regressing (pirria, v56.9.2.1 floor smoke, 2026-09-04: the line
+was present, the proxy was alive, and a reader grepping the string alone would
+have filed a false regression). The assertion is proxy LIVENESS while the lane
+is up, taken by a concurrent watcher, never a grep for the trace. Take it while
+the lane is up, not after: lane-scoped containers are torn down on exit by
+design, and only the application-lifetime set must survive.
+
 ---
 
 ## 5 — File findings as plan/issues work packets

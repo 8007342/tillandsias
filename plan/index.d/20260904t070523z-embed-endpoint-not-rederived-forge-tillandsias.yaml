@@ -1,0 +1,123 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: forge-l1-tier-inert-when-inference-brings-up-late
+    order: 1002-kav4
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    title: |
+      The L1 retrieval tier is inert on a cold forge: TILLANDSIAS_EMBED_ENDPOINT
+      is derived once at lib-common source time, races the async inference
+      bring-up, and is never re-derived — so a forge where inference comes up
+      late keeps spec_answer at "no embedding endpoint" all session while a
+      reachable endpoint sits there.
+    status: ready
+    kind: bug
+    deliverable: |
+      ensure_forge_spec_index (and the spec_answer path) re-resolve the embed
+      endpoint after the async inference bring-up, so a late-arriving inference
+      service retroactively enables L1 instead of silently losing the session.
+    depends_on: []
+    pickup_role: any
+    capability_tags: [forge, experts, inference, rag, integration]
+    estimated_hours: 3
+    context: |
+      REPRODUCED 2026-09-04 on a freshly-launched cold forge (forge-tillandsias,
+      linux-next @ 83b31d802, v56.9.2.1), the exact class of host 919-vvyv +
+      967-xq5e exist to serve. THREE independent readings agree the L1 tier
+      came up dead although the endpoint was reachable:
+
+        startup context:   spec_index=absent embed_endpoint=unset
+        experts-probe:     l0=ready l1=unset l2=ready  embed=- advice=embed-unset
+        /tmp/forge-lifecycle.log:557:  [spec-index] skipped (no-embed-endpoint):
+          TILLANDSIAS_EMBED_ENDPOINT is unset — spec_answer keeps its typed
+          refusal (712-r5x8)
+
+      HOLDING THE ENDPOINT UP BY HAND FIXES IT AND PROVES THE ENDPOINT IS FINE.
+      With TILLANDSIAS_EMBED_ENDPOINT=http://inference:11434/v1 exported,
+      experts-probe flips to:
+        l1=no-index  embed=http://inference:11434/v1
+      L1 moves from unset to no-index — the ONLY missing prerequisite from the
+      launch was the exported variable. nomic-embed-text is present (274 MB),
+      http://inference:11434 answers, resolve_embed_endpoint() derives and
+      exports the correct value when called.
+
+      THE ROOT CAUSE IS A RACE THE ONE-SHOT DERIVATION LOSES. entrypoint-forge-
+      opencode.sh sources lib-common.sh at line 9, and lib-common.sh fires
+      resolve_embed_endpoint() once at source time (images/default/lib-common.sh
+      :1174, consolidating 967-xq5e). inference starts ASYNCHRONOUSLY off the
+      forge critical path (spec:async-inference-launch; entrypoint probe at
+      images/default/entrypoint-forge-opencode.sh:85-98). On this forge the
+      lifecycle log ordering is conclusive:
+
+        :541  [lifecycle] inference | ready (probe passed)     <- inference UP
+        :555  [lifecycle] experts | ready: installed ... in 204s
+        :557  [spec-index] skipped (no-embed-endpoint)         <- STILL unset
+
+      The spec-index ensure (ensure_forge_spec_index, lib-common.sh:1553-1557)
+      ran at :557 — ~fifteen minutes of log after inference was declared ready
+      at :541 — and STILL read TILLANDSIAS_EMBED_ENDPOINT as unset. It reads the
+      variable directly and never re-calls resolve_embed_endpoint(), so the
+      one-shot failure at source time (before inference was up) permanently
+      disables L1 for the whole launch. That exact skip is the design's own
+      signed invariant: "A cold inference volume is still PULLING ... give it a
+      bounded window instead of failing" — the model-wait loop handles the MODEL
+      arriving late, but NOT the ENDPOINT establishing late, which is the step
+      one before it.
+
+      RELATION TO EXISTING PACKETS (not a duplicate): 967-xq5e made ONE
+      derivation exist; 919-vvyv documented the endpoint being inert and added a
+      forge fallback; f14fa703a / f14fa703a armed it. None of them handles "the
+      derivation ran too early and nothing re-derives". 919-vvyv's remaining
+      closure ("launch a fresh forge and see spec_answer return a cited envelope
+      within 5 min") is exactly what this races: on a truly cold forge the
+      first-build window masks it (the index step is backgrounded after the
+      ~200s cargo build), but the endpoint must survive to that point or the
+      index step self-skips.
+
+      MEASURED with this packet's proposed fix in mind: resolve_embed_endpoint()
+      is idempotent and cheap (one 3s-bounded GET to /v1/models) and PROBES,
+      never assumes (712-r5x8), so re-calling it from ensure_forge_spec_index at
+      the point it needs the variable is safe and would have converted this
+      forge's skip into a real 23154-chunk build.
+    exit_criteria:
+      - |
+        a fresh cold forge whose inference service comes up AFTER lib-common is
+        sourced still ends with TILLANDSIAS_EMBED_ENDPOINT set and the spec
+        index built — i.e. ensure_forge_spec_index re-resolves the endpoint
+        (bounded wait for inference) instead of reading a one-shot-unset var.
+      - |
+        resolve_embed_endpoint is re-called at need, not assumed set from
+        source time; the "give inference a bounded window" wait that already
+        exists for the MODEL extends to the ENDPOINT without assuming the
+        endpoint is set.
+      - |
+        verified by a launch-ordered repro (endpoint down at entrypoint-source
+        time, up before the index step) that an agent can observe the tier flip
+        from l1=unset to l1=ready rather than reasoning about it.
+    unscoreable: >
+      This defect is an async bring-up race whose deciding observation is a
+      fresh forge launch with a deliberately-timed inference service — a
+      scenario the in-forge litmus suite cannot stage (no image rebuild, no
+      controlled late-bringing-up inference), and naming a hypothetical
+      litmus would fail 885-92iu's declared-closure resolution because the
+      fixture does not yet exist. What WOULD make it scoreable is the fixture
+      described in exit_criteria: source lib-common.sh with the endpoint
+      unreachable, publish it late, then assert ensure_forge_spec_index
+      re-derives instead of reading a one-shot-unset var. Writing that fixture
+      is the packet's real deliverable and whoever takes this should write it
+      first.
+    events:
+      - type: filed
+        ts: "2026-09-04T07:05:23Z"
+        agent_id: "forge-forge-tillandsias-opencode-20260904t070523z"
+        host: forge-tillandsias
+        summary: |
+          Filed from a cold forge that reproduced the 919-vvyv class end to
+          end: spec_index=absent embed_endpoint=unset in the startup context,
+          experts-probe l1=unset, /tmp/forge-lifecycle.log:557 self-skip .
+          Direct proof the endpoint works: exporting TILLANDSIAS_EMBED_ENDPOINT=
+          http://inference:11434/v1 by hand flips l1 to no-index immediately.
+          Root cause is a one-shot derive-vs-async-bring-up race lost at source
+          time (lib-common.sh:1174); ensure_forge_spec_index (lib-common.sh
+          :1553-1557) reads the variable without re-deriving, so a late
+          inference retroactively enables nothing this session.

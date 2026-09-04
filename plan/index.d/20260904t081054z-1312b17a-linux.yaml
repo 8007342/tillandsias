@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: an-unpushable-branch-on-a-fast-moving-trunk-becomes-a-weapon
+    field: status
+    value: completed
+    ts: "2026-09-04T08:10:54Z"
+    host: linux
+
+events:
+  - packet_id: an-unpushable-branch-on-a-fast-moving-trunk-becomes-a-weapon
+    event:
+      type: completed
+      ts: "2026-09-04T08:10:54Z"
+      host: linux
+      summary: |-
+        status 'completed' with evidence_refs: 639df2537 pre-push-no-stale-base-revert guard + scripts/test-no-stale-base-revert.sh 6/6 + hook chain v8, merged to linux-next in ac480a8b2; author decision event 2026-09-04
+  - packet_id: an-unpushable-branch-on-a-fast-moving-trunk-becomes-a-weapon
+    event:
+      type: note
+      ts: "2026-09-04T08:10:54Z"
+      host: linux
+      summary: |-
+        closes on the client half; the literal reading of criterion 1 is carried by 1001-i5ux

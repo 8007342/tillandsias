@@ -98,18 +98,23 @@ fi
 # --- Install pre-push hook -------------------------------------------------
 
 PREPUSH_TARGET="$GIT_HOOKS_DIR/pre-push"
-PREPUSH_MARKER="# tillandsias-pre-push-v7"
+PREPUSH_MARKER="# tillandsias-pre-push-v8"
 
 MAIN_AFFORD_REL="scripts/hooks/pre-push-main-branch-affordance.sh"
 MERGE_GATE_REL="scripts/hooks/pre-push-linux-next-merged.sh"
 VERSION_GUARD_REL="scripts/hooks/pre-push-version-guard.sh"
 LOCAL_GATE_REL="scripts/hooks/pre-push-local-gate.sh"
+# Order 1000-rqmx. Runs FIRST: a stale-base force push would revert other
+# hosts' work, and there is no point spending the local gate's minutes on a
+# push that must be refused regardless of whether the tree is green.
+STALE_BASE_REL="scripts/hooks/pre-push-no-stale-base-revert.sh"
 MAIN_AFFORD="$REPO_ROOT/$MAIN_AFFORD_REL"
 MERGE_GATE="$REPO_ROOT/$MERGE_GATE_REL"
 VERSION_GUARD="$REPO_ROOT/$VERSION_GUARD_REL"
 LOCAL_GATE="$REPO_ROOT/$LOCAL_GATE_REL"
+STALE_BASE="$REPO_ROOT/$STALE_BASE_REL"
 
-for src in "$MAIN_AFFORD" "$MERGE_GATE" "$VERSION_GUARD" "$LOCAL_GATE"; do
+for src in "$MAIN_AFFORD" "$MERGE_GATE" "$VERSION_GUARD" "$LOCAL_GATE" "$STALE_BASE"; do
     if [[ ! -f "$src" ]]; then
         echo "error: $src not found" >&2
         exit 1
@@ -150,6 +155,7 @@ $PREPUSH_MARKER
 # No host path is baked in; see the HOOK_PREAMBLE rationale in the installer.
 $HOOK_PREAMBLE
 REFS="\$(cat)"
+printf '%s\n' "\$REFS" | bash "\$HOOK_ROOT/$STALE_BASE_REL"  "\$@" || exit \$?
 printf '%s\n' "\$REFS" | bash "\$HOOK_ROOT/$MAIN_AFFORD_REL" "\$@" || exit \$?
 printf '%s\n' "\$REFS" | bash "\$HOOK_ROOT/$MERGE_GATE_REL"    "\$@" || exit \$?
 printf '%s\n' "\$REFS" | bash "\$HOOK_ROOT/$VERSION_GUARD_REL" "\$@" || exit \$?
@@ -160,7 +166,7 @@ HOOK
 
 if [[ -f "$PREPUSH_TARGET" ]] && grep -qF "$PREPUSH_MARKER" "$PREPUSH_TARGET" 2>/dev/null; then
     echo "✓ pre-push hook (linux-next merge gate + VERSION guard + local gate) already installed"
-elif [[ -f "$PREPUSH_TARGET" ]] && grep -qE "# (version-guard-hook|tillandsias-pre-push-v[23456])" "$PREPUSH_TARGET" 2>/dev/null; then
+elif [[ -f "$PREPUSH_TARGET" ]] && grep -qE "# (version-guard-hook|tillandsias-pre-push-v[234567])" "$PREPUSH_TARGET" 2>/dev/null; then
     install_prepush
     echo "✓ pre-push hook upgraded to v7 (foreign-repo guard in the preamble)"
 elif [[ -f "$PREPUSH_TARGET" ]]; then

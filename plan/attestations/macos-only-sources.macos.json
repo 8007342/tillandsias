@@ -1,17 +1,17 @@
 {
   "scope": "macos-only",
   "host": "macos",
-  "attested_at": "2026-08-29T19:25:44Z",
-  "commit": "5446ae6fcacc466bd5dc9d92236b66ba9f02c7e8",
+  "attested_at": "2026-09-04T06:43:48Z",
+  "commit": "c009149f61353370bc99cd517e591168cf6f030f",
   "command": "cargo test -p tillandsias-macos-tray --bins",
-  "result": "test result: ok. 107 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.09s",
+  "result": "test result: ok. 115 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.62s",
   "sources": {
-    "crates/tillandsias-macos-tray/src/action_host.rs": "852769fc10026eb93ec083ab32122de4c4d0b52d",
-    "crates/tillandsias-macos-tray/src/diagnose.rs": "de84510ffa8b59d70223b595e242a88cd216348d",
+    "crates/tillandsias-macos-tray/src/action_host.rs": "a9d3b2ee0fa2a42b240dd1f0f99872491ec275d6",
+    "crates/tillandsias-macos-tray/src/diagnose.rs": "619e137fafe540b7684f1b4d644fe2f0f1353ec0",
     "crates/tillandsias-macos-tray/src/guest_binary.rs": "71e4f81b002cfac6e619cdb53135cf4819bb1154",
     "crates/tillandsias-macos-tray/src/installation_uuid.rs": "7d22c0f992eafaf5b14fa71aea60d06859ce14c3",
     "crates/tillandsias-macos-tray/src/main_thread.rs": "194147af892e8a5e7da925cf74dacd2b07eb2032",
-    "crates/tillandsias-macos-tray/src/pty_vsock_bridge.rs": "160c64a84c2980406d86dda1c9ba57910f473daf",
+    "crates/tillandsias-macos-tray/src/pty_vsock_bridge.rs": "b963c3ebb0950a2fc33a764eb76b3e040ac4ba69",
     "crates/tillandsias-macos-tray/src/status_item.rs": "6ca72ef8ffbf636ce31a24aa678c284ed6981c54"
   },
   "known_red": ["# Tests allowed to be red when stamping macOS-only sources (order 739-6r6n).", "# Each entry needs a filed issue; an unexplained name here is how a stamp stops", "# meaning anything.", "#", "# EMPTY ON PURPOSE, and the file exists rather than being absent so that", "# \"no macOS test is excused\" is a recorded decision a reader can see, not an", "# inference from a missing path. `cargo test -p tillandsias-macos-tray --bins`", "# was 107 passed / 0 failed / 1 ignored when this was written."]

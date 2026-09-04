@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: macos-accel-probe-truthfulness
+    field: desired_release
+    value: v0.5
+    ts: "2026-09-04T08:09:50Z"
+    host: linux
+
+events:
+  - packet_id: macos-accel-probe-truthfulness
+    event:
+      type: note
+      ts: "2026-09-04T08:09:50Z"
+      host: linux
+      summary: |-
+        routing defect on the 8 GB Mac: RAM, battery, engines and NPU all unreported in its row (macneo 2026-09-04); operator direction 2026-09-04 that the Mac hosts carry the macOS port

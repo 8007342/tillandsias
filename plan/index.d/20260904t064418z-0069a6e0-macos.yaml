@@ -1,0 +1,91 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: macos-guest-cannot-reach-a-host-native-service
+    event:
+      type: evidence
+      ts: "2026-09-04T06:44:18Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260904t063447z
+      host: macos
+      summary: |-
+        THE ACCEPTED FD WENT NOWHERE, AND THAT WAS THE REAL NEXT LINK. The prior slice
+        landed a listener that accepts a guest connection, duplicates the fd exactly as
+        its delegate documents, and sends it to a channel — and nothing in the tree read
+        that channel. `grep try_accept` outside transport_macos.rs returned nothing. So
+        every one of those six burst-delivered accepts on 2026-08-29 was received and
+        discarded. From inside the guest an accepted-then-dropped connection and a dead
+        service are the same observation, which is the silent-success shape this
+        milestone exists to remove; the accept-proof event read as further along than
+        the tree was.
+
+        LANDED, host half of the hop: crates/tillandsias-vm-layer/src/host_vsock_forward.rs
+          * relay_to(fd, addr) — bidirectional, one thread per direction, and the
+            half-close PROPAGATES. That is why it is not io::copy: a client that signals
+            end-of-request by shutting down its write half (an HTTP request without
+            content-length) deadlocks if the relay swallows the shutdown — both sides
+            then wait for the other to speak.
+          * FAILS CLOSED. If the host-native engine is not listening, the connect fails
+            and the guest fd is dropped at once, so the guest gets a prompt EOF. Holding
+            an accepted-but-unserved connection open is precisely the state that made
+            the accept path look healthy while delivering nothing.
+          * HostVsockListener::forward_to(addr) takes the receiver and REFUSES a second
+            call. Two drains on one mpsc channel split the accepted connections
+            arbitrarily between them, so half the guest requests would be served by a
+            relay pointed elsewhere — a coin flip per connection is worse than a
+            refusal, so rx became Option rather than being cloned.
+          * vz.rs: opt-in TILLANDSIAS_HOST_VSOCK_FORWARD_TO, mirroring the port's own
+            opt-in, and LOUD when unset ("accepting connections but forwarding
+            nowhere") because that is exactly the state the tree was silently in.
+
+        cfg(unix), NOT cfg(target_os="macos"), deliberately. Only macOS produces these
+        fds, but the relay is family-agnostic POSIX, so the Linux hosts compile and run
+        its tests on the normal gate instead of the lane's correctness resting on the
+        one host that owns it.
+
+        VERIFIED, and these are behavioural tests against real sockets, not source
+        scans — the previous slice's four tests could only pin shape because a live
+        accept needs a booted VM; this half has no such constraint and that is the
+        reason it was taken first:
+          * bytes_cross_in_both_directions — a one-way relay passes a naive smoke test
+            (the request arrives) and then hangs forever on the response.
+          * a_guest_half_close_reaches_the_host_service — read_to_end on the far side
+            returns only if the shutdown propagated.
+          * an_unreachable_target_closes_the_guest_connection — asserts the guest read
+            returns 0, i.e. EOF and not an idle open connection.
+          * the_forwarder_stops_when_the_listener_is_dropped — otherwise a thread leaks
+            per VM start.
+          * the_relay_takes_ownership_of_the_fd — a second owner is a double close, the
+            bug class the delegate's duplication comment warns about one level up.
+        cargo test -p tillandsias-vm-layer: 112 passed, 0 failed. ./build.sh --check
+        green (263s, exit 0).
+
+        STILL NOT DONE, named precisely so this is not read as the deliverable met:
+          * NO RUNTIME PROOF of the relay. It has never carried a byte from a real
+            guest. The unit tests prove the plumbing against a socketpair and a local
+            TCP listener; they say nothing about VZ.
+          * NO IN-GUEST HOP. `inference:11434` still resolves to the podman container
+            on ENCLAVE_NET (build_inference_run_args sets --network-alias inference).
+            Nothing in the guest dials CID 2. The transparency criterion remains unmet.
+          * THE PUMPING CONSTRAINT STILL BINDS the remaining half. The 2026-08-29 finding
+            is unchanged: this cannot be validated through --exec-guest, which pumps
+            nothing while a guest command runs.
+
+        DESIGN NOTE FOR THE NEXT CLAIMANT, since it is the decision that half turns on.
+        The alias mechanism is worth preserving rather than replacing: keeping `inference`
+        a container on ENCLAVE_NET means zero agent-side change, which IS the transparency
+        criterion, so a forwarder container aliased `inference` relaying TCP 11434 to
+        VSOCK-CONNECT:2:<port> looks right — socat is already in images/default/
+        Containerfile.base:33 and supports VSOCK-CONNECT. The open question is device
+        access: AF_VSOCK from inside a container needs /dev/vsock, against a profile that
+        is --cap-drop=ALL --security-opt=no-new-privileges today. The alternative — a
+        forwarder in the guest root namespace plus --add-host inference:<gateway> on every
+        agent container — avoids the device but touches the shared container profile and
+        therefore every consumer. I did NOT decide this; measure the device question
+        before assuming the container route.

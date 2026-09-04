@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: macos-guest-cannot-reach-a-host-native-service
+    field: status
+    value: ready
+    ts: "2026-09-04T07:04:48Z"
+    host: macos
+
+events:
+  - packet_id: macos-guest-cannot-reach-a-host-native-service
+    event:
+      type: note
+      ts: "2026-09-04T07:04:48Z"
+      host: macos
+      summary: |-
+        released at cycle end: host relay landed (c587bf335); remaining is the in-guest hop (inference:11434 -> CID 2) plus a runtime proof that cannot come from --exec-guest

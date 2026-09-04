@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: an-unpushable-branch-on-a-fast-moving-trunk-becomes-a-weapon
+    field: next_action
+    value: |-
+      CLIENT-SIDE HALF IS DONE AND LANDED (dc9208654). Guard, fixture (6/6), pre-push chain v8, and ./build.sh --check wiring. Do not re-implement it.
+
+      READ THIS BEFORE TRUSTING THE PACKET'S THREAT MODEL, because I measured it and it is wrong in a way that matters. The context says a naive "sleep; git push" with no rebase would have silently reverted a hundred-plus files. IT WOULD NOT: git rejects a non-fast-forward push itself and the pre-push hook receives an EMPTY ref list, so no hook can even see it. The dangerous invocation is a FORCED one — and --force-with-lease AFTER A FRESH FETCH succeeds and reverts, because the lease proves only that the remote has not moved since YOUR fetch, not that your base is current. A loop that fetches each iteration refreshes the lease and it passes every time. The more careful the loop looks, the more reliably it reverts.
+
+      WHAT REMAINS IS 1001-i5ux, split out rather than left implied. Exit criterion 1 here asks for refusal "regardless of how the push was invoked"; criterion 4 asks for --no-verify to be considered explicitly. A client hook cannot satisfy both — git offers no unskippable hook — so the invocation-independent version is a pre-receive hook on the mirror, filed as 1001-i5ux with the logic already written and fixtured. I did NOT rewrite criterion 1 to match what a hook can do.
+
+      WHETHER THIS PACKET CLOSES IS THEREFORE AN AUTHOR CALL: on the reading that criterion 4 implies (the author knew a hook is skippable and asked for a statement), it is done. On the literal reading of criterion 1, it is done only when 1001-i5ux lands. I have left it ready rather than choosing for you.
+
+      ONE OPERATIONAL NOTE: the guard binds only a checkout that has run scripts/install-hooks.sh, and the hook chain marker moved v7 to v8, so hosts will reinstall on their next run. A host that never installs hooks is unprotected on the client side — that is also 1001-i5ux.
+    ts: "2026-09-04T05:45:56Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: an-unpushable-branch-on-a-fast-moving-trunk-becomes-a-weapon
+    event:
+      type: note
+      ts: "2026-09-04T05:45:56Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        client half landed; server-side residual filed as 1001-i5ux; closure is an author call

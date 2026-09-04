@@ -1,0 +1,84 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: guest-pulls-full-multiarch-qemu-user-static
+    order: 1004-4xie
+    status: ready
+    kind: research
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [containers, performance, release, low-end, guest-image]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-windows-tray/src/wsl_lifecycle.rs
+    title: |
+      Every cold guest provision pulls the full 18-arch qemu-user-static set (170.6 MB installed, 35.7 MB
+      transferred) on an x86_64-only fleet — find the dependency path, scope it to x86, re-measure.
+    context: |
+      FOUND by esme-windows running /smoke-curl-install-and-test-e2e on release v56.9.2.1
+      (plan/issues/smoke-e2e-findings-v56.9.2.1-2026-09-04-esmeraldinha.md, packet
+      smoke-finding/guest-pulls-full-multiarch-qemu-user-static). The guest dnf transaction in
+      target/smoke-e2e/03-provision.log carried 53 `qemu-user-static-*` lines, including or1k, ppc,
+      s390x and sh4. THE 53 IS LOG LINES (download, install and progress redraws), NOT PACKAGES; the
+      number a reader should act on is 18.
+
+      MEASURED 2026-09-04 on esmeraldinha, same run, rpm inside the provisioned guest
+      (target/smoke-e2e/06-qemu-pkgs.txt): 18 `qemu-user-static-*` packages, 170.6 MB installed, of
+      which `qemu-user-static-x86` is 9.7 MB — an x86_64-only set saves 161.0 MB (94.3%) of guest
+      disk. Largest foreign arches: mips 32.9, ppc 16.1, aarch64 16.0, xtensa 15.4, sparc 13.7,
+      riscv 11.7, arm 11.4 MB.
+
+      MEASURED download cost, parsed from 03-provision.log: qemu-user-static 35.7 MB / 8 s against a
+      whole-transaction 233.2 MB / 39 s — 15.3% of bytes, 20.5% of download time. Install-phase time
+      is NOT resolvable: all 18 qemu install lines report 00m00s against the log's 1 s resolution, so
+      the supportable bound is "below 1 s each, <=18 s worst case", not a measured zero.
+
+      SIZED against the 117 s cold provision: dropping the foreign arches buys ~8 s of wall clock,
+      ~36 MB of transfer per cold provision, and 161 MB of guest disk. The seconds are not the
+      argument — the 66 MB rootfs and the 145-package transaction (113 install / 15 upgrade /
+      15 replace) dominate, and esmeraldinha is on a fast link. The two claims that travel are the
+      TRANSFER, paid on every run of a lane that is cold BY CONSTRUCTION (806-a4tu: the Windows e2e
+      destroys the guest each time) and that bites on a metered or slow link, and the DISK: 94.3% of
+      an installed emulation set that nothing on an x86_64 fleet can use. PRIORITY FOLLOWS THE 36 MB,
+      NOT THE 94% HEADLINE, which is about disk rather than time — hence p3, low-end tagged.
+
+      WHERE THE RECIPE LIVES: the Windows guest package set is GUEST_BASE_PACKAGES at
+      crates/tillandsias-windows-tray/src/wsl_lifecycle.rs:38, rendered into the `rpm -q ... ||
+      dnf install -y ...` line at wsl_lifecycle.rs:66-69. Nothing in the tree names qemu-user-static
+      (grep over crates/, scripts/, images/ is empty), so it arrives transitively — almost certainly
+      through `podman`. The macOS lane installs `podman socat` the same way (vz.rs:679) and has not
+      been measured for this; whoever picks this up should check whether it shares the pull.
+
+      THE TRAP, from the finder: `qemu-user-static` is installed at 28 KB, which is the signature of
+      the META-PACKAGE. If the arches come in through the solver from that meta-package, a
+      recipe-line exclusion fights the solver rather than fixing it. Whether the meta-package is
+      reached through a hard Requires or a weak dependency (Recommends) decides the lever and is
+      UNVERIFIED here — read `dnf repoquery --requires/--recommends podman` in the guest first.
+
+      Provenance: measured by esme-windows on esmeraldinha 2026-09-04 (release v56.9.2.1); relayed
+      to and filed by the coordinator (macuahuitl).
+    next_action: |
+      (1) In a provisioned guest, establish the dependency path: `rpm -q --whatrequires
+      qemu-user-static` and `dnf repoquery --requires --recommends podman`; confirm whether
+      `qemu-user-static` (28 KB) is the meta-package and whether it is a hard or weak dependency.
+      (2) Decide between an explicit `qemu-user-static-x86` pin in GUEST_BASE_PACKAGES
+      (wsl_lifecycle.rs:38) and a solver exclusion (`--exclude=qemu-user-static-{aarch64,...}` or
+      `install_weak_deps=False` if it is only Recommends); the pin must also satisfy the `rpm -q`
+      guard so re-provision stays a no-op. (3) Re-measure ONE cold provision from a pristine state
+      (`tillandsias-tray.exe --provision-once`, grep the log for qemu-user-static; then
+      `wsl -d tillandsias -- rpm -qa --qf "%{NAME} %{SIZE}\n" | grep ^qemu-user-static`) and report
+      the delta against 35.7 MB / 8 s / 170.6 MB with the link regime attached. (4) Note whether the
+      macOS vz.rs:679 lane shares the pull; do not fix it here without a measurement of its own.
+    exit_criteria:
+      - the dependency path by which qemu-user-static reaches the guest is named with the rpm/dnf output that shows it, including whether it is a hard or weak dependency of podman
+      - the chosen lever (x86 pin vs solver exclusion) is stated with the reason the other was rejected, and the rpm -q guard at wsl_lifecycle.rs:66 still short-circuits on re-provision
+      - a cold provision after the change is re-measured from a pristine state and the qemu-user-static transfer, package count and installed size are reported next to the 35.7 MB / 18 pkgs / 170.6 MB baseline, with the host and link regime attached
+      - the report states whether the macOS vz.rs:679 lane shares the pull, as a measurement or as an explicitly unmeasured question
+    unscoreable: >
+      This is a lead with a measurement, not a fix: no litmus arm covers the guest dnf transaction
+      shape, and naming one that does not exist is the dead-reference failure recorded three times on
+      2026-09-03. Closure is the re-measured delta of a cold provision (transfer, package count,
+      installed size) against esme-windows's 35.7 MB / 18 pkgs / 170.6 MB baseline. The intended pin,
+      if the fix lands as a recipe change, is a unit test beside wsl_lifecycle.rs:2183 asserting that
+      the rendered setup script names qemu-user-static-x86 (or the exclusion) in both the rpm -q
+      guard and the dnf install line — that test is the packet's scoreable successor, not this order.
