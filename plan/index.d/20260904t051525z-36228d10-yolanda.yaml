@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: cloud-only-migration-interrupted-local-src-still-load-bearing
+    field: next_action
+    value: |-
+      STATE 2026-09-04 (yolanda). OPERATOR HAS RULED; the packet is unblocked and ready to implement. Read the 2026-09-04 decision event before anything else - it names the full surface so you do not re-derive it.
+
+      DECIDED: (1) an existing ~/src on any disk is IGNORED AND LEFT TO ROT - forward-only, no migration, no detection, no warning, no cleanup, because there are no users in the wild. Do not write compatibility code. (2) REMOVE THE LOCAL ~/src PATH ENTIRELY; Cloud becomes the only path, on the ephemeral GitHub -> GitMirror -> Forge chain.
+
+      DONE ALREADY (landed e8a995a41, on the trunk): the destructive symptom. classify_git_checkout is three-state and only a truthful Invalid may quarantine; the exit-3 contract in archive-plan-packets.sh is hardened. Neither of those is the migration.
+
+      NEXT ACTION, and the ORDER MATTERS: wire the tmpfs FIRST, delete the mount SECOND. forge-hot-cold-split mandates /home/forge/src be a per-launch tmpfs sized by compute_hot_budget(); container_profile.rs:278 ships three of four hot paths without it and compute_hot_budget()/parse_size_pack_kb() have ZERO callers. Removing wsl_lifecycle.rs:1814 home-forge-src.mount before that wiring exists leaves a forge with no project source at all.
+
+      THEN the menu/type removal across the surface listed on the decision event - twelve files, largest being vsock_server.rs (59 refs) and windows-tray notify_icon.rs (52). CANNOT BE FINISHED ON YOLANDA: macos-tray action_host.rs and menu_disabled_v2.rs do not type-check here, so the macOS half needs osx-next or the coordinator union pass. Heads-up required before touching host-shell menu_state.rs / menu_action.rs, which all three trays consume.
+
+      NOT ASSIGNED: 979-xyub - operator did not take it, it stays released to the fleet.
+    ts: "2026-09-04T05:15:25Z"
+    host: yolanda
