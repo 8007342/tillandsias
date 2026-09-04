@@ -5,7 +5,7 @@
 - Area: `scripts/spec-index-ensure.sh` rung-1 resolution / 801-a2by durable tier / `check-build-cache-sweep.sh` interaction
 - Severity: high — an expensive, correctly-designed cache is published into the one directory a routine GC removes wholesale, and nothing reports it
 - Discovered-by: lenovinha (Fedora Silverblue, rootless podman) while taking 917-6iwv
-- Status: open
+- Status: fixed 2026-09-04 by 1003-v3dc (all three remedies landed; the forge-side half remains unmeasured)
 - Filed-from: `linux-next` @ `17ea51aaa`, working tree clean at time of measurement
 
 ## Summary
@@ -108,3 +108,37 @@ at 21,592 embeddings with nothing persisted between attempts — the same wound.
 
 Remedy 3 is the cheapest and closes the data-loss half on its own; 2 closes the
 silence; 1 closes the root cause. They are independent.
+
+## Resolution (2026-09-04, order 1003-v3dc)
+
+All three remedies landed together, plus a fourth carrier this file did not know about.
+
+- **Rung 4 moved** to `<checkout>/.cache/spec-index`. Negative control run the
+  way `metrics-log-path.sh` proved its equivalent claim, empirically rather than
+  by argument: with an index published in both places, removing
+  `target/tillandsias-spec-index` took it 2 entries -> 0 while `.cache/spec-index`
+  stayed 2 -> 2, and `--where` still reported `serving-exists=yes` against a
+  live entry.
+- **The rung-1 guard now distinguishes EACCES from ENOENT.** A successful
+  `podman volume inspect` is the existence oracle; `[ -d ]` is demoted to a
+  reachability test. A volume podman names but we cannot stat is a DEMOTION
+  (reported); a volume podman does not know is simply absent (quiet). No
+  container write probe was needed, and no reader gains a podman dependency —
+  readers inside the enclave take rung 2 via `FORGE_SPEC_INDEX_ROOT`.
+- **The demotion is no longer silent.** The resolver emits a third line, and
+  `--where` renders `spec-index:durable-tier=ok` or
+  `spec-index:durable-tier=unavailable:<reason>`.
+
+**A FOURTH CARRIER, which this file got wrong.** The report said "three files".
+The resolution ladder is also implemented in Rust, in
+`crates/tillandsias-plan/src/spec_index.rs`, and the shell agreement guard
+cannot see it. Changing only the shell side moved the PRODUCER while leaving the
+CONSUMER on `target/` — measured mid-fix as `skipped=5 skipped_engines=spec.answer`,
+i.e. exactly the producer/reader split this packet warned about, briefly created
+by the fix for it. Both sides now resolve `.cache/spec-index`, verified
+end-to-end: index migrated, `target/` deleted, grader back to
+`total=33 pass=31 skipped=0`.
+
+**Still unmeasured, and deliberately left so:** whether the forge, running
+inside the user namespace, reaches rung 1 correctly. That question needs a host
+with a running forge and is routed separately.
