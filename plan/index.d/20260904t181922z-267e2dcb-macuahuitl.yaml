@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: precommit-openspec-scan-exceeds-ten-minutes-on-large-files
+    event:
+      type: note
+      ts: "2026-09-04T18:19:22Z"
+      agent_id: linux-macuahuitl-claude-20260904t181920z
+      host: macuahuitl
+      summary: |
+        TWO 5-SECOND TIMEOUTS IN THE FULL INSTANT SUITE (coordinator, macuahuitl 2026-09-04T18:06Z-18:16Z, union litmus after the windows-next merge af027c837): litmus:cheatsheet-source-layer-validation step 1/1 "run the source validator in no-sha mode (timeout: 5s)" and litmus:cheatsheet-tier-discipline step 1/1 "run the tier validator in strict mode (timeout: 5s)" both hit TIMEOUT inside the 100-spec run and both PASS 2/2 when their spec runs alone minutes later. The merge touched no cheatsheet or check-cheatsheet-* file. The pre-commit hook on this host already reports "cheatsheet_tier_check took 6806ms (budget ~900ms) — the scan is drifting; see order 734-sjb3", so the validators sit near 7 s under load against a 5 s litmus budget: the drift this order tracks has crossed the litmus timeout and the two steps now flip on suite load. Route: make the scan faster, or raise the two budgets with the measurement cited; a 5 s budget on a 7 s scan is a flake by construction.
