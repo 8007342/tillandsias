@@ -41,9 +41,10 @@ packets:
       - "a fixture in scripts/test-*.sh drives the call site with a stub that exits 2 and asserts the gate's message names could-not-run; with a stub that exits 1 it asserts the violation text; pre-fix result: FAILS"
       - "the gate's DISPOSITION on could-not-run is decided and written where the call site is: blocked (fail closed) with the honest message, or advisory, and the reason is stated; pre-fix result: FAILS (undecided, and the message lies either way)"
       - "on esmeraldinha the check either passes inside the tillandsias-build distro or its verdict names why the binary is unfresh there; pre-fix result: FAILS"
-    verifiable_closure: |
-      litmus:fragment-events-land-shape or the bound litmus that pins
-      check-fragment-events-land.sh gains the exit-2-vs-exit-1 arm at the
-      build.sh call site; the claimer names the bound test from
-      openspec/litmus-bindings.yaml as the first act, and states unscoreable if
-      none binds it.
+    unscoreable: |
+      No litmus in openspec/litmus-tests names check-fragment-events-land.sh
+      (grep at filing time: none), so naming one is the 885-92iu forward
+      reference. The pin is the deliverable: a fixture under scripts/test-*.sh
+      driving the build.sh call site with exit-2 and exit-1 stubs, bound as a
+      new litmus under the ci-release or methodology-accountability spec by the
+      claimer, who names it as the first act.
