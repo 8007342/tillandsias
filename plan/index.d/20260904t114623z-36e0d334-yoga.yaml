@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: rank-routing-disjointness-is-margin-thin-under-widened-pools
+    event:
+      type: progress
+      ts: "2026-09-04T11:46:23Z"
+      agent_id: linux-yoga-claude-20260904t112934z
+      host: yoga
+      summary: |-
+        CRITERION 1 AS I WROTE IT WAS WRONG, and the correction is the most useful thing in this cycle. I required the fix be proved with the hosts' pools made deliberately IDENTICAL. Measured against the PRE-FIX selector: it passes that test 8/8. Identical pools produce identical scored lists, so distinct ordinals already separate — identical pools is the EASY case, not the stress case, and a fixture built on that criterion would have had no teeth at all. I wrote it from intuition about where the mechanism was weak instead of from a measurement, which is the same defect this packet describes one level up. The property that DOES discriminate is pool-independence of the POINTER, and case 8 now states it directly: hold rank and rotation fixed, vary only the host's own capabilities, and the epic it is pointed at must not move. Mutation control measured on the pre-fix selector — macuahuitl routes to harness-mcp-expert-validation with gpu:nvidia:usable and to convergence-velocity-milestone once npu:intel:unusable is added; same rank, same rot, same ledger, different destination purely because its own pool grew. Post-fix, four capability sets all route to one epic. That case discriminates regardless of ledger content, which case 1 provably cannot: case 1 passed on a broken selector hours before it caught one. FIX: the ordinal now indexes a routing frontier scored from the pool captured before the tier/tool/accel subtractions, a function of (ledger, role, release) alone, so equal ordinals cannot alias; a host that cannot serve its slot walks forward deterministically. Scoring is one function applied to both pools so they cannot drift. ALSO FIXED, mine from last cycle: both --by-hardware litmus steps used printf|grep -q, which truncates its producer under pipefail (901-jtvi) and returned 141 inside the runner while passing standalone — the exact class that file documents.
