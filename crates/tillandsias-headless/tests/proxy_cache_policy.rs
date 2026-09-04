@@ -105,14 +105,46 @@ fn bumped_origin_tls_and_signed_url_logs_fail_closed() {
         "signed release-asset query terms must stay out of access logs"
     );
 
+    // ORDER 1022-px54. This asserted the literal `exec squid -N` and had been
+    // red on the trunk since 7292b097b (767-es4w), which changed the launch to
+    // `exec /usr/local/bin/squid-supervisor squid squid -N` so a mid-service
+    // crash is counted and restarted instead of leaving the container
+    // Exited(139) with nothing watching. The test's INTENT — the parser gate
+    // runs before Squid serves — was never broken; only the string drifted.
+    //
+    // PARSE-BEFORE-SERVE HOLDS END-TO-END, which the packet left open and this
+    // comment settles. The supervisor relaunches on crash with `"$@" &` and does
+    // NOT re-run `squid -k parse`. That is correct rather than a gap: the parse
+    // happens in the entrypoint BEFORE the supervisor is exec'd, so it precedes
+    // every Squid launch in the container's life, restarts included, and the
+    // config is immutable for that lifetime — a restart has nothing new to
+    // validate. The property would only break if the config could change at
+    // runtime, which would make a restart serve unvalidated syntax; if a reload
+    // or a live config mount is ever added, this is the assertion to revisit.
+    //
+    // ASSERTING THE SUPERVISOR, NOT JUST `squid -N`. Matching the bare launch
+    // string would also pass for a future `exec squid -N` that dropped the
+    // supervisor entirely — silently undoing 767-es4w and restoring the
+    // uncounted-crash state it was written to end. Pinning the supervised form
+    // costs nothing and catches that.
     let entrypoint = repo_file("images/proxy/entrypoint.sh");
     let parse = entrypoint
         .find("squid -k parse")
         .expect("runtime Squid parser gate");
-    let launch = entrypoint.find("exec squid -N").expect("Squid launch");
+    let launch = entrypoint
+        .find("exec /usr/local/bin/squid-supervisor")
+        .expect("Squid must be launched under squid-supervisor (767-es4w)");
     assert!(
         parse < launch,
         "the runtime parser gate must run before Squid starts serving"
+    );
+    let launch_line = entrypoint[launch..]
+        .lines()
+        .next()
+        .expect("supervisor launch line");
+    assert!(
+        launch_line.trim_end().ends_with("squid -N"),
+        "the supervisor must still launch Squid in no-daemon mode; got {launch_line:?}"
     );
 }
 
