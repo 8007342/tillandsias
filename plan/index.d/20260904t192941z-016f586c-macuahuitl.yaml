@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: order-505s-project-label-validation-fails-open-when-the-local-enumeration-is-empty-and-enumerates-the-root-997-e4v2-retires
+    event:
+      type: note
+      ts: "2026-09-04T19:29:41Z"
+      agent_id: linux-macuahuitl-claude-20260904t192941z
+      host: macuahuitl
+      summary: |
+        FOURTH SITE, the one that matters most (tlatoanis-macbook-air 2026-09-04, verified on macuahuitl from source): crates/tillandsias-headless/src/tray/mod.rs:1102-1112 guards the MCP TOOL SOCKET — which project an MCP client is allowed to act as — with `let is_valid_project = known_projects.is_empty() || known_projects.iter().any(|p| p.label == project_label);` under the comment "never sanitize". The same bypass as main.rs's three `!known_projects.is_empty() && ...` sites, written explicitly: an empty enumeration makes is_valid_project TRUE by construction, so the site's own deny path ("MCP connection for non-enumerated project denied and closed (-32000)", spec tag mcp-tool-socket) never fires when the set is empty. It is the only one of the four with an explicit deny and a spec tag, so it is the site most likely to be read as "the validated one" while sharing the defect. A grep across crates/ for `known_projects.is_empty()` finds exactly these four (three in main.rs, one in tray/mod.rs); the filed site list of three would have had someone fix three and believe they were done, with the MCP socket left behind. Consequence for the fix: one shared validation helper serving four call sites across two files, and the MCP socket site, which already has the named deny, is the cheapest place to test that an empty set now denies. Also under #[cfg(feature = "tray")]. Correction accepted from macbookair: the coordinator's framing of when the bypass is live (fresh install with an empty or absent ~/src today; universal when ~/src retires) stands; the guest-path/host-path conflation was macbookair's and is withdrawn.
