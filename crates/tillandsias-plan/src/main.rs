@@ -481,6 +481,117 @@ const USAGE: &str = concat!(
     "                                     fragments, malformed ones, and whether compaction is eligible\n"
 );
 
+/// Read a cycle fragment for `loop-status-append`, refusing every input shape
+/// that cannot answer promptly (order 1004-8vkv).
+///
+/// THREE OUTCOMES USED TO BE ONE. `loop-status-append <file>` dropped the
+/// positional, fell through to stdin, and then behaved differently depending on
+/// what fd 0 happened to be:
+///   * an inherited SOCKET (a forge agent's stdin, by construction) — blocked
+///     forever. Measured by lenovinha 2026-09-04: 26 MINUTES at 0.0% CPU in
+///     unix_stream_data_wait before /proc was consulted. Nothing in the cycle
+///     times out on it, and a host stuck there is indistinguishable from a host
+///     mid-analysis.
+///   * a CLOSED stdin — reported "fragment carries no `## Cycle` section", which
+///     is a confident statement about a file the tool never opened, and sends
+///     the reader to edit a fragment that was fine.
+///
+/// SO THE FIX IS NOT "ALSO ACCEPT A PATH". It is that every way of supplying
+/// input either produces bytes or says why it cannot, in bounded time.
+///
+/// WHY A THREAD AND NOT AN fstat ON THE FD TYPE. Refusing by file type
+/// (socket/tty/char-device) sounds tighter and is wrong twice: a FIFO is a
+/// "pipe" and blocks exactly like a socket when nothing is writing, and a
+/// socket that DOES have data is perfectly readable. What actually matters is
+/// whether the bytes arrive, so this waits on the read with a deadline instead
+/// of predicting from the descriptor's kind. A regular file or a live pipe
+/// returns instantly and is unaffected.
+///
+/// The reader thread is deliberately left blocked when the deadline expires:
+/// it holds only stdin, the process exits on the next line, and there is no
+/// portable way in std to cancel a blocking read. Detaching it is the honest
+/// cost of not taking a libc dependency for one poll(2).
+fn read_loop_status_fragment(args: &[String]) -> String {
+    use std::io::IsTerminal as _;
+
+    const STDIN_DEADLINE: std::time::Duration = std::time::Duration::from_secs(5);
+
+    let from_file = |f: &str| -> String {
+        match std::fs::read_to_string(f) {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("error: read {f}: {e}");
+                std::process::exit(1);
+            }
+        }
+    };
+
+    if let Some(i) = args.iter().position(|a| a == "--file")
+        && let Some(f) = args.get(i + 1)
+    {
+        return from_file(f);
+    }
+
+    // A BARE POSITIONAL IS HONOURED, not dropped. The usage line already
+    // advertised `--file`, so the finder was not wrong to expect a path form to
+    // exist — they used the one that reads naturally. Refusing would also have
+    // satisfied the criterion; honouring it is better, because the invocation
+    // that cost 26 minutes now simply works.
+    //
+    // Only a value that EXISTS as a file is taken, so a future flag's argument
+    // is never mistaken for a fragment; anything else falls through to stdin
+    // and is reported there.
+    let positional = args
+        .iter()
+        .skip(1)
+        .find(|a| !a.starts_with('-') && Path::new(a.as_str()).is_file());
+    if let Some(f) = positional {
+        return from_file(f);
+    }
+
+    let stdin = std::io::stdin();
+    if stdin.is_terminal() {
+        eprintln!(
+            "error: loop-status-append has no input — stdin is a terminal, and this \
+             command does not prompt.\n  Supply the fragment one of these ways:\n    \
+             tillandsias-plan loop-status-append < fragment.md\n    \
+             tillandsias-plan loop-status-append --file fragment.md\n    \
+             tillandsias-plan loop-status-append fragment.md"
+        );
+        std::process::exit(2);
+    }
+
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::Builder::new()
+        .name("loop-status-stdin".into())
+        .spawn(move || {
+            let mut raw = String::new();
+            let r = std::io::Read::read_to_string(&mut std::io::stdin(), &mut raw);
+            let _ = tx.send(r.map(|_| raw));
+        })
+        .expect("spawn the stdin reader");
+
+    match rx.recv_timeout(STDIN_DEADLINE) {
+        Ok(Ok(raw)) => raw,
+        Ok(Err(e)) => {
+            eprintln!("error: read stdin: {e}");
+            std::process::exit(1);
+        }
+        Err(_) => {
+            eprintln!(
+                "error: loop-status-append read nothing from stdin within {}s and refused to \
+                 keep waiting.\n  fd 0 is open but no one is writing to it — an inherited \
+                 socket or an idle pipe.\n  This is the 26-minute silent hang of order \
+                 1004-8vkv, stopped early on purpose.\n  Supply the fragment explicitly \
+                 instead:\n    tillandsias-plan loop-status-append --file fragment.md\n    \
+                 tillandsias-plan loop-status-append < fragment.md",
+                STDIN_DEADLINE.as_secs()
+            );
+            std::process::exit(2);
+        }
+    }
+}
+
 fn usage() -> ! {
     eprintln!("{USAGE}");
     std::process::exit(2);
@@ -1926,20 +2037,20 @@ fn run_loop_status(args: &[String], base: &Path) {
             // heading), and writes it as a NEW fragment file — the concurrent
             // write that used to conflict on the shared base now lands on a
             // per-host path.
-            let mut raw = String::new();
-            if let Some(i) = args.iter().position(|a| a == "--file")
-                && let Some(f) = args.get(i + 1)
-            {
-                raw = match std::fs::read_to_string(f) {
-                    Ok(r) => r,
-                    Err(e) => {
-                        eprintln!("error: read {}: {e}", f);
-                        std::process::exit(1);
-                    }
-                };
-            } else if let Err(e) = std::io::Read::read_to_string(&mut std::io::stdin(), &mut raw) {
-                eprintln!("error: read stdin: {e}");
-                std::process::exit(1);
+            let raw = read_loop_status_fragment(args);
+            // 1004-8vkv: an EMPTY read must not be reported as a malformed
+            // fragment. "carries no `## Cycle` section" against zero bytes is a
+            // confident statement about a file that was never opened, and it
+            // sent the finder to edit a fragment that was fine.
+            if raw.trim().is_empty() {
+                eprintln!(
+                    "error: loop-status-append read 0 bytes — there was no fragment to \
+                     append.\n  This is not a problem with your fragment's headings; \
+                     nothing was read at all.\n  Supply it explicitly:\n    \
+                     tillandsias-plan loop-status-append --file fragment.md\n    \
+                     tillandsias-plan loop-status-append < fragment.md"
+                );
+                std::process::exit(2);
             }
             // 719-kgr5: the fragment NAME carries this stamp and fragments fold
             // in name order, so an invented value here reorders the folded

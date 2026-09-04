@@ -260,7 +260,8 @@ Run this before ending the loop whenever `origin/windows-next` or `origin/osx-ne
 
 Maintain the loop-status quick-start cache (under 80 lines per entry) as
 `## Cycle` entries: write each entry as a NEW fragment with
-`tillandsias-plan loop-status-append --host <host> --ts <ISO>`, and read the
+`tillandsias-plan loop-status-append --host <host> --ts <ISO> --file fragment.md`
+(`< fragment.md` and a bare path also work; order 1004-8vkv), and read the
 folded view with `tillandsias-plan loop-status` — NEVER edit the shared
 `plan/loop_status.md` directly, or a concurrent host's status write conflicts
 for the same reason the old monolithic ledger did (packet 582-nqw5):
