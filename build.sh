@@ -1663,15 +1663,27 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # the true code and name the could-not-run case with the script's own
     # verdict line plus the remedy, so a gate that cannot RUN a check never
     # asserts what the check would have found (965-sxec).
+    # FOLLOW-UP to 43e33dd5d: TEE the output and echo the script's OWN verdict
+    # line rather than naming its cause in this file. The landed text hardcoded
+    # "no fresh plan binary", which is correct today because the script's exit-2
+    # grammar has exactly one cause — and is a second place for the two to
+    # disagree the moment it gains another. The archiver's branch reads its
+    # cause out of the log for the same reason (965-sxec).
     _events_land_rc=0
-    _run bash "$SCRIPT_DIR/scripts/check-fragment-events-land.sh" 2>&1 || _events_land_rc=$?
+    _events_land_log="$(mktemp "${TMPDIR:-/tmp}/tillandsias-fel.XXXXXX")"
+    _run bash "$SCRIPT_DIR/scripts/check-fragment-events-land.sh" 2>&1         | tee "$_events_land_log" || true
+    _events_land_rc="${PIPESTATUS[0]}"
     if [ "$_events_land_rc" -eq 2 ]; then
-        _error "check-fragment-events-land COULD NOT RUN (exit 2): no fresh plan binary — this says nothing about fragment events; rebuild the instrument (scripts/cycle-preflight.sh) (1021-a944)"
+        _error "check-fragment-events-land COULD NOT RUN (exit 2) — this says NOTHING about whether any event lands on a packet; the instrument is what needs repair (1021-a944). Verdict: $(tr -d '' < "$_events_land_log" | tail -n 1)"
+        _error "remedy: scripts/cycle-preflight.sh rebuilds the plan binary for this tree, or run 'cargo build --release -p tillandsias-plan' in this locus"
+        rm -f "$_events_land_log"
         exit 1
     elif [ "$_events_land_rc" -ne 0 ]; then
         _error "an event is attached to no packet — invisible, not merely unfolded"
+        rm -f "$_events_land_log"
         exit 1
     fi
+    rm -f "$_events_land_log"
     _info "All fragment events land"
 
     # ORDER 1021-a944. The fixture for the branch above. It pins the VERDICT
@@ -1680,7 +1692,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # class on a run where the check never executed. A test that checked only
     # the code would have stayed green through the incident.
     _step "Checking a fragment-events check that could not run never claims what it would have found (1021-a944)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-fragment-events-verdict.sh" 2>&1; then
+    if ! _run bash "$SCRIPT_DIR/scripts/test-fragment-events-land-callsite.sh" 2>&1; then
         _error "the fragment-events could-not-run path regressed (1021-a944) — a gate that cannot RUN a check must never assert what the check would have FOUND"
         exit 1
     fi

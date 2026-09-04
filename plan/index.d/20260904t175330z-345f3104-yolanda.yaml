@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: build-sh-collapses-a-could-not-run-exit-into-a-fragment-events-violation
+    event:
+      type: progress
+      ts: "2026-09-04T17:53:30Z"
+      agent_id: windows-yolanda-opus5-20260904t175330z
+      host: yolanda
+      summary: |-
+        AUDIT OF THE IN-FORGE LANDING 43e33dd5d, and the follow-up that closes what it left short. Three of four criteria met; C3 claimed and NOT met, with a negative control as the evidence rather than an opinion.
+
+        I had an independent implementation of this packet from my own earlier fire, which turned this from a review into a comparison of two solutions to the same problem.
+
+        C1 exit-2 arm at the call site: MET. _events_land_rc captured, -eq 2 arm placed before the violation branch.
+
+        C2 the script's own verdict line plus the cycle-preflight remedy: MET IN EFFECT, BY PARAPHRASE. The landed text hardcodes "no fresh plan binary" rather than echoing what the script actually printed. That is correct TODAY because the script's exit-2 grammar has exactly one cause - and it is a second place for the two to disagree the moment it gains another, which is precisely why the archiver's branch reads its cause out of a teed log instead (965-sxec). TIGHTENED in the follow-up: tee the output, echo the real last line, and give the remedy its own line.
+
+        C4 whether the check can pass inside a WSL distro: MET, and esme's answer and mine are complementary rather than contradictory. Esme measured a TRANSIENT freshness miss on their host. I measured a STRUCTURAL one on a SHARED Windows/WSL checkout: from inside Linux only tillandsias-plan.exe exists under target/release, resolve_plan_binary looks for tillandsias-plan and finds nothing runnable, and cargo lives at ~/.cargo/bin but is NOT on PATH for a non-login `wsl.exe -- bash`, so ensure_fresh_plan_binary's rebuild arm cannot fire either. Both fixable, and I proved the fix rather than proposing it: PATH plus a CARGO_TARGET_DIR pointed OUTSIDE the shared tree, build in 56 s, then ok:fragment-events-land:70 fragment(s) checked, exit 0. The separate target dir is not optional - two toolchains fighting over one target/ is its own defect. Exit-7/exit-0 control run BEFORE any of it, because a cross-boundary exit code is not to be believed until a control proves it propagates (7 -> 7, 0 -> 0).
+
+        C3 a fixture DRIVING the call site: NOT MET. scripts/test-fragment-events-verdict.sh drives the real SCRIPT correctly - that arm is sound and I kept it - but asserts the CALL SITE by grepping build.sh for three strings, and a grep does not execute a routing.
+
+        THE CONTROL, run rather than argued. I changed the exit-2 arm's condition from `-eq 2` to `-eq 99`, making it unreachable so that exit 2 falls straight through to "an event is attached to no packet" - the exact defect this packet exists to remove. Every string the forge fixture greps for remained present, in the same file, in the same order.
+          FORGE FIXTURE ON THE SABOTAGED TREE: PASS 5/5.
+          MY FIXTURE ON THE SAME TREE:         FAIL, 3 arms red - not named as could-not-run, still claims an event is attached to no packet, no remedy.
+        A green pin over a broken gate. Its own commit message says it "pins the VERDICT TEXT, not the exit code alone"; what it pins is the text's PRESENCE IN THE FILE, which is a different claim. This is the day's recurring shape once more: an assertion consistent with the fix that cannot discriminate against its absence.
+
+        THE FOLLOW-UP. scripts/test-fragment-events-land-callsite.sh EXTRACTS the branch out of build.sh at run time with awk and EXECUTES it against exit-2, exit-1 and exit-0 stubs under a harness supplying _run/_error/_info. Not a copy: a copy is how two implementations come to disagree (704-zcgi's four probes, 805-r98w's two fingerprints), so editing the branch means the fixture runs the EDITED branch, and deleting or renaming it fails ARM 0 loudly instead of passing over an empty window - the anchor trap in its fixture form. ARM 2 is the negative control for ARM 1: a "fix" that merely stopped claiming anything would satisfy every could-not-run assertion and hollow the check out, so the exit-1 stub must still produce the violation text. ARM 4 drives the real script, so the routing is pinned to a branch something can actually trigger. 9/9 green on the correct routing, 3 red on the sabotage, green again on restore, and it is WIRED INTO THE GATE - an unwired fixture would reproduce 1003-444f, the defect I spent an earlier cycle documenting.
+
+        test-fragment-events-verdict.sh is REMOVED rather than kept alongside. Two fixtures for one branch is the duplication this repo keeps paying for, and mine subsumes its script-driving arm as ARM 4.
+
+        THE LESSON FOR THE CLOSURE, and it applies to my own work equally: A FIXTURE WRITTEN BY THE SAME AGENT THAT WROTE THE FIX SHOULD BE SABOTAGE-TESTED BY SOMEONE ELSE. The forge agent's reasoning was right, its precedents were the right ones, and it reached a correct fix before I did. What it could not see is the one thing hardest to see from inside your own work - whether your test can fail. That is not an argument against in-forge landings; it is an argument for a second implementation, and the only reason I could run the control is that I happened to have written one.
+
+        EVIDENCE: pre-fix FAILS on all four criteria (reproduced, not read); post-fix ./build.sh --check exits 0 with new-red=0 and the call-site fixture running inside the gate.

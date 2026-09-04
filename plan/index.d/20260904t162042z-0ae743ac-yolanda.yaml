@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: build-sh-collapses-a-could-not-run-exit-into-a-fragment-events-violation
+    event:
+      type: progress
+      ts: "2026-09-04T16:20:42Z"
+      agent_id: windows-yolanda-opus5-20260904t162042z
+      host: yolanda
+      summary: |-
+        FIXED, all four criteria, and the fourth is ANSWERED rather than routed — with a cause different from the one suspected.
+
+        PRE-FIX RESULT OF EACH CRITERION, stated before the diff.
+          C1 exit-2 arm at the call site: FAILS. No `-eq 2` arm existed; `if ! _run ...` collapsed every non-zero into the violation.
+          C2 the script's own verdict line surfaced with a remedy: FAILS. Nothing named the instrument or the repair.
+          C3 a fixture driving the call site: FAILS. None existed.
+          C4 can the check ever pass inside esme's WSL distro: UNANSWERED, esme's reproduction inconclusive.
+        Reproduced rather than read: driving the real script through its documented TILLANDSIAS_PLAN_BIN seam (a named binary passes through on existence alone, so a nonexistent one is a resolve failure) gives `blocked:fragment-events-land:no-fresh-plan-binary` and exit 2, while build.sh printed "an event is attached to no packet — invisible, not merely unfolded" — a substantive claim about the LEDGER on a run where not one fragment was read.
+
+        THE DECISION, WRITTEN AT THE CALL SITE: COULD-NOT-RUN BLOCKS. I did not invent a policy for this. The archiver's branch already settles it for THIS EXACT CAUSE — a stale or missing plan binary "still stop[s] the gate, because [it is] repairable in the locus that hit [it] and waving [it] through would trade a false substantive verdict for a false green" (965-sxec). The narrow forge skip there keys on no-usable-ruby, a package a forge will never have; nothing analogous applies to a binary this repo builds. So the exit-2 arm refuses, names the INSTRUMENT rather than the ledger, prints the script's own verdict line (not a paraphrase — a paraphrase is a second place for the two to disagree), and gives the remedy.
+
+        THE FIXTURE DRIVES THE REAL CALL SITE, NOT A COPY OF IT. scripts/test-fragment-events-land-callsite.sh EXTRACTS the branch out of build.sh at run time with awk and executes it against stub scripts under a harness supplying _run/_error/_info. A copy is how two implementations come to disagree — 704-zcgi's four probes, 805-r98w's two fingerprints — and this repo pays for that repeatedly. Edit the branch and the fixture runs the edited branch; delete or rename it and ARM 0 fails loudly rather than passing over an empty window, which is the anchor trap from slice 2 of 997-e4v2 in its fixture form. 9/9 arms pass.
+
+        ARM 2 IS THE NEGATIVE CONTROL FOR ARM 1, deliberately. A "fix" that simply stopped claiming anything would satisfy every could-not-run assertion and quietly destroy the check, so the exit-1 stub must still produce "an event is attached to no packet". Both directions pinned. ARM 4 drives the REAL script to prove the exit-2 branch has a reachable caller — a routing pinned to a branch nothing can trigger is a pin over an empty window.
+
+        NEGATIVE CONTROL ARMED ON THE FIXTURE ITSELF: reverting build.sh to the pre-fix call site turns it RED on exactly the three defect assertions (not named as could-not-run, still claims an event is attached to no packet, gives no remedy) and leaves the other six green, then green again on restore. The three that go red are precisely the three C1/C2 describe.
+
+        C4 ANSWERED: YES, THE CHECK CAN PASS INSIDE A WSL DISTRO, and the cause of esme's failure is NOT wsl.exe quoting. Measured on yolanda's tillandsias-build distro, exit-7/exit-0 control run FIRST because a cross-boundary exit code is not to be believed until a control proves it propagates (it does: 7 -> 7, 0 -> 0). Two causes, both structural, neither about quoting:
+          1. A Windows/WSL SHARED CHECKOUT HAS ONE target/release AND NEEDS TWO BINARIES. From inside Linux only `tillandsias-plan.exe` exists; resolve_plan_binary looks for `tillandsias-plan` and finds nothing runnable.
+          2. cargo is installed at ~/.cargo/bin but is NOT on PATH for a non-login `wsl.exe -- bash` shell, so ensure_fresh_plan_binary's rebuild arm cannot fire either.
+        Both fixable, and I proved the fix rather than proposing it: with PATH including ~/.cargo/bin and CARGO_TARGET_DIR pointed OUTSIDE the shared tree, `cargo build --release -p tillandsias-plan` succeeds in 56 s and the check then returns `ok:fragment-events-land:70 fragment(s) checked`, exit 0.
+          THE SEPARATE CARGO_TARGET_DIR IS NOT OPTIONAL. Building into the shared target/ from both Windows and Linux makes the two toolchains fight over the same artifacts; the Linux build must live elsewhere. That is the guidance esme needs, and it is the part that would not have been obvious from the failure message alone.
+
+        WHAT THIS MEANS FOR ESME TODAY: with the fix landed they get "the fragment-event check COULD NOT RUN (exit 2) ... Verdict: blocked:fragment-events-land:no-fresh-plan-binary" plus the remedy, instead of being sent to hunt a broken fragment that does not exist. And the remedy now works there, which it did not before this was measured.
