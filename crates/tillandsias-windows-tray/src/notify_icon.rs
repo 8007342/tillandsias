@@ -3932,6 +3932,33 @@ pub(crate) fn launch_pty(intent: &PtyIntent, project: Option<&str>) -> Result<()
     // argv_survives_wt_reparse guard (order 795-zshi) is deleted: it always
     // returned true for the shapes launch_spec actually emits.
     // @trace plan/issues/windows-github-login-blank-terminal-2026-08-09.md
+    // ORDER 823-u5zf. RECORD WHICH HOST WAS CHOSEN, because the packet's own
+    // closure asks for a lane "OBSERVED opening in Windows Terminal rather than
+    // conhost" and until this line there was nothing to observe it WITH.
+    //
+    // Three observables were tried on yolanda 2026-09-04 and all three are
+    // incapable of answering it: counting WindowsTerminal processes (it reuses
+    // ONE process, so a new window is a tab and the count never moves);
+    // inspecting wsl.exe parentage (a lane into a missing project exits before
+    // any child persists); and reading this log, which carried no spawn record
+    // at all. So the criterion could only ever be met by a human watching a
+    // screen — once, unrepeatably, on one host.
+    //
+    // One line makes it checkable by any host forever, including headless ones
+    // and CI. `terminal=` is the decision, not a paraphrase of it: it is
+    // emitted from the SAME branch that selects the spawn, so it cannot drift
+    // from what actually ran the way a separate predicate would.
+    let terminal = if matches!(intent, PtyIntent::GithubLogin) {
+        "conhost"
+    } else {
+        "windows-terminal"
+    };
+    tracing::info!(
+        %terminal,
+        intent = ?intent,
+        project = project.unwrap_or("-"),
+        "spawning in-VM PTY"
+    );
     let spawn_result = if matches!(intent, PtyIntent::GithubLogin) {
         spawn_wsl_console(distro, &argv)
     } else {
@@ -4210,6 +4237,65 @@ mod tests {
         assert!(
             !tick_timer_suppressed(true, true),
             "a user action asked for a confirming round"
+        );
+    }
+
+    /// ORDER 823-u5zf: the spawn decision is LOGGED, and the log agrees with
+    /// the branch that runs.
+    ///
+    /// The packet's closure wants a lane observed opening in Windows Terminal
+    /// rather than conhost. Three process-level observables cannot answer that
+    /// (Windows Terminal reuses one process; a lane into a missing project
+    /// leaves no child; the log carried no spawn record), so the criterion was
+    /// only ever checkable by a human watching a screen once. The log line
+    /// makes it checkable anywhere — and this test makes the LOG honest, which
+    /// is the part that would otherwise rot: a `terminal=` string that drifted
+    /// from the branch it describes would be worse than no log at all, because
+    /// it would be believed.
+    ///
+    /// Asserted over the production source with comments stripped, so the
+    /// explanatory comment above the branch cannot satisfy it.
+    ///
+    /// @trace order:823-u5zf
+    #[test]
+    fn the_logged_terminal_matches_the_branch_that_spawns() {
+        let source = include_str!("notify_icon.rs");
+        let production = source
+            .split("#[cfg(test)]")
+            .next()
+            .expect("the file has a production half");
+        let code: String = production
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join(
+                "
+",
+            );
+
+        // The label and the spawn must be selected by the SAME predicate.
+        let label_arm = code
+            .find("let terminal = if matches!(intent, PtyIntent::GithubLogin)")
+            .expect("the spawn decision must be labelled for the log");
+        let spawn_arm = code
+            .find("let spawn_result = if matches!(intent, PtyIntent::GithubLogin)")
+            .expect("the spawn must still branch on GithubLogin");
+        assert!(
+            label_arm < spawn_arm,
+            "the log label must be derived from the same predicate as the spawn, \
+             immediately before it — otherwise the two can disagree and the log \
+             becomes a confident lie about which terminal opened"
+        );
+
+        // And the labels must name the two real hosts, not be free text.
+        assert!(
+            code.contains("\"conhost\"") && code.contains("\"windows-terminal\""),
+            "the log must name conhost and windows-terminal explicitly (823-u5zf)"
+        );
+        assert!(
+            code.contains("spawning in-VM PTY"),
+            "the spawn record must be emitted, or the closure criterion is \
+             unobservable again"
         );
     }
 
