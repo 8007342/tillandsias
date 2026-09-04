@@ -215,6 +215,19 @@ _age() { # <seconds>
 # properties (exit codes, origin labels, stale-healthy) use it so they do not
 # silently inherit the fleet's expected set and start reporting an absence they
 # were never written to model.
+#
+# ── FIXTURE-ONLY. NO PRODUCTION CALLER MAY PASS `none`. ─────────────────────
+#
+# This token disables the absent detection, which is the entire subject of
+# 1004-inkc. A production caller passing it would turn this check back into one
+# that CANNOT FAIL on a deleted service — precisely the class the order just
+# removed, reintroduced through the door built to fix it.
+#
+# Enforced, not merely requested: scripts/check-enclave-expect-none-is-fixture-only.sh
+# refuses any caller outside the fixture, and it is wired into local-ci.sh. The
+# rule is deliberately a LINT rather than a runtime guard keyed on a test-only
+# environment variable — such a variable is itself settable from production, so
+# it would move the hole rather than close it.
 if [ "$EXPECTED" = "none" ]; then
     EXPECTED=""
 elif [ -z "$EXPECTED" ]; then

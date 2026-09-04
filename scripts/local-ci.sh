@@ -1486,6 +1486,27 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
         archive_check_log "litmus-runner-reports-rc" "skipped"
     fi
 
+    # Order 1004-inkc. `--expect none` disables the absent detection, which is
+    # that order's entire subject: a production caller passing it restores a
+    # health check that cannot fail on a DELETED service. The escape hatch was
+    # needed (empty now means "use the default", and three legacy fixture arms
+    # model a vault without a proxy while testing something else), so it is
+    # confined to the fixture and the confinement is CHECKED — a rule only an
+    # attentive reader honours is a suggestion, which is what 994-8r3w's unmet
+    # criterion 3 recorded about its own single-caller declaration.
+    if [[ -f "scripts/check-enclave-expect-none-is-fixture-only.sh" ]]; then
+        if bash scripts/check-enclave-expect-none-is-fixture-only.sh 2>&1 | tee /tmp/expect-none-fixture-only.log; then
+            log_pass "The enclave health check's absent-detection opt-out stays fixture-only"
+            archive_check_log "expect-none-fixture-only" "pass" /tmp/expect-none-fixture-only.log
+        else
+            log_fail_tracked "expect-none-fixture-only" "A production caller passes --expect none (see /tmp/expect-none-fixture-only.log)"
+            archive_check_log "expect-none-fixture-only" "fail" /tmp/expect-none-fixture-only.log
+        fi
+    else
+        log_fail_missing_guard "expect-none-fixture-only" "scripts/check-enclave-expect-none-is-fixture-only.sh"
+        archive_check_log "expect-none-fixture-only" "skipped"
+    fi
+
     # Order 765-mza8. Wired here, literally, for the same reason as the two
     # above. A dead `inputs:` glob is silent by construction: it cannot make a
     # test run, only skip, so nothing else in this suite would ever go red for
