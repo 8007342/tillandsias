@@ -1926,7 +1926,8 @@ Before exit:
 2. Refresh `plan/index.yaml` if this cycle changed active work, blockers,
    tested release, or host assignments. Record THIS cycle's status as a NEW
    `## Cycle` fragment in `plan/loop_status.d/` via
-   `tillandsias-plan loop-status-append --host <host> --ts <UTC-ISO>` — never
+   `tillandsias-plan loop-status-append --host <host> --ts <UTC-ISO> --file fragment.md`
+   (`< fragment.md` and a bare path also work; order 1004-8vkv) — never
    edit the shared `plan/loop_status.md` directly, or a concurrent host's
    status write conflicts for the same reason the old monolithic ledger did
    (packet 582-nqw5). The folded view (`tillandsias-plan loop-status`) is the
@@ -1943,8 +1944,15 @@ Before exit:
    timestamp, or omit `--ts` entirely when "now" is genuinely the right stamp:
 
    ```bash
-   tillandsias-plan loop-status-append --host <host> --ts <cycle-start-UTC> --backfill
+   tillandsias-plan loop-status-append --host <host> --ts <cycle-start-UTC> --backfill --file fragment.md
    ```
+
+   THE FRAGMENT MUST BE SUPPLIED EXPLICITLY. `--file <path>`, `< path` and a
+   bare path argument all work. Before order 1004-8vkv a bare path was silently
+   dropped and the command fell through to stdin, which on an inherited socket
+   (a forge agent's stdin, by construction) blocked for 26 minutes at 0.0%% CPU.
+   It is now refused in 5s naming the explicit forms, but supplying the input
+   explicitly is still the invocation to type.
 
    `--backfill` only reaches BACKWARD (a future `--ts` is still refused), so it
    waives nothing the limit exists to protect, and the refusal already names it.

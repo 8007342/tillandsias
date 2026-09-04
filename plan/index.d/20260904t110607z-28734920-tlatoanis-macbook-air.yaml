@@ -1,0 +1,85 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: loop-status-append-reads-stdin-and-blocks-on-a-path
+    event:
+      type: completed
+      ts: "2026-09-04T11:06:07Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260904t063447z
+      host: tlatoanis-macbook-air
+      summary: |-
+        FIXED, and the fixture was RED FIRST at 3/6 with all three outcomes reproduced
+        — including the hang, as an exit-124 timeout kill rather than a story about one.
+
+        THE THREE ARMS THAT FLIPPED:
+          * a bare positional path is HONOURED (was: silently dropped)
+          * a stdin with no writer is refused in 5s (was: blocked until timeout(1)
+            killed it — the 26-minute wait in miniature)
+          * an empty read says `read 0 bytes` (was: "fragment carries no `## Cycle`
+            section", a confident statement about a file never opened)
+        Arms 4-6 — the stdin form, the --file form, and a malformed fragment still
+        reporting its shape — were green before and after, which is what stops the
+        first three being satisfied by a binary that refuses everything.
+
+        WHY A DEADLINE AND NOT AN fstat ON THE DESCRIPTOR KIND. Refusing sockets, ttys
+        and character devices by type sounds tighter and is wrong twice: a FIFO is a
+        "pipe" and blocks exactly like a socket when nothing is writing, while a socket
+        that DOES have data is perfectly readable. What matters is whether bytes
+        arrive, so the read happens on a thread with a 5s deadline instead of predicting
+        from the fd's kind. A regular file or a live pipe returns instantly. The reader
+        thread is deliberately left blocked when the deadline expires — it holds only
+        stdin, the process exits on the next line, and std offers no portable way to
+        cancel a blocking read; detaching it is the honest cost of not taking a libc
+        dependency for one poll(2).
+
+        THE POSITIONAL IS ONLY TAKEN IF IT RESOLVES TO AN EXISTING FILE, so a future
+        flag's argument is never mistaken for a fragment; anything else falls through to
+        stdin and is reported there. Honouring rather than refusing was the choice
+        because it makes the invocation that cost lenovinha 26 minutes simply work.
+
+        TWO THINGS I GOT WRONG AND CAUGHT, both worth more than the fix:
+
+        1. MY OWN ARM 2 TESTED NOTHING AT FIRST. It passed the fragment path as a
+           positional AND a blocking FIFO on fd 0. Once the positional was honoured the
+           command succeeded without ever reading stdin — the arm went green while
+           measuring nothing, which is the empty-window shape yolanda had warned about
+           an hour earlier in its awk-anchor form. Corrected to supply NO positional and
+           no --file, so stdin is the only input; the comment in the fixture records why,
+           because the next person to add an arm here will be tempted the same way.
+
+        2. I MISREPORTED AN UNRELATED FAILURE AS PRE-EXISTING. litmus:plan-only-push-
+           lane-shape is red on this tree and I first called it "not mine" on the
+           strength of stash-and-rerun. That proves only that it is not in the WORKING
+           TREE, and I had a committed build.sh edit from this morning that a stash test
+           cannot see. Redone by attribution: the litmus fixture copies gate-stamp.sh,
+           pre-push-local-gate.sh, plan-binary-probe.sh and check-mo-full-attestations.sh
+           and never reads build.sh; `git log --since=2026-09-04` over all four plus the
+           litmus YAML is empty; newest touch b300d6b92 predates my work. Not mine, for a
+           reason that survives being challenged. Routed to the coordinator with the
+           measurement — it is the ACCEPT arm that is red, so the fast lane is refusing
+           work it should pass, which is why nobody noticed: the fallback is the full
+           gate and a slower cycle reports nothing.
+
+        ALSO LANDED: litmus:loop-status-append-input-shape (pre-build, instant) bound
+        under methodology-accountability beside litmus:loop-status-fragment-overlay, and
+        the three skills. advance-work-from-plan:488 needed CORRECTING rather than
+        extending — its warning ("a path argument is ignored and the command blocks
+        forever") had landed at HEAD and this change makes it false; meta-orchestration
+        :1929/:1946 and coordinate-multihost-work:263 gained the explicit input form.
+
+        The fixture runs the binary through scripts/plan-binary-probe.sh, not a
+        hardcoded target/ path — the gate refused the first version under 721-nyev, and
+        its wording is the right one to keep: an executable bit is a claim, running the
+        binary is evidence.
+
+        NOT DONE: the `--help` exit code and the `# Cycle` single-hash grammar question,
+        both named in the packet as out of scope. The --help surface does fall out of
+        this change (an empty read now names itself instead of reporting a shape defect)
+        but closing pirria's smoke finding against its own evidence is theirs.

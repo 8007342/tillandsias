@@ -500,9 +500,13 @@ status `ready`. The packet closes only when every agent named in
     never type it). It needs the §1 step 1b snapshot; without one the honest
     exit is landed-but-unattested, stated in the loop-status entry's first
     line. Write that entry with `tillandsias-plan loop-status-append --host <host>
-    --ts <cycle-start-UTC> --backfill < fragment.md` — the fragment comes on
-    STDIN; a path argument is ignored and the command blocks forever on an
-    inherited socket stdin (lenovinha, 2026-09-04, 26 minutes).
+    --ts <cycle-start-UTC> --backfill < fragment.md` — or `--file fragment.md`, or
+    a bare path, all three of which now work. Order 1004-8vkv fixed what this
+    line used to warn about: a path argument was silently dropped and the
+    command then blocked forever on an inherited socket stdin (lenovinha,
+    2026-09-04, 26 minutes). A stdin with nothing writing to it is now refused
+    in 5s naming both explicit forms, and an empty read says `read 0 bytes`
+    instead of blaming your fragment's headings.
 
 ### Mandatory Exit Discipline
 
