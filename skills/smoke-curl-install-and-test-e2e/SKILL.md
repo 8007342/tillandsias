@@ -164,6 +164,34 @@ download cache.
    ```bash
    mkdir -p target/smoke-e2e
    ```
+5. **Source the timing helpers, and keep them sourced for every block below**
+   (order 1013-qv7c). Each smoke step emits ONE duration record so the
+   recurrence rung (`repeat:` / `recur:` / `skippable:` in
+   `scripts/cycle-metrics.sh`) can see this runbook's work:
+   ```bash
+   . "$PWD/scripts/timing-log.sh" 2>/dev/null || true
+   command -v timing_emit >/dev/null 2>&1 || { timing_now_ms() { echo 0; }; timing_emit() { return 0; }; }
+   ```
+   **Why this and not the gate.** Every other emitter in the tree is a
+   build/test/litmus step in `build.sh`, `scripts/local-ci.sh` or
+   `scripts/run-litmus-test.sh`, and all of those need cargo. A floor host
+   without a toolchain therefore has *never* written a timing record —
+   measured on pirria 2026-09-04, where `repeat:`/`recur:`/`skippable:` all
+   read `source=absent` and `.cache/metrics/` was an empty directory the probe
+   itself created. An instrument for finding what slow hosts pay cannot be
+   downstream of the thing slow hosts cannot run. `timing_emit` is bash and
+   `jq`, needs no toolchain, and the smoke is work the floor *can* do — so the
+   records come from here.
+
+   The emits are **best-effort by construction**: `timing_emit` wraps its whole
+   body and always returns 0, and the fallback stub above keeps every call site
+   unconditional and `set -e`-safe. A metrics write can never fail a smoke step.
+
+   Records are named `phase=smoke` with these pinned `step` values, one per
+   step below: `smoke-curl-install`, `smoke-destructive-reset`,
+   `smoke-init-pristine`, `smoke-forge-lane`, `smoke-health-check`. They land
+   in `<checkout>/.cache/metrics/tillandsias-timing.jsonl` (the same log the
+   gate steps write) and are read back by `scripts/cycle-metrics.sh`.
 
 ---
 
@@ -182,11 +210,13 @@ unset the installer defaults to the stable channel.
 
 ```bash
 [ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh expands it empty'; exit 2; }
+_T0="$(timing_now_ms)"
 TILLANDSIAS_SMOKE_LOCK_LOG=target/smoke-e2e/00-smoke-lock.log \
   scripts/with-smoke-lock.sh --name release-smoke-e2e -- \
   bash -c "curl -fsSL '${SMOKE_BASE}/install.sh' | TILLANDSIAS_RELEASE_BASE='${SMOKE_BASE}' bash" 2>&1 \
   | tee target/smoke-e2e/01-install.log
 INSTALL_RC=${PIPESTATUS[0]}; printf 'install_exit=%s\n' "$INSTALL_RC" | tee target/smoke-e2e/01-install-exit.txt
+timing_emit smoke-curl-install smoke "$_T0" "${INSTALL_RC:-1}" || true
 test -n "$INSTALL_RC" && test "$INSTALL_RC" -eq 0
 hash -r
 tillandsias --version | tee target/smoke-e2e/01-version.txt
@@ -305,10 +335,12 @@ push it. Otherwise run the reset immediately; on Linux this step is mandatory.
 
 ```bash
 [ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh expands it empty'; exit 2; }
+_T0="$(timing_now_ms)"
 TILLANDSIAS_SMOKE_LOCK_LOG=target/smoke-e2e/00-smoke-lock.log \
   scripts/with-smoke-lock.sh --name release-smoke-e2e -- \
   podman system reset --force 2>&1 | tee target/smoke-e2e/02-reset.log
 RESET_RC=${PIPESTATUS[0]}; printf 'reset_exit=%s\n' "$RESET_RC" | tee target/smoke-e2e/02-reset-exit.txt
+timing_emit smoke-destructive-reset smoke "$_T0" "${RESET_RC:-1}" || true
 test -n "$RESET_RC" && test "$RESET_RC" -eq 0
 ```
 
@@ -421,10 +453,12 @@ metered or slow link pays it every time.
 
 ```bash
 [ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh expands it empty'; exit 2; }
+_T0="$(timing_now_ms)"
 TILLANDSIAS_SMOKE_LOCK_LOG=target/smoke-e2e/00-smoke-lock.log \
   scripts/with-smoke-lock.sh --name release-smoke-e2e -- \
   tillandsias --debug --init 2>&1 | tee target/smoke-e2e/03-init.log
-INIT_RC=${PIPESTATUS[0]}; printf 'init_exit=%s\n' "$INIT_RC" | tee target/smoke-e2e/03-init-exit.txt
+INIT_RC=${PIPESTATUS[0]}
+timing_emit smoke-init-pristine smoke "$_T0" "${INIT_RC:-1}" || true; printf 'init_exit=%s\n' "$INIT_RC" | tee target/smoke-e2e/03-init-exit.txt
 test -n "$INIT_RC" && test "$INIT_RC" -eq 0
 ```
 
@@ -475,8 +509,11 @@ test "$IMG" -nt target/smoke-e2e/03-destruction-marker
 # the host, this report is stale and the run is unfinished (the 2026-08-10
 # incident: 4/4 PASS on a health check taken before one more mutating step
 # wedged the host for 25 minutes).
+_T0="$(timing_now_ms)"
 "$APP" --diagnose --json 2>&1 | tee target/smoke-e2e/03-diagnose.json
-_rc=${PIPESTATUS[0]}; test -n "$_rc" && test "$_rc" -eq 0
+_rc=${PIPESTATUS[0]}
+timing_emit smoke-health-check smoke "$_T0" "${_rc:-1}" || true
+test -n "$_rc" && test "$_rc" -eq 0
 
 jq -e '.provisioned == true'    target/smoke-e2e/03-diagnose.json
 jq -e '.rootfs_present == true' target/smoke-e2e/03-diagnose.json
@@ -583,11 +620,23 @@ if ($diag.PSObject.Properties.Name -contains 'version') {
 ## 4 — Forge continuous-enhancement run (only if Step 3 was clean)
 
 ```bash
+[ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh expands it empty'; exit 2; }
+_T0="$(timing_now_ms)"
 TILLANDSIAS_SMOKE_LOCK_LOG=target/smoke-e2e/00-smoke-lock.log \
   scripts/with-smoke-lock.sh --name release-smoke-e2e -- \
   env TILLANDSIAS_NO_TRAY=1 tillandsias . --opencode --prompt "Use the /meta-orchestration skill" 2>&1 \
   | tee target/smoke-e2e/04-opencode.log
+LANE_RC=${PIPESTATUS[0]}; printf 'opencode_exit=%s\n' "$LANE_RC" | tee target/smoke-e2e/04-opencode-exit.txt
+timing_emit smoke-forge-lane smoke "$_T0" "${LANE_RC:-1}" || true
 ```
+
+> The guard and the `LANE_RC` capture arrived with the timing wrapper
+> (1013-qv7c). This block had neither: it piped to `tee` and recorded no status
+> at all, so a forge lane that failed to launch left the same evidence as one
+> that completed. Emitting a duration without an exit code would have recorded
+> *how long the failure took* and called it a measurement, so the capture is
+> part of the record, not scope creep — the 727-kmks assertion shape, arriving
+> at the one step that never had it.
 
 This launches the full enclave + the OpenCode agent inside the forge, which runs
 [[forge-continuous-enhancement]] against the `tillandsias` checkout. Two streams
@@ -636,9 +685,47 @@ is up, taken by a concurrent watcher, never a grep for the trace. Take it while
 the lane is up, not after: lane-scoped containers are torn down on exit by
 design, and only the application-lifetime set must survive.
 
----
+### 4c — Final health check (Linux)
 
-## 5 — File findings as plan/issues work packets
+**LAST — after every mutating step above**, the same rule the macOS and Windows
+lanes already carry (the 2026-08-10 incident: 4/4 PASS on a health check taken
+before one more mutating step wedged the host for 25 minutes).
+
+```bash
+[ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh expands it empty'; exit 2; }
+_T0="$(timing_now_ms)"
+{
+  echo "=== containers ==="
+  podman ps --format '{{.Names}}\t{{.Status}}'
+  echo "=== vault health ==="
+  podman exec tillandsias-vault sh -c \
+    'curl -s --cacert /run/secrets/tillandsias-vault-tls-ca https://127.0.0.1:8200/v1/sys/health?standbyok=true'
+  echo
+  echo "=== version ==="
+  tillandsias --version
+} 2>&1 | tee target/smoke-e2e/05-health.log
+_rc=${PIPESTATUS[0]}
+timing_emit smoke-health-check smoke "$_T0" "${_rc:-1}" || true
+test -n "$_rc" && test "$_rc" -eq 0
+grep -q '"sealed":false' target/smoke-e2e/05-health.log
+grep -q '^tillandsias-proxy' target/smoke-e2e/05-health.log
+```
+
+Expect the application-lifetime set (`tillandsias-vault`, `tillandsias-proxy`,
+`tillandsias-router`) up and healthy, and the lane-scoped ones
+(`tillandsias-inference`, `tillandsias-git-*`, the forge) gone — §4b's teardown
+is by design, so their ABSENCE here is the pass, not a finding.
+
+> **There was no Linux health-check block until 1013-qv7c**, though the Host
+> Matrix promises the step and the macOS/Windows lanes both implement it. The
+> gap is not cosmetic: `tillandsias --diagnostics` reads like the command to
+> reach for and is NOT one — it is a MODIFIER ("stream real-time logs from all
+> enclave containers (implies `--debug`)"), so bare, with no subcommand, it
+> falls through to the default tray launch and starts a cloud refresh. Measured
+> on pirria 2026-09-04, which ran it as the final health check of the
+> v56.9.2.1 smoke and had to kill it: a "health check" that mutates is exactly
+> what the LAST rule above exists to prevent. The block above is what that run
+> used instead, after the fact.
 
 Each finding becomes a `### Work Packet:` entry so `/advance-work-from-plan` can
 claim and fix it. Append packets to a dated smoke report:
