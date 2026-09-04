@@ -2280,15 +2280,23 @@ mod tests {
         });
     }
 
-    /// `ControlMessage::kind()` returns a stable, human-readable name for
-    /// every declared variant. Pinned by an explicit table so that adding
-    /// a new variant without naming it shows up as a test diff, not as a
-    /// silent "Unknown" in operator-facing Error frames.
-    #[test]
-    fn control_message_kind_names_every_declared_variant() {
-        // One sample envelope per variant — the wire-shape doesn't matter
-        // for the name lookup, just that the discriminant is correct.
-        let cases: &[(ControlMessage, &str)] = &[
+    /// One sample of EVERY declared `ControlMessage` variant, with its name.
+    ///
+    /// Shared by `control_message_kind_names_every_declared_variant` (which
+    /// reads the names) and `every_variant_discriminant_is_pinned_against_literals`
+    /// (which reads the encoded bytes). It is ONE list because two lists drift:
+    /// before 1029-5wvd this table held 19 of 32 variants, and its own comment
+    /// said the wire shape "doesn't matter" — true for the name lookup, and
+    /// the reason nobody noticed it was not a variant census.
+    ///
+    /// EXHAUSTIVENESS IS NOT MAINTAINED BY HAND. The contiguity assertion in
+    /// the discriminant test fails if this list misses a variant, and
+    /// `pinned_discriminant` fails to COMPILE if the enum gains one.
+    ///
+    /// @trace spec:vsock-transport
+    /// @trace order:1029-5wvd
+    fn one_sample_per_variant() -> Vec<(ControlMessage, &'static str)> {
+        vec![
             (
                 ControlMessage::Hello {
                     from: "x".into(),
@@ -2412,15 +2420,283 @@ mod tests {
                 },
                 "MetricsSnapshotReply",
             ),
-        ];
-        for (msg, expected) in cases {
+            // ADDED 1029-5wvd: the 13 variants this table never sampled.
+            (
+                ControlMessage::PtyOpen {
+                    session_id: 1,
+                    rows: 24,
+                    cols: 80,
+                    argv: vec![],
+                    env: vec![],
+                    cwd: None,
+                },
+                "PtyOpen",
+            ),
+            (
+                ControlMessage::PtyData {
+                    session_id: 1,
+                    direction: PtyDirection::ToGuest,
+                    bytes: vec![],
+                },
+                "PtyData",
+            ),
+            (
+                ControlMessage::PtyResize {
+                    session_id: 1,
+                    rows: 24,
+                    cols: 80,
+                },
+                "PtyResize",
+            ),
+            (
+                ControlMessage::PtyClose {
+                    session_id: 1,
+                    exit: PtyExit {
+                        code: 0,
+                        signal: None,
+                    },
+                },
+                "PtyClose",
+            ),
+            (
+                ControlMessage::DeliverCredentials {
+                    seq: 1,
+                    unseal_share_b64: None,
+                    installation_uuid: "u".into(),
+                    root_token: None,
+                },
+                "DeliverCredentials",
+            ),
+            (
+                ControlMessage::DeliverCredentialsReply {
+                    seq_in_reply_to: 1,
+                    success: true,
+                },
+                "DeliverCredentialsReply",
+            ),
+            (
+                ControlMessage::GetVaultHandover { seq: 1 },
+                "GetVaultHandover",
+            ),
+            (
+                ControlMessage::VaultHandoverReply {
+                    seq_in_reply_to: 1,
+                    unseal_share_b64: None,
+                    root_token: None,
+                },
+                "VaultHandoverReply",
+            ),
+            (
+                ControlMessage::GithubLoginStatusRequest { seq: 1 },
+                "GithubLoginStatusRequest",
+            ),
+            (
+                ControlMessage::GithubLoginStatusReply {
+                    seq_in_reply_to: 1,
+                    logged_in: true,
+                    handle: None,
+                },
+                "GithubLoginStatusReply",
+            ),
+            (
+                ControlMessage::PtyHeartbeat {
+                    session_id: 1,
+                    input_state: PtyInputState::NotBlocked,
+                },
+                "PtyHeartbeat",
+            ),
+            (ControlMessage::PtyStdinEof { session_id: 1 }, "PtyStdinEof"),
+            (
+                ControlMessage::PtyOpenData {
+                    session_id: 1,
+                    rows: 24,
+                    cols: 80,
+                    argv: vec![],
+                    env: vec![],
+                    cwd: None,
+                },
+                "PtyOpenData",
+            ),
+        ]
+    }
+
+    #[test]
+    fn control_message_kind_names_every_declared_variant() {
+        for (msg, expected) in one_sample_per_variant() {
             assert_eq!(
                 msg.kind(),
-                *expected,
+                expected,
                 "kind() mismatch for {expected}: got {}",
                 msg.kind()
             );
         }
+    }
+
+    /// The wire index of every `ControlMessage` variant, as an INDEPENDENT
+    /// LITERAL.
+    ///
+    /// WHY LITERALS AND NOT `mem::discriminant` OR A DERIVED TABLE. postcard
+    /// encodes an enum variant by its INDEX in the declaration, so the index
+    /// is the wire contract. Any expectation COMPUTED from the enum — a
+    /// discriminant, an iterator over variants, a parse of declaration order —
+    /// moves when the enum moves, and agrees with it by construction. That is
+    /// the defect 1029-5wvd was filed for: a pure reorder of two adjacent
+    /// variants repointed every later frame and the whole gate stayed green,
+    /// because everything checking the wire was built from the same source as
+    /// the wire.
+    ///
+    /// These numbers were MEASURED by encoding a sample of each variant on the
+    /// merged tree at 2562769bb (`postcard::to_allocvec`, first byte), not
+    /// read off the declaration. Six of them — VmShutdownRequest 9,
+    /// CloudRefreshRequest 10, DeliverCredentials 16, DeliverCredentialsReply
+    /// 17, GetVaultHandover 18, PtyStdinEof 30 — were independently measured
+    /// on windows-next by yolanda across 997-e4v2's mid-enum removal, chosen
+    /// to straddle the renumbering hole rather than to be easy; they agree.
+    ///
+    /// NO WILDCARD ARM, DELIBERATELY. A new variant fails to COMPILE here
+    /// (`error[E0004]`) rather than silently inheriting a neighbour's number.
+    ///
+    /// IF A TEST BELOW GOES RED, THE TIEBREAKER IS NOT IN THIS FILE. Ask
+    /// whether the renumbering was intended. If it was, the peers that speak
+    /// this wire must be updated together and WIRE_VERSION bumped (see its
+    /// doc: removal is not the inverse of addition); only then update these
+    /// literals. Editing a number here to restore green is how a silent
+    /// renumbering ships.
+    ///
+    /// @trace spec:vsock-transport
+    /// @trace order:1029-5wvd
+    fn pinned_discriminant(msg: &ControlMessage) -> u8 {
+        match msg {
+            ControlMessage::Hello { .. } => 0,
+            ControlMessage::HelloAck { .. } => 1,
+            ControlMessage::IssueWebSession { .. } => 2,
+            ControlMessage::IssueAck { .. } => 3,
+            ControlMessage::Error { .. } => 4,
+            ControlMessage::EvictProject { .. } => 5,
+            ControlMessage::McpFrame { .. } => 6,
+            ControlMessage::VmStatusRequest { .. } => 7,
+            ControlMessage::VmStatusReply { .. } => 8,
+            ControlMessage::VmShutdownRequest { .. } => 9,
+            ControlMessage::CloudRefreshRequest { .. } => 10,
+            ControlMessage::CloudRefreshReply { .. } => 11,
+            ControlMessage::PtyOpen { .. } => 12,
+            ControlMessage::PtyData { .. } => 13,
+            ControlMessage::PtyResize { .. } => 14,
+            ControlMessage::PtyClose { .. } => 15,
+            ControlMessage::DeliverCredentials { .. } => 16,
+            ControlMessage::DeliverCredentialsReply { .. } => 17,
+            ControlMessage::GetVaultHandover { .. } => 18,
+            ControlMessage::VaultHandoverReply { .. } => 19,
+            ControlMessage::GithubLoginStatusRequest { .. } => 20,
+            ControlMessage::GithubLoginStatusReply { .. } => 21,
+            ControlMessage::Subscribe { .. } => 22,
+            ControlMessage::SubscribeAck => 23,
+            ControlMessage::VmStatusPush { .. } => 24,
+            ControlMessage::LoginStatePush { .. } => 25,
+            ControlMessage::CloudProjectsPush { .. } => 26,
+            ControlMessage::PtyHeartbeat { .. } => 27,
+            ControlMessage::MetricsSnapshotRequest { .. } => 28,
+            ControlMessage::MetricsSnapshotReply { .. } => 29,
+            ControlMessage::PtyStdinEof { .. } => 30,
+            ControlMessage::PtyOpenData { .. } => 31,
+        }
+    }
+
+    /// Every declared variant encodes to its pinned index, and the pinned set
+    /// is exactly 0..N with no holes.
+    ///
+    /// TWO SEPARATE EXHAUSTIVENESS CHECKS, because one is not enough and I
+    /// shipped the wrong claim first. Contiguity catches a variant left
+    /// unsampled in the MIDDLE of the enum: the sampled discriminants then
+    /// skip a number and the sorted set is not 0..len. It is BLIND to a
+    /// TRAILING one — 32 samples measuring 0..31 is contiguous whether or not
+    /// a 33rd variant sits at index 32 — and a trailing addition is the
+    /// ordinary way this enum grows.
+    ///
+    /// MEASURED, not reasoned: the mutation that adds a trailing variant to
+    /// the enum, to `kind()`, and to `pinned_discriminant` while leaving it
+    /// out of the sample list passed 64/64 GREEN against the contiguity
+    /// check alone. An earlier draft of this doc claimed contiguity made the
+    /// list "prove its own exhaustiveness"; that was false, and the sabotage
+    /// arm for this test is what caught it.
+    ///
+    /// So `DECLARED_VARIANTS` is a hand-maintained literal, deliberately. The
+    /// chain is: a new variant fails to compile in `pinned_discriminant`
+    /// (E0004) -> the author gives it a number -> this count then fails until
+    /// they also SAMPLE it. Each step forces the next, and none of them can be
+    /// satisfied by a value derived from the enum.
+    ///
+    /// @trace spec:vsock-transport
+    /// @trace order:1029-5wvd
+    #[test]
+    fn every_variant_discriminant_is_pinned_against_literals() {
+        /// The number of `ControlMessage` variants. An independent literal for
+        /// the same reason the discriminants are: anything computed from the
+        /// enum agrees with the enum by construction.
+        const DECLARED_VARIANTS: usize = 32;
+
+        let samples = one_sample_per_variant();
+        assert_eq!(
+            samples.len(),
+            DECLARED_VARIANTS,
+            "one_sample_per_variant covers {} of {DECLARED_VARIANTS} declared \
+             variants. A variant that is declared and pinned but never sampled \
+             is never encoded, so its wire index is unchecked — and if it is \
+             the LAST variant, the contiguity assert below cannot see it.",
+            samples.len()
+        );
+        assert!(
+            samples.len() < 128,
+            "{} variants: postcard's varint discriminant no longer fits one \
+             byte, so encoded[0] is not the whole index and this test is \
+             reading a prefix",
+            samples.len()
+        );
+
+        let mut seen: Vec<u8> = Vec::new();
+        for (msg, name) in &samples {
+            let encoded = postcard::to_allocvec(msg).expect("encode sample");
+            let actual = encoded[0];
+            let expected = pinned_discriminant(msg);
+            assert_eq!(
+                actual, expected,
+                "{name} encodes as discriminant {actual}, pinned at {expected}. \
+                 A peer built before this change reads frame {actual} as \
+                 whatever variant IT has at that index. See pinned_discriminant's \
+                 doc before touching the literal."
+            );
+            seen.push(actual);
+        }
+
+        // THE TRAILING-VARIANT PROBE, and the only check here that cannot go
+        // stale alongside the thing it guards. DECLARED_VARIANTS and the
+        // sample list are both hand-maintained, so an author who adds a
+        // variant and updates NEITHER leaves them agreeing with each other
+        // (32 == 32) while the enum has 33 — measured: that mutation passed
+        // 64/64 green against the count assert alone.
+        //
+        // The decoder cannot be fooled that way. If index DECLARED_VARIANTS
+        // is a real variant, this frame DECODES; on an enum that genuinely
+        // stops at DECLARED_VARIANTS - 1 it must be an unknown-variant error.
+        // So this asks the wire itself how many variants exist, rather than
+        // asking a number that someone had to remember to change.
+        let one_past_the_end = [DECLARED_VARIANTS as u8, 0, 0, 0, 0, 0, 0, 0, 0];
+        assert!(
+            postcard::from_bytes::<ControlMessage>(&one_past_the_end).is_err(),
+            "discriminant {DECLARED_VARIANTS} decoded successfully, so the enum \
+             has at least {} variants while DECLARED_VARIANTS says \
+             {DECLARED_VARIANTS}. A variant was added without being pinned or \
+             sampled.",
+            DECLARED_VARIANTS + 1
+        );
+
+        seen.sort_unstable();
+        let expected_set: Vec<u8> = (0..samples.len() as u8).collect();
+        assert_eq!(
+            seen, expected_set,
+            "sampled discriminants are not contiguous from 0: a variant is \
+             declared and pinned but never sampled, so it is unchecked"
+        );
     }
 
     #[test]

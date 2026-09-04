@@ -33,6 +33,20 @@
 #     script; the refusal was correct about the letter and wrong about the
 #     intent, and a gate that makes the honest path harder than the escape
 #     hatch is worse than no gate;
+#   * a closure naming a `cargo test` invocation — same argument as the
+#     script form, and ADDED for the same reason it was (1033-ev5r). This gate
+#     refused a packet whose closure was
+#     `cargo test -p tillandsias-headless --test vsock_listener_e2e ... passes`.
+#     That verdict is as mechanical as a script's: it is a command with an exit
+#     code, runnable by anyone, and a reader can check it without asking the
+#     author what they meant. The author's available moves under the old
+#     grammar were to invent a `scripts/` wrapper that does nothing but shell
+#     out to cargo, or to write `unscoreable:` about a row that is plainly
+#     scorable. Both are worse records than the cargo line. This is the
+#     994-8r3w lesson recurring in a second dialect, which is itself the
+#     argument for stating the PRINCIPLE — a closure is scorable when it names
+#     something mechanically checkable — rather than accumulating a list of
+#     blessed prefixes;
 #   * an explicit `unscoreable: <reason>` — a STATED refusal.
 #
 # THE SECOND IS NOT A LOOPHOLE, IT IS THE POINT. Some rows genuinely close by
@@ -92,7 +106,7 @@ while IFS= read -r f; do
         pid="${block%%$'\x1f'*}"
         body="${block#*$'\x1f'}"
         case "$body" in
-            *litmus:*|*unscoreable:*|*scripts/*.sh*)
+            *litmus:*|*unscoreable:*|*scripts/*.sh*|*cargo\ test*)
                 # SCORABLE. Now the SECOND question, which is a different one:
                 # is the score it will produce COMPARABLE with the previous run?
                 # A row that tombstones an obligation changes the denominator
