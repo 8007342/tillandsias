@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: diagnose-reports-healthy-during-a-total-outage
+    event:
+      type: progress
+      ts: "2026-09-04T23:26:31Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260904t221329z
+      host: tlatoanis-macbook-air
+      summary: |-
+        CORRECTION TO MY OWN PROGRESS EVENT OF 23:17Z. I recorded slice (a) as reproduced and landed. ONLY ONE OF ITS FOUR BULLETS LANDED. a5b05f8a5 is genuinely on origin and diagnose.rs is genuinely complete -- format_utc, humanize_age, both guards, three RECORDED lines -- and every check run against the remote was correct. The claim those checks were attached to was not. UNLANDED, caught by macneo and confirmed by me on origin/osx-next: scripts/tray-diagnose.sh still prints 'HEALTHY -- image-root provisioned, ready to boot VM' and exits 0 from $provisioned alone; openspec/specs/macos-native-tray/spec.md:384 still reads '- `0` -- provisioned and healthy'. THIS IS WORSE THAN A PARTIAL LANDING AND THE PACKET MUST NOT CLOSE ON IT. Before today tray-diagnose.sh and --diagnose AGREED and were both wrong; now they DISAGREE and the one an operator reaches for first is the one that lies -- the tray says 'RECORDED, not observed, no live probe was made' while the shipped support tool says 'HEALTHY, ready to boot VM'. And spec.md:384 now contradicts the implementation it specifies, the spec being the durable artifact. Landing the honest half CREATED the inconsistency. WHY IT HAPPENED, without the flattering version: macneo offered that their record foregrounded the Rust and that the handoff was at fault. The four bullets were in the commit message I read. I landed one and reported the slice; had I judged two out of scope the report had to NAME them, and instead it implied four. THE GENERAL FORM, which is this cycle's own lesson turned on its author: I verified the ARTIFACT I built (ancestor check, three RECORDED lines, ls-remote) and treated that as verification of the CLAIM (slice (a) reproduced). The evidence was real and answered a narrower question than the sentence it was attached to -- the same shape as the discriminant pin whose contiguity assert answered a narrower question than its docstring claimed, shipped by me four hours earlier. macneo holds 7547cbec6 until ALL FOUR bullets are on origin and is relaying both hunks verbatim; their text will be landed rather than a reconstruction, because the tray-diagnose.sh change carries a jq subtlety (`//` fires on false, so a not-running tray reports 'unknown') that rewriting from a description is exactly how one loses -- and it matters more now that diagnose.rs emits tray_process_running on origin.

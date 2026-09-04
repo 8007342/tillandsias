@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: check-host-tools-measures-operator-environment-not-the-tool
+    event:
+      type: evidence
+      ts: "2026-09-04T23:25:52Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260904t221329z
+      host: tlatoanis-macbook-air
+      summary: |-
+        METHOD FOR THE NEXT HOST, appended at the coordinator's instruction because a method that lives in a message is the landmark that gets lost. This is how to isolate the coreutils variable in fault 1's arm; run BOTH arms or neither, because the first alone does not license a causal claim. Build the farm exactly as scripts/test-host-tools.sh farm() does -- a directory of symlinks to every tool the checks might reach (git jq cargo rustc rustup gh timeout gtimeout pkg-config curl shasum sha256sum plutil codesign xcrun podman python3 ruby awk sed grep tar gzip xz find sort head tail wc basename dirname mktemp chmod cp mv rm ln ls cat printf date hostname uname id stat openssl ssh-keygen nc pgrep lsof file diff comm tr cut env bash sh), skipping the named tools. ARM 1, timeout AND gtimeout skipped. ARM 2, THE CONTROL, identical construction with nothing skipped. Assert the negative control first -- PATH=$farm command -v timeout must FAIL -- or arm 1 is vacuous and proves nothing. Record the token state at the moment of the run (gh auth status), because it is the hidden variable this whole fault is about. MEASURED 2026-09-04 on tlatoanis-macbook-air with a VALID keyring token: arm 1 -> 'blocked:gh-cli-only' rc=1; arm 2 -> 'ok:gh-keyring-push-verified' rc=0. WHY THE CONTROL IS NOT OPTIONAL: arm 1's own message says the PUSH PROBE failed ('gh auth is green but a bounded non-interactive push probe failed'), and the farm replaces PATH wholesale, so a dozen unrelated breakages would produce the same verdict. blocked:gh-cli-only appearing is a PROXY for 'the missing timeout caused it' until arm 2 rules the proxy out. One variable, two verdicts, same host and token minutes apart is what licenses the causal claim.

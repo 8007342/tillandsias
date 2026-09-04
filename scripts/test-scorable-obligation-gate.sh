@@ -180,6 +180,84 @@ check "prose about testing is still refused" "violation:scorable-obligation-miss
       Someone should test this properly and confirm the behaviour is right.
 ')"
 
+# 1036-w2kd. LENOVINHA'S TWO SENTENCES, the second-host review of 1033-ev5r.
+# These are the negative controls the widening actually needed and did not get:
+# the original "prose about testing" arm avoided the literal string, so it
+# exercised the shape that was ALREADY refused rather than the one the widening
+# newly admitted. A sabotage arm that cannot reach the new code path proves
+# nothing about it.
+check "prose merely MENTIONING the tool is refused" "violation:scorable-obligation-missing:1" \
+  "$(run_in_fixture 'packets:
+  - packet_id: mentions-cargo-in-prose
+    order: 999-jjjj
+    status: ready
+    verifiable_closure: |
+      We have not run '"${C}"' on this yet; someone should before v0.6.
+')"
+
+# The nastier of the two: a closure saying IN PLAIN ENGLISH that the row is
+# unscoreable, which passed the gate whose entire purpose is to make that
+# statement explicit and greppable.
+check "prose saying the row is unscoreable is refused" "violation:scorable-obligation-missing:1" \
+  "$(run_in_fixture 'packets:
+  - packet_id: says-unscoreable-in-prose
+    order: 999-kkkk
+    status: ready
+    verifiable_closure: |
+      This is hard to verify; '"${C}"' would not cover it, so judgement is required.
+')"
+
+# THE HOLE WAS NOT NEW, which is why the fix anchors all four patterns rather
+# than narrowing the one that was added. `*scripts/*.sh*` admitted the same
+# shape long before `cargo test` did; `cargo test` merely appears in prose far
+# more often.
+check "prose mentioning a script is refused too" "violation:scorable-obligation-missing:1" \
+  "$(run_in_fixture 'packets:
+  - packet_id: mentions-script-in-prose
+    order: 999-llll
+    status: ready
+    verifiable_closure: |
+      We never wrote scripts/foo.sh for this and probably should.
+')"
+
+# POSITIVE CONTROL FOR THE ANCHORING ITSELF. Without this, the three arms above
+# are satisfied by a gate that refuses everything.
+check "a closure LEADING with the command still passes" "ok:scorable-obligations:1 checked" \
+  "$(run_in_fixture 'packets:
+  - packet_id: leads-with-command
+    order: 999-mmmm
+    status: ready
+    verifiable_closure: |
+      '"${C}"' -p some-crate --test some_target passes green at a clean HEAD.
+')"
+
+check "a bash-prefixed script closure still passes" "ok:scorable-obligations:1 checked" \
+  "$(run_in_fixture 'packets:
+  - packet_id: leads-with-bash-script
+    order: 999-nnnn
+    status: ready
+    verifiable_closure: |
+      bash scripts/test-something.sh prints PASS at a clean HEAD.
+')"
+
+# 1036-jamx. NEGATIVE CONTROL FOR THE TOMBSTONE SCAN, from a real false
+# positive: a packet DESCRIBING this mechanism ("the tombstone/regime scan
+# still needs the flattened body") was reported as tombstoning an obligation.
+# Same defect as the scorable patterns had, in the sibling arm of the same
+# script. A note nobody can trust is a note everybody learns to skip.
+out_tsref="$(run_in_fixture "packets:
+  - packet_id: mentions-the-mechanism
+    order: 999-oooo
+    status: ready
+    verifiable_closure: |
+      ${C} -p x --test y passes.
+    notes: this row explains how the tombstone/regime scan reads the body
+")"
+case "$out_tsref" in
+    *"regime-broken"*) fail=$((fail+1)); echo "FAIL: prose REFERRING to tombstoning is not a tombstone"; echo "  got=[$out_tsref]" ;;
+    *) pass=$((pass+1)) ;;
+esac
+
 total=$((pass+fail))
 if [ "$fail" -eq 0 ]; then
     echo "PASS: scorable-obligation gate $pass/$total (977-448j)"
