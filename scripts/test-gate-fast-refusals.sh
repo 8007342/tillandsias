@@ -54,11 +54,32 @@ fi
 # Each guard the phase claims must be invoked exactly once in build.sh — a
 # duplicate would run the check twice per gate, which is how a "move" that was
 # really a copy hides.
+#
+# COUNT INVOCATIONS, NOT MENTIONS. The first draft grepped for the bare script
+# name and immediately produced a false positive: 1034-ihxw added a comment
+# explaining why check-declared-closures-added.sh is deliberately NOT hoisted,
+# and the prose mention counted as a second call site. That is the same defect
+# the 901-jtvi lint had to fix — a rule keyed on a string appearing rather than
+# on a caller — reproduced here within hours. Match the `_run bash ...` form.
 for g in check-scorable-obligation-added check-issue-citation-convention \
-         check-script-exec-bits check-declared-closures-added check-litmus-pin-claims; do
-    n="$(/usr/bin/grep -c "$g\.sh" build.sh 2>/dev/null || echo 0)"
-    [ "$n" = "1" ] || bad "$g.sh appears $n times in build.sh (expected exactly 1)"
+         check-script-exec-bits check-litmus-pin-claims; do
+    n="$(/usr/bin/grep -cE "_run bash .*$g\.sh" build.sh 2>/dev/null || echo 0)"
+    [ "$n" = "1" ] || bad "$g.sh is invoked $n times in build.sh (expected exactly 1)"
 done
+
+# 885-92iu is the exception, and the exception is the point (1034-ihxw): it
+# degrades to a SKIP when `tillandsias-plan` is unbuilt, so hoisting it above
+# the build turned a gate into a no-op on a cold tree. It must be invoked
+# exactly once and AFTER the first compile.
+_dc="$(/usr/bin/grep -nE '_run bash .*check-declared-closures-added\.sh' build.sh 2>/dev/null | head -1 | cut -d: -f1)"
+_dc_n="$(/usr/bin/grep -cE '_run bash .*check-declared-closures-added\.sh' build.sh 2>/dev/null || echo 0)"
+if [ "$_dc_n" != "1" ]; then
+    bad "check-declared-closures-added.sh is invoked $_dc_n times (expected exactly 1)"
+elif [ -n "$_dc" ] && [ -n "$_clippy_line" ] && [ "$_dc" -gt "$_clippy_line" ]; then
+    ok "885-92iu stays AFTER the first compile (it skips without a built binary)"
+else
+    bad "885-92iu is invoked at line $_dc, at or before the first compile ($_clippy_line) — it would skip on a cold tree"
+fi
 [ "$fail" -eq 0 ] && ok "each hoisted guard is invoked exactly once"
 
 # ── the behavioural arm, opt-in ─────────────────────────────────────────────

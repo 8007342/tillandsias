@@ -1629,10 +1629,20 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
 
-    if ! _run bash "$SCRIPT_DIR/scripts/check-declared-closures-added.sh" 2>&1; then
-        _error "an added fragment's declared closure does not resolve (885-92iu) — see the verdict line above"
-        exit 1
-    fi
+    # NOT HERE: check-declared-closures-added.sh (885-92iu). It was hoisted in
+    # the first cut of 1009-gccx and that was WRONG — caught by yoga, confirmed
+    # by measurement here. It resolves a built `tillandsias-plan` and, when the
+    # binary is absent, emits `note: tillandsias-plan not built — declared-closures
+    # gate skipped` and PASSES. Nothing builds that binary before this phase, so
+    # hoisting it converted a gate into a no-op on any cold tree: exactly the
+    # "wired in name only" state this order exists to remove, introduced by the
+    # order itself. It stays in the body, after the workspace build, where it
+    # has a binary to resolve.
+    #
+    # THE RULE THIS ADDS to "median under a second, decidable from the working
+    # tree alone": a guard that DEGRADES TO A SKIP when a build artefact is
+    # missing must not be hoisted above the build. Speed is not the only axis —
+    # a faster check that cannot fail is worse than a slow one that can.
 
     if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-pin-claims.sh" 2>&1; then
         _error "a litmus pin claim does not resolve or execute (721-77yu) — see the verdict line above"
@@ -2640,6 +2650,17 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # while three slices landed against it and this gate stayed green.
     # Diff-scoped: standing debt is REPORTED by `tillandsias-plan
     # declared-closures` (exit 0), never redded here.
+
+    # ORDER 885-92iu, restored to the body by 1034-ihxw after 1009-gccx hoisted
+    # it in error. It resolves a built `tillandsias-plan`; with no binary it
+    # emits `note: tillandsias-plan not built` and PASSES, so above the build it
+    # is a no-op rather than a gate. It runs here, where a binary exists.
+    _step "Checking that added fragments' declared closures resolve (885-92iu)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-declared-closures-added.sh" 2>&1; then
+        _error "this change files a packet whose verifiable_closure names a litmus test that does not resolve (885-92iu)"
+        exit 1
+    fi
+    _info "Declared-closure resolution check passed"
 
     # ORDER 977-448j. The GATE for this (moved to the fast-refusal phase near the
     # top of --check by 1009-gccx) refuses a NEW packet whose closure names a
