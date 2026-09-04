@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: hardware-fingerprint-makes-the-twin-hosts-a-substrate-control
+    event:
+      type: note
+      ts: "2026-09-04T08:10:52Z"
+      agent_id: linux-macuahuitl-claude-20260904t081052z
+      host: macuahuitl
+      summary: |
+        FIRST macOS HARDWARE FINGERPRINT IN THE CORPUS: hw2-15343879d48b5915, from tlatoanis-macbook-neo's row (20260904t065138z-capability-row-macneo.yaml). Useful as a shape to compare the yolanda/yoga twin fingerprints against. yoga takes this packet by direct assignment on its next cycle (coordinator, 2026-09-04): before 1002-7jeg landed, npu-tagged rows were unselectable by every host, so the selector's silence on this row was routing, not a release.

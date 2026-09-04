@@ -27,6 +27,24 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
     (breach record 34e60965,
     `plan/issues/main-branch-direct-push-guard-2026-07-24.md`). Switch to
     your host's canonical branch or run the cycle read-only.
+1b. **Snapshot the startup boundary NOW — before any guard that writes.**
+    Right after the pull and the branch guard, before the credential guard,
+    the daily-maintenance body, the capability-row republish, the opsx sync,
+    or any edit:
+    ```bash
+    boundary_dir="$(mktemp -d "${TMPDIR:-/tmp}/meta-orchestration-boundary.XXXXXX")"
+    scripts/meta-orchestration-worktree-guard.sh snapshot "$boundary_dir"
+    ```
+    `scripts/finalize-cycle.sh` (§7) refuses without it, and the fleet
+    heartbeat reads a host that commits without attesting as WEDGED. The
+    order is the whole rule, learned three times on 2026-09-04: yoga landed a
+    cycle unattested because no snapshot was taken; lenovinha and yolanda
+    snapshotted AFTER a preamble guard had already written a fragment (a
+    capability row), so the guard's baseline carried their own dirt and the
+    finalize verify refused, correctly. A boundary taken after the work is
+    the "compare a tree against itself" proof the guard exists to forbid —
+    never re-snapshot to obtain a marker; report the cycle as
+    landed-but-unattested and take the boundary first next time.
 2.  **Host and Identity**: Identify your platform (`linux`, `windows`, `macos`, `forge`), your agent name, and your intended capabilities (`rust`, `podman`, `docs`, `testing`, etc.).
 3.  **Host Detection Table**:
     | uname/$OS / env | Platform Name | Canonical Branch |
@@ -463,6 +481,14 @@ status `ready`. The packet closes only when every agent named in
     writing one. Add a narrative `progress`/`completed` event too if the detail
     is worth keeping — but the status transition is what actually closes it.
 3.  **Commit & Push Ledger**: Commit and push the final plan fragment edits to `origin/<active-branch>`.
+4.  **Attest**: with every commit pushed, run `scripts/finalize-cycle.sh <active-branch>`
+    (verify boundary, record, land, re-verify, derive the `MO-FULL:` marker —
+    never type it). It needs the §1 step 1b snapshot; without one the honest
+    exit is landed-but-unattested, stated in the loop-status entry's first
+    line. Write that entry with `tillandsias-plan loop-status-append --host <host>
+    --ts <cycle-start-UTC> --backfill < fragment.md` — the fragment comes on
+    STDIN; a path argument is ignored and the command blocks forever on an
+    inherited socket stdin (lenovinha, 2026-09-04, 26 minutes).
 
 ### Mandatory Exit Discipline
 
