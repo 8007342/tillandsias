@@ -1,0 +1,67 @@
+packets:
+  - packet_id: yoga-proxy-key-secret-desynced-from-the-regenerated-ca
+    order: 1023-czw6
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    title: "yoga's proxy key secret is 21h older than its CA bundle, so squid would die naming neither file"
+    status: ready
+    kind: bug
+    priority: p2
+    deliverable: the desync cleared on yoga, and a statement of whether the launch path closes it unaided or the operator must act
+    depends_on: []
+    pickup_role: linux
+    capability_tags: [enclave, ca, podman, proxy]
+    estimated_hours: 2
+    unscoreable: >
+      pre-fix result: FAILS — scripts/check-enclave-ca-consistency.sh returns
+      `desync:enclave-ca-key-secret` rc=1 on yoga right now, and that guard IS
+      the pin. It is newly wired into litmus:ca-ephemeral by this cycle's
+      1022-y7kc work, but that spec is size:e2e and needs a live enclave, so
+      naming it as a verifiable_closure would point at a lane that does not run
+      on a dev host. The closure is the guard returning ok:enclave-ca-consistent
+      on this host; stating it here rather than dressing a host-state
+      observation as a litmus obligation.
+    outcome: >
+      Found 2026-09-04 on yoga while wiring the orphaned guards for 1022-y7kc
+      cause 2. MEASURED: `scripts/check-enclave-ca-consistency.sh` returns
+      `desync:enclave-ca-key-secret` rc=1. The cause is visible in the two
+      timestamps — $HOME/.local/state/tillandsias/ca/intermediate.{crt,key}
+      were written at 06:37 today, while the podman secret `tillandsias-ca-key`
+      is 21 hours old. The proxy binds the cert by path and reads the key from
+      the secret, so they no longer match.
+      THIS IS THE GUARD BEING RIGHT, and the reason it exists. squid does not
+      say "your key is stale": it starts, fails X509_check_private_key(), and
+      prints "No valid signing certificate configured" — a message naming
+      NEITHER the certificate nor the key, which is why this failure reads as a
+      proxy bug and sends the reader at the wrong subsystem. Order 975-rsgm is
+      the standing record of that misreading.
+      LIKELY HOST STATE RATHER THAN A TRUNK DEFECT, and the packet says likely
+      rather than certainly because I did not verify the remedy. The guard's
+      own remediation says ensure_proxy_ca_key_secret refreshes the secret with
+      --replace on the LAUNCH path, so re-running the enclave orchestration
+      should clear it; a bare `podman start` will not, which is 975-rsgm's
+      order. I did not run the orchestration this cycle — it is not the
+      cycle's work, and re-running it to make a red disappear before
+      understanding it is how a real defect gets absorbed as a hiccup.
+      WHY IT MATTERS BEYOND ONE HOST: this is the exact desync
+      cycle-preflight warns about ("regenerating the bundle alone leaves the
+      proxy's key secret stale"), and yoga reached it by ordinary use — the CA
+      bundle was regenerated this morning during the 520 cycle. Any host whose
+      bundle is regenerated without a launch is one command from the same
+      state, and until now nothing on any activation surface would have said
+      so, because the guard that detects it was orphaned.
+    exit_criteria:
+      - "scripts/check-enclave-ca-consistency.sh returns ok:enclave-ca-consistent on yoga"
+      - "the record states whether the launch path cleared it unaided or an operator step was required — a remedy that was not observed working is not a remedy"
+      - "if the launch path does NOT clear it, the gap is filed against the launch path rather than left as a per-host chore"
+    events:
+      - type: progress
+        ts: "2026-09-04T14:06:59Z"
+        agent_id: "linux-yoga-claude-20260904t140107z"
+        host: yoga
+        summary: >
+          Filed from the 1022-y7kc guard wiring. The guard was orphaned, so
+          this state existed undetected until it was invoked for the first
+          time. Not cleared this cycle on purpose: the remedy is documented but
+          unobserved, and clearing a red before understanding it is how a
+          defect becomes a hiccup.

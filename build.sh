@@ -2728,6 +2728,25 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Approved-UX-string gate passed"
 
+    # ORDER 1022-y7kc cause 2. An orphaned guard is fixed by INVOKING it
+    # (865-n8vq): a guard with no caller on any activation surface is a file
+    # that looks like protection and provides none, and audit-guard-activation
+    # fails --ci-full on exactly that. Both of these are STATIC — they read
+    # source and nothing else — so --check is their surface.
+    _step "Checking the CA path has one declaration (998-3z6g)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-ca-path-literals.sh" 2>&1; then
+        exit 1
+    fi
+
+    # 967-6ax6 criterion 1. Ratchets the container NAME the accel-proof
+    # producers look for against the name dev-inference-ensure.sh creates. It
+    # reads source only; the one `podman exec` in the file is prose describing
+    # the 2026-09-02 defect, not a call, so this does not need a live enclave.
+    _step "Checking the inference container name agrees across producers (967-6ax6)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-inference-container-name-agreement.sh" 2>&1; then
+        exit 1
+    fi
+
     _step "Checking user-visible terminology against the dictionary (629-t6bx)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-terminology.sh" 2>&1; then
         # The script names the file, the variant and the offending string, and
