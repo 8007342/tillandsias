@@ -1811,45 +1811,42 @@ WantedBy=multi-user.target
         )
         .await?;
 
-        // 5. home-forge-src.mount — targeted drvfs mount of the HOST's
-        // `%USERPROFILE%\src` at the in-VM project bind-mount convention
-        // `/home/forge/src` (see tillandsias-headless
-        // `TILLANDSIAS_IN_VM_PROJECT_ROOT`, default `/home/forge/src`).
+        // 5. HOST SRC MOUNT REMOVED (order 997-e4v2). This is where
+        // home-forge-src.mount used to be injected: a PERSISTENT drvfs (9p)
+        // mount of the Windows host's `%USERPROFILE%\src` at /home/forge/src,
+        // with global automount disabled so the mount was deliberate and
+        // targeted. It is deleted, not disabled, and nothing replaces it here.
         //
-        // This is the Windows half of the cross-host contract: macOS mounts
-        // the user's ~/src via virtio-fs; Windows mounts via drvfs (9p).
-        // Global automount stays DISABLED (`[automount] enabled=false` in
-        // wsl.conf, zero-trust posture) — only the src tree is exposed.
-        // Cloud checkouts (`tillandsias-headless --cloud owner/repo`) land
-        // here, i.e. directly in the host's ~/src, and the forge container
-        // volume-mounts the per-project subdir — host→VM→container, the same
-        // transparent chain as the Linux native tray's local ~/src.
+        // WHY IT WENT. The fleet decided to drop the host checkout and go
+        // cloud-only — Cloud > Project > Agent launches a forge on the
+        // ephemeral GitHub -> GitMirror -> Forge chain with no host disk in it.
+        // The unit's own comment admitted Cloud and Local were never separate
+        // paths: cloud checkouts landed "directly in the host's ~/src" and the
+        // container volume-mounted the per-project subdir, so two menus reached
+        // one host directory. Keeping it also collided with the operator's own
+        // home checkouts on .git and .config.
         //
-        // Unit name MUST be the systemd-escaped Where= path
-        // (/home/forge/src → home-forge-src.mount) or systemd refuses it.
-        // @trace spec:host-shell-architecture, spec:remote-projects
-        if let Ok(profile) = std::env::var("USERPROFILE") {
-            let host_src = format!("{}\\src", profile.trim_end_matches('\\'));
-            let mount_unit = format!(
-                "[Unit]\n\
-                 Description=Host ~/src (drvfs) at the in-VM project root convention\n\
-                 [Mount]\n\
-                 What={host_src}\n\
-                 Where=/home/forge/src\n\
-                 Type=drvfs\n\
-                 Options=rw,noatime,metadata\n\
-                 [Install]\n\
-                 WantedBy=multi-user.target\n"
-            );
-            self.wsl_root_write(
-                "/etc/systemd/system/home-forge-src.mount",
-                &mount_unit,
-                false,
-            )
-            .await?;
-        } else {
-            tracing::warn!("USERPROFILE not set; skipping home-forge-src.mount injection");
-        }
+        // AND IT WAS DESTRUCTIVE. drvfs reports every file as uid 1000 while
+        // the headless evaluates as root, so `git rev-parse` exited 128 with
+        // "dubious ownership", the checkout predicate read that as INVALID, and
+        // healthy trees were renamed aside — esmeraldinha accumulated ten
+        // between Aug 25 and Sep 2, `git fsck` clean on every one, each rename
+        // also destroying that checkout's repo-local .gh-credentials.
+        //
+        // ORDER: the per-launch tmpfs had to exist FIRST. forge-hot-cold-split
+        // mandates /home/forge/src be a kernel tmpfs sized by
+        // compute_hot_budget(); that is wired at the live launch site in
+        // tillandsias-headless (`forge_hot_src_tmpfs`). Removing this mount
+        // before that landed would have left a forge with no project source at
+        // all — hence tmpfs first, mount second, never mount-first.
+        //
+        // FORWARD-ONLY, by operator ruling 2026-09-03: an existing ~/src on any
+        // disk is IGNORED and left to rot. No migration, no detection, no
+        // warning, no cleanup pass, and deliberately no `systemctl disable` for
+        // a unit an older build already enabled — there are no users in the
+        // wild, so compatibility code here would be cost with zero benefit.
+        // A host that still has the unit keeps it until its VM is rebuilt.
+        // @trace order:997-e4v2, spec:forge-hot-cold-split
 
         // Persist vsock_loopback so it survives WSL2 restarts, and load it
         // HERE -- before the units below are started.
@@ -1913,8 +1910,7 @@ WantedBy=multi-user.target
             // provisioning waiting on it.
             "systemctl daemon-reload && systemctl enable --now podman.socket tillandsias-headless-fetch.service tillandsias-headless.service && \
              systemctl enable tillandsias-headless-ready.service && \
-             { systemctl start --no-block tillandsias-headless-ready.service 2>/dev/null || true; } && \
-             { systemctl enable --now home-forge-src.mount 2>/dev/null || true; }",
+             { systemctl start --no-block tillandsias-headless-ready.service 2>/dev/null || true; }",
         )
         .await?;
 
@@ -2177,6 +2173,83 @@ fn parse_headless_version(stdout: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// ORDER 997-e4v2, slice 2. The host `~/src` drvfs mount is GONE from
+    /// provisioning, and this asserts it about the CODE rather than the file.
+    ///
+    /// The distinction is load-bearing here and this file has been bitten by
+    /// the other side of it before (601-462g: a stale ExecStartPost wording
+    /// that made a `grep -c` report 1). The deletion deliberately leaves a long
+    /// comment explaining what `home-forge-src.mount` was and why it went, so a
+    /// naive `!source.contains("home-forge-src.mount")` would fail on the
+    /// explanation — and, worse, would pressure a future reader to delete the
+    /// record to make the test pass. Strip the comments first; what remains is
+    /// what provisioning actually does.
+    ///
+    /// @trace order:997-e4v2
+    #[test]
+    fn provisioning_never_injects_the_host_src_drvfs_mount() {
+        // Scope to the PRODUCTION half. The assertions below necessarily quote
+        // the unit name, so a whole-file scan would match this test's own
+        // source and fail no matter what provisioning does — a check that can
+        // only fail is as useless as one that can only pass.
+        let source = include_str!("wsl_lifecycle.rs");
+        let production = source
+            .split("#[cfg(test)]")
+            .next()
+            .expect("the file has a production half");
+        let code: String = production
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(
+            !code.contains("home-forge-src.mount"),
+            "provisioning must not write, enable, or otherwise name the host \
+             ~/src mount unit in CODE — Cloud is the only project path now, on \
+             the ephemeral GitHub -> GitMirror -> Forge chain (997-e4v2). The \
+             explanatory comment naming it is expected and is not code."
+        );
+        assert!(
+            !code.contains("USERPROFILE") || !code.contains("drvfs"),
+            "the host profile directory must not be re-exposed to the guest by \
+             any other name (997-e4v2)"
+        );
+
+        // FORWARD-ONLY, by operator ruling 2026-09-03: an existing ~/src and an
+        // already-enabled unit are IGNORED and left to rot. No migration, no
+        // detection, no warning, no cleanup — there are no users in the wild.
+        // A `systemctl disable` here would be exactly the compatibility code
+        // the ruling forbids, so its ABSENCE is part of the deliverable and is
+        // pinned rather than left to reviewer memory.
+        assert!(
+            !code.contains("systemctl disable"),
+            "the ruling is forward-only: do NOT add cleanup for a unit an older \
+             build enabled. An existing mount is left alone until the VM is \
+             rebuilt (997-e4v2)."
+        );
+    }
+
+    /// The tmpfs that replaced it must exist before this deletion is safe.
+    ///
+    /// Slice 1 wired `/home/forge/src` as a per-launch tmpfs in the headless
+    /// launch path; removing the mount without it leaves a forge with no
+    /// project source at all. The two halves live in different crates, so
+    /// nothing but this assertion keeps a future revert of slice 1 from
+    /// silently re-opening that hole from the other side.
+    ///
+    /// @trace order:997-e4v2, spec:forge-hot-cold-split
+    #[test]
+    fn the_replacement_hot_path_exists_in_the_headless_launcher() {
+        let headless = include_str!("../../tillandsias-headless/src/main.rs");
+        assert!(
+            headless.contains("fn forge_hot_src_tmpfs"),
+            "the per-launch /home/forge/src tmpfs is what makes removing the \
+             drvfs mount safe; if it is gone, this deletion has left the forge \
+             with no project source (997-e4v2, tmpfs first / mount second)"
+        );
+    }
 
     #[test]
     /// The drift class this generator exists to remove: every package must
@@ -2835,7 +2908,7 @@ mod tests {
         // race was in this function's statement order, so the fix is this
         // function's statement order, and THAT is what this pins.
         let provision_window = source
-            .split("// 5. home-forge-src.mount")
+            .split("// 5. HOST SRC MOUNT REMOVED")
             .nth(1)
             .and_then(|tail| tail.split("// Phase 3d:").next())
             .expect("provision window");
