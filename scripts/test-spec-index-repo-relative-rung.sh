@@ -66,9 +66,9 @@ got="$( cd "$FAKE_CO" && env -i HOME="$WORK/home" PATH="$WORK/bin:$PATH" PWD="$F
     || bad "the repo rung captured a host whose podman volume rung was valid: got '$got' want '$VOL'"
 
 echo "== arm 3 (NEGATIVE): a non-writable checkout falls through to the HOME rung =="
-RO_CO="$WORK/readonly"; mkdir -p "$RO_CO/plan" "$RO_CO/target"; : > "$RO_CO/plan/index.yaml"
-chmod -w "$RO_CO/target" 2>/dev/null || true
-if [ -w "$RO_CO/target" ]; then
+RO_CO="$WORK/readonly"; mkdir -p "$RO_CO/plan" "$RO_CO/.cache"; : > "$RO_CO/plan/index.yaml"
+chmod -w "$RO_CO/.cache" 2>/dev/null || true
+if [ -w "$RO_CO/.cache" ]; then
     # chmod is a no-op on some filesystems (drvfs, core.fileMode=false). Say so
     # rather than reporting a pass the environment could not have produced.
     ok "SKIP(read-only bit not representable here): cannot stage a non-writable checkout"
@@ -81,14 +81,14 @@ else
     [ "$got" = "$WORK/xdg/tillandsias/spec-index" ] \
         && ok "a read-only checkout falls through to XDG (got $got)" \
         || bad "a read-only checkout captured resolution: got '$got'"
-    chmod +w "$RO_CO/target" 2>/dev/null || true
+    chmod +w "$RO_CO/.cache" 2>/dev/null || true
 fi
 
 echo "== arm 4 (POSITIVE): with no podman and no explicit root, the rung anchors to the checkout =="
 got="$(_root XDG_CACHE_HOME="$WORK/xdg" TILLANDSIAS_SPEC_INDEX_NO_PODMAN=1)"
-[ "$got" = "$FAKE_CO/target/tillandsias-spec-index" ] \
+[ "$got" = "$FAKE_CO/.cache/spec-index" ] \
     && ok "repo-relative rung resolves under the checkout (got $got)" \
-    || bad "expected '$FAKE_CO/target/tillandsias-spec-index', got '$got'"
+    || bad "expected '$FAKE_CO/.cache/spec-index', got '$got'"
 
 echo "== arm 5 (THE BUG): two different HOMEs resolve to ONE root =="
 # This is 931-p26p reduced to its essence — the producer and the reader differ
