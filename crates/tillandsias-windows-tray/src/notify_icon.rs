@@ -1576,6 +1576,108 @@ async fn live_client_request(
 /// WSL install root so it is per-installation and survives a tray restart.
 ///
 /// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+/// The `Guest health:` block for `--diagnose`.
+///
+/// ORDER 1032-utne. This printed `Guest health: <verdict>` and nothing else.
+/// The verdict is a PURE DISK READ of crashloop.state — no live probe is made
+/// and the file can be arbitrarily old — so a bare verdict reads as a statement
+/// about the guest RIGHT NOW when it is a statement about whenever that file
+/// was last written.
+///
+/// MEASURED on yolanda against the shipped v56.9.2.1 binary with a
+/// crashloop.state aged five days: `Guest health: healthy`. No source, no age,
+/// no hint that nothing had been contacted. macneo found the same defect on
+/// macOS under 980-ja2m, where `healthy` printed with no VM running for 70s,
+/// five days after the file was written.
+///
+/// The LABEL is kept because two parity surface tests pin the literal
+/// (macos-tray and windows-tray main.rs:402); what changes is the sentence
+/// after it. `crash-loop:<subsystem>` is preserved VERBATIM inside the framing
+/// so `verdict_matches_grammar` still describes the verdict token.
+///
+/// An absent or unreadable file yields age UNKNOWN and never a fresh-looking
+/// verdict: `load` returns a DEFAULT detector on any read error, so without
+/// this the absence of state prints `starting` as confidently as an
+/// observation would.
+///
+/// @trace order:1032-utne, order:980-ja2m
+fn guest_health_lines(state_path: &std::path::Path, now_unix: u64) -> String {
+    let mut det = tillandsias_control_wire::crashloop::CrashLoopDetector::load(state_path);
+    let verdict = det.verdict(now_unix).verdict();
+    let written = std::fs::metadata(state_path)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs());
+    let provenance = match written {
+        Some(w) => format!(
+            "(crashloop.state, written {}, {} ago)",
+            format_unix_utc(w),
+            format_age(now_unix.saturating_sub(w))
+        ),
+        None => "(crashloop.state, age UNKNOWN - file absent or unreadable)".to_string(),
+    };
+    format!(
+        "Guest health: RECORDED, not observed - last recorded verdict \"{verdict}\" {provenance}\nNo live probe was made; this report cannot contact the guest."
+    )
+}
+
+/// `secs` as a coarse human age. Coarse deliberately: the question is "minutes
+/// or days", and a precise figure invites reading the number as freshness.
+fn format_age(secs: u64) -> String {
+    match secs {
+        s if s < 90 => format!("{s}s"),
+        s if s < 5400 => format!("{}m", s / 60),
+        s if s < 172_800 => format!("{}h", s / 3600),
+        s => format!("{}d", s / 86400),
+    }
+}
+
+/// Unix seconds as `YYYY-MM-DDTHH:MM:SSZ` without adding a date dependency.
+fn format_unix_utc(secs: u64) -> String {
+    let days = (secs / 86_400) as i64;
+    let tod = secs % 86_400;
+    let (mut y, mut d) = (1970i64, days);
+    loop {
+        let leap = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
+        let len = if leap { 366 } else { 365 };
+        if d < len {
+            break;
+        }
+        d -= len;
+        y += 1;
+    }
+    let leap = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
+    let ml = [
+        31,
+        if leap { 29 } else { 28 },
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
+    ];
+    let mut m = 0usize;
+    while m < 12 && d >= ml[m] {
+        d -= ml[m];
+        m += 1;
+    }
+    format!(
+        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
+        y,
+        m + 1,
+        d + 1,
+        tod / 3600,
+        (tod % 3600) / 60,
+        tod % 60
+    )
+}
+
 fn crashloop_state_path() -> std::path::PathBuf {
     WslLifecycle::install_root().join("crashloop.state")
 }
@@ -2910,9 +3012,10 @@ fn print_human(r: &DiagnoseReport) {
     }
 
     println!("\n--- guest health (crash-loop detection) ---");
-    let mut det =
-        tillandsias_control_wire::crashloop::CrashLoopDetector::load(&crashloop_state_path());
-    println!("Guest health: {}", det.verdict(unix_now_secs()).verdict());
+    println!(
+        "{}",
+        guest_health_lines(&crashloop_state_path(), unix_now_secs())
+    );
 
     if !r.recent_log_tail.is_empty() {
         println!();
@@ -4220,6 +4323,131 @@ mod tests {
             !tick_timer_suppressed(true, true),
             "a user action asked for a confirming round"
         );
+    }
+
+    /// ORDER 1032-utne: the Guest health line names its SOURCE and its AGE.
+    ///
+    /// Pre-fix result, measured against the shipped v56.9.2.1 binary with a
+    /// crashloop.state aged five days: `Guest health: healthy` — a bare
+    /// verdict, no source, no age, indistinguishable from a live observation.
+    /// The file carries no write timestamp of its own, so the age can only
+    /// come from its mtime; that is why this reads metadata rather than the
+    /// state body.
+    ///
+    /// @trace order:1032-utne
+    #[test]
+    fn guest_health_line_names_its_source_and_age() {
+        let dir =
+            std::env::temp_dir().join(format!("tillandsias-1032-utne-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let path = dir.join("crashloop.state");
+        std::fs::write(
+            &path,
+            "tillandsias-crashloop-state v1\never_ready 1\nlast_phase ready\n",
+        )
+        .expect("write state");
+
+        // `now` far ahead of the file's mtime is the aged case. Using the real
+        // mtime rather than a fabricated one keeps this honest: the code path
+        // under test is the one that reads metadata.
+        let written = std::fs::metadata(&path)
+            .and_then(|m| m.modified())
+            .expect("mtime")
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("epoch")
+            .as_secs();
+        let out = guest_health_lines(&path, written + 5 * 86_400);
+
+        assert!(
+            out.starts_with("Guest health:"),
+            "the parity surface tests pin this literal; it must survive: {out}"
+        );
+        assert!(
+            out.contains("RECORDED, not observed"),
+            "the line must say the verdict is recorded, not observed: {out}"
+        );
+        assert!(
+            out.contains("crashloop.state"),
+            "the line must name its source file: {out}"
+        );
+        assert!(
+            out.contains("5d ago"),
+            "a five-day-old file must be reported as five days old: {out}"
+        );
+        assert!(
+            out.contains("No live probe was made"),
+            "the report must say it cannot contact the guest: {out}"
+        );
+
+        // THE PRE-FIX FORM MUST NOT SURVIVE. This is the guard the packet asks
+        // for: a bare `Guest health: <verdict>` line, with nothing after the
+        // verdict, is exactly what shipped and exactly what misled.
+        let first = out.lines().next().unwrap_or_default();
+        assert!(
+            first != "Guest health: healthy"
+                && first != "Guest health: starting"
+                && !first.starts_with("Guest health: crash-loop:"),
+            "the bare-verdict form is the defect and must not be printable: {first}"
+        );
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// An absent file reports age UNKNOWN and never a fresh-looking verdict.
+    ///
+    /// `CrashLoopDetector::load` returns a DEFAULT detector on any read error,
+    /// so the absence of state yields a perfectly ordinary verdict. Without
+    /// this arm the line would present `starting` for a guest it has never
+    /// heard of, with the same confidence as an observation.
+    ///
+    /// @trace order:1032-utne
+    #[test]
+    fn absent_state_reports_age_unknown_not_a_fresh_verdict() {
+        let path = std::env::temp_dir().join("tillandsias-1032-utne-absent/crashloop.state");
+        let _ = std::fs::remove_file(&path);
+        let out = guest_health_lines(&path, 1_800_000_000);
+        assert!(
+            out.contains("age UNKNOWN"),
+            "an absent file must say the age is unknown: {out}"
+        );
+        assert!(
+            out.contains("RECORDED, not observed"),
+            "and must still refuse to read as an observation: {out}"
+        );
+    }
+
+    /// The `crash-loop:<subsystem>` token survives VERBATIM inside the framing.
+    ///
+    /// The grammar `verdict_matches_grammar` describes that token, and the tray
+    /// notification path keys on it. Reframing the sentence around the verdict
+    /// must not reword the verdict itself.
+    ///
+    /// @trace order:1032-utne
+    #[test]
+    fn crash_loop_verdict_is_preserved_verbatim_inside_the_framing() {
+        let dir =
+            std::env::temp_dir().join(format!("tillandsias-1032-utne-cl-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let path = dir.join("crashloop.state");
+        let mut det = tillandsias_control_wire::crashloop::CrashLoopDetector::with_defaults();
+        for i in 0..6u64 {
+            det.record_failure(
+                tillandsias_control_wire::crashloop::CrashLoopSubsystem::VaultUnseal,
+                1_800_000_000 + i,
+            );
+        }
+        det.save(&path).expect("save");
+
+        let out = guest_health_lines(&path, 1_800_000_010);
+        assert!(
+            out.contains("crash-loop:vault-unseal"),
+            "the crash-loop token must appear verbatim, not reworded: {out}"
+        );
+        assert!(
+            tillandsias_control_wire::crashloop::verdict_matches_grammar("crash-loop:vault-unseal"),
+            "and must still satisfy the pinned verdict grammar"
+        );
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     /// ORDER 823-u5zf: the spawn decision is LOGGED, and the log agrees with
