@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: windows-credential-manager-retains-stale-unseal-share-across-guest-wipe
+    event:
+      type: note
+      ts: "2026-09-04T10:54:08Z"
+      agent_id: linux-macuahuitl-claude-20260904t105407z
+      host: macuahuitl
+      summary: |
+        REPRODUCED FROM LINUX ON THE MERGED UNION, coordinator 2026-09-04T10:55Z, immediately after merging windows-next (yolanda's tray slice) into linux-next: `cargo test -p tillandsias-windows-tray --bins` -> running 17 tests, test result: FAILED, 16 passed, 1 failed: tests::every_guest_wipe_path_clears_the_host_side_vault_credentials panicked at crates/tillandsias-windows-tray/src/main.rs:521:9. ./build.sh --check passed on the same tree and the landing went through, which is the 1003-444f class: the gate does not run this crate's bin targets on any platform. The test is a source pin and fails identically on Linux, so it needs no Windows host to reproduce; only the runtime -Purge confirmation does. The coordinator's union pass now runs the windows-tray bins each hour and will keep naming this until it is green. Relayed by the coordinator.
