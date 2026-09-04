@@ -299,7 +299,7 @@ compute() {
         esac
         absolute="$REPO_ROOT/$path"
         if [[ -L "$absolute" ]]; then
-            kinds+=(symlink) paths+=("$path") execbits+=(--)   # 1034-ihxw: two-char field (index,worktree); a symlink has neither
+            kinds+=(symlink) paths+=("$path") execbits+=(-)
         elif [[ -f "$absolute" ]]; then
             # ORDER 887-bz88 — the exec bit is part of "these bytes were
             # validated", and it was not hashed. See the note above `compute`.
@@ -355,40 +355,10 @@ compute() {
             while [[ "$_gs_xi" -lt "$_gs_xn" && "${_gs_xpaths[$_gs_xi]}" < "$path" ]]; do
                 _gs_xi=$((_gs_xi + 1))
             done
-            # ORDER 1034-ihxw — TWO BITS: the INDEX mode and the WORKTREE mode.
-            #
-            # 887-bz88 added the index bit so `chmod -x` would stale the stamp,
-            # and its header says "any chmod now goes stale". MEASURED on
-            # lenovinha 2026-09-04, that was true only of a STAGED chmod:
-            #     bash scripts/gate-stamp.sh compute   -> cce706dc...b38a884
-            #     chmod -x scripts/check-litmus-pin-claims.sh   # worktree only
-            #     bash scripts/gate-stamp.sh compute   -> cce706dc...b38a884
-            # byte-identical, so `./build.sh --check` returned rc=0 in 2s on a
-            # tree that `TILLANDSIAS_FORCE_CHECK=1` refuses with
-            # violation:script-not-executable:1. The memo skipped the very guard
-            # 887-bz88 widened to catch this.
-            #
-            # The index bit alone cannot see it: `git ls-files -s` reports what
-            # was STAGED, and the skill runs the gate BEFORE `git add` — which
-            # is blind spot 1 from 887-bz88's own header, resurfacing here in
-            # the stamp rather than in the guard.
-            #
-            # `[ -x ]` is a bash builtin, so this costs no fork and respects
-            # 675-dkif's budget: the loop is still zero-fork per file.
-            #
-            # FRAME CHANGE, stated as 887-bz88 stated its own: the field goes
-            # from one character to two, so every existing stamp goes stale
-            # once and the next gate on each host writes a current one. Single
-            # re-run per host, self-healing.
             if [ "$_gs_xi" -lt "$_gs_xn" ] && [ "${_gs_xpaths[$_gs_xi]}" = "$path" ]; then
-                _gs_ix=x
+                execbits+=(x)
             else
-                _gs_ix=-
-            fi
-            if [ -x "$absolute" ]; then
-                execbits+=("${_gs_ix}x")
-            else
-                execbits+=("${_gs_ix}-")
+                execbits+=(-)
             fi
             kinds+=(file) paths+=("$path")
         elif [[ ! -e "$absolute" ]]; then
