@@ -3194,6 +3194,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Terminology memo check passed"
 
+    # 876-irn7 + 1005-m6rz. The suite existed and was invoked by NOTHING — it
+    # pinned the cargo-resolution fix and could have rotted silently, which is
+    # the shape it was written to prevent one layer down. Binding it here is
+    # part of 1005-m6rz's closure. It compiles nothing and touches no real
+    # toolchain: every arm is hermetic in a scratch tree.
+    _step "Checking cargo resolution, git identity and the cargo-site registry (876-irn7, 1005-m6rz)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-cycle-preflight-cargo-resolution.sh" 2>&1; then
+        _error "a preamble host-readiness arm regressed (876-irn7, 1005-m6rz) — see the verdict line above"
+        exit 1
+    fi
+    _info "Preamble host-readiness checks passed"
+
     # 965-sxec: a missing or unusable ruby must read as COULD-NOT-RUN (exit 3),
     # never as a claim about the ready set. Inside a forge `command -v ruby`
     # finds a brew shim that cannot install one, exits 127, and the caller's

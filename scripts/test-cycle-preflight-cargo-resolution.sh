@@ -111,5 +111,80 @@ got2="$(env -i PATH="/usr/bin:/bin" HOME="$W/home" bash -c '
     && ok "MUTATION: without the loop the same host reads absent — arm 1 has teeth" \
     || bad "mutation control did not reproduce the pre-fix behaviour (got $got2)"
 
+# ══ ORDER 1005-m6rz ═══════════════════════════════════════════════════════
+# Three arms the 876-irn7 suite did not carry: the git-identity preamble check,
+# the cheatsheet-tiers cargo resolution, and the site registry that is supposed
+# to stop the next one being found on a floor host.
+
+# ── 6. IDENTITY: a host that cannot author a commit is refused BEFORE claiming.
+#      Hermetic — a scratch repo with no identity reachable, which is what a
+#      fresh or re-imaged host looks like. GIT_CONFIG_NOSYSTEM and an empty HOME
+#      remove the global and system files; without both, the runner's own
+#      identity leaks in and the arm passes for the wrong reason.
+GUARD="$ROOT/scripts/check-committable-branch.sh"
+mkdir -p "$W/norepo"
+git init -q "$W/noident"
+( cd "$W/noident" && git checkout -q -b linux-next 2>/dev/null || true )
+got="$(cd "$W/noident" && env -i PATH="/usr/bin:/bin" HOME="$W/empty-home" \
+        GIT_CONFIG_NOSYSTEM=1 bash "$GUARD" 2>/dev/null)"
+[ "$got" = "blocked:no-git-identity" ] \
+    && ok "a host with no git identity is refused (blocked:no-git-identity)" \
+    || bad "no-identity host — want blocked:no-git-identity, got: $got"
+
+# The remedy must be PRINTED, not implied: the measured incident cost a whole
+# cycle's work because the failure named no fix at the point it was hit.
+remedy="$(cd "$W/noident" && env -i PATH="/usr/bin:/bin" HOME="$W/empty-home" \
+        GIT_CONFIG_NOSYSTEM=1 bash "$GUARD" 2>&1 >/dev/null)"
+case "$remedy" in
+    *"git config user.email"*) ok "the refusal names the exact git config remedy" ;;
+    *) bad "the refusal does not name the remedy: $remedy" ;;
+esac
+
+# TRUE NEGATIVE: an identity present must NOT be refused, or the guard would
+# stop every healthy host in the fleet.
+( cd "$W/noident" && git config user.name t && git config user.email t@example.invalid )
+got="$(cd "$W/noident" && env -i PATH="/usr/bin:/bin" HOME="$W/empty-home" \
+        GIT_CONFIG_NOSYSTEM=1 bash "$GUARD" 2>/dev/null)"
+case "$got" in
+    ok:branch-*) ok "an identity present passes the guard ($got)" ;;
+    *) bad "identity present — want ok:branch-*, got: $got" ;;
+esac
+
+# ── 7. CHEATSHEET-TIERS resolves cargo, and SKIPS rather than printing a bare
+#      command-not-found when it is genuinely absent.
+if grep -q 'cargo_resolve' "$ROOT/scripts/check-cheatsheet-tiers.sh"; then
+    ok "check-cheatsheet-tiers resolves cargo through the shared resolver"
+else
+    bad "check-cheatsheet-tiers still assumes cargo is on PATH"
+fi
+got="$(env -i PATH="$W/nothing:/usr/bin:/bin" HOME="$W/empty-home" \
+        bash "$ROOT/scripts/check-cheatsheet-tiers.sh" 2>&1 | head -1)"
+case "$got" in
+    skip:cheatsheet-tiers:cargo-absent*) ok "absent cargo reads as a SKIP, not an ERROR ($got)" ;;
+    *"command not found"*) bad "still prints a bare command-not-found: $got" ;;
+    *) ok "cheatsheet-tiers ran (cargo resolvable here): ${got:0:48}" ;;
+esac
+
+# ── 8. THE REGISTRY. Its entries must be real files, or the list that is
+#      supposed to stop the next discovery is itself the next thing to discover.
+. "$ROOT/scripts/lib-cargo-sites.sh"
+missing=""
+while IFS= read -r site; do
+    [ -n "$site" ] || continue
+    [ -e "$ROOT/$site" ] || missing="$missing $site"
+done <<EOF
+$(cargo_sites)
+EOF
+[ -z "$missing" ] && ok "every cargo-assumption site in the registry exists ($(cargo_sites | tr -d ' ' | grep -c .) listed)" \
+    || bad "registry names files that do not exist:$missing"
+
+# The three sites the packet names must all be listed — a registry that quietly
+# dropped one would pass the existence arm above while losing the point.
+for want in scripts/cycle-preflight.sh scripts/check-cheatsheet-tiers.sh scripts/host-capability-probe.sh; do
+    cargo_sites | grep -qx "$want" \
+        && ok "registry lists $want" \
+        || bad "registry is missing $want"
+done
+
 echo "test-cycle-preflight-cargo-resolution: $pass passed, $fail failed"
 [ "$fail" = 0 ] || exit 1
