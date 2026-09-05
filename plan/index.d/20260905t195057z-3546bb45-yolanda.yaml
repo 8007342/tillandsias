@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: binding-an-orphaned-fixture-imports-its-whole-legacy-body-into-the-gate-past-every-diff-scoped-guard
+    event:
+      type: note
+      ts: "2026-09-05T19:50:57Z"
+      agent_id: linux-macuahuitl-claude-20260905t195057z
+      host: yolanda
+      summary: |
+        THIRD-HOST CONFIRMATION, WITH THE CLAIM THE HOST RETRACTED KEPT OUT OF IT. yolanda measured arm 17 on windows-next after merging trunk, on a tree where the condition the coordinator supplied passes — `git show origin/linux-next:scripts/hooks/pre-push-local-gate.sh | sed 's/#.*//' | grep -cE 'bash[[:space:]]+[^|]*check-scorable-obligation-added\.sh'` returns 2 on origin/linux-next, 2 on origin/windows-next, and 2 in yolanda's tree.
+
+        THE MECHANISM, TEN RUNS, DETERMINISTIC IN BOTH DIRECTIONS:
+
+          MSYS bash, 10 consecutive:  17/17 x10
+          WSL bash,  10 consecutive:  16/17 x10
+          raw pipeline rc under pipefail, WSL, 10 times: 141 x10
+
+          set +o pipefail  ->  rc=0
+          set -o pipefail  ->  rc=141
+          PIPESTATUS=141 0
+
+        The 0 on the right is grep -q MATCHING. It then exited on the first match, sed took SIGPIPE and died 141, and `set -uo pipefail` at line 11 promoted that to the pipeline's status. So the arm reported "the plan-only lane does not invoke the scorable guard" about a lane that invokes it TWICE, on every one of ten runs.
+
+        A CLAIM WAS MADE AND WITHDRAWN BY ITS AUTHOR BEFORE IT REACHED THIS LEDGER, and the withdrawal is why the ten-run data is here at all. yolanda first reported having seen 17/17 and 16/17 "from the same checkout minutes apart" and concluded the failure is a RACE near the buffer rather than a platform threshold. The coordinator accepted it and was about to record it as a reconciliation of two other hosts' measurements — macuahuitl's 10161-byte margin passing and esmeraldinha's 0/60-at-10KB versus 60/60-at-30KB cliff — under the reading that "safe today" was never right for any host.
+
+        yolanda then tested it. The two readings came from DIFFERENT SHELLS: 17/17 from MSYS bash, 16/17 from inside the WSL distro the gate re-execs into. No shell was ever observed to flip. Ten runs each show it is deterministic per shell. THE RACE CLAIM DOES NOT SURVIVE, the original platform reading stands, and esmeraldinha's cliff stands.
+
+        yolanda's words, recorded because the judgement is the transferable part: the sentence was literally true and implied something never measured, and "same checkout" was let to carry the weight of "same conditions". They would rather hand over a smaller true finding than a larger one that has to be retracted after it has reconciled two other hosts' data.
+
+        THE COORDINATOR'S SHARE OF THIS: the reconciliation was attractive because it made three hosts' disagreeing numbers into one story, and a story that explains everything is exactly when to ask what was actually measured. The event was not yet written only because the land was still running.
+
+        THE IRONY IS INDEPENDENT OF THE RETRACTED CLAIM AND STANDS: the arm's own comment records that its first version was not teeth-bearing because a comment satisfied it, and that STRIPPING COMMENTS was the fix. The `sed` that does the stripping is the process that dies. THE HARDENING CREATED THE DEFECT. That is the sharpest instance of "the fix for a silent verdict is itself a place a silent verdict can hide" — sharper than a rewrite introducing a scoping bug, because here the defect is in the hardening itself.
