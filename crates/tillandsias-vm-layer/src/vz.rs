@@ -701,7 +701,7 @@ fn provision_user_data(secure_control_wire: &str) -> String {
 # which is the difference between "provisioning is broken somewhere" and a
 # line number.
 echo "tillandsias-provision-start $(date -u +%FT%TZ)" > /var/log/tillandsias-provision-marker
-trap 'echo "tillandsias-provision-FAILED line=$LINENO rc=$? cmd=$BASH_COMMAND $(date -u +%FT%TZ)" >> /var/log/tillandsias-provision-marker' ERR
+trap 'rc=$?; { echo "tillandsias-provision-FAILED line=$LINENO rc=$rc cmd=$BASH_COMMAND $(date -u +%FT%TZ)"; echo "--- systemd state at failure ---"; systemctl --no-pager --failed 2>&1 | head -20; systemctl status tillandsias-headless-fetch.service tillandsias-headless.service --no-pager 2>&1 | head -40; } >> /var/log/tillandsias-provision-marker' ERR
 set -euo pipefail
 
 # Order 272 (guest-ssh-backdoor-closure): the secure control wire is the
