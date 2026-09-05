@@ -309,6 +309,46 @@ automates. Canonical: `methodology/distributed-work.yaml` → `cycle_batch_triag
     weaker and later signal than the timestamp — a push can succeed and still
     have lost — so do not wait for one.
 
+    **PUSH THE CLAIM ALONE, AND FIRST.** A claim is invisible to every other
+    host until it lands, so the claim commit must contain the claim fragment and
+    NOTHING else: no scaffolding, no ledger tidy-up, no scripts. Anything else in
+    the outgoing diff takes the push off the plan-only lane and onto the full
+    gate, and the window where two hosts both read `ready` is exactly that long.
+
+    MEASURED on yoga 2026-09-05, GNU grep, per push attempt:
+
+    | condition                                  | cost   |
+    |--------------------------------------------|--------|
+    | retry loop alone, no hooks                 | 18–56ms |
+    | claim-only push, gate stamp valid          | ~6.5s  |
+    | claim-only push, stamp stale (the rebase)  | ~14.1s |
+    | a push the plan-only lane REFUSES          | a full gate, ~250s |
+
+    The retry loop was never the cost. A rebase under a moving trunk invalidates
+    the stamp, so the middle row is the normal case during exactly the window
+    when collisions happen — and four attempts of it is about a minute of
+    invisibility, not the ten minutes of 1034-whsp. That incident required at
+    least one attempt on the bottom row, which the plan-only lane now prevents
+    for a claim-only diff (1056-5344, 1060-7mmm, 1013-xm63 hardened that lane on
+    2026-09-05). Keep the claim commit clean and you stay off the bottom row.
+
+    **WHEN YOU DISCOVER A LANDED DUPLICATE — you lost even if the rule says you
+    won.** The timestamp rule decides who CONTINUES, never who overwrites a
+    landed, measured result. If the other host has already landed the work:
+
+    - Concede. Do not re-land, do not revert theirs. Re-landing is the
+      duplication the rule exists to prevent, one step later.
+    - Record YOUR measurement on the packet as a second observation. Two hosts
+      measuring the same change independently is worth more than the hours it
+      cost, and it is the only salvage available.
+    - Say plainly in the event that you lost the race and on what timestamp, so
+      the next reader does not reconstruct it from commit order — which is the
+      weaker signal, and can disagree.
+
+    Yoga did exactly this on 1009-gccx: its claim was 5m14s EARLIER and it still
+    conceded, because lenovinha had landed and measured. That reading is the
+    ruling, not a courtesy.
+
 4.  **Release on exit, unconditionally.**
 
     Completed work moves to its terminal status (§7.2). Work you did NOT finish
