@@ -32,7 +32,6 @@ cycle that changes a listed packet's phase, status, or verification tally.
 | 591-x7ws | `truly-ephemeral-project-checkout-drop-the-host-mount` | ready | not yet recorded | not yet recorded |
 | 682-u3si | `local-telemetry-for-bottleneck-finding-milestone` | ready | not yet recorded | not yet recorded |
 | 793-rb9u | `mcp-json-launcher-host-kind-compatibility` | ready | not yet recorded | not yet recorded |
-| 794-kmqe | `windows-lane-wsl2-hardware-exposure-shared-measurement` | ready | not yet recorded | not yet recorded |
 | 829-dkuc | `periodic-deslopification-sweep` | ready | not yet recorded | not yet recorded |
 | 917-6iwv | `local-expert-system-in-toolboxes-on-accelerated-hosts` | ready | not yet recorded | not yet recorded |
 | 917-zkge | `per-host-nix-cache-rollout` | accumulating (v0.6 attractor — slices only, never drained/closed) | operator's release cadence | forge cold-land wall-time metric (headline); per-host ensure+verify rows as they land |
