@@ -26,7 +26,32 @@ pub async fn open_and_wrap_hvsocket_stream(
     // Privilege-routed (order 312): elevated → direct AF_HYPERV; standard
     // user → wsl.exe/socat stdio bridge. Same wire either way.
     let stream = open_wsl_wire_stream(port).await?;
-    if std::env::var("TILLANDSIAS_SECURE_CONTROL_WIRE").as_deref() == Ok("on") {
+    // ORDER 972-umik. This was the FOURTH behaviour and the strictest: exact,
+    // case-sensitive equality against the single string "on". Two consequences,
+    // and the second is a security defect rather than a divergence:
+    //
+    //   BLANK — no explicit arm at all. An empty value is simply not `Ok("on")`
+    //   and fell through to plaintext. Same outcome the macOS readers reached
+    //   through a deliberate `is_empty() => Off`, but here by omission. The
+    //   shared reader REFUSES blank, on the reasoning that blank is the shape an
+    //   unfilled CI variable takes and reading it as insecure is the worst
+    //   available guess.
+    //
+    //   `ON` / `On` — NOT `Ok("on")`, so they meant PLAINTEXT on Windows while
+    //   the macOS readers accepted them case-insensitively and ran the
+    //   handshake. An operator who set TILLANDSIAS_SECURE_CONTROL_WIRE=ON on a
+    //   Windows host has been running an UNENCRYPTED control wire believing it
+    //   secure, on every shipped Windows build through v56.9.5.1, with nothing
+    //   reporting it. That is a security control that reads as enabled and is
+    //   not, and the conversion fixes it by construction.
+    //
+    // A bad value is now refused here rather than silently downgrading the
+    // connection to plaintext.
+    let mode = match tillandsias_control_wire::secure_wire_mode::secure_wire_mode() {
+        Ok(mode) => mode,
+        Err(err) => return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, err)),
+    };
+    if mode.is_secure() {
         let psk = tillandsias_secure_channel::channel_psk(
             env!("WORKSPACE_VERSION"),
             tillandsias_control_wire::WIRE_VERSION,
@@ -385,6 +410,66 @@ mod tests {
         );
     }
 
+    /// ORDER 972-umik: the Windows lane's psk PAIRS — a client and a server
+    /// built from the SAME production expression complete a real Noise
+    /// handshake and pass a frame each way.
+    ///
+    /// Not an assertion on the parsed mode, deliberately. A conversion's real
+    /// risk is not a wrong parse — it is the two ends silently disagreeing
+    /// about WHICH mode or WHICH key they are in, which no mode-value check can
+    /// see and which stays invisible until a live guest will not talk. So this
+    /// drives the handshake itself, with the psk built from exactly the
+    /// expression open_and_wrap_hvsocket_stream uses: WORKSPACE_VERSION, the
+    /// wire version, HopId::HostGuest. If any of those three drift apart
+    /// between host and guest, this fails here rather than in the field.
+    ///
+    /// Runs everywhere, unlike the #[ignore] e2e below: no WSL, no distro, no
+    /// privileges — a tokio duplex is the whole substrate.
+    ///
+    /// @trace order:972-umik
+    #[tokio::test]
+    async fn windows_lane_psk_pairs_and_carries_a_frame_both_ways() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        // Return type left to inference: `channel_psk` yields a Zeroizing
+        // wrapper and `zeroize` is not a direct dependency of this crate, so
+        // naming it here would add one for a test helper.
+        let lane_psk = || {
+            tillandsias_secure_channel::channel_psk(
+                env!("WORKSPACE_VERSION"),
+                tillandsias_control_wire::WIRE_VERSION,
+                tillandsias_secure_channel::HopId::HostGuest,
+            )
+        };
+
+        let (client_side, server_side) = tokio::io::duplex(64 * 1024);
+        let server_psk = lane_psk();
+        let server = tokio::spawn(async move {
+            let mut s = tillandsias_secure_channel::server_handshake(server_side, &server_psk)
+                .await
+                .expect("server handshake");
+            let mut buf = [0u8; 5];
+            s.read_exact(&mut buf).await.expect("server read");
+            assert_eq!(&buf, b"ping ");
+            s.write_all(b"pong ").await.expect("server write");
+            s.flush().await.expect("server flush");
+        });
+
+        let client_psk = lane_psk();
+        let mut c = tillandsias_secure_channel::client_handshake(client_side, &client_psk)
+            .await
+            .expect("client handshake with the production psk expression");
+        c.write_all(b"ping ").await.expect("client write");
+        c.flush().await.expect("client flush");
+        let mut back = [0u8; 5];
+        c.read_exact(&mut back).await.expect("client read");
+        assert_eq!(
+            &back, b"pong ",
+            "a frame must survive the encrypted channel in both directions"
+        );
+        server.await.expect("server task");
+    }
+
     /// Secure-wire flag-ON proof (order 191, windows evidence slice): with the
     /// in-VM headless running a version-matched binary under
     /// `TILLANDSIAS_SECURE_CONTROL_WIRE=on`, the tray-side wrapper
@@ -400,9 +485,14 @@ mod tests {
         use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
         use tillandsias_host_shell::vsock_client::Client;
 
+        // ORDER 972-umik: assert through the SHARED reader, not a second
+        // env::var of the same variable. A test that parses the variable itself
+        // is still a second reader — it would keep accepting a spelling the
+        // production path had stopped accepting, which is the divergence this
+        // packet removes, hiding inside the test meant to prove the path works.
         assert_eq!(
-            std::env::var("TILLANDSIAS_SECURE_CONTROL_WIRE").as_deref(),
-            Ok("on"),
+            tillandsias_control_wire::secure_wire_mode::secure_wire_mode(),
+            Ok(tillandsias_control_wire::secure_wire_mode::SecureWireMode::On),
             "export TILLANDSIAS_SECURE_CONTROL_WIRE=on so the wrapper takes the secure path"
         );
 
