@@ -373,7 +373,21 @@ verification:
           zsh `:s` history-modifier failure four hours earlier on another host.
           Both of that day's blind probes would have been caught instantly by a
           denominator.
-        enforced_by: "judgment — a probe that cannot report how much it examined has a zero that is not reportable"
+        earned_by_second: >
+          SAME DAY, SAME HOST, APPLIED TO A MUTATION RATHER THAN A MEASUREMENT.
+          macneo sabotaged a doc guard by removing its required phrase and ran
+          the guard: IT PASSED, which should have meant the guard was worthless.
+          It did not — the SABOTAGE was worthless. The replace had been written
+          with a leading `    /// ` included while the phrase sits mid-line after
+          other text, so it matched nothing and the guard was run against an
+          UNCHANGED file. Fixed by making the mutation report its own
+          denominator: count the needle before and after, assert the file
+          actually changed (2 occurrences to 1), then run — and the guard then
+          failed as it should. A SABOTAGE ARM IS A PROBE TOO, and "the test
+          passed under sabotage" is evidence only once the sabotage is shown to
+          have applied. A green sabotage silently certifies a blind test, which
+          is worse than no sabotage at all because it manufactures confidence.
+        enforced_by: "judgment — a probe that cannot report how much it examined has a zero that is not reportable; a mutation that cannot show it changed the file has a red that proves nothing"
       - id: a_discriminating_probe_needs_both_controls
         kind: judgment
         rule: >
