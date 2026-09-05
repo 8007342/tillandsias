@@ -389,6 +389,40 @@ Hard rules:
   `scripts/run-litmus-test.sh --diff-scope origin/linux-next --compact` (or the
   bound spec by name) before the land, not after.
 
+- **The gate pass token gates the STAMP, never the PUSH (1039-b64k).** A push
+  needs a *stamp* whose digest matches the tree being pushed; the pre-push hook
+  calls `gate-stamp.sh verify`, which compares recorded-vs-computed digest and
+  nothing else. `<git-dir>/tillandsias-gate-pass-token` is minted by a green
+  `build.sh` and consumed by `gate-stamp.sh write`, so an unearned stamp is
+  impossible by accident (940-f77j) — but no branch of the hook reads it. Two
+  consequences worth knowing before you debug a refused push: a **memoised**
+  gate mints no token and writes no stamp and still pushes fine, because the
+  existing stamp covers the unchanged tree; and a fix that adds or moves the
+  token cannot affect a push at all. 1039-b64k was filed with a remedy resting
+  on the opposite belief, and the remedy was dropped once the push path was
+  actually read rather than inferred from the packet.
+
+- **After a gate run, rebuild before exercising a feature-gated path
+  (1031-q4pb).** `./build.sh --check` rebuilds `target/debug/tillandsias`
+  WITHOUT `--features tray`, so a control arm that drives a `#[cfg(feature =
+  "tray")]` surface after a gate is exercising a binary in which the code under
+  test does not exist. On 2026-09-04 that turned a working control into a hang;
+  had the absent path fallen through to success instead, it would have been a
+  green arm for absent code. `cargo build -p <crate> --features <feature>`
+  immediately before the arm, every time — a gate silently replaces the binary.
+
+- **Read a file's own comments before concluding a failure is novel
+  (yolanda, 2026-09-04).** yolanda spent ~40 minutes and four gate runs
+  rediscovering the Windows drvfs deadlock from scratch — the mechanism, the
+  memo amplifier, and the measurement — all of which were already written eighty
+  lines above the line being debugged, in `gate-stamp.sh`'s `compute`, from
+  order 889-8tcb. They had read the file three times during the diagnosis, each
+  time for a different question, and never the paragraph directly above the
+  suspicious line. A file that has been bitten before usually says so, and this
+  project records that more reliably than most. (The defect being rediscovered
+  was lenovinha's 1034-ihxw, landed against that same warning — so the two
+  halves of this lesson are one event.)
+
 - **Quoted history lives in comments; guards scan declarations.** A codebase
   that explains itself contains the strings it forbids (a doc comment names the
   identifier it replaced, a narrowing quotes the sentence it narrowed), so a
@@ -398,6 +432,26 @@ Hard rules:
   cannot match its own source; keep the quoted history where it explains the
   change. Named by macneo on 980-ja2m, 2026-09-04, after its first class guard
   went red on its own doc comments.
+
+- **A gate run silently replaces the binary without the tray feature.**
+  `./build.sh --check` rebuilds `target/debug/tillandsias` without `--features
+  tray`; every order-505 site and much of the tray surface is
+  `#[cfg(feature = "tray")]`, so a control arm run after a gate can exercise a
+  binary in which the code under test does not exist. On 2026-09-04 lenovinha's
+  arms hung against such a binary, which was luck: an absent path falling
+  through to success is a green arm for absent code. Build with the feature
+  set the change needs (`cargo build --features tray,listen-vsock`) immediately
+  before any live control arm, and quote the feature set beside the arm.
+
+- **A control variable set outside the builder does not reach cargo inside it.**
+  `scripts/with-tillandsias-builder.sh` forwards only `TILLANDSIAS_*`, `LITMUS_*`,
+  `FORGE_*`, `NIX_*`, `CONTAINER_HOST` and `DOCKER_HOST` into the toolbox, and
+  `with-wsl2-builder.sh` forwards only `TILLANDSIAS_*` across wsl.exe; on
+  2026-09-05 `CARGO_BUILD_JOBS=10` was UNSET inside the builder on both Linux and
+  Windows, so a "ten-job arm" ran at twenty and would have reported a confident
+  null. A build setting must be applied inside the build scripts, or forwarded by
+  name with a probe that proves it arrived (`with-tillandsias-builder.sh bash -c
+  'echo ${VAR:-UNSET}'`) before any measurement is read.
 
 ---
 

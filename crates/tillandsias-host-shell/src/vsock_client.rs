@@ -636,6 +636,18 @@ mod tests {
     use tokio::net::UnixListener;
 
     async fn spawn_hello_responder(path: std::path::PathBuf) -> tokio::task::JoinHandle<()> {
+        spawn_hello_responder_with_version(path, WIRE_VERSION).await
+    }
+
+    /// The same responder with the HelloAck's advertised wire version under the
+    /// caller's control, so the mismatch arm can be driven without a second
+    /// harness. ORDER 1032-62rx: a copy would be a second implementation of
+    /// "what a server says on handshake", which is how the two come to
+    /// disagree; this is the existing fixture with one field parameterised.
+    async fn spawn_hello_responder_with_version(
+        path: std::path::PathBuf,
+        ack_version: u16,
+    ) -> tokio::task::JoinHandle<()> {
         let listener = UnixListener::bind(&path).expect("bind responder");
         tokio::spawn(async move {
             let (mut stream, _addr) = listener.accept().await.expect("accept");
@@ -652,7 +664,7 @@ mod tests {
                 wire_version: WIRE_VERSION,
                 seq: env.seq,
                 body: ControlMessage::HelloAck {
-                    wire_version: WIRE_VERSION,
+                    wire_version: ack_version,
                     server_caps: vec![
                         "v1".to_string(),
                         tillandsias_control_wire::CAP_EXEC_ARGV_VECTOR.to_string(),
@@ -670,6 +682,60 @@ mod tests {
             // Keep the stream alive briefly so the client can complete the read.
             tokio::time::sleep(Duration::from_millis(100)).await;
         })
+    }
+
+    /// ORDER 1032-62rx: the CLIENT-SIDE wire-version refusal actually fires.
+    ///
+    /// vsock_client.rs's mismatch arm existed with NOTHING exercising it. The
+    /// six assertions in the tree that mention WIRE_VERSION are all
+    /// `assert_eq!(wire_version, WIRE_VERSION)` after a SUCCESSFUL handshake —
+    /// tautological, because the value came back from a peer built in the same
+    /// build from the same constant. They cannot fail whatever WIRE_VERSION is
+    /// set to, so none of them is a version check.
+    ///
+    /// This drives a server that advertises WIRE_VERSION + 1 and asserts the
+    /// handshake REFUSES with InvalidData. Deleting the arm at vsock_client.rs
+    /// turns this red — which is the whole point, and is checked rather than
+    /// assumed (1032-62rx criterion 3).
+    ///
+    /// KNOWN ASYMMETRY, deliberately not asserted here: against a CURRENT
+    /// server this arm is unreachable, because vsock_server validates the
+    /// client's Hello and returns BEFORE sending any HelloAck, and when it does
+    /// answer it fills the ack with its own WIRE_VERSION. So the arm serves
+    /// only a peer old enough to answer without validating — which is exactly
+    /// the peer that cannot be fixed from here, and why the branch must stay.
+    ///
+    /// @trace order:1032-62rx, spec:vsock-transport
+    #[tokio::test]
+    async fn handshake_refuses_a_server_advertising_a_different_wire_version() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("control.sock");
+        let _server = spawn_hello_responder_with_version(path.clone(), WIRE_VERSION + 1).await;
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        // `expect_err` needs `T: Debug` and `Client` does not derive it, so match
+        // instead. (Windows hid this: the module is `cfg(all(test, unix))`, so a
+        // Windows `cargo test` compiled none of it and reported 0 tests run.)
+        let err =
+            match connect_with_handshake(Transport::Unix(path), DEFAULT_HANDSHAKE_TIMEOUT).await {
+                Ok(_) => panic!("a server advertising a different wire version must be REFUSED"),
+                Err(e) => e,
+            };
+        assert_eq!(
+            err.kind(),
+            io::ErrorKind::InvalidData,
+            "the refusal must be InvalidData, not a timeout or a transport error: {err}"
+        );
+        let msg = err.to_string();
+        assert!(
+            msg.contains("wire version mismatch"),
+            "the error must name the mismatch so an operator can act: {msg}"
+        );
+        assert!(
+            msg.contains(&WIRE_VERSION.to_string())
+                && msg.contains(&(WIRE_VERSION + 1).to_string()),
+            "and must name BOTH versions, local and peer: {msg}"
+        );
     }
 
     /// @trace spec:host-shell-architecture, spec:vsock-transport

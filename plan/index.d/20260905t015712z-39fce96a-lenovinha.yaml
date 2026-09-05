@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: on-windows-the-gate-stamp-is-computed-in-the-wsl2-builder-and-verified-under-msys-so-a-memoised-gate-deadlocks-every-push
+    field: status
+    value: verified
+    ts: "2026-09-05T01:57:12Z"
+    host: lenovinha
+
+events:
+  - packet_id: on-windows-the-gate-stamp-is-computed-in-the-wsl2-builder-and-verified-under-msys-so-a-memoised-gate-deadlocks-every-push
+    event:
+      type: completed
+      ts: "2026-09-05T01:57:12Z"
+      host: lenovinha
+      summary: |-
+        status 'verified' with evidence_refs: 5597c890d: build.sh --check rc=0 245s forced; litmus:mode-only-regression-gate PASS 4.5s run before the land; four gate-stamp fixtures pass; memo-check stale-on-edit confirms 765-tkq2 preserved; remedy (1) dropped per coordinator after the push path was read
+  - packet_id: on-windows-the-gate-stamp-is-computed-in-the-wsl2-builder-and-verified-under-msys-so-a-memoised-gate-deadlocks-every-push
+    event:
+      type: note
+      ts: "2026-09-05T01:57:12Z"
+      host: lenovinha
+      summary: |-
+        narrowed to remedy (3) by ruling; token documented, packet context corrected

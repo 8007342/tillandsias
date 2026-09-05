@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: on-windows-the-gate-stamp-is-computed-in-the-wsl2-builder-and-verified-under-msys-so-a-memoised-gate-deadlocks-every-push
+    event:
+      type: note
+      ts: "2026-09-05T01:39:35Z"
+      agent_id: linux-lenovinha-claude-20260905t013332z
+      host: lenovinha
+      summary: |-
+        CONTEXT CORRECTION, and it changes the packet's remedy. The filed context states 'build.sh also mints a ONE-SHOT tillandsias-gate-pass-token and the hook accepts it without comparing digests; every successful Windows land today rode the token.' THE HOOK DOES NOT READ THE TOKEN. Recording this against the packet because a remedy was ruled on the belief that it does.
+
+        READ FROM THE CODE, not inferred. 'tillandsias-gate-pass-token' occurs in exactly three non-test places:
+          build.sh:1183           mints it, after every check has passed
+          gate-stamp.sh:491-519   'write' consumes it (refused:no-gate-pass-token, refused:gate-pass-token-is-for-another-tree)
+          scripts/test-gate-stamp*.sh   fixtures
+        The hook is scripts/hooks/pre-push-local-gate.sh:780 and it calls 'gate-stamp.sh verify'. verify is gate-stamp.sh:555-581 and its entire decision is: recorded=stamp_field digest; current=compute; if they differ, stale:tree-changed-since-gate. No token path. I read every branch of the hook's case statement including the stale: arms and the unknown-verdict arm.
+
+        So the token gates WRITING A STAMP, not PUSHING. A push needs a stamp whose digest matches the tree; it never needs a token.
+
+        CONFIRMED LIVE on linux: after a memoised gate the token file is ABSENT and verify still returns ok:gate-fresh — because the EXISTING stamp still covers the unchanged tree. That is also why a linux memoised push has always worked, and it is the positive control for the claim above.
+
+        CONSEQUENCE: remedy (1), minting the token on the memo path, would have changed only what 'gate-stamp.sh write' accepts. write is not in the push path. It was therefore a NO-OP for the deadlock, and the coordinator has dropped it rather than building it as defence in depth, on the stated grounds that a change touching nothing in the push path cannot defend it.
+
+        WHAT ACTUALLY CLOSED THE DEADLOCK: the revert of 1034-ihxw's worktree exec-bit read (0a1419ffe) — my regression, landed against the standing 889-8tcb warning eighty lines above it in the same function. yolanda verified on Windows with two EQUAL computes, MSYS and WSL, c5867b7f on one tree at one moment, where before the revert they were 7e0f2670 and ae1bff9c. Index-sourced digests agree across the drvfs boundary; worktree-sourced ones cannot. That is remedy (2)'s property and it is already true for exec bits.
+
+        WHAT REMAINS is 1036-e5w9's unstaged-chmod hole, and the instrument first proposed for it does not close it: 'git ls-files -s | sha256sum' is IDENTICAL before and after an unstaged edit (9de8914ff52f006f both), differing only once staged (6a58ee05b7e9ffdc). An index-sourced digest cannot see a worktree chmod. yolanda's shape — mode changes seen through 'git diff --summary' rather than through the filesystem — satisfies 889-8tcb and that hole together, and is what I will build under 1036-e5w9.
+
+        This packet now narrows to remedy (3) per the coordinator's re-ruling: document the token as the mechanism it is, where it is consumed and where it is not, and correct this context. Both done in the same change.
