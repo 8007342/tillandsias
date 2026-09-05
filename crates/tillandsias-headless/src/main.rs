@@ -6943,6 +6943,19 @@ fn build_opencode_forge_args(
     // that date; an older podman may genuinely have refused.)
     let mut args = vec![
         "--rm".into(),
+        // 873-vgyg. `--rm` removes the container when it EXITS CLEANLY; it does
+        // nothing for one left behind by a launch that died before or during
+        // startup. That corpse keeps the name, and every later launch dies on
+        // podman's raw exit-125 "name already in use" until someone runs
+        // `podman rm` by hand — an error that names neither Tillandsias nor the
+        // remedy. `--replace` removes it atomically and creates a fresh one.
+        //
+        // This builder was the ONE forge path without it. Measured at HEAD:
+        // proxy (3420), git (4303), inference (4863), router (5075),
+        // ssh-sidecar (10293) and build_forge_agent_run_args_with_vault (14655)
+        // all pass `--replace`; this one did not, and had no test asserting it
+        // while the other five do.
+        "--replace".into(),
         "--name".into(),
         forge_container_name(project_name),
         "--hostname".into(),
@@ -21676,6 +21689,49 @@ mod tests {
     /// EXITED container holding the name must not block the next launch with
     /// a Permanent exit-125. `--replace` on `podman run` atomically removes
     /// the exited container and creates a fresh one.
+    /// 873-vgyg. The opencode forge builder was the one forge path without
+    /// `--replace`, and the only one with no test asserting it — the other five
+    /// (proxy, git, inference, router, ssh-sidecar) and the agent run-args
+    /// builder all had both. A failed launch leaves a same-name EXITED
+    /// container that `--rm` does not clean up, and every later launch then
+    /// dies on podman's raw exit-125 "name already in use" until a manual
+    /// `podman rm`.
+    ///
+    /// ASSERTED ON EVERY MODE, not one. The gap survived because the flag was
+    /// absent from a shared `args` vec that all modes extend, so a single-mode
+    /// test would have been satisfied by a fix applied to one branch.
+    #[test]
+    fn opencode_forge_args_use_replace_for_idempotency() {
+        // Both modes, and both the prompted and interactive lanes, because the
+        // flag lives in the shared `args` vec every branch extends and a
+        // single-lane assertion would be satisfied by a one-branch fix.
+        for (mode, prompt) in [
+            (ForgeMode::Cli, None),
+            (ForgeMode::Cli, Some("do a thing")),
+            (ForgeMode::Web, None),
+            (ForgeMode::Web, Some("do a thing")),
+        ] {
+            let argv = build_opencode_forge_args(
+                &PathBuf::from("/tmp/project"),
+                "alpha",
+                None,
+                prompt,
+                &PathBuf::from("/tmp/ca"),
+                "1.2.3",
+                mode,
+                None,
+                false,
+                false,
+            );
+            assert!(
+                has_arg(&argv, "--replace"),
+                "{mode:?} (prompt={prompt:?}) opencode forge args must include \
+                 --replace so an exited container does not block the next \
+                 launch with a raw exit-125 (873-vgyg): {argv:?}"
+            );
+        }
+    }
+
     #[test]
     fn inference_run_args_use_replace_for_idempotency() {
         let certs = PathBuf::from("/tmp/ca");
