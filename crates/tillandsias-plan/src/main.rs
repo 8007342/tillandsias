@@ -262,7 +262,8 @@ const USAGE: &str = concat!(
     "                                     the base. Exit 1 only for an unresolvable id; an\n",
     "                                     existing packet with no events prints nothing and\n",
     "                                     exits 0, which is what a stranded claim looks like.\n",
-    "           expire-claims [--ttl-hours N] [--dry-run] [--list-live] [--now-epoch S] [--host H]\n",
+    "           expire-claims [--ttl-hours N] [--write] [--dry-run] [--list-live] [--now-epoch S] [--host H]\n",
+    "                         (default DRY-RUN: writing requires --write; 1067-24q6)\n",
     "                                     ORDER 672-bz7u. Return stranded in_progress claims to\n",
     "                                     ready: any packet whose LAST recorded event activity is\n",
     "                                     older than the TTL (default 24h) gets a status fragment\n",
@@ -6679,8 +6680,23 @@ fn main() {
             // automatically. Lives HERE and not in bash because the claim age
             // is only knowable from the folded ledger, and grepping for it
             // shell-side is the brittle parsing 456 eliminated.
+            // ORDER 1067-24q6 — THE DEFAULT IS THE FIX. This used to be
+            // `let mut dry_run = false`, i.e. bare `expire-claims` WROTE.
+            // Three independent hosts released another host's lease in one
+            // day by running it to look: tlatoanis-macbook-air 14:49Z (bare),
+            // macuahuitl 16:41Z (`--list-live`, a flag whose name says list),
+            // yoga 17:5xZ (bare, while reading for 1034-whsp). Each caught it
+            // only by checking `git status` afterwards; the claim recipe every
+            // cycle runs is `git add plan/index.d/`, which would have
+            // published the release with nothing in the commit naming it.
+            //
+            // The victim is BY CONSTRUCTION another host, so the runner sees
+            // nothing wrong and the affected party is not present to object.
+            // Writing is now opt-in; `--dry-run` stays accepted so existing
+            // callers keep working and keep meaning what they say.
             let mut ttl_hours: i64 = 24;
-            let mut dry_run = false;
+            let mut write = false;
+            let mut dry_run_flag = false;
             let mut list_live = false;
             let mut now_epoch: Option<i64> = None;
             let mut host = resolve_writer_host();
@@ -6697,7 +6713,8 @@ fn main() {
                             }
                         };
                     }
-                    "--dry-run" => dry_run = true,
+                    "--dry-run" => dry_run_flag = true,
+                    "--write" | "--apply" => write = true,
                     "--list-live" => list_live = true,
                     "--now-epoch" => {
                         i += 1;
@@ -6730,6 +6747,15 @@ fn main() {
                 eprintln!("error: --ttl-hours must be >= 1 (got {ttl_hours})");
                 std::process::exit(2);
             }
+            // Asking for both is not a preference to resolve, it is a caller
+            // that does not know which it wants. Refuse rather than pick.
+            if write && dry_run_flag {
+                eprintln!(
+                    "error: --write and --dry-run are contradictory; pass one (default is dry-run)"
+                );
+                std::process::exit(2);
+            }
+            let dry_run = !write;
             let now = now_epoch.unwrap_or_else(|| {
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
@@ -7003,6 +7029,19 @@ fn main() {
                         in_progress.len()
                     ));
                 }
+            }
+            // ORDER 1067-24q6 criterion 2: THE OPT-IN NAMES ITSELF. A reader
+            // who runs this and sees rows must be able to learn how to act on
+            // them without leaving the terminal — and, more importantly, must
+            // be told that nothing has happened yet. The old output's only
+            // mention of its mode was `mode=write` in the summary, printed
+            // AFTER the mutation.
+            if dry_run && !expired.is_empty() {
+                emit(&format!(
+                    "  ({} claim(s) above WOULD be returned to ready; nothing has been written. \
+                     Re-run with --write to apply.)",
+                    expired.len()
+                ));
             }
             if !dry_run && !expired.is_empty() {
                 let compact = loop_status::iso_to_compact(&now_iso);
