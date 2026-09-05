@@ -4,12 +4,12 @@ languages: [bash, yaml]
 since: 2026-08-29
 last_verified: 2026-08-29
 sources:
-  - plan/index.yaml order:748-tkjx
-  - plan/index.yaml order:921-vtf4
-  - plan/index.yaml order:925-erjs
-  - plan/index.yaml order:721-77yu
-  - plan/index.yaml order:677-33be
-  - plan/index.yaml order:776-cm74
+  - plan/archive/packets-2026-08.yaml order:748-tkjx
+  - plan/archive/packets-2026-08.yaml order:921-vtf4
+  - plan/archive/packets-2026-08.yaml order:925-erjs
+  - plan/archive/packets-2026-08.yaml order:721-77yu
+  - plan/archive/packets-2026-08.yaml order:677-33be
+  - plan/archive/packets-2026-08.yaml order:776-cm74
 authority: high
 status: current
 tier: bundled

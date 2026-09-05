@@ -5,8 +5,8 @@ since: 2026-09-02
 last_verified: 2026-09-02
 sources:
   - plan/index.yaml order:919-vvyv
-  - plan/index.yaml order:392a
-  - plan/index.yaml order:168
+  - plan/archive/packets-2026-07.yaml order:392a
+  - plan/archive/packets-2026-07.yaml order:168
   - images/inference/entrypoint.sh
   - images/inference/preload-policy.sh
 authority: high

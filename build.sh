@@ -1667,6 +1667,17 @@ if [[ "$FLAG_CHECK" == true ]]; then
         _error "a new reader of TILLANDSIAS_SECURE_CONTROL_WIRE appeared (972-umik) — see the verdict line above"
         exit 1
     fi
+    # 1053-a7qr: a cheatsheet `sources:` anchor must name the file that
+    # DECLARES the order. Tree-only, sub-second, and it can fail — the fast
+    # phase by lenovinha's two criteria. Nothing read these anchors before:
+    # a fixture naming a nonexistent file AND a nonexistent order passed both
+    # the ghost-trace gate and trace-coverage.sh, because those scan `@trace`
+    # ANNOTATIONS and frontmatter is a different field.
+    if ! _run bash "$SCRIPT_DIR/scripts/check-cheatsheet-source-anchors.sh" 2>&1; then
+        _error "a cheatsheet anchors an order to a file that does not declare it (1053-a7qr) — see the verdict line above"
+        exit 1
+    fi
+
     _info "Fast refusals passed"
 
     # 765-uti9 quick win (velocity audit F3): the dedicated `cargo check
