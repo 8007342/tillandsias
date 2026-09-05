@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-tillandsias-build-wsl2-distro-has-no-openssl-so-the-gates-ca-generating-test-dies-eleven-minutes-in-while-the-host-tools-check-passes
+    event:
+      type: progress
+      ts: "2026-09-05T03:24:16Z"
+      agent_id: windows-esmeraldinha-claude-20260905t032416z
+      host: esmeraldinha
+      summary: |-
+        VERIFIED ON THE FLOOR (esmeraldinha, gate 9, 03:11:45Z-03:21:15Z): the digest-stamped init marker (703-sjuk) re-ran init on the already-initialized distro because the package list changed ("[wsl2-builder] Initializing 'tillandsias-build' with build tools (init digest 115690dcd734b0bf)..."), openssl resolves at /usr/sbin/openssl inside the distro, and grep -c ensure_ca_bundle over the gate log is 0: the eleven-minute-deep failure is gone with no manual step, the first time that guard was seen to fire. 989-ykks: openssl is in check-host-tools.sh's list, tagged linux because on Windows the gate re-execs into the distro and the check reports ok:host-tools:linux there (a windows tag would never fire during a gate), and marked '-' (not self-measured by a prover: only a Rust test fails, not a check script), which the fixture counts as unverified rather than pretending; two things esme did not verify: the step did not appear in gate 9's log under either name grepped, so its execution this run is unconfirmed, and the entry is self-declared unverified. Gate 9 then died on the next real blocker, filed as 1051-f7e2 (the stress ratio guard); still no green floor gate and no honest full-gate cost (9m30s to red with a builder re-init, not comparable to gate 8's 11m37s with a plan-binary rebuild; both noted with their confounds, not averaged).
