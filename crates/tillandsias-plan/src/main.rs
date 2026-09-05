@@ -5453,6 +5453,7 @@ fn main() {
             };
             let mut counts: std::collections::BTreeMap<String, usize> =
                 std::collections::BTreeMap::new();
+            let mut scanned = 0usize;
             for p in query_packets(
                 &ledger,
                 Some("ready"),
@@ -5462,6 +5463,7 @@ fn main() {
                 &[],
                 options.limit,
             ) {
+                scanned += 1;
                 if let Some(deps) = p.get("depends_on").and_then(serde_yaml::Value::as_sequence) {
                     for d in deps {
                         let key = match d {
@@ -5475,6 +5477,16 @@ fn main() {
             }
             for (id, n) in counts {
                 emit(&format!("{id}	{n}"));
+            }
+            // ORDER 1081-gynk: SAY WHEN THE SCAN WAS CAPPED. Exactly-at-the-cap
+            // is the tell that a list is a SAMPLE, and this output is
+            // well-formed either way — nothing else would say so.
+            if scanned == options.limit {
+                emit(&format!(
+                    "  (scan stopped at --limit {}: this is a SAMPLE, not every ready packet — \
+                     pass --limit <n> to scan further)",
+                    options.limit
+                ));
             }
         }
         "select-rows" => {
