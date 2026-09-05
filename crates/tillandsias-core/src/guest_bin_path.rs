@@ -35,7 +35,25 @@ use std::path::PathBuf;
 /// staging, and a ratchet has one subject to count instead of two.
 fn xdg_state_root() -> PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    PathBuf::from(crate::ca_path::state_root_expanded(&home))
+    xdg_state_root_for(&home)
+}
+
+/// The root over an EXPLICIT home.
+///
+/// SPLIT OUT SO IT CAN BE TESTED WITHOUT MUTATING THE PROCESS (1050-hxek),
+/// which is 1002-9xmb's fix applied to this module. `ca_path` already made
+/// exactly this split, and its comment twelve lines up says why: `HOME` is
+/// process-global, cargo runs tests concurrently in ONE process, and the
+/// tests that call `set_var("HOME", ...)` race.
+///
+/// This module ignored that and set `HOME` to `/home/probe` anyway, under a
+/// SAFETY note claiming a "single-threaded test" — which is not true of any
+/// cargo test binary. The value leaked into `singleton`'s tests in the same
+/// crate, which then tried to create a lock directory under
+/// `/home/probe/Library/Caches` and failed with os error 45 on roughly half
+/// of full-suite runs.
+fn xdg_state_root_for(home: &str) -> PathBuf {
+    PathBuf::from(crate::ca_path::state_root_expanded(home))
 }
 
 /// HOST directory the tray stages the guest binary into.
@@ -43,9 +61,19 @@ pub fn guest_bin_dir() -> PathBuf {
     xdg_state_root().join("guest-bin")
 }
 
+/// [`guest_bin_dir`] over an explicit home — see [`xdg_state_root_for`].
+pub fn guest_bin_dir_for(home: &str) -> PathBuf {
+    xdg_state_root_for(home).join("guest-bin")
+}
+
 /// HOST path of the staged guest binary.
 pub fn staged_guest_binary() -> PathBuf {
     guest_bin_dir().join("tillandsias-headless")
+}
+
+/// [`staged_guest_binary`] over an explicit home — see [`xdg_state_root_for`].
+pub fn staged_guest_binary_for(home: &str) -> PathBuf {
+    guest_bin_dir_for(home).join("tillandsias-headless")
 }
 
 /// GUEST mount point for the share carrying the staged binary.
@@ -73,9 +101,11 @@ mod tests {
     /// `home-src` share.
     #[test]
     fn staging_is_off_home_src() {
-        // SAFETY: single-threaded test; the value is read, not cached.
-        unsafe { std::env::set_var("HOME", "/home/probe") };
-        let p = staged_guest_binary();
+        // 1050-hxek: NO set_var. The home is passed in, so this test cannot
+        // leak a value into any other test in this process. The previous
+        // version set HOME=/home/probe process-wide and broke singleton's
+        // tests on about half of full-suite runs.
+        let p = staged_guest_binary_for("/home/probe");
         let s = p.to_string_lossy();
         // 1027-539s: the expectation is DERIVED from the manifest, not written
         // as a literal — a hard-coded root here would be the very copy this

@@ -1,0 +1,95 @@
+packets:
+  - packet_id: a-test-setting-HOME-process-wide-breaks-singleton-in-the-same-crate
+    order: 1050-hxek
+    status: implemented
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags:
+      - testing
+      - fail-loud
+    estimated_hours: 2
+    verifiable_closure: |
+      cargo test -p tillandsias-core --lib guest_bin_path passes with no
+      set_var call in guest_bin_path.rs; re-introducing
+      `set_var("HOME", "/home/probe")` there restores the singleton failures.
+    title: |
+      `singleton`'s tests fail intermittently because sibling tests set HOME process-wide — one of the setters was mine, added under a SAFETY note claiming a single-threaded test.
+    deliverable: |
+      Tests that need a specific HOME take it as a parameter. What must not
+      persist is a crate where an unrelated test's environment decides whether
+      `singleton` can create its lock directory.
+    context: |
+      SURFACED 2026-09-05 while measuring 1032-62rx criterion 3 — an
+      intermittent found by tripping over it, which is how they surface.
+
+      THE FAILURE:
+        singleton::tests::acquire_times_out_instead_of_blocking_forever
+        singleton::tests::try_acquire_returns_none_when_lock_is_busy
+        panicked: first try_acquire should not error: "Failed to create lock
+        directory /home/probe/Library/Caches/tillandsias: Operation not
+        supported (os error 45)"
+
+      `/home/probe` is not singleton's value. It came from
+      crates/tillandsias-core/src/guest_bin_path.rs, which did
+        // SAFETY: single-threaded test; the value is read, not cached.
+        unsafe { std::env::set_var("HOME", "/home/probe") };
+      THE SAFETY NOTE WAS FALSE. No cargo test binary is single-threaded; cargo
+      runs tests concurrently in one process. I wrote that line and that note,
+      for 1019-ivia.
+
+      AND THE FIX WAS ALREADY DOCUMENTED TWELVE LINES AWAY, in the same crate:
+      ca_path.rs's `expand_home` says "SPLIT OUT SO IT CAN BE TESTED WITHOUT
+      MUTATING THE PROCESS (order 1002-9xmb) ... three tests calling
+      set_var("HOME", ...) raced ... reading /home/probe — the OTHER test's
+      value". The remedy was written down, in the file next door, naming the
+      very value my module then set. I read that comment while writing
+      guest_bin_path and did not apply it.
+
+      CONTROL, because the failure appeared during a mutation run and could
+      have been blamed on it: on a CLEAN tree one workspace run gave 0
+      failures and the next failed those same two tests. Independent of the
+      mutation, and of 1032-62rx.
+    outcome: |
+      guest_bin_path gains `xdg_state_root_for(home)`, `guest_bin_dir_for(home)`
+      and `staged_guest_binary_for(home)`; the test passes "/home/probe" in and
+      sets nothing. This is 1002-9xmb's split applied to the module that
+      ignored it.
+
+      MEASURED, and the packet is honest that this NARROWS the flake rather
+      than closing it:
+        before: ~1 in 2 full-suite runs (2 workspace runs, 1 failed)
+        after:  2 failures in 19 consecutive `cargo test -p tillandsias-core
+                --lib` runs, then 8 consecutive green
+      The residue is other setters in the same crate:
+      image_builder.rs:958 and :1021 both `set_var("HOME", &root)`. That file's
+      own comment at :888 already says those belong to "their own packet along
+      with the ten other set_var("HOME") sites in the workspace", so the
+      remaining work is acknowledged and out of scope here.
+    exit_criteria:
+      - 'guest_bin_path.rs contains no set_var call (prose naming it is fine)'
+      - 'the packet states that image_builder.rs:958 and :1021 remain, so nobody reads this as closing the class'
+      - 'a re-introduction of the removed set_var restores the singleton failures, so the fix is shown to be the cause and not a coincidence'
+    notes: |
+      NOT a fix for the class. Eleven-plus set_var("HOME") sites remain across
+      the workspace, already acknowledged at image_builder.rs:888 and
+      main.rs:17431. This removes the one that was mine and that produced the
+      observed value.
+
+      The general rule is already canonical:
+      verification.measurement_practice — a test that mutates process-global
+      state cannot be reasoned about in isolation. The specific lesson here is
+      narrower and worse: the fix existed, in the same crate, in a comment I
+      had read, and I still wrote the racing version.
+    events:
+      - ts: 2026-09-05T03:00:00Z
+        type: implemented
+        agent: macos-tlatoanis-macbook-air-claude-20260905t004510z
+        host: tlatoanis-macbook-air
+        note: |
+          Filed and fixed by the author of the offending line. yolanda-windows
+          pushed for it to be filed rather than left as an anecdote — "not my
+          packet's area is exactly how an intermittent gets left to whoever
+          trips over it next" — and they were right; I would have left it.
