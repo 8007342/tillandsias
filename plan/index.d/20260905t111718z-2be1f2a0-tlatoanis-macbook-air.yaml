@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-exit-125-hint-asserts-the-container-launched-when-podman-never-launched-it
+    event:
+      type: implemented
+      ts: "2026-09-05T11:17:18Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260905t004510z
+      host: tlatoanis-macbook-air
+      summary: |-
+        FIXED. format_attached_command_failure took status_code and never looked at it, so both the cause: and next: lines were unconditional constants. 125 now gets its own account: 'cause: AMBIGUOUS at 125 — podman returns 125 when it could not start the container at all, and a foreground tool can also exit 125. Do not assume the container ran.' and 'next: read podman's own error immediately above FIRST — a name already in use, an image or storage failure means the container never started and the remedy is there. Only if podman reported no error is this an agent/runtime failure.' Every other status keeps the old lines unchanged. THE GUARD ASSERTS THE NARROWING IN BOTH DIRECTIONS and the second arm is the one that matters: a non-125 status must KEEP the agent-runtime hint. Without it a 'fix' that simply deleted that line would pass — throwing away advice that is correct in the common case to silence a wrong claim in a rare one. SABOTAGE, both: reverting to the unconditional constants -> RED 'must not assert the container launched'; deleting the agent hint outright -> RED 'the agent-runtime hint must survive for the statuses it fits'. Restored green. That two-sided shape is the same as 1055-e8ie's fatal-branch arm and 1036-jamx's negative control: a one-directional test lets the OVERCORRECTION through, and overcorrection has been the more tempting error each time. Forced gate on a quiet machine: ok:test-baseline:ran=2303 new-red=0 tolerated=0 stale=0, exit 0. NOT CLAIMED: a live reproduction. pirria's transcript is the pre-fix evidence and is quoted in the packet's context; I have not manufactured a 125 on this host and the fix is a source narrowing whose behaviour is pinned by the guard, not by a boot.
