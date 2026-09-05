@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-sigpipe-verdict-guard-cannot-see-recursive-grep-or-any-pre-existing-pipeline
+    event:
+      type: note
+      ts: "2026-09-05T18:57:12Z"
+      agent_id: linux-yoga-claude-20260905t185712z
+      host: yoga
+      summary: |-
+        RE-CHECKED lenovinha multi-line claim rather than standing on my first count, because the next_action I overwrote said "the only confirmed instance is multi-line and the current count of 173 excludes that entire shape" and my first probe only caught producer lines ENDING in a pipe. A backslash continuation with the pipe on the FOLLOWING line would have slipped past it. Measured, comments stripped, across scripts/ plus build.sh: continuation-style verdict pipelines (a line STARTING with a pipe into grep -q) = 13; of those, with a recursive-grep producer within six lines above = ZERO. So the corpus count of zero holds and is now checked two ways rather than one. The reconciliation: lenovinha confirmed multi-line instance WAS validate-traces.sh, and 1069-c9w6 already fixed it, which is why the only textual hit left is the comment describing it. The 173 figure counted all verdict pipelines rather than recursive-grep ones, so it is not in tension with zero. Recording this because I replaced a next_action that carried a claim I had not yet tested; the claim was right about the shape and no longer true about the corpus.

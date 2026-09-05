@@ -86,7 +86,33 @@ fi
 # Producers whose output is unbounded BY NATURE. Deliberately excludes
 # bounded-by-construction queries the sweep proved safe (`git config
 # --get-all <key>` = 18 bytes here, `rustup target list --installed` = 144).
-UNBOUNDED_PRODUCER_RE='(^|[;&|(]|[[:space:]])(cat|find|journalctl|coredumpctl|git[[:space:]]+(log|diff|show|ls-files|ls-tree|grep)|cargo|podman[[:space:]]+(logs|events|ps|images)|docker[[:space:]]+(logs|ps|images))([[:space:]]|$)'
+# ORDER 1070-a4gc: A PLAIN RECURSIVE GREP IS AN UNBOUNDED PRODUCER.
+#
+# This list recognised `git grep` and not `grep -r`, so the exact line that
+# broke the trace-coverage metric was invisible to this guard even when NEWLY
+# added. In validate-traces.sh, `grep -rl ... | grep -q .` under pipefail made
+# `grep -q` close the pipe, the still-traversing `grep -rl` take SIGPIPE and
+# return 141, pipefail propagate it, and the `if` take the else branch — so the
+# three best-traced specs were reported UNCOVERED and the fleet's coverage
+# number was wrong and host-dependent (1069-c9w6).
+#
+# `[rR]` anywhere in the flag cluster with `[a-zA-Z]*` on BOTH sides, so `-rl`,
+# `-rn`, `-R` and `-lr` all match. The first cut wrote `-[a-zA-Z]*[rR]` and
+# required whitespace immediately after, which matches `-r` and `-lr` but NOT
+# `-rl` — the exact flag combination in the defect this order exists for. The
+# fixture caught it, and it is the same trailing-boundary mistake as a prefix
+# that matches a longer identifier. A NON-recursive grep is deliberately NOT a producer here: it is bounded
+# by its input file, and adding bare `grep` would flag the common and harmless
+# `grep x file | grep -q y`.
+#
+# `rg` IS NOT ADDED, and that is a measurement rather than an oversight.
+# ripgrep is recursive by default, so every use as a producer is unbounded — but
+# this guard tests the whole text left of the pipe, and `command -v rg && ...`
+# appears in scripts/with-tillandsias-builder.sh:247, which would be flagged as
+# a false positive on correct code. Live producer instances of rg: zero. When
+# one appears, add it with an anchor that distinguishes a command from an
+# argument.
+UNBOUNDED_PRODUCER_RE='(^|[;&|(]|[[:space:]])(cat|find|journalctl|coredumpctl|grep[[:space:]]+-[a-zA-Z]*[rR][a-zA-Z]*|git[[:space:]]+(log|diff|show|ls-files|ls-tree|grep)|cargo|podman[[:space:]]+(logs|events|ps|images)|docker[[:space:]]+(logs|ps|images))([[:space:]]|$)'
 
 # Consumers that stop reading before EOF.
 EARLY_EXIT_CONSUMER_RE='\|[[:space:]]*(grep[[:space:]]+[^|]*-[a-zA-Z]*q|grep[[:space:]]+[^|]*-m[[:space:]]*1|head[[:space:]]|sed[[:space:]]+-n?[[:space:]]*.?[0-9]*q)'

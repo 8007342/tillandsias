@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-sigpipe-verdict-guard-cannot-see-recursive-grep-or-any-pre-existing-pipeline
+    field: next_action
+    value: 'REGEX BLIND SPOT FIXED (yoga, 582b30025); the DIFF-SCOPE blind spot is deliberately left open with the measurement that justifies leaving it. Live corpus instances of the recursive-grep-into-verdict-grep shape: ZERO (counted comments-stripped across scripts/, build.sh and scripts/hooks, same-line and multi-line; the one apparent hit is a comment about the already-fixed 1069-c9w6). A full-corpus arm would therefore flag nothing while costing every push, which is how a guard gets switched off (977-448j). REVISIT ONLY WITH A NEW COUNT: if a later sweep finds live pre-existing instances, widening becomes worth arguing; do not widen on the packet''s text alone. rg is also unadded on measurement — it would false-positive on ''command -v rg'' in with-tillandsias-builder.sh:247 because the guard tests the whole text left of the pipe; add it only with an anchor distinguishing a command from an argument.'
+    ts: "2026-09-05T18:56:24Z"
+    host: yoga
+
+events:
+  - packet_id: the-sigpipe-verdict-guard-cannot-see-recursive-grep-or-any-pre-existing-pipeline
+    event:
+      type: progress
+      ts: "2026-09-05T18:56:24Z"
+      host: yoga
+      summary: |-
+        status 'REGEX BLIND SPOT FIXED (yoga, 582b30025); the DIFF-SCOPE blind spot is deliberately left open with the measurement that justifies leaving it. Live corpus instances of the recursive-grep-into-verdict-grep shape: ZERO (counted comments-stripped across scripts/, build.sh and scripts/hooks, same-line and multi-line; the one apparent hit is a comment about the already-fixed 1069-c9w6). A full-corpus arm would therefore flag nothing while costing every push, which is how a guard gets switched off (977-448j). REVISIT ONLY WITH A NEW COUNT: if a later sweep finds live pre-existing instances, widening becomes worth arguing; do not widen on the packet's text alone. rg is also unadded on measurement — it would false-positive on 'command -v rg' in with-tillandsias-builder.sh:247 because the guard tests the whole text left of the pipe; add it only with an anchor distinguishing a command from an argument.' (not terminal) with evidence_refs: 582b30025
+  - packet_id: the-sigpipe-verdict-guard-cannot-see-recursive-grep-or-any-pre-existing-pipeline
+    event:
+      type: note
+      ts: "2026-09-05T18:56:24Z"
+      host: yoga
+      summary: |-
+        regex half done; diff-scope half deliberately not widened, with the count that justifies it
