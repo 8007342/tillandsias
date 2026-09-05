@@ -1,0 +1,91 @@
+packets:
+  - packet_id: a-step-named-mutation-or-sabotage-whose-command-neither-writes-nor-restores-is-asserting-nothing
+    order: 1059-pb2j
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    owner_host: any
+    capability_tags:
+      - litmus
+      - guard
+      - fail-loud
+      - testing
+    estimated_hours: 3
+    owned_files:
+      - openspec/litmus-tests/
+      - scripts/
+    title: >-
+      A litmus step whose NAME says MUTATION or SABOTAGE while its COMMAND
+      neither writes nor restores anything is asserting nothing; three
+      instances found by three unrelated routes, and the class is
+      mechanically detectable from the step text
+    context: |
+      THREE INSTANCES, each found a different way, none by looking for this:
+
+        1029-5wvd  a mutation that silently FAILED TO APPLY. The arm ran, the
+                   edit did not land, and the green was indistinguishable from
+                   a blind guard's green.
+        1033-ev5r  a sabotage arm whose text AVOIDED the literal string it was
+                   meant to trip, so it exercised a shape already refused and
+                   never reached the branch the change had added. Found in a
+                   second-host review; the author's own negative control missed
+                   it.
+        this one   litmus-lww-channel-fields-alias.yaml, found by the standing
+                   freshness audit on 2026-09-05. The step read "MUTATION: with
+                   the alias removed from the reader, the fixture must FAIL —
+                   otherwise it is asserting nothing about the alias at all"
+                   and its command is `grep -q` for a literal source string. It
+                   removes nothing, re-runs nothing, and observes no failure.
+                   Renamed to SOURCE PIN at 5083b2649 rather than deleted,
+                   because the tripwire has smaller real value.
+
+      THE SHAPE, stated so a guard can be written against it: the step's NAME
+      carries the guarantee and its COMMAND does not. A reader auditing the
+      suite reads names; a reader auditing the commands is doing the work the
+      name was supposed to save them. That gap is what makes this worth
+      mechanising rather than correcting three times.
+
+      WHY THIS IS SEPARATE FROM 1041-up99, which the coordinator ruled and I
+      agree with: 1041-up99 is fixtures that nothing invokes, and "this fixture
+      asserts nothing" IN GENERAL is not decidable. THIS class is narrow and
+      mechanical — a step naming a mutation whose command has no write, no
+      chmod, no mv, no git checkout, no restore, and no trap. A guard that can
+      actually run is worth its own packet.
+
+      NOT A CLAIM THAT EVERY SUCH ARM IS WRONG. A step may legitimately be
+      named for the defect it pins while asserting a source shape — that is
+      what the renamed arm above now is. The defect is the MISMATCH between a
+      name promising a behavioural mutation and a command that performs none,
+      so the guard must refuse the NAME, not the technique: the remedy in every
+      case so far was a rename, not a deletion.
+    exit_criteria:
+      - >-
+        a guard flags a step whose name matches MUTATION|SABOTAGE (case
+        sensitive, as the corpus spells them) and whose command contains no
+        mutating verb and no restore; pre-fix result: FAILS — it would have
+        flagged the arm in litmus-lww-channel-fields-alias.yaml before
+        5083b2649, and the guard must be run against that pre-fix text as its
+        positive control
+      - >-
+        a NEGATIVE control proves the guard can pass: the renamed SOURCE PIN
+        form, and at least one real mutation arm from the corpus that does
+        write-and-restore, are both accepted; a guard that flags every arm is
+        the same defect one level up
+      - >-
+        the guard counts what the command DOES rather than what it mentions —
+        a command whose comment says "mutation" must not satisfy it (the
+        901-jtvi occurrences-not-callers shape, which recurred twice more the
+        same week)
+      - >-
+        the three known instances are listed in the guard's own header with
+        what each one taught, so the next reader does not rediscover the class
+        a fourth time
+    next_action: >-
+      write the guard against the PRE-FIX text of
+      litmus-lww-channel-fields-alias.yaml (recoverable from git history before
+      5083b2649) so it is known to have teeth before it is trusted; then sweep
+      the corpus and expect false positives on legitimately-named source pins,
+      which are renames rather than guard exceptions
