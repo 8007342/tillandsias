@@ -3244,6 +3244,19 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Issue-capture lane fixture passed"
 
+    # Order 1056-5344. The lane now scopes PAST a mandated merge of
+    # origin/linux-next, which widens the bypass further: without the ancestry
+    # gate a host could park code on a side branch, merge it --no-ff, and the
+    # first-parent view would not see it. Arm 3 of this fixture is that negative
+    # control, so it belongs inside the gate for the same reason its sibling
+    # does — a control nothing executes cannot protect the hole it names.
+    _step "Checking the plan-only lane survives the mandated merge without opening a bypass (1056-5344)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-pre-push-plan-lane-after-merge.sh" 2>&1; then
+        _error "the plan-only lane's merge scoping lost a boundary (1056-5344) — see the verdict line above"
+        exit 1
+    fi
+    _info "Plan-lane merge-scoping fixture passed"
+
     # Order 251 criterion LM-04. `plan/long-running.md` is declared a filtered
     # view of the ledger's active multi_cycle packets and nothing enforced it.
     # It drifted in July (caught by a human verifier, repaired by hand, bought

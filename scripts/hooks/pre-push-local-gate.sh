@@ -232,10 +232,75 @@ fi
 # already printed), 1 to fall back to the full gate (reason already printed).
 LANE_NOTES=()
 
+# ORDER 1056-5344. The paths THIS PUSH ITSELF changes, excluding what a
+# mandated merge of trunk dragged in.
+#
+# THE COMPOSITION THAT BROKE THE LANE. methodology pull_merge_cadence.pre_push_gate
+# requires merging origin/linux-next into a platform branch before EVERY push.
+# That merge brings other hosts' non-plan files into the diff against the
+# PLATFORM remote — they are new relative to windows-next even though they are
+# old on trunk — and the lane judged that whole diff. So the two rules compose
+# into "plan-only only if trunk has not moved", and the busier trunk is the less
+# reachable the lane. esmeraldinha hit it 2026-09-05 with a one-fragment cycle
+# on a night the fleet landed several times an hour.
+#
+# WHY --first-parent AND NOT --no-merges ALONE. "The paths this push's own
+# non-merge commits touch" reads naturally as `git log --no-merges A..B`, and
+# that is WRONG: a commit arriving through the merge is ITSELF a non-merge
+# commit newly reachable on this ref, so it is included and the scoped set is
+# identical to the unscoped one. Measured while designing this — that
+# formulation returned the foreign README right alongside the ledger fragment,
+# so the "fix" would have changed nothing while looking correct on any
+# same-branch test.
+#
+# WHY THE ANCESTRY GATE IS NOT OPTIONAL. --first-parent alone is a BYPASS: a
+# host can park code on a side branch, merge it with --no-ff and push, and the
+# code arrives through the SECOND parent where a first-parent walk cannot see
+# it. Measured: a sneaky.rs was invisible to the scoped view while the ledger
+# fragments showed. That is not the un-gated union this order knowingly accepts
+# (trunk's own content, gated when the coordinator merges into linux-next); it
+# is arbitrary unreviewed code taking a lane meant for ledger appends. So the
+# scoped view is used ONLY when every merge in the range brings trunk content:
+# each merge's second parent must be an ancestor of origin/linux-next. Anything
+# else falls back to the FULL net diff, which disqualifies as it always did.
+#
+# THE DECISION AND THE EMISSION ARE SEPARATE FUNCTIONS ON PURPOSE. The emitter
+# is consumed through process substitution, which is a SUBSHELL: a
+# LANE_UNION_UNGATED=1 set inside it is discarded, so the marker would silently
+# never be written and the stamp would claim a gated union. The decision
+# therefore runs in the caller's shell and the caller sets the flag.
+_lane_can_scope() { # remote_sha local_sha -> 0 when the merge-scoped view applies
+    local remote_sha="$1" local_sha="$2" m p2 merges=0
+
+    while IFS= read -r m; do
+        [[ -n "$m" ]] || continue
+        merges=$((merges + 1))
+        p2="$(git rev-parse --verify --quiet "${m}^2" 2>/dev/null)" || return 1
+        [[ -n "$p2" ]] || return 1
+        # A merge of anything but trunk content cannot be scoped away.
+        git merge-base --is-ancestor "$p2" refs/remotes/origin/linux-next 2>/dev/null || return 1
+    done < <(git log --merges --format=%H "${remote_sha}..${local_sha}" 2>/dev/null)
+
+    # No merge, nothing to scope away: the net diff already IS this push's own
+    # changes. Returning 1 keeps behaviour bit-identical to before this order
+    # for every push that does not merge.
+    [[ "$merges" -gt 0 ]]
+}
+
+_lane_scoped_diff() { # remote_sha local_sha -> "<status>\t<path>" lines
+    local remote_sha="$1" local_sha="$2" c
+    while IFS= read -r c; do
+        [[ -n "$c" ]] || continue
+        git diff --name-status --no-renames "${c}^" "$c" -- 2>/dev/null
+    done < <(git log --first-parent --no-merges --format=%H "${remote_sha}..${local_sha}" 2>/dev/null) \
+        | LC_ALL=C sort -u
+}
+
 attempt_plan_only_lane() {
     local -a files=() srcs=() bases=() issue_bases=()
     local att_seen=0
     LANE_NOTES=()
+    LANE_UNION_UNGATED=0
 
     if [[ -z "$REFS" ]]; then
         echo "plan-only lane: not applicable — no ref list on stdin to scope the outgoing diff (full gate required)" >&2
@@ -258,6 +323,15 @@ attempt_plan_only_lane() {
             echo "plan-only lane: not applicable — remote base $remote_sha is not present locally (full gate required)" >&2
             return 1
         fi
+
+        # ORDER 1056-5344: decide HERE, in this shell, whether the merge-scoped
+        # view applies — the emitter below runs in a subshell and cannot record it.
+        local _scoped=0
+        if _lane_can_scope "$remote_sha" "$local_sha"; then
+            _scoped=1
+            LANE_UNION_UNGATED=1
+        fi
+        _lane_can_scope_decided() { [[ "$_scoped" -eq 1 ]]; }
 
         # Net outgoing diff for this ref: what the remote will see change.
         # --no-renames keeps the status alphabet to A/M/D/T: a rename of a
@@ -379,7 +453,11 @@ attempt_plan_only_lane() {
             # the validator below can index it without drifting out of step.
             issue_bases+=("$issue_base")
             issue_base=""
-        done < <(git diff --name-status --no-renames "$remote_sha" "$local_sha" -- 2>/dev/null)
+        done < <(if _lane_can_scope_decided; then
+                     _lane_scoped_diff "$remote_sha" "$local_sha"
+                 else
+                     git diff --name-status --no-renames "$remote_sha" "$local_sha" -- 2>/dev/null
+                 fi)
     done <<< "$REFS"
 
     if [[ ${#files[@]} -eq 0 ]]; then
@@ -681,6 +759,20 @@ attempt_plan_only_lane() {
         for note in ${LANE_NOTES[@]+"${LANE_NOTES[@]}"}; do
             echo "plan-only lane: note: $note" >&2
         done
+    fi
+    # ORDER 1056-5344: RECORD THE GATE DEBT rather than imply the lane gated it.
+    # When the lane was taken over a mandated merge, the pushed head is a UNION
+    # of two sides that were each green separately and were never gated
+    # TOGETHER — the 754-kptj shape. The lane validated this push's own
+    # fragments; it did not build the union. Write that down where the
+    # coordinator's land can read it, so the debt is a fact on disk instead of
+    # an inference someone has to make from the branch topology.
+    if [ "${LANE_UNION_UNGATED:-0}" -eq 1 ]; then
+        local _um; _um="$(git rev-parse --absolute-git-dir 2>/dev/null)/tillandsias-union-ungated"
+        printf '%s %s\n' "$(git rev-parse HEAD 2>/dev/null)" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            >> "$_um" 2>/dev/null || true
+        echo "plan-only lane: this head is an UN-GATED UNION (scoped past a merge of origin/linux-next);" >&2
+        echo "plan-only lane: recorded in $_um — the coordinator's land gates it, this lane did not" >&2
     fi
     echo "${GRN}✓ local gate: plan-only lane clean (${#files[@]} fragment file(s) validated; build stamp not required for this push)${RST}" >&2
     return 0
