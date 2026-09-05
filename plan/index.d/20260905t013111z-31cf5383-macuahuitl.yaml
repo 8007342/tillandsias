@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: linux-build-tuneups-carried-by-the-build-scripts
+    event:
+      type: finding
+      ts: "2026-09-05T01:31:11Z"
+      agent_id: linux-macuahuitl-claude-20260905t013111z
+      host: macuahuitl
+      summary: |
+        DESKTOP TRIAL, ROUND 1 (macuahuitl, 20 cores, 62 GB, btrfs zstd, NVMe scheduler none), protocol written before the numbers (falsifier: 10 jobs is "the fix" only if its io-full peak is at most half the default's at no more than 1.5x wall). BASELINE (a real multi-crate compile, the 00:54Z union gate at cargo's default 20 jobs, forced by tree change): io-full peak 83.5%, 167 of 226 five-second samples above 20%, max rustc 20, and 43% io-full observed with ZERO rustc during the test phase. WARM CONTROLS (both arms on a just-compiled tree, caught by esmeraldinha before they were read as a comparison: TILLANDSIAS_FORCE_CHECK forces the gate's steps, not cargo's compile): A default 183 s ran=2209 io-full peak 34.9% (7/37 over 20%) max rustc 2; B 10 jobs 155 s ran=2209 io-full peak 12.7% (0/31) max rustc 1; compile-free, so the spread is cache warmth, not the job count; they stand only as "a gate with no compilation still stalls at 35%". COMPILE-FORCED ARMS (touch crates/tillandsias-core/src/lib.rs before each; compile-work guard Compiling>0 and rustc_max>0, both valid): A default 183 s, Compiling=19, io-full peak 15.3%, mean 2.2, max rustc 3; B 10 jobs 166 s, Compiling=16, io-full peak 7.7%, mean 1.4, max rustc 6. VALID BUT WEAK: touching one crate recompiles a dependency CHAIN, so neither arm exercised more than a handful of concurrent rustc processes and neither reached the regime that freezes the desktop; the job cap was never the binding variable in these arms. WHAT THE ROUND DOES SHOW: the only run that stalled the desktop-shaped 83% was the one with twenty concurrent rustc writers; bounded recompiles at 3 to 6 writers stay under 16%; and the test phase alone reaches 35 to 43% with no compiler, which the job cap cannot touch (that is the dirty-page and podman-fixture I/O, arms 3 and 4 of this packet). NEXT ARM, the decisive one: a full `cargo clean` before each of A (default) and B (10 jobs), the only shape that puts twenty rustc writers on the disk at once, about 15 to 25 minutes per arm, run while the daily cut waits on host landings. Not concluded; the operator's hypothesis is neither confirmed nor refuted by this round, and the numbers say the test phase needs its own arm regardless.

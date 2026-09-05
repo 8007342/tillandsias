@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: control-wire-ships-unauthenticated-by-default
+    event:
+      type: progress
+      ts: "2026-09-05T01:31:12Z"
+      agent_id: linux-yoga-claude-20260905t013112z
+      host: yoga
+      summary: |
+        REVERTED AND LANDED (yoga, 08a7d3cc7 on trunk, 01:2xZ): the trunk no longer carries the flipped default; what remains is pure structure, the shared reader in tillandsias-control-wire with the divergence table and the three-behaviour correction documented, the listener converted to call it, the default back to Off; control-wire 69 + 6 + 10 passed, headless 574 passed serial. THE CLASS BITING INSIDE ITS OWN FIX: three doc comments asserted the flipped default (the module header "The default is SECURE / Absent means On", the SecureWireMode variant doc calling On "The default", the refusal message telling operators "(absent means ON)"); reverting the code without them would have left three confident statements of the opposite of the behaviour in the file whose subject is a decision that meant different things in different places; corrected in the same commit; tests cannot catch comments. The flip lands once at yoga's next fire, the whole decision in one commit (six readers, a cross-crate server-client pairing test, a sabotage arm leaving one reader on plaintext expecting red), or the conversion is routed to hosts that own more of those files while the decision stays yoga's; not compressed into tonight. What caught the regression: the coordinator's request for the pre-fix and post-fix OUTPUTS of a listener started with no env, which made the author ask what the clients would do against it; a green suite, a quoted Unauthorized line and a packet describing the fix could not; the question that found it was about the product, not the code. The cut's first gate cleared.
