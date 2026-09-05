@@ -347,6 +347,33 @@ verification:
           measurement. A one-line grep quoted in a message is a probe and needs
           the same positive control as a five-minute scan.
         enforced_by: "judgment — recorded so it is not re-derived; state the positive control's result beside the null one, or the null one is not reportable. A grep typed into a message is a probe."
+      - id: print_the_denominator
+        kind: judgment
+        rule: >
+          A count of FINDINGS without a count of THINGS EXAMINED is
+          unfalsifiable. Every probe that reports a number must report how much
+          it looked at, in the same output, so the control travels IN the
+          measurement rather than beside it where it can be forgotten. A zero
+          findings over a stated denominator is evidence; a bare zero is not
+          distinguishable from a probe that never executed.
+        earned_by: >
+          2026-09-05, macneo, auditing a patch for whitespace hazards before a
+          relay. The per-part audit reported ZERO trailing-whitespace and ZERO
+          empty lines in BOTH parts, while a whole-file run moments earlier had
+          listed empty lines at 9, 12 and 18 — two of the same host's
+          measurements contradicting each other. Cause: `set -- $r` to split
+          "1 291" into two arguments, and ZSH DOES NOT WORD-SPLIT UNQUOTED
+          PARAMETER EXPANSIONS, so $1 was the whole string, $2 was empty,
+          `NR>=a && NR<=b` was never true, and the awk block NEVER EXECUTED. It
+          exited 0 and printed zeros. The tell was in the output the whole time
+          — the header rendered `lines 1 291-:` instead of `lines 1-291:` — and
+          was noticed only because two numbers disagreed. Re-run with an
+          explicit `scanned=` counter: 291 and 179 lines, exactly the two
+          ranges, so the block demonstrably ran. This is the same shape as the
+          zsh `:s` history-modifier failure four hours earlier on another host.
+          Both of that day's blind probes would have been caught instantly by a
+          denominator.
+        enforced_by: "judgment — a probe that cannot report how much it examined has a zero that is not reportable"
       - id: a_discriminating_probe_needs_both_controls
         kind: judgment
         rule: >

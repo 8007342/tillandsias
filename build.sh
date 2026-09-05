@@ -3303,7 +3303,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Multi-line jq capture check passed"
-
     # 1004-vsh2: `cmdkey /list:<target>` echoes the queried name in its header
     # even when no such credential exists, so the smoke runbook's presence
     # predicate was TRUE FOR EVERY TARGET — the post-delete assertion threw on
