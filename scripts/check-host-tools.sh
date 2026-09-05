@@ -96,7 +96,109 @@ derived_probed_tools() {
         | sort -u
 }
 
-have() { command -v "$1" >/dev/null 2>&1; }
+# ── resolving a tool before declaring it absent (1004-x9ua) ─────────────────
+#
+# ORDER 1004-x9ua. This check answered a question about the OPERATOR'S SHELL and
+# reported it as a question about the HOST. rustup and Homebrew both write their
+# PATH edit into a shell rc file, and a non-login non-interactive shell never
+# sources it — which is EXACTLY the kind of shell every agent tool call gets.
+#
+# MEASURED on tlatoanis-macbook-air 2026-09-05, under the PATH such a call sees:
+#   env -i PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin bash scripts/check-host-tools.sh
+#   -> missing:host-tools:macos:timeout,cargo,rustc,pkg-config
+# with ALL FOUR installed: timeout, gtimeout and pkg-config in /opt/homebrew/bin,
+# cargo and rustc in ~/.cargo/bin (cargo 1.96.1 runs). Two prefixes, not one —
+# the filed diagnosis named ~/.cargo/bin and would have left timeout and
+# pkg-config still lying.
+#
+# WHY THAT IS WORSE THAN A WRONG ANSWER. Every one of those four printed a
+# remedy telling the operator to install what they already had. An operator who
+# follows `brew install coreutils` installs a package that is present and the
+# check stays red, which is the 980-xcaf `brew install qemu` shape this file's
+# own header warns about.
+#
+# THIS IS 876-irn7 AGAIN, AND IT IS THE FIFTH SITE. The registry is
+# scripts/lib-cargo-sites.sh, which asks that the next site be ADDED there rather
+# than discovered on a floor host; this file is now listed in it, together with
+# the reason it resolves through its own list instead of calling cargo_resolve
+# (it must cover /opt/homebrew/bin too, and its fixture has to be able to
+# construct absence for an absolute prefix). check-cheatsheet-tiers.sh:57, named
+# in this packet as an open third site, was ALREADY FIXED by 1005-m6rz before
+# this cycle — verified here, not assumed: under `env -i PATH=/usr/bin:/bin` it
+# resolves and reports OK rather than a bare command-not-found.
+#
+# The shape below is deliberately the one cycle-preflight already established
+# rather than a second convention: CARGO_HOME first (a host that set it meant
+# it), then the standard prefixes, and put the resolved directory ON PATH so
+# every later caller in this process sees it too.
+#
+# THE GENUINELY-ABSENT CASE KEEPS ITS VERDICT AND ITS TERMINAL FORCE. This
+# narrows a false positive; it must not weaken the true one.
+tool_prefixes() {
+    # A TEST SEAM, and the reason it has to exist: every prefix below except the
+    # cargo ones is an ABSOLUTE path, so a fixture on a host that really has
+    # /opt/homebrew/bin cannot construct the genuinely-absent case for a tool
+    # living there — it can farm $HOME and $CARGO_HOME and nothing else. Without
+    # this seam, criterion 4's "a host with no cargo anywhere still fails" is
+    # provable for cargo and UNPROVABLE for timeout and pkg-config, and the arm
+    # would quietly cover half of what it claims.
+    #
+    # Distinct from the CYCLE_PREFLIGHT_SKIP_BUILD shape 1004-ws5q declined: that
+    # was a production escape hatch a human had to remember. This is exercised by
+    # scripts/test-host-tools.sh on every gate run, so it cannot rot unnoticed,
+    # and unset it changes nothing about how the check behaves on a real host.
+    if [ -n "${TILLANDSIAS_HOST_TOOL_PREFIXES:-}" ]; then
+        printf '%s\n' "$TILLANDSIAS_HOST_TOOL_PREFIXES" | tr ':' '\n'
+        return 0
+    fi
+    # CARGO_HOME first, then rustup's default, then Homebrew's three standard
+    # prefixes (Apple silicon, Intel, linuxbrew). Not derived from `brew
+    # --prefix`, because brew itself is off the same PATH this is repairing.
+    [ -n "${CARGO_HOME:-}" ] && echo "$CARGO_HOME/bin"
+    echo "$HOME/.cargo/bin"
+    echo "/opt/homebrew/bin"
+    echo "/usr/local/bin"
+    echo "/home/linuxbrew/.linuxbrew/bin"
+}
+
+# Names that satisfy a requirement without carrying it. NOT a convenience list:
+# each is read off the CONSUMER's own fallback, so this file cannot drift into
+# accepting something the gate would then reject.
+#   timeout -> gtimeout: check-credential-channel.sh:17-20 takes either.
+alternates_for() {
+    case "$1" in
+        timeout) [ "$PLATFORM" = macos ] && echo gtimeout ;;
+        *) : ;;
+    esac
+}
+
+# Resolve $1 onto PATH if it exists in a standard prefix. Returns 0 if the name
+# is callable afterwards. Exports PATH so later callers inherit the repair.
+_resolve_onto_path() {
+    command -v "$1" >/dev/null 2>&1 && return 0
+    local _dir
+    while IFS= read -r _dir; do
+        [ -n "$_dir" ] || continue
+        case "$_dir" in /bin) continue ;; esac
+        if [ -x "$_dir/$1" ]; then
+            PATH="$_dir:$PATH"
+            export PATH
+            return 0
+        fi
+    done <<EOF
+$(tool_prefixes)
+EOF
+    return 1
+}
+
+have() {
+    _resolve_onto_path "$1" && return 0
+    local _alt
+    for _alt in $(alternates_for "$1"); do
+        _resolve_onto_path "$_alt" && return 0
+    done
+    return 1
+}
 
 missing=""
 present=0
@@ -111,6 +213,13 @@ while IFS='|' read -r tool platforms prover expect why remedy; do
             echo "  MISSING: $tool"
             echo "    needed because: $why"
             echo "    remedy: $remedy"
+            # ORDER 1066-dkkb: state the boundary of what was inspected, so a
+            # reader can tell "not installed" from "not where I looked". The
+            # prefix list below is standard, not exhaustive, and a tool sitting
+            # somewhere else would otherwise get the same confident remedy that
+            # sent an operator to reinstall what they already had.
+            echo "    searched PATH plus: $(tool_prefixes | tr '\n' ' ')"
+            echo "    if it IS installed elsewhere this is a PATH fault, not a missing tool — put its directory on PATH (agent shells are non-login and never source your rc file)"
         } >&2
     fi
 done <<EOF

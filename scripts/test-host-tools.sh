@@ -79,7 +79,15 @@ esac
 _plat="$(uname -s | tr 'A-Z' 'a-z' | sed 's/darwin/macos/')"
 case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) _plat=windows ;; esac
 farm "$tmp/farm" "$_absent_tool" "$_absent_extra"
-out="$(PATH="$tmp/farm" "$CHECK" 2>/dev/null)"; rc=$?
+# ORDER 1004-x9ua. The farm defines the PATH; since the check now also resolves
+# through standard ABSOLUTE prefixes (~/.cargo/bin, /opt/homebrew/bin, ...) it
+# must be told those are empty too, or the farm constrains the PATH while the
+# check reaches straight past it. MEASURED when the resolution landed: this arm
+# went red with `rc=0 ok:host-tools:macos:5 required present` on a farm that had
+# genuinely hidden timeout — the farm was still hiding, and the check was no
+# longer only looking there.
+mkdir -p "$tmp/noprefix"
+out="$(PATH="$tmp/farm" TILLANDSIAS_HOST_TOOL_PREFIXES="$tmp/noprefix" "$CHECK" 2>/dev/null)"; rc=$?
 if [ "$rc" -eq 1 ] && printf '%s' "$out" | grep -q "^missing:host-tools:${_plat}:.*${_absent_tool}"; then
     check ok "a genuinely absent required tool is named, exit 1 ($_plat/$_absent_tool)"
 else
@@ -116,6 +124,98 @@ while IFS='|' read -r tool platforms prover expect why remedy; do
 done <<EOF
 $(awk '/cat <<.SPEC.$/{f=1;next} /^SPEC$/{f=0} f' "$CHECK")
 EOF
+
+# 4b. ORDER 1004-x9ua — THE NARROWING IS PROVED ON BOTH SIDES, per criterion 4.
+#     The defect was that this check read the OPERATOR'S PATH and reported it as
+#     the HOST'S inventory: under the non-login PATH every agent tool call gets,
+#     it printed missing:host-tools:macos:timeout,cargo,rustc,pkg-config on a
+#     host carrying all four. One side alone cannot pin the fix — resolving
+#     everything always would pass the positive arm and destroy the verdict.
+#
+#     Both arms below drive tool_prefixes through TILLANDSIAS_HOST_TOOL_PREFIXES,
+#     because every real prefix is an absolute path and a host that HAS
+#     /opt/homebrew/bin cannot otherwise construct the absent case for a tool
+#     living there. Without the seam this arm would cover cargo and rustc and
+#     silently skip timeout and pkg-config.
+_reqs="$(printf '%s\n' "$_spec" | awk -F'|' -v p="$_plat" 'NF && index(","$2",", ","p",")>0 {print $1}')"
+mkdir -p "$tmp/offpath" "$tmp/empty"
+_have_all=1
+for _t in $_reqs; do
+    _p="$(command -v "$_t" 2>/dev/null)" || { _have_all=0; continue; }
+    ln -sf "$_p" "$tmp/offpath/$_t" 2>/dev/null
+done
+if [ "$_have_all" = 1 ]; then
+    # POSITIVE: resolvable-but-off-PATH must PASS. PATH deliberately carries
+    # none of the required tools; only the prefix does.
+    farm "$tmp/bare" $_reqs
+    out="$(PATH="$tmp/bare" TILLANDSIAS_HOST_TOOL_PREFIXES="$tmp/offpath" "$CHECK" 2>/dev/null)"; rc=$?
+    if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q '^ok:host-tools:'; then
+        check ok "1004-x9ua: tools present in a standard prefix but off PATH resolve, not MISSING"
+    else
+        check FAIL "1004-x9ua: tools off PATH but present must resolve" "rc=$rc out=[$out]"
+    fi
+
+    # NEGATIVE CONTROL FOR THE POSITIVE ARM. If $tmp/bare did not actually hide
+    # them, the arm above would pass without the resolution doing anything —
+    # the vacuous-pass shape this fixture's own arm 3 exists to refuse.
+    _leaked=""
+    for _t in $_reqs; do
+        PATH="$tmp/bare" command -v "$_t" >/dev/null 2>&1 && _leaked="${_leaked:+$_leaked,}$_t"
+    done
+    if [ -z "$_leaked" ]; then
+        check ok "1004-x9ua: the bare farm really hides every required tool, so the arm above means what it says"
+    else
+        check FAIL "1004-x9ua: bare farm leaked tools, positive arm is vacuous" "leaked=[$_leaked]"
+    fi
+
+    # TRUE ABSENCE KEEPS ITS VERDICT AND ITS TERMINAL FORCE. Same bare PATH, but
+    # the prefix is empty: nothing is resolvable anywhere.
+    out="$(PATH="$tmp/bare" TILLANDSIAS_HOST_TOOL_PREFIXES="$tmp/empty" "$CHECK" 2>/dev/null)"; rc=$?
+    if [ "$rc" -eq 1 ] && printf '%s' "$out" | grep -q "^missing:host-tools:${_plat}:"; then
+        check ok "1004-x9ua: a tool absent from PATH and every prefix still fails, exit 1"
+    else
+        check FAIL "1004-x9ua: true absence must still fail" "rc=$rc out=[$out]"
+    fi
+
+    # CRITERION 2: no remedy may name a tool that IS installed here. The verdict
+    # naming a tool is what triggers its remedy, so assert on the verdict.
+    # CRITERION 2 IS ABOUT THE LIVE HOST, not the farm: under an empty prefix the
+    # absence is REAL for the check, so naming tools there is correct. Assert on
+    # the verdict this host actually prints.
+    _live="$("$CHECK" 2>/dev/null)"
+    _liars=""
+    for _t in $_reqs; do
+        command -v "$_t" >/dev/null 2>&1 || continue
+        printf '%s' "$_live" | grep -q "[:,]$_t\(,\|$\)" && _liars="${_liars:+$_liars,}$_t"
+    done
+    if [ -z "$_liars" ]; then
+        check ok "1004-x9ua: no verdict names a tool that is installed on this host (criterion 2)"
+    else
+        check FAIL "1004-x9ua: verdict names installed tool(s), remedy is unreachable" "named=[$_liars] verdict=[$_live]"
+    fi
+else
+    check ok "1004-x9ua: skipped both-sides arms — this host genuinely lacks a required tool, so the positive side cannot be constructed"
+fi
+
+# 4c. ORDER 1004-x9ua — the timeout alternate is read off the CONSUMER.
+#     check-credential-channel.sh:17-20 accepts timeout OR gtimeout, so a host
+#     with only gtimeout is NOT missing coreutils, and telling it to
+#     `brew install coreutils` is advice to install what it has.
+if [ "$_plat" = macos ] && command -v gtimeout >/dev/null 2>&1; then
+    mkdir -p "$tmp/gt"; rm -f "$tmp/gt"/*
+    ln -sf "$(command -v gtimeout)" "$tmp/gt/gtimeout"
+    for _t in $_reqs; do
+        [ "$_t" = timeout ] && continue
+        _p="$(command -v "$_t" 2>/dev/null)" && ln -sf "$_p" "$tmp/gt/$_t"
+    done
+    farm "$tmp/bare2" $_reqs gtimeout
+    out="$(PATH="$tmp/bare2" TILLANDSIAS_HOST_TOOL_PREFIXES="$tmp/gt" "$CHECK" 2>/dev/null)"; rc=$?
+    if [ "$rc" -eq 0 ]; then
+        check ok "1004-x9ua: gtimeout alone satisfies the timeout requirement, as its consumer does"
+    else
+        check FAIL "1004-x9ua: gtimeout alone must satisfy timeout" "rc=$rc out=[$out]"
+    fi
+fi
 
 # 5. The check is wired into the gate.
 if grep -q 'check-host-tools.sh\|test-host-tools.sh' "$ROOT/build.sh"; then
