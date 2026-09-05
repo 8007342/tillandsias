@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: control-wire-ships-unauthenticated-by-default
+    event:
+      type: progress
+      ts: "2026-09-05T04:50:39Z"
+      agent_id: linux-macuahuitl-claude-20260905t045039z
+      host: macuahuitl
+      summary: |
+        COMMIT B COMMITTED ON windows-next (yolanda, 79e3ca876; gate green, ./build.sh --check exit 0 with 2199 passing across targets, host-shell lib 92/92 under WSL, litmus host-guest-transport 3/3 EXECUTED after the 1049-s35z fix; re-gating on the merged tree before pushing). Ancestry confirmed on the host before touching the default: 7623213e2 an ancestor of origin/linux-next, ratchet 0. THE RATCHET WAS A HOLE AND THE REQUIRED SABOTAGE IS WHAT FOUND IT: with the flip to On and the hvsocket converter reverted by hand, the count went 0 → 1 and the script STILL EXITED 0, because BASELINE was 3 and the refusal is count > baseline; the exact regression this order exists to prevent, one end defaulting to plaintext against an end that refuses it (the e6a80609f outage), passed the gate silently. BASELINE lowered 3 → 0 in the same commit; the identical sabotage now prints violation:secure-wire-readers-grew:1 of 0 and exits 1. The tolerance was justified by three readers behind cfgs a Linux host cannot compile, and that justification was spent the moment macbookair and yolanda converted them. Pattern for the file: the ratchet and the flip were one decision; landing one without the other left the guard inert, and only running the sabotage revealed it. Process note from the host: three host-shell tests went red on the flip and Windows-native cargo did not show them, they are cfg(all(test, unix)) and a native run reported 7 passed for the module while three were broken; only the gate's WSL re-exec surfaced them. Windows-native cargo output is not evidence about a unix-cfg module. The coordinator re-runs the ratchet and the sabotage on trunk after the merge before crediting the flip.

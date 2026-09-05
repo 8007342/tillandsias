@@ -1,0 +1,58 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: plan-only-lane-is-disqualified-by-the-mandated-pre-push-merge-on-platform-branches
+    order: 1056-5344
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: any
+    capability_tags: [gate, windows, macos, plan, velocity]
+    estimated_hours: 3
+    owned_files:
+      - scripts/hooks/pre-push-local-gate.sh
+    title: |
+      On a platform branch the plan-only push lane is reachable only when trunk has not moved: the pre-push gate mandates merging origin/linux-next before every push, the merge brings other hosts' non-plan files into the diff against the remote, and the lane judges that whole diff, so a one-file ledger append costs the floor a 25-minute full gate whenever anyone touched README.md on trunk
+    context: |
+      FOUND by esmeraldinha 2026-09-05T04:3xZ with a ledger-only cycle (one loop_status.d fragment, the
+      1004-pg9p metrics round). First refusal, correct: `blocked:linux-next-not-merged:windows-next`
+      (methodology pull_merge_cadence.pre_push_gate). The mandated merge brought README.md and
+      openspec/litmus-tests/litmus-mode-only-regression-gate.yaml, other hosts' work. Then, verbatim:
+        plan-only lane: not applicable — 'README.md' is outside plan/index.d/, plan/loop_status.d/,
+        plan/issues/, and plan/mo-full-attestations.d/ (full gate required)
+        ✗ pre-push refused: the tree changed since ./build.sh --check last passed
+        CHANGED SINCE THE GATE RAN (12 path(s), newest-first by mtime)
+      The host's 04:28Z push of four fragments succeeded because they sat on a tree the gate had just
+      validated; nothing about authorship differed. The shape: the lane tests THE TREE BEING PUSHED, and
+      the pre-push merge guarantees that tree contains whatever trunk moved since the last gate; on a
+      platform branch the two rules compose into "plan-only only if trunk has not moved", and the busier
+      the trunk the less reachable the lane. Tonight the fleet landed several times an hour. Distinct from
+      1013-xm63 (which is about append-only edits being refused in kind); here the edits were accepted in
+      kind and a foreign file in the same push disqualified the ref.
+      Two fix directions, offered by the finder, and the coordinator's reading of the trade-off:
+      (1) judge the lane on the paths THIS PUSH'S OWN non-merge commits touch (the `touched` set 1000-rqmx
+      already computes for the stale-base guard), so a merge of origin/linux-next carrying someone else's
+      README does not disqualify a ledger append; (2) exempt a merge of origin/linux-next from the lane's
+      scope test, since the rule that forces the foreign paths in is the rule that then refuses them.
+      TRADE-OFF to state in the fix, not to hide: under either option the platform branch head becomes an
+      UN-GATED UNION (each side green, the union never run; the 2026-08-15 shape, 754-kptj) until the
+      coordinator's merge into linux-next gates it, which that path already does. So the fix should record
+      the union's gate debt in the stamp (a "union-ungated" marker the coordinator's land can read) rather
+      than pretend the lane gated it. Option (1) is preferred: it keeps the lane's own rule (this push's
+      changes are plan-only) exact.
+    exit_criteria:
+      - "a platform-branch push whose own non-merge commits touch only plan/index.d, plan/loop_status.d, plan/issues or plan/mo-full-attestations.d takes the plan-only lane after a mandated merge of origin/linux-next that brought non-plan files; pre-fix result: FAILS (esmeraldinha 2026-09-05, verbatim refusal above)"
+      - "a push whose own commits touch any non-plan path still requires the full gate; pre-fix result: passes, and must keep passing"
+      - "the stamp or push record marks the platform head as an un-gated union when the lane was taken over a merge, and scripts/land-on-platform-branch.sh reads it and refuses to skip its gate; pre-fix result: n/a, the marker does not exist"
+    unscoreable: |
+      The pin is a hook fixture with a merge commit carrying a foreign README beside a ledger append,
+      asserting lane taken; and the inverse with a code file in the host's own commit, asserting full
+      gate; the claimer adds both under the ci-release spec.
+    events:
+      - type: note
+        ts: "2026-09-05T04:50:39Z"
+        host: macuahuitl
+        summary: |
+          FILED by the coordinator from esmeraldinha's report, relayed because the host was mid-gate 11 on
+          the merged tree at the time; the finder offered both fix directions and filed nothing itself.

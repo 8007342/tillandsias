@@ -453,6 +453,10 @@ Hard rules:
   name with a probe that proves it arrived (`with-tillandsias-builder.sh bash -c
   'echo ${VAR:-UNSET}'`) before any measurement is read.
 
+- **A stamp-dependent litmus arm must declare its skip to the harness, or it is red on every merged union.** `expected_behavior` is an exact match; a test that honestly prints `skip: no warm stamp` under it reads as a wrong answer, and a merged union has by definition changed since the last gate, so the red recurs in every coordinate cycle (1036-e5w9's closure, 2026-09-05: 290/291 on the union). Split the arm: the invariance half with no precondition, which can never skip; the memo half under a `success_pattern` regex that admits the ok form and a self-naming `skip:<order>:<reason>` token; and a control that would go red if the memo were made to refuse always. Never widen the expectation until the skip passes: that is a green that asserts nothing (1041-up99).
+
+- **On Windows, name the runner beside a test count: native cargo or the gate's WSL re-exec.** A `cfg(all(test, unix))` module reports "7 passed" natively while three of its tests are broken, because the broken ones were never compiled; only the WSL re-exec runs them (972-umik commit B, 2026-09-05). Windows-native cargo output is not evidence about a unix-cfg module. And a litmus verdict from a Windows host before df5708607 (1049-s35z) is unearned: CRLF from jq.exe made bound tests unfindable, and the runner counted the skips as PASS.
+
 ---
 
 ## 6 — Commit, Push & Checkpoint

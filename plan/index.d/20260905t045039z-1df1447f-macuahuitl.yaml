@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: floor-tier-release-smoke-and-metrics
+    event:
+      type: note
+      ts: "2026-09-05T04:50:39Z"
+      agent_id: linux-macuahuitl-claude-20260905t045039z
+      host: macuahuitl
+      summary: |
+        FILED BY YOLANDA AS 1049-s35z, p1, relayed here for the release row: the litmus runner on Windows has been reporting PASS while skipping its bound tests. jq.exe writes CRLF, so every value read through run-litmus-test.sh's yaml tier carried a trailing CR: names, phase, host_kind and size. Before the fix, host-guest-transport --phase pre-build --size instant printed two SKIPs 'Test file not found' for files that exist, then Total 3 (executed 1, skipped 2), Pass Rate 100%, Status PASS; after (one site fixed at df5708607 with before/after measured): executed 3, skipped 0. Two failures compound and the second is worse: the CR makes the file unfindable, and the runner's response to an unfindable BOUND test is SKIP with skips excluded from coverage; the packet carries both halves, and the other 25 jq call sites under scripts/ are listed and deliberately not swept without a per-site control. Which tests a Windows host believed it was selecting is not recoverable from its logs. Instrument warning: MSYS grep treats CRLF as the line terminator, so the CR is invisible to grep and an audit using it reports all-clear; od -c shows it. CONSEQUENCE FOR THE STABLE CANDIDATE, weighed by the coordinator: any litmus verdict reported FROM A WINDOWS HOST before df5708607 is unearned, yolanda's included; the trunk's union litmus, the release gate's litmus and every count in the README rows were produced on Linux and are unaffected; Windows-lane litmus claims in the ledger need the qualifier until re-run past df5708607.
