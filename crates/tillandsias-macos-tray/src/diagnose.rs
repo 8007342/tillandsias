@@ -47,6 +47,7 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::OnceLock;
 use std::task::{Context, Poll};
+use tillandsias_control_wire::secure_wire_mode::SecureWireMode;
 
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
@@ -209,26 +210,19 @@ fn guest_health_report_line() -> String {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum SecureControlWireMode {
-    Off,
-    On,
-}
-
-fn secure_control_wire_mode() -> Result<SecureControlWireMode, String> {
-    static MODE: OnceLock<Result<SecureControlWireMode, String>> = OnceLock::new();
-    MODE.get_or_init(|| match std::env::var("TILLANDSIAS_SECURE_CONTROL_WIRE") {
-        Ok(raw) if raw.eq_ignore_ascii_case("on") => Ok(SecureControlWireMode::On),
-        Ok(raw) if raw.eq_ignore_ascii_case("off") || raw.is_empty() => {
-            Ok(SecureControlWireMode::Off)
-        }
-        Ok(raw) => Err(format!(
-            "TILLANDSIAS_SECURE_CONTROL_WIRE must be 'on' or 'off' (got {raw:?})"
-        )),
-        Err(std::env::VarError::NotPresent) => Ok(SecureControlWireMode::Off),
-        Err(err) => Err(format!("TILLANDSIAS_SECURE_CONTROL_WIRE: {err}")),
-    })
-    .clone()
+/// 972-umik: DELEGATES to the one reader in tillandsias-control-wire. This
+/// crate used to parse `TILLANDSIAS_SECURE_CONTROL_WIRE` itself, which is how
+/// six copies of one parse drifted apart. The `OnceLock` is kept — it memoises
+/// the RESULT, including the error, so a bad value fails identically on every
+/// call — but the environment is read once, inside the shared module.
+///
+/// The default is whatever the shared reader gives (Off today). It is NOT
+/// restated here: a local default is exactly the drift this conversion removes,
+/// and the flip to On belongs to the commit that converts the LAST reader.
+fn secure_control_wire_mode() -> Result<SecureWireMode, String> {
+    static MODE: OnceLock<Result<SecureWireMode, String>> = OnceLock::new();
+    MODE.get_or_init(tillandsias_control_wire::secure_wire_mode::secure_wire_mode)
+        .clone()
 }
 
 type GuestWireStream = Box<dyn tillandsias_control_wire::transport::AsyncReadWrite + Unpin + Send>;
@@ -290,8 +284,8 @@ async fn open_control_wire_stream(
         .map_err(|e| e.to_string())?;
 
     match secure_control_wire_mode()? {
-        SecureControlWireMode::Off => Ok(ControlWireStream::Plain(stream)),
-        SecureControlWireMode::On => {
+        SecureWireMode::Off => Ok(ControlWireStream::Plain(stream)),
+        SecureWireMode::On => {
             let psk = channel_psk(
                 tillandsias_secure_channel::workspace_version(),
                 tillandsias_control_wire::WIRE_VERSION,
@@ -2003,6 +1997,89 @@ fn parse_aarch64_qcow2_sha(manifest_toml: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use tillandsias_control_wire::secure_wire_mode::{SecureWireMode, parse_secure_wire_mode};
+
+    /// 972-umik. THE macOS LANE PAIRS SERVER AND CLIENT UNDER THE SHARED
+    /// READER'S `On`.
+    ///
+    /// The conversion's risk is not that the parse is wrong — it is that this
+    /// crate and its peer stop agreeing about WHICH mode they are in, and a
+    /// disagreement is invisible until a real guest refuses to talk. So this
+    /// drives the actual handshake both sides use, with the psk built from the
+    /// same expression `probe_phase_secure_or_plain` uses, and passes a frame
+    /// through it.
+    #[tokio::test]
+    async fn macos_lane_pairs_server_and_client_under_shared_reader_on() {
+        use tillandsias_secure_channel::{HopId, channel_psk};
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        // Precondition, asserted rather than assumed: this test is only about
+        // the secure path, so a build whose shared reader stopped offering On
+        // must fail here rather than silently test nothing.
+        assert_eq!(
+            parse_secure_wire_mode(Ok("on".to_string())),
+            Ok(SecureWireMode::On),
+            "the shared reader must still resolve 'on' to On"
+        );
+
+        let psk = channel_psk(
+            tillandsias_secure_channel::workspace_version(),
+            tillandsias_control_wire::WIRE_VERSION,
+            HopId::HostGuest,
+        );
+        let psk_server = *psk;
+        let psk_client = *psk;
+
+        let (host, guest) = tokio::io::duplex(64 * 1024);
+
+        let server = tokio::spawn(async move {
+            let mut s =
+                tillandsias_secure_channel::secure_stream::server_handshake(guest, &psk_server)
+                    .await
+                    .expect("server handshake");
+            let mut buf = [0u8; 5];
+            s.read_exact(&mut buf).await.expect("server read");
+            s.write_all(b"pong!").await.expect("server write");
+            buf
+        });
+
+        let mut c = tillandsias_secure_channel::secure_stream::client_handshake(host, &psk_client)
+            .await
+            .expect("client handshake");
+        c.write_all(b"ping!").await.expect("client write");
+        let mut back = [0u8; 5];
+        c.read_exact(&mut back).await.expect("client read");
+
+        assert_eq!(&server.await.expect("server task")[..], b"ping!");
+        assert_eq!(&back[..], b"pong!");
+    }
+
+    /// 972-umik. THE DEFAULT IS THE SHARED READER'S, NOT A LOCAL ONE.
+    ///
+    /// Absent still means Off today; the flip to On belongs to the commit that
+    /// converts the LAST reader (yolanda holds it, hvsocket.rs). Pinned through
+    /// the pure parser so no process-global `set_var` is touched — that race is
+    /// how three ca_path tests failed under concurrent cargo (1002-9xmb).
+    ///
+    /// THE BLANK CASE IS A DELIBERATE BEHAVIOUR CHANGE ON macOS. Both readers
+    /// this crate used to carry matched `raw.is_empty()` to Off, so a blank
+    /// variable meant PLAINTEXT here. The shared reader refuses blank, because
+    /// blank is the shape an unfilled CI variable takes and reading it as
+    /// insecure is the worst available guess. This is the conversion's one
+    /// non-mechanical effect and it is asserted rather than left to be noticed.
+    #[test]
+    fn shared_reader_owns_the_default_and_refuses_blank() {
+        assert_eq!(
+            parse_secure_wire_mode(Err(std::env::VarError::NotPresent)),
+            Ok(SecureWireMode::Off),
+            "absent must still mean Off until the last reader is converted"
+        );
+        assert!(
+            parse_secure_wire_mode(Ok(String::new())).is_err(),
+            "blank must be an error, not the plaintext this crate used to infer"
+        );
+    }
+
     /// 795-zshi slice 5. The two exec preambles were duplicated VERBATIM and
     /// differed by exactly one token — a `diff` of the two blocks reported a
     /// single changed line. This pins the property that made the duplication

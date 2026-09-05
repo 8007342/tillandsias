@@ -20,7 +20,7 @@
          (the path scripts\install-windows.ps1 installs to).
       3. `Get-Command tillandsias-tray.exe` (PATH).
       4. <repo>\target\release\tillandsias-windows-tray.exe (dev build; the
-         cargo bin target, distinct from the shipped name — 1043-kvvn).
+         cargo bin target, distinct from the shipped name - 1043-kvvn).
       5. <repo>\target\debug\tillandsias-tray.exe   (dev build).
 
     Exit codes mirror the tray's `--diagnose` contract:
