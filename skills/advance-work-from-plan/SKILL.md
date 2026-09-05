@@ -28,6 +28,28 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
     (breach record 34e60965,
     `plan/issues/main-branch-direct-push-guard-2026-07-24.md`). Switch to
     your host's canonical branch or run the cycle read-only.
+
+2.  **Instrument check**: `scripts/cycle-preflight.sh` must answer `ok:` before
+    you select work — selecting with an unverified instrument is the one
+    failure the loop cannot reason its way out of, because the tool it would
+    reason WITH is the stale thing. Its `<plan>` segment names which instrument
+    you are running on (order 1004-ws5q):
+
+    - `rebuilt` — cargo present, instrument built or confirmed current.
+    - `existing` — **no cargo, but a runnable binary resolved.** A legitimate
+      cycle: a host doing compile-free work keeps its slot. Before 1004-ws5q
+      preflight declared the COMPILER absent without ever looking for a
+      BINARY, and a floor-tier release smoke that compiles nothing lost a 4h
+      slot with a healthy instrument on disk (pirria, 2026-09-04).
+    - `skipped` — the build step was skipped via `CYCLE_PREFLIGHT_SKIP_BUILD=1`.
+    - `blocked:preflight:plan:cargo-absent` — no cargo AND no runnable binary.
+      Terminal: there is no instrument, so do not start the cycle.
+
+    **`CYCLE_PREFLIGHT_SKIP_BUILD=1` is for compile-free work on a host that
+    cannot compile, and nothing else.** It is not a way past a red build on a
+    host that can compile — that is a broken instrument. Since 1004-ws5q a host
+    with no cargo but a working binary gets `existing` without the variable, so
+    needing it at all should now be rare.
     **On `osx-next` / `windows-next`, merge `origin/linux-next` HERE, before the
     selector runs, not only before the push.** The selector and every
     `plan_*` read answer from the WORKTREE ledger, and on a platform branch the
