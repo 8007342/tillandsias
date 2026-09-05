@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: smoke-finding-v56-9-4-1-stale-evidence-file-reads-as-pass
+    order: 1044-na6u
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: any
+    capability_tags: [testing, release, docs, smoke, evidence]
+    estimated_hours: 1
+    owned_files:
+      - skills/smoke-curl-install-and-test-e2e/SKILL.md
+    title: |
+      When a smoke step aborts, the previous round's evidence file survives and reads as this round's PASS, because 03-provision-exit.txt (and its §1/§2 siblings) are written only AFTER the step returns; an aborted run never overwrites them
+    context: |
+      FOUND by esmeraldinha on the v56.9.4.1 floor smoke after the §3 abort. VERBATIM, read after the abort: 
+      exit_file_mtime=2026-09-04T06:47:59Z / provision_exit=0 / elapsed_seconds=117. That is the v56.9.2.1 round 
+      from eighteen hours earlier: a reader or a later automated check sees provision_exit=0 with a plausible 117 s 
+      duration for a provision that died partway through installing systemd. Same class as the day's other 
+      findings: a plausible number for work that did not happen. The elapsed_seconds key is itself the tell (the 
+      current block writes cold_provision_seconds) but nothing in the lane compares them. Fix: every step truncates 
+      or deletes its evidence files at the START of the step rather than writing them at the end, so an aborted run 
+      leaves an absent file; absent is a verdict, stale is a lie. Apply to §1, §2, §3 and the health block.
+    exit_criteria:
+      - "each smoke step removes its own evidence files before its first command, so an abort leaves them absent; pre-fix result: FAILS (03-provision-exit.txt from the prior round survives an abort and reads as PASS)"
+      - "the final report refuses to cite an evidence file whose mtime predates the round's start"
+    unscoreable: |
+      The pin is the Windows smoke block run on esmeraldinha (no litmus lane covers the
+      PowerShell runbook); the claimer names one if it adds it.
+    events:
+      - type: note
+        ts: "2026-09-05T00:45:26Z"
+        host: macuahuitl
+        summary: |
+          FILED by the coordinator from esmeraldinha's v56.9.4.1 floor smoke round (1004-pg9p),
+          relayed because that host has no credential channel; the verbatim output is in the context.
