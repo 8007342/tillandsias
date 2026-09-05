@@ -1,0 +1,106 @@
+packets:
+  - packet_id: jq-crlf-on-windows-turns-shell-reads-into-silent-wrong-answers
+    order: 1049-s35z
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    release_target: stable-milestone-v1
+    capability_tags:
+      - windows
+      - fail-loud
+      - testing
+      - tooling
+    estimated_hours: 5
+    verifiable_closure: |
+      bash scripts/run-litmus-test.sh <any spec> --phase pre-build --size
+      instant exits NON-ZERO when a name bound in openspec/litmus-bindings.yaml
+      has no file on disk, instead of logging SKIP and excluding it from
+      coverage. Reproduce the condition by binding a name with no file; the run
+      must not be able to report PASS.
+
+      NEGATIVE CONTROL, and it is the scorable half: with the file present the
+      same invocation goes green, so the test distinguishes "the runner reds on
+      a missing bound test" from "the runner reds at all". Without that arm a
+      green proves nothing here -- a green verdict over an unrun corpus is the
+      exact defect being fixed.
+
+      That covers the half that turned this bug into a PASS verdict. The CR half
+      is scored per site, below.
+
+      On a Windows host, for each of the 26 scripts under scripts/ that pipes
+      `jq -r` into a shell value, either the value is CR-stripped at the read
+      or the script is shown not to compare/index on it. The SCORABLE half is
+      a negative control per site, not a sweep: re-introduce the CR at one
+      site and the gate that depends on it must go RED. A green run after a
+      blind `tr -d` pass proves nothing, because a green run is exactly what
+      this defect produced for an unknown length of time.
+
+      Additionally: `scripts/run-litmus-test.sh` must FAIL, not SKIP, when a
+      bound litmus test file cannot be found. "Test file not found" is a
+      corpus-integrity error; today it is logged SKIP and skips are excluded
+      from coverage, which is the mechanism that converted this bug into a
+      PASS verdict.
+    title: |
+      jq.exe writes CRLF, so every shell value read through `jq -r` on Windows carries a trailing CR — the litmus runner skipped the tests it was invoked to run and reported PASS 100%, and 25 other scripts read jq the same way.
+    deliverable: |
+      Values read from jq in shell scripts are CR-free on Windows, and a
+      litmus test bound in the bindings but not found on disk reds the run
+      instead of silently leaving the executed set.
+    context: |
+      MEASURED ON YOLANDA 2026-09-04, found while verifying an unrelated
+      litmus change (972-umik commit B).
+
+      THE TWO-LINE REPRODUCTION. Pipe a one-key JSON object through `jq -r`
+      and dump it with `od -c`: the value is followed by CR and LF, not LF
+      alone. jq.exe writes CRLF.
+
+      WHAT IT DID. scripts/run-litmus-test.sh reads bindings, test names,
+      phase, host_kind and size through one tier (_yaml_jq: the compiled plan
+      reader piped into jq). Every value came back with a trailing CR. Run of
+      `run-litmus-test.sh host-guest-transport --phase pre-build --size
+      instant` BEFORE the fix:
+
+        [SKIP] litmus:secure-control-wire-guest-responder-shape  Test file not found
+        [SKIP] litmus:psk-input-parity-shape                     Test file not found
+        Total: 3 (executed: 1, skipped: 2)
+        Pass Rate: 100% (1/1 executed)
+        Status: [PASS]
+
+      Both files exist on disk. `bash -x` shows the lookup asking for a
+      filename with a CR before ".yaml". AFTER the fix: executed 3, skipped 0.
+
+      TWO FAILURES COMPOUND, AND THE SECOND IS THE DANGEROUS ONE. The CR makes
+      the file unfindable; the runner's response to an unfindable BOUND test
+      is SKIP, and skips are EXCLUDED FROM COVERAGE. So the run reports PASS
+      100% while executing a third of its corpus. A gate that answers PASS
+      having run almost nothing is worse than a gate that is down, because
+      nobody goes looking for it. Fixing the CR without fixing the SKIP leaves
+      the mechanism intact for the next cause.
+
+      IT IS NOT ONLY TEST NAMES. phase, host_kind and size come through the
+      same tier, so a comparison against "pre-build" was really a comparison
+      against "pre-build" plus a CR: the phase and size FILTERS were silently
+      wrong on Windows in the same invisible direction. Which tests a Windows
+      host believed it was selecting is not knowable from the logs.
+
+      WHY IT SURVIVED. MSYS grep treats CRLF as the line terminator, so a
+      trailing CR is invisible to `grep -c` and to reading the output. My own
+      first attempt to measure the blast radius reported "0 of 476 names
+      affected" — the instrument lying, not the tree being clean. `od -c` on
+      the same bytes shows the CR. Any audit of this class that uses grep as
+      its instrument will report all-clear.
+
+      SCOPE, AND WHAT WAS DELIBERATELY NOT DONE. 26 scripts under scripts/
+      pipe `jq -r` into shell values and every one is exposed on a Windows
+      host. df5708607 fixes ONE of them (run-litmus-test.sh), the site that
+      was blocking verification, with the before/after measured end to end.
+      The other 25 are NOT swept, because a sweep with no per-site control is
+      how a real fix becomes a claim — and this packet exists precisely
+      because a claim of that shape held for an unknown length of time.
+
+      HOST NOTE: this is a Windows-lane defect by construction; a Linux or
+      macOS jq writes LF. It should be verified on yolanda, esme or pirria,
+      and the litmus SKIP-vs-FAIL half is platform-independent.
+

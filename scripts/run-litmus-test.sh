@@ -256,10 +256,36 @@ fi
 # nothing) when the tier is unavailable or the file does not load, so callers
 # fall through to the next tier. A `blocked:` verdict from yaml-json lands on
 # stdout INTO jq, which then fails — the fallback engages either way.
+#
+# CARRIAGE RETURNS ARE STRIPPED, and that is not defensive tidying -- it is the
+# fix for a defect that made this runner report success without running.
+# jq.exe on Windows writes CRLF, so every value read through this tier arrived
+# with a trailing carriage return. Reproduce in two lines: pipe a one-key JSON
+# object through `jq -r` and dump the result with `od -c`; the value is followed
+# by CR and LF, not LF alone.
+#
+# Measured on yolanda 2026-09-04. Test names became "litmus:<name>" plus a CR,
+# the lookup asked for a file whose name ended in CR before ".yaml", the file
+# was NOT FOUND, and the test was logged SKIP. Skips are EXCLUDED FROM COVERAGE,
+# so the run then printed PASS 100% (1/1 executed) having skipped the tests it
+# was invoked to run. A gate that answers PASS while executing almost nothing is
+# worse than a gate that is down, because nobody goes looking for it.
+#
+# It is not only the names: phase, host_kind and size come through here too, so
+# a comparison against "pre-build" was really a comparison against "pre-build"
+# plus a CR, and the phase and size filters were silently wrong on Windows in
+# the same invisible direction.
+#
+# THIS IS ONE SITE OF A CLASS. 26 scripts under scripts/ pipe `jq -r` into shell
+# values and every one of them is exposed on a Windows host; filed separately
+# rather than swept here, because a sweep I cannot verify per-site is how a real
+# fix becomes a claim.
 _yaml_jq() {
     [[ -n "$LITMUS_PLAN_BIN" ]] || return 1
     command -v jq &>/dev/null || return 1
-    "$LITMUS_PLAN_BIN" yaml-json "$1" 2>/dev/null | jq -r "$2" 2>/dev/null
+    local out
+    out="$("$LITMUS_PLAN_BIN" yaml-json "$1" 2>/dev/null | jq -r "$2" 2>/dev/null)" || return 1
+    printf '%s\n' "${out//$'\r'/}"
 }
 export TILLANDSIAS_NO_SINGLETON=1
 export LITMUS_PODMAN_CALLS_FILE="${LITMUS_PODMAN_CALLS_FILE:-$PROJECT_ROOT/target/litmus-podman/calls.log}"
@@ -499,7 +525,7 @@ yaml_get() {
     if v="$(_yaml_jq "$file" "$path")"; then
         echo "$v"
     elif command -v yq &>/dev/null; then
-        yq eval "$path" "$file" 2>/dev/null || echo ""
+        yq eval "$path" "$file" 2>/dev/null | tr -d "" || echo ""
     elif command -v jq &>/dev/null; then
         # Simple fallback for yq-style paths (not perfect but functional)
         grep -E "^${path//./\\.}:" "$file" 2>/dev/null | cut -d':' -f2- | xargs || echo ""

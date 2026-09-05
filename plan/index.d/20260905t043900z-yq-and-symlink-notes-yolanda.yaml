@@ -1,0 +1,15 @@
+events:
+  - packet_id: yq-absent-on-a-windows-host-degrades-litmus-without-a-verdict-boundary
+    event:
+      type: note
+      ts: "2026-09-05T04:38:20Z"
+      host: yolanda
+      summary: |-
+        Filed from yolanda. Measured rather than taken from the banner: only 2 of 413 litmus files invoke yq in a step command, so the warning over-scopes itself into uselessness. Same failure shape as 1049-s35z one level up -- a degradation signalled beside the verdict instead of inside it.
+  - packet_id: core-symlinks-false-makes-the-skill-canonicalization-check-unrunnable-and-misdiagnosed
+    event:
+      type: note
+      ts: "2026-09-05T04:38:20Z"
+      host: yolanda
+      summary: |-
+        Filed from yolanda. All 75 entries flagged, index mode is 120000, worktree is a 24-byte regular file, core.symlinks=false. The check reds on a host limitation, calls a file a directory, and its REMEDY would damage a correct tree if followed here.

@@ -23693,6 +23693,98 @@ esac
         );
     }
 
+    /// ORDER 1052-gw8w. THE REPORTED RACE DOES NOT EXIST, and this test is the
+    /// reason the inference cannot be made a third time.
+    ///
+    /// The finding was that the user.name refusal fired while the same command
+    /// printed "image git ensure still running in its detached helper", and
+    /// that a retry 40 s later succeeded — read as a not-ready state being
+    /// reported as an operator configuration fault.
+    ///
+    /// It is not, for two independent reasons, either of which is sufficient:
+    ///
+    /// 1. THE HEARTBEAT IS PRINTED BY THE BLOCKING WAITER ITSELF.
+    ///    `SetsidImageEnsure::run` loops on `try_wait` and returns only on
+    ///    `Ok(Some(status))`; the "still running" line is emitted inside that
+    ///    loop as a liveness beat. `ensure_versioned_images` then walks
+    ///    ["proxy", "git", "vault", ... "forge"] SEQUENTIALLY. So "git ensure
+    ///    still running" is what waiting looks like, not evidence of anything
+    ///    running concurrently, and the git image ensure had necessarily
+    ///    COMPLETED before the login was reached at all.
+    ///
+    /// 2. WAITING COULD NOT HELP EVEN IF IT DID RACE. The prerequisite reads
+    ///    `gitconfig_default_paths()`, and the ONLY writer of the managed path
+    ///    in this binary is `store_git_identity`, which runs strictly AFTER the
+    ///    prerequisite passes. `write_forge_gitconfig` writes
+    ///    cache_root/forge-gitconfig/<project>.config, a different path that is
+    ///    not on the search list. No ensure, no image build, and no provisioning
+    ///    step creates either file, so no amount of waiting can turn the refusal
+    ///    into a success.
+    ///
+    /// What actually explains the successful retry is in the same report, one
+    /// paragraph earlier: "Writing ~/.gitconfig by hand — 82 bytes — satisfies
+    /// it, and the login then succeeds." The retry was not unchanged. Two
+    /// adjacent lines of output invited a causal reading, and the packet's
+    /// premise inherited it.
+    #[test]
+    fn image_ensure_cannot_be_racing_the_identity_prerequisite() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+
+        // (1) The heartbeat lives inside the wait loop, and the waiter returns
+        // only when the child has exited.
+        // Anchored INSIDE the impl: source_window closes at the next `fn`, and
+        // `impl ... {` is immediately followed by one, so the impl header alone
+        // yields a one-line window.
+        let impl_at = source
+            .find("impl DetachedImageEnsure for SetsidImageEnsure")
+            .expect("the setsid waiter must exist");
+        let waiter = source_window(
+            &source[impl_at..],
+            "fn run(&self, request: &DetachedEnsureRequest)",
+        );
+        assert!(
+            waiter.contains("still running in its detached helper"),
+            "the heartbeat must be emitted by the waiter, which is why it does \
+             NOT indicate concurrency (1052-gw8w): {waiter}"
+        );
+        assert!(
+            waiter.contains("try_wait") && waiter.contains("Ok(Some(status)) => return"),
+            "the detached ensure must block until the helper exits: {waiter}"
+        );
+
+        // (2) The prerequisite's inputs are written by exactly one function,
+        // and it is downstream of the prerequisite. If a provisioning step ever
+        // starts writing them, this fails and the race becomes possible.
+        // Scoped to the region around the identity code rather than the whole
+        // file: this test's own prose names the function, and a scan of the
+        // file would count itself.
+        let region_start = source
+            .find("fn store_git_identity(name: &str, email: &str)")
+            .expect("the identity writer must exist");
+        let region_end = source
+            .find("Per-lane ssh-agent sidecar")
+            .expect("the identity region must be bounded");
+        let region = &source[region_start..region_end];
+        let sites: Vec<&str> = region
+            .lines()
+            .filter(|l| l.contains("managed_gitconfig_path()"))
+            .collect();
+        assert_eq!(
+            sites.len(),
+            3,
+            "expected exactly three sites — the definition, the reader in \
+             gitconfig_default_paths, and the single writer in \
+             store_git_identity. A fourth would mean something else can create \
+             the prerequisite, which is the only way waiting could ever help \
+             (1052-gw8w): {sites:?}"
+        );
+        let store = source_window(source, "fn store_git_identity(name: &str, email: &str)");
+        assert!(
+            store.contains("managed_gitconfig_path()") && store.contains("fs::write"),
+            "store_git_identity must be the one writer: {store}"
+        );
+    }
+
     #[test]
     fn forge_agent_run_argv_exports_project_selection() {
         let _pseam = podman_false_seam();

@@ -66,6 +66,65 @@ unset _BUILDER_DIR
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# ── MEMORY-DERIVED CARGO_BUILD_JOBS CEILING (order 1047-h88p, arm 1) ─────────
+#
+# THE CAP MUST BE APPLIED INSIDE THE SCRIPT, not exported by the caller, and
+# that is not a style choice. esmeraldinha measured that CARGO_BUILD_JOBS does
+# NOT cross the wsl.exe boundary: scripts/with-wsl2-builder.sh forwards only
+# `compgen -v | grep '^TILLANDSIAS_'`, so `CARGO_BUILD_JOBS=2 wsl.exe …` arrives
+# UNSET in the distro (with WSLENV=CARGO_BUILD_JOBS it arrives as [2]). A cap
+# passed as a bare environment variable is therefore honoured on Linux and inert
+# on the Windows dispatch — silently, which is the worse half.
+#
+# WHY A CAP AT ALL. Measured on lenovinha 2026-09-05, one host, one observation
+# per cell: `./build.sh --check` completes at jobs 4 and 2, but a LAND — the
+# same gate plus the push and the pre-push ledger check — was OOM-killed at 4
+# AND at 2, and completed at 1. 13.5 GB total, 16 cores, so an uncapped gate
+# runs up to 16 rustc writers. A killed land is indistinguishable from a refused
+# one at a glance (nothing pushed, commit intact and rebased), which is what
+# makes this a correctness setting on a small-memory host rather than desktop
+# comfort — I nearly debugged my own change over one.
+#
+# ONLY WHERE MEASURED. This caps hosts BELOW 16 GB and leaves everything else
+# exactly as it is today. macuahuitl at 62 GB is untouched by construction. The
+# 16-32 GB band is UNMEASURED and deliberately gets no cap: inventing a ceiling
+# for a tier nobody has seen fail would be folklore, and the status quo there is
+# uncapped. If a mid-tier host starts dying, that is a measurement to add, not a
+# number to guess now.
+#
+# IT ONLY EVER LOWERS. An operator-set CARGO_BUILD_JOBS is honoured verbatim —
+# the cap defers to an explicit choice rather than overriding it, so a host that
+# knows better keeps its setting and this stays a floor-protection default.
+#
+# NOT ESMERALDINHA'S HALF. The IO-derived cap for the test and fixture phases is
+# measured on the floor tier and is a separate arm; this one is memory only.
+_tillandsias_memory_job_ceiling() {
+    local mem_kb mem_gb
+    mem_kb="$(awk '/^MemTotal:/ {print $2; exit}' /proc/meminfo 2>/dev/null || true)"
+    [[ "$mem_kb" =~ ^[0-9]+$ ]] || return 0   # unreadable: no cap, never a guess
+    mem_gb=$(( mem_kb / 1048576 ))
+    if (( mem_gb < 16 )); then
+        printf '1\n'
+    fi
+}
+# NO FORWARDING IS NEEDED, and that is why the cap is computed here rather than
+# mirrored into a TILLANDSIAS_ variable for with-wsl2-builder.sh to carry. The
+# gate RE-EXECS into the tillandsias-build distro and runs THIS script again
+# inside it, so this block evaluates on whichever side is actually going to run
+# cargo, against that side's own /proc/meminfo. A forwarded value would also
+# have been the wrong number: esmeraldinha measured the distro seeing 7942 MB
+# where the host has more, because WSL2 defaults to half of physical, so the
+# memory that matters for the jobs a distro-side cargo spawns is the distro's.
+# Closing the gap by construction beats carrying a value across a boundary that
+# is documented to drop it.
+if [[ -z "${CARGO_BUILD_JOBS:-}" ]]; then
+    _tillandsias_job_cap="$(_tillandsias_memory_job_ceiling)"
+    if [[ -n "$_tillandsias_job_cap" ]]; then
+        export CARGO_BUILD_JOBS="$_tillandsias_job_cap"
+    fi
+    unset _tillandsias_job_cap
+fi
+
 # Prefer a rustup-managed toolchain when present so optional targets such as
 # x86_64-unknown-linux-musl are visible to host-native builds.
 if [[ -d "$HOME/.cargo/bin" ]]; then

@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: linux-build-tuneups-carried-by-the-build-scripts
+    event:
+      type: progress
+      ts: "2026-09-05T05:36:10Z"
+      agent_id: linux-lenovinha-claude-20260905t033623z
+      host: lenovinha
+      summary: |-
+        ARM 1 LANDED (ok:land:fd277f115:attempt-4). The criterion is met in the only form that counts: a land that COMPLETED with the cap applied by the script and not by me — CARGO_BUILD_JOBS verified ABSENT from the environment before the run.
+
+        PRE-FIX LINE, one observation per cell, this host: ./build.sh --check completes at jobs 4 and 2; a LAND — the same gate plus the push and the pre-push ledger check — was OOM-killed at 4 AND at 2, and completed only at 1. 13.5 GB, 16 cores, so an uncapped gate runs up to 16 rustc writers.
+
+        WHY IT IS IN-SCRIPT AND NOT AN EXPORT: esmeraldinha measured that CARGO_BUILD_JOBS does not cross the wsl.exe boundary — with-wsl2-builder.sh forwards only TILLANDSIAS_-prefixed names — so a cap passed as a bare env var is honoured on Linux and SILENTLY inert on the Windows dispatch.
+
+        I DROPPED THE FORWARDING VARIABLE I FIRST WROTE, and the reason is the better half of this change. My first draft mirrored the cap into TILLANDSIAS_CARGO_BUILD_JOBS so the wsl2 wrapper would carry it. Two things were wrong with that. First, it is unnecessary: the gate re-execs into the distro and runs build.sh AGAIN inside it, so the block already evaluates on whichever side actually runs cargo. Second, a forwarded value would have been the WRONG NUMBER — esme measured the distro seeing 7942 MB where the host has more, because WSL2 defaults to half of physical, and the memory that bounds a distro-side cargo is the distro's. Closing the gap by construction beats carrying a value across a boundary documented to drop it. It is also the only version I could verify from Linux; the mirror would have shipped untested.
+
+        ONLY WHERE MEASURED, and this is deliberate restraint rather than incompleteness:
+            13 GB (this host)        -> cap 1
+             8 GB (floor, WSL distro)-> cap 1
+            16 GB and above          -> UNCAPPED, unchanged
+            62 GB (macuahuitl)       -> UNCAPPED, unchanged
+        The 16-32 GB band is UNMEASURED and gets no invented ceiling. Nobody has seen a host fail there, the status quo is uncapped, and guessing a threshold for a tier with no data is the folklore this fleet has spent the night removing. If a mid-tier host starts dying, that is a measurement to add.
+
+        It only ever LOWERS, and an operator-set CARGO_BUILD_JOBS is honoured verbatim — the cap defers to an explicit choice rather than overriding it.
+
+        NOT CLAIMED: that jobs=1 is optimal, or even that it is the right cap for every sub-16 GB host. It is the value that completed a land here after two that did not. A host with 13 GB and fewer cores may tolerate more; the cap is a floor-protection default, not a tuning result.
+
+        SCOPE: arm 1 only. esmeraldinha's IO-derived half for the test and fixture phases stays on the floor tier; arms 2, 3 and 4 are untouched.
