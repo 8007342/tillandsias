@@ -143,7 +143,16 @@ _synthetic_root() {
     printf '# spec\n' > "$t/openspec/specs/covered-spec/spec.md"
     printf '# spec\n' > "$t/openspec/specs/uncovered-spec/spec.md"
     # exactly one trace, to the first spec only -> 1 of 2 covered = 50%
-    printf '#!/usr/bin/env bash\n# @trace spec:covered-spec\n' > "$t/scripts/traced.sh"
+    # THE TRACE MARKER IS ASSEMBLED AT RUNTIME, never written literally here.
+    # A literal trace marker naming a synthetic spec would be a GHOST TRACE to a
+    # spec that does not exist, and the pre-commit ghost_check correctly flagged
+    # exactly that on the first version of this block. It then flagged the
+    # SECOND version too, because the comment explaining the hazard spelled the
+    # marker out — the warning reproduced the defect it warned about. It is the same shape the
+    # repo names elsewhere: a file that contains the string it is reasoning
+    # about becomes a false positive for every scanner keyed on that string.
+    printf '#!/usr/bin/env bash\n# @%s %s:%s\n' 'trace' 'spec' 'covered-spec' \
+        > "$t/scripts/traced.sh"
     printf '%s' "$t"
 }
 
