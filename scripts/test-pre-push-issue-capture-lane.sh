@@ -98,15 +98,79 @@ git push -q -u origin linux-next
 # the next reader debugs the lane. Assert the base FIRST so a broken base
 # reports as a broken base. Skipped when no plan binary is resolvable, because
 # then the lane skips ledger validation too and the base is not load-bearing.
-_probe_bin="${TILLANDSIAS_PLAN_BIN:-$ROOT/target/release/tillandsias-plan}"
-if [ -x "$_probe_bin" ]; then
-    if ( cd "$W/wc" && "$_probe_bin" --index plan/index.yaml check >/dev/null 2>&1 ); then
-        ok "PRECONDITION: the scratch base ledger folds"
-    else
-        echo "FAIL: PRECONDITION — the scratch base ledger does not fold; the arms below would fail for an environment reason, not a lane defect" >&2
-        echo "issue-capture-lane: 0 passed, 1 failed"
-        exit 1
-    fi
+# ORDER 1058-fenk. RUNNABILITY, NOT THE EXECUTABLE BIT. This guard was
+# `[ -x "$_probe_bin" ]`, and the bit is a CLAIM while running the binary is
+# EVIDENCE — the rule scripts/plan-binary-probe.sh was centralised to enforce,
+# rediscovered here the hard way.
+#
+# MEASURED by pirria 2026-09-05: cycle-preflight builds
+# target/release/tillandsias-plan on the HOST, the gate consumes it inside the
+# tillandsias-builder toolbox, and on a rolling-release host whose glibc is
+# newer than the image (CachyOS 2.44 vs fedora-toolbox:42) the ELF runs on the
+# host and cannot link in the toolbox:
+#   ./target/release/tillandsias-plan: /lib64/libm.so.6: version `GLIBC_2.44' not found
+# `[ -x ]` is true for that file. So an unlinkable binary took the branch meant
+# for a present one, the fold failed for an environment reason, and the
+# precondition reported a FAIL. Every gate on that host was red from 19:07Z at
+# a head that had been green while target/release was empty — the variable was
+# a host-built artefact, not trunk.
+#
+# An ELF that cannot link is exactly as unusable as an absent one and must take
+# the SAME branch. resolve_plan_binary decides by executing `capabilities`, so
+# it answers the question this guard was actually asking.
+# RESOLVED FROM $ROOT, NOT FROM THE CURRENT DIRECTORY. This script has already
+# `cd`-ed into the scratch repo by this point, and the probe's candidates are
+# cwd-relative (./target/release/...), so resolving here searched a tree that by
+# construction has no target/ and fell through to `command -v`. On a host with
+# ~/.local/bin on PATH that silently still worked; INSIDE THE BUILDER TOOLBOX,
+# where it is not, every ledger arm quietly stopped being exercised — a green
+# fixture measuring nothing. Caught by this file's own control arm, which is
+# the argument for having one. The replaced `[ -x "$ROOT/target/..." ]` was
+# absolute and had no such dependency, so the runnability fix must not
+# introduce one.
+_probe_bin="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary)" || _probe_bin=""
+case "$_probe_bin" in
+    ./*) _probe_bin="$ROOT/${_probe_bin#./}" ;;
+    ""|/*) ;;
+    *) _probe_bin="$ROOT/$_probe_bin" ;;
+esac
+# shellcheck source=scripts/plan-binary-probe.sh
+. "$ROOT/scripts/plan-binary-probe.sh"
+# An explicit TILLANDSIAS_PLAN_BIN is honoured by the probe on EXISTENCE alone
+# (deliberately — a stub that fails like a stale binary must stay
+# distinguishable from an absent one), so runnability still has to be asked
+# here rather than assumed from a successful resolve.
+_probe_why=""
+if [ -n "$_probe_bin" ]; then
+    _probe_why="$("$_probe_bin" capabilities 2>&1 >/dev/null)" || _probe_bin=""
+else
+    # RECOVER THE REASON. resolve_plan_binary answers "which binary can I run"
+    # and discards WHY each candidate lost — correct for its job, useless for a
+    # skip message. "no runnable binary" and "the binary you built cannot link
+    # here" send a reader to completely different places, and it was not
+    # knowing which that cost pirria a day of red gates. So if a file IS sitting
+    # at the conventional path, run it once and keep what it says.
+    for _cand in "${CARGO_TARGET_DIR:-$ROOT/target}/release/tillandsias-plan" \
+                 "$ROOT/target/release/tillandsias-plan"; do
+        [ -f "$_cand" ] || continue
+        _probe_why="$("$_cand" capabilities 2>&1 >/dev/null)" && continue
+        _probe_why="${_probe_why:-$_cand exists but did not run}"
+        break
+    done
+fi
+if [ -z "$_probe_bin" ]; then
+    # NAMED, never silent: a skip that does not say why is indistinguishable
+    # from a check that passed.
+    echo "skip:plan-binary-not-runnable-here:${_probe_why:-no runnable tillandsias-plan resolved}" >&2
+    echo "  The lane skips ledger validation without a runnable binary, so the" >&2
+    echo "  scratch base is not load-bearing and the arms below still mean what" >&2
+    echo "  they say. This is host state, not a lane defect (1058-fenk)." >&2
+elif ( cd "$W/wc" && "$_probe_bin" --index plan/index.yaml check >/dev/null 2>&1 ); then
+    ok "PRECONDITION: the scratch base ledger folds"
+else
+    echo "FAIL: PRECONDITION — the scratch base ledger does not fold; the arms below would fail for an environment reason, not a lane defect" >&2
+    echo "issue-capture-lane: 0 passed, 1 failed"
+    exit 1
 fi
 
 # Drive the guard the way git does: one "<lref> <lsha> <rref> <rsha>" line on
