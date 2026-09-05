@@ -457,6 +457,38 @@ attempt_plan_only_lane() {
                         echo "plan-only lane: not applicable — '$path' has status '$status' in the outgoing diff; issue captures qualify as new (A) or corrected (M) only (full gate required)" >&2
                         return 1
                     fi
+                    # A WORK-QUEUE LEDGER IS A SHARED RECORD, NOT ONE HOST'S
+                    # PROSE (order 1013-xm63). 1060-7mmm admits an M anywhere
+                    # under plan/issues/ because correcting a report you wrote is
+                    # the ordinary way it improves. A work-queue file is
+                    # different in kind: several hosts append to the same
+                    # document, and a rewrite there can silently drop a sibling's
+                    # line — the lane cannot tell a correction from an erasure,
+                    # and neither can a reader afterwards.
+                    #
+                    # So for these files only, the M must be an APPEND. That is
+                    # the whole of pirria's case (2026-09-04, a cargo-less host
+                    # that could work and report but not comply: the skill's
+                    # §6.3 mandates a work-queue line, which is an M by
+                    # construction, and the refusal sent it to a full gate it had
+                    # no toolchain to run). An append is a record; a rewrite is
+                    # not, and it keeps the full gate.
+                    #
+                    # `git diff` deletion lines, minus the `---` file header. A
+                    # pure append has none.
+                    case "${path##*/}" in
+                        *work-queue*)
+                            if [[ "$status" == "M" ]]; then
+                                _wq_removed="$(git diff "$remote_sha" "$local_sha" -- "$path" 2>/dev/null \
+                                    | grep '^-' | grep -v '^---' | head -3)"
+                                if [[ -n "$_wq_removed" ]]; then
+                                    echo "plan-only lane: not applicable — '$path' is a work-queue ledger and this edit REMOVES or REWRITES lines, which the lane cannot tell from erasing a sibling host's entry (full gate required)" >&2
+                                    printf '%s\n' "$_wq_removed" | sed 's/^/    /' >&2
+                                    return 1
+                                fi
+                            fi
+                            ;;
+                    esac
                     # DEPTH IS DECIDED EXPLICITLY, not left to a glob. The
                     # Reduction Engine names four classification directories;
                     # a capture lives at the top level or in exactly one of
