@@ -306,6 +306,96 @@ verification:
           zeros standing as evidence, and two present bullets would have been
           reported missing to their author.
         enforced_by: "judgment — recorded so it is not re-derived; the sibling mechanical rule is 965-sxec's gate arm"
+      - id: a_null_result_needs_a_positive_control
+        kind: judgment
+        rule: >
+          "I looked and found nothing" is evidence only once you have shown the
+          METHOD FINDS THE THING WHEN IT IS THERE. Before reporting a null
+          result, run the same probe, unchanged, against an input known to
+          contain what you are looking for. A zero from a probe that cannot
+          match is indistinguishable from a zero from a probe that matched
+          nothing, and both exit 0. This is the SIBLING of
+          a_zero_is_evidence_only_if_the_check_ran and not the same rule: that
+          one asks whether the command EXECUTED, this one asks whether it could
+          have DETECTED. A probe can run perfectly and still be blind.
+        earned_by: >
+          2026-09-05, macneo, scanning a preserved guest image for the guest
+          binary's version to decide whether a control-wire failure was version
+          skew. The scan returned 0 matches, exit 0, in 5m20s — a clean-looking
+          result that would have been reported as "no old binary present, skew
+          eliminated". Run against a binary KNOWN to carry the string, the same
+          regex also returned 0: the version occurs BARE in a Rust string table
+          packed against unrelated literals
+          (`...host-guesttillandsias-control-channel56.9.5.1`), so a pattern
+          with a `tillandsias-headless ` or `Tillandsias v` prefix could never
+          match. The positive control failed and the null result meant nothing.
+          Caught before it left the host only because the control is reflex.
+          Fourth instance that week of a result that looked like data and was an
+          artefact of the instrument.
+        earned_by_second: >
+          SAME DAY, SAME HOST, INSIDE THE MESSAGE PROPOSING THIS RULE. macneo
+          reported "79e3ca876 ADDED NO STRING LITERALS" as a measured fact. The
+          probe was `grep -oE '"[a-z0-9_:.-]{12,60}"'` — lowercase only, no
+          spaces, 12 to 60 characters — and it returned 0 because it could not
+          match a literal containing a space or a capital. A broad
+          `"[^"]{4,80}"` returns 21. The operative conclusion survived only
+          because the coordinator checked WHERE the 21 live (shell scripts,
+          comments and `#[cfg(test)]` blocks, so none reaches the shipped guest
+          binary); had one been a shipped literal the claim would have been
+          wrong with no instrument to say so. THE FAILURE MODE IS NOT DISBELIEF
+          IN THE RULE — it is not noticing that a casual command IS a
+          measurement. A one-line grep quoted in a message is a probe and needs
+          the same positive control as a five-minute scan.
+        enforced_by: "judgment — recorded so it is not re-derived; state the positive control's result beside the null one, or the null one is not reportable. A grep typed into a message is a probe."
+      - id: a_discriminating_probe_needs_both_controls
+        kind: judgment
+        rule: >
+          A NON-null result needs a control too, and a different one from the
+          null case. A count is evidence of a DIFFERENCE only once you have
+          shown the probe distinguishes the two cases: a POSITIVE control on the
+          case you expect to match, and a NEGATIVE control on the case you
+          expect NOT to match. Without both, a large count is evidence that the
+          string exists, which is usually not the question. And allow for a
+          THIRD outcome besides "clean" and "mixed": the probe may be blind by
+          construction, which is a stronger and less comfortable verdict than
+          inconclusive.
+        earned_by: >
+          2026-09-05, macneo, deciding whether a control-wire failure was
+          version skew by scanning a preserved guest image. The scan returned 57
+          hits for the old version string, which reads as an answer. A POSITIVE
+          control on the NEW binary found five copies of the same string, so the
+          marker is present in both cases and separates nothing. A second marker
+          (`tillandsias-control-channel`) died to a NEGATIVE control: `git grep`
+          at 79e3ca876^ showed it predates the commit by two orders. The two
+          probes failed for DIFFERENT mechanisms and only running both controls
+          found both. The structural reason closes the approach rather than the
+          probes: for the guest binary, 79e3ca876 added no string literal that
+          reaches the shipped artefact — its additions are in shell scripts,
+          comments and `#[cfg(test)]` blocks, verified independently on
+          macuahuitl — so it flips a default without changing any shipped
+          string, and NO string scan of that binary can detect it. Verdict: the
+          instrument cannot answer the question; skew neither eliminated nor
+          established.
+        enforced_by: "judgment — report the positive and negative control results beside the count, or the count is not evidence of a difference"
+      - id: state_the_asymmetry_before_the_result
+        kind: judgment
+        rule: >
+          When a probe can only settle a question in ONE direction, say which
+          direction BEFORE running it. A method whose clean answer eliminates a
+          hypothesis but whose dirty answer establishes nothing must publish
+          that asymmetry in advance, or the outcome that arrives gets read as
+          the interesting one after the fact. THE ASYMMETRY PROTECTS THE
+          INTERPRETATION; THE POSITIVE CONTROL PROTECTS THE MEASUREMENT. They
+          are different instruments and a claim usually needs both.
+        earned_by: >
+          2026-09-05, macneo, on the same guest image: a raw-image string scan
+          finds matches in allocated blocks AND in freed-but-unzeroed ones, so
+          only a real mount resolves a path to an inode. Stated in advance: a
+          clean answer ELIMINATES version skew, a mixed answer does NOT
+          establish it. Published before the data arrived, which is what stopped
+          "clean" being pre-authorised as the interesting outcome when the first
+          probe returned a spurious zero.
+        enforced_by: "judgment — the asymmetry is written into the message or the ledger event before the probe runs"
       - id: quoted_history_lives_in_comments_guards_scan_declarations
         kind: judgment
         rule: >

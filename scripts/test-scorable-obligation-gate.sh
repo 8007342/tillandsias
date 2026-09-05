@@ -286,18 +286,28 @@ esac
 # So: strip comments, then require an actual `bash ... <checker>` invocation.
 _lane="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/scripts/hooks/pre-push-local-gate.sh"
 _needle="check-scorable""-obligation-added.sh"
+_lane_code=""
+[ -f "$_lane" ] && _lane_code="$(sed 's/#.*//' "$_lane")"
 if [ ! -f "$_lane" ]; then
     fail=$((fail+1)); echo "FAIL: the plan-only lane script is missing: $_lane"
-# SIGPIPE-SAFE (792-ksr8). `sed ... | grep -q` under `set -o pipefail` lets the
-# verdict be decided by the producer's death rather than by the question asked:
-# grep -q exits on the match at line 875 of 1136, sed keeps writing, takes
-# SIGPIPE, and pipefail promotes 141 to the pipeline's status. Measured on
-# esmeraldinha 2026-09-05 inside the WSL builder, on a tree whose lane IS
-# correctly wired: PIPESTATUS=(141 0) — grep MATCHED and this arm still said
-# FAIL. It passed under MSYS bash only because Windows pipe buffering absorbed
-# the remainder, which is why the fixture looked green where it was authored.
-# Capture first, then match a herestring: no pipeline, no producer to kill.
-elif grep -qE "bash[[:space:]]+[^|]*$_needle" <<<"$(sed 's/#.*//' "$_lane")"; then
+# CAPTURE FIRST — 792-ksr8, and this arm was a live instance of the class it
+# is written in the style of. It used to be
+#     sed 's/#.*//' "$_lane" | grep -qE "bash[[:space:]]+[^|]*$_needle"
+# under this file's `set -uo pipefail`. grep -q exits AT THE MATCH, sed keeps
+# writing, takes SIGPIPE, and pipefail promotes 141 to the pipeline's status —
+# so the arm reported FAIL BECAUSE THE LANE WAS CORRECTLY WIRED. esmeraldinha
+# measured PIPESTATUS=(141 0) on WSL with the wiring present, at 16/17 after a
+# 28-minute gate.
+#
+# IT IS GREEN ON FEDORA FOR A REASON THAT IS NOT REASSURING. Measured here:
+# the comment-stripped lane is 33932 bytes, the first match is at line 875, and
+# 10161 bytes remain after it — against a 65536-byte pipe buffer. sed finishes
+# writing before the buffer fills, so nothing is ever signalled. The margin is
+# 55375 bytes TODAY and shrinks every time anyone adds a guard to that lane.
+# This host is one that flips later, not one that is safe: the verdict was
+# decided by how much output happened to remain after the match rather than by
+# whether the match existed.
+elif grep -qE "bash[[:space:]]+[^|]*$_needle" <<<"$_lane_code"; then
     pass=$((pass+1))
 else
     fail=$((fail+1))
