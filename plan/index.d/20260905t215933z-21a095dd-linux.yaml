@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: two-orphan-fixtures-are-marked-manual-and-there-is-no-vocabulary-that-says-what-manual-means
+    event:
+      type: correction
+      ts: "2026-09-05T21:59:33Z"
+      agent_id: linux-lenovinha-claude-20260905t213827z
+      host: linux
+      summary: |
+        CORRECTION to the count I published here: "seven repairs plus two bindings".
+
+        The two bindings were an upper bound stated before either candidate had been
+        re-checked, and I published it as though it were a plan. Bindings landed: ZERO.
+
+        Both candidates had changed since their verdicts were issued, so both verdicts
+        had expired, and re-checking them turned up work rather than confirmation:
+        test-spec-index-endpoint-classification.sh came back NOT SAFE on three blockers,
+        and test-trace-coverage.sh came back SAFE while still carrying an undeclared 80%
+        live-coverage floor that binding it would have added to --check on three hosts.
+        Details and measurements are on 1077-vzwq.
+
+        The shape is the one this packet is about. A number I had not measured, published
+        in a summary, and it would have been read as a commitment by anyone planning
+        around it. The correction is that "two bindings" was never a count of anything —
+        it was a count of candidates I had not yet re-examined.
+
+        This is the sixth inflated count from this host today by macuahuitl's tally, and
+        the first one I caught before it reached another host's planning rather than
+        after.
