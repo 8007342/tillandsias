@@ -1,0 +1,82 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-selector-and-the-plan-tool-both-report-blocking-and-mean-different-things
+    order: 1081-gynk
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [plan, selector, metrics, fail-loud]
+    estimated_hours: 2
+    owned_files:
+      - scripts/select-work-batch.sh
+      - crates/tillandsias-plan/src/main.rs
+    title: |
+      the selector's frontier prints blocking=N for an epic while `tillandsias-plan blocking-counts` has no row for that epic at all, because one is a per-PACKET count and the other an epic-level SUM of it — so a coordinator checking the number reads "no blocking row" and concludes the figure is wrong
+    context: |
+      FOUND by yoga and macuahuitl independently on 2026-09-05, reproduced on both hosts:
+
+        scripts/select-work-batch.sh linux
+          frontier 22.339 socket-audit-master packets=8 blocking=9 neglect=8.6
+        tillandsias-plan blocking-counts | grep socket-audit-master   -> no row
+        tillandsias-plan blocked-by 151                               -> empty
+
+      THE TWO DEFINITIONS, MEASURED RATHER THAN INFERRED, and they are not in
+      conflict — they are different questions sharing one word:
+
+        blocking-counts  emits one row per PACKET, keyed by packet_id, counting
+                         that packet's downstream dependents. 115 rows today.
+                         An EPIC never appears as a row unless the epic itself
+                         is a packet with dependents, so grepping an epic name
+                         returns nothing and reads as "no blocking".
+
+        selector         calls the SAME tool (select-work-batch.sh:742) and then
+                         SUMS those per-packet counts across the epic's eligible
+                         rows (`block[e] += dep[pid]`, :809), capped at 10.
+                         So its `blocking` is an epic-level aggregate of the
+                         other view, not a second computation.
+
+      Both are internally consistent, which is why the disagreement is invisible
+      until someone checks one against the other — the same shape as every other
+      two-reader defect this fleet found today, and the reason the coordinator
+      could not reproduce a figure that was never wrong.
+
+      NOT RECONCILED, AND STATED SO RATHER THAN ROUNDED: I could not reproduce
+      the exact 9. Summing blocking-counts over the epic's rows from
+      `select-rows` (with and without `--release v0.5`) gives 6 rows and a sum
+      of 8, while the selector reports packets=8 and blocking=9. So the selector
+      aggregates a LARGER row set than a bare `select-rows | grep <epic>`
+      yields, and I did not find where the extra two rows come from. That gap is
+      the first thing the claimer should close, because it may be a third row-set
+      definition rather than a filter.
+
+      WHY IT IS WORTH FIXING RATHER THAN DOCUMENTING: the frontier line is what a
+      coordinator reads when deciding where to route work, and `blocking=9`
+      carries 1.5x weight in the epic score (:811). A reader who checks it against
+      the plan tool finds nothing and has no way to tell "the number is wrong"
+      from "I asked the wrong question".
+
+      SHAPE, both cheap: rename the selector's column to something that says it
+      is an aggregate (`dependents=` or `blocking_sum=`), or have
+      blocking-counts accept an epic and emit the aggregate itself so the two
+      views can be compared directly. Prefer whichever makes the frontier line
+      checkable with one command.
+    exit_criteria:
+      - "a reader can reproduce the selector's blocking figure for an epic with one documented command, and the two views agree or the difference is named in the output; pre-fix result: FAILS (grepping the epic in blocking-counts returns nothing; a hand-sum gives 8 against the selector's 9)"
+      - "the row set the selector aggregates over is identified and matches a reproducible query; pre-fix result: FAILS (selector reports packets=8, select-rows yields 6 for the same epic, unexplained)"
+      - "a packet with no dependents still scores 0 blocking and is not dropped from the frontier; pre-fix result: passes and must keep passing"
+    unscoreable: |
+      The pin is a fixture comparing the selector's frontier blocking figure for
+      one epic against a documented query, asserting they agree. The claimer adds
+      it once the row-set question above is answered.
+    events:
+      - type: filed
+        ts: "2026-09-05T20:37:54Z"
+        host: yoga
+        summary: |
+          Filed by yoga on the coordinator's ruling that this is worth
+          reconciling and that the first step is reading what each computes.
+          Both definitions are recorded above from measurement; the residual
+          8-vs-9 row-set gap is named as unreconciled rather than rounded away.
