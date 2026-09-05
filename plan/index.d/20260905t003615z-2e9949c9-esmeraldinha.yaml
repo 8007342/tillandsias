@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: floor-tier-release-smoke-and-metrics
+    event:
+      type: finding
+      ts: "2026-09-05T00:36:15Z"
+      agent_id: windows-esmeraldinha-claude-20260905t003615z
+      host: esmeraldinha
+      summary: |-
+        FLOOR GATE 8 (esmeraldinha, 00:22:30Z-00:34:07Z, 11m37s, exit 1): idle host, Windows entry point, re-exec confirmed, HEAD 565a6524e with 9cac76676 present; build-check row {"ts":"2026-09-05T00:34:07Z","step":"build-check","phase":"check","duration_ms":648408,"exit":1}, build-preamble 47,009 ms (the plan-binary rebuild after the pull, against 0.6-1.8 s warm), so a post-pull cycle cost and not a warm best case. 1022-px54 CONFIRMED FIXED on the floor: gate 7's two failed targets became one, proxy_cache_policy gone from the list. The one remaining failure is characterised and filed as 1042-svey: openssl absent from the tillandsias-build distro, ensure_ca_bundle os error 2 in source_built_init_and_status_check_smoke_uses_fake_podman, with the 989-ykks host-tools step passing in the same run. So the floor's best number is 11m37s to a red at the test phase with a rebuild included, the first whose configuration esme can vouch for; a GREEN floor gate cost still needs 1042-svey resolved. Esme moves to the v56.9.4.1 smoke round (full runbook including the §2 reset, §2b against the new README row), findings relayed as finding-shaped messages.

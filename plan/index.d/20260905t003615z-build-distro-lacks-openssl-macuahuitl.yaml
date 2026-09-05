@@ -1,0 +1,53 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-tillandsias-build-wsl2-distro-has-no-openssl-so-the-gates-ca-generating-test-dies-eleven-minutes-in-while-the-host-tools-check-passes
+    order: 1042-svey
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: windows
+    capability_tags: [windows, wsl2, gate, toolbox, openssl, host-tools, fail-loud]
+    estimated_hours: 2
+    owned_files:
+      - scripts/with-wsl2-builder.sh
+      - scripts/check-host-tools.sh
+      - crates/tillandsias-headless/src/main.rs
+    title: |
+      The tillandsias-build WSL2 distro is provisioned without openssl, so `./build.sh --check` on a Windows host dies at source_built_init_and_status_check_smoke_uses_fake_podman (ensure_ca_bundle: "Failed to run command: No such file or directory") after eleven minutes, while the 989-ykks host-tools step passed seconds in
+    context: |
+      CHARACTERISED by esmeraldinha on floor gate 8 (2026-09-05T00:22:30Z-00:34:07Z, 11m37s, idle host, Windows entry
+      point, re-exec confirmed, HEAD 565a6524e with the 1022-px54 fix present and that failure gone): one target
+      failed, `-p tillandsias-headless --bin tillandsias` 508 passed / 1 failed, panic
+      `ensure_ca_bundle: "Failed to run command: No such file or directory (os error 2)"`. The command is
+      `openssl` (`Command::new("openssl")` in ensure_ca_bundle's CA-generation branch, main.rs:3106); os error 2 is
+      the binary not found. Presence in the distro: `command -v openssl` ABSENT, `rpm -q openssl` "package openssl is
+      not installed" (git and rpm present, podman absent). The function exits early only when
+      TILLANDSIAS_HOST_KIND == "forge" ("The forge environment does not have openssl CLI and is not responsible…"),
+      and in the distro that variable is UNSET, so the test takes the openssl path on a host without openssl. 1003-444f
+      (13:53Z) brought this test into --check and the two met for the first time on this host. The gate's own
+      checking-this-host-has-the-tools-the-gate-needs (989-ykks) step PASSED on gates 7 and 8 while a test in the same
+      run died on a missing binary. COORDINATOR DECISION on the design question esme declined to hold: the build
+      distro is the environment that RUNS the gate, and by the toolbox-first rule it carries what the gate's tests
+      need; `tillandsias --init` on any real host generates a CA with openssl, so the test is exercising a real path
+      and the exemption belongs to the forge only (a non-CA-owning environment by design), not to the builder. So:
+      (1) provision openssl into tillandsias-build (the WSL2 builder distro image / its ensure step), and (2) add
+      openssl to 989-ykks's required-tools list so the gate refuses in seconds with the tool named, which is the
+      cheapest place to fail loudly. Not a product defect; a gate-environment gap.
+    exit_criteria:
+      - "on esmeraldinha, ./build.sh --check through the Windows entry point runs source_built_init_and_status_check_smoke_uses_fake_podman green; pre-fix result: FAILS (ensure_ca_bundle, os error 2)"
+      - "with openssl hidden from the distro's PATH, the 989-ykks host-tools step refuses and names openssl before any test runs; pre-fix result: FAILS (the step passes and the test dies eleven minutes later)"
+      - "the forge exemption in ensure_ca_bundle is unchanged and a note in its comment says the builder is NOT exempt and why"
+    unscoreable: |
+      The pin is the gate itself on a Windows host plus a host-tools fixture with
+      openssl hidden; the claimer names the litmus lane if one applies.
+    events:
+      - type: note
+        ts: "2026-09-05T00:36:15Z"
+        host: macuahuitl
+        summary: |
+          FILED by the coordinator from esmeraldinha's gate 8 characterisation
+          (command named, absence proven with command -v and rpm -q before filing),
+          with the design decision stated so the claimer implements it. Assigned to
+          yolanda by platform after 1032-62rx; esmeraldinha verifies on the floor.
