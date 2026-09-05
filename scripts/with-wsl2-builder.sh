@@ -183,10 +183,19 @@ set -eu
 #     run, in the one environment where checks actually execute.
 # Both tools are packaged in Fedora, so the absence was an omission, not a
 # constraint.
+# ORDER 1042-svey - `openssl` (the CLI) IS NOT `openssl-devel`. On Fedora the
+# -devel package carries headers and pulls openssl-libs; the /usr/bin/openssl
+# COMMAND is a separate package. This list had -devel (the Rust build needs it)
+# and not the binary, so the CLI arrived only as an incidental dependency of
+# something else - present on yolanda's builder distro and absent on
+# esmeraldinha's, which is how its gate died eleven minutes in inside
+# ensure_ca_bundle with `os error 2` while the 989-ykks host-tools step had
+# passed seconds earlier. Same shape as the jq/yq omission above: packaged in
+# Fedora, so the absence was an omission rather than a constraint.
 dnf install -y \
     gcc pkg-config file cmake make \
     musl-gcc musl-devel musl-libc-static \
-    openssl-devel systemd-devel \
+    openssl openssl-devel systemd-devel \
     ruby perl-FindBin \
     procps-ng findutils diffutils \
     git curl tar xz ShellCheck awk \
