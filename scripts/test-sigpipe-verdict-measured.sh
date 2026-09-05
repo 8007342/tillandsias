@@ -51,6 +51,7 @@ bad() { echo "FAIL: $1" >&2; fail=$((fail+1)); }
 W="$(mktemp -d "$ROOT/target/sigpipe-fx.XXXXXX")"
 trap 'rm -rf "$W"' EXIT INT TERM
 awk 'BEGIN{for(i=1;i<=1200;i++){ if(i==300) print "NEEDLE_HERE marker line"; else print "filler filler filler filler filler filler filler filler filler" }}' > "$W/corpus.txt"
+# A SECOND corpus, deliberately under PIPE_BUF (4096 B), for the known-GOOD arm.# Arm 2 used the 1200-line corpus and was INTERMITTENTLY RED on macuahuitl's# Fedora host: 2 of 6 runs, inner counts 2/3 then 1/3, arm 2 only. A 58 KB# producer needs many write() calls, so a consumer exiting at the match can# leave it mid-write — the same condition the check detects, arriving in the# case that asserts the condition is ABSENT. An arm that is clean only when the# machine is quiet is a snapshot of the machine.## Under PIPE_BUF the whole output goes in ONE write, and the consumer cannot# exit before it has data to match on — so by the time grep -q exits, the# producer has already finished writing and has nothing left to be refused.# That is STRUCTURALLY clean rather than empirically clean.## NOT VERIFIED BY REPRODUCTION: esmeraldinha could not reproduce the failure at# all, 0/50 with the big corpus under deliberate CPU and I/O load. The fix rests# on the structural argument, not on a green run of a case that was already# green here.awk 'BEGIN{for(i=1;i<=20;i++){ if(i==5) print "NEEDLE_HERE marker line"; else print "filler" }}' > "$W/small.txt"
 
 # 1. KNOWN-BAD, portable: a slowed producer must be caught.
 v="$(REPS=3 measure_pipeline fx 1 "SLOW_READ $W/corpus.txt" "-q 'NEEDLE_HERE'")"
@@ -60,7 +61,7 @@ case "$v" in
 esac
 
 # 2. A fast producer that matches is clean.
-v="$(REPS=3 measure_pipeline fx 2 "cat $W/corpus.txt" "-q 'NEEDLE_HERE'")"
+v="$(REPS=3 measure_pipeline fx 2 "cat $W/small.txt" "-q 'NEEDLE_HERE'")"
 case "$v" in
     measured-clean:*) ok "a fast producer whose consumer matches is measured-clean ($v)" ;;
     *) bad "expected measured-clean, got: $v" ;;
