@@ -399,6 +399,26 @@ Hard rules:
   change. Named by macneo on 980-ja2m, 2026-09-04, after its first class guard
   went red on its own doc comments.
 
+- **A gate run silently replaces the binary without the tray feature.**
+  `./build.sh --check` rebuilds `target/debug/tillandsias` without `--features
+  tray`; every order-505 site and much of the tray surface is
+  `#[cfg(feature = "tray")]`, so a control arm run after a gate can exercise a
+  binary in which the code under test does not exist. On 2026-09-04 lenovinha's
+  arms hung against such a binary, which was luck: an absent path falling
+  through to success is a green arm for absent code. Build with the feature
+  set the change needs (`cargo build --features tray,listen-vsock`) immediately
+  before any live control arm, and quote the feature set beside the arm.
+
+- **A control variable set outside the builder does not reach cargo inside it.**
+  `scripts/with-tillandsias-builder.sh` forwards only `TILLANDSIAS_*`, `LITMUS_*`,
+  `FORGE_*`, `NIX_*`, `CONTAINER_HOST` and `DOCKER_HOST` into the toolbox, and
+  `with-wsl2-builder.sh` forwards only `TILLANDSIAS_*` across wsl.exe; on
+  2026-09-05 `CARGO_BUILD_JOBS=10` was UNSET inside the builder on both Linux and
+  Windows, so a "ten-job arm" ran at twenty and would have reported a confident
+  null. A build setting must be applied inside the build scripts, or forwarded by
+  name with a probe that proves it arrived (`with-tillandsias-builder.sh bash -c
+  'echo ${VAR:-UNSET}'`) before any measurement is read.
+
 ---
 
 ## 6 — Commit, Push & Checkpoint
