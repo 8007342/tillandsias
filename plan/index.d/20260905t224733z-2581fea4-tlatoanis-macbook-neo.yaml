@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-guest-whose-provisioning-completed-never-reaches-ready-and-the-host-has-no-way-to-ask-why
+    field: status
+    value: in_progress
+    ts: "2026-09-05T22:47:33Z"
+    host: tlatoanis-macbook-neo
+
+events:
+  - packet_id: a-guest-whose-provisioning-completed-never-reaches-ready-and-the-host-has-no-way-to-ask-why
+    event:
+      type: note
+      ts: "2026-09-05T22:47:33Z"
+      host: tlatoanis-macbook-neo
+      summary: |-
+        claimed for macneo via coordinator relay; they can reproduce on demand and hold two checksum-verified guest images, and cannot push (1025-a896). Closing evidence requires a Linux mount, which is stated in next_action rather than discovered at criterion 1
