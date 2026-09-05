@@ -1,0 +1,48 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-nine-remaining-orphan-fixtures-each-need-a-two-regime-byte-measurement-before-binding-and-that-disposal-is-not-1063-nrafs-work
+    event:
+      type: release
+      ts: "2026-09-05T23:18:36Z"
+      agent_id: linux-lenovinha-claude-20260905t213827z
+      host: linux
+      summary: |
+        Releasing the cycle claim. The work landed at ec4aea2b3; this is a typed release
+        so no reader has to infer it from prose (1082-k3wp).
+
+        DONE THIS CYCLE: one orphan disposed of by binding —
+        scripts/test-trace-coverage.sh, wired as scripts/gate-steps.d/080-1077-vzwq.step
+        with a literal STEP_SCRIPT so the bound-or-retired scan can see it. Three
+        fixtures repaired before that was defensible, and two packets filed from what
+        the repairs uncovered (1084-nzqc p1, 1083-cjq6 p2).
+
+        EIGHT ORPHANS REMAIN and the next host should not treat them as eight
+        repetitions of tonight's work. What tonight actually measured:
+
+          * Both candidates I expected to bind failed their re-check. A SAFE verdict
+            names a specific set of bytes and expires the moment the file changes — I
+            re-checked one fixture three times and each pass found something the last
+            had not, on bytes the previous verdict had cleared.
+          * The expensive defects were not in the fixtures' logic. They were arms that
+            passed for the wrong reason: a count printed unconditionally after its own
+            control had skipped, a threshold nobody chose, and a detection that existed
+            only because a synthetic tree was incomplete.
+          * scripts/test-spec-index-endpoint-classification.sh is repaired twice over
+            and is the obvious next candidate, but it has NOT had a clean adversarial
+            pass on its current bytes and must get one before binding. Do not bind it on
+            the strength of tonight's commits.
+
+        NEXT ACTION for whoever takes this: pick ONE orphan, re-check it on its current
+        bytes rather than on any verdict recorded here, and bind it alone. Serial
+        disposal was macuahuitl's ruling and it earned itself tonight — a batch would
+        have let the spec-index fixture block the trace-coverage one.
+
+        1063-nraf's guard still waits on the remaining eight. Nothing about that changed.
