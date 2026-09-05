@@ -3278,7 +3278,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Missing-bound-test check passed"
 
-<<<<<<< HEAD
     # 1064-r8fv: the landing tool must merge TRUNK on a platform branch, must
     # not manufacture an empty merge on trunk itself, and must refuse — naming
     # the relay lane rather than taking it — when a push is refused server-side
@@ -3292,8 +3291,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Landing tool trunk-merge check passed"
 
-=======
->>>>>>> origin/windows-next
     # 891-5shq: the TILLANDSIAS_* namespace forward has ONE implementation and
     # both dispatch boundaries use it. The toolbox boundary was fixed and the
     # reasoning written down; the WSL boundary then received its own separate
@@ -3308,22 +3305,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Env-forward sharing check passed"
-<<<<<<< HEAD
-=======
-
-    # 1064-r8fv: the landing tool must merge TRUNK on a platform branch, must
-    # not manufacture an empty merge on trunk itself, and must refuse — naming
-    # the relay lane rather than taking it — when a push is refused server-side
-    # rather than lost to a race. Both defects were invisible on linux-next,
-    # where the branch and trunk are the same ref, which is why the tool worked
-    # exactly where it was not needed.
-    _step "Checking the landing tool merges trunk and refuses honestly (1064-r8fv)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-land-merges-trunk.sh" 2>&1; then
-        _error "land-on-platform-branch.sh does not merge trunk on a platform branch, or retries a server-side refusal (1064-r8fv) — see the verdict line above"
-        exit 1
-    fi
-    _info "Landing tool trunk-merge check passed"
->>>>>>> origin/windows-next
 
     # 965-sxec: a missing or unusable ruby must read as COULD-NOT-RUN (exit 3),
     # never as a claim about the ready set. Inside a forge `command -v ruby`
