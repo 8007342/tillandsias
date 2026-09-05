@@ -1,0 +1,90 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: exec-guest-runs-commands-with-no-HOME-so-any-set-u-script-touching-it-dies-and-PATH-gains-a-bogus-entry
+    order: 1072-qk43
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [vm-layer, macos, exec-guest, fail-loud, environment]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-vm-layer/src/vz.rs
+    unscoreable: |
+      THE TEST IS THE FIX: criterion 4 is the fixture, asserting the exec-guest
+      environment carries a HOME consistent with its USER. No litmus lane covers
+      the exec-guest environment today; the claimer names one if it adds it.
+    title: |
+      --exec-guest runs the guest command with HOME UNSET while USER=root, so every set -u script that touches $HOME dies on line one and PATH silently gains a bogus /.local/bin
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-09-05, while trying to build the
+      forge image in the guest for 317.
+
+        tillandsias-tray --exec-guest 'echo "HOME=[${HOME-<UNSET>}]"; echo "USER=[$USER]"'
+        -> HOME=[<UNSET>]
+           USER=[root]
+           whoami=root
+
+      The environment is INCONSISTENT rather than merely minimal: USER is set,
+      whoami and id agree it is root, and HOME — which every login shell sets and
+      which POSIX-shaped tooling assumes — is absent.
+
+      TWO CONSEQUENCES, both measured here.
+
+      1. ANY set -u SCRIPT TOUCHING $HOME DIES ON ITS FIRST REFERENCE.
+           bash scripts/build-image.sh forge
+           -> scripts/build-image.sh: line 40: HOME: unbound variable
+           -> BUILD_EXIT=1, elapsed 0 seconds
+         The project's own build script cannot run in its own guest. This is not
+         build-image.sh's defect: HOME is a variable every other execution
+         context provides, and hardening every consumer against its absence is
+         the wrong end to fix.
+
+      2. PATH SILENTLY GAINS A BOGUS ENTRY, and this is the quieter half.
+           PATH=/.local/bin:/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+         The leading "/.local/bin" is "$HOME/.local/bin" expanded with HOME
+         empty. It resolves to a real absolute path that simply does not exist,
+         so nothing errors, nothing warns, and a tool that WOULD have been found
+         under a correct HOME is silently not found. Unlike (1) this leaves no
+         message at all.
+
+      WHY IT MATTERS BEYOND THE BUILD. Guest-side automation is exactly where a
+      missing tool reads as a product fault rather than an environment fault.
+      This host spent part of the same session establishing that
+      check-host-tools.sh reported the OPERATOR'S PATH as the HOST'S inventory
+      (1004-x9ua); an exec-guest PATH containing a phantom "/.local/bin" is the
+      same class arriving from the other side.
+
+      HOW IT WAS FOUND, recorded because the first evidence was WRONG. My initial
+      attempt chained on `git log -1`, git is absent in the guest, and the chain
+      aborted:
+        /bin/bash: line 1: git: command not found
+        ---BUILD EXIT=127---
+      while the transport reported {"status":"ok","exit_code":0}. A SILENT 127 —
+      the exact failure mode 317's criterion 2 exists to forbid — produced in the
+      invocation meant to verify their absence. Trusting the transport's status
+      would have reported a successful image build that never started. Only after
+      separating BUILD_EXIT from the transport status did the real defect
+      (unbound HOME) appear.
+
+      ALSO CORRECTED HERE so the record is not left wrong: /home/forge/src is a
+      virtiofs mount of the host's ~/src and the repository is one level deeper at
+      /home/forge/src/tillandsias. I twice read the wrong path — once concluding
+      the sources were present when the probe's `&&` chain had not reached its
+      confirmation line, and once concluding they were absent. git IS genuinely
+      absent in the guest; hash-image-sources.sh uses it for staleness detection.
+    exit_criteria:
+      - "--exec-guest sets HOME consistently with the user it runs as, so a guest command sees the same environment an interactive session would"
+      - "PATH contains no entry derived from an empty variable — a phantom /.local/bin must not appear, because it fails silently rather than loudly"
+      - "the project's own scripts/build-image.sh runs in the guest without the caller exporting HOME by hand"
+      - "a fixture asserts the exec-guest environment carries HOME, USER and a PATH free of empty-expansion entries, and fails if any is absent — both directions, so a future minimal-env change cannot reintroduce it silently"
+    events:
+      - type: filed
+        ts: "2026-09-05T17:54:21Z"
+        agent_id: "macos-tlatoanis-macbook-air-claude-20260905t144547z"
+        host: tlatoanis-macbook-air
+        summary: |
+          Found while executing the coordinator's 317 image-build instruction.
+          The build could not start for a reason unrelated to 317, and the
+          reason generalises to all guest-side automation.
