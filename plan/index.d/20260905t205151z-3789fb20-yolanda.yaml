@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: cmdkey-credential-verifier-matches-unconditionally
+    event:
+      type: completed
+      ts: "2026-09-05T20:51:51Z"
+      agent_id: windows-yolanda-opus5-20260905t205151z
+      host: yolanda
+      summary: |
+        CLOSED, and the work this cycle was NOT the fix -- the fix was already in the tree and the packet was never closed. Measured HEAD before changing anything, which is the discipline that keeps paying: skills/smoke-curl-install-and-test-e2e/SKILL.md already carries Test-TillandsiasCredPresent, made on this host 2026-09-04, with the reasoning in a comment block. Work done, status never written. Same family as 1079-qb8k, arriving from the other end.
+
+        SO THIS CYCLE VERIFIED AND GUARDED. Landed at 23c3baeea / d9496d128.
+
+        THE PREMISE, REPRODUCED HERE RATHER THAN TAKEN FROM THE REPORT. `cmdkey /list:<target>` for a target that does not exist prints:
+
+          Currently stored credentials for definitely-not-a-real-target-xyz:
+          * NONE *
+
+        The header echoes the queried name, so `-match [regex]::Escape($target)` is TRUE FOR EVERY TARGET. Measured on yolanda, both directions:
+
+          absent target,  ORIGINAL predicate            -> True    (cannot be false)
+          present target, ORIGINAL predicate            -> True    (right by luck)
+          absent target,  SHIPPED predicate             -> False   (correct)
+          present LegacyGeneric entry, queried BARE     -> 2 echoes, True
+
+        A predicate that cannot be false is not a check -- the packet's own phrase, and the reason it was two failures in opposite directions from one line: the post-delete assertion threw on EVERY run including a clean one, and the same predicate gated the delete, so the guard never guarded.
+
+        WHY THE SHIPPED FIX IS BETTER THAN THE ONE THIS PACKET SPECIFIES, recorded because the packet's text will otherwise read as unimplemented. The packet proposes matching `target=$name` against the whole store. The product writes TargetName="vault-shamir-share-v1" BARE, while cmdkey DISPLAYS generic entries as `LegacyGeneric:target=<name>` -- so the whole-store form depends on that display rendering. I measured that a LegacyGeneric entry answers with 2 echoes whether queried by its FULL or its BARE name, so the echo count separates absent from present regardless of how cmdkey renders the prefix. The shipped comment also refuses to test for the absence of "* NONE *" or to match header text, because both are LOCALIZED -- trading a bug that fails on every run for one that fails only on some operators' machines is strictly worse, since it fails where nobody is looking.
+
+        I ALSO GOT THIS WRONG ONCE AND THE INSTRUMENT WAS MINE. My first discrimination test reported the shipped predicate FALSE for a target that exists, which would have condemned a correct fix. The fault was my test: I extracted a bare name from a `target=` substring and queried with it, and that name was not the stored target. Re-queried with the exact full name: 2 echoes, True. A negative result from an instrument I built five minutes earlier deserved the same suspicion as a positive one.
+
+        GUARD LANDED: scripts/test-cmdkey-predicate-discriminates.sh, 4 arms, wired into build.sh. Arm 2 is the one with teeth -- on a Windows host it EXECUTES the shipped predicate against a target that certainly does not exist and requires FALSE, with the ORIGINAL spelling run against the SAME target as the control returning TRUE. Off Windows that arm SKIPS rather than asserting from prose. Arm 1 strips comments before scanning, because this runbook documents the broken predicate in the block explaining its replacement and a naive scan would red a correct file (1055-6yp8). Verified to discriminate: restoring the always-true form as live code reds arm 1.
+
+        NOT DONE, and it is the packet's own second half: re-running §2 end to end requires unregistering the WSL distro. That is destructive and needs operator authorisation I will not self-grant. What is closed is that the predicate can now be false and cannot silently regress; what is not closed is a full §2 run, and I am not claiming it.
