@@ -1,6 +1,6 @@
 //! End-to-end CLI integration tests. Each test invokes the **real**
 //! `tillandsias-tray.exe` binary (located via Cargo's
-//! `CARGO_BIN_EXE_tillandsias-tray` env var) and asserts on the actual
+//! `CARGO_BIN_EXE_tillandsias-windows-tray` env var) and asserts on the actual
 //! captured output — complementing the inline pin tests in
 //! `notify_icon::tests` which only assert against the test struct
 //! `baseline_diagnose_report()`. These tests would catch:
@@ -26,7 +26,7 @@ use std::process::Command;
 /// Cargo sets `CARGO_BIN_EXE_<bin_name>` when compiling integration tests
 /// in `tests/`. The binary is built on demand before the test runs, so
 /// this is always-fresh.
-const TRAY_EXE: &str = env!("CARGO_BIN_EXE_tillandsias-tray");
+const TRAY_EXE: &str = env!("CARGO_BIN_EXE_tillandsias-windows-tray");
 
 /// `--version` exits 0 + prints a single line containing both the
 /// workspace VERSION (baked from `../../VERSION` via build.rs) and the

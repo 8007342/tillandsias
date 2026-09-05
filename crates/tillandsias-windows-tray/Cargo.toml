@@ -9,7 +9,19 @@ publish = false
 build = "build.rs"
 
 [[bin]]
-name = "tillandsias-tray"
+# 1043-kvvn: the BUILD-TIME target name must be unique across the workspace.
+# tillandsias-macos-tray also declares a bin, and both used to be called
+# "tillandsias-tray" — so both wrote target/<profile>/tillandsias-tray and
+# whichever linked LAST won the file. On macOS that made
+# CARGO_BIN_EXE_tillandsias-tray in the macos-tray tests resolve to this
+# crate's Windows stub, which exits 1 with "runs on Windows only".
+#
+# THE SHIPPED NAME IS UNCHANGED AND IS A CONTRACT: the release packages
+# tillandsias-tray.exe, install-windows.ps1 installs that name, and the smoke
+# runbook asserts `tillandsias-tray --version` on both platforms.
+# scripts/build-windows-tray.ps1 renames this build output to the shipped name
+# when it stages the zip, so only the intermediate is renamed here.
+name = "tillandsias-windows-tray"
 path = "src/main.rs"
 
 [dependencies]

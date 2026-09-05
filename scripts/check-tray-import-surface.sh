@@ -51,7 +51,10 @@ is_os_shipped() {
 if [[ -n "${TILLANDSIAS_IMPORT_FIXTURE:-}" ]]; then
     imports="$(printf '%s\n' $TILLANDSIAS_IMPORT_FIXTURE | tr '[:upper:]' '[:lower:]' | sort -u)"
 else
-    tray_exe="${TILLANDSIAS_TRAY_EXE:-$ROOT/target/release/tillandsias-tray.exe}"
+    # 1043-kvvn: the cargo bin target is tillandsias-windows-tray; the shipped
+    # artifact is still tillandsias-tray.exe, so an INSTALLED path passed via
+    # TILLANDSIAS_TRAY_EXE keeps its name and only the dev-build default moves.
+    tray_exe="${TILLANDSIAS_TRAY_EXE:-$ROOT/target/release/tillandsias-windows-tray.exe}"
     if [[ ! -f "$tray_exe" ]]; then
         echo "skip:no-tray-binary"
         exit 0

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: cloud-only-migration-interrupted-local-src-still-load-bearing
+    event:
+      type: progress
+      ts: "2026-09-05T01:31:51Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260905t004510z
+      host: tlatoanis-macbook-air
+      summary: |-
+        CORRECTION: MY CONCURRENCY CONCLUSION HERE IS FALSE. An earlier event on this packet recorded cli_unknown_flags and exec_guest_stdin as PROVEN to be my own gate concurrency, on a forced solo run that came back green. That green was a lucky link order, not a control. THE REAL CAUSE, filed as 1043-kvvn: tillandsias-macos-tray and tillandsias-windows-tray both declared [[bin]] name = 'tillandsias-tray', so both wrote target/<profile>/tillandsias-tray and whichever linked last won the file; CARGO_BIN_EXE_tillandsias-tray then resolved to the Windows stub, which exits 1 with 'runs on Windows only' where the macOS test asserts exit 2. Intermittent because link order varies; invisible under cargo test -p tillandsias-macos-tray because the sibling is not built then. These are real defects and were never mine. The method error: across three occurrences I compared PASS/FAIL between isolated and full-suite runs and never opened the transcript to read WHY the test failed. The stderr named the wrong binary in plain text throughout.

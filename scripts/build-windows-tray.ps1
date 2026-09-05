@@ -197,7 +197,10 @@ try {
 }
 if ($cargoExit -ne 0) { throw "cargo build failed (exit $cargoExit)" }
 
-$exe = Join-Path $RepoRoot "target\$profileName\tillandsias-tray.exe"
+# 1043-kvvn: the cargo bin target is tillandsias-windows-tray (unique across
+# the workspace); the SHIPPED name is still tillandsias-tray.exe and is staged
+# as such below.
+$exe = Join-Path $RepoRoot "target\$profileName\tillandsias-windows-tray.exe"
 if (-not (Test-Path $exe)) { throw "expected binary not found: $exe" }
 
 Write-Host "Built: $exe" -ForegroundColor Green
