@@ -9,6 +9,16 @@ packets:
     pickup_role: any
     capability_tags: [plan, litmus, closure, fail-loud, gate]
     estimated_hours: 3
+    unscoreable: |
+      No litmus can be pinned yet, and pinning one would be the very defect this
+      packet is about: it exists BECAUSE four closures name litmus tests that do
+      not exist. Exit criterion 4 IS the fixture — the counter must move in both
+      directions, rising when an unresolvable declaration is added and falling
+      when one is resolved. The claimer writes it and replaces this block with a
+      closure naming it. SETTLE THE STATUS FILTER FIRST (criterion 2): a count
+      that includes an OBSOLETED packet is measuring the wrong set, and the line
+      may drop from four to two before any closure work is done.
+      Added 2026-09-05 by the filer after the guard caught the omission.
     owned_files:
       - plan/index.yaml
       - openspec/litmus-tests

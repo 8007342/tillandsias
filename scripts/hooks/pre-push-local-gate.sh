@@ -828,6 +828,60 @@ attempt_plan_only_lane() {
         LANE_NOTES+=("scripts/check-added-fragments-parse.sh absent — skipped")
     fi
 
+    # ORDER 1069-5sp4: THE SCORABLE-OBLIGATION GUARD CANNOT RUN
+    # ANYWHERE ELSE FOR A PLAN-ONLY PUSH, and that is structural rather than an
+    # authoring mistake.
+    #
+    # check-scorable-obligation-added.sh reads ONE input: newly added
+    # plan/index.d/*.yaml. It lives in build.sh's fast-refusal block (line ~1699).
+    # But gate-stamp.sh:343 deliberately EXCLUDES plan/index.d/*.yaml from the
+    # stamp hash (930-i6x4, "append-only ledger traffic the plan fast lane
+    # covers"). So a plan-only change never invalidates the stamp,
+    # `./build.sh --check` answers ok:gate-fresh and runs NOTHING — including the
+    # one guard whose only input is the thing that changed.
+    #
+    # A guard behind a memoisation that ignores the guard's own input can only
+    # fire when something ELSE changed. MEASURED on tlatoanis-macbook-air
+    # 2026-09-05: standalone the guard reports
+    # violation:scorable-obligation-missing:2, while `./build.sh --check` on the
+    # SAME TREE reports ok:gate-fresh and exits 0.
+    #
+    # And this lane — the one place a plan-only push is actually inspected —
+    # validated the fragments' YAML and never asked the scorable question. So
+    # three fragments (1059-yekz, 1067-24q6, 1068-cxmf) reached trunk unchecked
+    # and redded the COORDINATOR's gate minutes later, where the guard finally
+    # ran because that host had other changes. The authoring host, which could
+    # have said so in under a second, stayed green every time.
+    #
+    # ABSENCE IS A NOTED SKIP, NOT A REFUSAL, and I got this wrong first.
+    # I made it fail closed, reasoning that a missing guard silently readmits the
+    # defect. Measured consequence: NINE fixtures build a scratch repo that
+    # copies this hook without the checkers, so the lane refused in all of them
+    # and the gate went red in five arms of test-pre-push-issue-capture-lane
+    # alone. The branch fires ONLY in synthetic repos — a real checkout always
+    # carries the file, and if it were deleted, build.sh's fast refusal invokes
+    # it directly and the full gate fails there. So fail-closed bought nothing in
+    # production and broke the instruments.
+    #
+    # test-gate-stamp-scope.sh's own case-7 note records this exact substitution
+    # one dependency over: without yq on macOS that arm "stopped testing the
+    # lane's stamp handling and started testing tool availability". A fixture
+    # that fails for want of a copied script is measuring the fixture.
+    #
+    # The skip is NOTED, not silent: LANE_NOTES is printed in the push record
+    # below, so "the guard did not run" is visible rather than absent — which is
+    # the distinction this whole packet is about.
+    if [[ -f scripts/check-scorable-obligation-added.sh ]]; then
+        if ! out="$(bash scripts/check-scorable-obligation-added.sh 2>&1)"; then
+            echo "plan-only lane: validation FAILED — check-scorable-obligation-added refused (977-448j):" >&2
+            echo "$out" | head -8 | sed 's/^/  /' >&2
+            echo "  A new packet must name a litmus in verifiable_closure, or say 'unscoreable: <reason>'." >&2
+            return 1
+        fi
+    else
+        LANE_NOTES+=("scripts/check-scorable-obligation-added.sh absent — scorable-obligation check skipped")
+    fi
+
     # Order 767-iukh: when the push touches the attestation ledger, the
     # dedicated gate must vouch for it — it re-validates the WHOLE ledger
     # (grammar on every file, commit reachability for this host's own file),

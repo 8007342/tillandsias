@@ -9,6 +9,14 @@ packets:
     pickup_role: any
     capability_tags: [plan, claims, multi-host, safety, cli]
     estimated_hours: 2
+    unscoreable: |
+      No litmus can be pinned yet, because THE TEST IS THE FIX. Exit criterion 3
+      IS the fixture — bare and read/list-flag invocations leave the ledger
+      byte-identical, the opt-in still expires a genuinely stale claim — and a
+      verifiable_closure may only name a test that already exists. The claimer
+      writes that fixture and replaces this block with a closure naming it.
+      Added 2026-09-05 by the filer after the guard caught the omission; see
+      1069-5sp4 for why it was not caught on this host at filing time.
     owned_files:
       - crates/tillandsias-plan/src/main.rs
     title: |
