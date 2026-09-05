@@ -1,0 +1,151 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-memoisation-audit-cannot-measure-its-own-effect-because-a-memo-hit-emits-no-timing-record
+    order: 1074-96z9
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    owner_host: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags:
+      - metrics
+      - instrument
+      - fail-loud
+      - multi-host
+    estimated_hours: 3
+    owned_files:
+      - build.sh
+      - scripts/cycle-metrics.sh
+    verifiable_closure: |
+      bash scripts/test-memo-hit-observability.sh exits 0, and each arm reds
+      independently on the PRE-FIX code:
+
+      ARM 1 (archiver hit is recorded). A gate run whose archiver memo HITS
+      emits a timing record naming the hit. PRE-FIX RESULT: FAILS — build.sh's
+      hit branch calls only _info and no timing_emit, so a hit produces no
+      record at all and the hit rate is not computable from the log.
+
+      ARM 2 (the two outcomes are distinguishable). A hit and a miss emit
+      DIFFERENT step names, so the recurrence rung cannot average a cheap hit
+      into the real cost of a miss. PRE-FIX RESULT: FAILS for the archiver for
+      the same reason as arm 1. The terminology step already satisfies this and
+      is the reference implementation, so arm 2 asserts it for BOTH steps and
+      would catch a later regression in either.
+
+      ARM 3 (the skippable line states its window). scripts/cycle-metrics.sh
+      prints a window token on `skippable:` as `recur:` already does.
+      PRE-FIX RESULT: FAILS — the line prints candidates/floor_ms/min_runs/top3
+      and no window, while the value is windowed to --recur-window-days.
+
+      NEGATIVE CONTROL, and it is the arm that matters: a run whose memo MISSES
+      must still emit the real step under its real name with its real duration.
+      A fix that renamed every record to a hit/miss pair without keeping the
+      miss on the profiled path would satisfy arms 1 and 2 while deleting the
+      only measurement of what the step actually costs.
+    title: |
+      a memoised gate step's HIT emits no timing record, so the audit that nominated it for memoisation cannot measure whether the memoisation worked — and it will keep re-nominating the fixed step for a full seven-day window
+    context: |
+      MEASURED on macuahuitl 2026-09-05T18:4xZ during the hourly coordination
+      pass, running the cross-host recurrence audit that order 1001-q3zf exists
+      to drive.
+
+      WHAT I SET OUT TO DO. The audit rule says: when the same step tops
+      `skippable:` on two or more hosts, file ONE packet to memoise or skip it,
+      citing each host's runs=, avg_ms=, fail_pct= and saved_ms_upper=. Four
+      hosts agreed, which is the strongest signal the rule has ever produced:
+
+        checking-the-plan-archiver-preserves-the-ready-set-831-ezea
+          macuahuitl  runs=347 avg_ms=15282 fail_pct=0 saved_ms_upper=5287798
+          lenovinha   runs=230 avg_ms=24841 fail_pct=0 saved_ms_upper=5688602
+          yoga        runs=150 avg_ms=17048 fail_pct=0 saved_ms_upper=2540281
+          macbookair  runs=122 avg_ms=18204 fail_pct=0 saved_ms_upper=2202796
+
+        checking-user-visible-terminology-against-the-dictionary-629-t6b
+          macuahuitl  runs=347 avg_ms=13278 fail_pct=0 saved_ms_upper=4594365
+          lenovinha   runs=230 avg_ms=33414 fail_pct=0 saved_ms_upper=7651905
+          yoga        runs=150 avg_ms=14275 fail_pct=0 saved_ms_upper=2127016
+          macbookair  runs=122 avg_ms=29803 fail_pct=0 saved_ms_upper=3606197
+
+      Every saved_ms_upper above is an UPPER BOUND and must be quoted as one:
+      it is total_ms minus one run, the most a perfect skip could have saved.
+      The timing log carries no input identity, so no line of it can claim a
+      given run WOULD have hit a cache.
+
+      THEN I READ build.sh BEFORE FILING, AND BOTH STEPS ARE ALREADY MEMOISED.
+      build.sh:2637 gates the archiver check behind
+      scripts/archiver-check-memo.sh, landed 2026-09-04; build.sh:3021 gates the
+      terminology check behind scripts/terminology-check-memo.sh, and its own
+      comment already cites this very audit and carries four hosts' numbers
+      including pirria's 25.4s. The packet the rule told me to file was done
+      before I opened the file. That is the recurring lesson filed as
+      check-for-the-capability-before-designing-its-replacement, and it is the
+      reason this packet is about the INSTRUMENT instead.
+
+      DEFECT 1 — A HIT IS INVISIBLE, so the memo's effect cannot be measured.
+      On a hit the archiver branch calls `_info` and returns; `_run` never runs,
+      so no timing record is emitted under any name. The step simply stops
+      appearing. Nobody can compute the hit rate, and "did the memo help" has no
+      answer in the log — which is precisely the bound that the terminology
+      memo's own comment set out to eliminate for itself:
+
+        "The timing record carries hit= so the NEXT audit can measure the hit
+         rate instead of bounding it: saved_ms_upper was only ever an upper
+         bound because the timing log carried no input identity."
+
+      The terminology step emits terminology-check-hit and
+      terminology-check-miss. The ARCHIVER step, landed nine hours earlier,
+      emits neither. So the fleet has the fix and the reference implementation
+      already in the tree, applied to one of the two steps.
+
+      DEFECT 2 — THE AUDIT WILL RE-NOMINATE BOTH STEPS FOR SEVEN MORE DAYS.
+      `skippable:` is windowed to --recur-window-days (default 7). The runs
+      above were accumulated mostly BEFORE the memos landed, and they do not
+      leave the window until they age out. So the next six audits will read the
+      same top-2 on the same four hosts and reach the same wrong conclusion I
+      reached, because a memoised step's cheap hits no longer accumulate under
+      its old name to dilute the average. The instrument nominates fixed work,
+      persistently, and looks more confident each time more hosts agree.
+
+      DEFECT 3 — THE LINE DOES NOT SAY IT IS WINDOWED. `recur:` prints
+      `window=7d`; `skippable:` prints candidates/floor_ms/min_runs/top3 and no
+      window at all, though it is computed in the same jq program from the same
+      --recur-window-days. A reader comparing runs= across four hosts, exactly
+      what the audit rule instructs, cannot tell from the line whether those are
+      7-day counts or all-time counts. I could not, and I read the source to
+      find out.
+
+      WHAT IS NOT CLAIMED. fail_pct=0 across 1046 combined runs of each step is
+      NOT evidence that either check is vacuous, and this packet does not say
+      so. These are gate steps that run on every commit while most commits touch
+      neither the dictionary nor the ledger's ready set; a zero failure rate is
+      what a correctly-scoped guard looks like from the outside. The claim here
+      is only about the instrument that reports them.
+    next_action: |
+      LEFT TO DO, in the order that keeps each step provable:
+
+      1. Give the archiver memo the same hit/miss timing the terminology memo
+         has. build.sh:2637-2656 is the site; terminology at build.sh:3021-3040
+         is the pattern to copy, including the rule that a record is written
+         only after a PASS. Do not invent a third convention.
+
+      2. Keep the miss on the profiled path. `_run` carries the phase timing and
+         the cd into SCRIPT_DIR; a capture that drops it silently stops the step
+         being profiled, which is already recorded in build.sh's own comment for
+         the 965-sxec tee. This is what the negative control protects.
+
+      3. Print the window on `skippable:` in scripts/cycle-metrics.sh:1035, the
+         way `recur:` does at line 1033. One token. It is the cheapest of the
+         three and the one a reader hits first.
+
+      4. Write scripts/test-memo-hit-observability.sh with the four arms in the
+         closure and bind it into ./build.sh --check. Each arm must be shown to
+         RED on the pre-fix code; a criterion the unfixed tree already passes
+         has no teeth and must not be ratified.
+
+      NOT IN SCOPE, deliberately: changing the 7-day window, and adding the tree
+      digest on timing records that would turn saved_ms_upper from a bound into
+      a measurement. The digest is 1001-q3zf's own named next rung and belongs
+      there. Once arm 1 lands, the hit rate becomes directly countable from the
+      log, which is the cheaper half of what the digest was wanted for.

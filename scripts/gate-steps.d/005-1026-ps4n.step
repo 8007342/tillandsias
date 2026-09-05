@@ -1,0 +1,23 @@
+# Gate step 1026-ps4n — data, not code (order 1072-b7eq).
+#
+# Arrived from linux-next as a SIXTH inline block appended to the same region
+# 1072-b7eq was converting, and conflicted on the merge — the fifth instance of
+# this collision in one day, and the one that resolved itself by becoming a file.
+# Prefix 005 keeps the run order trunk had (this step ran before the other five);
+# the ten-spacing exists precisely so a step can land between two without
+# renaming either.
+#
+# Pirria's rationale, carried over verbatim: a timing record must outlive the
+# shell measuring it, or the log must say so. The arm that matters is the
+# negative one — a lost record is filed under <step>-supervisor-lost and NEVER
+# under the real step name, because the recurrence rung groups by step and a
+# lower bound averaged into the real timings would corrupt the decision the log
+# exists to inform. Hermetic: scratch stamp dir and scratch log.
+#
+# STEP_SCRIPT is a LITERAL path on purpose: a binding assembled from a
+# variable is invisible to every name-based scan, including the
+# bound-or-retired guard (1063-nraf). Keep it a plain string.
+STEP_DESC="Checking a timing record outlives its supervisor (1026-ps4n)"
+STEP_SCRIPT="scripts/test-timing-supervisor-lost.sh"
+STEP_ERROR="a killed supervisor no longer leaves a named-cause timing record (1026-ps4n) — see the verdict line above"
+STEP_OK="Supervisor-loss timing check passed"

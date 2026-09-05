@@ -140,6 +140,25 @@ pub struct Ledger {
     /// LWW fold for that field. Exactly the winner `fragments::fold` picked,
     /// including its first-wins-on-tie behavior.
     field_sources: BTreeMap<String, FieldSource>,
+    /// ORDER 1065-4t7t — packet_id -> (host, ts) of the LWW entry that won the
+    /// `status` field. THIS IS THE LEASE, and it was already being computed.
+    ///
+    /// The stranded-claim sweep used to recognise a live claim by finding an
+    /// event whose summary began "claimed for cycle". That is prose, so a lease
+    /// recorded any other way was invisible and the packet read as claimable
+    /// while a host was working it — four instances on 2026-09-05 alone,
+    /// including a reopen through `set-field` whose reason carried no such
+    /// sentence and a packet the sweep called unclaimed while another host was
+    /// mid-run on it.
+    ///
+    /// Every `set-field ... status in_progress` already writes a status entry
+    /// carrying `ts` and `host`, and the fold already records which entry won
+    /// (`FoldProvenance::lww_wins`). So the authoritative claimant and claim
+    /// time were present the whole time; only the sweep was reading the wrong
+    /// channel. Sidecar rather than a packet key, for the same reason
+    /// `field_sources` is: injecting provenance into the packet Values would
+    /// leak into the edit and compaction text paths.
+    status_leases: BTreeMap<String, (String, String)>,
     /// Every fragment file beside the index (parseable or not) at load time.
     /// Freshness is derived over base PLUS this set, so adding a fragment
     /// changes `indexed_at` even before anything reads its content.
@@ -523,6 +542,7 @@ impl Ledger {
             source_path: None,
             origin_sources: BTreeMap::new(),
             field_sources: BTreeMap::new(),
+            status_leases: BTreeMap::new(),
             corpus_files: Vec::new(),
             skipped_fragments: Vec::new(),
         })
@@ -550,6 +570,16 @@ impl Ledger {
     /// `field` on `packet_id`, or `None` when the current value comes from the
     /// packet's own block (base or fragment-born). An exact answer must cite
     /// this winner for the field, never the stale base span.
+    /// The (host, ts) that set this packet's current status — its LEASE when
+    /// that status is `in_progress` (order 1065-4t7t). `None` when the status
+    /// came from the base index rather than a fragment, which is the honest
+    /// answer: the base carries no claimant.
+    pub fn status_lease_of(&self, packet_id: &str) -> Option<(&str, &str)> {
+        self.status_leases
+            .get(packet_id)
+            .map(|(h, t)| (h.as_str(), t.as_str()))
+    }
+
     pub fn field_source_of(&self, packet_id: &str, field: &str) -> Option<&FieldSource> {
         self.field_sources.get(&format!("{packet_id}\u{1}{field}"))
     }
@@ -582,11 +612,13 @@ impl Ledger {
         &mut self,
         origin_sources: BTreeMap<String, FieldSource>,
         field_sources: BTreeMap<String, FieldSource>,
+        status_leases: BTreeMap<String, (String, String)>,
         corpus_files: Vec<PathBuf>,
         skipped_fragments: Vec<PathBuf>,
     ) {
         self.origin_sources = origin_sources;
         self.field_sources = field_sources;
+        self.status_leases = status_leases;
         self.corpus_files = corpus_files;
         self.skipped_fragments = skipped_fragments;
     }

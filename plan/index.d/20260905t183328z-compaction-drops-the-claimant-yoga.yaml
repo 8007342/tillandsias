@@ -1,0 +1,76 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: compaction-folds-a-claim-into-the-base-and-drops-the-claiming-host-and-ts
+    order: 1073-xays
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [plan, claims, multi-host, compaction]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-plan/src/main.rs
+      - crates/tillandsias-plan/src/fragments.rs
+    title: |
+      compaction folds a status entry into plan/index.yaml and does not carry the claiming host and ts forward, so a packet claimed before its last compaction is unattributable for the rest of its life and the stranded-claim sweep must report it unclaimed forever
+    context: |
+      FOUND while closing 1065-4t7t, by checking the one row that did NOT become
+      attributed rather than assuming it was residue of the old defect.
+
+      1065-4t7t made the sweep read the lease from the status channel, where every
+      `set-field <id> status in_progress` records `ts` and `host`. That fixed
+      three of four rows on this ledger. The remaining one, 1025-a896, is
+      `in_progress` in the BASE INDEX with no fragment status entry — so
+      `status_lease_of` returns None and the sweep says unclaimed, correctly.
+
+      THE BASE CARRIES NO CLAIMANT. A packet's `status: in_progress` line in
+      plan/index.yaml records the VALUE and nothing about who set it or when.
+      Compaction folds the winning fragment status entry into that line and the
+      (host, ts) is discarded, because the base schema has nowhere to put it.
+
+      SO THE CONDITION IS PERMANENT, which is what makes it worth its own packet
+      rather than a footnote: a packet claimed before its last compaction can
+      never become attributed, no matter how many times the sweep improves. The
+      sweep now says so at the point of output (1065-4t7t), so nobody chases it
+      as a stranded claim — but the honest fix is upstream.
+
+      WHY IT MATTERS BEYOND TIDINESS. The sweep's whole job is to tell a stranded
+      claim from a live one. A permanently-unattributable in_progress row is
+      indistinguishable from a genuinely abandoned one, and the reaper's TTL
+      logic keys on activity it cannot attribute. Today that is one row; every
+      compaction of a claimed packet adds another, and compaction is routine.
+
+      SHAPE, and the claimer should weigh both rather than assume the first:
+      (a) the base packet gains optional `status_host` / `status_ts` keys that
+      compaction writes from the winning entry, and `status_lease_of` falls back
+      to them — a schema addition, so it touches the open-world round-trip and
+      every consumer that re-serialises a packet;
+      (b) compaction REFUSES to fold a status entry for an `in_progress` packet,
+      leaving the fragment in place until the packet reaches a terminal status —
+      no schema change, but the fragment corpus keeps rows compaction exists to
+      remove, and a long-held claim keeps its fragment for as long as it is held.
+      (b) is smaller and may be enough; (a) is what a reader would expect.
+
+      NOT INVESTIGATED: whether any packet OTHER than 1025-a896 is currently in
+      this state, and whether the archive path (plan/archive/) has the same gap.
+      Count them before choosing, because (a)'s cost is only justified if this is
+      more than one row.
+    exit_criteria:
+      - "a packet claimed and then compacted is still attributed to its claiming host and claim ts by the stranded-claim sweep; pre-fix result: FAILS (1025-a896 reports unclaimed-in-progress with '-' for host and ts, permanently)"
+      - "a packet that genuinely has no claimant is still reported unclaimed, so the fix does not manufacture an owner; pre-fix result: passes and must keep passing"
+      - "the count of currently-unattributable in_progress rows is measured and recorded before a shape is chosen, so (a)'s schema cost is justified by more than one row"
+    unscoreable: |
+      The pin is a fold/compaction round-trip test: claim a packet in a fragment,
+      compact, and assert the lease survives; plus the negative that an unclaimed
+      packet gains no owner. The claimer adds both.
+    events:
+      - type: filed
+        ts: "2026-09-05T18:33:28Z"
+        host: yoga
+        summary: |
+          Filed by yoga from 1065-4t7t's remaining row, with macuahuitl's
+          endorsement that compaction carrying the claimant forward is a fair
+          argument. The sweep now names the condition at the point of output;
+          this packet is the upstream fix.

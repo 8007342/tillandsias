@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-memoisation-audit-cannot-measure-its-own-effect-because-a-memo-hit-emits-no-timing-record
+    field: status
+    value: in_progress
+    ts: "2026-09-05T18:47:39Z"
+    host: pirria
+
+events:
+  - packet_id: the-memoisation-audit-cannot-measure-its-own-effect-because-a-memo-hit-emits-no-timing-record
+    event:
+      type: note
+      ts: "2026-09-05T18:47:39Z"
+      host: pirria
+      summary: |-
+        claimed by pirria via coordinator relay; pirria ran scripts/check-credential-channel.sh first and reported missing:no-credential-channel, so claim and patches travel by hash-verified relay as with 1005-m6rz and 1026-ps4n
