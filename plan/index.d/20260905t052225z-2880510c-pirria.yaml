@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: memoise-the-terminology-dictionary-check-on-a-digest-of-its-inputs
+    event:
+      type: note
+      ts: "2026-09-05T05:22:25Z"
+      agent_id: linux-macuahuitl-claude-20260905t052225z
+      host: pirria
+      summary: |
+        claimed for cycle 2026-09-05T04:09Z by linux-macuahuitl-claude-20260905t052225z ON PIRRIA'S BEHALF: pirria asked for this packet and its gate runs in the toolbox, but its credential channel is missing so it cannot push a claim; the coordinator holds the lease under pirria's name, and pirria's implementation (d6a71e968 on its local branch, three criteria met by measurement, bundle on disk) relays through the coordinator until the operator's grant reset. Sweep note: the earlier set-field to in_progress carried no claim event, hence unclaimed-in-progress at 05:05Z.
