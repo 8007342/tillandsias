@@ -3212,6 +3212,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Credential verdict fixture passed"
 
+    _step "Checking the freshness budget is regime-named and still catches a regression (1038-d7vw)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-freshness-regime-budget.sh" 2>&1; then
+        _error "the freshness budget stopped discriminating by filesystem regime, or drifted outside the measurements that derived it (1038-d7vw) — one global number cannot serve 725ms on ext4 and 13.8s over drvfs, and a remote budget raised past the 25.2s pre-fix cost would stay green through a full quadratic regression"
+        exit 1
+    fi
+    _info "Freshness regime-budget fixture passed"
+
     _step "Checking litmus steps can actually fail (972-cvdg)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-steps-can-fail.sh" 2>&1; then
         _error "a litmus step prints the same token on success and failure (972-cvdg) — see the verdict line above"
