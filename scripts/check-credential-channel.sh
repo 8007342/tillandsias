@@ -475,9 +475,9 @@ credential_channel_verdict() {
       *,manager,*|*,manager-core,*|*"\\Git Credential Manager"*)
         echo "blocked:interactive-credential-helper:${_helpers:-unknown}" >&2
         echo "  gh holds a token but git's helper chain is interactive-only — an" >&2
-        echo "  unattended push hangs forever on a prompt. REMEDY (measured 18s" >&2
-        echo "  on esmeraldinha after a 10-minute hang):" >&2
-        echo "    gh auth token | git credential-store --file \"\$(git rev-parse --git-dir)/.gh-credentials\" store  # seed repo-local" >&2
+        echo "  unattended push hangs forever on a prompt. REMEDY:" >&2
+        echo "    # seed repo-local (1052-548e: a bare token is REFUSED and ECHOED)" >&2
+        _ccc_seed_remedy_line >&2
         echo "    git config --local --replace-all credential.helper ''         # empty entry DROPS the system manager" >&2
         echo "    git config --local --add credential.helper \"store --file=\$(git rev-parse --git-dir)/.gh-credentials\"" >&2
         echo "blocked:interactive-credential-helper"
@@ -704,6 +704,72 @@ credential_channel_verdict() {
 # never had one" — two conditions with the same repair cost but very different
 # diagnoses, and the guard previously reported both as
 # missing:no-credential-channel.
+# THE SEEDING REMEDY, EMITTED FROM ONE PLACE (order 1052-548e).
+#
+# WHAT WAS WRONG. Two arms of this guard printed:
+#
+#   gh auth token | git credential-store --file ... store
+#
+# `git credential-store ... store` does NOT read a bare token. It reads a
+# credential DESCRIPTION — protocol=, host=, username=, password=, terminated
+# by a BLANK LINE. Fed a token it refuses with `fatal: unable to read
+# credential`, leaves the store at 0 bytes, and the guard's next verdict is
+# unchanged — which an operator reads as "my refresh did not work" rather than
+# "the remedy did not run".
+#
+# AND IT DISCLOSED THE SECRET, which is why esmeraldinha filed this p1 on the
+# echo alone. git's rejection path prints the line it rejected, and the
+# rejected line IS the token:
+#
+#   warning: invalid credential line: gho_...
+#
+# Anything capturing that output — a terminal transcript, a cycle log, a pasted
+# bug report, an agent's session record — then contains a live credential. A
+# remedy that fails BY PRINTING THE SECRET is worth fixing on that ground even
+# if it had worked.
+#
+# MEASURED by esmeraldinha 2026-09-05T03:00Z on a host that had been
+# credential-blocked all day; the description form below produced
+# ok:gh-credentials-store and a live authenticated push probe.
+#
+# HOW A WRONG LINE CARRIED THE WORD "MEASURED" FOR TWELVE DAYS, since the
+# packet asked and the answer is the interesting part. The remedy shipped in
+# 8f39c0aef (860-g798, 2026-08-24) labelled "measured 18s on esmeraldinha
+# after a 10-minute hang". That commit's evidence is real, but it is about the
+# HANG and about the helper-config lines: "the empty helper entry that drops
+# the system manager, the subtlety that cost esmeraldinha its second diagnosis
+# pass". Those are lines 2 and 3, and esmeraldinha used them unchanged twelve
+# days later. The SEEDING line was added into the same block and inherited the
+# label without ever being run. Nothing in 8f39c0aef substantiates the 18s
+# figure for it.
+#
+# So the failure was not a false measurement, it was a TRUE measurement
+# covering a smaller scope than the text it was attached to — and a three-line
+# block reads as one claim. That attribution is now removed from the printed
+# text rather than reworded, and the fixture runs the line instead of
+# describing it.
+#
+# WHY A FUNCTION RATHER THAN TWO CORRECTED STRINGS. The line was wrong in two
+# places and would have been corrected in one. Emitting it from here means the
+# fixture can run WHAT THE OPERATOR IS SHOWN rather than a hand-copy that can
+# drift from it — which is this packet's third criterion, and the reason the
+# original error survived being "measured".
+#
+# `%s` for the token and single-quoted printf format: the token never appears
+# in the printed command, only `$(gh auth token)`, so the remedy text itself is
+# safe to paste into a bug report.
+_ccc_seed_remedy_line() {
+    # QUOTED heredoc: every $( ) and every backslash-n must survive verbatim
+    # into the operator's terminal. The `\n` are for THEIR printf, not ours —
+    # an unquoted form expands them here and emits a multi-line broken command,
+    # which is a second way to print a remedy that cannot be run.
+    cat <<'REMEDY'
+    printf 'protocol=https\nhost=github.com\nusername=%s\npassword=%s\n\n' \
+      "$(gh api user --jq .login)" "$(gh auth token)" \
+      | git credential-store --file "$(git rev-parse --git-dir)/.gh-credentials" store
+REMEDY
+}
+
 _ccc_stamp_path() {
     printf '%s/tillandsias-credential-verified' "$(git rev-parse --git-dir 2>/dev/null || echo .)"
 }
@@ -715,6 +781,14 @@ _ccc_record_pass() {
 }
 
 case "${1:-}" in
+  print-remedy)
+    # THE FIXTURE'S ENTRY POINT (order 1052-548e, third criterion). It exists so
+    # a test can run WHAT THE OPERATOR IS SHOWN rather than a hand-copy of it.
+    # A hand-copy is exactly how the broken line survived being described as
+    # "measured 18s": whatever was measured, it was not this text.
+    _ccc_seed_remedy_line
+    exit 0
+    ;;
   reverify)
     # RE-PROBE BEFORE THE EXPENSIVE STEP. The skill calls this at Finalization
     # immediately BEFORE `./build.sh --check`, so a dead credential costs the
@@ -756,7 +830,7 @@ case "${1:-}" in
       echo "  Report blocked with the salvage ref rather than exiting clean." >&2
       echo "  REMEDY for the credential itself:" >&2
       echo "    gh auth refresh        # or: gh auth login" >&2
-      echo "    gh auth token | git credential-store --file \"\$(git rev-parse --git-dir)/.gh-credentials\" store" >&2
+      _ccc_seed_remedy_line >&2
       echo "blocked:credential-expired-mid-cycle"
       exit 1
     fi
