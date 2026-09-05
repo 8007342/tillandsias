@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-landing-tool-cannot-land-on-a-platform-branch-and-retries-refusals
+    event:
+      type: completed
+      ts: "2026-09-05T18:58:37Z"
+      agent_id: windows-yolanda-opus5-20260905t185837z
+      host: yolanda
+      summary: |
+        CLOSED. Ran on the merged tree just now, on this host, rather than reported from memory:
+
+          == 1064-r8fv: land-on-platform-branch merges trunk on a platform branch
+          PASS: 8  FAIL: 0
+          ok:land-merges-trunk:8 arm(s)
+
+        ALL FOUR ARMS RAN, and the negative control is the one macuahuitl asked to see quoted, so here is what it does: ARM 2 runs the tool on linux-next, where the branch and trunk are the SAME ref, and requires the merge-commit count to be UNCHANGED before and after. That is what stops a fix from satisfying arm 1 by merging something on every branch -- an implementation that manufactured an empty merge commit on every land would pass arm 1 and pollute the history the tool exists to protect. Arm 1 requires trunk to be contained after the land AND verifies it on the REMOTE rather than in the worktree, since the only proof that counts is what origin has. Arm 3 rejects a push with a pre-receive hook and requires exit 6 with the relay lane NAMED in the output, plus a check that the tool did NOT create the relay ref itself.
+
+        BOTH DEFECTS RED UNDER THEIR OWN SABOTAGE, verified separately rather than together: removing the trunk merge reds arm 1 only; putting a bare "rejected" back into the retryable pattern reds arm 3 only.
+
+        THE SECOND DEFECT WAS FOUND BY THE FIXTURE, NOT BY ME, and it is the better half of the record. I filed this packet for one defect -- the tool integrating onto origin/<branch> and never merging trunk, so it could not satisfy the mandated-merge guard on a platform branch however many attempts it was given. Arm 3 then found that the retryable classification grepped a bare "rejected", which also matches `! [remote rejected] ... (pre-receive hook declined)`: a SERVER-SIDE refusal retried to exhaustion, burning a full gate run per attempt on a push that could never succeed. That is this file's OWN header warning one layer down -- it opens by describing how grepping for "<branch> -> <branch>" also matches the rejection line -- reproduced inside the guard written to prevent it.
+
+        LIVE CONFIRMATION, unplanned: my own land three commits ago printed "land: attempt 1 -- merging origin/linux-next (mandated before every non-linux-next push)". That line exists because of this fix, and it ran on my own push.
+
+        MODE CORRECTED IN THE SAME PASS, and macuahuitl was right to flag it. scripts/test-land-merges-trunk.sh was 644. The cause is this host: core.fileMode=false, so chmod in the worktree never reaches the index, and drvfs then reports the file rwxr-xr-x while git ls-files -s says 100644 -- worktree and commit disagreeing, with only the index authoritative. That is the 1055-6yp8 lesson arriving as my own defect two orders later. Fixed with git update-index --chmod=+x, which writes the mode regardless of what the filesystem can represent, and applied to the two fixtures added this cycle for the same reason. Nothing was broken: the closure and build.sh both invoke through bash.
