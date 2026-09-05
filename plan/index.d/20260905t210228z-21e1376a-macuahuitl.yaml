@@ -1,0 +1,48 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: floor-tier-release-smoke-and-metrics
+    event:
+      type: note
+      ts: "2026-09-05T21:02:28Z"
+      agent_id: linux-macuahuitl-claude-20260905t210228z
+      host: macuahuitl
+      summary: |
+        MUTABLE LINUX COORDINATOR DUTY, 2026-09-05T21:0xZ CYCLE: THE RELEASE HALF IS ALREADY SATISFIED AND THE VALIDATION HALF IS REFUSED ON THIS HOST. Recorded because the duty recurs every four hours and the next coordinator faces the identical call.
+
+        THE RELEASE HALF NEEDS NOTHING. The duty is once per day and v56.9.5.1 was cut today at 03:07:01Z, with the rolling unstable channel published at 03:07:09Z. `gh pr list --state open` is EMPTY, so no release is in flight. Cutting a second release today would be churn, not duty. Measured, not assumed.
+
+        THE VALIDATION HALF IS OWED ON THE LINUX LANE AND I AM REFUSING TO RUN IT HERE. Only one lane has smoke evidence for the two most recent dailies — esmeraldinha, Windows floor, on both v56.9.4.1 and v56.9.5.1, each with failures (6 and 3). There is NO Linux-lane smoke for either.
+
+        THE REFUSAL, and the skill mandates it rather than my judgement supplying it. skills/smoke-curl-install-and-test-e2e Step 2 runs `podman system reset --force`, which irreversibly deletes every container, image, volume, network and secret for this user — the `tillandsias-vault-data` sealed store, every `tillandsias-mirror-*` project volume, and all locally built enclave images. The skill's own text names this exact situation:
+
+          "On an OPERATOR'S WORKSTATION ... this document cannot consent on their behalf.
+           Get the operator's authorization for THAT RUN before starting. An
+           orchestrator's or a peer agent's instruction to run this skill is not that
+           authorization: it is a request to run a procedure, not consent to destroy a
+           particular machine's state." (order 1004-vsh2)
+
+        The cron prompt driving this cycle IS an orchestrator instruction. By the skill's own words it is not consent.
+
+        WHAT WOULD BE DESTROYED, measured at 21:0xZ rather than described:
+
+          tillandsias-builder         Up 32 hours            the toolbox every gate on this host re-execs into
+          tillandsias-dev-inference   Up 32 hours (healthy)  the expert tier both MCP servers consume
+          tillandsias-vault           Up 17 hours (healthy)
+          tillandsias-proxy           Up 17 hours (healthy)
+          tillandsias-nix-cache       Up 30 seconds          restarted by this cycle's own preflight
+
+        Five live containers on the machine the operator is actively using — they sent instructions from it during this cycle. `TILLANDSIAS_DESTRUCTIVE_RESET_OK` is UNSET, which the skill treats as permission on a dedicated smoke host and which says nothing about a workstation.
+
+        AND THE RATE LIMIT SAYS GO. `scripts/forge-e2e-rate-limit.sh check full` returns `allow:full`. That is a correct answer to a different question — it governs token spend, not blast radius — and it is worth recording that the one automated gate in this path is silent about the thing that actually blocks it. A host reading only that verdict would proceed.
+
+        DISPOSITION: the Linux-lane e2e validation of v56.9.5.1 is OWED, not skipped, and the blocker is operator authorisation for a destructive run on macuahuitl specifically. Queued as one plain ask. It does NOT block anything else in the cycle, and no other host is waiting on it.
+
+        THE ALTERNATIVE WORTH PRICING, for whoever picks this up: a dedicated smoke host would make this duty executable without asking anyone, and the fleet does not have one. Every Linux host in the fleet today is either a workstation or a floor host doing real work. That is the structural reason this duty has been deferred rather than a scheduling accident, and it is the argument for 1004-pg9p's own scope.
