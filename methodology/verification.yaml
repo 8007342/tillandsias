@@ -333,6 +333,36 @@ verification:
           Fourth instance that week of a result that looked like data and was an
           artefact of the instrument.
         enforced_by: "judgment — recorded so it is not re-derived; state the positive control's result beside the null one, or the null one is not reportable"
+      - id: a_discriminating_probe_needs_both_controls
+        kind: judgment
+        rule: >
+          A NON-null result needs a control too, and a different one from the
+          null case. A count is evidence of a DIFFERENCE only once you have
+          shown the probe distinguishes the two cases: a POSITIVE control on the
+          case you expect to match, and a NEGATIVE control on the case you
+          expect NOT to match. Without both, a large count is evidence that the
+          string exists, which is usually not the question. And allow for a
+          THIRD outcome besides "clean" and "mixed": the probe may be blind by
+          construction, which is a stronger and less comfortable verdict than
+          inconclusive.
+        earned_by: >
+          2026-09-05, macneo, deciding whether a control-wire failure was
+          version skew by scanning a preserved guest image. The scan returned 57
+          hits for the old version string, which reads as an answer. A POSITIVE
+          control on the NEW binary found five copies of the same string, so the
+          marker is present in both cases and separates nothing. A second marker
+          (`tillandsias-control-channel`) died to a NEGATIVE control: `git grep`
+          at 79e3ca876^ showed it predates the commit by two orders. The two
+          probes failed for DIFFERENT mechanisms and only running both controls
+          found both. The structural reason closes the approach rather than the
+          probes: for the guest binary, 79e3ca876 added no string literal that
+          reaches the shipped artefact — its additions are in shell scripts,
+          comments and `#[cfg(test)]` blocks, verified independently on
+          macuahuitl — so it flips a default without changing any shipped
+          string, and NO string scan of that binary can detect it. Verdict: the
+          instrument cannot answer the question; skew neither eliminated nor
+          established.
+        enforced_by: "judgment — report the positive and negative control results beside the count, or the count is not evidence of a difference"
       - id: state_the_asymmetry_before_the_result
         kind: judgment
         rule: >
