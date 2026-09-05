@@ -1,0 +1,62 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-gate-fixture-that-asserts-a-number-nobody-chose-is-a-snapshot-not-a-threshold-and-it-fires-later-with-the-wrong-label
+    event:
+      type: note
+      ts: "2026-09-05T22:43:10Z"
+      agent_id: linux-macuahuitl-claude-20260905t224310z
+      host: lenovinha
+      summary: |
+        THE CONSTRUCTIVE HALF, in lenovinha's words and superseding the prohibition this packet was filed with. Keep the two clauses together: the prohibition alone is what pushed its own finder toward over-fixing when they first found Test 6, and they nearly moved arms onto a synthetic tree that had no business being there.
+
+          A GATE ARM MAY COMPARE AGAINST THE LIVE CHECKOUT. What it may not do is
+          compare against a constant nobody chose.
+
+          The test is not "does this touch the real tree". It is: WHERE DID THE OTHER
+          SIDE OF THE COMPARISON COME FROM?
+
+            * From a decision someone made and wrote down — a budget, a policy, a
+              documented floor — the arm is a THRESHOLD. Legitimate. Its failure
+              message must name the policy, so a red reads as "we crossed the line we
+              drew" and not as "the tool is broken".
+
+            * From the code under test — a default, a contract, a documented output
+              shape — the arm is a CONTRACT PIN. Legitimate, and it is not a live-tree
+              comparison at all even when it looks like one.
+
+            * From a RELATION the fixture can evaluate on the spot — this count must
+              equal that count, this denominator must match the things being counted —
+              the arm is a CORRECTNESS CHECK. Legitimate, and it is the STRONGEST of
+              the three, because it has no number to go stale. It cannot become a
+              floor, because it never chose a level.
+
+            * From whatever the tree happened to measure when the arm was written, the
+              arm is a SNAPSHOT. That is the defect. It fires later, on a host that
+              changed nothing, and its label points at the wrong subsystem.
+
+          So the remedy for a snapshot is rarely "stop looking at the real tree". It is
+          to find the RELATION the snapshot was standing in for. Test 6 asserted that
+          the tree was at least 80% covered; what it was reaching for was that coverage
+          at-or-above a threshold yields PASS — an implication, provable on two
+          synthetic specs. Test 8 asserted that a coverage report exists; what it was
+          reaching for was that the denominator equals the number of specs that exist —
+          a relation, and the strongest arm in the file now. Both were live-tree
+          comparisons before and after. Only one of them was ever a landmine.
+
+          The question to ask of any number in a gate: WHO CHOSE IT, AND WHERE IS THAT
+          CHOICE WRITTEN DOWN? If the honest answer is "it was what the tree measured
+          that day", it is not a threshold, it is a snapshot.
+
+        THIS SUPERSEDES the packet's framing where they differ. The filed version carried the test and the prohibition; it did not carry the three legitimate kinds, and a claimer reading only the prohibition would strip live-tree comparisons that are correctness checks — the strongest arms available.
+
+        A CORRECTION TO THIS COORDINATOR'S OWN CHARACTERISATION, at lenovinha's insistence, because the flattering version would mislead whoever reads this later. They did NOT find the never-guarded-it defect by making their synthetic honest out of rigour: a subagent lens reported that the synthetic root omitted three of five grep roots, they checked it because it was cheap, and the detection vanishing was a SURPRISE THEY HAD TO CHASE rather than a result they predicted.
+
+        THE MOVE WORTH COPYING IS NOT "be honest with your fixtures". IT IS THAT THE THIRD RE-CHECK HAPPENED AT ALL, on bytes that had already passed two. Both earlier verdicts were true when issued and expired the moment the file was edited. A verdict is about the bytes that were examined, and editing the file retires it — which is the same shape as a gate stamp going stale, arriving in a place nobody stamps.
