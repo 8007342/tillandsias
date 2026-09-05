@@ -967,7 +967,32 @@ __READY_UNIT__EOF
 # Reload and enable services
 systemctl daemon-reload
 systemctl enable tillandsias-headless-fetch.service tillandsias-headless.service tillandsias-headless-ready.service
-systemctl start tillandsias-headless-fetch.service tillandsias-headless.service
+# 1055-e8ie. A START THAT FAILS AGAINST UNITS THAT ARE ALREADY RUNNING MUST
+# NOT KILL PROVISIONING. Under `set -e` this line aborted the whole script and
+# everything below it — including the readiness start on the next line — never
+# ran, so the guest could not report phase Ready and the host waited 300 s.
+# MEASURED: on the failing boot BOTH units had already reached active seconds
+# earlier (fetch Starting->Finished, headless Starting->Started with preflight
+# all ok) and this start still returned 1.
+#
+# On a FIRST provision the units are not enabled at boot, so this start is
+# what brings them up and a genuine failure here must still be fatal. On a
+# RE-provision they were enabled already, systemd started them from
+# WantedBy=multi-user.target, and this start races that.
+#
+# So: try, and on failure ASK WHETHER THEY ARE ACTUALLY RUNNING. Active means
+# the start was redundant — say so and continue. Not active means a real
+# failure — report it and let `set -e` stop us. This distinguishes the two
+# instead of treating them alike, which is what the silent abort did.
+if ! systemctl start tillandsias-headless-fetch.service tillandsias-headless.service; then
+  if systemctl is-active --quiet tillandsias-headless.service; then
+    echo "[tillandsias-provision] systemctl start returned non-zero but the units are ACTIVE — redundant start, continuing (1055-e8ie)" >&2
+  else
+    echo "[tillandsias-provision] FATAL: units are not active after an explicit start (1055-e8ie)" >&2
+    systemctl status tillandsias-headless-fetch.service tillandsias-headless.service --no-pager >&2 || true
+    false
+  fi
+fi
 # Started last and NOT waited on: it is an assertion about the daemon, so it
 # must not gate the provisioning that produced the daemon.
 systemctl start --no-block tillandsias-headless-ready.service
@@ -3288,6 +3313,46 @@ mod tests {
     /// the staged binary exists and is invisible (retry / check the share); a
     /// genuinely absent staged file means nothing was ever staged (run the .app
     /// bundle — 701-kgvk).
+    /// 1055-e8ie. A REDUNDANT START MUST NOT KILL PROVISIONING.
+    ///
+    /// The script is `set -e`, so `systemctl start` returning non-zero aborted
+    /// it and the readiness start on the NEXT line never ran — the guest then
+    /// could not report phase Ready and the host waited 300 s. Measured: on the
+    /// failing boot both units were already active seconds earlier and the
+    /// start still returned 1.
+    ///
+    /// The fix must keep a GENUINE failure fatal (on a first provision this
+    /// start is what brings the units up), so it asks whether they are running
+    /// rather than swallowing the status. This asserts both halves: the
+    /// is-active check exists, and the not-active branch still fails.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn vz_redundant_unit_start_does_not_abort_provisioning() {
+        let script = provision_user_data("off");
+
+        assert!(
+            script.contains("if ! systemctl start tillandsias-headless-fetch.service"),
+            "the start must be guarded, not bare — a bare start aborts the \
+             script under set -e (1055-e8ie)"
+        );
+        assert!(
+            script.contains("systemctl is-active --quiet tillandsias-headless.service"),
+            "the guard must ask whether the units are ACTUALLY running before \
+             deciding the start's failure mattered (1055-e8ie)"
+        );
+        // The not-active branch must still stop provisioning. Without this the
+        // fix degrades into `|| true` and a real failure ships silently, which
+        // is the defect with a different sign.
+        let tail = script
+            .split("units are not active after an explicit start")
+            .nth(1)
+            .expect("the fatal branch must exist");
+        assert!(
+            tail.contains("false"),
+            "a genuine start failure must remain fatal (1055-e8ie)"
+        );
+    }
+
     /// 1055-e8ie. THE INSTANCE-ID MUST MOVE WHEN THE PROVISIONING SCRIPT MOVES.
     ///
     /// cloud-init runs a shebang user-data once per instance-id. Keyed on the
