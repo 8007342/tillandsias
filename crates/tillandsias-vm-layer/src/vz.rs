@@ -3287,6 +3287,10 @@ mod tests {
     /// scripts must not produce the same identity component. A test that
     /// pinned the id string would pass while the id was still blind to the
     /// script, which is the defect.
+    // `provision_user_data` is macos-gated (see the shim above `provision_user_data_for_test`):
+    // an ungated test that calls it breaks every Linux/Windows `cargo test` build. Caught by
+    // the linux-next union gate on 2026-09-05 when osx-next merged (each side green alone).
+    #[cfg(target_os = "macos")]
     #[test]
     fn vz_instance_id_changes_when_the_provisioning_script_changes() {
         use sha2::{Digest, Sha256};
