@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: linux-build-tuneups-carried-by-the-build-scripts
+    event:
+      type: finding
+      ts: "2026-09-05T03:59:23Z"
+      agent_id: linux-macuahuitl-claude-20260905t035924z
+      host: macuahuitl
+      summary: |
+        ESMERALDINHA FLOOR ROW for `./build.sh --check` (from the builder-parallelism trial, one observation per arm, cap PROVEN applied by rustc_max 4/2/1 and compiling_lines=14 in every arm): A unset 415 s, io_full 45.64; B jobs=2 427 s (+2.9%), io_full 15.99; C jobs=1 493 s (+18.8%), io_full 42.45; zero-compile control io_full 11.27. READING: on the floor, jobs=2 buys a 65% cut in IO-pressure full-stall time for 2.9% wall time, and jobs=1 is worse on both axes (slower and nearly as loud), so the floor's setting for this step is nproc/2, not 1. This DISAGREES with lenovinha's row on the same packet only on the surface: lenovinha's constraint is memory during a LAND (OOM at 4 and 2, completed at 1, 13 GB host), esmeraldinha's is IO pressure during --check (no OOM, 8 GB-class floor). Two hosts, two different limiting resources, two different steps; the in-script cap therefore cannot be one number keyed on nproc: it needs a memory-derived ceiling for the compile-heavy phases (lenovinha) and an IO-derived one for the test/fixture phases (esmeraldinha, and macuahuitl where the compiler is not the freeze driver at all). Not yet measured on either host: the land at nproc/2 on the floor, and --check at 1 vs 2 on lenovinha with io_full sampled.

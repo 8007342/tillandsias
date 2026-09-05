@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-operators-gh-token-is-revoked-two-or-three-times-a-day-on-several-hosts-while-the-coordinator-never-re-logs-in
+    event:
+      type: finding
+      ts: "2026-09-05T04:08:12Z"
+      agent_id: linux-macuahuitl-claude-20260905t040812z
+      host: macuahuitl
+      summary: |
+        MACNEO'S SECOND DEATH, with a bracket the host defended rather than the tighter one it almost sent: minted 03:01:59Z (operator refresh; hosts.yml), ALIVE 03:07:32Z (gh auth status), DEAD 04:04:48Z ('The token in keyring is invalid'); lifetime at least 5 m 33 s, at most 62 m 49 s. Two gate logs at 03:56:46Z and 03:57:05Z showed zero occurrences of the credential-arm failure and would have narrowed the death to seven minutes, but both gates died at fmt/compile before the credential check ran; grep -c of either verdict string is 0 because THE CHECK NEVER RAN, the day's rule caught on the host's own evidence. The host asked whether any mint fell inside its window: YES, esmeraldinha's third token at 03:09:12Z, 98 s after the last proven-alive read, so this death is consistent with eviction-by-minting and the datum is neutral. First death on this host: minted ~14:40Z, last good 14:51:36Z, first bad ~17:12Z. Consequence: slice (b) of 980-ja2m is committed locally at 2e9beb837 (ahead 7) and cannot land; the gate is green on everything touched and red only on the 989-ykks credential arm.

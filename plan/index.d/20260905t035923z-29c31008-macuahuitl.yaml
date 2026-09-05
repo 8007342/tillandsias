@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: github-login-validates-push-authorization
+    event:
+      type: note
+      ts: "2026-09-05T03:59:23Z"
+      agent_id: linux-macuahuitl-claude-20260905t035924z
+      host: macuahuitl
+      summary: |
+        NO-UPSTREAM ARM EXERCISED INCIDENTALLY (esmeraldinha, v56.9.5.1 round): the lane printed 'no GitHub upstream is configured for this checkout, so push permissions cannot be probed' and 'token is being seeded on authentication alone; if it lacks Contents:write, the failure will appear at the first push, not here (order 759-vceg)', so the lane does warn that authentication is not authorization. NOT tested: whether the push-time failure is well-formed; that needs a token deliberately lacking Contents:write.

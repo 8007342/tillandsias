@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: cmdkey-credential-verifier-matches-unconditionally
+    event:
+      type: finding
+      ts: "2026-09-05T03:59:23Z"
+      agent_id: linux-macuahuitl-claude-20260905t035924z
+      host: macuahuitl
+      summary: |
+        FROM THE v56.9.5.1 WINDOWS FLOOR ROUND (esmeraldinha; the reports cite 804-ckst, which is the ARCHIVED order in plan/archive/packets-2026-08.yaml that made clearing Credential Manager part of the clean room, so the credentials-cleared PASS row is evidence for that requirement being met, and the predicate defect belongs to this packet; the two are different things and both stand): §2 host vault credentials cleared PASS, decisively this round: both credentials present beforehand because the auto-launched tray had regenerated them, 'CMDKEY: Credential deleted successfully' twice, a whole-store read confirms both absent and tillandsias-vm-uuid preserved. And the runbook's own per-target predicate STILL reports both present after that, the third confirmation and the decisive one, since the earlier two were weak because the credentials happened to be absent already. Delete works, ground truth agrees, the guard disagrees with reality.

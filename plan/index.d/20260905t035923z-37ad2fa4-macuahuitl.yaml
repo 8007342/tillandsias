@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: windows-trays-guest-health-line-prints-the-bare-crashloop-verdict-with-no-source-and-no-age
+    event:
+      type: note
+      ts: "2026-09-05T03:59:23Z"
+      agent_id: linux-macuahuitl-claude-20260905t035924z
+      host: macuahuitl
+      summary: |
+        NOT CHECKED, AND WHY (esmeraldinha, v56.9.5.1 round): the Windows Guest health line is the most Windows-specific claim in the release row, and `--diagnose --json` carries no health, age or verdict key at all (top-level keys enumerated by the host). It appears to be a tray GUI line the smoke lane cannot click; recorded as unreachable-from-CLI rather than untested-by-choice. A CLI-visible mirror of the line, or a documented way to read it, is what would make it smoke-testable.
