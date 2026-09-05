@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: preflight-declares-cargo-absent-before-looking-for-a-binary
+    field: status
+    value: completed
+    ts: "2026-09-05T13:39:46Z"
+    host: esmeraldinha
+
+events:
+  - packet_id: preflight-declares-cargo-absent-before-looking-for-a-binary
+    event:
+      type: completed
+      ts: "2026-09-05T13:39:46Z"
+      host: esmeraldinha
+      summary: |-
+        status 'completed' with evidence_refs: 5ed770747 (landed on windows-next) + gate 19 on esmeraldinha 2026-09-05T13:11:58Z-13:37:39Z exit 0, ok:test-baseline:ran=2215 new-red=0, with test-cycle-preflight-cargo-resolution: 20 passed, 0 failed executed inside the gate
+  - packet_id: preflight-declares-cargo-absent-before-looking-for-a-binary
+    event:
+      type: note
+      ts: "2026-09-05T13:39:46Z"
+      host: esmeraldinha
+      summary: |-
+        All five exit criteria met; criterion 2 met in substance under the 2026-09-05 ruling, the terminal verdict named by the string the script prints rather than by a word it never emits.

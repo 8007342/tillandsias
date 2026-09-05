@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: preflight-declares-cargo-absent-before-looking-for-a-binary
+    event:
+      type: verified-by
+      ts: "2026-09-05T13:39:44Z"
+      agent_id: windows-esmeraldinha-claude-20260905t133944z
+      host: esmeraldinha
+      summary: |
+        completed on the floor. All five exit criteria met, with criterion 2 met in
+        substance under the coordinator's ruling of 2026-09-05.
+
+        CRITERION 2, REWORDED PER THE RULING rather than left as a bar the code never
+        clears: the criterion asked the verdict to name one of rebuilt / existing /
+        skipped / **none**. The script emits the first three and never `none`, and that
+        is correct rather than incomplete — the no-instrument case exits 1 with
+        `blocked:preflight:plan:cargo-absent` BEFORE any `ok:cycle-preflight:<verdict>`
+        line is printed, so there is no verdict slot for `none` to occupy. A printed
+        `none` that a cycle could proceed past would undo 876-irn7, whose whole point is
+        that this verdict must stop the cycle. Both skills therefore enumerate four
+        states with the terminal one named by the string the script actually prints.
+
+        PRE-FIX EVIDENCE, pirria's two readings from its 2026-09-05 orientation, which
+        are both correct and together show the two layers are independent:
+          - `command -v cargo` printed ABSENT on the non-interactive PATH;
+          - the same host's cycle-preflight resolved /home/lapto/.cargo/bin/cargo through
+            the 876-irn7 recovery path and rebuilt the instrument.
+        876-irn7 fixed WHEN cargo is called absent. This packet fixed WHAT HAPPENS NEXT.
+        The change sits strictly after that recovery loop and does not touch it, so a
+        host that can recover its toolchain keeps rebuilding exactly as before.
+
+        WHAT I GOT WRONG, recorded because the packet should carry it: I reported this
+        work "implemented" while exit criterion 5 was unmet. I had arms for
+        no-cargo-with-binary and no-cargo-no-binary but none for cargo-present — the
+        third regime the criterion names, and the one that matters most, because it is
+        the arm guarding against MY OWN change diverting a healthy compiling host onto
+        whatever instrument happens to be on disk. It is now arm 11 and the fixture is
+        20 passed, 0 failed, running inside the gate rather than only by hand.
+
+        VERIFIED IN-GATE: gate 19 on esmeraldinha, exit 0, `ok:test-baseline:ran=2215
+        new-red=0`, with `test-cycle-preflight-cargo-resolution: 20 passed, 0 failed`
+        inside the gate log — the first time this suite has been executed by a gate on
+        this host, which 1005-m6rz's binding made possible.
