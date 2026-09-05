@@ -46,6 +46,34 @@ critical_path:
     # So if this step ever exceeds 15s again, the question is what grew or what
     # reintroduced a linear scan over a set — not whether the host deserves a
     # larger number.
+    #
+    # AND THE SECOND QUESTION IS WHICH FILESYSTEM IT RAN ON, not which host.
+    # esme-windows measured a three-way within-host control on 2026-09-05 — one
+    # machine, one CPU, one kernel, this same fixed script, in-tree each time,
+    # 1658 output lines and 5288 tracked files IDENTICAL in all three arms:
+    #
+    #   Git Bash / MSYS over drvfs      13,841 ms
+    #   inside the distro, /mnt/c (9p)  10,044 ms
+    #   inside the distro, native ext4      725 ms
+    #
+    # 9p/drvfs is 13.9x on its own; the MSYS layer adds a further 38% and is
+    # secondary. On ext4 that "floor-tier" N100 box runs this in 725ms against
+    # lenovinha's 680ms — within 7% of a dual-GPU mobile workstation.
+    #
+    # THE TIER LABEL DOES NOT PREDICT THIS NUMBER; THE REGIME DOES. That is the
+    # part worth carrying to other packets: attributing a measurement to a host's
+    # hardware tier when its filesystem regime explains it nearly happened twice
+    # here — once as an overlay hypothesis about lenovinha, once as "the floor
+    # box is slow" about esmeraldinha. Both were wrong in the same direction.
+    #
+    # THE BUDGET IS THEREFORE STILL AN OPEN QUESTION and this comment does not
+    # settle it (packet 1038-d7vw, macuahuitl's). One global number cannot serve
+    # 0.7s and 13.8s honestly: set it for ext4 and every Windows host is
+    # permanently red; set it for drvfs and it stops measuring anything on Linux.
+    # A regime-named budget can select itself at runtime from `findmnt -no FSTYPE`
+    # rather than being hand-assigned per host — which is what avoids the failure
+    # both of us walked into from opposite ends, a budget set from whichever host
+    # happened to file it.
     command: "scripts/freshness-inventory.sh >/tmp/freshness-report.txt 2>&1; grep -qE '^freshness-inventory: [0-9]+ components, [0-9]+ stamped, [0-9]+ unstamped$' /tmp/freshness-report.txt && grep -qE '^freshness-coverage: [0-9]+\\.[0-9]% \\([0-9]+/[0-9]+ delta=(unknown|[+-][0-9]+)\\)$' /tmp/freshness-report.txt && echo 'ok: header grammar pinned'"
     timeout_ms: 15000
     expected_behavior: "ok: header grammar pinned"
