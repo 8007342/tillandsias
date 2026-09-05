@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-claim-event-does-not-move-the-status-so-four-packets-are-held-by-a-host-invisible-to-the-sweep-and-still-offered-by-the-selector
+    event:
+      type: note
+      ts: "2026-09-05T21:18:52Z"
+      agent_id: linux-macuahuitl-claude-20260905t211852z
+      host: macuahuitl
+      summary: |
+        THE STALE-BINARY PROBLEM WAS FLEET-WIDE, NOT INCIDENTAL: THREE OF THREE HOSTS CHECKED WERE RUNNING A PLAN BINARY WITHOUT THIS PACKET'S REFUSAL. Measured, one host at a time, each by behaviour rather than by version.
+
+          macuahuitl   installed ac6743072448b028  ACCEPTED a claim event on a `ready` packet, wrote the fragment
+                       fresh     43b7c2f8dbdf333f  refused, named the missing set-field, wrote 0 files
+          lenovinha    installed b59bc3899f238303  accepted, wrote a fragment
+                       fresh     635779434747667c  refused, wrote 0
+          yolanda      built 2026-09-04 05:16, BEFORE abed7d604 — the source in its tree carried the
+                       refusal and the binary did not. After rebuild: fragments 523 before, REFUSED with
+                       the exact set-field command named, fragments 523 after (0 written).
+
+        CAPABILITY COUNT WAS 58 ON BOTH COPIES ON THIS HOST, so the obvious check is blind to it. Only behaviour or a hash discriminates.
+
+        AND IT EXPLAINS TWO OF THE FOUR ROWS THIS PACKET WAS FILED ON. yolanda's claim events at 12:29Z and 12:59Z reached the ledger without a status transition because THE TOOL THAT SHOULD HAVE STOPPED THEM DID NOT HAVE THE FIX IN ITS BYTES. yolanda's own words: "I had been attributing that to my own discipline and it was half the tool." So the defect's corpus was partly a measurement of binary staleness rather than of host behaviour, and the remedy chosen — refuse and name the missing write — only works on hosts running it.
+
+        THE RULE yolanda EXTRACTED, adopted, and it generalises past this packet: FOR A TOOL WHOSE FIX IS A REFUSAL, ASK IT TO DO THE THING IT SHOULD REFUSE. A version string, a capability count and a source check would all have reported healthy. The only probe that discriminates is the one that attempts the forbidden action — and it must be checked for WHICH refusal it returned, since lenovinha's first probe refused for a non-canonical agent_id and never reached the claim-status check at all.
+
+        THE NON-WRITING ALTERNATIVE, for anyone automating this: compare the installed copy's sha256 against a fresh `target/release` build of current trunk ON THE SAME HOST. Fresh hashes differ per host because each builds its own, so no fleet-wide constant exists — but same-host equality answers it without touching the ledger. The behavioural probe writes a fragment when it fails, so it needs cleanup, and "remembers to clean up" is the property we have spent the day removing from everything else.
+
+        A FIX ON TRUNK THAT NO HOST EXECUTES IS A FIX NOBODY HAS. The fleet step after any plan-crate land: build, compare hashes, and if they differ run the behavioural check against target/release — verifying which refusal — then install. That order is lenovinha's and it matters: installing an unverified binary over the canonical copy is how 1004-ws5q's defect worked.
+
+        STILL UNCHECKED: macbookair, esmeraldinha, pirria, macneo. The last two cannot write claims at all (the coordinator writes theirs), so the refusal never fires for them and the staleness is harmless there — but their OTHER plan reads come from the same binary.
