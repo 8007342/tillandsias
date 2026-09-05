@@ -111,23 +111,51 @@ if [ "${CYCLE_PREFLIGHT_SKIP_BUILD:-0}" != "1" ]; then
         done
     fi
     if ! command -v cargo >/dev/null 2>&1; then
-        # Name the fault. A cycle that cannot rebuild its instrument should say
-        # so rather than proceed on whatever binary happens to be lying around.
-        echo "blocked:preflight:plan:cargo-absent"
-        exit 1
+        # ORDER 1004-ws5q. ASK WHETHER THERE IS AN INSTRUMENT BEFORE DECLARING
+        # THE COMPILER'S ABSENCE TERMINAL. The verdict above 876-irn7 narrowed
+        # was still ordered backwards: it stopped the cycle on the absence of a
+        # BUILDER without ever looking for a runnable BINARY, so a host that
+        # needs no compiler this cycle lost its whole slot with a healthy
+        # instrument sitting on disk.
+        #
+        # MEASURED on pirria 2026-09-04: a floor-tier release smoke — which
+        # compiles nothing — was refused its 4h slot, and the only way through
+        # was CYCLE_PREFLIGHT_SKIP_BUILD=1, an env seam named in no skill. A
+        # fix that works only because a human remembers an undocumented
+        # variable is the "protects whoever remembers" shape 1000-rqmx already
+        # declined once.
+        #
+        # THE TRUE POSITIVE KEEPS ITS VERDICT AND ITS TERMINAL FORCE. No cargo
+        # AND no runnable binary is a host with no instrument, and it must
+        # still stop — `cargo-absent` below is reached only when the probe has
+        # also failed. What changes is that the cycle now says WHICH it found.
+        . "$ROOT/scripts/plan-binary-probe.sh"
+        if plan_bin="$(resolve_plan_binary)"; then
+            plan_verdict="existing"
+        else
+            # Name the fault. A cycle that can neither rebuild its instrument
+            # nor find one should say so rather than proceed on nothing.
+            echo "blocked:preflight:plan:cargo-absent"
+            exit 1
+        fi
     fi
-    build_log="$(mktemp)"
-    if cargo build --release -p tillandsias-plan >"$build_log" 2>&1; then
-        # `cargo build` is a no-op when nothing changed, so this is cheap on the
-        # common path and correct on the uncommon one.
-        plan_verdict="rebuilt"
-    else
-        reason="$(grep -m1 '^error' "$build_log" | cut -c1-120)"
+    # ORDER 1004-ws5q. Skipped when the probe above already found a runnable
+    # instrument on a host with no cargo: there is nothing to build with, and
+    # the binary it would verify is the one already resolved.
+    if [ "$plan_verdict" != "existing" ]; then
+        build_log="$(mktemp)"
+        if cargo build --release -p tillandsias-plan >"$build_log" 2>&1; then
+            # `cargo build` is a no-op when nothing changed, so this is cheap on
+            # the common path and correct on the uncommon one.
+            plan_verdict="rebuilt"
+        else
+            reason="$(grep -m1 '^error' "$build_log" | cut -c1-120)"
+            rm -f "$build_log"
+            echo "blocked:preflight:plan:${reason:-build-failed}"
+            exit 1
+        fi
         rm -f "$build_log"
-        echo "blocked:preflight:plan:${reason:-build-failed}"
-        exit 1
     fi
-    rm -f "$build_log"
 
     # Prove the freshly built binary answers, rather than assuming a successful
     # compile means a working instrument.

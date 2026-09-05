@@ -210,5 +210,68 @@ for want in scripts/cycle-preflight.sh scripts/check-cheatsheet-tiers.sh scripts
         || bad "registry is missing $want"
 done
 
+# ══ ORDER 1004-ws5q (esmeraldinha) — merged beside 1005-m6rz's arms; renumbered 9–11 ═════
+# ── ORDER 1004-ws5q ────────────────────────────────────────────────────────
+# 876-irn7 narrowed WHEN cargo is called absent. This orders WHAT HAPPENS NEXT:
+# a host with no compiler but a runnable instrument keeps its cycle, and only a
+# host with neither is stopped. The arms below pin all three regimes.
+#
+# TILLANDSIAS_PLAN_BIN is the honest lever here: plan-binary-probe.sh honours the
+# override on EXISTENCE ALONE (its own comment says probing it would collapse the
+# stale-vs-absent distinction 704-zcgi preserves), so these arms vary exactly one
+# thing — whether an instrument is resolvable — without compiling anything.
+absent_cargo_arm() { # absent_cargo_arm <TILLANDSIAS_PLAN_BIN value> ; echoes verdict|blocked:...
+    env -i PATH="$NOCARGO" HOME="$W/empty-home" ROOT="$ROOT" \
+        TILLANDSIAS_PLAN_BIN="$1" bash -c '
+        plan_verdict="skipped"
+        if ! command -v cargo >/dev/null 2>&1; then
+            . "$ROOT/scripts/plan-binary-probe.sh"
+            if plan_bin="$(resolve_plan_binary)"; then
+                plan_verdict="existing"
+            else
+                echo "blocked:preflight:plan:cargo-absent"; exit 1
+            fi
+        fi
+        echo "$plan_verdict"
+    '
+}
+
+# The block under test must be the one that SHIPS. Pin its two load-bearing
+# halves: the probe is consulted, and the terminal verdict is inside the else.
+if grep -q 'if plan_bin="$(resolve_plan_binary)"; then' "$PREFLIGHT" \
+   && grep -q 'plan_verdict="existing"' "$PREFLIGHT"; then
+    ok "the shipped preflight probes for a binary before declaring cargo absent"
+else
+    bad "cycle-preflight.sh no longer probes before the cargo-absent exit — this suite is stale"
+fi
+
+# ── 9. NO CARGO, BUT AN INSTRUMENT ON DISK. The measured pirria case: a
+#      compile-free cycle must not lose its slot.
+: > "$W/stub-plan"; chmod +x "$W/stub-plan"
+got="$(absent_cargo_arm "$W/stub-plan")"
+[ "$got" = existing ] && ok "no cargo + a runnable binary yields plan_verdict=existing, not a block" \
+    || bad "no cargo + runnable binary — want existing, got $got"
+
+# ── 10. TRUE POSITIVE PRESERVED, and this is the arm that matters most. No
+#      compiler AND no instrument is a host that cannot reason; it must stop.
+got="$(absent_cargo_arm "$W/nonexistent-plan-binary")"
+case "$got" in
+    blocked:preflight:plan:cargo-absent)
+        ok "no cargo + no binary still blocks with cargo-absent — the terminal verdict is intact" ;;
+    *)  bad "no cargo + no binary — want blocked:preflight:plan:cargo-absent, got $got" ;;
+esac
+
+# ── 11. MUTATION CONTROL: without the probe, arm 9's host blocks. If this ever
+#      reports 'existing' the arm above has stopped testing anything.
+got="$(env -i PATH="$NOCARGO" HOME="$W/empty-home" bash -c '
+    if ! command -v cargo >/dev/null 2>&1; then
+        echo "blocked:preflight:plan:cargo-absent"; exit 1
+    fi
+    echo rebuilt
+')"
+[ "$got" = "blocked:preflight:plan:cargo-absent" ] \
+    && ok "MUTATION: without the probe the same host blocks — arm 6 has teeth" \
+    || bad "mutation control did not reproduce the pre-fix behaviour (got $got)"
+
 echo "test-cycle-preflight-cargo-resolution: $pass passed, $fail failed"
 [ "$fail" = 0 ] || exit 1
