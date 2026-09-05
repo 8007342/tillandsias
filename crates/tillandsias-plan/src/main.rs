@@ -6111,6 +6111,57 @@ fn main() {
                 );
                 std::process::exit(1);
             }
+            // ORDER 1079-qb8k: A CLAIM EVENT IS NOT A CLAIM.
+            //
+            // `append-event --type claim` records an event; `set-field status
+            // in_progress` is a SEPARATE call and is the only thing the fold
+            // reads. Hosts do one. The two instruments then disagree in the
+            // worst direction — the sweep sees no lease and the selector still
+            // offers the packet, so a held packet is handed to a second host,
+            // which is 814-iyu7 arriving through a write that never lands.
+            //
+            // REMEDY (b), CHOSEN ON MEASUREMENT rather than on the argument.
+            // The packet offered three. Fleet-wide there are 43 packets
+            // carrying a claim event, and their CURRENT statuses are: 24 ready,
+            // 6 completed, 4 obsoleted, 4 blocked, 3 in_progress, 2 pending.
+            //
+            //   (a) make the claim event transition the status — 16 of those 43
+            //       sit at a status this tool must never overwrite (completed,
+            //       obsoleted, blocked, pending), so one subcommand doing two
+            //       things has to grow a table of exceptions immediately.
+            //   (c) make the readers honour claim events — of the 24 `ready`
+            //       rows, only 4 have a claim event under 24h old; 20 are stale
+            //       history (15 older than a week). A reader honouring them
+            //       would treat 20 released packets as held and empty the ready
+            //       set, which the packet itself names as worse than the defect.
+            //   (b) refuse, and name the missing write. No hidden behaviour, no
+            //       exception table, and it enforces exactly the order the
+            //       worker skill already documents: claim with set-field, THEN
+            //       add the narrative event.
+            //
+            // So this refusal breaks nothing the skill sanctions: the optional
+            // narrative claim event is written AFTER the status moves, and at
+            // that point the packet is in_progress and this passes.
+            if etype.as_str() == "claim" {
+                let st = ledger
+                    .resolve(reference)
+                    .and_then(|p| tillandsias_plan::str_field(p, "status"))
+                    .unwrap_or("");
+                if st != "in_progress" {
+                    eprintln!(
+                        "error: a claim EVENT does not claim {target} — it is a record, not the \
+                         claim. The fold reads only the status field, so this event would leave \
+                         the packet `{st}`: invisible to the stranded-claim sweep and still \
+                         offered by the selector, which is how two hosts implement the same \
+                         packet (814-iyu7, 1079-qb8k).\n\
+                         \n\
+                         Claim it first, then this event will be accepted:\n\
+                         \x20 tillandsias-plan set-field {target} status in_progress \\\n\
+                         \x20     --host <host> --evidence <ref> --reason \"claimed for cycle <ts> by <agent>\""
+                    );
+                    std::process::exit(1);
+                }
+            }
             // 772-4se9: identity resolves AFTER the ref so an unresolvable
             // reference still reports as such (pinned by
             // litmus:append-event-rejects-unknown-flags-shape), but BEFORE
@@ -6809,6 +6860,78 @@ fn main() {
                     }
                     unclaimed += 1;
                 }
+                // ── ORDER 1079-qb8k: REPORT THE DISAGREEMENT, DO NOT RESOLVE IT ──
+                //
+                // A packet can carry a `claim` EVENT while its status never
+                // moved, because those are two writes and hosts do one. The two
+                // instruments then disagree in the worst direction: this sweep
+                // sees no lease and the selector still offers the packet, so a
+                // held packet is handed to a second host.
+                //
+                // NOT SILENTLY RESOLVED IN EITHER DIRECTION. Transitioning the
+                // packet here would rewrite another host's authorship from this
+                // one; treating the event as a lease would remove it from the
+                // ready set on the strength of a write the fold does not read.
+                // Both are the tool deciding what a host meant. It says what it
+                // sees instead.
+                //
+                // AGED, AND THE AGE IS THE WHOLE POINT. Measured fleet-wide on
+                // 2026-09-05: 43 packets carry a claim event, 24 of them are
+                // currently `ready`, and of those only FOUR have a claim event
+                // under 24h old — 15 are older than a week. Reporting all 24
+                // would bury the four live ones under twenty released packets
+                // and make the row worthless, which is the same shape as a
+                // guard that flags the whole corpus.
+                let mut claim_no_status = 0usize;
+                for p in query_packets(&ledger, Some("ready"), None, None, None, &[], usize::MAX) {
+                    let Some(pid) = str_field(p, "packet_id") else {
+                        continue;
+                    };
+                    let Some(seq) = p.get("events").and_then(serde_yaml::Value::as_sequence) else {
+                        continue;
+                    };
+                    let mut newest: Option<(&str, &str)> = None; // (ts, host)
+                    for ev in seq {
+                        if ev.get("type").and_then(serde_yaml::Value::as_str) != Some("claim") {
+                            continue;
+                        }
+                        let Some(ts) = ev.get("ts").and_then(serde_yaml::Value::as_str) else {
+                            continue;
+                        };
+                        if ts <= cutoff.as_str() {
+                            continue;
+                        }
+                        let host = ev
+                            .get("host")
+                            .and_then(serde_yaml::Value::as_str)
+                            .unwrap_or("-");
+                        if newest.is_none_or(|(cur, _)| ts > cur) {
+                            newest = Some((ts, host));
+                        }
+                    }
+                    if let Some((ts, host)) = newest {
+                        let order = p
+                            .get("order")
+                            .and_then(|v| match v {
+                                serde_yaml::Value::String(s) => Some(s.clone()),
+                                serde_yaml::Value::Number(n) => Some(n.to_string()),
+                                _ => None,
+                            })
+                            .unwrap_or_else(|| "?".into());
+                        emit(&format!(
+                            "claim-without-status\t{order}\t{pid}\t{host}\t{ts}\t-"
+                        ));
+                        claim_no_status += 1;
+                    }
+                }
+                if claim_no_status > 0 {
+                    emit(&format!(
+                        "  ({claim_no_status} packet(s) carry a recent claim EVENT but status \
+                         `ready`: the claiming host owes `set-field <id> status in_progress`. \
+                         Not transitioned here — that would rewrite their authorship (1079-qb8k))"
+                    ));
+                }
+
                 // THE PARTITION, STATED SO IT CAN BE FALSIFIED. Every in_progress
                 // packet lands in exactly one bucket, and this line lets a reader
                 // — or a fixture — check that against the summary's count instead
@@ -7673,6 +7796,84 @@ mod tests {
     /// any host may note on a claimed row), a claim-less in_progress row
     /// yields nothing, and both the activity AND the claim itself must be
     /// inside the TTL.
+    /// ORDER 1079-qb8k. A CLAIM EVENT IS NOT A CLAIM, AND THE TOOL SAYS SO
+    /// RATHER THAN DECIDING WHAT THE HOST MEANT.
+    ///
+    /// `append-event --type claim` records an event; `set-field status
+    /// in_progress` is a separate call and is the only thing the fold reads.
+    /// Hosts do one, and then the sweep sees no lease while the selector still
+    /// offers the packet — a held packet handed to a second host.
+    ///
+    /// THE NEGATIVE CONTROL IS THE ARM THAT MATTERS, and the packet says so: a
+    /// ready packet with NO claim event must stay out of this report and stay
+    /// in the ready set. A fix that empties the ready set to be safe is worse
+    /// than the defect, because a host with nothing offered stops and a
+    /// coordinator reading an empty queue concludes the fleet is done.
+    ///
+    /// AGE IS LOAD-BEARING. Measured fleet-wide: 43 packets carry a claim
+    /// event, 24 are currently `ready`, and only 4 of those have one under 24h
+    /// old. Reporting all 24 would bury the live ones under twenty released
+    /// packets.
+    #[test]
+    fn a_claim_event_without_a_status_is_reported_but_not_resolved() {
+        let raw = concat!(
+            "packets:\n",
+            // Recent claim event, status never moved: the defect. REPORTED.
+            "  - packet_id: held\n    order: 1\n    title: \"h\"\n    status: ready\n    desired_release: v0.5\n",
+            "    events:\n      - type: claim\n        ts: \"2026-08-10T00:00:00Z\"\n        host: hosta\n",
+            "        summary: claimed for cycle 2026-08-10T00:00Z\n",
+            // A claim event OLDER than the cutoff: released history, not a lease.
+            "  - packet_id: stale\n    order: 2\n    title: \"s\"\n    status: ready\n    desired_release: v0.5\n",
+            "    events:\n      - type: claim\n        ts: \"2026-07-01T00:00:00Z\"\n        host: hostb\n",
+            "        summary: claimed for cycle 2026-07-01T00:00Z\n",
+            // NO claim event: the negative control. Must not appear at all.
+            "  - packet_id: plain\n    order: 3\n    title: \"p\"\n    status: ready\n    desired_release: v0.5\n",
+            "    events:\n      - type: note\n        ts: \"2026-08-10T00:00:00Z\"\n        host: hostc\n",
+            "        summary: just a note\n",
+        );
+        let ledger = Ledger::parse(raw, Default::default()).expect("synthetic ledger parses");
+        let cutoff = "2026-08-09T00:00:00Z";
+        let mut reported: Vec<(&str, String)> = Vec::new();
+        for p in query_packets(&ledger, Some("ready"), None, None, None, &[], usize::MAX) {
+            let Some(pid) = str_field(p, "packet_id") else {
+                continue;
+            };
+            let Some(seq) = p.get("events").and_then(serde_yaml::Value::as_sequence) else {
+                continue;
+            };
+            for ev in seq {
+                if ev.get("type").and_then(serde_yaml::Value::as_str) != Some("claim") {
+                    continue;
+                }
+                let Some(ts) = ev.get("ts").and_then(serde_yaml::Value::as_str) else {
+                    continue;
+                };
+                if ts <= cutoff {
+                    continue;
+                }
+                let host = ev
+                    .get("host")
+                    .and_then(serde_yaml::Value::as_str)
+                    .unwrap_or("-");
+                reported.push((pid, host.to_string()));
+            }
+        }
+        assert_eq!(
+            reported,
+            vec![("held", "hosta".to_string())],
+            "only the RECENT claim-without-status is reported: `stale` is released \
+             history and `plain` has no claim event at all — reporting either would \
+             remove work nobody holds from the ready set"
+        );
+        // AND IT IS NOT RESOLVED: the status is untouched by the report.
+        assert_eq!(
+            ledger.resolve("held").and_then(|p| str_field(p, "status")),
+            Some("ready"),
+            "the report must not transition the packet — that would rewrite the \
+             claiming host's authorship from another host"
+        );
+    }
+
     /// ORDER 1065-4t7t. THE LEASE IS THE STATUS ENTRY, NOT A SENTENCE.
     ///
     /// A packet claimed through `set-field` carries a status entry with `ts`
