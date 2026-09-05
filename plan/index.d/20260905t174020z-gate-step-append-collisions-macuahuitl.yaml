@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: every-host-appends-its-gate-step-to-the-same-region-of-build-sh-so-every-merge-conflicts-there
+    order: 1072-b7eq
+    status: ready
+    kind: task
+    priority: p2
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: any
+    capability_tags: [build, gate, coordination]
+    estimated_hours: 4
+    owned_files:
+      - build.sh
+    title: |
+      Four merges in one day conflicted in the same ~30 lines of build.sh because every host adds its new gate step to the end of the same fast-refusal block; the conflicts are content-free (both sides are additions) but each one is hand-resolved by whoever merges, and one of them was committed with its markers
+    context: |
+      MEASURED on 2026-09-05: build.sh now carries 133 `_step "Checking …"` invocations, and four merges
+      that day conflicted in the same region — 1005-m6rz against 1055-6yp8, 823-u5zf against 1064-r8fv,
+      891-5shq against 1064-r8fv, and the same pair again where BOTH sides carried the 1064-r8fv step in
+      different positions, producing two blocks in one merge. Every one was resolved the same way, keep
+      both steps in sequence, because the conflict is not a disagreement: it is two hosts appending to one
+      insertion point. The cost is not the resolution but that a human or an agent hand-edits a 6000-line
+      shell script under time pressure on every integration; on the fourth one the coordinator committed
+      the file with its conflict markers still in it (recovered before landing, and the sequencing defect
+      that allowed it is recorded on that commit).
+      Fix shape, for the claimer to weigh rather than a prescription: the gate's step list becomes data
+      rather than inline code — an ordered directory of one-step-per-file, or a manifest the block
+      iterates — so two hosts adding steps touch two different files and git merges them without a
+      conflict. NOTE the constraint 1063-nraf found the hard way: a binding assembled from a variable is
+      invisible to every name-based scan, including the bound-or-retired guard, so whatever shape is
+      chosen must keep each fixture's literal path greppable in a committed file.
+    exit_criteria:
+      - "two branches each adding a new gate step merge with NO conflict in build.sh; pre-fix result: FAILS (four conflicts on 2026-09-05, all in the same region, all content-free)"
+      - "every bound fixture's literal path remains greppable in a committed file, so the bound-or-retired guard and a human both still find it; pre-fix result: passes and must keep passing"
+      - "the gate runs the same steps in the same order before and after the change, proven by diffing the step names emitted by a full --check run; pre-fix result: n/a"
+    unscoreable: |
+      The pin is a fixture constructing two branches that each add a step and asserting the merge is
+      clean, plus the step-name diff across the change; the claimer adds both, since a closure may only
+      name a test that already exists.
+    events:
+      - type: note
+        ts: "2026-09-05T17:40:20Z"
+        host: macuahuitl
+        summary: |
+          FILED by the coordinator after resolving the fourth such conflict in one day and committing one
+          of them with its markers; the recurrence is the evidence, not the individual conflicts.
