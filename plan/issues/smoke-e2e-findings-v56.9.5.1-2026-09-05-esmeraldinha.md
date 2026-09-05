@@ -75,10 +75,48 @@ the file (`write ~/.gitconfig with a [user] name`), or install git in the guest
 if the login genuinely needs it later. The message currently implies the second
 while the code only needs the first.
 
-Note also a **race**: the first attempt failed on this prerequisite while
-`image git ensure still running in its detached helper` was printed by the same
-command. The second attempt, 40 s later, succeeded. So the error can fire for a
-not-ready-yet condition and blame the operator's configuration for it.
+### CORRECTION 2026-09-05 — the "race" below is RETRACTED; there is no race
+
+RETRACTED, quoted so the record shows what was claimed:
+
+> Note also a **race**: the first attempt failed on this prerequisite while
+> `image git ensure still running in its detached helper` was printed by the same
+> command. The second attempt, 40 s later, succeeded. So the error can fire for a
+> not-ready-yet condition and blame the operator's configuration for it.
+
+**The file came first.** Three timestamps from the artifacts, not from memory:
+
+    03:51:40Z   target/803-walk3.log      the prerequisite refusal
+    03:52:09Z   /root/.gitconfig          written by hand, 82 bytes
+    03:52:14Z   target/803-walk4.log      the successful login
+
+The write and the successful login were issued in the **same tool call** — the
+command wrote `/root/.gitconfig`, then piped the token into
+`--github-login --with-token`. So the retry was not "unchanged": the one thing
+the error asked for had just been created, five seconds earlier.
+
+MECHANISM, established by yoga reading the binary for 1052-gw8w, either half of
+which is sufficient on its own:
+1. The `image git ensure still running in its detached helper` line is emitted
+   inside the blocking waiter's loop as a **liveness beat**. It is what waiting
+   looks like, not evidence that the ensure was incomplete — the ensure had
+   already completed before the login was reached.
+2. **Nothing in any ensure or provisioning step writes the searched gitconfig
+   paths.** No amount of elapsed time could have turned that refusal into a
+   success.
+
+HOW THE ERROR WAS MADE, since that is the part worth carrying: two true
+observations — the liveness line, and 40 s of elapsed time — were joined into a
+causal claim without noticing that the intervening command had changed the exact
+condition under test. The elapsed time was real; "unchanged" was supplied by the
+author. **A grep for the gitconfig path in the provisioning scripts would have
+refuted the timing story in seconds, and the story was already satisfying.**
+
+WHAT IS UNAFFECTED: everything above this block. `git` is genuinely absent in the
+guest for both `root` and `forge`, the message genuinely instructs the operator to
+run `git config`, and the code genuinely reads the FILE rather than the binary —
+which is why 82 hand-written bytes worked. That finding is 1052-984i and it
+stands; only the race paragraph is withdrawn (1052-gw8w, disposed false-premise).
 
 ## Ledger claims (README row, read from `origin/linux-next`)
 
