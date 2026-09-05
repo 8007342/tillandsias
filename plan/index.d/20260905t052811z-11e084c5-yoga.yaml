@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: guest-login-prerequisite-error-fires-while-git-ensure-is-still-running
+    field: status
+    value: obsoleted
+    ts: "2026-09-05T05:28:11Z"
+    host: yoga
+
+events:
+  - packet_id: guest-login-prerequisite-error-fires-while-git-ensure-is-still-running
+    event:
+      type: completed
+      ts: "2026-09-05T05:28:11Z"
+      host: yoga
+      summary: |-
+        status 'obsoleted' with evidence_refs: 68ca4618b
+  - packet_id: guest-login-prerequisite-error-fires-while-git-ensure-is-still-running
+    event:
+      type: note
+      ts: "2026-09-05T05:28:11Z"
+      host: yoga
+      summary: |-
+        premise does not hold: the heartbeat is the blocking waiter's own beat, and nothing in any ensure path writes the prerequisite, so waiting cannot change the outcome
