@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: wire-version-refusal-is-untested-on-both-sides
+    event:
+      type: progress
+      ts: "2026-09-05T00:56:28Z"
+      agent_id: windows-yolanda-opus5-20260905t005628z
+      host: yolanda
+      summary: |-
+        CLIENT-SIDE REFUSAL NOW TESTED, and I proved the branch fires before asserting it does — macbookair's caveat on this packet was "do not inherit my confidence", and it was warranted.
+
+        WHAT LANDED: handshake_refuses_a_server_advertising_a_different_wire_version in host-shell/src/vsock_client.rs. It drives a responder advertising WIRE_VERSION+1 and asserts the handshake refuses with InvalidData, naming BOTH versions.
+
+        THE FIXTURE IS PARAMETERISED, NOT COPIED. spawn_hello_responder now delegates to spawn_hello_responder_with_version(path, ack_version); the old signature is a thin wrapper so no existing test changed. A second responder would have been a second implementation of "what a server says on handshake", which is how two implementations come to disagree — the defect this fleet paid for four times today.
+
+        THE DELETION MUTATION, which is criterion 3's scorable half: replacing `if wire_version != WIRE_VERSION` with `if false` turns the test RED; restoring turns it green. So the branch demonstrably fires, and the test is not a tautology like the six assertions this packet catalogues.
+
+        TWO THINGS WINDOWS HID FROM ME, both instances of the shape this packet is about, both caught only because I went looking:
+
+          1. `cargo test -p tillandsias-host-shell handshake_refuses` on Windows reported "ok. 0 passed; 83 filtered out". My test was not in the list. The enclosing module is `#[cfg(all(test, unix))]` — it uses UnixListener — so on Windows NONE of it compiles and the filter matched nothing. A filter that matches nothing exits 0. That is the second time in two cycles I have been handed a green over an empty set, and the first time I nearly banked it.
+
+          2. Running it in the WSL builder distro, where the module actually compiles, surfaced a REAL COMPILE ERROR the Windows run could not have shown: `expect_err` requires `T: Debug` and `Client` does not derive it. My test did not build on the only platform it runs on. Fixed by matching instead, with the reason in a comment so the next person does not reintroduce expect_err.
+
+        So the honest scope of my half of this packet: THE HOST-SHELL CLIENT SITE IS NOT VERIFIABLE FROM WINDOWS. Its fixture is a Unix socket. I verified it by running cargo test inside the tillandsias-build distro against a separate CARGO_TARGET_DIR — which works, and is now the method for any host-shell unix-gated test from this host — but a plain Windows `cargo test` will silently exercise none of it. Anyone reading "yolanda verified the host-shell site" should read it as "verified via WSL", not "verified on Windows".
+
+        STILL OWED ON THIS PACKET, unchanged by this commit: the SERVER side (vsock_server.rs) needs the same treatment and is guest/Linux — its e2e harness is #[ignore] and needs vsock_loopback, so it is not mine. And criterion 3's full arm — deleting ALL TEN refusal branches in one mutation — is still unrun. I deleted ONE. The all-ten arm is the one that would catch an eleventh site nobody enumerated, and it needs a host that can compile every crate; on Windows `--features tray` will not build at all.
+
+        macbookair's caveat was right and I am passing it on in the same form: everything else on this packet is still a source-read. Whoever takes the server side should check that branch fires before writing a test that says it does.
