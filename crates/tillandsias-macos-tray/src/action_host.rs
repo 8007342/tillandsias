@@ -1454,6 +1454,27 @@ async fn run_start(
     // Once a successful fetch lands, subsequent launches hit the
     // cache (download_verified short-circuits when dest sha matches)
     // so startup is fast.
+    // ORDER 1082-9rub. A PRESENT rootfs.img DOES NOT MEAN THE GUEST WAS
+    // PROVISIONED. is_provisioned() is a stat(); a guest that booted, created
+    // its image and then aborted during cloud-init satisfies it completely. This
+    // branch used to send such a guest straight to boot, where it never reaches
+    // Ready and the operator is told nothing about why.
+    //
+    // Deliberately NOT re-fetching in that case: the image is usually intact and
+    // only the in-guest script aborted, so a re-fetch would spend a download to
+    // fix nothing. What was missing was that the condition was SILENT. Say it,
+    // and name the record that says so.
+    if vz.is_provisioned() && !vz.provisioning_completed() {
+        eprintln!(
+            "[tillandsias-tray] Start VM: rootfs.img is present at {} but the \
+             guest recorded NO provisioning completion ({}). The image exists; \
+             provisioning did not finish. If the guest does not reach Ready, \
+             this is why — read the provision record before suspecting the \
+             control wire (1082-9rub, 1055-e8ie).",
+            vz.rootfs_image_path().display(),
+            vz.provision_state_path().display()
+        );
+    }
     if !vz.is_provisioned() {
         eprintln!(
             "[tillandsias-tray] Start VM: rootfs.img missing at {}; \

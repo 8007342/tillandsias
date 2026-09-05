@@ -262,6 +262,32 @@ impl VzRuntime {
         self.rootfs_image_path().exists()
     }
 
+    /// Did the guest's provisioning script record its own COMPLETION?
+    ///
+    /// ORDER 1082-9rub. `is_provisioned()` above is a stat() of rootfs.img and
+    /// answers "the image was fetched and converted". Two branch sites read it
+    /// as "the guest is provisioned", and the gap between those two facts is a
+    /// real, reachable state: a guest that booted, created its rootfs, and then
+    /// ABORTED during cloud-init. rootfs.img is present; nothing was provisioned.
+    ///
+    /// This asks the question those sites meant to ask. The record is written by
+    /// the provisioning script itself (1055-e8ie) with `phase complete` as its
+    /// LAST statement, so a start with no completion is a positive signal of an
+    /// abort rather than an absence of information.
+    ///
+    /// RETURNS FALSE WHEN THE FILE IS ABSENT OR UNREADABLE, deliberately. The
+    /// callers use this to decide whether to trust an existing image, and "I
+    /// could not tell" must not read as "yes" — that is the whole defect this
+    /// packet is about, one layer down. A guest provisioned before this record
+    /// existed will therefore report false and be treated as unverified, which
+    /// is the correct conservative answer for a signal that cannot be
+    /// reconstructed after the fact.
+    pub fn provisioning_completed(&self) -> bool {
+        std::fs::read_to_string(self.provision_state_path())
+            .map(|t| t.lines().any(|l| l.trim() == "phase complete"))
+            .unwrap_or(false)
+    }
+
     /// Host-side directory shared into the guest so the provisioning script can
     /// report its own outcome where the host can read it (order 1055-e8ie).
     ///
@@ -1961,7 +1987,13 @@ impl VmRuntime for VzRuntime {
     async fn provision(&self, _manifest: &ProvisionManifest) -> Result<(), VmError> {
         // Idempotency short-circuit per
         // vm-provisioning-lifecycle.provision.idempotency@v1.
-        if self.is_provisioned() {
+        //
+        // ORDER 1082-9rub: idempotency means "this already SUCCEEDED", not "a
+        // file from a previous attempt is lying around". is_provisioned() is a
+        // stat() of rootfs.img, so on its own it returns Ok(()) — reporting
+        // provisioning success — for a guest whose image was created and whose
+        // cloud-init then aborted. Require the guest's own completion record.
+        if self.is_provisioned() && self.provisioning_completed() {
             return Ok(());
         }
         // The legacy tarball import path never existed on macOS: this trait
@@ -3006,6 +3038,81 @@ mod tests {
     /// branches are a separate packet. What must not silently return is a
     /// function whose name implies completion and whose doc does not say it
     /// measures a file.
+    /// ORDER 1082-9rub. The predicate must distinguish the three states the
+    /// guest can actually be in, and must not treat "I could not tell" as yes.
+    ///
+    /// These use a temp image root rather than the real one: a test that reads
+    /// this host's actual provision record would pass or fail according to what
+    /// the machine happens to hold, which is the shape that made three of my
+    /// test attempts vacuous earlier today on a different packet.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn provisioning_completed_distinguishes_complete_from_aborted_and_absent() {
+        let tmp =
+            std::env::temp_dir().join(format!("tillandsias-1082-9rub-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let rt = VzRuntime::new(3, tmp.clone());
+
+        // ABSENT: no record at all. Must be false — an unreadable signal is not
+        // a completed provision, and reading it as one is this packet's defect.
+        assert!(
+            !rt.provisioning_completed(),
+            "no record must not read as completed"
+        );
+
+        std::fs::create_dir_all(rt.provision_state_dir()).unwrap();
+
+        // ABORTED: the script started and never reached its last statement.
+        // This is the state a present rootfs.img hides.
+        std::fs::write(
+            rt.provision_state_path(),
+            "tillandsias-provision-state v1\nwritten_at 1\nphase start\n",
+        )
+        .unwrap();
+        assert!(
+            !rt.provisioning_completed(),
+            "a start with no completion is an ABORT, not a success"
+        );
+
+        // FAILED: the ERR trap fired.
+        std::fs::write(
+            rt.provision_state_path(),
+            "tillandsias-provision-state v1\nwritten_at 2\nphase failed\nrc 1\n",
+        )
+        .unwrap();
+        assert!(
+            !rt.provisioning_completed(),
+            "a failure must not read as completed"
+        );
+
+        // COMPLETE: the positive half. Without this the predicate could simply
+        // return false always and every arm above would still pass.
+        std::fs::write(
+            rt.provision_state_path(),
+            "tillandsias-provision-state v1\nwritten_at 3\nphase complete\n",
+        )
+        .unwrap();
+        assert!(
+            rt.provisioning_completed(),
+            "the script's own completion record must be believed"
+        );
+
+        // A record that MENTIONS completion in another field must not count —
+        // the guard scans the phase line, not the text (the quoted-history
+        // lesson: prose about a thing is not the thing).
+        std::fs::write(
+            rt.provision_state_path(),
+            "tillandsias-provision-state v1\nphase start\ncmd echo phase complete\n",
+        )
+        .unwrap();
+        assert!(
+            !rt.provisioning_completed(),
+            "a completion string inside another field is not a completion record"
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
     #[test]
     fn is_provisioned_documents_that_it_only_stats_a_file() {
         let source = include_str!("vz.rs");
