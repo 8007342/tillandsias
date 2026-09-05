@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: cloud-only-migration-interrupted-local-src-still-load-bearing
+    event:
+      type: progress
+      ts: "2026-09-05T00:58:35Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260905t004510z
+      host: tlatoanis-macbook-air
+      summary: |-
+        FLAKE RESOLVED — MY OWN CONCURRENCY, and the earlier note on this packet that said 'likely my concurrent gates, NOT proven' is now proven. cli_unknown_flags::unknown_flag_is_refused_loudly_and_names_the_flag and exec_guest_stdin::stdin_that_never_eofs_does_not_block_the_boot_forever went new-red THREE times, and every one of the three ran while a second gate or a land's gate was running on the same target directory. Isolated, both pass 2/2 and 2/2 every time. DECISIVE RUN: with 0 build, 0 land and 0 cargo processes on the machine, TILLANDSIAS_FORCE_CHECK=1 ./build.sh --check reported ok:test-baseline:ran=2287 new-red=0 tolerated=0 stale=0, exit 0, 257s. Same 2287 tests that produced new-red=2 under concurrency. So these are not load-sensitive defects in the tray and should not be filed as such; they are what two workspace test runs sharing target/ do to each other, and the fix is on the operator of the gate, not in the tests. THE PART WORTH KEEPING IS HOW I NEARLY CLOSED IT WRONG. My first solo run returned GATE_EXIT=0 and I almost reported 'solo gate green, concurrency confirmed'. It was 'ok:gate-fresh' — MEMOISED, nothing re-run. A green from a gate that did not execute is not evidence, and it is more dangerous than a false zero because a zero invites suspicion and a green invites none. That is verification.measurement_practice.a_zero_is_evidence_only_if_the_check_ran, which I wrote into methodology three hours earlier and which explicitly names 'or a silent pass' — and I still nearly walked past one. Worse, the stamp it was trusting had been written at 00:51 by the CLAIM LAND'S gate, i.e. by one of the very concurrent runs I was trying to rule out, so the memoised green was not merely uninformative but was the wrong evidence for this exact question.
