@@ -18,7 +18,6 @@
 use std::io;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::OnceLock;
 use std::sync::RwLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -71,34 +70,14 @@ static VAULT_BOOTSTRAP_DONE: AtomicBool = AtomicBool::new(false);
 /// Default in-VM podman socket path. Used by `VmStateHandle::podman_ready`
 /// to decide whether containers can actually start.
 const IN_VM_PODMAN_SOCKET_DEFAULT: &str = "/run/podman/podman.sock";
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum SecureControlWireMode {
-    Off,
-    On,
-}
-
-fn parse_secure_control_wire_mode(
-    raw: Result<String, std::env::VarError>,
-) -> Result<SecureControlWireMode, String> {
-    match raw {
-        Ok(v) if v.eq_ignore_ascii_case("on") => Ok(SecureControlWireMode::On),
-        Ok(v) if v.eq_ignore_ascii_case("off") || v.is_empty() => Ok(SecureControlWireMode::Off),
-        Ok(v) => Err(format!(
-            "TILLANDSIAS_SECURE_CONTROL_WIRE must be 'on' or 'off' (got {v:?})"
-        )),
-        Err(std::env::VarError::NotPresent) => Ok(SecureControlWireMode::Off),
-        Err(err) => Err(format!("TILLANDSIAS_SECURE_CONTROL_WIRE: {err}")),
-    }
-}
-
-fn secure_control_wire_mode() -> Result<SecureControlWireMode, String> {
-    static MODE: OnceLock<Result<SecureControlWireMode, String>> = OnceLock::new();
-    MODE.get_or_init(|| {
-        parse_secure_control_wire_mode(std::env::var("TILLANDSIAS_SECURE_CONTROL_WIRE"))
-    })
-    .clone()
-}
+// ORDER 972-umik. The mode is parsed by the ONE reader in
+// tillandsias-control-wire::secure_wire_mode, not here. This file used to
+// carry its own copy; there were six, with three different behaviours, and
+// the divergence shipped a plaintext client to anyone who capitalised a word.
+// The alias keeps this module's existing call sites reading naturally.
+use tillandsias_control_wire::secure_wire_mode::{
+    SecureWireMode as SecureControlWireMode, secure_wire_mode as secure_control_wire_mode,
+};
 
 /// Wrap `stream` per the secure-control-wire `mode`: `Off` passes the
 /// plaintext stream through, `On` runs the version-bound Noise responder
@@ -1886,39 +1865,45 @@ mod tests {
     // function itself. The vsock-side fetch_cloud_projects wrapper is
     // now a thin token-read shim, not worth a separate token-read target.)
 
-    /// The secure-control-wire gate must DEFAULT OFF (absent/empty/"off" =
-    /// plaintext, so the flip is opt-in and off is a no-op) and must FAIL CLOSED
-    /// on any unrecognized value — an unknown flag is an error, never a silent
-    /// downgrade to plaintext. @trace plan/issues/secure-channel-maturity-ladder-2026-07-04.md
+    /// ORDER 972-umik. THE FLIP. This test used to be called
+    /// `secure_control_wire_flag_defaults_off_and_fails_closed` and asserted
+    /// that an absent variable meant PLAINTEXT — "so the flip is opt-in and
+    /// off is a no-op". That was the defect: the flip was opt-in through a
+    /// variable that nothing in the product ever set, so the shipped default
+    /// was a plaintext, credential-carrying listener bound to any CID.
+    ///
+    /// It also asserted the PARSER in isolation, which 972-umik's third exit
+    /// criterion calls out as the weaker thing: it could not have caught the
+    /// windows client's `== Ok("on")` byte comparison, because that surface
+    /// never called this parser. The parser now lives in
+    /// tillandsias-control-wire::secure_wire_mode and is exercised by that
+    /// module's own tests; what is asserted HERE is that this listener reads
+    /// it rather than carrying a seventh copy.
     #[test]
-    fn secure_control_wire_flag_defaults_off_and_fails_closed() {
+    fn secure_control_wire_defaults_on_through_the_shared_reader() {
         use std::env::VarError;
-        // default OFF paths (no behaviour change when the flag is unset/off/empty)
+        use tillandsias_control_wire::secure_wire_mode::parse_secure_wire_mode;
+        // THE DEFAULT IS SECURE. Absent means On.
         assert_eq!(
-            parse_secure_control_wire_mode(Err(VarError::NotPresent)).unwrap(),
+            parse_secure_wire_mode(Err(VarError::NotPresent)).unwrap(),
+            SecureControlWireMode::On,
+            "an absent variable must mean ENCRYPTED; opt-in security is not security"
+        );
+        // Only an explicit, exact opt-out disables it.
+        assert_eq!(
+            parse_secure_wire_mode(Ok("off".to_string())).unwrap(),
             SecureControlWireMode::Off
         );
-        assert_eq!(
-            parse_secure_control_wire_mode(Ok("off".to_string())).unwrap(),
-            SecureControlWireMode::Off
-        );
-        assert_eq!(
-            parse_secure_control_wire_mode(Ok(String::new())).unwrap(),
-            SecureControlWireMode::Off
-        );
-        // explicit ON (case-insensitive)
-        assert_eq!(
-            parse_secure_control_wire_mode(Ok("on".to_string())).unwrap(),
-            SecureControlWireMode::On
-        );
-        assert_eq!(
-            parse_secure_control_wire_mode(Ok("ON".to_string())).unwrap(),
-            SecureControlWireMode::On
-        );
-        // FAIL CLOSED: garbage is an error, NOT a silent fallback to Off/plaintext
-        assert!(parse_secure_control_wire_mode(Ok("yes".to_string())).is_err());
-        assert!(parse_secure_control_wire_mode(Ok("1".to_string())).is_err());
-        assert!(parse_secure_control_wire_mode(Ok("true".to_string())).is_err());
+        // Blank is no longer a silent Off — it is the shape an unfilled CI
+        // variable takes, and reading it as insecure was the worst guess.
+        assert!(parse_secure_wire_mode(Ok(String::new())).is_err());
+        // The values that used to diverge across surfaces are loud everywhere.
+        for v in ["1", "true", " on"] {
+            assert!(
+                parse_secure_wire_mode(Ok(v.to_string())).is_err(),
+                "{v:?} must be refused loudly, not silently downgraded"
+            );
+        }
     }
 
     /// Order 137 (vsock-exec-chain-authn-authz): a gated-ON responder that
@@ -2117,7 +2102,11 @@ mod tests {
         let state = VmStateHandle::new();
         let (mut client, server) = tokio::io::duplex(64 * 1024);
         let (_shutdown_tx, shutdown_rx) = watch::channel(false);
-        let _server_task = tokio::spawn(handle_connection(
+        let _server_task = tokio::spawn(handle_connection_with_mode(
+            // 972-umik: this test exercises the PLAINTEXT protocol path, so it
+            // asks for plaintext explicitly. The shipped default is now On, and
+            // a test that wants the insecure path must say so.
+            Ok(SecureControlWireMode::Off),
             Box::new(server),
             state.clone(),
             shutdown_rx,
@@ -2194,7 +2183,11 @@ mod tests {
     ) {
         let (mut client, server) = tokio::io::duplex(socket_capacity);
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
-        let server_task = tokio::spawn(handle_connection(
+        let server_task = tokio::spawn(handle_connection_with_mode(
+            // 972-umik: this test exercises the PLAINTEXT protocol path, so it
+            // asks for plaintext explicitly. The shipped default is now On, and
+            // a test that wants the insecure path must say so.
+            Ok(SecureControlWireMode::Off),
             Box::new(server),
             state.clone(),
             shutdown_rx,
@@ -2411,7 +2404,11 @@ mod tests {
         let state = VmStateHandle::new();
         let (mut client, server) = tokio::io::duplex(1 << 20);
         let (_shutdown_tx, shutdown_rx) = watch::channel(false);
-        let server_task = tokio::spawn(handle_connection(
+        let server_task = tokio::spawn(handle_connection_with_mode(
+            // 972-umik: this test exercises the PLAINTEXT protocol path, so it
+            // asks for plaintext explicitly. The shipped default is now On, and
+            // a test that wants the insecure path must say so.
+            Ok(SecureControlWireMode::Off),
             Box::new(server),
             state.clone(),
             shutdown_rx,

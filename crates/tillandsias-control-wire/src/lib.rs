@@ -65,6 +65,7 @@ use serde::{Deserialize, Serialize};
 pub const WIRE_VERSION: u16 = 3;
 
 pub mod guest_transport;
+pub mod secure_wire_mode;
 pub mod transport;
 
 /// Maximum permitted single-message length on the wire, and the ONLY frame
