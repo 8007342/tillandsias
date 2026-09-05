@@ -77,6 +77,12 @@ packets:
       packet status. Anyone taking this should decide that FIRST: if obsoleted
       and blocked packets should not count, the line may drop from 4 to 2 with
       no closure work at all, and the two that remain are real and actionable.
+    unscoreable: |
+      The pin is the counter fixture the criteria require and which does not yet exist: adding an
+      unresolvable declaration raises the count and resolving one lowers it, with an obsoleted packet's
+      declaration excluded. The claimer adds it, and settles the status filter first, since the count may
+      drop from four to two before any closure work. (unscoreable block added on trunk by the coordinator
+      so the fragment satisfies 977-448j.)
     exit_criteria:
       - "each of the four is dispositioned INDIVIDUALLY and the disposition is recorded on its own packet: repointed to an existing litmus (with the span read, not just the name matched), test written, declaration dropped, or excluded because the packet is obsoleted/blocked"
       - "the check states which packet statuses it counts, so a reader can tell 'four live closures are unearned' from 'four declarations exist, two on packets nobody will ever work'"

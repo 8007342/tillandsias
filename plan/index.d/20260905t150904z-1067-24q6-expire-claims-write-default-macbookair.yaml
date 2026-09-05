@@ -54,6 +54,12 @@ packets:
       plan subcommand (status, query, ready, next, blocked-by) is pure, so the
       shape of the CLI teaches that asking is safe. mode=write appears only in
       the summary line AFTER the mutation has happened.
+    unscoreable: |
+      The pin is the both-directions fixture this packet's own criteria require and which does not yet
+      exist: a scratch ledger where every documented read/list flag leaves the bytes identical, and the
+      opt-in still expires a genuinely stale claim so 641-e2qa is preserved rather than weakened. The
+      claimer adds it. (unscoreable block added on trunk by the coordinator so the fragment satisfies
+      977-448j; a closure may only name a test that already exists, and this packet's test is the fix.)
     exit_criteria:
       - "bare `expire-claims` does not mutate: it reports what it WOULD expire and exits 0, with the dry-run stated in its own output"
       - "writing requires an explicit opt-in (--write or --apply), and the flag name appears in the dry-run output so the reader learns it without the docs"

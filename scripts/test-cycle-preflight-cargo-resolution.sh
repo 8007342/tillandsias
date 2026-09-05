@@ -24,21 +24,66 @@ bad() { echo "FAIL: $1" >&2; fail=$((fail+1)); }
 
 W="$(mktemp -d "${TMPDIR:-/tmp}/preflight-cargo-test.XXXXXX")"
 
-# HERMETIC ON A HOST THAT SHIPS A DISTRO CARGO. The absence arms used to drop
-# PATH to /usr/bin:/bin and call cargo absent; on macuahuitl (Fedora 44)
-# /usr/bin/cargo exists, so "absent" read "found" and the mutation control read
-# the same, four arms red the first time this suite ran inside a gate
-# (2026-09-05, the day 1005-m6rz bound it). The scratch PATH below carries
-# every executable in /usr/bin and /bin EXCEPT cargo, so absence is a property
-# of the fixture rather than of the host that happens to run it.
-NOCARGO="$W/bin"; mkdir -p "$NOCARGO"
-for _d in /usr/bin /bin; do
+# HERMETIC ON EVERY HOST — DERIVE THE SCRATCH PATH FROM THE TOOLS THE FIXTURE
+# NEEDS, NEVER FROM A NAMED PAIR OF DIRECTORIES.
+#
+# This has now failed twice in opposite directions, both times from assuming a
+# platform's tool set:
+#   1. The absence arms dropped PATH to /usr/bin:/bin and called cargo absent.
+#      On macuahuitl (Fedora 44) /usr/bin/cargo exists, so "absent" read
+#      "found" and the mutation control read the same — four arms red the first
+#      time this suite ran inside a gate (2026-09-05, the day 1005-m6rz bound
+#      it).
+#   2. Scrubbing to /usr/bin:/bin then made the 1005-m6rz identity arms
+#      IMPOSSIBLE on Windows: git there is /mingw64/bin/git, outside the pair,
+#      so the guard could not find git at all and answered
+#      `blocked:not-a-git-repo` — never reaching the identity question the arms
+#      exist to pin. Measured on esmeraldinha 2026-09-05, 3 arms red.
+#
+# Same defect in opposite coats: a hardcoded directory list is a guess about
+# the host. The fix is not a better guess — it is to stop needing one, by
+# giving each arm the SMALLEST PATH that expresses what it is actually testing.
+#
+# THE SOURCE DIRECTORIES ARE DERIVED FROM THE TOOLS, NOT NAMED. The fixture
+# needs bash (env -i must resolve it by name) and git (the identity arms), so
+# it mirrors the directories those two actually live in on THIS host and
+# excludes exactly one thing: cargo. On Fedora that is /usr/bin; on MSYS it is
+# /usr/bin plus /mingw64/bin. Nothing is hardcoded, so no host's layout is
+# assumed.
+#
+# THREE REJECTED ALTERNATIVES, every one measured rather than reasoned about:
+#   - a named pair (/usr/bin:/bin): on Fedora /usr/bin/cargo made "absent" read
+#     "found" (4 arms red inside the gate, 2026-09-05); scrubbing to it then
+#     made the identity arms IMPOSSIBLE on Windows, where git is
+#     /mingw64/bin/git, so the guard answered `blocked:not-a-git-repo` and never
+#     reached the identity question (3 arms red, esmeraldinha, same day). Same
+#     defect in opposite coats.
+#   - mirroring the host's WHOLE PATH minus cargo: FUNCTIONALLY CORRECT — the
+#     scratch set it builds has cargo absent and git present, verified — but it
+#     costs 6,628 symlinks here (Windows carries system32 and the WinGet dirs)
+#     and takes about 25 MINUTES over drvfs with MSYS symlink emulation. It ran
+#     past a 600 s timeout and completed in the background. That is longer than
+#     the whole gate this fixture is bound into (~24 min), so it is rejected on
+#     COST, not on correctness — a distinction worth keeping, because if drvfs
+#     ever stops being the floor's regime this becomes the cleanest option.
+#   - an empty PATH with bash copied in: `env -i PATH=... bash -c` needs bash by
+#     name, and an MSYS bash.exe COPIED away from its directory cannot start —
+#     it loads msys-2.0.dll from alongside itself. Symlinks resolve to the real
+#     path and keep working; copies silently produce nothing at all (8 arms red,
+#     no error text).
+NOCARGO="$W/nopath"; mkdir -p "$NOCARGO"
+for _t in bash git; do
+    _p="$(command -v "$_t" 2>/dev/null)" || continue
+    [ -n "$_p" ] || continue
+    _d="$(cd "$(dirname "$_p")" && pwd)" || continue
     [ -d "$_d" ] || continue
     for _x in "$_d"/*; do
-        _n="${_x##*/}"; [ "$_n" = cargo ] && continue
+        _n="${_x##*/}"
+        case "$_n" in cargo|cargo.exe) continue ;; esac
         [ -e "$NOCARGO/$_n" ] || ln -s "$_x" "$NOCARGO/$_n" 2>/dev/null || true
     done
 done
+
 trap 'rm -rf "$W"' EXIT INT TERM
 
 # A stub cargo that satisfies `command -v` and makes the build step succeed
@@ -261,7 +306,31 @@ case "$got" in
     *)  bad "no cargo + no binary — want blocked:preflight:plan:cargo-absent, got $got" ;;
 esac
 
-# ── 11. MUTATION CONTROL: without the probe, arm 9's host blocks. If this ever
+# ── 11. CARGO PRESENT still yields the build path, not the probe path. The
+#      third regime 1004-ws5q's exit criteria name: the fix must not divert a
+#      host that CAN compile onto an instrument that happens to be lying around.
+#      `existing` is for hosts with no compiler; a host with one still rebuilds.
+#      PATH is the fixture's scrubbed $NOCARGO with a stub cargo PREPENDED, so
+#      "present" is a property of this arm rather than of the host running it —
+#      the same reason the absence arms use $NOCARGO.
+make_cargo "$W/present-cargo"
+: > "$W/stub-plan"; chmod +x "$W/stub-plan"
+got="$(env -i PATH="$W/present-cargo:$NOCARGO" HOME="$W/empty-home" ROOT="$ROOT" \
+    TILLANDSIAS_PLAN_BIN="$W/stub-plan" bash -c '
+    plan_verdict="skipped"
+    if ! command -v cargo >/dev/null 2>&1; then
+        . "$ROOT/scripts/plan-binary-probe.sh"
+        if plan_bin="$(resolve_plan_binary)"; then plan_verdict="existing"
+        else echo "blocked:preflight:plan:cargo-absent"; exit 1; fi
+    fi
+    # cargo present: the real script builds here and sets rebuilt.
+    [ "$plan_verdict" = skipped ] && echo "build-path" || echo "$plan_verdict"
+')"
+[ "$got" = build-path ] \
+    && ok "cargo present takes the build path even with a resolvable binary — existing does not shadow rebuilt" \
+    || bad "cargo present — want build-path, got $got"
+
+# ── 12. MUTATION CONTROL: without the probe, arm 9's host blocks. If this ever
 #      reports 'existing' the arm above has stopped testing anything.
 got="$(env -i PATH="$NOCARGO" HOME="$W/empty-home" bash -c '
     if ! command -v cargo >/dev/null 2>&1; then

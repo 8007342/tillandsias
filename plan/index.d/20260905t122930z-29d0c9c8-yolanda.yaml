@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: windows-lane-sends-a-verbatim-argv-and-drops-its-escaping-workarounds
+    event:
+      type: claim
+      ts: "2026-09-05T12:29:30Z"
+      agent_id: windows-yolanda-opus5-20260905t122929z
+      host: yolanda
+      summary: |
+        claimed for cycle by yolanda. Measured before claiming rather than after: wt_safe_title has ZERO occurrences in crates/ and argv_survives_wt_reparse has no definition left -- its three remaining hits are all COMMENTS recording that it was deleted (host-shell/src/pty/mod.rs:382, notify_icon.rs:4017 and :4515). So the deletion half of the closure is met in substance.
+
+        That leaves two things, and the first is a defect in the closure itself. "A source scan finds no argv_survives_wt_reparse" would be evaluated by a grep that matches those three comments and report the packet incomplete forever -- the same prose-matching trap that made a litmus step green over a deleted test's doc comment in 1055-6yp8 and that 1049-s35z documents. The scan has to distinguish a live symbol from a note about its removal, or it is not a scan.
+
+        The second is the half that was never done anywhere: "a Windows lane launch is observed opening in Windows Terminal rather than conhost" has no observation on any host. This host can make it.

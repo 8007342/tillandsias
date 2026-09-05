@@ -78,7 +78,13 @@ WRITE = re.compile(r"""(
 
 # Delegation: the command hands off to a repo script, which is where the
 # mutation lives. Treated as mutating.
-DELEGATE = re.compile(r'(?:^|[\s;&|(])(?:bash\s+|sh\s+|\./)?scripts/[\w.-]+\.sh\b')
+# The boundary must include QUOTES. A litmus command is a YAML scalar, so the
+# character before the script path is very often `"` — and with only whitespace
+# in the class this matched `"bash scripts/x.sh"` (via the space after bash) but
+# NOT `"scripts/x.sh"`. Order 147 hit exactly that: a delegating MUTATION arm
+# was refused as mutating nothing. The guard was pinning a quoting style rather
+# than the property, in the file whose whole subject is the difference.
+DELEGATE = re.compile(r'''(?:^|[\s;&|("'])(?:bash\s+|sh\s+|\./)?scripts/[\w.-]+\.sh\b''')
 
 def strip_shell_comments(s: str) -> str:
     # Best effort: a '#' that starts a token. Keeps '#' inside words (e.g. a

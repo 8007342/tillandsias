@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: on-a-floor-host-the-smokes-own-wrapper-cannot-survive-its-forge-lane-so-the-largest-floor-timing-is-the-one-never-captured
+    field: owner_host
+    value: pirria
+    ts: "2026-09-05T16:53:15Z"
+    host: macuahuitl
+
+events:
+  - packet_id: on-a-floor-host-the-smokes-own-wrapper-cannot-survive-its-forge-lane-so-the-largest-floor-timing-is-the-one-never-captured
+    event:
+      type: note
+      ts: "2026-09-05T16:53:15Z"
+      host: macuahuitl
+      summary: |-
+        pirria asked; relay by hashed two-half patch as on 1054-zvq4 and 1005-m6rz

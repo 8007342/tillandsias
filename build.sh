@@ -3252,6 +3252,45 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Skill canonicalization remedy check passed"
 
+    # 823-u5zf: the wt.exe re-parse workarounds must stay deleted, and a comment
+    # RECORDING their deletion must not count as one. The packet's closure asks
+    # for "a source scan finds no argv_survives_wt_reparse"; a literal grep
+    # cannot serve, because it reds the correct tree on three explanatory
+    # comments and would be "fixed" by deleting the only explanation of why the
+    # code looks the way it does. Classifying by position rather than presence
+    # is the same lesson 1055-6yp8 and 1049-s35z paid for.
+    _step "Checking the wt-reparse workarounds stay deleted (823-u5zf)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-wt-reparse-scan.sh" 2>&1; then
+        _error "the wt-reparse deletion scan cannot tell a live symbol from a comment about it (823-u5zf) — see the verdict line above"
+        exit 1
+    fi
+    _info "wt-reparse deletion scan check passed"
+
+    # 1049-s35z: a litmus name bound in litmus-bindings.yaml whose file is
+    # absent must RED. It used to be logged SKIP, and skips are excluded from
+    # coverage, so the runner reported PASS having executed a third of what it
+    # was asked to. The CR was one cause; the SKIP is the mechanism that turned
+    # it into a green, and would have turned the next cause into one too.
+    _step "Checking a missing bound litmus test reds rather than skips (1049-s35z)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-missing-bound-test-reds.sh" 2>&1; then
+        _error "a bound litmus test with no file no longer reds, or the CR strip is gone (1049-s35z) — see the verdict line above"
+        exit 1
+    fi
+    _info "Missing-bound-test check passed"
+
+    # 1064-r8fv: the landing tool must merge TRUNK on a platform branch, must
+    # not manufacture an empty merge on trunk itself, and must refuse — naming
+    # the relay lane rather than taking it — when a push is refused server-side
+    # rather than lost to a race. Both defects were invisible on linux-next,
+    # where the branch and trunk are the same ref, which is why the tool worked
+    # exactly where it was not needed.
+    _step "Checking the landing tool merges trunk and refuses honestly (1064-r8fv)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-land-merges-trunk.sh" 2>&1; then
+        _error "land-on-platform-branch.sh does not merge trunk on a platform branch, or retries a server-side refusal (1064-r8fv) — see the verdict line above"
+        exit 1
+    fi
+    _info "Landing tool trunk-merge check passed"
+
     # 965-sxec: a missing or unusable ruby must read as COULD-NOT-RUN (exit 3),
     # never as a claim about the ready set. Inside a forge `command -v ruby`
     # finds a brew shim that cannot install one, exits 127, and the caller's
@@ -3509,6 +3548,26 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Freshness regime-budget fixture passed"
+
+    # 1063-nraf / 1041-up99: this fixture was ORPHANED — invoked by no script,
+    # no litmus binding and no skill — while plan/index.yaml stated, of it, "THE
+    # NEGATIVE CONTROL, pinned by scripts/test-expert-accuracy-record-shape.sh,
+    # 6/6". The ledger recorded an enforcement that did not run. That is worse
+    # than recording none: a later reader has no reason to doubt it, and the
+    # control it names is the one that keeps a never-called expert from being
+    # reported as 100% accurate rather than as null.
+    #
+    # Wired here rather than left to a human's memory, which is the whole of
+    # 1063-nraf: a fixture pinning a verdict that can delete a host's cycle runs
+    # only when someone remembers to run it. Verified green before wiring
+    # (ok:test-expert-accuracy-record-shape:6-passed) — wiring a red fixture
+    # would trade a silent gap for a broken gate.
+    _step "Checking the expert-accuracy record shape (917-6iwv)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-expert-accuracy-record-shape.sh" 2>&1; then
+        _error "the expert-accuracy record shape regressed (917-6iwv) — a never-called expert must record rate=null, never 0 and never 100, and a partial run must carry its denominator"
+        exit 1
+    fi
+    _info "Expert-accuracy record fixture passed"
 
     _step "Checking litmus steps can actually fail (972-cvdg)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-steps-can-fail.sh" 2>&1; then
