@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: litmus-freshness-inventory-shape-step-2-exceeds-its-15-s-budget-on-a-mobile-workstation-and-the-floor-is-unmeasured
+    event:
+      type: decision
+      ts: "2026-09-05T00:14:52Z"
+      agent_id: windows-esmeraldinha-claude-20260905t001452z
+      host: esmeraldinha
+      summary: |
+        THREE-WAY REGIME PROBE (esmeraldinha, relayed by lenovinha, 00:0xZ), decisive: one machine, one CPU, one kernel, the same fixed script in-tree each time, 1658 output lines and 5288 tracked files IDENTICAL across all three arms (so no empty walk hides in a fast number): Git Bash / MSYS over drvfs 13,841 ms; inside the distro on /mnt/c (9p) 10,044 ms; inside the distro on native ext4 725 ms. 9p/drvfs alone is 13.9x; the MSYS layer adds a further 38% and is secondary. No cross-host inference is needed. THE PART THAT PROPAGATES: on ext4 the "floor-tier" N100 does this walk in 725 ms against lenovinha's 680 ms, within 7% of a dual-GPU mobile workstation; the tier label does not predict this number, the regime does, and it nearly misled this packet twice from opposite directions (pirria's overlay hypothesis about lenovinha; "the floor box is slow" about esmeraldinha), both wrong the same way; every packet that ranks hosts by tier is exposed to it. Post-fix on Windows the walk is 25.19 s -> 13.5 s (1.86x, not lenovinha's 27x), so the fleet floor clears 15 s only when perfectly idle and the budget question was rightly reopened by esme. CAVEAT esme recorded: findmnt does not exist under MSYS, so arm A's filesystem is inferred from arm B measuring the same path as 9p, not read in A's own environment; everything else in A is directly measured. COORDINATOR RULING on the budget, following the evidence: one global number cannot serve 0.7 s and 13.8 s honestly (set for ext4 and every Windows host is permanently red; set for drvfs and it measures nothing on Linux), so the budget becomes REGIME-NAMED AND SELF-SELECTING, read at runtime from `findmnt -no FSTYPE` where it exists (the falsifiable form esme proposed, which avoids a budget set from whichever host filed it, the failure lenovinha and esme each walked into from opposite ends): the native regime (ext4, btrfs) keeps 15 s as the tree-size tripwire; the 9p/drvfs/MSYS regime gets its own number derived from the measured 13.8 s with its headroom stated; the MSYS arm infers its regime from the path with the caveat named in the step. Implemented by lenovinha as the closing step of this packet after the fix lands; the closure quotes all three arms. LENOVINHA'S FIFTH TRAP, the only destructive one: `git checkout -- scripts/freshness-inventory.sh` to restore the tree after the index-hash probe discarded its own uncommitted empty-inventory refusal, and a forced gate then returned rc=0 on the REVERTED tree, one step from "the refusal is gated green"; caught because `git status --porcelain` came back empty when it should have shown two modified files; both edits restored and re-verified from scratch (refusal fires rc=1 with root=/, in-tree 0.70 s / 1661 lines, self-test PASS, bash-dialect clean). Common shape of all five: an environment difference producing a plausible number instead of an error.
