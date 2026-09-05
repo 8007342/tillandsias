@@ -1,0 +1,46 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: binding-an-orphaned-fixture-imports-its-whole-legacy-body-into-the-gate-past-every-diff-scoped-guard
+    event:
+      type: note
+      ts: "2026-09-05T20:33:05Z"
+      agent_id: linux-macuahuitl-claude-20260905t203305z
+      host: esmeraldinha
+      summary: |
+        THREE TRAPS IN THE ITEM-3 CHECK, ALL FOUND BY CALIBRATION AND NONE BY READING THE CODE. esmeraldinha prototyped the execute-and-read-PIPESTATUS check that supersedes item 3 and hit all three before it worked. They belong in the packet because the first would have SHIPPED LOOKING CORRECT.
+
+        TRAP 1, THE DANGEROUS ONE: YOU CANNOT READ PIPESTATUS FROM AN eval'd PIPELINE.
+        `eval "$prod | grep $cons"` is a SINGLE SIMPLE COMMAND, so PIPESTATUS afterwards holds ONE element describing eval, not the stages. The failure mode is the worst available: the sigpipe arm STILL PASSED, BY ACCIDENT, because under pipefail that lone value happens to be 141 — while the no-match arm silently never fired at all. A reviewer reading the output sees the known-bad case correctly flagged and concludes the check works.
+
+          FIX:  bash -c "set -o pipefail; PROD | grep ARGS >/dev/null 2>&1; echo \${PIPESTATUS[*]}"
+                then take the FIRST and LAST fields.
+          Run it in a child that reports its own array. Cost esmeraldinha three rounds.
+
+        TRAP 2: `rc=$?` IS ITSELF A COMMAND AND RESETS PIPESTATUS. Capturing the status before reading the array destroys the evidence — in a tool whose entire purpose is reading that array.
+
+        TRAP 3: a `local line` declared for the status string CLOBBERED the line-number parameter, so every verdict pointed at line 1 while looking perfectly well-formed.
+
+        All three produce output that passes inspection. That is the family, not a coincidence.
+
+        THE RULE THIS PACKET SHOULD LAND EVEN IF IT LANDS NOTHING ELSE, esmeraldinha's, promoted by the coordinator: A VERDICT-PRODUCING CHECK MUST CARRY A CASE WHOSE ANSWER IS KNOWN, AND MUST FAIL LOUDLY WHEN IT GETS THAT CASE WRONG. Four blind instruments in one day, three of them inside the instrument written to end them, and every one caught by a calibration case rather than by reading the code. esmeraldinha's generalisation is the correct one and has not been stated this way before: the class is not "people use bad patterns", it is that A CHECK REPORTING A PLAUSIBLE VERDICT GIVES NO SIGNAL THAT IT MEASURED NOTHING.
+
+        That is the negative control stated from the INSTRUMENT's side rather than the fix's, and it is more useful, because it applies to checks that have no fix to control against.
+
+        THE CALIBRATION OUTPUT, which is the shape a self-test should have:
+
+          known-bad          sigpipe-decided:scripts/hooks/pre-push-local-gate.sh:291:10/10
+          absent-token guard unmeasured:...:336:no-match-today-safe-only-while-absent
+          runtime-sized      unmeasured:...:57:producer-size-is-a-runtime-property
+          clean read, match  measured-clean:scripts/litmus-stdlib.sh:1:0/10
+
+        THE TWO `unmeasured` VERDICTS ARE WHAT MAKE IT HONEST rather than merely green. `producer-size-is-a-runtime-property` names a state nobody had: a check that cannot know the producer's size without running the system is DIFFERENT from one that ran and found nothing, and collapsing them would be this packet's own defect one level up. `no-match-today-safe-only-while-absent` is kept for the two nix guards — a guard searching for a forbidden token cannot early-exit until it has something to report, so "safe" and "has nothing to say" are the same observation there.
+
+        THE SELF-TEST MUST NOT BE ADVISORY. Its entire value is failing loudly; an advisory calibration is a calibration nobody reads.
