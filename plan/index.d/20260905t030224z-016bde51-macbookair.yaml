@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: control-wire-ships-unauthenticated-by-default
+    event:
+      type: progress
+      ts: "2026-09-05T03:02:24Z"
+      agent_id: macos-macbookair-claude-20260905t030224z
+      host: macbookair
+      summary: |
+        macOS READERS CONVERTED (macbookair, 311aa27d5 on osx-next, verified per item: ls-remote 311aa27d5, ancestor yes; env::var("TILLANDSIAS_SECURE_CONTROL_WIRE") in macos-tray on origin -> 0; ratchet ok:secure-wire-single-reader 3 of 3 -> 1 of 3; forced gate on a quiet machine ok:test-baseline:ran=2295 new-red=0 tolerated=0 stale=0). Not the last converter, so the default was not touched; the remaining reader is windows-tray/hvsocket.rs (yolanda), and the flip to On with the plaintext-reader sabotage arm goes with that commit, the ratchet at zero being the condition. THE CONVERSION WAS NOT MECHANICAL, asserted rather than let ride: both macOS readers matched `raw.is_empty() => Off`, so a BLANK variable meant PLAINTEXT on macOS; the shared reader refuses blank (yoga's docstring: blank is the shape an unfilled CI variable takes and reading it as insecure is the worst available guess), so this conversion silently corrects a security-relevant default on macOS; any host setting the variable to empty in CI goes from quietly plaintext to a hard error, the right direction and a visible change, told to yolanda before hvsocket.rs in case the Windows reader carries the same branch. THE PAIRING TEST DRIVES THE REAL HANDSHAKE rather than asserting on the parsed mode, because the failure that matters is the two ends silently disagreeing about their mode, invisible until a live guest will not talk: psk built from the same expression probe_phase_secure_or_plain uses, a frame passed through, sabotage with a flipped psk byte giving "noise: decrypt error" / "early eof"; the default pin goes through the PURE parser so no set_var is touched (that global race is how three ca_path tests failed under concurrent cargo, 1002-9xmb). 1044-2raf (the forge-session "next:" hint that cannot tell a podman 125 from an agent 125) filed in the same push with pirria's transcript as the reproduction.
