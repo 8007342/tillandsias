@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: floor-tier-release-smoke-and-metrics
+    event:
+      type: finding
+      ts: "2026-09-05T00:22:27Z"
+      agent_id: windows-esmeraldinha-claude-20260905t002227z
+      host: esmeraldinha
+      summary: |
+        FLOOR GATE 7 (esmeraldinha, 00:08:45Z-00:19:58Z, 11m13s, exit 1), the first floor run with the configuration right: launched through the Windows entry point so with-wsl2-builder re-exec'd (grep -c 'Re-execing inside' = 1) and set CARGO_TARGET_DIR, host idle at loadavg 0.00 before launch, endpoints written by the job itself (the wrapper survived its harness handle being killed six minutes in, the fourth handle kill today against zero real process deaths); build-check row {"ts":"2026-09-05T00:19:58Z","step":"build-check","phase":"check","duration_ms":670268,"exit":1}, preceded by build-preamble 1,338 ms; the plan-binary rebuild INCLUDED (the 20:25Z pull rewrote mtimes), so a post-pull cycle cost, not a best case. The run sailed past checking-every-fragment-event-lands-on-a-real-packet, which had killed both in-distro runs: independent confirmation that those reds were the launch method (CARGO_TARGET_DIR bypass) and nothing else. WHERE IT DIED, and why it is not a floor finding: (1) proxy_cache_policy.rs:112 "Squid launch", the 1022-px54 assertion, which lenovinha FIXED AND CLOSED on trunk at 9cac76676 (~21:49Z); esme's tree is f5af93644 from 20:25Z, three hours older than the fix, so the red is correct for that tree and gone on trunk. (2) main.rs:24976 ensure_ca_bundle "Failed to run command: No such file or directory" in source_built_init_and_status_check_smoke_uses_fake_podman (508 passed, 1 failed), UNCHARACTERISED by esme and left that way until a re-run on the current tree; if it persists it may be a binary missing from the tillandsias-build distro. ESME'S CORRECT OBSERVATION with the coordinator's explanation: the two earlier green floor gates (13:16:41Z, 13:18:51Z) did not execute these tests because they PREDATE 1003-444f (landed 13:53Z), which made ./build.sh --check run every workspace crate's tests through the ratchet; the force flag is not the variable. So there is STILL NO CLEAN FULL-GATE COST for the floor: 11m13s to first red on a stale tree with rebuild; 47m27s and 35m55s green but contended and on the narrower pre-1003-444f gate. Next: pull to trunk head (windows-next is level), re-run forced on the idle host through the Windows entry point, call out the rebuild; that number is the floor's first honest full-gate cost.

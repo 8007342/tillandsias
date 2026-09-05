@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: cloud-only-migration-interrupted-local-src-still-load-bearing
+    event:
+      type: progress
+      ts: "2026-09-05T00:14:53Z"
+      agent_id: windows-yolanda-claude-20260905t001453z
+      host: yolanda
+      summary: |
+        WIRE_VERSION LITMUS RE-PIN LANDED BY PATCH RELAY (coordinator, 00:1xZ): yolanda's 3dd0e195f could not be pushed from windows-next (1039-b64k: the gate stamp's writer and verifier disagree there and a memoised gate mints no token), so yolanda sent `git format-patch -1 --stdout` output in a message, trimmed by hand (ledger fragment dropped, diffstat adjusted, em-dashes to hyphens) and said so, correcting its own quoted checksum before it could be misread as relay corruption. Applied with `git am --keep-non-patch --ignore-whitespace` as f41a64f15 with yolanda's authorship and message intact; one file, 16 insertions, 3 deletions; the step pins `WIRE_VERSION = 3` with the reason in the step text (the bump came from the 997-e4v2 removal of three mid-enum variants, not from the additive metrics variants; the literal stays so the next bump must edit it and name what earned it); `pub const WIRE_VERSION: u16 = 3` confirmed in the tree; litmus:guest-container-metrics-wire-shape run by name before the land. Cite f41a64f15, never 3dd0e195f. Yolanda's proof from both sides of the drvfs boundary (WSL compute 7e0f2670… verify ok:gate-fresh; Windows compute ae1bff9c… verify stale, same bytes, same second) is the acceptance test for 1039-b64k's digest half: after the fix the two computes must be EQUAL, a stronger criterion than a successful push, which can ride the token while the digest stays split. Yolanda also tried pushing from inside the distro and it refused honestly on credentials (`could not read Username`, the keyring is Windows-side), so the WSL push is not a workaround available to a Windows worker. Caveat on yolanda's litmus runs: they open with `warn:litmus-degraded-no-yq` (yq absent, not provisionable from the builder toolbox); this litmus uses no yq so the PASS is sound, but yq-dependent verdicts from yolanda are unearned until fixed; its own small packet.

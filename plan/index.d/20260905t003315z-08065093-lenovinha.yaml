@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: litmus-freshness-inventory-shape-step-2-exceeds-its-15-s-budget-on-a-mobile-workstation-and-the-floor-is-unmeasured
+    event:
+      type: progress
+      ts: "2026-09-05T00:33:15Z"
+      agent_id: linux-lenovinha-claude-20260904t233510z
+      host: lenovinha
+      summary: |-
+        CLOSING STEP LANDED (ok:land:7917099c4). The budget is now named by FILESYSTEM REGIME and selects itself at runtime.
+
+        THE THREE ARMS, esme-windows's within-host control, which is what settled it. One machine, one CPU, one kernel, the fixed script, in-tree each time, host idle — and 1658 output lines and 5288 tracked files IDENTICAL in all three, so no empty walk is hiding inside a fast number:
+            Git Bash / MSYS over drvfs      13,841 ms
+            inside the distro, /mnt/c (9p)  10,044 ms
+            inside the distro, native ext4      725 ms
+        9p/drvfs alone is 13.9x. MSYS adds a further 38% and is secondary. No cross-host inference anywhere in it.
+
+        THE FINDING THAT OUTLIVES THE PACKET: on ext4 that 'floor-tier' N100 does 725ms against lenovinha's 680ms — within 7% of a dual-GPU mobile workstation. The tier label does not predict this number; the regime does. This packet was misled by the tier TWICE from opposite directions before anyone measured: an overlay hypothesis about lenovinha being slow, and 'the floor box is slow' about esmeraldinha. Both wrong the same way. Any packet that ranks hosts by tier is exposed to it.
+
+        WHAT LANDED. scripts/freshness-regime-budget.sh reads findmnt -no FSTYPE, falls back to a pwd -W path inference under MSYS where findmnt does not exist, and prints which source it used so a reader never has to guess whether the regime was read or inferred. Both numbers are DERIVED, not chosen:
+          native 15000ms UNCHANGED, still the tree-size tripwire (~20x headroom against 725/680ms).
+          remote 20000ms, bracketed on BOTH sides — above the measured 13,841ms by 45% (esme observed contention moving measurements by more than 10%, so a 10% margin would fail intermittently, which is worse than failing steadily because it reads as flakiness and gets ignored), and BELOW the 25,186ms pre-fix cost so a full quadratic regression still trips it. 13.8 < B < 25.2 leaves little room to be arbitrary.
+        An unreadable regime takes the remote budget deliberately.
+
+        ENFORCEMENT MOVED INTO THE STEP because the runner parses timeout_ms as a literal integer (run-litmus-test.sh:1263) and cannot take a per-regime value. timeout_ms is now a hard ceiling (45000) above the largest budget, and the step times itself. Side benefit that is really the point: the verdict line names the regime and budget it used — 'ok: header grammar pinned (697ms within 15000ms, freshness-budget: ms=15000 regime=native fs=btrfs source=findmnt)' — so a red says which budget it failed instead of being a bare timeout.
+
+        MY FIRST TEST PASSED A MUTATION, and I am recording it because it is the third instance of one defect class in a day. Collapsing the selector to a single budget returned regime=remote on btrfs while all ten arms stayed green: grepping the case statement asks whether a filesystem is MENTIONED, not whether it MAPS to the right budget. That is exactly the count-occurrences-not-callers defect of 901-jtvi, written inside the test meant to catch that class. A live-selection arm now asserts actual output. Both mutations fail correctly:
+          FAIL: remote budget 26000 is at or above the 25186 pre-fix cost — a full regression would pass
+          FAIL: on btrfs the selector returned regime=remote ms=20000; expected native/15000
+        11/11 unmutated, and the enforcement's own negative control gives violation:freshness-budget-exceeded: 700ms > 1ms.
+
+        WIRED IN, checked rather than assumed. The two new scripts were UNTRACKED when the preceding gate returned rc=0, so guards that walk tracked files never saw them — the same shape as everything else this evening, a green verdict for work that was not examined. Staged, exec bits set, and the fixture is invoked exactly once from build.sh; the landing gate shows 'ok:test-freshness-regime-budget:11' and 'Freshness regime-budget fixture passed' in its own output, which is the evidence the test RAN rather than merely existing.
+
+        esme's caveat carried rather than glossed: findmnt does not exist under MSYS, so arm A's regime is inferred from the path (arm B measured the same path directly as 9p), not read in its own environment. An inferred regime is weaker evidence than a read one and the output line says which it was.
+
+        THE PACKET'S THREE PARTS: d731382be (the quadratic, 18.39s -> 0.68s here, 25.19s -> 13.5s on Windows), bfd1e7a4f (the empty-inventory refusal, without which a walk that never ran reports 0.0% coverage at rc=0 in 0.39s and reads as a 64x win), 7917099c4 (this). All three gated green with the bound litmus run before each land.

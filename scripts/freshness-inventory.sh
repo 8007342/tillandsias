@@ -316,6 +316,41 @@ if [ -z "${FRESHNESS_FIXTURE_DIR:-}" ] && [ "${#CANDIDATES[@]}" -gt 0 ]; then
     CANDIDATES=(${_kept[@]+"${_kept[@]}"})
 fi
 
+# AN EMPTY INVENTORY IS A BROKEN RUN, NOT A CLEAN ONE (order 1038-d7vw).
+# Reported by esme-windows, and the reason it matters is that it fooled three
+# separate measurements in one evening — two of mine and one of esme's.
+#
+# The script derives REPO_ROOT from ${BASH_SOURCE[0]}/.., so a copy executed
+# from OUTSIDE the repo (`git show origin/linux-next:scripts/freshness-inventory.sh
+# > /tmp/fi.sh && bash /tmp/fi.sh`, the natural way to test a fix on a host you
+# cannot merge to) resolves REPO_ROOT to `/`, finds nothing, and prints:
+#
+#   freshness-inventory: 0 components, 0 stamped, 0 unstamped
+#   freshness-coverage: 0.0% (0/0 delta=unknown)
+#
+# rc=0, in 0.39s. That is indistinguishable from a fast clean walk unless you
+# read the line count, and it is how esme's Windows arm produced an apparent
+# 25s -> 0.39s "64x confirmation" of a fix that had not run at all. The old
+# script did exactly the same thing — verified by running BOTH from /tmp on
+# linux, byte-identical 4-line output — so this is not a regression from the
+# awk rewrite; it is a fails-open this script has always had, exposed because
+# the rewrite gave people a reason to run it from a temp path.
+#
+# WHY THE DESYNC GUARDS BELOW DO NOT COVER THIS, which esme diagnosed correctly
+# from the source: both are inside `[ "${#CANDIDATES[@]}" -gt 0 ]`. They protect
+# against a marker array that is SHORT; they cannot see a candidate set that is
+# EMPTY, because in that case they are never reached. This refusal sits outside
+# that block deliberately.
+#
+# Refusing costs nothing real: a checkout with zero auditable components is not
+# a state any caller wants a coverage number for.
+if [ "${#CANDIDATES[@]}" -eq 0 ]; then
+    echo "blocked:freshness-inventory:empty-inventory:root=$REPO_ROOT" >&2
+    echo "  no candidate components found. If this script was copied elsewhere," >&2
+    echo "  run it from inside the repo — REPO_ROOT comes from \${BASH_SOURCE[0]}/.." >&2
+    exit 1
+fi
+
 total=0
 stamped=0
 declare -a STAMP_LINES
@@ -500,6 +535,12 @@ done
 # it is a sample of what previous audits happened to touch. Ranking within it
 # answers "which of the 8 files we have looked at is oldest", which is not the
 # question the audit class is asking.
+# Declared so `${#UNSTAMPED_LINES[@]}` below cannot trip `set -u` on a run that
+# stamped everything. esme-windows surfaced this as `UNSTAMPED_LINES: unbound
+# variable` — incidental to the empty-inventory case it was seen in, but a real
+# latent bug in its own right: a fully-stamped tree would hit it too, and the
+# error goes to stderr while the script still exits 0.
+UNSTAMPED_LINES=(${UNSTAMPED_LINES[@]+"${UNSTAMPED_LINES[@]}"})
 FRESHNESS_SEED="${FRESHNESS_SEED:-$(date -u +%Y%m%d)}"
 next_rel=""
 next_src=""
