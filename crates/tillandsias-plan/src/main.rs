@@ -6905,14 +6905,32 @@ type HeldClaim<'a> = (String, &'a str, String);
 /// would NOT expire (newest event activity at or after the cutoff) AND whose
 /// claim itself is younger than the TTL, with the claiming host and claim ts.
 ///
-/// OWNERSHIP COMES FROM THE CLAIM EVENT, NEVER THE NEWEST EVENT. Any host may
-/// append a note to a claimed row (freshness audits do), so "host of the
-/// newest event" is last-toucher attribution — the wrong host. The claim
-/// convention is machine-recognizable: the skill's claim recipe records a
-/// `claimed for cycle <ts>` summary via set-field --reason, so the claim
-/// event is the NEWEST event whose summary starts with that prefix. A row
-/// with no such event yields no live-claim row at all: an owner the ledger
-/// cannot name is not this host (fail closed), and the detector must refuse.
+/// OWNERSHIP COMES FROM THE STATUS CHANNEL, NOT FROM EVENT PROSE (1065-4t7t).
+///
+/// This used to recognise a live claim ONLY by finding an event whose summary
+/// began "claimed for cycle". That is a sentence, so a lease recorded any other
+/// way was invisible and the packet read as claimable while a host was working
+/// it. Four instances on 2026-09-05: a claim written "claimed <ts> by", a
+/// reopen through `set-field` whose reason carried no such sentence, two proxy
+/// claims that had to be phrased exactly to be seen, and order 317 called
+/// unclaimed-in-progress while another host was mid-run on it. That is
+/// 814-iyu7's duplication arriving through the INSTRUMENT rather than the
+/// selector.
+///
+/// THE LEASE WAS ALREADY THERE. Every `set-field <id> status in_progress`
+/// writes a status entry carrying `ts` and `host`, and the fold already records
+/// which entry won (`FoldProvenance::lww_wins` -> `Ledger::status_lease_of`).
+/// The authoritative claimant and claim time were present the whole time; only
+/// this function was reading the wrong channel.
+///
+/// The event-text path REMAINS as a fallback, widened to accept what the claim
+/// command actually writes rather than one sentence. It is a fallback and not
+/// the primary because prose is the thing that failed.
+///
+/// Any host may append a note to a claimed row (freshness audits do), so "host
+/// of the newest event" would be last-toucher attribution — the wrong host. A
+/// row with no lease and no claim event yields no live-claim row: an owner the
+/// ledger cannot name is not this host (fail closed).
 ///
 /// Rows are `(order, packet_id, claim_host, claim_ts, last_activity_ts)`.
 type LiveClaim<'a> = (String, &'a str, String, String, String);
@@ -6955,7 +6973,13 @@ fn live_claims<'a>(ledger: &'a Ledger, cutoff_iso: &str) -> Vec<LiveClaim<'a>> {
                 let is_claim = ev
                     .get("summary")
                     .and_then(serde_yaml::Value::as_str)
-                    .is_some_and(|s| s.trim_start().starts_with("claimed for cycle"));
+                    .is_some_and(|s| {
+                        // WIDENED (1065-4t7t): "claimed for cycle", "claimed
+                        // <ts> by" and "claim(<id>)" all say the same thing to
+                        // a reader and said nothing to the old prefix test.
+                        let t = s.trim_start();
+                        t.starts_with("claimed") || t.starts_with("claim(")
+                    });
                 if is_claim {
                     let host = ev
                         .get("host")
@@ -6967,8 +6991,23 @@ fn live_claims<'a>(ledger: &'a Ledger, cutoff_iso: &str) -> Vec<LiveClaim<'a>> {
                 }
             }
         }
-        let (Some(last), Some((claim_host, claim_ts))) = (last_ts, claim) else {
-            continue;
+        // THE STATUS CHANNEL FIRST. Its (host, ts) is the entry that actually
+        // set in_progress, which is what a lease is.
+        let lease = ledger
+            .status_lease_of(pid)
+            .filter(|(h, t)| !h.is_empty() && !t.is_empty());
+        let (claim_host, claim_ts) = match (lease, claim) {
+            (Some((h, t)), _) => (h, t),
+            (None, Some((h, t))) => (h, t),
+            (None, None) => continue,
+        };
+        // `last_ts` still comes from events: it answers "has anything happened
+        // here recently", which the status entry cannot. A row whose only
+        // record is the claim itself takes the claim ts as its last activity
+        // rather than being dropped for having no events.
+        let last = match last_ts {
+            Some(l) if l > claim_ts => l,
+            _ => claim_ts,
         };
         // Both halves of "young enough": the reaper would not expire the row,
         // and the claim itself is inside the TTL. A stale claim kept alive by
@@ -7045,7 +7084,13 @@ fn expire_claim_candidates<'a>(
                 let is_claim = ev
                     .get("summary")
                     .and_then(serde_yaml::Value::as_str)
-                    .is_some_and(|s| s.trim_start().starts_with("claimed for cycle"));
+                    .is_some_and(|s| {
+                        // WIDENED (1065-4t7t): "claimed for cycle", "claimed
+                        // <ts> by" and "claim(<id>)" all say the same thing to
+                        // a reader and said nothing to the old prefix test.
+                        let t = s.trim_start();
+                        t.starts_with("claimed") || t.starts_with("claim(")
+                    });
                 if !is_claim {
                     continue;
                 }
@@ -7610,6 +7655,66 @@ mod tests {
     /// any host may note on a claimed row), a claim-less in_progress row
     /// yields nothing, and both the activity AND the claim itself must be
     /// inside the TTL.
+    /// ORDER 1065-4t7t. THE LEASE IS THE STATUS ENTRY, NOT A SENTENCE.
+    ///
+    /// A packet claimed through `set-field` carries a status entry with `ts`
+    /// and `host`, and that is the authoritative claimant whatever the reason
+    /// text says. Before this, recognition required an event summary opening
+    /// "claimed for cycle", so a lease worded any other way was invisible and
+    /// the row read as claimable while a host was working it.
+    ///
+    /// Measured on the live ledger the day this landed: the sweep went from
+    /// live=3/unclaimed=2 to live=4/unclaimed=1 with no ledger change, and
+    /// order 317 stopped being reported unclaimed while tlatoanis-macbook-air
+    /// was mid-run on it.
+    #[test]
+    fn a_status_entry_is_a_lease_whatever_the_reason_text_says() {
+        // Same temp-dir idiom the sibling fold tests use; no dev-dependency.
+        let dir = std::env::temp_dir().join(format!("tilland-lease-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("tempdir");
+        let index = dir.join("index.yaml");
+        std::fs::write(
+            &index,
+            concat!(
+                "packets:\n",
+                "  - packet_id: leased\n    order: 9\n    title: \"l\"\n    status: ready\n    desired_release: v0.5\n",
+            ),
+        )
+        .expect("write base");
+        let frag_dir = dir.join("index.d");
+        std::fs::create_dir_all(&frag_dir).expect("frag dir");
+        // A claim whose event prose says NOTHING a prefix test would match.
+        std::fs::write(
+            frag_dir.join("20260810t000000z-a-hosta.yaml"),
+            concat!(
+                "status:\n",
+                "  - packet_id: leased\n    field: status\n    value: in_progress\n",
+                "    ts: \"2026-08-10T00:00:00Z\"\n    host: hosta\n",
+                "events:\n",
+                "  - packet_id: leased\n    event:\n      type: progress\n",
+                "      ts: \"2026-08-10T00:00:00Z\"\n      host: hosta\n",
+                "      summary: reopened after a falsifying observation\n",
+            ),
+        )
+        .expect("write fragment");
+
+        let ledger = Ledger::load_with_fragments(&index).expect("folded ledger loads");
+        assert_eq!(
+            ledger.status_lease_of("leased"),
+            Some(("hosta", "2026-08-10T00:00:00Z")),
+            "the winning status entry's (host, ts) IS the lease"
+        );
+        let live = live_claims(&ledger, "2026-08-09T00:00:00Z");
+        assert_eq!(
+            live.len(),
+            1,
+            "a set-field claim must be seen even with no claim sentence: {live:?}"
+        );
+        assert_eq!(live[0].2, "hosta", "and it must name the claiming host");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn live_claims_name_the_claiming_host_and_fail_closed_without_one() {
         let raw = concat!(
@@ -7621,6 +7726,12 @@ mod tests {
             "        summary: claimed for cycle 2026-08-10T00:00Z\n",
             "      - type: note\n        ts: \"2026-08-10T02:00:00Z\"\n        host: hostb\n",
             "        summary: drive-by freshness note from another host\n",
+            // ORDER 1065-4t7t: lenovinha's phrasing. "claimed <ts> by <agent>"
+            // was invisible to the old prefix test and is a lease to a reader.
+            "  - packet_id: worded\n    order: 6\n    title: \"w\"\n    status: in_progress\n    desired_release: v0.5\n",
+            "    events:\n",
+            "      - type: note\n        ts: \"2026-08-10T00:00:00Z\"\n        host: hostc\n",
+            "        summary: claimed 2026-08-10T00:00Z by linux-hostc-claude\n",
             // in_progress with events but NO claim-convention event: no row.
             "  - packet_id: unowned\n    order: 2\n    title: \"u\"\n    status: in_progress\n    desired_release: v0.5\n",
             "    events:\n      - type: progress\n        ts: \"2026-08-10T00:00:00Z\"\n        host: hosta\n",
@@ -7647,15 +7758,29 @@ mod tests {
         let live = live_claims(&ledger, "2026-08-09T00:00:00Z");
         assert_eq!(
             live,
-            vec![(
-                "1".to_string(),
-                "owned",
-                "hosta".to_string(),
-                "2026-08-10T00:00:00Z".to_string(),
-                "2026-08-10T02:00:00Z".to_string(),
-            )],
-            "only the freshly-claimed row is live, owned by the CLAIMING host, \
-             with claim ts and newest-activity ts both reported"
+            vec![
+                (
+                    "1".to_string(),
+                    "owned",
+                    "hosta".to_string(),
+                    "2026-08-10T00:00:00Z".to_string(),
+                    "2026-08-10T02:00:00Z".to_string(),
+                ),
+                // ORDER 1065-4t7t: recognised now, invisible before. This is
+                // lenovinha's real phrasing on 1047-h88p, which the old prefix
+                // test did not match — the packet then read as claimable while
+                // that host was working it.
+                (
+                    "6".to_string(),
+                    "worded",
+                    "hostc".to_string(),
+                    "2026-08-10T00:00:00Z".to_string(),
+                    "2026-08-10T00:00:00Z".to_string(),
+                ),
+            ],
+            "freshly-claimed rows are live and owned by the CLAIMING host, \
+             whatever wording the claim used, with claim ts and \
+             newest-activity ts both reported"
         );
     }
 
