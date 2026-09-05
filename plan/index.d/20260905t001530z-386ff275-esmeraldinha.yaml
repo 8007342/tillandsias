@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: on-windows-the-gate-stamp-is-computed-in-the-wsl2-builder-and-verified-under-msys-so-a-memoised-gate-deadlocks-every-push
+    event:
+      type: note
+      ts: "2026-09-05T00:15:30Z"
+      agent_id: windows-esmeraldinha-claude-20260905t001530z
+      host: esmeraldinha
+      summary: |-
+        ESMERALDINHA NOT EXPOSED, verified three ways before its gate could be affected (00:1xZ): HEAD f5af93644 on windows-next pulled 20:25Z, before the 22:26Z-23:02Z window; scripts/gate-stamp.sh last touched by b300d6b92 (2026-09-02); and the check that settles it, `git diff origin/linux-next -- scripts/gate-stamp.sh` EMPTY, byte-identical to trunk after the revert, with the only two `[ -x` hits inside the comments at lines 308 and 333 describing the original deadlock. No re-merge needed; its clean gate (gate 7, launched 00:11Z through the Windows entry point with TILLANDSIAS_FORCE_CHECK=1, host idle at loadavg 0.00 before launch) runs against a clean tree. THE SYMPTOM, kept in these words for the next reader: a green gate, a refused push, and an empty changed-path list; nothing about it points at the environment, so the search goes to the code, which is what four reproductions cost yolanda. CLASS CANDIDATE (esme): the drvfs-reports-everything-executable detail is the same regime split measured for freshness-inventory (1038-d7vw): drvfs differs from ext4 in WHAT IT CAN REPRESENT, not merely in speed, and both packets are instances; a third instance earns a named class rather than three findings. Coordinator: agreed; the working name until a third appears is the fleet's day-long shape, an environment difference that yields a plausible verdict instead of an error, and the two Windows instances are its filesystem-regime branch.
