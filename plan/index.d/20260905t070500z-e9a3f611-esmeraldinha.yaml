@@ -1,0 +1,77 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: plan-only-lane-accepts-new-issue-captures-and-refuses-corrections-to-them
+    order: 1060-7mmm
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: any
+    capability_tags: [git, hooks, gate, evidence, docs]
+    estimated_hours: 2
+    owned_files:
+      - scripts/hooks/pre-push-local-gate.sh
+      - scripts/test-pre-push-plan-lane-after-merge.sh
+    title: |
+      the plan-only lane accepts a NEW file under plan/issues/ but refuses a modification to one, so a correction to a landed report can never take the lane while the original capture could — the lane makes adding a record cheap and correcting one expensive
+    context: |
+      FOUND on esmeraldinha 2026-09-05, in the same push that gave 1056-5344 its first live exercise.
+      Verbatim refusal:
+
+        plan-only lane: not applicable — 'plan/issues/smoke-e2e-findings-v56.9.5.1-2026-09-05-esmeraldinha.md'
+        has status 'M' in the outgoing diff; only NEW issue captures qualify (full gate required)
+
+      The change was a FOUR-CHARACTER correction: the report cited order `1029-5vwd`, which has no
+      referent in the ledger; the discriminant-pin order is `1029-5wvd`. A wrong order id in a landed
+      report is exactly the kind of thing that should be cheap to fix — it had already begun
+      travelling into other hosts' messages when it was caught.
+
+      Same push, with the correction set aside, was ACCEPTED by the lane:
+
+        plan-only lane: outgoing diff adds only new plan fragment files / append-only
+        attestation-ledger records — accepting without the build stamp
+
+      So the lane's own validation ran happily over three NEW fragments while scoping past twelve
+      foreign paths from the mandated `origin/linux-next` merge. The only thing it would not accept
+      was a one-line fix to prose it had already accepted the creation of.
+
+      WHY THIS IS POINTED THE WRONG WAY. On the night this was found, this host retracted a
+      fabricated race (1052-gw8w), corrected an `ls-remote` claim that proved nothing, and fixed
+      this transposed id — three corrections to landed or relayed records in one shift. A lane whose
+      economics favour appending a new record over correcting an existing one selects for exactly
+      the failure mode this fleet keeps finding: records that read as settled while carrying
+      something wrong. The cheap path should be the honest one.
+
+      WHAT IS NOT BEING ARGUED. An `M` on an arbitrary tracked file is a genuine escape hatch and
+      the lane is right to refuse it: `build.sh` and a `.rs` can reach the build, and a modification
+      is where a bypass would hide. The narrow question is whether an `M` CONFINED to `plan/issues/`
+      deserves the same treatment as an `M` on `build.sh`. Prose in that directory cannot reach the
+      build, cannot change what the gate validates, and is already trusted enough that its creation
+      qualifies unreviewed.
+
+      NEIGHBOUR: 1013-xm63 (`plan-only-push-lane-refuses-append-only-edits-to-work-queue-ledgers`)
+      is one directory over and the same shape — a lane refusing an edit whose blast radius it has
+      already accepted in another form. Whoever takes either should read both.
+    exit_criteria:
+      - "an outgoing diff whose only non-A entry is an M confined to plan/issues/ takes the plan-only lane, under the same per-file validation a new capture receives; pre-fix result: FAILS — refused with `has status 'M' in the outgoing diff; only NEW issue captures qualify`"
+      - "an M on any path outside plan/index.d/, plan/loop_status.d/, plan/issues/ and plan/mo-full-attestations.d/ still requires the full gate, asserted by a negative arm; pre-fix result: PASSES today and must keep passing"
+      - "the un-gated-union marker is still written when the accepted push scoped past a merge, so relaxing the file-status rule does not quietly drop the gate debt; pre-fix result: PASSES today (.git/tillandsias-union-ungated observed) and must keep passing"
+    unscoreable: |
+      The pin extends scripts/test-pre-push-plan-lane-after-merge.sh, which yoga
+      added with 1056-5344; the claimer adds the M-confined-to-issues arm and its
+      negative control there rather than starting a new fixture.
+    events:
+      - type: filed
+        ts: "2026-09-05T07:05:00Z"
+        agent_id: windows-esmeraldinha-claude-20260905t070500z
+        host: esmeraldinha
+        summary: |
+          Filed from the floor in the same cycle that exercised 1056-5344 live.
+          The refusal and the acceptance are from the SAME push, seconds apart,
+          differing only in whether the correction was included — which is what
+          makes the attribution clean rather than inferred. Method note: the
+          first attempt conflated two variables, the mandated merge and a
+          modified file, so its refusal could not say whether 1056-5344's fix
+          worked; setting the correction aside isolated the variable and
+          produced both readings.
