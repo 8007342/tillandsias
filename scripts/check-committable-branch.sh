@@ -51,6 +51,37 @@ committable_branch_verdict() {
     echo "blocked:committable-cycle-on-main"
     return 1
   fi
+  # ORDER 1005-m6rz. The other half of "can this cycle commit here": a branch
+  # that accepts commits is useless if the host cannot AUTHOR one.
+  #
+  # MEASURED on pirria-cachyos 2026-09-04: a host with no git identity ran a
+  # full release smoke, wrote its findings report, and only then discovered
+  # `unable to auto-detect email address (got 'lapto@pirria.(none)')` at the
+  # commit — after the work, which is the expensive place to learn it. No
+  # preamble step checked it: not this guard, not cycle-preflight, not the
+  # credential guard, not daily maintenance. A fresh or re-imaged host hits it
+  # every time, and the skill's claim step (§3) requires a COMMIT AND A PUSH
+  # before the work begins, so an unauthorable host cannot even claim.
+  #
+  # `git var GIT_AUTHOR_IDENT` IS THE INSTRUMENT, not a pair of `git config`
+  # reads. It runs git's own identity resolution — config, then environment,
+  # then the auto-detection from username and hostname — and fails exactly when
+  # a commit would fail. Checking user.name and user.email individually would
+  # report a fresh host as broken while git would have auto-detected fine, and
+  # would report pirria's case as HEALTHY because the auto-detected value
+  # exists; it is the `.(none)` hostname that makes git refuse it. Only asking
+  # git the question git will ask gets both cases right.
+  if ! git var GIT_AUTHOR_IDENT >/dev/null 2>&1; then
+    echo "blocked:no-git-identity"
+    {
+      echo "  This host cannot author a commit, so it cannot claim or push."
+      echo "  Set an identity for this checkout (repo-local, not --global):"
+      echo "    git config user.name  \"<name>\""
+      echo "    git config user.email \"<email>\""
+      echo "  Then re-run this guard; it is the same check git makes at commit time."
+    } >&2
+    return 1
+  fi
   echo "ok:branch-${branch}"
   return 0
 }

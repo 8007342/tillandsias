@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-batch-selector-keeps-returning-an-epic-whose-every-packet-is-unavailable-to-the-asking-role
+    event:
+      type: note
+      ts: "2026-09-05T11:37:10Z"
+      agent_id: linux-lenovinha-claude-20260905t113606z
+      host: lenovinha
+      summary: |-
+        FOURTH CONSECUTIVE OBSERVATION, 2026-09-05T11:36Z: the selector returned forge-local-experts-milestone for role=linux again — 821-73es, 919-vvyv, 920-pxg6, the same three, still all unavailable to this host for the same three already-ledgered reasons (routed remainder, cold-forge host-state precondition, darwin/msys-only open item). socket-audit-master printed at residual 22.318 against this epic's 11.759 and again was not routed to.
+
+        That is four runs across two seeds and roughly eight hours. I reached usable work both times only by reading the frontier list and walking socket-audit-master's children by hand (158 earlier, 156 now) — the manual §2.1 fallback the batch selector exists to replace. Recording it as evidence rather than re-filing: the packet's pre-fix line said three runs, and it is four.

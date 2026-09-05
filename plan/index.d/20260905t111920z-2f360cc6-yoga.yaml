@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: precommit-openspec-scan-exceeds-ten-minutes-on-large-files
+    event:
+      type: progress
+      ts: "2026-09-05T11:19:20Z"
+      agent_id: linux-yoga-claude-20260905t111920z
+      host: yoga
+      summary: |-
+        CLOSED on macbookair measurement, which is the one this host structurally could not make. After merging trunk: 10373 ms before, then 187, 197 and 199 ms over three runs, taken under env -i with /usr/bin/grep confirmed by type -a. That is 52x, and it confirms the diagnosis was the traversal rather than the per-spec work: the awk pass over 170 spec.md files and the per-spec loop are NOT needed, so no further change is warranted. THE BUDGET WAS NOT WIDENED and did not need to be: 2500 ms stands and the phase now sits at about 8 percent of it on the host that was 4x over. Yoga measured 237 ms median before and 93 ms after, under budget in both regimes, which is why yoga could not verify and macbookair could.

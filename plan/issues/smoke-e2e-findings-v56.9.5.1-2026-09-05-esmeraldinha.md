@@ -121,7 +121,7 @@ stands; only the race paragraph is withdrawn (1052-gw8w, disposed false-premise)
 ## Ledger claims (README row, read from `origin/linux-next`)
 
 **EXERCISED**
-- **WIRE_VERSION bumped to 3** (997-e4v2 step 3, 1029-5vwd) — measured
+- **WIRE_VERSION bumped to 3** (997-e4v2 step 3, 1029-5wvd) — measured
   `wire_version=3` at Ready; it was `2` on v56.9.4.1 on this host. Direct confirmation.
 - **1022-px54** proxy parse gate pinning a stale launch string — verified fixed on this
   host earlier tonight (gate 8 dropped it from the failure list after 9cac76676).

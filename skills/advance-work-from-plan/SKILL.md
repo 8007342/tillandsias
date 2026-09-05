@@ -28,6 +28,28 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
     (breach record 34e60965,
     `plan/issues/main-branch-direct-push-guard-2026-07-24.md`). Switch to
     your host's canonical branch or run the cycle read-only.
+
+2.  **Instrument check**: `scripts/cycle-preflight.sh` must answer `ok:` before
+    you select work — selecting with an unverified instrument is the one
+    failure the loop cannot reason its way out of, because the tool it would
+    reason WITH is the stale thing. Its `<plan>` segment names which instrument
+    you are running on (order 1004-ws5q):
+
+    - `rebuilt` — cargo present, instrument built or confirmed current.
+    - `existing` — **no cargo, but a runnable binary resolved.** A legitimate
+      cycle: a host doing compile-free work keeps its slot. Before 1004-ws5q
+      preflight declared the COMPILER absent without ever looking for a
+      BINARY, and a floor-tier release smoke that compiles nothing lost a 4h
+      slot with a healthy instrument on disk (pirria, 2026-09-04).
+    - `skipped` — the build step was skipped via `CYCLE_PREFLIGHT_SKIP_BUILD=1`.
+    - `blocked:preflight:plan:cargo-absent` — no cargo AND no runnable binary.
+      Terminal: there is no instrument, so do not start the cycle.
+
+    **`CYCLE_PREFLIGHT_SKIP_BUILD=1` is for compile-free work on a host that
+    cannot compile, and nothing else.** It is not a way past a red build on a
+    host that can compile — that is a broken instrument. Since 1004-ws5q a host
+    with no cargo but a working binary gets `existing` without the variable, so
+    needing it at all should now be rare.
     **On `osx-next` / `windows-next`, merge `origin/linux-next` HERE, before the
     selector runs, not only before the push.** The selector and every
     `plan_*` read answer from the WORKTREE ledger, and on a platform branch the
@@ -563,10 +585,36 @@ status `ready`. The packet closes only when every agent named in
 1.  **Full Verification**: Run the full validation litmus on your platform to confirm zero-drift compliance.
 2.  **Close the packet — BOTH the event and the status transition.**
 
+    **LAND THE CODE FIRST, then close with the SHA the landing printed.**
+    `scripts/land-on-platform-branch.sh` fetches, integrates onto origin and
+    REWRITES your commit, so a SHA captured before it is the pre-rebase local
+    one and never exists upstream. `ok:land:<sha>` is the only SHA that exists.
+
     ```bash
+    landed="$(scripts/land-on-platform-branch.sh | sed -n 's/^ok:land:\([0-9a-f]*\):.*/\1/p')"
     tillandsias-plan set-field <packet-id> status completed \
-      --reason "<what shipped, commit SHAs, validation log paths>"
+      --evidence "$landed" \
+      --reason "<what shipped, validation log paths>"
     ```
+
+    Then commit and push the ledger fragment (step 3), which takes the
+    plan-only lane. **This inverts the old step 2/step 4 order for the CODE
+    commit only** — every other ledger write keeps the 3c ordering.
+
+    ORDER 1024-c3h3. This step used to run before the landing, and the evidence
+    refs were systematically wrong for every host that followed it: lenovinha
+    measured four of four closures citing ghosts on 2026-09-04 (5326cb97d,
+    d2ce890b2, 89f6960d2, 4aaa24ba2, while the code landed as dcc50ff27,
+    a20540d33, 42930b71c, 00549903c), and yoga's 1011-d578 cited 677c30527 the
+    same way. A reader running the obvious check
+    (`git merge-base --is-ancestor <sha> origin/<branch>`) gets NO and **cannot
+    tell "the code never landed" from "the ref was captured too early"** — two
+    conditions needing opposite responses. That is 881-29me's shape with a SHA
+    instead of a line number: cite what survives the operation.
+
+    If you cannot capture the landed SHA, cite by content the rebase preserves
+    (the commit subject, a test name, a verdict line) and say that is what you
+    did. A wrong SHA is worse than no SHA, because it looks checkable.
 
     An event alone does **not** close a packet. This step used to read *"append
     a `completed` event … or by writing an append-only fragment file setting
