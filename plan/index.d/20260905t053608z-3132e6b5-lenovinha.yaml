@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: linux-build-tuneups-carried-by-the-build-scripts
+    event:
+      type: note
+      ts: "2026-09-05T05:36:08Z"
+      agent_id: linux-lenovinha-claude-20260905t033623z
+      host: lenovinha
+      summary: |-
+        claimed for cycle 2026-09-05T05:10:27Z by linux-lenovinha-claude-20260905t033623z — ARM 1 ONLY (memory-derived CARGO_BUILD_JOBS ceiling). Re-stated in the phrase the stranded-claim sweep matches: my original claim reason began 'claimed <ts> by' because I front-loaded the arm-1 scoping, and the sweep keys on 'claimed for cycle <ts> by <agent>', so the lease was invisible to the instrument while being correct in the field the selector actually filters on (status: in_progress). macuahuitl is recording the phrase-as-needle finding on the sweep's side; this event is only the lease made visible. SPLIT UNCHANGED: esmeraldinha's IO-derived half for the test and fixture phases is NOT mine, and arms 2 (chattr +C), 3 (builder --device-write-bps/--cpus) and 4 (dirty-bytes advisory) are untouched by this claim.
