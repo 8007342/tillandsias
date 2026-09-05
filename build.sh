@@ -3483,6 +3483,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Selector cross-branch filter pin passed"
 
+    # Order 1033-iycs. The land tool discarded the gate's entire output, so its
+    # refusal named no step and no log — in the file whose header records that
+    # discarding the PUSH's output reported LANDED for a refused push. The
+    # negative control matters as much as the rest: arms that only check a
+    # refusal are satisfied by a tool that refuses unconditionally.
+    _step "Checking a land gate refusal names its step and its log (1033-iycs)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-land-gate-refusal-names-its-step.sh" 2>&1; then
+        _error "the land tool's gate refusal lost its diagnostic (1033-iycs) — see the verdict line above"
+        exit 1
+    fi
+    _info "Land-refusal diagnostic pin passed"
+
     # Order 1056-5344. The lane now scopes PAST a mandated merge of
     # origin/linux-next, which widens the bypass further: without the ancestry
     # gate a host could park code on a side branch, merge it --no-ff, and the

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: linux-native-stream-audit
+    field: next_action
+    value: 'AUDIT HALF DONE (yoga, this event). Production polling sites in the linux tray path are THREE, not fourteen: mod.rs:813 and mod.rs:4764 (shutdown AtomicBool 250ms, both 679-vdi6) and mod.rs:4373 (github-login Vault token 1s, 679-rp9m). Two other sleeps are NOT defects and must not be swept in: mod.rs:3014 is a fixed 2s cosmetic menu delay (a different defect) and mod.rs:5172 is bounded test-support quiescence with a 10s ceiling and a recorded reason. Criterion 3 is ALREADY MET (mpsc::unbounded = 0, broadcast/watch = 6). WHAT REMAINS: criterion 1, SC-01..SC-15 across the path, which needs this packet''s four-agent verification and is not a one-host slice; and the refactor, which is the two child packets. LOCATE BY FUNCTION NAME, NOT LINE: the children''s cited lines have drifted (679-vdi6 says ~L640-655 and ~L4081-4082; the sites are 813 and 4764). 679-vdi6''s conversion must preserve the flush_pending_emit() call in the 4764 loop body — the coalesced-burst trailing flush (944-jaef) — or it silently drops coalescing.'
+    ts: "2026-09-05T20:06:41Z"
+    host: yoga
+
+events:
+  - packet_id: linux-native-stream-audit
+    event:
+      type: progress
+      ts: "2026-09-05T20:06:41Z"
+      host: yoga
+      summary: |-
+        status 'AUDIT HALF DONE (yoga, this event). Production polling sites in the linux tray path are THREE, not fourteen: mod.rs:813 and mod.rs:4764 (shutdown AtomicBool 250ms, both 679-vdi6) and mod.rs:4373 (github-login Vault token 1s, 679-rp9m). Two other sleeps are NOT defects and must not be swept in: mod.rs:3014 is a fixed 2s cosmetic menu delay (a different defect) and mod.rs:5172 is bounded test-support quiescence with a 10s ceiling and a recorded reason. Criterion 3 is ALREADY MET (mpsc::unbounded = 0, broadcast/watch = 6). WHAT REMAINS: criterion 1, SC-01..SC-15 across the path, which needs this packet's four-agent verification and is not a one-host slice; and the refactor, which is the two child packets. LOCATE BY FUNCTION NAME, NOT LINE: the children's cited lines have drifted (679-vdi6 says ~L640-655 and ~L4081-4082; the sites are 813 and 4764). 679-vdi6's conversion must preserve the flush_pending_emit() call in the 4764 loop body — the coalesced-burst trailing flush (944-jaef) — or it silently drops coalescing.' (not terminal) with evidence_refs: 1f4212b60
+  - packet_id: linux-native-stream-audit
+    event:
+      type: note
+      ts: "2026-09-05T20:06:41Z"
+      host: yoga
+      summary: |-
+        audit half delivered; refactor and four-agent verification outstanding

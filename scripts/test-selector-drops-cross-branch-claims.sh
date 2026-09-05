@@ -45,8 +45,16 @@ STUB
 
 _run() { TILLANDSIAS_XBRANCH_CHECK="$W/stub.sh" bash scripts/select-work-batch.sh linux --budget 3 2>&1; }
 
-# ── 0. BASELINE: the real selector emits a batch at all ────────────────────
-base="$(bash scripts/select-work-batch.sh linux --budget 3 2>/dev/null)"
+# ── 0. BASELINE: the UNFILTERED batch, taken with the clean stub ───────────
+# NOT with the live checker. The baseline is the batch before any cross-branch
+# drop, and the live checker DROPS — so on a day when a sibling holds one of the
+# picked packets, the baseline came back short and arms 1 and 3 compared 3
+# against 2 and failed. That is a control depending on live external state, and
+# it went red the first time a sibling actually held something: this fixture
+# passed when I wrote it and refused a real land hours later, having tested
+# nothing but the fleet's claim state.
+_stub clean
+base="$(_run)"
 n_base="$(printf '%s\n' "$base" | grep -c '^packet' || true)"
 if [ "${n_base:-0}" -ge 1 ]; then
     ok "the selector emits a batch ($n_base packet(s)) — the arms below have a subject"
