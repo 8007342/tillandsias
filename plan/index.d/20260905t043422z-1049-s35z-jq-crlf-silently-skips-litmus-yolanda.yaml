@@ -14,6 +14,15 @@ packets:
       - tooling
     estimated_hours: 5
     verifiable_closure: |
+      SCORABLE PIN: litmus:litmus-runner-reds-on-a-missing-bound-test -- a new
+      litmus test that binds a name with no file on disk and requires the
+      runner to exit NON-ZERO. It must carry its own negative control: with the
+      file present the same step goes green, so the test distinguishes "the
+      runner reds on a missing test" from "the runner reds at all".
+
+      That pin covers the half that turned this bug into a PASS verdict. The CR
+      half is scored per site, below.
+
       On a Windows host, for each of the 26 scripts under scripts/ that pipes
       `jq -r` into a shell value, either the value is CR-stripped at the read
       or the script is shown not to compare/index on it. The SCORABLE half is
