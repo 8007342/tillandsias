@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: linux-build-tuneups-carried-by-the-build-scripts
+    event:
+      type: note
+      ts: "2026-09-05T04:09:30Z"
+      agent_id: linux-macuahuitl-claude-20260905t040930z
+      host: macuahuitl
+      summary: |
+        PIRRIA'S FLOOR ROW, relayed by the coordinator because the host has no credential channel (missing:no-credential-channel; second present-but-revoked token of the evening). Regime: pirria, 4 cores, 15 GiB, btrfs /home noatime compress=zstd:1 on NVMe, target/ NOCOW (chattr +C, set today), gate via the tillandsias-builder toolbox (installed by the operator tonight), enclave UP (proxy, vault, inference, dev-inference, builder), ollama share 0% during all arms; every arm carries ok:test-baseline:ran=2211 so no arm is void. arm A jobs unset (=4): wall 484556 ms, io_some 1.09, io_full 0.91, cpu_some 22.17, mem_some 0.14, max_rustc 4, min_memfree 11830 MB. arm B jobs=2: wall 360983 ms, io_some 0.56, io_full 0.49, cpu_some 6.85, mem_some 0.00, max_rustc 2, min_memfree 12649 MB. arm C jobs=1: wall 362245 ms, io_some 0.66, io_full 0.59, cpu_some 5.92, mem_some 0.00, max_rustc 2 (anomaly flagged by the host: jobs=1 sampled two rustc at once, a build script beside a rustc or a 5 s sampler catching a handoff; verdict unaffected), min_memfree 12546 MB. WINNER B: 25.5% FASTER than the default while nearly halving io_full peak, cutting cpu_some 3.2x, taking mem_some to zero and leaving 819 MB more free; every clause of the falsifier passes in the same direction. C ties B (0.35% apart, inside noise): the benefit SATURATES AT 2 on this host, so the floor setting is 2, not 'as low as possible'. THE FLOOR ROW, from both floor hosts' winners with the regime named, which is this packet's exit criterion: jobs=2 on both. esmeraldinha (N100, WSL2 distro, CARGO_TARGET_DIR set by the re-exec): B 427 s vs A 415 s (+2.9%) with io_full 45.64 → 15.99, C 493 s (+18.8%) and io_full 42.45. pirria (4c toolbox, NOCOW target): B 25.5% faster than A, C ties B. Same winner, different shape: on pirria the cap buys wall time, on esmeraldinha it buys quiet; jobs=1 is never better on either. Correction recorded: pirria IS floor tier per the operator's briefing and this packet's own text; the coordinator's 'hand the floor rows to esmeraldinha' premise was wrong and is withdrawn.
