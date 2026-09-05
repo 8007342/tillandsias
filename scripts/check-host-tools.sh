@@ -76,6 +76,7 @@ timeout|macos|check-credential-channel.sh|blocked:gh-cli-only|GNU coreutils. che
 cargo|macos,linux,windows|-|-|the gate compiles and clippies the workspace|rustup toolchain install stable
 rustc|macos,linux,windows|-|-|same as cargo|rustup toolchain install stable
 pkg-config|macos|-|-|the workspace build needs it to locate native deps; without it --check cannot start. NOT self-measured: reported by macneo-macos on a factory-fresh Mac 2026-09-03|brew install pkg-config
+openssl|linux|-|-|ORDER 1042-svey. The gate's CA-generating test (source_built_init_and_status_check_smoke_uses_fake_podman -> ensure_ca_bundle) shells out to the openssl COMMAND. Without it that test dies with os error 2 ELEVEN MINUTES into the run, long after this step passed. Tagged linux because on Windows the gate re-execs into the tillandsias-build WSL2 distro and this check reports ok:host-tools:linux — a windows tag would never fire during a gate. NOT self-measured by a prover: the only thing that fails is a Rust test, not a check script, so the honest entry is '-' and the fixture counts it unverified rather than pretending otherwise|dnf install -y openssl
 SPEC
 }
 

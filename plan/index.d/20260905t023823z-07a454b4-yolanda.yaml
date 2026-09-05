@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-tillandsias-build-wsl2-distro-has-no-openssl-so-the-gates-ca-generating-test-dies-eleven-minutes-in-while-the-host-tools-check-passes
+    event:
+      type: progress
+      ts: "2026-09-05T02:38:23Z"
+      agent_id: windows-yolanda-opus5-20260905t023823z
+      host: yolanda
+      summary: |-
+        FIXED, and the cause is more specific than "the distro has no openssl".
+
+        THE ACTUAL CAUSE: scripts/with-wsl2-builder.sh installed `openssl-devel` and NOT `openssl`. On Fedora those are separate packages — the -devel one carries headers and pulls openssl-libs, and the /usr/bin/openssl COMMAND ships in its own package. The Rust build needs the headers, so -devel was there deliberately; the CLI arrived only as an incidental dependency of something else, which is why it is PRESENT on one Windows host's builder distro and ABSENT on another's. Same shape as the jq/yq omission recorded eight lines above it in the same file: packaged in Fedora, so an omission rather than a constraint.
+
+        I COULD NOT REPRODUCE THE PRE-FIX FAILURE HERE, and that is itself the finding. yolanda's tillandsias-build distro HAS openssl — `command -v openssl` -> /usr/sbin/openssl, `rpm -q openssl` -> openssl-3.5.7-2.fc44.x86_64 — while esmeraldinha's has neither. Two Windows hosts, same provisioning script, different contents: the builder distros have DRIFTED, and the drift is invisible because nothing declares openssl as required. Criterion 1 ("on esmeraldinha, the gate runs the CA test green") is therefore esme's to verify and I have not claimed it.
+
+        CRITERION 2 IS MET AND MEASURED HERE, with both controls run:
+          CONTROL A — openssl genuinely hidden: `command -v openssl` empty on the pruned PATH (a stub directory of symlinks to every needed tool EXCEPT openssl). Confirmed BEFORE reading the verdict, because a hide that silently fails and a guard that never fires produce identical output — my first attempt at this pruned /usr/bin and /usr/sbin from PATH, the hide did not take, and the check passed. I nearly recorded that pass.
+          CONTROL B — cargo still visible on the same PATH, so a refusal cannot be a false red for a different missing tool.
+          VERDICT: missing:host-tools:linux:openssl, naming the tool, the reason and the remedy, in seconds.
+
+        TAGGED linux, NOT windows, and this is load-bearing: on a Windows host `./build.sh --check` re-execs into the tillandsias-build WSL2 distro, so `uname -s` is Linux and the step reports ok:host-tools:linux. Measured from the gate's own log, not assumed — a `windows` tag would never fire during a gate. The gate now reads linux:4 where it read linux:3.
+
+        PROVER IS `-`, DELIBERATELY. The required set's contract is that every entry carries a check script that fails without the tool, so the claim falsifies itself. The only thing that fails without openssl is a Rust test, not a check script, so there is no honest prover and the entry says so; scripts/test-host-tools.sh then counts it unverified rather than pretending. Inventing a prover would have repeated exactly what check-host-tools-measures-operator-environment-not-the-tool is open about: the macos `timeout` entry's prover measures gh login state, not the coreutils dependency it claims to prove.
+
+        CRITERION 3: the forge exemption in ensure_ca_bundle is UNCHANGED, with a comment saying the builder is NOT exempt and why — a forge is exempt because the host injects its CA, and nothing injects one into the builder. The note argues against widening it: turning "any environment without openssl" into an exemption would convert a loud missing-tool failure into a silently CA-less run, which is the trade the host-tools list exists to refuse.
+
+        FIXTURE: scripts/test-host-tools.sh reports `--platform linux partitions its 4 declared tool(s) exactly`. It is 2/10 red on this host — and IDENTICALLY 2/10 red on the pristine tree (windows/cargo and the macos accounting arm), verified by stashing my change and re-running. Both are environmental to running the macos and windows arms from Git Bash; neither is mine.
+
+        EVIDENCE: ./build.sh --check exit 0, ok:test-baseline:ran=2211 new-red=0 tolerated=0 stale=0, live verdict ok:host-tools:linux:4.
+
+        FOR ESME: after this lands, a re-provision through scripts/with-wsl2-builder.sh installs openssl; a distro that already exists will not be re-provisioned by the merge alone, so the floor check is `wsl -d tillandsias-build -- command -v openssl` and, if empty, `dnf install -y openssl` inside it. The host-tools step will now say so in seconds either way.
