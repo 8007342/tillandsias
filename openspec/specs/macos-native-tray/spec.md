@@ -412,6 +412,58 @@ text for the same failure class.
   "converging" is worse than a false "broken" because it tells automation to
   wait for something that will never arrive.
 
+### Invariant: guest liveness is heartbeat-bounded, never push-derived
+- **ID**: macos-native-tray.invariant.heartbeat-freshness-bound
+- **Modality**: MUST
+- **Expression**: `crates/tillandsias-macos-tray/src/diagnose.rs::HEARTBEAT_PERIOD_SECS
+  == 30 AND HEARTBEAT_STALE_AFTER_SECS == 90 AND
+  heartbeat_verdict_from RETURNS Stale WHEN age > HEARTBEAT_STALE_AFTER_SECS`
+- **Measurable**: true via
+  `heartbeat_bound_reports_a_phase_when_fresh_and_unknown_when_stale`,
+  `heartbeat_bound_is_three_periods`,
+  `heartbeat_falls_back_to_mtime_only_when_the_record_has_no_timestamp`, and
+  `a_push_driven_timestamp_would_fail_the_bound_a_heartbeat_passes`.
+
+  The live tray SHALL write `heartbeat.state` into the image root every
+  **HEARTBEAT_PERIOD_SECS = 30 s**, on a timer, independently of control-wire
+  pushes AND of whether the VM came up. `--diagnose` SHALL report the recorded
+  phase only while that record is younger than
+  **HEARTBEAT_STALE_AFTER_SECS = 90 s**, and MUST report UNKNOWN — withholding
+  the phase — beyond it. Absence of the file is UNKNOWN, never healthy.
+
+  BOTH NUMBERS ARE STATED HERE so a tuning change and a semantic change can be
+  told apart: moving 30/90 is tuning, and changing what the bound *means* is
+  not.
+
+  WHY A TIMER AND NOT THE PUSH STREAM. Measured on macneo (8 GB) 2026-09-05: a
+  healthy, Ready, podman-ready guest emitted exactly ONE `vm-status` line in
+  25 m 34 s — the first, nine seconds after boot — and nothing for the
+  remaining 1525 s. SC-07 says why in its own log line: "vm-status/login/cloud/
+  local polls demoted to fallback". The push channel is event-driven and
+  correctly silent, so a timestamp written only on pushes is 25 minutes stale
+  on a system with nothing wrong, and unbounded after that. That refutes every
+  push-driven threshold in BOTH directions: short enough to notice death means
+  UNKNOWN continuously on a working guest, and long enough to avoid that
+  cannot notice death. The heartbeat is the mechanism, not an optimisation.
+
+  WHY THREE PERIODS. One missed write — a scheduling stall, a suspend, a slow
+  disk on a loaded 8 GB host — must not flip a healthy system to UNKNOWN,
+  which is the false-alarm half of the defect this packet closes. Three
+  consecutive misses matches the crash-loop detector's own `threshold 3` and
+  keeps worst-case detection latency inside 90 s.
+
+  WHY THE TIMESTAMP IS INSIDE THE FILE. `written_at` is written into both
+  `heartbeat.state` and `crashloop.state`; mtime is NEVER the truth. A copy, a
+  restore, a `touch` or an rsync gives stale content a fresh mtime, and nothing
+  at the filesystem layer distinguishes that from a real write. A reader MAY
+  fall back to mtime only for a record written before the field existed, and
+  MUST disclose it — the printed line names "mtime" in that case.
+
+  WHAT THE HEARTBEAT IS NOT. It records what the live tray BELIEVES, verbatim
+  as its status chip reads, not a fresh probe of the guest: macOS has no
+  AF_VSOCK and a separate `--diagnose` process cannot reach the VM. The
+  timestamp beside it is what makes that belief falsifiable.
+
 ### Invariant: No display passthrough in v1
 - **ID**: macos-native-tray.invariant.no-display-passthrough-in-v1
 - **Expression**: `otool -L tillandsias-tray.app/Contents/MacOS/tillandsias-tray DOES_NOT_CONTAIN Metal.framework`

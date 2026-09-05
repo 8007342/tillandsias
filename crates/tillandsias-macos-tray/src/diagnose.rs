@@ -84,6 +84,152 @@ pub fn crashloop_state_path() -> PathBuf {
     image_root().join("crashloop.state")
 }
 
+/// Heartbeat period: how often the live tray writes `heartbeat.state`
+/// (980-ja2m slice (b)).
+///
+/// MEASURED, NOT CHOSEN BY TASTE. On macneo 2026-09-05 a healthy, Ready,
+/// podman-ready guest emitted exactly ONE `vm-status` line in 25m34s — the
+/// first, nine seconds after boot — and nothing for the remaining 1525
+/// seconds. SC-07 says why in its own log line: "vm-status/login/cloud/local
+/// polls demoted to fallback". The push channel is event-driven and correctly
+/// silent, so a timestamp written only on pushes is 25 minutes stale on a
+/// system with nothing wrong, and unbounded thereafter.
+///
+/// That kills every push-driven threshold in BOTH directions: short enough to
+/// notice death means UNKNOWN continuously on a working guest, and long enough
+/// to avoid that cannot notice death at all. The heartbeat is therefore the
+/// mechanism, not an optimisation — the freshness bound is the load-bearing
+/// part of this packet, and a bound that reads UNKNOWN precisely when the
+/// system works is the original defect with extra steps.
+///
+/// 30 s bounds worst-case staleness in SECONDS, as the criterion requires, for
+/// two writes a minute of a ~100-byte file. Set on the fleet's most
+/// memory-constrained host deliberately: if 8 GB can afford it, everything can.
+pub(crate) const HEARTBEAT_PERIOD_SECS: u64 = 30;
+
+/// Staleness bound: a heartbeat older than this reads UNKNOWN, never a phase.
+///
+/// THREE PERIODS, NOT ONE. A single missed write — a scheduling stall, a
+/// suspend, a slow disk on a loaded 8 GB host — must not flip a healthy system
+/// to UNKNOWN, which would be the false-alarm half of the defect. Three
+/// consecutive misses is the same shape as the crash-loop detector's own
+/// `threshold 3` already in crashloop.state, and it keeps the worst-case
+/// detection latency inside 90 s.
+pub(crate) const HEARTBEAT_STALE_AFTER_SECS: u64 = 3 * HEARTBEAT_PERIOD_SECS;
+
+/// Where the live tray writes its heartbeat. Same image root as the rest of
+/// the report, so `--diagnose` and the tray agree on one location.
+pub fn heartbeat_state_path() -> std::path::PathBuf {
+    image_root().join("heartbeat.state")
+}
+
+/// Serialize a heartbeat record. Line-based and forward-compatible, matching
+/// crashloop.state's format so a reader learns one shape, not two.
+///
+/// The timestamp is INSIDE the file. mtime is never the truth here — see
+/// `TimestampSource` — so a copy or a `touch` cannot manufacture freshness.
+pub fn heartbeat_state_string(status_line: &str, written_at_unix: u64) -> String {
+    // `status` carries the tray's chip text VERBATIM and may contain spaces and
+    // emoji, so it is written last and parsed to end-of-line. Everything above
+    // it is a single token, which keeps the format readable by the same
+    // split_whitespace parser crashloop.state uses.
+    format!(
+        "tillandsias-heartbeat-state v1\nwritten_at {written_at_unix}\nperiod_secs {HEARTBEAT_PERIOD_SECS}\nstatus {status_line}\n"
+    )
+}
+
+/// What the heartbeat file says about the guest right now.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum HeartbeatVerdict {
+    /// A heartbeat written within the staleness bound: the phase is CURRENT.
+    Fresh { phase: String, age_secs: u64 },
+    /// A heartbeat older than the bound. The phase it names is NOT reported —
+    /// a stale phase is exactly the lie this packet exists to stop.
+    Stale { age_secs: u64 },
+    /// No heartbeat file, or one this reader cannot parse.
+    Absent,
+}
+
+/// Read the heartbeat and bound it by age.
+///
+/// Prefers the content timestamp and falls back to mtime only for a file that
+/// predates it, disclosing the fallback to the caller so the printed line can
+/// say "mtime" — the same rule the Guest health line follows, through the same
+/// `TimestampSource`, so the two readers cannot drift apart.
+pub(crate) fn heartbeat_verdict_at(now_unix: u64) -> HeartbeatVerdict {
+    let path = heartbeat_state_path();
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        return HeartbeatVerdict::Absent;
+    };
+    heartbeat_verdict_from(&text, file_mtime_unix(&path), now_unix)
+}
+
+/// The parse and the bound, with no filesystem in the way.
+///
+/// Split out so both directions of the bound are testable as pure values.
+/// `mtime_fallback` is the file's mtime for a record that predates
+/// `written_at`; it is used ONLY then, and never silently — see
+/// `TimestampSource`.
+pub(crate) fn heartbeat_verdict_from(
+    text: &str,
+    mtime_fallback: Option<u64>,
+    now_unix: u64,
+) -> HeartbeatVerdict {
+    let mut phase = None;
+    let mut written = None;
+    for line in text.lines() {
+        if let Some(rest) = line.strip_prefix("status ") {
+            // To end-of-line: the tray's chip text contains spaces and emoji.
+            phase = Some(rest.trim().to_string());
+            continue;
+        }
+        let mut parts = line.split_whitespace();
+        if let Some("written_at") = parts.next() {
+            written = parts.next().and_then(|v| v.parse::<u64>().ok());
+        }
+    }
+    let src = written
+        .map(TimestampSource::Content)
+        .or_else(|| mtime_fallback.map(TimestampSource::Mtime));
+    let (Some(phase), Some(src)) = (phase, src) else {
+        return HeartbeatVerdict::Absent;
+    };
+    let age = now_unix.saturating_sub(src.unix());
+    if age > HEARTBEAT_STALE_AFTER_SECS {
+        HeartbeatVerdict::Stale { age_secs: age }
+    } else {
+        HeartbeatVerdict::Fresh {
+            phase,
+            age_secs: age,
+        }
+    }
+}
+
+/// The `Guest state` line: the ONE place in this report that can speak about a
+/// live guest, and only within `HEARTBEAT_STALE_AFTER_SECS`.
+pub(crate) fn guest_state_report_line_at(now_unix: u64) -> String {
+    match heartbeat_verdict_at(now_unix) {
+        HeartbeatVerdict::Fresh { phase, age_secs } => format!(
+            "Guest state: {phase} — as the live tray reported it (heartbeat {} old, bound {}s)",
+            humanize_age(age_secs),
+            HEARTBEAT_STALE_AFTER_SECS
+        ),
+        HeartbeatVerdict::Stale { age_secs } => format!(
+            "Guest state: UNKNOWN — the last heartbeat is {} old, past the {}s bound. \
+             The phase it names is NOT reported: a stale phase is indistinguishable \
+             from a live one, which is the defect this bound exists to close.",
+            humanize_age(age_secs),
+            HEARTBEAT_STALE_AFTER_SECS
+        ),
+        HeartbeatVerdict::Absent => format!(
+            "Guest state: UNKNOWN — no heartbeat file. Either no tray has run since \
+             this was installed, or the tray is not writing one. Absence is never \
+             read as healthy (bound {}s).",
+            HEARTBEAT_STALE_AFTER_SECS
+        ),
+    }
+}
+
 fn unix_now_secs() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -186,20 +332,20 @@ fn humanize_age(secs: u64) -> String {
 fn guest_health_report_line() -> String {
     let verdict = guest_health_verdict();
     let path = crashloop_state_path();
-    let age = std::fs::metadata(&path)
-        .and_then(|m| m.modified())
-        .ok()
-        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|d| d.as_secs());
+    let written_at = tillandsias_control_wire::crashloop::CrashLoopDetector::load(&path)
+        .written_at()
+        .map(TimestampSource::Content)
+        .or_else(|| file_mtime_unix(&path).map(TimestampSource::Mtime));
 
-    match age {
-        Some(written) => {
-            let now = unix_now_secs();
-            let elapsed = now.saturating_sub(written);
+    match written_at {
+        Some(src) => {
+            let written = src.unix();
+            let elapsed = unix_now_secs().saturating_sub(written);
             format!(
                 "Guest health: RECORDED, not observed — last recorded verdict \
-                 \"{verdict}\" (crashloop.state, written {}, {} ago)",
+                 \"{verdict}\" (crashloop.state, written {}{}, {} ago)",
                 format_utc(written),
+                src.disclosure(),
                 humanize_age(elapsed)
             )
         }
@@ -208,6 +354,53 @@ fn guest_health_report_line() -> String {
              \"{verdict}\" (crashloop.state age UNKNOWN: file absent or unreadable)"
         ),
     }
+}
+
+/// Where a state file's write time came from (980-ja2m).
+///
+/// MTIME IS NOT THE TRUTH. A copy, a restore, a `touch` or an rsync gives stale
+/// content a fresh mtime, and nothing at the filesystem layer can tell that
+/// apart from a real write. A timestamp written INSIDE the file cannot be
+/// forged by ordinary filesystem operations, so it is preferred whenever the
+/// file carries one.
+///
+/// The mtime path is kept ONLY for files written before the content timestamp
+/// existed, and a reader that falls back MUST SAY SO — hence `disclosure()`
+/// putting the word "mtime" in the printed line. A silent fallback would make
+/// a forgeable number indistinguishable from an unforgeable one, which is the
+/// same class of defect as printing a recorded phase as if it were observed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TimestampSource {
+    /// Read from inside the file. Not forgeable by filesystem operations.
+    Content(u64),
+    /// Read from the filesystem. Forgeable; always disclosed to the reader.
+    Mtime(u64),
+}
+
+impl TimestampSource {
+    pub(crate) fn unix(self) -> u64 {
+        match self {
+            Self::Content(t) | Self::Mtime(t) => t,
+        }
+    }
+
+    /// Text appended after the rendered timestamp. Empty for a content
+    /// timestamp; names mtime when the fallback was used.
+    pub(crate) fn disclosure(self) -> &'static str {
+        match self {
+            Self::Content(_) => "",
+            Self::Mtime(_) => " (from mtime: this file predates the written_at field)",
+        }
+    }
+}
+
+/// Unix seconds of a file's mtime, or `None` if absent or unreadable.
+fn file_mtime_unix(path: &std::path::Path) -> Option<u64> {
+    std::fs::metadata(path)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs())
 }
 
 /// 972-umik: DELEGATES to the one reader in tillandsias-control-wire. This
@@ -558,6 +751,7 @@ fn print_human(r: &DiagnoseReport) {
     // restart/unseal/handshake pattern flips it to crash-loop:<subsystem>.
     // Additive — does NOT affect the 0/2/1 exit-code contract.
     // @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+    println!("{}", guest_state_report_line_at(unix_now_secs()));
     println!("{}", guest_health_report_line());
     println!("No live probe was made; this report cannot contact the guest.");
     println!();
@@ -2813,6 +3007,130 @@ mod tests {
     ///
     /// 2000-02-29 is the case the `year % 4 == 0 && year % 100 != 0` rule gets
     /// WRONG on its own: 2000 is divisible by 100 and IS a leap year because it
+    /// 980-ja2m slice (b). BOTH DIRECTIONS, round-tripped through the real
+    /// parser. A bound proved only on the stale side is satisfied by a reader
+    /// that says UNKNOWN always — and that reader is the original defect
+    /// wearing the fix's clothes, because it reports UNKNOWN precisely when
+    /// the system works.
+    #[test]
+    fn heartbeat_bound_reports_a_phase_when_fresh_and_unknown_when_stale() {
+        let now = 1_800_000_000u64;
+
+        // FRESH: 10 s old, inside the 90 s bound. The phase IS reported, and
+        // it is the tray's own chip text, emoji and all.
+        let fresh = super::heartbeat_state_string("\u{1F535} Booting\u{2026}", now - 10);
+        match super::heartbeat_verdict_from(&fresh, None, now) {
+            super::HeartbeatVerdict::Fresh { phase, age_secs } => {
+                assert_eq!(
+                    phase, "\u{1F535} Booting\u{2026}",
+                    "chip text is recorded verbatim"
+                );
+                assert_eq!(age_secs, 10);
+            }
+            other => panic!("a 10 s old heartbeat must report a phase, got {other:?}"),
+        }
+
+        // STALE: 120 s old, past the bound. The phase must NOT survive into
+        // the verdict — reporting a two-minute-old phase as current is the
+        // lie, not the age.
+        let stale = super::heartbeat_state_string("\u{1F7E2} Ready", now - 120);
+        match super::heartbeat_verdict_from(&stale, None, now) {
+            super::HeartbeatVerdict::Stale { age_secs } => assert_eq!(age_secs, 120),
+            other => panic!("a 120 s old heartbeat must read UNKNOWN, got {other:?}"),
+        }
+
+        // ABSENT beats a guess: no timestamp anywhere is not "just now".
+        assert_eq!(
+            super::heartbeat_verdict_from("garbage", None, now),
+            super::HeartbeatVerdict::Absent
+        );
+    }
+
+    /// 980-ja2m. mtime is the fallback ONLY for a record predating
+    /// `written_at`, and using it must change what the reader is told.
+    #[test]
+    fn heartbeat_falls_back_to_mtime_only_when_the_record_has_no_timestamp() {
+        let now = 1_800_000_000u64;
+        let no_ts = "tillandsias-heartbeat-state v1\nstatus Ready\n";
+        match super::heartbeat_verdict_from(no_ts, Some(now - 5), now) {
+            super::HeartbeatVerdict::Fresh { age_secs, .. } => assert_eq!(age_secs, 5),
+            other => panic!("mtime must be used when the record carries none, got {other:?}"),
+        }
+        // With a content timestamp present, a LYING mtime must not win: a
+        // `touch` on a stale file cannot manufacture freshness.
+        let with_ts = super::heartbeat_state_string("Ready", now - 600);
+        assert_eq!(
+            super::heartbeat_verdict_from(&with_ts, Some(now), now),
+            super::HeartbeatVerdict::Stale { age_secs: 600 },
+            "a fresh mtime must not override a stale content timestamp"
+        );
+    }
+
+    /// 980-ja2m slice (b). The bound must be a MULTIPLE of the period, not an
+    /// independent number: one missed write under load must not flip a healthy
+    /// host to UNKNOWN, and the relationship is what makes that true.
+    #[test]
+    fn heartbeat_bound_is_three_periods() {
+        assert_eq!(super::HEARTBEAT_PERIOD_SECS, 30);
+        assert_eq!(super::HEARTBEAT_STALE_AFTER_SECS, 90);
+        assert_eq!(
+            super::HEARTBEAT_STALE_AFTER_SECS,
+            3 * super::HEARTBEAT_PERIOD_SECS,
+            "the bound is three periods so a single missed write is tolerated"
+        );
+    }
+
+    /// 980-ja2m slice (b). THE ARM A PUSH-DRIVEN DESIGN FAILS, exercised
+    /// against the real verdict rather than by comparing two constants.
+    ///
+    /// Measured on macneo 2026-09-05: one `vm-status` line in 25 m 34 s on a
+    /// healthy, Ready, podman-ready guest, so a record written only when a
+    /// push arrives is 1525 s old on a system with nothing wrong. Fed to the
+    /// bound it reads UNKNOWN — which is the false alarm this design exists to
+    /// avoid — while the heartbeat's own worst case, one period, reads as a
+    /// phase. Both halves are asserted here; the first alone would be
+    /// satisfied by a reader that always says UNKNOWN.
+    #[test]
+    fn a_push_driven_timestamp_would_fail_the_bound_a_heartbeat_passes() {
+        const MEASURED_SILENT_SPAN_SECS: u64 = 1525;
+        let now = 1_800_000_000u64;
+
+        let push_driven = super::heartbeat_state_string("Ready", now - MEASURED_SILENT_SPAN_SECS);
+        assert_eq!(
+            super::heartbeat_verdict_from(&push_driven, None, now),
+            super::HeartbeatVerdict::Stale {
+                age_secs: MEASURED_SILENT_SPAN_SECS
+            },
+            "a push-driven record on a HEALTHY guest reads UNKNOWN — the false \
+             alarm that rules the push stream out as a liveness source"
+        );
+
+        let heartbeat_worst_case =
+            super::heartbeat_state_string("Ready", now - super::HEARTBEAT_PERIOD_SECS);
+        match super::heartbeat_verdict_from(&heartbeat_worst_case, None, now) {
+            super::HeartbeatVerdict::Fresh { age_secs, .. } => {
+                assert_eq!(age_secs, super::HEARTBEAT_PERIOD_SECS)
+            }
+            other => panic!("one period old must still report a phase, got {other:?}"),
+        }
+    }
+
+    /// 980-ja2m. mtime must never silently stand in for a content timestamp: a
+    /// copy or a `touch` forges it. When the fallback IS used the printed line
+    /// has to say so, and this pins the disclosure.
+    #[test]
+    fn an_mtime_fallback_is_disclosed_and_a_content_timestamp_is_not() {
+        assert_eq!(super::TimestampSource::Content(1).disclosure(), "");
+        assert!(
+            super::TimestampSource::Mtime(1)
+                .disclosure()
+                .contains("mtime"),
+            "a forgeable timestamp must name itself in the output"
+        );
+        assert_eq!(super::TimestampSource::Content(42).unix(), 42);
+        assert_eq!(super::TimestampSource::Mtime(42).unix(), 42);
+    }
+
     /// is divisible by 400. 2100-03-01 is the converse — divisible by 100, not
     /// by 400, NOT a leap year — and the day after the February that a wrong
     /// implementation gives 29 days. An implementation that handles only the

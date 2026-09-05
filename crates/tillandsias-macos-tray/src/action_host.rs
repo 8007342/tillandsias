@@ -1921,6 +1921,59 @@ impl TrayActionHost {
                 );
             });
 
+            // 980-ja2m slice (b). HEARTBEAT, ON A TIMER, INDEPENDENT OF PUSHES
+            // AND OF WHETHER THE VM CAME UP.
+            //
+            // Measured on macneo 2026-09-05: a healthy, Ready, podman-ready
+            // guest emitted exactly ONE vm-status line in 25m34s and then
+            // nothing, because SC-07 demotes the polls while the subscription
+            // is healthy. A timestamp written only when a push arrives is
+            // therefore 25 minutes stale on a system with nothing wrong, and a
+            // separate `--diagnose`, which cannot reach the VM at all (no
+            // AF_VSOCK), cannot tell that from a dead guest.
+            //
+            // SPAWNED OUTSIDE THE `vz_for_poller` GATE DELIBERATELY. The first
+            // placement was inside the poller, which only runs when auto-boot
+            // SUCCEEDED — so a live tray whose VM failed to start wrote no
+            // heartbeat at all and `--diagnose` reported "no heartbeat file".
+            // That is the least informative answer available in exactly the
+            // case an operator is most likely to be looking: the tray is up,
+            // the guest is not. Caught by running the live arm rather than
+            // reasoning about it. Here the tray reports what it believes for
+            // as long as it is alive, and only a tray that is GONE is silent.
+            //
+            // Best-effort by construction: a failed write must never disturb
+            // the tray, and a heartbeat that stops is the signal itself.
+            {
+                let hb_status = status_text_slot.clone();
+                tokio::spawn(async move {
+                    let mut ticker = tokio::time::interval(Duration::from_secs(
+                        crate::diagnose::HEARTBEAT_PERIOD_SECS,
+                    ));
+                    ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+                    loop {
+                        ticker.tick().await;
+                        let status_line = hb_status
+                            .lock()
+                            .ok()
+                            .map(|t| heartbeat_status_line(&t))
+                            .unwrap_or_else(|| "(status unreadable)".to_string());
+                        let now = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map(|d| d.as_secs())
+                            .unwrap_or(0);
+                        let path = crate::diagnose::heartbeat_state_path();
+                        if let Some(parent) = path.parent() {
+                            let _ = std::fs::create_dir_all(parent);
+                        }
+                        let _ = std::fs::write(
+                            &path,
+                            crate::diagnose::heartbeat_state_string(&status_line, now),
+                        );
+                    }
+                });
+            }
+
             // Live status: kick off the 30s VmStatus poller. Holds
             // the Arc<VzRuntime> for its lifetime; the task lives for
             // the app lifetime (no cancellation in v0.0.1 — the Tokio
@@ -2829,6 +2882,35 @@ async fn run_push_listener(
     }
 }
 
+/// The tray's own status text, reduced to one safe line for the heartbeat.
+///
+/// 980-ja2m. The heartbeat records WHAT THE TRAY BELIEVES, not a fresh probe —
+/// the tray is the only process holding the wire, so its own view is the best
+/// available fact, and the timestamp beside it is what makes that view
+/// falsifiable.
+///
+/// IT RECORDS THE CHIP TEXT VERBATIM RATHER THAN MAPPING IT TO A VOCABULARY.
+/// The first version matched a hand-written needle list (ready/building/
+/// starting/booting/stopped/error) and mapped anything else to "unknown". Run
+/// live, it wrote `phase unknown` for the whole session while the tray was
+/// displaying a perfectly good status, because the real chip strings are
+/// emoji-prefixed human text and my list was a guess about them. A lossy map
+/// between two things that drift independently is a second source of truth,
+/// and its failure mode is silent: it reports "unknown" about a system that
+/// knows exactly what it is doing, which is this packet's own defect
+/// reintroduced one layer down.
+///
+/// Only sanitisation is applied: collapse whitespace so the value stays on one
+/// line of a line-based format. Nothing is interpreted.
+fn heartbeat_status_line(status_text: &str) -> String {
+    let collapsed = status_text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if collapsed.is_empty() {
+        "(tray has not set a status yet)".to_string()
+    } else {
+        collapsed
+    }
+}
+
 fn spawn_vm_status_poller(
     vz: Arc<VzRuntime>,
     status_text: Arc<Mutex<String>>,
@@ -2868,6 +2950,7 @@ fn spawn_vm_status_poller(
         vm_ever_ready.clone(),
         health.clone(),
     ));
+
     tokio::spawn(async move {
         // Tick counter for the cloud-projects cadence. Matches windows-
         // tray's "first tick + every 10 ticks" pattern (commit

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: store-msix-free-signing-research
+    event:
+      type: completed
+      ts: "2026-09-05T16:57:39Z"
+      agent_id: windows-yolanda-opus5-20260905t165739z
+      host: yolanda
+      summary: |
+        CLOSED on the coordinator's ruling that "mapped end to end" means DOCUMENTED. Recording the ambiguity itself rather than letting the closure imply more than was done, because a future reader will otherwise read "criterion 2 met" as "we have submitted through the API".
+
+        THE AMBIGUITY, AND WHY IT COULD NOT BE RESOLVED BY WORKING HARDER. EC2 reads "the Store submission API path from CI is mapped end to end (auth, artifact upload, submission, publish), with costs and lead times recorded". On a DOCUMENTED reading it is met: plan/issues/store-submission-api-map-2026-09-05.md carries the auth call with its exact resource value, the five-step sequence with verbs and paths, the upload mechanism, the terminal status vocabulary, the costs and the published lead times, each linked to the Microsoft Learn page it came from with the date it was read. On an EXERCISED reading it is unreachable BY ANY AGENT, not merely by this one: five operator ACCOUNT actions gate the first call -- an Azure AD directory with Global administrator, associating Partner Center with it, creating the AAD application with the Manager role, generating its key (one-time visibility), and completing one manual submission including age ratings. All are $0 except time. Those five are now an operator ask carried by the coordinator.
+
+        THE LOAD-BEARING FINDING, per the coordinator, is the corroboration rather than the map: the previous agent RECOMMENDED a manual first submission before automating, as a judgement call. The docs make it MANDATORY -- the API cannot create the app, and one submission must be completed in Partner Center first, including the age-ratings questionnaire, before the API can create any submission for that app. No amount of automation removes that step, so any plan that plots straight from CI to a first submission is wrong at step zero.
+
+        THE SECOND LOAD-BEARING FINDING IS A CONSTRAINT ON THE RELEASE LANE: certification is typically hours and UP TO THREE BUSINESS DAYS, then about 15 minutes to visibility. NOTHING IN THE RELEASE LANE MAY BLOCK ON Published. A release job that waits for it will hang for days on a normal submission, and one that treats "not failed" as success will report green while the submission sits in Certification -- Published is the only success state in a vocabulary whose in-flight values (PendingCommit, CommitStarted, PreProcessing, Certification, Release) all look like progress.
+
+        AND THE TRAP MOST LIKELY TO COST A DAY, kept in the closure because it is invisible until it bites: TWO Microsoft APIs are called "the Store submission API" and both rank highly for the same searches. The MSI/EXE one takes a token scoped https://api.store.microsoft.com/.default; the MSIX/UWP one -- ours -- takes resource=https://manage.devcenter.microsoft.com. The wrong value mints a token that AUTHENTICATES FINE and then fails every call, and the wrong one is what a search surfaces first.
+
+        NOT VERIFIED AND SAID SO IN THE DOCUMENT ITSELF: nothing was executed. No token minted, no submission created, no ZIP uploaded, no status polled. Every value is quoted from documentation, not observed, and the "lead times recorded" are Microsoft's published range rather than our measurement -- a measured number can only come after operator step 5. StoreBroker, Microsoft's own PowerShell module over this exact API, is named as worth evaluating before anyone writes a client (our Windows build path is already PowerShell) and explicitly NOT recommended, because I did not assess its dependency weight or maintenance status.
