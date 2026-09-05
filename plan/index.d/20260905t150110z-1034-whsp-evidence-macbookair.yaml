@@ -1,0 +1,97 @@
+packets: []
+events:
+  1034-whsp:
+    - type: progress
+      ts: "2026-09-05T15:01:10Z"
+      agent_id: "macos-tlatoanis-macbook-air-claude-20260905t144547z"
+      host: tlatoanis-macbook-air
+      summary: |
+        SECOND-HOST SLICE, evidence 78df54a34. Criterion 2's pre-fix measurement
+        is TAKEN and a remedy is landed and gated, but read the scope note at the
+        bottom before marking the criterion met: the remedy fires at the CLAIM
+        step, not inside the selector, and I am not claiming more than that.
+
+        THE MEASUREMENT REFRAMES THE PACKET A SECOND TIME. yoga reframed it once
+        (the retry loop is 18-56ms; the pre-push hook is the cost). Measured
+        here, the push is not the problem AT ALL:
+          claim push, claim-only diff, platform branch ..... 12.0s
+            (0.7s refused for the mandated linux-next merge, 0.5s merge, 10.8s)
+          osx-next -> linux-next relay gaps, last 9 ........ 19m to 2h02m
+          time since the last relay when measured .......... 6h28m
+          this host's own claims still unseen on linux-next  1h55m and 2h11m
+
+        CRITERION 1'S "pre-fix result: FAILS" CONFIRMED FROM THE SECOND SIDE, by
+        folding each branch with --index rather than by inference:
+          origin/linux-next ... 1034-whsp ready       <- what a linux host selects on
+          this checkout ....... 1034-whsp in_progress <- held here
+        8 of this host's fragments were absent from linux-next at that moment. A
+        claim reaches a trunk host only when the coordinator RELAYS the platform
+        branch, so the invisibility window is the relay interval, not the push.
+
+        THIS KILLS REMEDIES (a), (b) AND (d) as filed. All three optimise the
+        push, which already completes in seconds; nothing done on the pushing
+        host makes a fragment appear on a branch nobody has merged yet. Recorded
+        so the next claimer does not re-measure them.
+
+        (c) IMPLEMENTED IN ITS SMALLEST FORM. The packet asked that existing
+        machinery be checked first: `git ls-remote origin 'refs/tillandsias/*'`
+        returns ZERO refs, so the out-of-band store it hoped the mirror carried
+        does not exist. Rather than build a channel, scripts/check-claims-across-branches.sh
+        reads what is already published — sibling branches are on origin and a
+        claim is a fragment. One fetch, 1.02s, exits 1 with
+        claimed-elsewhere:<packet>:<branch>. It folds each branch's ledger rather
+        than grepping for claim fragments, because status is LWW and a later
+        fragment can release a claim (635-i6vm).
+
+        NOT A LOCK, and its header says so: two hosts claiming inside the same
+        fetch still collide and the timestamp rule still arbitrates. It converts
+        an hours-wide race into a seconds-wide one.
+
+        IT BLOCKS RATHER THAN PASSING WHEN IT CANNOT LOOK (no plan binary, failed
+        fetch -> exit 2). A false "nobody holds this" hands a claimed packet to a
+        second host, which is the 814-iyu7 duplication; and an ok: verdict on a
+        could-not-run path is 1024-c3h3's exact shape.
+
+        FIXTURE 4/4, WIRED INTO THE GATE (build.sh) so it is not another
+        1063-nraf orphan. Sabotage: the no-binary path made to print ok -> arm 3
+        RED; the in_progress match disabled -> arm 1 RED; restored byte-identical.
+        Forced gate ok:test-baseline:ran=2303 new-red=0 tolerated=0 stale=0.
+
+        THREE CORRECTIONS AGAINST MYSELF, recorded because each was nearly a
+        false claim in this very event:
+          - I first wrote that the mandated merge takes a claim push off the
+            plan-only lane onto a full gate. WRONG: the lane is merge-aware
+            (1056-5344, 1060-7mmm) and accepted it, scoped past the merge.
+          - `--root` is not a real flag on tillandsias-plan. My first
+            "linux-next sees it as ready" came from a fallback with stderr
+            suppressed, and a `ready any -> 0` that was a hidden error rather
+            than a filter. Redone with --index, which is why the numbers above
+            are trustworthy and the first pair were not.
+          - My own fixture arm asserted against a condition it never built:
+            `env -i` did not remove the binary because the script cd's to a ROOT
+            that HAS target/release. The script was right and my arm was wrong.
+
+        SCOPE NOTE — WHAT IS NOT DONE, stated rather than folded into a green.
+        Criterion 2 says "a second host's SELECTOR refuses or reroutes within one
+        selector run". This remedy refuses at the CLAIM step, one step later:
+        select-work-batch.sh still offers a sibling-claimed packet, and the
+        claimer is stopped when they run the check the skill now puts ahead of
+        set-field. The effect the criterion wants (the second host does not
+        implement) is achieved; the mechanism it names is not yet wired.
+        NEXT ACTION for whoever takes this: fold the three siblings ONCE per
+        selector run (not once per candidate) into a set of in_progress ids and
+        filter the batch through it — ~3 folds and one fetch regardless of batch
+        size, so roughly the 1.02s measured here, not 1.02s x budget.
+        select-work-batch.sh is not in this packet's owned_files, which is why I
+        did not extend it unasked.
+
+        RELEASING THE LEASE back to ready with this recorded.
+
+        UNRELATED SIDE EFFECT, DISCLOSED: while inventorying existing machinery I
+        ran `tillandsias-plan expire-claims`, which DEFAULTS TO WRITE MODE. It
+        expired macneo's 24h-stale claim on 980-ja2m and wrote a fragment. That
+        was an accidental mutation from what I intended as a read; I deleted the
+        unpushed fragment and left 980-ja2m in_progress. The expiry may well be
+        correct under the documented 24h TTL (641-e2qa), but it should be a
+        deliberate act by the coordinator, not a side effect of someone else's
+        probe. A read-only default, or a --write flag, looks worth a packet.
