@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-phase-drift-warning-has-a-blind-band-from-one-to-four-times-budget
+    field: next_action
+    value: 'INSTRUMENTATION LANDED (yoga, 08a9c752c): TILLANDSIAS_HOOK_PHASE_TIMING=1 prints every phase with elapsed, budget and multiple, and the 4x warning now names the multiple. THE THRESHOLD IS UNCHANGED and the blind band is still open. WHAT REMAINS NEEDS A SECOND HOST''S NUMBERS, not a decision: run TILLANDSIAS_HOOK_PHASE_TIMING=1 on a real commit and report the per-phase multiples. yoga''s are ghost 0.00x, zero_trace 0.03x, staleness 0.02x, cheatsheet_source 0.01x, cheatsheet_tier 0.16x. If a second host is also well under 1x, move the threshold to 1x; if any healthy phase sits above 1x, the budget for THAT phase is wrong and should be corrected before the threshold moves. Fixture arm 6 asserts the band is still open, so closing it will fail that arm until it is updated with the evidence.'
+    ts: "2026-09-05T13:41:10Z"
+    host: yoga
+
+events:
+  - packet_id: the-phase-drift-warning-has-a-blind-band-from-one-to-four-times-budget
+    event:
+      type: progress
+      ts: "2026-09-05T13:41:10Z"
+      host: yoga
+      summary: |-
+        status 'INSTRUMENTATION LANDED (yoga, 08a9c752c): TILLANDSIAS_HOOK_PHASE_TIMING=1 prints every phase with elapsed, budget and multiple, and the 4x warning now names the multiple. THE THRESHOLD IS UNCHANGED and the blind band is still open. WHAT REMAINS NEEDS A SECOND HOST'S NUMBERS, not a decision: run TILLANDSIAS_HOOK_PHASE_TIMING=1 on a real commit and report the per-phase multiples. yoga's are ghost 0.00x, zero_trace 0.03x, staleness 0.02x, cheatsheet_source 0.01x, cheatsheet_tier 0.16x. If a second host is also well under 1x, move the threshold to 1x; if any healthy phase sits above 1x, the budget for THAT phase is wrong and should be corrected before the threshold moves. Fixture arm 6 asserts the band is still open, so closing it will fail that arm until it is updated with the evidence.' (not terminal) with evidence_refs: 08a9c752c
+  - packet_id: the-phase-drift-warning-has-a-blind-band-from-one-to-four-times-budget
+    event:
+      type: note
+      ts: "2026-09-05T13:41:10Z"
+      host: yoga
+      summary: |-
+        instrumentation landed; threshold waits on a second host's volumes
