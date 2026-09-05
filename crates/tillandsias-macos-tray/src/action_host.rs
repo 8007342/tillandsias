@@ -58,6 +58,7 @@ use std::sync::OnceLock;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 use std::time::Duration;
+use tillandsias_control_wire::secure_wire_mode::SecureWireMode;
 
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, NSObject};
@@ -283,26 +284,19 @@ fn compose_chip_text(base: &str, last_event: Option<&str>) -> String {
     clamp_tray_status_chip(text)
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum SecureControlWireMode {
-    Off,
-    On,
-}
-
-fn secure_control_wire_mode() -> Result<SecureControlWireMode, String> {
-    static MODE: OnceLock<Result<SecureControlWireMode, String>> = OnceLock::new();
-    MODE.get_or_init(|| match std::env::var("TILLANDSIAS_SECURE_CONTROL_WIRE") {
-        Ok(raw) if raw.eq_ignore_ascii_case("on") => Ok(SecureControlWireMode::On),
-        Ok(raw) if raw.eq_ignore_ascii_case("off") || raw.is_empty() => {
-            Ok(SecureControlWireMode::Off)
-        }
-        Ok(raw) => Err(format!(
-            "TILLANDSIAS_SECURE_CONTROL_WIRE must be 'on' or 'off' (got {raw:?})"
-        )),
-        Err(std::env::VarError::NotPresent) => Ok(SecureControlWireMode::Off),
-        Err(err) => Err(format!("TILLANDSIAS_SECURE_CONTROL_WIRE: {err}")),
-    })
-    .clone()
+/// 972-umik: DELEGATES to the one reader in tillandsias-control-wire. This
+/// crate used to parse `TILLANDSIAS_SECURE_CONTROL_WIRE` itself, which is how
+/// six copies of one parse drifted apart. The `OnceLock` is kept — it memoises
+/// the RESULT, including the error, so a bad value fails identically on every
+/// call — but the environment is read once, inside the shared module.
+///
+/// The default is whatever the shared reader gives (Off today). It is NOT
+/// restated here: a local default is exactly the drift this conversion removes,
+/// and the flip to On belongs to the commit that converts the LAST reader.
+fn secure_control_wire_mode() -> Result<SecureWireMode, String> {
+    static MODE: OnceLock<Result<SecureWireMode, String>> = OnceLock::new();
+    MODE.get_or_init(tillandsias_control_wire::secure_wire_mode::secure_wire_mode)
+        .clone()
 }
 
 type GuestWireStream = Box<dyn tillandsias_control_wire::transport::AsyncReadWrite + Unpin + Send>;
@@ -404,8 +398,8 @@ async fn open_control_wire_stream(
         .map_err(|e| format!("vsock connect: {e}"))?;
 
     match secure_control_wire_mode()? {
-        SecureControlWireMode::Off => Ok(ControlWireStream::Plain(stream)),
-        SecureControlWireMode::On => {
+        SecureWireMode::Off => Ok(ControlWireStream::Plain(stream)),
+        SecureWireMode::On => {
             let psk = channel_psk(
                 tillandsias_secure_channel::workspace_version(),
                 tillandsias_control_wire::WIRE_VERSION,
