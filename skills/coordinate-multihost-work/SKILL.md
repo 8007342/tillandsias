@@ -43,6 +43,36 @@ via `tillandsias-plan loop-status-append` and stop.
 
 ---
 
+## A Trunk-Only Claim Check Is Wrong For Every Platform Host
+
+**Before calling any packet unclaimed, fold the sibling branches:**
+
+```bash
+scripts/check-claims-across-branches.sh --batch <id>...   # or a single <id>
+```
+
+`tillandsias-plan ready`, `status` and `expire-claims` all read the fold of
+**this branch**. A macOS or Windows host claims on `osx-next` or `windows-next`,
+and that claim reaches trunk only when the coordinator relays the branch. So a
+packet claimed correctly, with the status flipped and the claim pushed FIRST,
+still reads `ready` on trunk for as long as the relay takes.
+
+**MEASURED by macbookair 2026-09-05: the relay gap ran 19 minutes to 2h02m, with
+two of their own claims unseen on trunk for 1h55m and 2h11m.** So a host doing
+exactly the right thing and a host that claimed nothing at all are
+INDISTINGUISHABLE from trunk, for hours, and no amount of care on the
+coordinator's part closes that by looking harder.
+
+The same cycle, this coordinator told that host "nothing has arrived, which is
+exactly what that discipline looks like from outside." It was not: the claim had
+landed on `osx-next` twenty minutes earlier. `--batch` returned
+`claimed-elsewhere:1082-9rub:osx-next` in about a second.
+
+That is order 1034-whsp's subject arriving in the coordinator's own routine, and
+the remedy is mechanical rather than attentional: **run the cross-branch check on
+every candidate before routing it, and never report a packet as unclaimed on the
+strength of a trunk read.**
+
 ## Active Coordination & Mediation Audit
 
 In every hourly pass, the orchestrator MUST actively analyze concurrent work and evidence to detect and mediate four critical multi-host alignment problems:
