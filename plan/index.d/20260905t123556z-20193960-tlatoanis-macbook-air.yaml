@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: closure-evidence-shas-are-captured-before-the-landing-rewrite-and-name-commits-that-never-reach-origin
+    field: status
+    value: in_progress
+    ts: "2026-09-05T12:35:56Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: closure-evidence-shas-are-captured-before-the-landing-rewrite-and-name-commits-that-never-reach-origin
+    event:
+      type: falsified
+      ts: "2026-09-05T12:35:56Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        falsified 'done' claim; evidence: plan/index.d/20260905t123546z-1024-c3h3-reopen-macbookair.yaml — status set to 'in_progress', new attempt epoch
+  - packet_id: closure-evidence-shas-are-captured-before-the-landing-rewrite-and-name-commits-that-never-reach-origin
+    event:
+      type: note
+      ts: "2026-09-05T12:35:56Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        reopen: the fixture measures the checker's SKIP branch on a host with no ambient tillandsias-plan; arm 5 (negative control) passed vacuously
