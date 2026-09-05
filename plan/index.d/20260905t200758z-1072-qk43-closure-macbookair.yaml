@@ -1,0 +1,76 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  1072-qk43:
+    - type: progress
+      ts: "2026-09-05T20:07:58Z"
+      agent_id: "macos-tlatoanis-macbook-air-claude-20260905t144547z"
+      host: tlatoanis-macbook-air
+      summary: |
+        FIXED. child_env (crates/tillandsias-headless/src/pty_handler.rs) seeded
+        PATH, no_proxy and NO_PROXY and never HOME. It now resolves the home from
+        /etc/passwd for the effective uid, falls back to /root for uid 0 ONLY,
+        and invents nothing otherwise — a guessed HOME points caches and dotfiles
+        at a directory the child may not own, which is quieter than no HOME at
+        all. A caller-provided HOME still wins, exactly like PATH.
+
+        IT TOOK THREE ATTEMPTS TO WRITE A TEST THAT FAILS WHEN THE FIX IS
+        REMOVED, and both rejected versions are recorded here because the next
+        person writing a test against an environment lookup on macOS will reach
+        for the first one.
+
+          ATTEMPT 1 — assert against child_env directly, with an else-branch for
+          "no home found" that asserts the uid is non-zero.
+          SURVIVED DELETING THE ENTIRE SEED. On macOS the dev host's uid is not
+          0, so the else-branch was satisfied by the machine and the test passed
+          with the fix removed.
+
+          ATTEMPT 2 — guard the assertion with
+          `if default_child_home().is_some()`.
+          SURVIVED DELETION AGAIN. default_child_home() returns None on macOS, so
+          the body never ran at all. Green, and measuring nothing.
+
+          ATTEMPT 3 — split the pure logic out (home_from_passwd) and INJECT the
+          home into child_env_with_home. Now the seed's removal fails on every
+          host: `if false && let Some(home) = home` -> FAILED, restored -> 9
+          passed, tree byte-identical (diff -q).
+
+        THE REASON IS STRUCTURAL, NOT INCIDENTAL, and it is the transferable
+        part: macOS keeps regular users in DIRECTORY SERVICES rather than
+        /etc/passwd, so ANY test that touches the real lookup is vacuous on a
+        macOS dev host BY CONSTRUCTION. A green there says nothing about the
+        code. Both rejected attempts were found by SABOTAGING rather than by
+        reading — twice — which is the only reason this is a fix and not a
+        confident false claim.
+
+        TWO SELF-INFLICTED ITEMS FROM THE SAME HOUR, as evidence rather than
+        apology, because both are the day's shape:
+          - De-duplicating a stray attribute silently STRIPPED `#[test]` from
+            child_env_seeds_default_path_when_absent, disabling an existing test.
+            Caught only by noticing the run reported 4 tests where 5 were
+            expected. A disabled test and a passing one are indistinguishable in
+            a green summary.
+          - My first `cargo build -p tillandsias-headless` reported SUCCESS
+            without compiling pty_handler at all, because the module is gated
+            behind --features listen-vsock. A green build over code that never
+            built — the same shape as a guard that passes by never executing.
+
+        COVERAGE LIMIT, VERIFIED AND FILED AS 1074-w7qv RATHER THAN LEFT AS A
+        CAVEAT. The nine tests added here DO NOT RUN IN THE LANDING GATE.
+        build.sh's feature-gated pass (tray, listen-vsock) is at build.sh:1562
+        inside `if [[ "$FLAG_TEST" == true ]]`, and FLAG_TEST is set only by the
+        --test flag (build.sh:389). `./build.sh --check` — what the pre-push hook
+        stamps and what land-on-platform-branch.sh runs — has its own workspace
+        pass at build.sh:2412 without those features.
+        MEASURED: three successful gate logs from this host contain
+        'Feature-gated tests passed' 0 times and 'ok:test-baseline' once; and
+        locally `cargo test --bins -- child_env` matches 0 of 495 while the same
+        command with --features listen-vsock matches 9 of 559.
+        So "I added tests" and "the tests run in the gate" are different claims
+        here, and only the second protects anything.
+
+        NOT VERIFIED END-TO-END IN THE GUEST, and it cannot be from this host:
+        the tray REFUSES to stage its guest binary (701-kgvk — the guest's
+        already-staged 2026-09-05T03:14:35Z is NEWER than the installed bundle's
+        03:10:27Z), so the running guest keeps its current binary and this fix
+        reaches it only when a newer bundle is built and staged. The unit arms
+        above are what this host can honestly claim.

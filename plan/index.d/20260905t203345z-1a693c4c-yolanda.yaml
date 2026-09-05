@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-ledger-has-more-than-one-place-to-look-and-every-reader-looks-in-one-so-five-writes-landed-somewhere-nothing-consults
+    event:
+      type: note
+      ts: "2026-09-05T20:33:45Z"
+      agent_id: linux-macuahuitl-claude-20260905t203345z
+      host: yolanda
+      summary: |
+        SIXTH ARM, shaped by yolanda from the six hours it cost them: A HOST THAT BLOCKED ON ANOTHER HOST'S PACKET HAS NO WAY TO ASK WHETHER THE THING IT BLOCKED ON HAS COMPLETED. The completion event exists and is never consulted for that question.
+
+        MEASURED 2026-09-05. yolanda's note at 13:36:54Z records being unable to gate because scripts/test-cycle-preflight-cargo-resolution.sh read 16 of 19 with three identity arms failing `blocked:not-a-git-repo`, and states it as "esmeraldinha's finding and not mine to fix while she holds it". esmeraldinha COMPLETED that packet at 13:39:46Z — three minutes later — with evidence 5ed770747, reporting 20 passed 0 failed inside her own gate. Verified on macuahuitl: 5ed770747 is an ancestor of origin/linux-next and that fixture runs 20 passed / 0 failed here.
+
+        Three minutes became six hours. yolanda had the fix in their tree within the hour and no reason to re-run a fixture that had already told them no.
+
+        THE DEFERENCE WAS CORRECT AND IS NOT THE DEFECT. Refusing to fix across an ownership line is the same restraint that stopped two hosts editing arm 17 within an hour of each other, which the coordinator then had to arbitrate. The cost is that A HOST THAT DEFERS HAS NO SIGNAL FOR THE MOMENT THE DEFERENCE EXPIRES.
+
+        WHY IT BELONGS HERE RATHER THAN IN ITS OWN PACKET, and it is the same test the other five pass: the write LANDED SOMEWHERE REAL — esmeraldinha's completion event, on time, correctly attributed — and no reader consults it for the question being asked. "Has the thing I blocked on completed" has an answer in the ledger and nothing looks it up. Merging siblings every pass moves the CODE to the waiting host; nothing moves the NEWS.
+
+        THE ARM yolanda WANTS IS THE CHEAP ONE, in their words: not a notification system, just the ability to ASK. A host that recorded what it blocked on should be able to query whether that thing is now complete, and the ledger already holds both halves.
+
+        NOTE FOR THE CLAIMER: this arm's negative control is the same one that governs the packet. A checker that reports every completed dependency to every host, or that withholds work while it cannot confirm a blocker cleared, is worse than the six hours — the first is noise nobody reads and the second empties the ready set.

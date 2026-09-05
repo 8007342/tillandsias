@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: brew-aarch64-harness-strategy
+    event:
+      type: note
+      ts: "2026-09-05T19:57:58Z"
+      agent_id: linux-macuahuitl-claude-20260905t195758z
+      host: macuahuitl
+      summary: |
+        STATUS CORRECTED ready -> blocked BY THE COORDINATOR, not to overrule macbookair's release but to finish it. macbookair released 317 at 18:05:29Z with an accurate reason: the cold-cache slice is done, the prerequisites are retired, and the boundary is now an orchestrated forge launch needing operator authorisation for proxy and vault credentials. That reasoning is right and the release was right; only the mechanics leave the row misleading.
+
+        THE DEFECT IS THAT THE BLOCKER LIVES IN PROSE. It is in the `summary` of a `note` event. The SELECTOR does not read note summaries; it reads status. So 317 sat at `ready` and `tillandsias-plan ready` offers it — verified just now, 1 of 1. Every macOS host that drains the selector is handed a packet whose only remaining work needs a credential no host may mint, and each would discover that after claiming it.
+
+        THIS IS THE RULE THE METHODOLOGY GAINED THIS MORNING, arriving as its own first violation. methodology/distributed-work.yaml, the `released` rule: a release returns status to ready ONLY if a host of the packet's pickup_role can start it NOW; otherwise pending or blocked, with the blocker named IN A FIELD THE SELECTOR READS — `blocked_by`, or a narrowed `pickup_role`. Never a prose-only blocker in next_action or a note. macbookair had no way to know: the amendment landed hours after the habit, and nothing in the tool refuses a release that strands a packet.
+
+        WHAT WAS NOT CHANGED. The release itself stands, the slice's findings stand, and macbookair keeps authorship of everything it measured. 317 goes back to `ready` the moment the operator authorises the forge launch, and the operator queue already carries that as one plain ask: authorise a forge launch with proxy and vault on macbookair for 317's install half.
+
+        WHY blocked AND NOT pending: pending would say the work is not yet startable for a reason internal to the plan. This one is startable the instant a person does one thing, and naming that in the status is what stops a host rediscovering the wall. If the operator would rather it read pending, that is a one-line change and this note is the record of the choice.
+
+        SEE ALSO 1079-qb8k, filed this cycle from the same family: a write that lands somewhere real, that nothing consults for the question being asked. There it is a claim event that never reaches the status field; here it is a blocker that never leaves a prose summary. Three instances today across three hosts, and in every one the ledger has more than one place to look while the reader looks in one.

@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-guest-provisioning-script-can-abort-partway-while-cloud-init-reports-success
+    event:
+      type: completed
+      ts: "2026-09-05T22:43:46Z"
+      agent_id: linux-macuahuitl-claude-20260905t224346z
+      host: tlatoanis-macbook-neo
+      summary: |
+        ALL FOUR CRITERIA MET. CLOSING WITH THE PACKET'S MOST CONSEQUENTIAL FINDING SPLIT INTO A SUCCESSOR RATHER THAN RESOLVED, and that sentence is in the closure at macneo's request rather than buried in a commit message.
+
+          criterion 1  459df06fe  a marker written before anything can fail, plus an ERR trap
+          criterion 2  e16319e28  start/complete/failed on a host-visible virtiofs share,
+                                  timestamp inside the file, and the host-side reader that
+                                  did not exist at all
+          criterion 3  459df06fe  the aborting command identified FROM THE LOG rather than by
+                                  inspection: line 373, `systemctl start
+                                  tillandsias-headless-fetch.service tillandsias-headless.service`
+          criterion 4  895a03440  `is_provisioned()` documents what it measures, what it does
+                                  not, and where to look instead — with a guard pinning all three
+
+        Both relays arrived by hash-verified paste under macneo's authorship because that host cannot push (1025-a896). Criterion 2: 24605 bytes, 470 lines, sha256 5130fd2c…, matched on the first assembly with NO restoration. Criterion 4: 7167 bytes, 144 lines, sha256 2117905b…, hazard map matched over a stated denominator (scanned=144, ws=3, empty=10). Both zero doubled backslashes.
+
+        WHY THE CLOSURE SAYS "SPLIT" RATHER THAN "RESOLVED". The packet was filed against a guest assembled from a mixture of runs while cloud-init reported success. It ends with the host able to tell a finished provision from an aborted one, and with the insufficient signal documenting its own insufficiency. What it does NOT end is the inference: `is_provisioned()` is a stat() of rootfs.img and ~20 sites still BRANCH on it as though it meant provisioning completed (vz.rs 11, diagnose.rs 7, action_host.rs 2). That is 1082-9rub, ready, p2, pickup_role macos, and several of those branches gate destructive or user-visible behaviour — which is why it is a separate packet rather than an omission.
+
+        CRITERION 4 WAS UNSATISFIABLE AS FILED AND THE REWORDING IS RECORDED BOTH WAYS. As filed it named cloud-init's `done` as the signal to correct. Measured while closing: NOTHING in this tree consumes cloud-init's status — three occurrences, all comment, doc-comment or test name. There was no consumer to make honest. macneo ASKED for the rewording rather than making it, naming the substitution this packet exists to punish, and both versions sit on the packet so the edit is visible rather than absorbed.
+
+        THREE THINGS THIS PACKET PRODUCED THAT ARE NOT IN ITS CRITERIA:
+
+        1. THE PACKET'S OWN DEFECT, ONE LEVEL DOWN, FOUND BY ITS OWN FIX. The first marker recorded a start and a failure and NO completion, so "ran to completion", "died without the ERR trap firing" and "died before the write reached disk" were one artefact. Absence of failure is not evidence of success — the headline, arriving in the remedy. `StartedNeverFinished` is a POSITIVE abort signal because completion is the script's last statement.
+
+        2. A RECORD NOTHING READ. `grep -rn provision-marker` found no consumer anywhere in the tree: the first marker was written for a reader that had never been built, to /var/log inside the guest, unreachable from the host in exactly the condition it exists to report — order 272 makes the control wire the only channel and macOS cannot mount ext4. Recovering it took grepping the raw disk image.
+
+        3. A DIAGNOSIS THAT WAS RETRACTED AND A SECOND COMMIT THAT EXPLAINED IT. The line-373 causal chain was recorded as this packet's biggest finding and withdrawn within the hour on a probe with its positive control built in — bare "provision-FAILED" 0 hits against bare "provision-start" 10, the sibling string written by the same line to the same file. Then 8c460e454 was found on trunk, landed 45 minutes after 459df06fe, having already fixed the line-373 abort. TWO commits of this packet's work were on trunk while it read `ready`, which is 1080-4deb's fifth instance and cost another host most of a cycle.
+
+        WHAT REMAINS OPEN AND IS NOT THIS PACKET'S: 1082-9rub for the twenty branches, and macneo's own guest still never reaching Ready with provisioning COMPLETE — positively established as downstream of provisioning rather than in it, which is a diagnosis that was impossible before criterion 2 existed.

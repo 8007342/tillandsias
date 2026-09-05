@@ -136,9 +136,54 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
         echo "land: head carries un-gated union debt ($(wc -l < "$_um" | tr -d ' ') record(s)); the gate below is mandatory (1056-5344)"
     fi
 
-    echo "land: attempt $attempt — gate (./build.sh --check)"
-    if ! ./build.sh --check >/dev/null 2>&1; then
-        echo "refused:land:gate-failed — run ./build.sh --check to see why" >&2
+    # ORDER 1033-iycs: CAPTURE THE GATE, AND NAME WHAT FAILED.
+    #
+    # This line read `./build.sh --check >/dev/null 2>&1` and the refusal was
+    # four words plus "run ./build.sh --check to see why" — no step, no reason,
+    # no log. In THIS FILE, whose header (lines 14-24) records that discarding
+    # the PUSH's output reported LANDED for a refused push. The lesson was
+    # applied to the push call and not to the gate call two lines above it.
+    #
+    # WHY "RE-RUN IT" IS NOT A REMEDY. macbookair hit this landing 997-e4v2 on
+    # osx-next: the standalone re-run on the same commit graph, no edits
+    # between, returned GATE_EXIT=0 and the retry landed clean. So the remedy
+    # text re-runs a DIFFERENT invocation against a tree this script's own
+    # integrate step may have moved, and the one instance became irreproducible
+    # by construction. Whether the gate is non-deterministic — 1022-y7kc cause 8,
+    # 765-tkq2 memoisation — cannot be asked until a refusal carries its
+    # evidence, and "re-run it" hides how often this happens.
+    #
+    # PER ATTEMPT, because the loop runs the gate up to $ATTEMPTS times against
+    # different trees; one log overwritten each pass would answer the wrong
+    # question. Under $GIT_DIR so it survives the worktree and is not something
+    # a later `git clean` removes.
+    _gate_log="$(git rev-parse --absolute-git-dir 2>/dev/null)/tillandsias-land-gate-attempt-${attempt}.log"
+    echo "land: attempt $attempt — gate (./build.sh --check, log: $_gate_log)"
+    if ! ./build.sh --check > "$_gate_log" 2>&1; then
+        # The FIRST failing step, not the last line: build.sh prints its verdict
+        # after the failure, so a tail shows the summary and not the cause. The
+        # error line is what the reader needs and it is what a re-run would have
+        # shown them minutes later.
+        # ANCHORED, AND `ok` ROWS EXCLUDED. The first cut matched `violation:`
+        # and `refused:` ANYWHERE in a line, and the gate is full of fixtures
+        # whose EXPECTED output contains those tokens — the very first real
+        # refusal this fix caught named
+        # `ok   no evidence at all -> refused:no-evidence:...`, a passing arm,
+        # as the cause. A marker inside an `ok` row is a fixture quoting the
+        # verdict it asserts, not a failure. Strip ANSI first so `^` means the
+        # start of the text and not the start of a colour escape.
+        _first_fail="$(sed 's/\x1b\[[0-9;]*m//g' "$_gate_log" 2>/dev/null \
+            | grep -m1 -E '^(FAIL[: ]|violation:|refused:|\[build\] .*(refused|failed|violation))' \
+            | cut -c1-200)"
+        echo "refused:land:gate-failed — the gate refused; its output is at $_gate_log" >&2
+        if [ -n "$_first_fail" ]; then
+            echo "  first failing line: $_first_fail" >&2
+        else
+            echo "  (no violation/refusal line matched; read the log — the gate may have died rather than refused)" >&2
+        fi
+        echo "  Do NOT re-run ./build.sh --check to diagnose this: it is a DIFFERENT" >&2
+        echo "  invocation against a tree this script's integrate step may have moved," >&2
+        echo "  which is how the 997-e4v2 instance became irreproducible (1033-iycs)." >&2
         exit 3
     fi
     # The gate just built this exact tree, union included, so the debt is paid.

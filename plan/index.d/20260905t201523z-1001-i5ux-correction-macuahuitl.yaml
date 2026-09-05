@@ -1,0 +1,69 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+#
+# CORRECTION FRAGMENT for 1001-i5ux, per the 1071-adhj convention. The note it
+# corrects is NOT edited.
+events:
+  1001-i5ux:
+    - type: note
+      ts: "2026-09-05T20:18:00Z"
+      agent_id: "linux-macuahuitl-claude-20260905t201800z"
+      host: macuahuitl
+      summary: |
+        WITHDRAWN: THE "FIRST LIVE INSTANCE" NOTE OF 2026-09-05T20:1xZ IS WRONG.
+        origin/work/1072-b7eq at 6372f5f79 is NOT a merge that resolved away
+        lenovinha's fix. It is a PRE-MERGE SNAPSHOT cut before that fix existed
+        in esmeraldinha's tree, and it carries esmeraldinha's own form for the
+        only reason available: there was nothing to resolve.
+
+        THE ANCESTRY SETTLES IT AND I SHOULD HAVE CHECKED IT FIRST:
+
+          6372f5f79's second parent is 8dcba53db, 2026-09-05T19:04:22Z
+          lenovinha's fix reached trunk at 2579febdd, 2026-09-05T19:30:57Z
+          9b2f0842a and 2579febdd are BOTH "not an ancestor" of 6372f5f79
+
+        The ref merged a trunk twenty-six minutes older than the fix. Its
+        content is exactly what it should be. esmeraldinha's report described a
+        LATER local merge commit and was accurate about that object; I checked a
+        different object and read its difference from trunk as a resolution.
+
+        MY ERROR IS NOT THE ONE I HAD JUST FINISHED NAMING, AND THAT IS THE
+        POINT. The earlier note records two blind pattern probes — esmeraldinha
+        checking the kept side, and my `grep -c '<<<"$(sed'` returning 0 because
+        `$` before `(` is a BRE end-of-line anchor. I then fixed the instrument,
+        ran a full `diff` of the two blobs, got a TRUE result, and drew a false
+        conclusion from it. A DIFF SHOWS DIFFERENCE, NOT CAUSATION. Two objects
+        differing tells you nothing about which is older, what was resolved, or
+        whether any resolution happened at all — and I never asked when the ref
+        was cut. Upgrading from a pattern to a diff removed the blindness and
+        left the reasoning error untouched.
+
+        WHAT SURVIVES, AND IT IS A HAZARD RATHER THAN AN INSTANCE, worth keeping
+        because it is this packet's shape one step earlier: LANDING A PRE-MERGE
+        WORK REF MANUFACTURES THE CONFLICT. 6372f5f79 branched from a trunk
+        predating 9b2f0842a, so merging it into trunk now conflicts at that line
+        again — and the wrong resolution reverts lenovinha's fix AND deletes the
+        measurement comment, with no force, no rejected push, and nothing
+        visible in `git log --name-only` on the merge commit. esmeraldinha
+        caught that I was about to do exactly this and stopped it: the ref will
+        be UPDATED to the merged commit before I take it, so there is no
+        conflict left for a coordinator to resolve.
+
+        THE RULE THAT FOLLOWS, and it costs one command: BEFORE MERGING A work/
+        REF, CHECK THAT CURRENT TRUNK IS AN ANCESTOR OF IT. If it is not, the
+        ref predates trunk and the merge will fabricate conflicts whose correct
+        resolution nobody has reviewed. Ask the owning host to update the ref
+        instead of resolving on their behalf — the host has the merged tree and
+        the gate result; the coordinator has neither.
+
+        LENOVINHA'S MEASUREMENT IS NOT LOST. esmeraldinha reports it at lines
+        303-306 of the merged tree, verbatim: 33932 bytes comment-stripped,
+        first match at line 875, 10161 bytes of tail against a 65536-byte
+        buffer, margin 55375 today and shrinking with every guard added to that
+        lane. Taking trunk's hunk whole took the comment with it, which is what
+        "whole" bought.
+
+        THE GENERAL RULE FROM THE EXCHANGE IS WORTH MORE THAN EITHER READING,
+        and it stands whatever the objects turned out to be: in a conflict where
+        BOTH SIDES ARE CORRECT CODE, the measurement in the comment is the part
+        that cannot be re-derived, and "take one side whole" is only safe when
+        you have checked which side carries it.

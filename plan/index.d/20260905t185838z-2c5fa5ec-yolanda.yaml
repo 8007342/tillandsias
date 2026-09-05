@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-landing-tool-cannot-land-on-a-platform-branch-and-retries-refusals
+    field: status
+    value: completed
+    ts: "2026-09-05T18:58:38Z"
+    host: yolanda
+
+events:
+  - packet_id: the-landing-tool-cannot-land-on-a-platform-branch-and-retries-refusals
+    event:
+      type: completed
+      ts: "2026-09-05T18:58:38Z"
+      host: yolanda
+      summary: |-
+        status 'completed' with evidence_refs: bash scripts/test-land-merges-trunk.sh on the merged tree -> ok:land-merges-trunk:8 arm(s), PASS 8 FAIL 0; both defects red under their own sabotage (remove the trunk merge -> arm 1 reds; restore the bare 'rejected' pattern -> arm 3 reds); arm 2 negative control requires the merge-commit count UNCHANGED on linux-next; artifact on trunk, build.sh binds it at line 3301
+  - packet_id: the-landing-tool-cannot-land-on-a-platform-branch-and-retries-refusals
+    event:
+      type: note
+      ts: "2026-09-05T18:58:38Z"
+      host: yolanda
+      summary: |-
+        closure run on this host on the merged tree rather than reported from memory, per the coordinator's request that a fixture passing on their host says nothing about the sabotage arms

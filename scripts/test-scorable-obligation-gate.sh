@@ -286,9 +286,71 @@ esac
 # So: strip comments, then require an actual `bash ... <checker>` invocation.
 _lane="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/scripts/hooks/pre-push-local-gate.sh"
 _needle="check-scorable""-obligation-added.sh"
+_lane_code=""
+[ -f "$_lane" ] && _lane_code="$(sed 's/#.*//' "$_lane")"
 if [ ! -f "$_lane" ]; then
     fail=$((fail+1)); echo "FAIL: the plan-only lane script is missing: $_lane"
-elif sed 's/#.*//' "$_lane" | grep -qE "bash[[:space:]]+[^|]*$_needle"; then
+# CAPTURE FIRST — 792-ksr8, and this arm was a live instance of the class it
+# is written in the style of. It used to be
+#     sed 's/#.*//' "$_lane" | grep -qE "bash[[:space:]]+[^|]*$_needle"
+# under this file's `set -uo pipefail`. grep -q exits AT THE MATCH, sed keeps
+# writing, takes SIGPIPE, and pipefail promotes 141 to the pipeline's status —
+# so the arm reported FAIL BECAUSE THE LANE WAS CORRECTLY WIRED. esmeraldinha
+# measured PIPESTATUS=(141 0) on WSL with the wiring present, at 16/17 after a
+# 28-minute gate.
+#
+# IT IS GREEN ON FEDORA AND THE REASON IS NOT THE ONE THIS COMMENT FIRST GAVE.
+# Measured on macuahuitl: the comment-stripped lane is 33932 bytes, the first
+# match is at line 875, and 10161 bytes remain after it. esmeraldinha reproduced
+# those byte counts exactly on WSL — and the same pipeline there is 40/40
+# SIGPIPE, PIPESTATUS=(141 0), the consumer MATCHING and the pipeline still
+# failing. Identical quantities, opposite verdicts, both deterministic.
+#
+# SO THE "BYTES AFTER THE MATCH AGAINST THE 65536-BYTE PIPE BUFFER" EXPLANATION
+# IS FALSIFIED, and it was the coordinator's. esmeraldinha's synthetics on the
+# failing host, with a pipe verified to hold 65536 bytes:
+#     500 lines,  match@1     tail 36427 B   wrong 1/10
+#     500 lines,  match@450   tail  3650 B   wrong 0/10
+#     1200 lines, match@875   tail 23725 B   wrong 1/10
+#     1200 lines, match@1199  tail     73 B   wrong 0/10
+# A 36 KB tail is nearly always fine there; the real 10 KB tail is never fine.
+# The margin does not order the outcomes. It is not mis-parameterised, it is the
+# wrong quantity.
+#
+# THE MECHANISM IS PRODUCER I/O LATENCY, established causally by esmeraldinha and
+# not by correlation. Byte-identical file, one distinct md5, same command:
+#     drvfs  /mnt/c/.../pre-push-local-gate.sh    10/10 SIGPIPE
+#     ext4   a copy in /tmp                        0/10
+# and the control that makes it causal rather than a filesystem story — on ext4,
+# a deliberately SLOWED producer (per-line bash read loop, same bytes, same
+# consumer) reproduces it 10/10. Read times: drvfs 207 ms / 5 reads, ext4 10 ms.
+#
+# A FAST producer writes its whole output into the 64 KB pipe buffer before
+# `grep -q` is scheduled to exit, so it has nothing left to write and never sees
+# EPIPE. A SLOW producer is still blocked on read I/O when grep matches and
+# exits; its next write goes to a pipe with no reader, and that is the 141. Size
+# matters only ABOVE the buffer; below it, latency decides.
+#
+# CONFIRMED FROM THE FAST SIDE on macuahuitl: checkout on local NVMe btrfs,
+# producer 6 ms / 5 reads (~35x faster than drvfs), verdict 0/10 SIGPIPE.
+#
+# SO A CHECK FOR THIS CLASS MUST EXECUTE THE PIPELINE AGAINST THE REAL FILE ON
+# THE REAL CHECKOUT FILESYSTEM. A synthetic calibration case in /tmp reports SAFE
+# and is worthless — every synthetic esmeraldinha built lived on ext4, which is
+# why none reproduced the defect at any size, match position or ERE complexity.
+# The live file is REQUIRED, not brittle. Report `unmeasured` with a reason
+# otherwise, and never model it.
+#
+# FLEET CONSEQUENCE: any host whose checkout is reached over a slow-backed
+# filesystem is exposed where a local-disk host is not — WSL drvfs, a network
+# mount, a container bind mount, a macOS virtiofs share. A green here says
+# nothing about those. 792-ksr8's own "0 below 6 KB, mixed 8-14 KB, certain
+# above 19 KB" was one host's slice and conflated size with buffer-fill.
+#
+# WHAT SURVIVES, AND IT IS WHY THE CAPTURE STAYS: the verdict was decided by
+# something other than whether the match existed, on both hosts, in opposite
+# directions. That is the defect regardless of mechanism.
+elif grep -qE "bash[[:space:]]+[^|]*$_needle" <<<"$_lane_code"; then
     pass=$((pass+1))
 else
     fail=$((fail+1))

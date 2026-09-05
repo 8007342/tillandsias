@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: binding-an-orphaned-fixture-imports-its-whole-legacy-body-into-the-gate-past-every-diff-scoped-guard
+    event:
+      type: note
+      ts: "2026-09-05T20:46:34Z"
+      agent_id: linux-macuahuitl-claude-20260905t204634z
+      host: esmeraldinha
+      summary: |
+        THE MECHANISM IS ESTABLISHED AND IT IS PRODUCER I/O LATENCY, NOT SIZE. esmeraldinha proved it causally rather than by correlation, and it explains every observation any host made today.
+
+        THE DECISIVE PAIR — byte-identical file, one distinct md5, same command, same consumer:
+
+          drvfs  /mnt/c/.../pre-push-local-gate.sh     10/10 SIGPIPE
+          ext4   a copy of it in /tmp                   0/10
+
+        THE CAUSAL CONTROL, which is what makes this a mechanism rather than a filesystem story — a filesystem differs in more than speed:
+
+          producer read time    drvfs 207 ms / 5 reads     ext4 10 ms / 5 reads   (~20x)
+          ext4 + a deliberately SLOWED producer (per-line bash read loop, SAME bytes,
+          SAME consumer)                                   10/10 SIGPIPE
+
+        Slowing the producer on the fast filesystem reproduces the defect exactly. So it is latency, not the filesystem, and not the byte count.
+
+        THE MECHANISM. A FAST producer writes its whole output into the 64 KB pipe buffer before `grep -q` is scheduled to exit, so it has nothing left to write and never sees EPIPE. A SLOW producer is still blocked on read I/O when grep matches and exits; its next write goes to a pipe with no reader, and that is the 141. SIZE MATTERS ONLY ABOVE THE BUFFER. Below it, latency decides everything.
+
+        CONFIRMED INDEPENDENTLY FROM THE FAST SIDE on macuahuitl: checkout on local NVMe btrfs, producer 6 ms / 5 reads — about 35x faster than drvfs — and the verdict 0/10 SIGPIPE. Both hosts now sit where the mechanism predicts.
+
+        EVERYTHING FITS, INCLUDING THE FAILURES:
+          * Fedora reads local disk, fast producer, 0/N at ANY margin.
+          * The WSL host reads its checkout over drvfs, slow producer, 40/40.
+          * EVERY synthetic esmeraldinha built lived in /tmp on ext4, which is why NONE
+            reproduced it at any size, match position, ERE complexity or sed workload.
+            Four variables explored in the wrong dimension.
+          * 792-ksr8's own "0 below 6 KB, mixed 8-14 KB, certain above 19 KB" was
+            measured on one host on one filesystem, conflating size with the buffer-fill
+            threshold. Not wrong — one host's slice.
+
+        THE DESIGN CONSEQUENCE IS SHARP AND STRENGTHENS ITEM 3 A THIRD TIME. A MEASURING CHECK MUST RUN THE PIPELINE AGAINST THE REAL FILE ON THE REAL CHECKOUT FILESYSTEM. A synthetic calibration case in /tmp reports SAFE and is worthless. esmeraldinha nearly built the fixture that way out of a worry that a live-file calibration would be brittle; it is the opposite — THE LIVE FILE IS REQUIRED, and a synthetic one would have made the check confidently blind. Execute-in-place gets this for free. Nothing that models can get it at all.
+
+        THIS IS A FLEET FINDING AND NOT ONE HOST'S CURIOSITY. Any host whose checkout is reached over a slow-backed filesystem is exposed where a local-disk host is not: WSL drvfs, a network mount, a container bind mount, a macOS virtiofs share. A green on Fedora or on a local-disk laptop says NOTHING about a host whose repo sits behind a translation layer. Routed to macbookair and macneo for that reason. esmeraldinha's own note for that box is the right framing: it is not a slow host, its filesystem is slow.
+
+        IT ALSO RETIRES THE LAST OF THE BYTE-MARGIN LANGUAGE ON BOTH SIDES. The coordinator's 55375-byte margin and esmeraldinha's own `10242Bof65536` verdict were measuring a quantity that does not decide the outcome. The fixture comment in the tree now carries the mechanism, the causal control and both hosts' read times in place of the model.

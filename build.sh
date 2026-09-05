@@ -3236,88 +3236,52 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Preamble host-readiness checks passed"
 
-    # 1026-ps4n. A timing record must outlive the shell measuring it, or the log
-    # must say so. The arm that matters is the negative one: a lost record is
-    # filed under <step>-supervisor-lost and NEVER under the real step name,
-    # because the recurrence rung groups by step and a lower bound averaged into
-    # the real timings would corrupt the decision the log exists to inform.
-    # Hermetic: scratch stamp dir and scratch log, no smoke, no containers.
-    _step "Checking a timing record outlives its supervisor (1026-ps4n)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-timing-supervisor-lost.sh" 2>&1; then
-        _error "a killed supervisor no longer leaves a named-cause timing record (1026-ps4n) — see the verdict line above"
-        exit 1
-    fi
-    _info "Supervisor-loss timing check passed"
-
-    # 1055-6yp8: the skill-canonicalization check must judge what is COMMITTED,
-    # and its printed remedy must not damage a correct tree. On a checkout with
-    # core.symlinks=false the check read the worktree and reported all 75 skill
-    # entries as violations against a correct tree, under a REMEDY whose
-    # `git mv <path> skills/<name>` succeeds with exit 0 while moving the
-    # harness entry INSIDE the existing canonical directory — deleting it and
-    # burying a stray. This fixture pins the hazard, the guard, and the negative
-    # control that the check still reds on a genuine harness-exclusive skill; a
-    # fix that merely stopped flagging would pass every arm but the last.
-    _step "Checking skill canonicalization reads the index and its remedy is safe (1055-6yp8)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-skill-canonicalization-remedy.sh" 2>&1; then
-        _error "the skill-canonicalization check misreads a committed symlink or prints a destructive remedy (1055-6yp8) — see the verdict line above"
-        exit 1
-    fi
-    _info "Skill canonicalization remedy check passed"
-
-    # 823-u5zf: the wt.exe re-parse workarounds must stay deleted, and a comment
-    # RECORDING their deletion must not count as one. The packet's closure asks
-    # for "a source scan finds no argv_survives_wt_reparse"; a literal grep
-    # cannot serve, because it reds the correct tree on three explanatory
-    # comments and would be "fixed" by deleting the only explanation of why the
-    # code looks the way it does. Classifying by position rather than presence
-    # is the same lesson 1055-6yp8 and 1049-s35z paid for.
-    _step "Checking the wt-reparse workarounds stay deleted (823-u5zf)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-wt-reparse-scan.sh" 2>&1; then
-        _error "the wt-reparse deletion scan cannot tell a live symbol from a comment about it (823-u5zf) — see the verdict line above"
-        exit 1
-    fi
-    _info "wt-reparse deletion scan check passed"
-
-    # 1049-s35z: a litmus name bound in litmus-bindings.yaml whose file is
-    # absent must RED. It used to be logged SKIP, and skips are excluded from
-    # coverage, so the runner reported PASS having executed a third of what it
-    # was asked to. The CR was one cause; the SKIP is the mechanism that turned
-    # it into a green, and would have turned the next cause into one too.
-    _step "Checking a missing bound litmus test reds rather than skips (1049-s35z)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-missing-bound-test-reds.sh" 2>&1; then
-        _error "a bound litmus test with no file no longer reds, or the CR strip is gone (1049-s35z) — see the verdict line above"
-        exit 1
-    fi
-    _info "Missing-bound-test check passed"
-
-    # 1064-r8fv: the landing tool must merge TRUNK on a platform branch, must
-    # not manufacture an empty merge on trunk itself, and must refuse — naming
-    # the relay lane rather than taking it — when a push is refused server-side
-    # rather than lost to a race. Both defects were invisible on linux-next,
-    # where the branch and trunk are the same ref, which is why the tool worked
-    # exactly where it was not needed.
-    _step "Checking the landing tool merges trunk and refuses honestly (1064-r8fv)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-land-merges-trunk.sh" 2>&1; then
-        _error "land-on-platform-branch.sh does not merge trunk on a platform branch, or retries a server-side refusal (1064-r8fv) — see the verdict line above"
-        exit 1
-    fi
-    _info "Landing tool trunk-merge check passed"
-
-    # 891-5shq: the TILLANDSIAS_* namespace forward has ONE implementation and
-    # both dispatch boundaries use it. The toolbox boundary was fixed and the
-    # reasoning written down; the WSL boundary then received its own separate
-    # copy of the same four lines, and a control flag that works on one
-    # platform's dispatch and not the other's is worse than one that works on
-    # neither, because only one of those gets noticed. The fixture also pins
-    # that the forward never MANUFACTURES a value and that values are quoted --
-    # unquoted, a flag carrying a semicolon is a command-injection seam.
-    _step "Checking the env-forward is shared by every dispatch boundary (891-5shq)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-env-forward-shared.sh" 2>&1; then
-        _error "a dispatch boundary rolls its own TILLANDSIAS_* forward, or the forward manufactures/unquotes values (891-5shq) — see the verdict line above"
-        exit 1
-    fi
-    _info "Env-forward sharing check passed"
+    # ORDER 1072-b7eq — THE GATE'S STEP LIST IS DATA AT THIS INSERTION POINT.
+    #
+    # Every host used to append its new fixture step to the end of this block,
+    # so every merge conflicted in the same thirty lines. The conflicts were
+    # content-free — both sides were additions, and every resolution was "keep
+    # both in sequence" — but resolving one is a CODE EDIT to build.sh, which
+    # sits outside the plan-only push lane, so a conflict that changed nothing
+    # anyone reviewed obliged a full ~25-minute re-gate on whichever host
+    # merged. Four such merges on 2026-09-05, one of them committed with its
+    # markers still in it.
+    #
+    # Now each step is one file under scripts/gate-steps.d/, so two hosts
+    # adding steps touch two different files and git merges them without a
+    # conflict. TO ADD A STEP: write a new .step file there. Do not add one
+    # here.
+    #
+    # THE LITERAL PATH STAYS GREPPABLE, and that is a constraint rather than a
+    # detail (1063-nraf): a binding assembled from a variable is invisible to
+    # every name-based scan, including the bound-or-retired guard — and thirty
+    # fixtures were already invoked by nothing when that was measured. Each
+    # .step file therefore carries `STEP_SCRIPT="scripts/test-<name>.sh"` as a
+    # plain string a grep can find, and this loop refuses a file whose script
+    # is missing rather than skipping it.
+    #
+    # Numeric prefixes fix the order and are spaced by ten so a later step can
+    # land between two without renaming either.
+    for _step_file in "$SCRIPT_DIR"/scripts/gate-steps.d/*.step; do
+        [ -e "$_step_file" ] || continue
+        STEP_DESC=""; STEP_SCRIPT=""; STEP_ERROR=""; STEP_OK=""
+        # shellcheck disable=SC1090
+        . "$_step_file"
+        if [ -z "$STEP_DESC" ] || [ -z "$STEP_SCRIPT" ]; then
+            _error "gate step ${_step_file##*/} declares no STEP_DESC/STEP_SCRIPT (1072-b7eq)"
+            exit 1
+        fi
+        if [ ! -f "$SCRIPT_DIR/$STEP_SCRIPT" ]; then
+            _error "gate step ${_step_file##*/} names $STEP_SCRIPT, which does not exist — a step that cannot run must refuse, not skip (1072-b7eq)"
+            exit 1
+        fi
+        _step "$STEP_DESC..."
+        if ! _run bash "$SCRIPT_DIR/$STEP_SCRIPT" 2>&1; then
+            _error "${STEP_ERROR:-$STEP_SCRIPT failed} — see the verdict line above"
+            exit 1
+        fi
+        _info "${STEP_OK:-${STEP_SCRIPT##*/} passed}"
+    done
 
     # 965-sxec: a missing or unusable ruby must read as COULD-NOT-RUN (exit 3),
     # never as a claim about the ready set. Inside a forge `command -v ruby`
@@ -3482,6 +3446,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Selector cross-branch filter pin passed"
+
+    # Order 1033-iycs. The land tool discarded the gate's entire output, so its
+    # refusal named no step and no log — in the file whose header records that
+    # discarding the PUSH's output reported LANDED for a refused push. The
+    # negative control matters as much as the rest: arms that only check a
+    # refusal are satisfied by a tool that refuses unconditionally.
+    _step "Checking a land gate refusal names its step and its log (1033-iycs)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-land-gate-refusal-names-its-step.sh" 2>&1; then
+        _error "the land tool's gate refusal lost its diagnostic (1033-iycs) — see the verdict line above"
+        exit 1
+    fi
+    _info "Land-refusal diagnostic pin passed"
 
     # Order 1056-5344. The lane now scopes PAST a mandated merge of
     # origin/linux-next, which widens the bypass further: without the ancestry

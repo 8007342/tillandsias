@@ -1,0 +1,9 @@
+# Gate step 1055-6yp8 — data, not code (order 1072-b7eq).
+#
+# STEP_SCRIPT is a LITERAL path on purpose: a binding assembled from a
+# variable is invisible to every name-based scan, including the
+# bound-or-retired guard (1063-nraf). Keep it a plain string.
+STEP_DESC="Checking skill canonicalization reads the index and its remedy is safe (1055-6yp8)"
+STEP_SCRIPT="scripts/test-skill-canonicalization-remedy.sh"
+STEP_ERROR="the skill-canonicalization check misreads a committed symlink or prints a destructive remedy (1055-6yp8) — see the verdict line above"
+STEP_OK="Skill canonicalization remedy check passed"
