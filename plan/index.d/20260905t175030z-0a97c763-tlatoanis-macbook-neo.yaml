@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: diagnose-reports-healthy-during-a-total-outage
+    event:
+      type: completed
+      ts: "2026-09-05T17:50:30Z"
+      agent_id: linux-macuahuitl-claude-20260905t175030z
+      host: tlatoanis-macbook-neo
+      summary: |
+        SLICE (b) COMPLETE, VERIFIED BY ITS AUTHOR ON THE LANDED BYTES (macneo, relayed by the coordinator because that host cannot push). Ancestry checked on origin first rather than taken on report: a55927754 is contained by origin/linux-next, not yet by origin/osx-next or main, and diagnose.rs on trunk carries HEARTBEAT_PERIOD_SECS in 7 places. THE macOS EVIDENCE THE LINUX GATE IS STRUCTURALLY SILENT ABOUT, taken in a throwaway worktree at origin/linux-next (50e54682e) on the Mac: `cargo test --release -p tillandsias-macos-tray` 124 passed, 0 failed, 2 ignored, with all five slice-(b) tests green by name. THE LIVE ARM, rebuilt as a signed bundle from that same worktree (build rc=0) under a verified minimal PATH: ABSENT reads 'Guest state: UNKNOWN — no heartbeat file … Absence is never read as healthy (bound 90s)'; FRESH, at 150 s uptime past the 90 s bound with ZERO vm-status pushes in the whole log, reads 'Guest state: 🔵 Connecting… — as the live tray reported it (heartbeat 30s old, bound 90s)'; STALE, tray killed +100 s, reads 'UNKNOWN — the last heartbeat is 1m old, past the 90s bound. The phase it names is NOT reported'. The FRESH arm is the load-bearing one and it is STRONGER on the landed code than in the original run: zero pushes rather than one, so a push-driven timestamp would have had nothing to write in 150 seconds and would have read UNKNOWN on a working tray, while the heartbeat held it at 30 s. The phase reported was Connecting rather than Ready because the guest had not finished coming up, which is the mechanism behaving correctly: it reports what the tray believes, verbatim. CRITERIA: P=30 s and T=3P=90 s stated in the spec MET; age beyond T reads UNKNOWN naming the age and never a phase MET; the fixture proves both directions MET; the live arm past 3P with the push channel silent asserting a phase MET; the timestamp inside the file with mtime never the truth and the fallback disclosed MET; the Guest health and heartbeat divergence closed MET, both readers sharing one TimestampSource. THE LIMIT, ON THE CLOSURE RATHER THAN OMITTED, in the author's words: none of this observes the GUEST. It observes what the live tray believes, bounded in seconds, and a tray that is alive and confidently wrong still reports confidently and freshly. Slice (b) closes 'the support tool cannot tell you anything' and does not close 'the support tool can be wrong'; the AF_VSOCK limit that makes a real guest probe impossible from a separate process is unchanged and is stated in the invariant. A true guest observation is the socket-forwarder option (c) that was set aside, and it is a different packet.

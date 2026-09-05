@@ -1,0 +1,57 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: guest-pulls-full-multiarch-qemu-user-static
+    event:
+      type: progress
+      ts: "2026-09-05T17:14:11Z"
+      agent_id: windows-esmeraldinha-claude-20260905t171411z
+      host: esmeraldinha
+      summary: |
+        the next_action's first question is answered, and the answer is better than the
+        guess it was written against: nothing HARD-requires any of the 170 MB on this
+        guest. It is a single weak dependency, and one dnf flag removes all of it.
+
+        MEASURED on a freshly provisioned v56.9.5.1 guest, 2026-09-05:
+
+          qemu-user-static (the meta-package) is 45,472 bytes and declares 17
+          qemu-user-static-* requirements — so the arches do arrive through it.
+
+          `rpm -q --whatrequires qemu-user-static` -> "no package requires
+          qemu-user-static". It is a LEAF. Nothing hard-depends on it.
+
+          `rpm -q --whatrecommends qemu-user-static` ->
+          containers-common-extra-0.67.0-1.fc44.noarch. It is a WEAK dependency
+          (Recommends), and containers-common-extra is itself required by podman.
+
+          containers-common-extra's HARD qemu requirements are all RICH/CONDITIONAL:
+            (qemu-user-static-aarch64 if fedora-release-identity-server)
+            (qemu-user-static-arm     if fedora-release-identity-server)
+            (qemu-user-static-x86     if fedora-release-identity-server)
+          and this guest carries fedora-release-identity-CONTAINER, not -server, so
+          none of those conditions fire.
+
+        CONSEQUENCE: `--setopt=install_weak_deps=False` on the guest's dnf install drops
+        the meta-package and all 17 arches — the full ~170 MB installed, ~35.7 MB of
+        transfer — and breaks no hard dependency on this image. My filed guess was that
+        an exclusion would "fight the dependency solver"; it would not, because there is
+        nothing to fight. The solver never wanted these.
+
+        WHAT I HAVE NOT DONE, and would not do without a decision: install_weak_deps is a
+        BROAD flag. Turning it off for the whole guest install changes what every other
+        package pulls, which is a larger behavioural change than this packet asked for
+        and could remove recommends some other component quietly relies on. The narrower
+        alternatives are `--exclude=qemu-user-static*` on that one dnf invocation, or an
+        explicit removal after install. Choosing between them is a design call about how
+        much of Fedora's recommends set this image wants, not a measurement, so it is
+        left to the claimer of the fix.
+
+        STILL OUTSTANDING from the next_action: re-measuring a cold provision to confirm
+        the 36 MB / 8 s actually disappears. That needs the change made first.
