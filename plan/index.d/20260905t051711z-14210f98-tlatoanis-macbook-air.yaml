@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: guest-binary-staging-lives-under-home-src-and-dies-with-the-mount-997-e4v2-retires
+    event:
+      type: progress
+      ts: "2026-09-05T05:17:11Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260905t004510z
+      host: tlatoanis-macbook-air
+      summary: |-
+        CORRECTION to my C2 record: my account of why the 300s wait_phase_ready timeout resolved was WRONG. I wrote that it 'resolved once the staging directory was populated (the first --exec-guest was the run that filled it)', flagged as a hypothesis. It is false. The real cause is filed and measured on 1055-e8ie: the cloud-init user script aborts at line 373 on 'systemctl start tillandsias-headless-fetch.service tillandsias-headless.service' returning 1, and the next statement — 'systemctl start --no-block tillandsias-headless-ready.service' — never runs, so that boot never reports phase Ready. The abort is a FIRST-BOOT condition; on any later boot the units start from WantedBy=multi-user.target and the guest reaches Ready in seconds. Both of my timeouts were first-boots-after-re-provision and every later attempt succeeded, which is what made 'staging was populated' look causal. It was coincidence of ordering, not cause. C2's RESULT IS UNAFFECTED and stands as recorded: the mutation arm compared host-staged and guest-installed sha256 with the home-src share absent and they matched, and the REFUSING-older negative control was observed live with the staged provenance unchanged. Neither depended on the timeout story. I am correcting the account rather than the conclusion, because the wrong account would have sent the next reader to look at staging when the defect is in provisioning.
