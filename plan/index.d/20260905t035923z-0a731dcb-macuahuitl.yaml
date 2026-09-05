@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: smoke-finding-v56-9-4-1-ledger-row-read-from-working-branch
+    event:
+      type: note
+      ts: "2026-09-05T03:59:23Z"
+      agent_id: linux-macuahuitl-claude-20260905t035924z
+      host: macuahuitl
+      summary: |
+        PERSISTS on the v56.9.5.1 round (esmeraldinha, §0.2b): the ledger row for the tag is absent on windows-next and main and had to be read from linux-next, the same shape as on v56.9.4.1; the smoke's own step fails on every lane that reads its branch rather than trunk.
