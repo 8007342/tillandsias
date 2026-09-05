@@ -48,6 +48,25 @@ run_against() {
     # honours is TILLANDSIAS_SPEC_INDEX_CHECKOUT (spec-index-ensure.sh:231),
     # from which it derives "$_tsi_co/.cache/spec-index" (:246) — so the value
     # must be a CHECKOUT root, not an index dir.
+    # NEUTRALISE THE HIGHER RUNGS OR THIS ISOLATES NOTHING (1077-vzwq).
+    # TILLANDSIAS_SPEC_INDEX_CHECKOUT is RUNG 4 of a ladder, not an override:
+    # spec-index-ensure.sh reads it at :231 only inside `if [ -z "$_tsi_root" ]`
+    # at :229. Two higher rungs pre-empt it —
+    #   rung 1  FORGE_SPEC_INDEX_ROOT, unconditional at :212, and the forge
+    #           launcher INJECTS it (main.rs:14500), so inside a forge this
+    #           fixture would drive the REAL mounted index;
+    #   rung 2  the podman volume tillandsias-spec-index-<project>.
+    #
+    # MY EARLIER "PROVEN ISOLATED" HELD BY ACCIDENT AND I AM RECORDING WHY.
+    # I measured a byte-identical .cache/spec-index before and after, and that
+    # was true — but only because rootless podman returns a mountpoint it will
+    # not let this user stat, so rung 2 self-demotes via the 1003-v3dc EACCES
+    # path and rung 4 is reached. On a host where that volume is readable, or
+    # in any forge, the same fixture writes to the real index and my control
+    # would have reported success while measuring a directory the producer was
+    # never targeting.
+    FORGE_SPEC_INDEX_ROOT="" \
+    TILLANDSIAS_SPEC_INDEX_NO_PODMAN=1 \
     TILLANDSIAS_SPEC_INDEX_CHECKOUT="$WORK" \
     TILLANDSIAS_EMBED_ENDPOINT="$1" \
         bash "$SCRIPT" 2>"$WORK/err.txt" | grep -E '^blocked:spec-index:' | head -1
