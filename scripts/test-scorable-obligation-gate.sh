@@ -258,6 +258,45 @@ case "$out_tsref" in
     *) pass=$((pass+1)) ;;
 esac
 
+# ── ORDER 1069-5sp4: IS THE GUARD REACHABLE FOR THE CHANGE IT IS ABOUT? ───────
+#
+# Every arm above tests the CHECKER in isolation, and every one of them passed
+# for three cycles while the checker never ran on the authoring host at all.
+# That is the class an isolation test cannot see: the checker's only input is
+# newly added plan/index.d/*.yaml, gate-stamp.sh:343 EXCLUDES that path from the
+# stamp hash (930-i6x4), so a plan-only change leaves the stamp fresh,
+# ./build.sh --check answers ok:gate-fresh, and the fast-refusal block never
+# executes. Measured 2026-09-05: standalone the checker said
+# violation:scorable-obligation-missing:2 while ./build.sh --check on the same
+# tree said ok:gate-fresh and exited 0.
+#
+# So the plan-only pre-push lane must invoke it — that lane is the only thing
+# that inspects a plan-only push. This arm pins that wiring.
+#
+# THE NEEDLE IS ASSEMBLED rather than written literally, because a grep whose
+# pattern also matches this file's own assertion proves nothing (the vacuous-pin
+# lesson from 1029-5wvd).
+#
+# AND COMMENTS ARE STRIPPED BEFORE SCANNING, because the first version of this
+# arm was NOT teeth-bearing and its own sabotage proved it: disabling the lane's
+# invocation left the arm GREEN at 17/17, since the checker's name still appeared
+# in the explanatory comment block right above it. A guard that a comment can
+# satisfy is satisfied by the history of the thing rather than the thing —
+# methodology/verification.yaml, quoted_history_lives_in_comments_guards_scan_declarations.
+# So: strip comments, then require an actual `bash ... <checker>` invocation.
+_lane="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/scripts/hooks/pre-push-local-gate.sh"
+_needle="check-scorable""-obligation-added.sh"
+if [ ! -f "$_lane" ]; then
+    fail=$((fail+1)); echo "FAIL: the plan-only lane script is missing: $_lane"
+elif sed 's/#.*//' "$_lane" | grep -qE "bash[[:space:]]+[^|]*$_needle"; then
+    pass=$((pass+1))
+else
+    fail=$((fail+1))
+    echo "FAIL: the plan-only lane does not invoke the scorable guard (1069-5sp4)"
+    echo "  A plan-only push is the ONLY kind this guard is about, and the gate"
+    echo "  stamp ignores plan/index.d/, so build.sh --check cannot reach it."
+fi
+
 total=$((pass+fail))
 if [ "$fail" -eq 0 ]; then
     echo "PASS: scorable-obligation gate $pass/$total (977-448j)"
