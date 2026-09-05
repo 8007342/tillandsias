@@ -2663,12 +2663,31 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # phase timing and the cd into SCRIPT_DIR, and a capture that dropped it
     # would silently stop this step being profiled.
     _archiver_log="$(mktemp "${TMPDIR:-/tmp}/tillandsias-archiver.XXXXXX")"
+    # ORDER 1074-96z9. A memo HIT used to emit nothing at all: this branch was
+    # `_info` and a return, so the step simply vanished from the timing log and
+    # the hit rate was not computable. The audit that nominates steps for
+    # memoisation could therefore never measure whether memoisation WORKED —
+    # and worse, kept re-nominating this already-memoised step, because its
+    # cheap hits no longer accumulated under any name to dilute the old
+    # average. The terminology memo (1054-zvq4) already carries the fix; this
+    # copies that convention rather than inventing a third.
+    #
+    # THE MISS DELIBERATELY STAYS INSIDE `_run`. build.sh's own 965-sxec note
+    # records that `_run` carries the phase timing, so lifting the work out of
+    # it to emit a tidier hit/miss pair would delete the only measurement of
+    # what this step actually COSTS while still satisfying "a hit is recorded".
+    # The hit/miss records answer "did the memo fire"; the `_run` phase record
+    # answers "what does the work cost". Both are needed and they are not the
+    # same number.
+    _arch_t0="$(timing_now_ms)"
     if _archiver_memo="$(bash "$SCRIPT_DIR/scripts/archiver-check-memo.sh" check 2>/dev/null)"; then
         _info "$_archiver_memo — ledger and archiver unchanged since the last pass; check not re-run"
+        timing_emit archiver-check-hit check "$_arch_t0" 0 || true
     else
         _run bash "$SCRIPT_DIR/scripts/archive-plan-packets.sh" --check 2>&1             | tee "$_archiver_log" || true
         _archiver_rc="${PIPESTATUS[0]}"
         [ "$_archiver_rc" -eq 0 ] && bash "$SCRIPT_DIR/scripts/archiver-check-memo.sh" record >/dev/null 2>&1 || true
+        timing_emit archiver-check-miss check "$_arch_t0" "${_archiver_rc:-1}" || true
     fi
     if [ "$_archiver_rc" -eq 3 ]; then
         # ORDER 965-sxec. A forge ships NO ruby by design, so the archiver's
