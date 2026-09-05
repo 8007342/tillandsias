@@ -110,7 +110,18 @@ _fail() { echo "✗ $*"; failed=$((failed + 1)); }
 # and there were five of them.
 _synthetic_root() {
     local t; t="$(mktemp -d)"
-    mkdir -p "$t/scripts" "$t/openspec/specs/covered-spec" "$t/openspec/specs/uncovered-spec"
+    # 1077-vzwq: CREATE EVERY SEARCH ROOT validate-traces.sh:264-266 GREPS.
+    # Omitting crates/ images/ methodology/ and the root *.sh made the
+    # "uncovered" verdict arrive by grep rc=2 (ERROR: unreadable operands)
+    # rather than rc=1 (no match) — MEASURED, both ways: rc 2 with the dirs
+    # missing, rc 1 with them present. So Tests 6 and 11, which are credited
+    # with guarding the SIGPIPE regression this whole file was rewritten
+    # around, were firing on an error path that cannot occur in a real tree.
+    # A control that reds for a mechanism the defect does not use is not a
+    # control.
+    mkdir -p "$t/scripts" "$t/crates" "$t/images" "$t/methodology" \
+             "$t/openspec/specs/covered-spec" "$t/openspec/specs/uncovered-spec"
+    : > "$t/root.sh"
     cp "$SCRIPT_DIR/validate-traces.sh" "$t/scripts/"
     printf '# spec\n' > "$t/openspec/specs/covered-spec/spec.md"
     printf '# spec\n' > "$t/openspec/specs/uncovered-spec/spec.md"
@@ -137,6 +148,19 @@ _SYNTH="$(_synthetic_root)"
 # dir. Sibling fixtures use a trap; so does this one now.
 trap 'rm -rf "$_SYNTH"' EXIT
 _V="$_SYNTH/scripts/validate-traces.sh"
+
+# 1077-vzwq: PIN THE RATIO THE OTHER ARMS ASSUME. Five arms compare against 50
+# or 90 and are correct only while the synthetic tree is 1-traced-of-2. That
+# ratio lived in a comment, so an edit to _synthetic_root would silently change
+# what those arms mean while every one of them stayed green. jq-free on purpose:
+# this must hold on a host with no jq, where the arms that check it are skipped.
+_ratio="$(bash "$_V" --coverage-threshold 0 2>/dev/null || true)"
+if grep -q '"coverage_percentage": 50' <<<"$_ratio" \
+   && grep -q '"total_active_specs": 2' <<<"$_ratio"; then
+    _pass "synthetic tree is 1-traced-of-2 (50%), as the arms below assume"
+else
+    _fail "synthetic tree is NOT 50%/2 specs — every threshold below is meaningless: $(printf '%s' "$_ratio" | tr -d '\n')"
+fi
 
 # 1077-vzwq: ASSERT THE DIAGNOSTIC, NOT MERELY A NON-ZERO EXIT. Tests 2 and 3
 # were mutation-insensitive: deleting validate-traces.sh's entire threshold
@@ -229,27 +253,61 @@ fi
 echo "Test 8: Validator runs to completion on the REAL checkout"
 _live_rc=0
 _live_out="$(bash "$SCRIPT_DIR/validate-traces.sh" --coverage-threshold 0 2>/dev/null)" || _live_rc=$?
+# 1077-vzwq: ASSERT A CORRECTNESS RELATION, NOT A NUMBER. Greping for the field
+# NAME let the validator report any denominator it liked: hardcoding
+# TOTAL_ACTIVE_SPECS=2 left every arm green, because the synthetic tree really
+# does have 2 specs and this arm never looked at the value. The denominator must
+# equal the number of spec directories that exist — a relation the fixture can
+# check without CHOOSING a number, so it can never become a coverage floor. This
+# is the distinction the whole repair rests on: comparing against the live tree
+# is fine when the comparison is a correctness property; it is a landmine only
+# when the comparison is to an unchosen constant.
+_specs_on_disk="$(find "$ROOT/openspec/specs" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d '[:space:]')"
+_live_total="$(sed -n 's/.*"total_active_specs":[[:space:]]*\([0-9][0-9]*\).*/\1/p' <<<"$_live_out")"
 if [ "$_live_rc" -ne 0 ]; then
-    _fail "Should exit 0 on the real tree at threshold 0 (rc=$_live_rc)"
-elif grep -q '"coverage_percentage"' <<<"$_live_out"; then
-    _pass "Runs on the real tree and emits a coverage report"
-else
+    _fail "Should exit 0 on the real tree at threshold 0 (rc=$_live_rc) — if openspec/specs is absent this is the checkout, not the validator"
+elif ! grep -q '"coverage_percentage"' <<<"$_live_out"; then
     _fail "Ran on the real tree but emitted no coverage_percentage field"
-fi
-
-echo "Test 9: Exit code 1 when coverage is below threshold"
-if bash "$_V" --coverage-threshold 90 >/dev/null 2>&1; then
-    _fail "Should exit non-zero when coverage (50%) is below the threshold (90)"
+elif [ -z "$_live_total" ]; then
+    _fail "Ran on the real tree but emitted no total_active_specs field"
+elif [ "$_live_total" != "$_specs_on_disk" ]; then
+    _fail "The validator counted $_live_total active specs; $_specs_on_disk spec directories exist — the denominator is wrong, so every percentage it reports is wrong"
 else
-    _pass "Exit non-zero when coverage below threshold"
+    _pass "Runs on the real tree and its denominator matches the $_specs_on_disk spec directories that exist"
 fi
 
+# 1077-vzwq: rc == 1 SPECIFICALLY, not merely non-zero. The `else` branch
+# greened on ANY failure, so a crash on the failure path — or the rc 141 a
+# SIGPIPE produces, which is the exact signal shape this validator's last bug
+# emitted — certified "exit non-zero when coverage below threshold" while the
+# validator was not reaching that conclusion at all.
+echo "Test 9: Exit code 1 when coverage is below threshold"
+_t9_rc=0
+bash "$_V" --coverage-threshold 90 >/dev/null 2>&1 || _t9_rc=$?
+if [ "$_t9_rc" -eq 1 ]; then
+    _pass "Exit code is exactly 1 when coverage below threshold"
+else
+    _fail "Should exit 1 when coverage (50%) is below the threshold (90), got rc=$_t9_rc"
+fi
+
+# 1077-vzwq: ASSERT THE LISTING, NOT THE BANNER. This grepped only the header
+# string "Uncovered specs", so deleting the per-spec loop entirely, or listing
+# the COVERED spec instead of the uncovered one, both left it green — and a
+# crash immediately after the header printed the banner, listed nothing, and
+# still greened both this arm and Test 9. Name the spec, require the covered one
+# to be absent, and require the trailer that only a completed run emits.
 echo "Test 10: Uncovered specs listed on failure"
 _out="$(bash "$_V" --coverage-threshold 90 2>&1 || true)"
-if grep -q "Uncovered specs" <<<"$_out"; then
-    _pass "Lists uncovered specs when coverage fails"
+if ! grep -q "Uncovered specs" <<<"$_out"; then
+    _fail "Should print the uncovered-specs banner when coverage fails"
+elif ! grep -qE '^[[:space:]]*-[[:space:]]*uncovered-spec$' <<<"$_out"; then
+    _fail "Banner printed but the uncovered spec is not NAMED — a banner is not a listing"
+elif grep -qE '^[[:space:]]*-[[:space:]]*covered-spec$' <<<"$_out"; then
+    _fail "The TRACED spec is listed as uncovered — the listing is inverted"
+elif ! grep -q "Action: Add @trace spec:uncovered-spec" <<<"$_out"; then
+    _fail "No action trailer — the run did not reach the end of the failure path"
 else
-    _fail "Should list uncovered specs when coverage fails"
+    _pass "Names the uncovered spec, omits the covered one, and completes the failure path"
 fi
 
 # POSITIVE CONTROL: the same synthetic tree must PASS a threshold it meets, so
