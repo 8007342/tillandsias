@@ -3259,6 +3259,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "wt-reparse deletion scan check passed"
 
+    # 1049-s35z: a litmus name bound in litmus-bindings.yaml whose file is
+    # absent must RED. It used to be logged SKIP, and skips are excluded from
+    # coverage, so the runner reported PASS having executed a third of what it
+    # was asked to. The CR was one cause; the SKIP is the mechanism that turned
+    # it into a green, and would have turned the next cause into one too.
+    _step "Checking a missing bound litmus test reds rather than skips (1049-s35z)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-missing-bound-test-reds.sh" 2>&1; then
+        _error "a bound litmus test with no file no longer reds, or the CR strip is gone (1049-s35z) — see the verdict line above"
+        exit 1
+    fi
+    _info "Missing-bound-test check passed"
+
     # 965-sxec: a missing or unusable ruby must read as COULD-NOT-RUN (exit 3),
     # never as a claim about the ready set. Inside a forge `command -v ruby`
     # finds a brew shim that cannot install one, exits 127, and the caller's

@@ -1584,14 +1584,33 @@ run_tests_for_spec() {
         # Convert colon to hyphen for file lookup (litmus:ephemeral-guarantee -> litmus-ephemeral-guarantee)
         local test_file="${LITMUS_TESTS_DIR}/${test_name//:/-}.yaml"
 
+        # A BOUND NAME WITH NO FILE IS A CORPUS-INTEGRITY ERROR, NOT A SKIP
+        # (order 1049-s35z). It used to be logged SKIP, and skips are EXCLUDED
+        # FROM COVERAGE, so a run that could not find the tests it was invoked
+        # to run still printed PASS. Measured on yolanda 2026-09-04, before the
+        # CR fix that caused it: two of three bound tests unfindable, and the
+        # verdict was
+        #     Total: 3 (executed: 1, skipped: 2)
+        #     Pass Rate: 100% (1/1 executed)
+        #     Status: [PASS]
+        #
+        # The CR was one cause; this is the MECHANISM that turned it into a
+        # green, and it would have turned the next cause into one too. A gate
+        # that answers PASS while executing a third of its corpus is worse than
+        # a gate that is down, because nobody goes looking for it.
+        #
+        # SAFE TO FAIL CLOSED, measured rather than assumed: all 476 names bound
+        # in litmus-bindings.yaml resolve to a file on disk today, so this
+        # refuses nothing that currently exists. A test file is tracked in the
+        # repo, so absence means the binding and the corpus disagree — which is
+        # exactly what a human needs told, on any platform.
         if [[ ! -f "$test_file" ]]; then
+            log_test_result "$spec_id" "$test_name" "FAIL" "Test file not found (bound in litmus-bindings.yaml; corpus and bindings disagree)"
+            printf '@trace spec:%s\n' "$spec_id" >&2
             if should_fail_fast_for_spec "$spec_id"; then
-                log_test_result "$spec_id" "$test_name" "FAIL" "Test file not found"
-                printf '@trace spec:%s\n' "$spec_id" >&2
                 return 21
             fi
-            log_test_result "$spec_id" "$test_name" "SKIP" "Test file not found"
-            spec_skipped=1
+            spec_failed=1
             test_count=$((test_count+1))
             continue
         fi
