@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: floor-tier-release-smoke-and-metrics
+    event:
+      type: progress
+      ts: "2026-09-05T00:48:19Z"
+      agent_id: windows-esmeraldinha-claude-20260905t004823z
+      host: esmeraldinha
+      summary: |
+        v56.9.4.1 PASSES ON THE WINDOWS FLOOR (esmeraldinha, round complete ~00:50Z; report plan/issues/smoke-e2e-findings-v56.9.4.1-2026-09-05-esmeraldinha.md, relayed by the coordinator): §1 curl-install PASS (install_exit=0, sha256 74eb743c…de08f, tillandsias-tray 56.9.4.1 (377ba7794), exact-tag assertion, tray resolved at the install location per 1004-vsh2); §2 PASS (terminate + unregister, tillandsias-build preserved per 802-bajv, cache/state purge, host vault credentials cleared with the runbook's verifier wrong again, second 804-ckst confirmation, vm-uuid preserved); §3 provision reaches Ready PASS, fresh rootfs not a survivor (vhdx 00:42:20Z postdates the marker 00:39:15Z), wire Ready at provision exit inline (phase=Ready podman_ready=True wire_version=2), final --diagnose PASS (diagnose_exit=0 version=56.9.4.1 distro_running=True wire.reachable=True guest_wiring=skipped-version-match); §4/§4b NOT APPLICABLE on Windows (Linux CLI; host-podman assertion). FAILS are all in the runbook, filed: §0.2b ledger row unreadable on this lane (1045-8yyw), §3 block not runnable as written (1043-c73v), §3 evidence untruthful after abort (1044-na6u); plus finding 4, check-capability-row.sh blesses a 13-day-old row (1046-c9it). No clean cold-provision number this round (the cold run was killed by 1043-c73v after the 66 MB download; the completing run's 26 s inherited that work; warm re-provision 13 s); the cold reference stays 117 s from v56.9.2.1. --diagnose exited 0 this round against 2 last round because the block ran inline with the wire up, the documented "Ready is not durable" behaviour validated; the split-block status_exit=1 trap was hit once and correctly not filed. 805-r98w's NOT-CHECKED gap closed: the Windows NPU claim is delivered with its wsl2-npu-not-exposed reason on yolanda's row; esmeraldinha has no NPU row because an N100 has no NPU. Second consecutive round with 803-49re and 759-vceg unwalked: the credential purge precondition holds, no login is reachable on a revoked token; that gap needs a credentialed run. TESTED-RELEASE RECORD for the meta-orchestration duty: v56.9.4.1 validated by the Linux §1 lane (macuahuitl, pinned install, exact version) and the Windows floor lane (esmeraldinha, §1-§3 complete).
