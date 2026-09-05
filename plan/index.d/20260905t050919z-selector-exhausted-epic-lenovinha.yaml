@@ -1,0 +1,98 @@
+packets:
+  - packet_id: the-batch-selector-keeps-returning-an-epic-whose-every-packet-is-unavailable-to-the-asking-role
+    order: 1057-dgij
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    owner_host: any
+    capability_tags:
+      - orchestration
+      - selector
+      - convergence
+    estimated_hours: 3
+    owned_files:
+      - scripts/select-work-batch.sh
+    title: >-
+      select-work-batch.sh returned the same exhausted epic on three
+      consecutive runs for role=linux, every packet in it unavailable for a
+      reason already recorded on the ledger, while a higher-residual epic was
+      reachable only by walking its children by hand
+    context: |
+      OBSERVED on lenovinha 2026-09-05, three runs, two different seeds:
+
+        run 1  --budget 3            epic=forge-local-experts-milestone score=11.706
+                                     821-73es, 919-vvyv, 920-pxg6
+        run 2  --budget 2            same epic, same head two
+        run 3  --budget 3 --seed lenovinha-0409   same epic, same three
+
+      All three packets were unavailable to this host, each for a reason
+      ALREADY ON THE LEDGER before the selector offered them:
+
+        821-73es  its remaining item is explicitly routed to 853-6gz3's
+                  validation layer; I had just closed the one part a rebuilding
+                  host could do and released it with next_action saying so.
+        919-vvyv  needs a COLD forge on an empty model volume. On this host that
+                  means destroying the live enclave state that holds the working
+                  spec index, which I declined.
+        920-pxg6  its only open item is task 4.5, mlua portability evidence from
+                  the darwin/msys lanes. Not a Linux task at all.
+
+      Meanwhile the triage line printed socket-audit-master at residual 22.299
+      with blocking=9, against forge-local-experts-milestone's 11.706 — nearly
+      double — and the entropy never routed there across three runs. I reached
+      it only by reading the frontier list and walking its children by hand
+      (156/157/158), which is the manual fallback the batch selector exists to
+      replace.
+
+      WHAT THIS IS NOT. Not a starvation complaint about score-weighted entropy:
+      that is deliberate and documented, and ~9-in-12 to the largest residual is
+      the design. The defect is narrower — the selector scores EPICS by residual
+      and then hands over their packets without asking whether any packet in the
+      chosen epic is ACTIONABLE BY THE ASKING ROLE. An epic can be entirely
+      blocked for role=linux while still scoring 11.7, because the things that
+      block it (a routed remainder, a host-state precondition, a
+      wrong-platform open item) live in packet fields and events the epic score
+      never reads.
+
+      WHY p3 AND NOT HIGHER: the loss is a cycle's selection, not correctness,
+      and the manual fallback works — §2.1 of the worker skill is exactly this
+      walk. But it costs a cycle each time and it silently teaches a host to
+      stop trusting the batch line, which is worse than the wasted minutes.
+
+      RELATED, AND A SEPARATE SMALL FINDING: the coordinator named this area as
+      "the cold-start selector (606-xu52)". No packet with order 606-xu52 exists
+      in plan/index.yaml or plan/index.d/; the token appears only in
+      plan/archive/packets-2026-08.yaml and two plan/issues/ documents. Either
+      it was archived under a different id or the reference has rotted. Whoever
+      claims this should resolve that before assuming a parent packet exists —
+      a stale citation sending a reader to code that moved is the same defect
+      shape recorded on 158 the same night.
+    exit_criteria:
+      - >-
+        the selector does not offer an epic none of whose packets are
+        actionable by the asking role; pre-fix result: FAILS — three
+        consecutive runs on 2026-09-05 returned
+        forge-local-experts-milestone for role=linux with 821-73es (routed to
+        853-6gz3), 919-vvyv (host-state precondition) and 920-pxg6
+        (darwin/msys-only open item)
+      - >-
+        the triage or batch line says WHY an epic was passed over or a packet
+        withheld, so a host can tell "nothing for you" from "the selector did
+        not look"; today an exhausted epic and a healthy one print identically
+      - >-
+        a control proves the rule can fail: with a fixture epic whose packets
+        are all role-blocked, the selector must not return it, and with one
+        actionable packet added it must
+      - >-
+        the fix is measured against the real ledger rather than a fixture
+        alone — re-run for role=linux and record which epic is returned and
+        whether its head packet is actionable
+    next_action: >-
+      resolve the 606-xu52 reference first (it does not exist in the live
+      ledger); then decide whether actionability is a filter on the epic score
+      or a post-scoring skip, and note that "actionable" needs a definition
+      that does not require reading every packet's event history — the three
+      blockers here were a routed remainder, a host-state precondition and a
+      wrong-platform open item, and only the last is visible from a field

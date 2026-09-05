@@ -10087,16 +10087,66 @@ fn prompt_and_store_git_identity() -> Result<(), String> {
     store_git_identity(&name, &email)
 }
 
+/// The refusal shown when a non-interactive login finds no git identity.
+///
+/// ORDER 1052-984i. This used to say "configure it before using --with-token",
+/// which names `git config` — and the guest HAS NO GIT. esmeraldinha measured
+/// it on the v56.9.5.1 Windows floor round: in a freshly provisioned guest
+/// `command -v git` returns nothing for either root or forge, so the only
+/// remedy the old message suggested could not be run at all.
+///
+/// THE PREREQUISITE IS A FILE, NOT A TOOL. `read_git_identity_defaults` calls
+/// `std::fs::read_to_string` on the paths below and parses `[user]` out of the
+/// text; nothing in this path executes git, checks PATH, or shells out. Writing
+/// 82 bytes of `[user]` by hand satisfies it and the login then succeeds, which
+/// is what esmeraldinha did to get past it. So the message must state the
+/// remedy in terms of the file.
+///
+/// The two available fixes are NOT interchangeable and choosing wrongly is
+/// costly: installing git in the guest would satisfy the message but not the
+/// code, and would add a package to every guest image to fix a string. The
+/// code needs only the file, so the string is what changes.
+///
+/// The paths are resolved rather than written literally as `~/.gitconfig`,
+/// because `managed_gitconfig_path` moves with `XDG_CACHE_HOME` — a message
+/// naming a path the operator does not actually have is the same defect in a
+/// new place.
+fn git_identity_missing_message(field: &str) -> String {
+    let paths = gitconfig_default_paths();
+    let searched = if paths.is_empty() {
+        "  (none — HOME is not set)".to_string()
+    } else {
+        paths
+            .iter()
+            .map(|p| format!("  {}", p.display()))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let target = paths
+        .last()
+        .map(|p| p.display().to_string())
+        .unwrap_or_else(|| "~/.gitconfig".to_string());
+
+    format!(
+        "non-interactive GitHub login found no git {field}.\n\n\
+         This is a FILE, not a tool: git does not need to be installed. These \
+         paths were read and none supplied {field}:\n\
+         {searched}\n\n\
+         To fix it, create {target} with:\n\
+         \x20 [user]\n\
+         \x20 \tname = Your Name\n\
+         \x20 \temail = you@example.com\n"
+    )
+}
+
 fn store_existing_git_identity() -> Result<(), String> {
     let current = read_git_identity_defaults();
-    let name = current.name.ok_or_else(|| {
-        "non-interactive GitHub login requires an existing git user.name; configure it before using --with-token"
-            .to_string()
-    })?;
-    let email = current.email.ok_or_else(|| {
-        "non-interactive GitHub login requires an existing git user.email; configure it before using --with-token"
-            .to_string()
-    })?;
+    let name = current
+        .name
+        .ok_or_else(|| git_identity_missing_message("user.name"))?;
+    let email = current
+        .email
+        .ok_or_else(|| git_identity_missing_message("user.email"))?;
 
     store_git_identity(&name, &email)
 }
@@ -23578,6 +23628,71 @@ esac
         assert!(pairs.contains(&("GIT_COMMITTER_EMAIL", "big.pickle@example.test".to_string())));
     }
 
+    /// ORDER 1052-984i. The refusal must name the FILE, and must not send the
+    /// operator to `git config` — the guest has no git. esmeraldinha measured
+    /// `command -v git` returning nothing for root and forge on a freshly
+    /// provisioned v56.9.5.1 guest, so the old remedy was unrunnable there
+    /// while an 82-byte hand-written .gitconfig satisfied the check.
+    #[test]
+    fn git_identity_refusal_names_the_file_not_the_git_binary() {
+        for field in ["user.name", "user.email"] {
+            let msg = git_identity_missing_message(field);
+
+            assert!(
+                !msg.contains("git config"),
+                "the remedy must not be `git config` — the guest has no git \
+                 binary at all (1052-984i): {msg}"
+            );
+            assert!(
+                msg.contains("FILE, not a tool") && msg.contains("does not need to be installed"),
+                "the message must say the prerequisite is a file: {msg}"
+            );
+            assert!(
+                msg.contains("[user]") && msg.contains("name =") && msg.contains("email ="),
+                "the message must show the stanza to write: {msg}"
+            );
+            assert!(
+                msg.contains(field),
+                "the message must name the missing field {field}: {msg}"
+            );
+        }
+    }
+
+    /// The message must name paths that were ACTUALLY searched. A literal
+    /// `~/.gitconfig` would be wrong wherever XDG_CACHE_HOME moves the managed
+    /// path — the same defect (a remedy the operator cannot follow) in a new
+    /// place.
+    #[test]
+    fn git_identity_refusal_names_the_paths_it_searched() {
+        let msg = git_identity_missing_message("user.name");
+        for path in gitconfig_default_paths() {
+            assert!(
+                msg.contains(&path.display().to_string()),
+                "searched path {} must appear in the refusal: {msg}",
+                path.display()
+            );
+        }
+    }
+
+    /// THE FILE-VS-BINARY CHECK. The prerequisite decision reads a file; if
+    /// someone later makes it shell out to git, the message above becomes a
+    /// lie again and this fails.
+    #[test]
+    fn git_identity_prerequisite_reads_a_file_and_never_runs_git() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source_window(source, "fn read_git_identity_defaults()");
+        assert!(
+            window.contains("read_to_string"),
+            "the identity prerequisite must be satisfied by reading a file: {window}"
+        );
+        assert!(
+            !window.contains("Command::new") && !window.contains("which"),
+            "the identity prerequisite must not execute or locate git — the \
+             guest has none, and the refusal promises a file is enough \
+             (1052-984i): {window}"
+        );
+    }
+
     #[test]
     fn forge_agent_run_argv_exports_project_selection() {
         let _pseam = podman_false_seam();
@@ -24962,9 +25077,17 @@ esac
             .find(signature)
             .unwrap_or_else(|| panic!("missing signature: {signature}"));
         let tail = &source[start..];
-        let end = tail
-            .find("\n    fn ")
-            .or_else(|| tail.find("\nfn "))
+        // THE NEARER BOUNDARY, not the indented one first. This used to try
+        // "\n    fn " and fall back to "\nfn " only when that was absent, so a
+        // window opened on a TOP-LEVEL fn ran past every function after it and
+        // stopped at the first method or test fn — thousands of lines. Every
+        // caller asserts with `contains`, which an over-wide window satisfies,
+        // so the fault was invisible until 1052-984i asserted that a window
+        // does NOT contain something and the answer came from unrelated code.
+        let end = [tail.find("\n    fn "), tail.find("\nfn ")]
+            .into_iter()
+            .flatten()
+            .min()
             .unwrap_or(tail.len());
         &tail[..end]
     }
