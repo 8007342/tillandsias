@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-claim-is-invisible-to-every-other-host-for-as-long-as-its-push-takes-and-the-push-takes-longest-when-the-trunk-is-busiest
+    field: next_action
+    value: 'CRITERION 3 DONE and criterion 1 MEASURED (yoga, 9e1221389). WHAT REMAINS IS CRITERION 2 and it needs a SECOND HOST: after a first host claims under a moving trunk, does a second host''s selector refuse or reroute within one selector run, measured. Yoga cannot produce that alone. READ THE MEASUREMENT FIRST: the retry loop costs 18-56ms and is not the problem; per-attempt cost is the pre-push hook (about 6.5s with a valid stamp, about 14.1s with a stale one via the plan-only lane, about 250s only if the lane REFUSES). The ten-minute incident required the full-gate row, which the lane now prevents for a claim-only diff. Do NOT build candidates (b), (c) or (d) without first showing a cost they would remove.'
+    ts: "2026-09-05T12:29:38Z"
+    host: yoga
+
+events:
+  - packet_id: a-claim-is-invisible-to-every-other-host-for-as-long-as-its-push-takes-and-the-push-takes-longest-when-the-trunk-is-busiest
+    event:
+      type: progress
+      ts: "2026-09-05T12:29:38Z"
+      host: yoga
+      summary: |-
+        status 'CRITERION 3 DONE and criterion 1 MEASURED (yoga, 9e1221389). WHAT REMAINS IS CRITERION 2 and it needs a SECOND HOST: after a first host claims under a moving trunk, does a second host's selector refuse or reroute within one selector run, measured. Yoga cannot produce that alone. READ THE MEASUREMENT FIRST: the retry loop costs 18-56ms and is not the problem; per-attempt cost is the pre-push hook (about 6.5s with a valid stamp, about 14.1s with a stale one via the plan-only lane, about 250s only if the lane REFUSES). The ten-minute incident required the full-gate row, which the lane now prevents for a claim-only diff. Do NOT build candidates (b), (c) or (d) without first showing a cost they would remove.' (not terminal) with evidence_refs: 9e1221389
+  - packet_id: a-claim-is-invisible-to-every-other-host-for-as-long-as-its-push-takes-and-the-push-takes-longest-when-the-trunk-is-busiest
+    event:
+      type: note
+      ts: "2026-09-05T12:29:38Z"
+      host: yoga
+      summary: |-
+        partial slice: criterion 3 landed, criterion 1 measured, criterion 2 needs two hosts
