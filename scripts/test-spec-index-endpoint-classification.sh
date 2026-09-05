@@ -38,7 +38,17 @@ done
 run_against() {
     # Runs the real script with the endpoint overridden, and a destination it
     # may write to, so nothing touches the host's real index.
-    TILLANDSIAS_SPEC_INDEX_ROOT="$WORK/index" \
+    #
+    # 1063-nraf: THE ISOLATION ABOVE WAS A CLAIM THE CODE DID NOT HONOUR. This
+    # passed TILLANDSIAS_SPEC_INDEX_ROOT, a name spec-index-ensure.sh NEVER
+    # READS (grep -c in that file: 0). Every arm therefore drove the real
+    # producer against the operator's own checkout — the comment asserted the
+    # safety property and the variable did not provide it, which is the same
+    # shape as a fixture escaping its temp dir. The seam the producer actually
+    # honours is TILLANDSIAS_SPEC_INDEX_CHECKOUT (spec-index-ensure.sh:231),
+    # from which it derives "$_tsi_co/.cache/spec-index" (:246) — so the value
+    # must be a CHECKOUT root, not an index dir.
+    TILLANDSIAS_SPEC_INDEX_CHECKOUT="$WORK" \
     TILLANDSIAS_EMBED_ENDPOINT="$1" \
         bash "$SCRIPT" 2>"$WORK/err.txt" | grep -E '^blocked:spec-index:' | head -1
 }

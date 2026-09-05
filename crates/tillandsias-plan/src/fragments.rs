@@ -1888,6 +1888,7 @@ impl Ledger {
             ledger.set_fragment_sources(
                 std::collections::BTreeMap::new(),
                 std::collections::BTreeMap::new(),
+                std::collections::BTreeMap::new(),
                 corpus_files,
                 skipped,
             );
@@ -1943,6 +1944,9 @@ impl Ledger {
             }
         }
         let mut field_sources = std::collections::BTreeMap::new();
+        // ORDER 1065-4t7t: the winning `status` entry's (host, ts) IS the lease.
+        let mut status_leases: std::collections::BTreeMap<String, (String, String)> =
+            std::collections::BTreeMap::new();
         for (key, (idx, ts, host)) in &provenance.lww_wins {
             let frag = &fragments[*idx];
             let mut parts = key.split('\u{1}');
@@ -1953,6 +1957,9 @@ impl Ledger {
             // one fragment by requiring the winning ts/host to appear in the
             // block. Empty ts/host (legal, they default to "" in the fold)
             // cannot be required — the field needle alone identifies the entry.
+            if field == "status" {
+                status_leases.insert(pid.to_string(), (host.clone(), ts.clone()));
+            }
             let field_needle = format!("field: {field}");
             let mut needles: Vec<&str> = vec![field_needle.as_str()];
             if !ts.is_empty() {
@@ -1972,7 +1979,13 @@ impl Ledger {
                 );
             }
         }
-        ledger.set_fragment_sources(origin_sources, field_sources, corpus_files, skipped);
+        ledger.set_fragment_sources(
+            origin_sources,
+            field_sources,
+            status_leases,
+            corpus_files,
+            skipped,
+        );
         Ok(ledger)
     }
 }
