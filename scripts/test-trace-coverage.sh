@@ -298,13 +298,23 @@ fi
 # to be absent, and require the trailer that only a completed run emits.
 echo "Test 10: Uncovered specs listed on failure"
 _out="$(bash "$_V" --coverage-threshold 90 2>&1 || true)"
+# ASSEMBLED AT RUNTIME, never written literally — for the THIRD time in this
+# file. Spelling the marker out — even inside a string being grepped FOR —
+# creates a trace reference to a spec that does not exist, and the ghost-trace
+# ratchet correctly refuses it. The block below already warns about this twice,
+# and records that its own warning reproduced the defect by spelling the marker
+# in the explanation. I then wrote it literally into this arm, reddened the gate
+# at its very last step, and wrote it AGAIN in the first version of this comment.
+# Three times in one file: a file that contains the string it reasons about is a
+# false positive for every scanner keyed on that string, and prose is not exempt.
+_action_needle="$(printf 'Action: Add @%s %s:%s' 'trace' 'spec' 'uncovered-spec')"
 if ! grep -q "Uncovered specs" <<<"$_out"; then
     _fail "Should print the uncovered-specs banner when coverage fails"
 elif ! grep -qE '^[[:space:]]*-[[:space:]]*uncovered-spec$' <<<"$_out"; then
     _fail "Banner printed but the uncovered spec is not NAMED — a banner is not a listing"
 elif grep -qE '^[[:space:]]*-[[:space:]]*covered-spec$' <<<"$_out"; then
     _fail "The TRACED spec is listed as uncovered — the listing is inverted"
-elif ! grep -q "Action: Add @trace spec:uncovered-spec" <<<"$_out"; then
+elif ! grep -q "$_action_needle" <<<"$_out"; then
     _fail "No action trailer — the run did not reach the end of the failure path"
 else
     _pass "Names the uncovered spec, omits the covered one, and completes the failure path"
