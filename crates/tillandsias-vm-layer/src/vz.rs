@@ -688,6 +688,20 @@ fn home_src_dir() -> std::path::PathBuf {
 /// gets read by a human is one of those signals.
 fn provision_user_data(secure_control_wire: &str) -> String {
     r#"#!/bin/bash
+# 1055-e8ie. THIS SCRIPT MUST SAY WHERE IT DIED.
+#
+# It is `set -euo pipefail`, so any failing command aborts it silently, and
+# cloud-init does NOT surface a user-script failure as a cloud-init error —
+# `cloud-init status` still reports `done, errors: []`. MEASURED: a guest ran
+# a fetch-headless.sh from hours earlier while that boot's user-data carried
+# the current one, cloud-init reported success, and modules:final completed in
+# 0.01 s. The script starts (marker below) and does not reach its writes.
+#
+# The trap records the failing LINE where the host can read it after the fact,
+# which is the difference between "provisioning is broken somewhere" and a
+# line number.
+echo "tillandsias-provision-start $(date -u +%FT%TZ)" > /var/log/tillandsias-provision-marker
+trap 'echo "tillandsias-provision-FAILED line=$LINENO rc=$? cmd=$BASH_COMMAND $(date -u +%FT%TZ)" >> /var/log/tillandsias-provision-marker' ERR
 set -euo pipefail
 
 # Order 272 (guest-ssh-backdoor-closure): the secure control wire is the
@@ -3287,9 +3301,15 @@ mod tests {
     /// scripts must not produce the same identity component. A test that
     /// pinned the id string would pass while the id was still blind to the
     /// script, which is the defect.
-    // `provision_user_data` is macos-gated (see the shim above `provision_user_data_for_test`):
-    // an ungated test that calls it breaks every Linux/Windows `cargo test` build. Caught by
-    // the linux-next union gate on 2026-09-05 when osx-next merged (each side green alone).
+    ///
+    /// GATED because it calls `provision_user_data`, which is macos-only. The
+    /// rule is stated at that function's test shim — "an ungated #[cfg(test)]
+    /// here breaks every Linux/Windows `cargo test` build" — and I wrote this
+    /// test ungated anyway. My gate is green on macOS and STRUCTURALLY CANNOT
+    /// see this class; the pre-build union litmus cannot either, because it
+    /// never compiles. Only the gate on the merged union catches it, which is
+    /// where macuahuitl found it (E0425 at vz.rs, tillandsias-vm-layer lib
+    /// tests, Linux).
     #[cfg(target_os = "macos")]
     #[test]
     fn vz_instance_id_changes_when_the_provisioning_script_changes() {
