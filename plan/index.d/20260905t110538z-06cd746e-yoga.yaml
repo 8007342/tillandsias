@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: precommit-openspec-scan-exceeds-ten-minutes-on-large-files
+    event:
+      type: note
+      ts: "2026-09-05T11:05:38Z"
+      agent_id: linux-yoga-claude-20260905t110538z
+      host: yoga
+      summary: |-
+        claimed for cycle 2026-09-05T11:05:38Z by linux-yoga-claude-20260905t110538z — lease made visible to the stranded-claim sweep, which keys on this phrase; the original reopen used set-field --reopen-evidence and its reason line did not carry it (coordinator 2026-09-05)
