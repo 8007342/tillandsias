@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-guest-binary-staging-success-path-is-silent-so-a-live-failure-cannot-be-diagnosed
+    event:
+      type: progress
+      ts: "2026-09-05T04:23:10Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260905t004510z
+      host: tlatoanis-macbook-air
+      summary: |-
+        BOTH CANDIDATES WERE WRONG, and the real cause is filed as 1055-e8ie. Measured in the running guest: (1) the fetch unit DOES run every boot — systemctl show tillandsias-headless-fetch.service gives ExecMainStartTimestamp 04:18:50, Result=success, NRestarts=0, so 701-kgvk's 'reinstalls on EVERY boot' is correct and needs no correction; (2) its stderr IS routed to the console — the unit carries StandardOutput=journal+console and StandardError=journal+console. Neither candidate held. THE ACTUAL CAUSE: the guest is running a STALE COPY OF fetch-headless.sh. Its mtime is 2026-09-05 01:03:59 and grep -c staged_binary=installed on it returns 0, while the user-data delivered THIS BOOT (/var/lib/cloud/instances/<id>/user-data.txt.i, 17871 bytes, written 04:21) DOES contain the line, cloud-init ran the user script (config_scripts_user semaphore present for the current instance), and cloud-init reports status: done with errors: []. So the correct script was delivered and run, a write partway down it did not happen, and everything reported success. Leading hypothesis, stated as one: the user-data is '#!/bin/bash' + 'set -euo pipefail', so any command failing before the fetch-headless.sh write aborts it silently and cloud-init does not surface a user-script failure as a cloud-init error. THIS PACKET'S FIELD HALF IS BLOCKED ON 1055-e8ie: the line I added cannot be observed until a guest actually receives the script that carries it. The source half is landed and its guard bites. WHAT I WOULD KEEP FROM THIS: I nearly closed this packet on a green guard asserting the string exists in the SOURCE, while the operator-visible behaviour had not changed at all — the exact proxy this packet was filed about, one layer further out than I had looked. The guard was not wrong; it was answering 'is the line in the file' when the question was 'does the operator see it'.

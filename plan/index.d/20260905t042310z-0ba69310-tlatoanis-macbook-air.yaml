@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-guest-binary-staging-success-path-is-silent-so-a-live-failure-cannot-be-diagnosed
+    field: status
+    value: blocked
+    ts: "2026-09-05T04:23:10Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: the-guest-binary-staging-success-path-is-silent-so-a-live-failure-cannot-be-diagnosed
+    event:
+      type: note
+      ts: "2026-09-05T04:23:10Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        field half blocked on 1055-e8ie: the guest runs a stale fetch-headless.sh because provisioning aborts silently

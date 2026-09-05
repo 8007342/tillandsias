@@ -1,0 +1,96 @@
+packets:
+  - packet_id: the-guest-provisioning-script-can-abort-partway-while-cloud-init-reports-success
+    order: 1055-e8ie
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: macos
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags:
+      - macos
+      - fail-loud
+      - guest-rootfs
+      - diagnostics
+    estimated_hours: 4
+    verifiable_closure: |
+      cargo test -p tillandsias-vm-layer asserts the user-data script reports
+      its own failure (a trap on ERR writing a marker the host can read), and
+      a boot whose provisioning aborts is distinguishable from one that
+      completed.
+    title: |
+      The cloud-init user-data script is `set -euo pipefail` with no failure reporting, so it can abort partway and leave a guest assembled from a mixture of runs while cloud-init reports `status: done, errors: []`.
+    deliverable: |
+      A guest whose provisioning did not complete says so. What must not
+      persist is a provisioning run that half-applies and reports success.
+    context: |
+      MEASURED 2026-09-05 on tlatoanis-macbook-air while settling 1049-c6xa.
+      Every fact below is from the running guest via `--exec-guest`.
+
+      THE CONTRADICTION:
+        - The user-data delivered THIS BOOT contains the change. In
+          /var/lib/cloud/instances/<id>/user-data.txt.i (17871 bytes, written
+          04:21) `grep -c staged_binary=installed` -> 1.
+        - cloud-init RAN the user script this boot: the per-instance semaphore
+          config_scripts_user exists in that instance dir, and
+          cloud-init-output.log shows modules:final finishing at 04:21:37.
+        - cloud-init reports SUCCESS: `cloud-init status --long` ->
+          status: done, extended_status: done, errors: [].
+        - AND THE FILE THAT SCRIPT WRITES AT ITS LINE 95 WAS NOT WRITTEN.
+          /usr/local/lib/tillandsias/fetch-headless.sh has mtime
+          2026-09-05 01:03:59 — hours older than this boot — and
+          `grep -c staged_binary=installed` on it returns 0.
+
+      So the correct user-data was delivered, cloud-init ran it, cloud-init
+      called it a success, and a write partway down the script did not happen.
+
+      THE MECHANISM, and it is stated as the LEADING HYPOTHESIS rather than a
+      measurement: provision_user_data() emits `#!/bin/bash` + `set -euo
+      pipefail`. Under those options any command failing before line 95 aborts
+      the whole script silently. cloud-init does not surface a user-script
+      non-zero exit as a cloud-init error — its own modules succeeded — so the
+      guest boots, systemd starts the units that DO exist from an earlier run,
+      and every host-side signal reads healthy.
+
+      WHAT I HAVE NOT DONE: located the aborting command. The discriminating
+      next step is to read the user script's own stdout/stderr, which cloud-init
+      captures in /var/log/cloud-init-output.log, and find the last line it
+      emitted before stopping.
+
+      WHY THIS IS p1 AND NOT A CURIOSITY. A guest can be running a MIXTURE of
+      two provisioning runs — some files from today's bundle, some from
+      whenever the script last got that far — with no host-visible difference
+      from a clean provision. Every guest-side artifact this fleet reasons
+      about (the fetch script, the systemd units, the fstab lines) is written by
+      that script, and any of them can silently be a previous generation's.
+
+      HOW IT SURFACED, which is the argument for the fix: 1049-c6xa added a log
+      line to fetch-headless.sh, the guard asserting the line exists in the
+      SOURCE went green, the bundle demonstrably carried it, and the operator
+      still saw nothing — because the guest was running a script from before the
+      change. The source-string guard could not see it, which is the exact proxy
+      1049-c6xa was filed about, one layer further out than either of us looked.
+    exit_criteria:
+      - 'the user-data script reports its own failure — an ERR trap (or equivalent) that records the failing line where the HOST can read it, not only in the guest journal'
+      - 'a partially-provisioned guest is distinguishable from a completed one without booting a second VM to compare file mtimes'
+      - 'the aborting command in the current script is identified and named, from cloud-init-output.log rather than by inspection'
+      - 'cloud-init reporting `done` is no longer sufficient evidence that provisioning completed, and whatever consumes that signal says so'
+    notes: |
+      Directly explains 1049-c6xa's field symptom and supersedes both candidates
+      recorded there: the fetch unit DOES run every boot (701-kgvk's claim is
+      correct and needs no correction) and its stderr IS routed to the console
+      (StandardOutput/StandardError=journal+console). Neither was the cause.
+
+      Blocks the field half of 1049-c6xa: that line cannot be observed until a
+      guest actually receives the script carrying it.
+    events:
+      - ts: 2026-09-05T04:30:00Z
+        type: filed
+        agent: macos-tlatoanis-macbook-air-claude-20260905t004510z
+        host: tlatoanis-macbook-air
+        note: |
+          Found by refusing to close 1049-c6xa on a green source-string guard
+          when the operator-visible behaviour had not changed. The two
+          candidates recorded there were both wrong and both plausible; the
+          measurement that settled it was reading the delivered user-data and
+          the on-disk script's mtime in the same breath.
