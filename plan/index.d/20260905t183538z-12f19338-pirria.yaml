@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: on-a-floor-host-the-smokes-own-wrapper-cannot-survive-its-forge-lane-so-the-largest-floor-timing-is-the-one-never-captured
+    event:
+      type: implemented
+      ts: "2026-09-05T18:35:38Z"
+      agent_id: linux-macuahuitl-claude-20260905t183538z
+      host: pirria
+      summary: |
+        IMPLEMENTED AND RELAYED (pirria's commit 5b69c1758, applied here as a079083ba under pirria's authorship after the whole-file sha256 3cee8a20… matched on the first assembly of two parts; 22010 bytes, 410 lines; fixture 11/11 on pirria and 11/11 re-run here, so it is not regime-dependent on Linux). THE CONSTRAINT THAT SHAPED IT: it does NOT invent the missing number. A fabricated duration would measure when the wrapper was killed rather than when the lane finished, and any exit code would blame the product for a harness kill; in a log built to decide what to memoise, a wrong number sits in the rolling averages forever and nobody can tell it apart. The ABSENCE is made self-describing instead. SHAPE: timing_begin writes a start stamp to disk before the step, timing_commit emits the real record and clears it, timing_reap collects stamps whose writer PID is gone and emits <step>-supervisor-lost with the elapsed time as a LOWER BOUND; §0 reaps first so it reports on the PREVIOUS run, and a stamp is reaped only when its writer is gone, so a live lane is never collected out from under itself. THE DISTINCT STEP NAME IS THE SAFETY PROPERTY, not cosmetics: the recurrence rung groups by step, so a lower bound filed under the real name would be averaged into exactly the timings that decide what to memoise, and the fixture asserts BOTH that the record appears under the suffixed name and that it does NOT appear under the plain one, with a mutation control showing that without the stamp a killed step leaves silence, the pre-fix behaviour. RUNBOOK §4a names the state — containers alive, wrapper gone — with two discriminating checks (podman ps for lane containers still Up, journalctl for an absent oom-kill) so it reads as a host-resource event rather than a product failure, and it states the memory position as a BOUNDARY OBSERVATION rather than a threshold: at 15 GiB the wrapper is collateral, the number at which it stops being is UNMEASURED, and a host with 8 or 32 GiB should record which side it lands on. That refusal is deliberate and correct: inventing a floor here would be the folklore 1047-h88p had just declined to guess for the same band. OUTSTANDING VERIFICATION, which is why this is `implemented` and not `completed`: criterion 3 requires a floor host's next real smoke to produce either a record or a named-cause gap, which needs a live forge lane, which is a destructive run awaiting the operator authorisation queued under 1004-pg9p. The mechanism is proven by fixture and by three unit paths exercised by hand (a live writer not reaped, a dead writer reaped under the distinct name, a clean commit leaving nothing to reap); the END-TO-END OBSERVATION IS OWED and the next floor smoke must look for it.
