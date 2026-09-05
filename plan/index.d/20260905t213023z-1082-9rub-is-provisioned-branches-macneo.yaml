@@ -1,0 +1,85 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: is-provisioned-is-a-stat-of-rootfs-img-and-twenty-sites-branch-on-it-as-though-it-meant-provisioning-completed
+    order: 1082-9rub
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: macos
+    owner_host: any
+    release_target: stable-milestone-v1
+    capability_tags:
+      - macos
+      - fail-loud
+      - vm-layer
+      - provisioning
+    estimated_hours: 4
+    owned_files:
+      - crates/tillandsias-vm-layer/src/vz.rs
+      - crates/tillandsias-macos-tray/src/diagnose.rs
+      - crates/tillandsias-macos-tray/src/action_host.rs
+    verifiable_closure: |
+      cargo test -p tillandsias-vm-layer and -p tillandsias-macos-tray, plus a
+      fixture feeding a START-ONLY provision record to a converted call site and
+      asserting it does NOT take the completed path.
+
+      PRE-FIX RESULT: FAILS — no call site reads the provision record today, so
+      no fixture can distinguish provisioned-but-aborted from
+      provisioned-and-complete at any of them.
+
+      NEGATIVE CONTROL: a site that genuinely wants "is the disk file there"
+      must still answer from the file test after the change. A conversion that
+      routed every site through the provision record would satisfy the arm above
+      while breaking the idempotency short-circuit `is_provisioned()` was
+      written for.
+    title: |
+      `is_provisioned()` is a stat() of rootfs.img and ~20 sites BRANCH on it as though it meant provisioning completed
+    context: |
+      Split out of 1055-e8ie criterion 4, which DOCUMENTED the signal rather
+      than moving it. `is_provisioned()` (crates/tillandsias-vm-layer/src/vz.rs)
+      returns `self.rootfs_image_path().exists()` — a file test. It is branched
+      on at ~20 sites: vz.rs 11, diagnose.rs 7, action_host.rs 2. Counts
+      verified on macuahuitl independently of the report.
+
+      MEASURED on macneo 2026-09-05: a cold provision produced rootfs.img, so
+      `is_provisioned()` returned TRUE, on a guest that never reached Ready and
+      whose control wire never came up. The disk file and a working guest are
+      different facts.
+
+      1055-e8ie added the signal that CAN answer the question these sites are
+      asking — `provision_state_path()`, a host-visible record carrying
+      start/complete/failed written by the guest, landed as e16319e28 — and
+      980-ja2m slice (a) already fixed the REPORTING: `--diagnose` says "the
+      boot artifacts are on disk" rather than PROVISIONED, precisely because
+      macneo found it was a stat(). What remains is the BRANCHING.
+
+      WHY IT IS ITS OWN PACKET: several of the ~20 gate destructive or
+      user-visible behaviour, so changing what they mean is a behavioural change
+      with a different risk profile from a documentation fix, and it should not
+      ride inside a packet whose other criteria are already met.
+    exit_criteria:
+      - "each of the ~20 call sites is CLASSIFIED: those that genuinely want 'is the disk file there' keep the file test; those that want 'did provisioning finish' read the provision record"
+      - "the classification is RECORDED PER SITE, so a later reader can tell a deliberate file-test from an unexamined one"
+      - "no site silently treats a stat() as completion; where the record is unavailable the site SAYS SO rather than assuming either answer"
+      - "a fixture proves at least one converted site behaves differently for provisioned-but-aborted versus provisioned-and-complete — the two states 1055-e8ie made distinguishable; pre-fix result: FAILS"
+    next_action: |
+      LEFT TO DO: classify the ~20 sites and convert only the ones that are
+      asking about completion. Record the classification per site, including the
+      ones you deliberately leave as file tests — an unexamined site and a
+      considered file-test are indistinguishable afterwards otherwise, which is
+      this packet's own defect one level up.
+
+      START WITH THE DESTRUCTIVE AND USER-VISIBLE BRANCHES and say which those
+      are before converting anything. They carry the risk that makes this a
+      separate packet.
+
+      DO NOT route every site through the provision record. `is_provisioned()`
+      exists for `provision`'s idempotency short-circuit, and that caller
+      genuinely wants the file test.
+    provenance: |
+      Found by macneo-macos 2026-09-05 while closing 1055-e8ie criterion 4;
+      packet text drafted by macneo and filed through macuahuitl-fedora because
+      macneo cannot push (1025-a896). The 11/7/2 breakdown and the cold-provision
+      measurement are macneo's; the call-site counts were re-verified on
+      macuahuitl before filing.
