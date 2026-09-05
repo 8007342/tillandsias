@@ -1250,6 +1250,19 @@ _write_gate_stamp() {
         } > "$_pass_token" 2>/dev/null || true
     fi
 
+    # ORDER 1063-363b. Verify BEFORE the stamp: the stamp's whole claim is "the
+    # gate validated THIS tree", and a tree the gate itself rewrote mid-run is
+    # not that tree. Refusing here keeps a corrupted run from minting the token
+    # that lets it push.
+    if [ -n "${_TRACKED_STATE:-}" ]; then
+        _step "Checking the gate did not write into the checkout (1063-363b)..."
+        if ! _run bash "$SCRIPT_DIR/scripts/check-tracked-files-unwritten.sh" verify "$_TRACKED_STATE" 2>&1; then
+            _error "the gate modified tracked files while measuring them (1063-363b) — every verdict after the write is suspect; restore with 'git checkout --' and see the named paths above"
+            exit 1
+        fi
+        _info "No tracked file was written during the gate"
+    fi
+
     _step "Writing the gate stamp..."
     if bash "$SCRIPT_DIR/scripts/gate-stamp.sh" write --scope full --dispatch "$_stamp_dispatch" >/dev/null 2>&1; then
         _info "Gate stamp recorded (pre-push will accept this tree)"
@@ -1671,6 +1684,16 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # than the clippy pass it would jump ahead of (2.3s), so hoisting it would
     # add more to every GREEN run than it saves on the red ones. If a guard here
     # ever grows past a second, it belongs back in the body.
+    # ORDER 1063-363b: BASELINE THE TREE THE GATE IS ABOUT TO MEASURE.
+    # On lenovinha 2026-09-05 something in the gates and litmus overwrote
+    # scripts/plan-binary-probe.sh in the WORKING TREE with the contents of
+    # scripts/check-fragment-status-loss.sh. That file is an instrument — half
+    # the gate resolves the plan binary through it — so every verdict taken
+    # after the write measured something other than the tree under test, and
+    # said so confidently. 61ms against a 254s gate.
+    _TRACKED_STATE="$(git rev-parse --absolute-git-dir 2>/dev/null)/tillandsias-tracked-baseline"
+    bash "$SCRIPT_DIR/scripts/check-tracked-files-unwritten.sh" snapshot "$_TRACKED_STATE" >/dev/null 2>&1 || true
+
     _step "Fast refusals: sub-second deciders before any compile (1009-gccx)..."
 
     if ! _run bash "$SCRIPT_DIR/scripts/check-scorable-obligation-added.sh" 2>&1; then
@@ -3194,6 +3217,34 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Terminology memo check passed"
 
+    # 876-irn7 + 1005-m6rz. The suite existed and was invoked by NOTHING — it
+    # pinned the cargo-resolution fix and could have rotted silently, which is
+    # the shape it was written to prevent one layer down. Binding it here is
+    # part of 1005-m6rz's closure. It compiles nothing and touches no real
+    # toolchain: every arm is hermetic in a scratch tree.
+    _step "Checking cargo resolution, git identity and the cargo-site registry (876-irn7, 1005-m6rz)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-cycle-preflight-cargo-resolution.sh" 2>&1; then
+        _error "a preamble host-readiness arm regressed (876-irn7, 1005-m6rz) — see the verdict line above"
+        exit 1
+    fi
+    _info "Preamble host-readiness checks passed"
+
+    # 1055-6yp8: the skill-canonicalization check must judge what is COMMITTED,
+    # and its printed remedy must not damage a correct tree. On a checkout with
+    # core.symlinks=false the check read the worktree and reported all 75 skill
+    # entries as violations against a correct tree, under a REMEDY whose
+    # `git mv <path> skills/<name>` succeeds with exit 0 while moving the
+    # harness entry INSIDE the existing canonical directory — deleting it and
+    # burying a stray. This fixture pins the hazard, the guard, and the negative
+    # control that the check still reds on a genuine harness-exclusive skill; a
+    # fix that merely stopped flagging would pass every arm but the last.
+    _step "Checking skill canonicalization reads the index and its remedy is safe (1055-6yp8)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-skill-canonicalization-remedy.sh" 2>&1; then
+        _error "the skill-canonicalization check misreads a committed symlink or prints a destructive remedy (1055-6yp8) — see the verdict line above"
+        exit 1
+    fi
+    _info "Skill canonicalization remedy check passed"
+
     # 965-sxec: a missing or unusable ruby must read as COULD-NOT-RUN (exit 3),
     # never as a claim about the ready set. Inside a forge `command -v ruby`
     # finds a brew shim that cannot install one, exits 127, and the caller's
@@ -3311,6 +3362,27 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Zero-trace scan scope pin passed"
+
+    # Order 1024-c3h3. An evidence SHA captured before land-on-platform-branch
+    # rewrites the commit names a ref that never reaches origin, and a reader
+    # cannot tell that from "the code never landed" — opposite diagnoses. The
+    # fixture reproduces the rewrite and pins that the two stay separable.
+    _step "Checking a rewritten evidence SHA is named with its landed replacement (1024-c3h3)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-closure-evidence-survives-landing.sh" 2>&1; then
+        _error "the closure-evidence check no longer separates a rewritten ref from work that never landed (1024-c3h3) — see the verdict line above"
+        exit 1
+    fi
+    _info "Closure-evidence landing pin passed"
+
+    # Order 1063-363b. The guard above only helps if it can still SEE a write —
+    # a comparison that drops paths with spaces, or reads a missing baseline as
+    # a clean tree, would be worse than none.
+    _step "Checking the tracked-file guard still detects a write (1063-363b)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-tracked-files-unwritten-guard.sh" 2>&1; then
+        _error "the tracked-file guard lost an arm (1063-363b) — see the verdict line above"
+        exit 1
+    fi
+    _info "Tracked-file guard fixture passed"
 
     # Order 1056-5344. The lane now scopes PAST a mandated merge of
     # origin/linux-next, which widens the bypass further: without the ancestry

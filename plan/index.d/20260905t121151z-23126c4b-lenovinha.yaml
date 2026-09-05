@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: wire-local-experts-mode-through-grounded-pipeline
+    field: pickup_role
+    value: macos
+    ts: "2026-09-05T12:11:51Z"
+    host: lenovinha
+
+events:
+  - packet_id: wire-local-experts-mode-through-grounded-pipeline
+    event:
+      type: note
+      ts: "2026-09-05T12:11:51Z"
+      host: lenovinha
+      summary: |-
+        re-statused per the 2026-09-05 ruling. FIELD LIMITATION, stated rather than hidden: pickup_role is SINGLE-VALUED — across 776 packets the corpus has only linux/any/windows/macos/operator/tlatoani and no multi-role value — so 'macos and windows' is not expressible. Its one open item (task 4.5) needs mlua portability evidence from BOTH the darwin and msys lanes; macos is set as the next actionable lane and the windows half is named in next_action. The effect the ruling wanted is achieved either way: a linux host is no longer offered it

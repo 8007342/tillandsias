@@ -1,0 +1,65 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-phase-drift-warning-has-a-blind-band-from-one-to-four-times-budget
+    order: 1064-5hv2
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [hooks, fail-loud, observability, performance]
+    estimated_hours: 1
+    owned_files:
+      - scripts/hooks/pre-commit-openspec.sh
+    title: |
+      run_phase warns only when a phase exceeds FOUR TIMES its budget, so every phase between 1x and 4x drifts silently; a 9000ms scan against a 2500ms budget would never have been mentioned, and the 10373ms that reopened 734-sjb3 surfaced only because it was barely past the 4x line
+    context: |
+      FOUND by macbookair 2026-09-05 while re-measuring 734-sjb3. The warning at
+      scripts/hooks/pre-commit-openspec.sh reads:
+
+        if [[ "$budget" -gt 0 && "$elapsed" -gt $((budget * 4)) ]]; then
+
+      so a phase may cost up to four times what it is budgeted for and say
+      nothing. zero_trace_check's budget is 2500ms; anything up to 10000ms is
+      silent. The 10373ms that reopened 734-sjb3 cleared that bar by 4 percent —
+      had the regression been slightly smaller, or the host slightly faster, the
+      drift would have been invisible and the packet would still read verified.
+
+      THE BUDGETS ARE ALREADY THE STATEMENT OF WHAT A PHASE IS WORTH. A 4x
+      multiplier silently redefines every one of them, and it does so in a
+      direction nobody chose: the comment beside the budgets says "a phase that
+      has drifted past its budget is visible to whoever is watching", which is
+      not what the code does.
+
+      HOW BOTH RE-MEASUREMENTS WERE ACTUALLY TAKEN, which is the corroborating
+      evidence: macbookair and yoga independently made throwaway copies of the
+      hook with the condition forced true, because the shipped instrument would
+      not report the numbers they needed. When two hosts have to defeat a signal
+      to read it, the signal is set wrong.
+
+      REMEDY SHAPE (macbookair's, adopted): warn at 1x, and put the MULTIPLE in
+      the message so a 1.1x nudge and a 4x regression are distinguishable at a
+      glance rather than equal. Expected to stay quiet on healthy hosts — on
+      yoga after 734-sjb3 every phase sits well under 1x (zero_trace 93ms/2500,
+      ghost 6ms/900, cheatsheet_tier 124ms/900) — so this is not a noise trade.
+      Whoever takes it should measure the warning volume on at least two hosts
+      before landing, because a signal that fires on every commit is one that
+      gets ignored, which is this packet's own failure mode inverted.
+    exit_criteria:
+      - "a phase between 1x and 4x of its budget produces a warning naming the multiple; pre-fix result: FAILS (silent by construction; 9999ms against a 2500ms budget says nothing)"
+      - "a phase under its budget stays silent, measured on at least two hosts so the change is not a noise trade; pre-fix result: passes and must keep passing"
+      - "the fixture drives run_phase with a stubbed phase function at 0.5x, 2x and 5x of a budget and asserts silent / warn-with-multiple / warn-with-multiple"
+    unscoreable: |
+      The pin is a fixture over run_phase with a stubbed slow phase; the claimer
+      adds it. Credited to macbookair, who found it by having to defeat the
+      signal in order to take a measurement.
+    events:
+      - type: filed
+        ts: "2026-09-05T11:19:47Z"
+        host: yoga
+        summary: |
+          Filed by yoga on macbookair's finding, relayed by the coordinator, in
+          the cycle that closed 734-sjb3 on macbookair's 10373ms -> 187/197/199ms
+          measurement. The finding outlives that fix: the blind band is a
+          property of run_phase, not of the scan.

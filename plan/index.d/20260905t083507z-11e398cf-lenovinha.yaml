@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: probe-usage-guard-accepts-a-comment-as-compliance
+    field: status
+    value: verified
+    ts: "2026-09-05T08:35:07Z"
+    host: lenovinha
+
+events:
+  - packet_id: probe-usage-guard-accepts-a-comment-as-compliance
+    event:
+      type: completed
+      ts: "2026-09-05T08:35:07Z"
+      host: lenovinha
+      summary: |-
+        status 'verified' with evidence_refs: 9f75f5d47 (relay-landed 3a608300b, both ancestors of origin/linux-next): guard on trunk reads ok:plan-binary-probe-usage:20 of 948; POSITIVE control — yoga's pre-fix shape now violation:1 where the old guard said ok; NEGATIVE control — the same file made compliant passes ok:1 of 2; 9 commands converted across 2 litmus files, both specs PASS; ./build.sh --check rc=0 332s forced; no allow-list added
+  - packet_id: probe-usage-guard-accepts-a-comment-as-compliance
+    event:
+      type: note
+      ts: "2026-09-05T08:35:07Z"
+      host: lenovinha
+      summary: |-
+        compliance now tests USE not MENTION, symmetric with eligibility, per-command on the litmus surface

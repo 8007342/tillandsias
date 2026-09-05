@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-batch-selector-keeps-returning-an-epic-whose-every-packet-is-unavailable-to-the-asking-role
+    field: next_action
+    value: 'The re-statusing is DONE (821-73es blocked+depends_on, 919-vvyv blocked, 920-pxg6 pickup_role macos). What remains is the RULE, and the coordinator is adding the methodology sentence in their next land: release to ready only when a host of the packet''s role can start it now. A claimer taking this further should (1) sweep for other ready-with-prose-blocker packets rather than assume these three were the only ones — the four observations were one host over eight hours and nobody has counted the corpus; (2) decide whether the sweep wants a guard, noting that ''a next_action that reads like a blocker'' is prose-matching and was explicitly refused, so a guard would have to key on something else or not exist; (3) leave the epic ranking alone — it was not the cause, and the original title accusing it is corrected on this packet.'
+    ts: "2026-09-05T12:12:32Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-batch-selector-keeps-returning-an-epic-whose-every-packet-is-unavailable-to-the-asking-role
+    event:
+      type: note
+      ts: "2026-09-05T12:12:32Z"
+      host: lenovinha
+      summary: |-
+        record what is done and what is not

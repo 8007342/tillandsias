@@ -23,6 +23,22 @@ ok()  { echo "ok: $1"; pass=$((pass+1)); }
 bad() { echo "FAIL: $1" >&2; fail=$((fail+1)); }
 
 W="$(mktemp -d "${TMPDIR:-/tmp}/preflight-cargo-test.XXXXXX")"
+
+# HERMETIC ON A HOST THAT SHIPS A DISTRO CARGO. The absence arms used to drop
+# PATH to /usr/bin:/bin and call cargo absent; on macuahuitl (Fedora 44)
+# /usr/bin/cargo exists, so "absent" read "found" and the mutation control read
+# the same, four arms red the first time this suite ran inside a gate
+# (2026-09-05, the day 1005-m6rz bound it). The scratch PATH below carries
+# every executable in /usr/bin and /bin EXCEPT cargo, so absence is a property
+# of the fixture rather than of the host that happens to run it.
+NOCARGO="$W/bin"; mkdir -p "$NOCARGO"
+for _d in /usr/bin /bin; do
+    [ -d "$_d" ] || continue
+    for _x in "$_d"/*; do
+        _n="${_x##*/}"; [ "$_n" = cargo ] && continue
+        [ -e "$NOCARGO/$_n" ] || ln -s "$_x" "$NOCARGO/$_n" 2>/dev/null || true
+    done
+done
 trap 'rm -rf "$W"' EXIT INT TERM
 
 # A stub cargo that satisfies `command -v` and makes the build step succeed
@@ -41,7 +57,7 @@ STUB
 # real binary and refreshes a real inference endpoint — neither is hermetic and
 # neither is what 876-irn7 changed.
 resolve_arm() { # resolve_arm <extra-env...> ; echoes "found" | "absent"
-    env -i PATH="/usr/bin:/bin" HOME="$W/home" "$@" bash -c '
+    env -i PATH="$NOCARGO" HOME="$W/home" "$@" bash -c '
         if ! command -v cargo >/dev/null 2>&1; then
             for _cargo_dir in "${CARGO_HOME:-}/bin" "$HOME/.cargo/bin"; do
                 case "$_cargo_dir" in /bin) continue ;; esac
@@ -86,7 +102,7 @@ got="$(resolve_arm)"
 #      "${CARGO_HOME:-}/bin" expands to exactly that, and /bin/cargo on some
 #      host would be silently accepted as a CARGO_HOME hit.
 mkdir -p "$W/fakebin"; make_cargo "$W/fakebin"
-got="$(env -i PATH="/usr/bin:/bin" HOME="$W/empty-home" bash -c '
+got="$(env -i PATH="$NOCARGO" HOME="$W/empty-home" bash -c '
     probed=""
     if ! command -v cargo >/dev/null 2>&1; then
         for _cargo_dir in "${CARGO_HOME:-}/bin" "$HOME/.cargo/bin"; do
@@ -102,15 +118,99 @@ case "$got" in
 esac
 
 # ── 5. MUTATION CONTROL: without the loop, arm 1 must fail. ────────────────
-got="$(env -i PATH="/usr/bin:/bin" HOME="$W/home" bash -c '
+got="$(env -i PATH="$NOCARGO" HOME="$W/home" bash -c '
     command -v cargo >/dev/null 2>&1 && echo found || echo absent')"
 make_cargo "$W/home/.cargo/bin"
-got2="$(env -i PATH="/usr/bin:/bin" HOME="$W/home" bash -c '
+got2="$(env -i PATH="$NOCARGO" HOME="$W/home" bash -c '
     command -v cargo >/dev/null 2>&1 && echo found || echo absent')"
 [ "$got2" = absent ] \
     && ok "MUTATION: without the loop the same host reads absent — arm 1 has teeth" \
     || bad "mutation control did not reproduce the pre-fix behaviour (got $got2)"
 
+# ══ ORDER 1005-m6rz ═══════════════════════════════════════════════════════
+# Three arms the 876-irn7 suite did not carry: the git-identity preamble check,
+# the cheatsheet-tiers cargo resolution, and the site registry that is supposed
+# to stop the next one being found on a floor host.
+
+# ── 6. IDENTITY: a host that cannot author a commit is refused BEFORE claiming.
+#      Hermetic — a scratch repo with no identity reachable, which is what a
+#      fresh or re-imaged host looks like. GIT_CONFIG_NOSYSTEM and an empty HOME
+#      remove the global and system files; without both, the runner's own
+#      identity leaks in and the arm passes for the wrong reason.
+GUARD="$ROOT/scripts/check-committable-branch.sh"
+mkdir -p "$W/norepo"
+git init -q "$W/noident"
+# HOST-REGIME NOTE. On pirria the hostname is `pirria.(none)` and git refuses
+# to auto-detect an identity; on macuahuitl the hostname is a resolvable FQDN
+# and git auto-detects one happily, so with nothing configured this arm read
+# ok:branch-linux-next there. The guard's refusal path is what this arm pins,
+# and git's own switch for "do not guess" is user.useConfigOnly: with it set,
+# `git var GIT_AUTHOR_IDENT` fails exactly as a commit would on a host that
+# cannot auto-detect, regardless of what the fixture host's hostname is.
+( cd "$W/noident" && git config user.useConfigOnly true )
+( cd "$W/noident" && git checkout -q -b linux-next 2>/dev/null || true )
+got="$(cd "$W/noident" && env -i PATH="$NOCARGO" HOME="$W/empty-home" \
+        GIT_CONFIG_NOSYSTEM=1 bash "$GUARD" 2>/dev/null)"
+[ "$got" = "blocked:no-git-identity" ] \
+    && ok "a host with no git identity is refused (blocked:no-git-identity)" \
+    || bad "no-identity host — want blocked:no-git-identity, got: $got"
+
+# The remedy must be PRINTED, not implied: the measured incident cost a whole
+# cycle's work because the failure named no fix at the point it was hit.
+remedy="$(cd "$W/noident" && env -i PATH="$NOCARGO" HOME="$W/empty-home" \
+        GIT_CONFIG_NOSYSTEM=1 bash "$GUARD" 2>&1 >/dev/null)"
+case "$remedy" in
+    *"git config user.email"*) ok "the refusal names the exact git config remedy" ;;
+    *) bad "the refusal does not name the remedy: $remedy" ;;
+esac
+
+# TRUE NEGATIVE: an identity present must NOT be refused, or the guard would
+# stop every healthy host in the fleet.
+( cd "$W/noident" && git config user.name t && git config user.email t@example.invalid )
+got="$(cd "$W/noident" && env -i PATH="$NOCARGO" HOME="$W/empty-home" \
+        GIT_CONFIG_NOSYSTEM=1 bash "$GUARD" 2>/dev/null)"
+case "$got" in
+    ok:branch-*) ok "an identity present passes the guard ($got)" ;;
+    *) bad "identity present — want ok:branch-*, got: $got" ;;
+esac
+
+# ── 7. CHEATSHEET-TIERS resolves cargo, and SKIPS rather than printing a bare
+#      command-not-found when it is genuinely absent.
+if grep -q 'cargo_resolve' "$ROOT/scripts/check-cheatsheet-tiers.sh"; then
+    ok "check-cheatsheet-tiers resolves cargo through the shared resolver"
+else
+    bad "check-cheatsheet-tiers still assumes cargo is on PATH"
+fi
+got="$(env -i PATH="$W/nothing:$NOCARGO" HOME="$W/empty-home" \
+        bash "$ROOT/scripts/check-cheatsheet-tiers.sh" 2>&1 | head -1)"
+case "$got" in
+    skip:cheatsheet-tiers:cargo-absent*) ok "absent cargo reads as a SKIP, not an ERROR ($got)" ;;
+    *"command not found"*) bad "still prints a bare command-not-found: $got" ;;
+    *) ok "cheatsheet-tiers ran (cargo resolvable here): ${got:0:48}" ;;
+esac
+
+# ── 8. THE REGISTRY. Its entries must be real files, or the list that is
+#      supposed to stop the next discovery is itself the next thing to discover.
+. "$ROOT/scripts/lib-cargo-sites.sh"
+missing=""
+while IFS= read -r site; do
+    [ -n "$site" ] || continue
+    [ -e "$ROOT/$site" ] || missing="$missing $site"
+done <<EOF
+$(cargo_sites)
+EOF
+[ -z "$missing" ] && ok "every cargo-assumption site in the registry exists ($(cargo_sites | tr -d ' ' | grep -c .) listed)" \
+    || bad "registry names files that do not exist:$missing"
+
+# The three sites the packet names must all be listed — a registry that quietly
+# dropped one would pass the existence arm above while losing the point.
+for want in scripts/cycle-preflight.sh scripts/check-cheatsheet-tiers.sh scripts/host-capability-probe.sh; do
+    cargo_sites | grep -qx "$want" \
+        && ok "registry lists $want" \
+        || bad "registry is missing $want"
+done
+
+# ══ ORDER 1004-ws5q (esmeraldinha) — merged beside 1005-m6rz's arms; renumbered 9–11 ═════
 # ── ORDER 1004-ws5q ────────────────────────────────────────────────────────
 # 876-irn7 narrowed WHEN cargo is called absent. This orders WHAT HAPPENS NEXT:
 # a host with no compiler but a runnable instrument keeps its cycle, and only a
@@ -121,7 +221,7 @@ got2="$(env -i PATH="/usr/bin:/bin" HOME="$W/home" bash -c '
 # stale-vs-absent distinction 704-zcgi preserves), so these arms vary exactly one
 # thing — whether an instrument is resolvable — without compiling anything.
 absent_cargo_arm() { # absent_cargo_arm <TILLANDSIAS_PLAN_BIN value> ; echoes verdict|blocked:...
-    env -i PATH="/usr/bin:/bin" HOME="$W/empty-home" ROOT="$ROOT" \
+    env -i PATH="$NOCARGO" HOME="$W/empty-home" ROOT="$ROOT" \
         TILLANDSIAS_PLAN_BIN="$1" bash -c '
         plan_verdict="skipped"
         if ! command -v cargo >/dev/null 2>&1; then
@@ -145,14 +245,14 @@ else
     bad "cycle-preflight.sh no longer probes before the cargo-absent exit — this suite is stale"
 fi
 
-# ── 6. NO CARGO, BUT AN INSTRUMENT ON DISK. The measured pirria case: a
+# ── 9. NO CARGO, BUT AN INSTRUMENT ON DISK. The measured pirria case: a
 #      compile-free cycle must not lose its slot.
 : > "$W/stub-plan"; chmod +x "$W/stub-plan"
 got="$(absent_cargo_arm "$W/stub-plan")"
 [ "$got" = existing ] && ok "no cargo + a runnable binary yields plan_verdict=existing, not a block" \
     || bad "no cargo + runnable binary — want existing, got $got"
 
-# ── 7. TRUE POSITIVE PRESERVED, and this is the arm that matters most. No
+# ── 10. TRUE POSITIVE PRESERVED, and this is the arm that matters most. No
 #      compiler AND no instrument is a host that cannot reason; it must stop.
 got="$(absent_cargo_arm "$W/nonexistent-plan-binary")"
 case "$got" in
@@ -161,9 +261,9 @@ case "$got" in
     *)  bad "no cargo + no binary — want blocked:preflight:plan:cargo-absent, got $got" ;;
 esac
 
-# ── 8. MUTATION CONTROL: without the probe, arm 6's host blocks. If this ever
+# ── 11. MUTATION CONTROL: without the probe, arm 9's host blocks. If this ever
 #      reports 'existing' the arm above has stopped testing anything.
-got="$(env -i PATH="/usr/bin:/bin" HOME="$W/empty-home" bash -c '
+got="$(env -i PATH="$NOCARGO" HOME="$W/empty-home" bash -c '
     if ! command -v cargo >/dev/null 2>&1; then
         echo "blocked:preflight:plan:cargo-absent"; exit 1
     fi
