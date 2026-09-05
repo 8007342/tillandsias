@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-step-named-mutation-or-sabotage-whose-command-neither-writes-nor-restores-is-asserting-nothing
+    event:
+      type: progress
+      ts: "2026-09-05T07:55:46Z"
+      agent_id: linux-yoga-claude-20260905t075546z
+      host: yoga
+      summary: |-
+        Closed, landed d7da56c1f. SIZED FIRST as the coordinator asked, and the sweep is SMALLER than expected rather than larger: across all 413 litmus files and 2492 steps, THREE are named MUTATION, ZERO are named SABOTAGE anywhere in the corpus, and all three named ones perform or delegate a real mutation. The guard is green on trunk today and reds nothing, because the three known instances were already corrected before it existed. That is the honest result; I did not manufacture a red to match the estimate. MY FIRST SIZING PASS WAS PRECISE AND WORTHLESS and the header records it: it counted the redirection character as a write, so >/dev/null and 2>&1 (the commonest tokens here) marked every arm as mutating and it reported 0 of 3 candidates. A sweep can be exact about the wrong predicate; fixture arm 6 pins the correction. POSITIVE CONTROL IS THE REAL PRE-FIX TEXT, read from git at 5083b2649^, not an imitation: "MUTATION: with the alias removed from the reader, the fixture must FAIL" over a grep -q for a source string, which removes nothing, re-runs nothing and observes no failure. Pre-fix FAILS; the guard flags it, and a non-vacuity arm asserts the recovered text really contains the arm so the positive control cannot pass on an empty file. DELEGATION COUNTS AS MUTATING and this is what keeps the guard usable: litmus-fragment-status-loss-attribution-shape.yaml has a MUTATION CONTROL whose command is bash scripts/test-fragment-status-loss.sh, with the mutation inside the fixture; refusing it would force a rename of correct work and a guard that flags correct work gets switched off. IT REFUSES THE NAME, NEVER THE TECHNIQUE, because every instance so far was fixed by a rename (the lww arm became a SOURCE PIN, smaller but real value), so the printed remedy is a rename and arm 2 pins that the renamed form passes over the IDENTICAL command. Criterion 3 holds: a command whose comment names sed -i and git checkout is still flagged, the 901-jtvi occurrences-not-callers shape. SABOTAGE stays in the pattern despite zero instances, since a pattern matching only what already exists cannot catch the next one. Fixture 7 of 7, guard plus fixture wired into build.sh --check. SCOPE STATED RATHER THAN SILENTLY SKIPPED: MUTATION also appears 56 times across 21 files under scripts/ as labels inside shell fixtures; those are NOT covered and should not be bolted on, because in a shell fixture the mutation may be many lines from the label so "does this arm mutate" stops being mechanically decidable, which is the boundary 1041-up99 was ruled on.

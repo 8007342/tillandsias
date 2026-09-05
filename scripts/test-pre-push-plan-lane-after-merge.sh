@@ -53,6 +53,51 @@ fail=0; pass=0
 ok()  { echo "ok:   $1"; pass=$((pass+1)); }
 bad() { echo "FAIL: $1" >&2; fail=$((fail+1)); }
 
+# ── A VALIDATOR, HANDED OVER HERMETICALLY (macbookair, 2026-09-05) ──────────
+#
+# THIS FIXTURE TOOK EVERY macOS HOST OUT OF THE LANDING PATH. Arms 1, 4 and 5
+# failed at trunk HEAD with:
+#   plan-only lane: not applicable — neither yq nor target/release/tillandsias-plan
+#   is available to validate fragments (fail closed; full gate required)
+# so the gate refused and no macOS host could land anything.
+#
+# WHY IT PASSED ON LINUX AND NOWHERE ELSE. The hook resolves its validator with
+# cwd inside the SCRATCH repo, which by construction has no target/, so
+# resolve_plan_binary walks past every checkout candidate and reaches
+# `command -v tillandsias-plan`. On a Linux host with ~/.local/bin on PATH that
+# silently succeeds; on macOS, where that is absent and yq is absent by policy,
+# the lane fails closed — correctly. The fixture was depending on ambient host
+# tooling and calling it a lane property.
+#
+# It is the SAME defect I fixed in test-pre-push-issue-capture-lane.sh for
+# 1058-fenk hours earlier — a cwd-relative probe in a script that has cd-ed into
+# scratch — and I left it in the fixture I was writing at the time. macbookair's
+# discriminating measurement is what separated the two candidate causes: putting
+# a stub yq on PATH changed nothing, so the fault was how the temp repo reaches
+# a validator, not which tools the host has.
+#
+# So the checkout's OWN binary is resolved here, in the checkout, where the
+# probe can see it — and resolving EXECUTES `capabilities`, so what is exported
+# below has been run, not merely found. That matters because the probe honours
+# an explicit TILLANDSIAS_PLAN_BIN on existence alone (1060-wxdh): handing over
+# an unverified path is exactly the shape that installed a dead binary over a
+# canonical copy on yoga.
+_validator="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary 2>/dev/null)" || _validator=""
+case "$_validator" in ./*) _validator="$ROOT/${_validator#./}" ;; esac
+if [ -n "$_validator" ]; then
+    export TILLANDSIAS_PLAN_BIN="$_validator"
+elif command -v yq >/dev/null 2>&1; then
+    : # yq alone satisfies the lane's fragment validation
+else
+    # NAMED SKIP, NOT RED. A host with no validator cannot exercise the lane's
+    # acceptance arms, and refusing there would red the gate for missing
+    # tooling rather than for a lane defect — which is how this fixture took
+    # macOS out of the landing path in the first place.
+    echo "skip:plan-lane-after-merge:no-validator — no runnable tillandsias-plan and no yq, so the lane cannot validate fragments on this host; the acceptance arms would fail on tooling, not behaviour" >&2
+    echo "plan-lane-after-merge: 0 passed, 0 failed (skipped)"
+    exit 0
+fi
+
 W="$(mktemp -d "${TMPDIR:-/tmp}/prepush-lane-merge.XXXXXX")"
 trap 'rm -rf "$W"' EXIT INT TERM
 export GIT_TERMINAL_PROMPT=0
@@ -66,15 +111,29 @@ git remote add origin "$W/bare.git"
 # ~/.gitconfig and the seeding push below would run the REAL hooks against this
 # scratch tree. Same trap already documented in test-pre-push-issue-capture-lane.sh.
 git config core.hooksPath .git/hooks
+# CRLF noise is not a finding. On the Windows floor every arm logged "LF will be
+# replaced by CRLF" for the scratch repos' own files, which reads like a fixture
+# fault and is not one (esmeraldinha, 2026-09-05, where all 5 arms passed under
+# MSYS git on drvfs). Pinning it keeps the output legible so a real message is
+# not lost among warnings about files this fixture wrote itself.
+git config core.autocrlf false
 # The guard sources siblings relative to itself, so it must sit at scripts/hooks/.
 mkdir -p scripts/hooks plan/index.d
 cp "$GUARD" scripts/hooks/pre-push-local-gate.sh
-for f in plan-binary-probe.sh gate-stamp.sh common.sh; do
+for f in plan-binary-probe.sh gate-stamp.sh common.sh check-issue-citation-convention.sh; do
     cp "$ROOT/scripts/$f" "scripts/$f" 2>/dev/null || true
 done
 chmod +x scripts/*.sh scripts/hooks/*.sh 2>/dev/null || true
 printf 'packets: []\n' > plan/index.yaml
 printf 'base\n' > README.md
+# A landed capture for the correction arms (1060-7mmm) to modify.
+mkdir -p plan/issues
+printf 'See `main.rs` `resolve_probe`.\n' > plan/issues/existing-report.md
+# A tracked non-plan file for arm 7. NOT README.md: trunk modifies that in this
+# fixture, so an arm editing it hits a MERGE CONFLICT and the guard refuses for
+# a reason that has nothing to do with the lane — a pass for the wrong reason,
+# which the first run of arm 7 produced.
+printf 'fn main() {}\n' > src_placeholder.rs
 G add -A >/dev/null; G commit -q -m base
 git push -q -u origin linux-next
 # Both platform branches start level, as they do in the fleet.
@@ -202,6 +261,57 @@ if [ "$rc" -eq 0 ] && [ ! -s .git/tillandsias-union-ungated ]; then
 else
     bad "ARM 5: a merge-free push either failed the lane or recorded a spurious union marker (rc=$rc)"
     printf '%s\n' "$out" | sed 's/^/      /' >&2
+fi
+
+# ── ARM 6: a CORRECTION to a landed report rides the lane after the merge ──
+# ORDER 1060-7mmm, and cross-branch because that is the shape it was found in:
+# esmeraldinha hit it on windows-next in the same push that first exercised
+# 1056-5344 live. The lane had accepted the CREATION of a smoke report
+# unreviewed and refused a four-character fix to a wrong order id in it.
+#
+# The correction sits BESIDE a new fragment on purpose: a real cycle pushes
+# both, and an arm that modified a report alone would not prove the mixed case.
+reset_branch
+printf 'packets: []\n' > plan/index.d/20260905t000005z-fixture.yaml
+printf 'Also see `lib.rs` `resolve_plan_binary`.\n' >> plan/issues/existing-report.md
+G add -A >/dev/null; G commit -q -m "new fragment plus a correction to a landed report"
+G merge -q --no-edit origin/linux-next -m "mandated merge of origin/linux-next"
+rm -f .git/tillandsias-union-ungated
+out="$(run_guard)"; rc=$?
+if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q 'plan-only lane'; then
+    ok "ARM 6: an M confined to plan/issues/ rides the lane beside a new fragment"
+else
+    bad "ARM 6: a correction to a landed report was refused after the merge (rc=$rc)"
+    printf '%s\n' "$out" | grep -m2 'plan-only lane' | sed 's/^/      /' >&2
+fi
+# Criterion 3 of the packet: relaxing the file-status rule must not quietly drop
+# the gate debt the scoped lane incurs.
+if [ -s .git/tillandsias-union-ungated ]; then
+    ok "ARM 6: the un-gated union is still recorded when a correction takes the lane"
+else
+    bad "ARM 6: relaxing the M rule dropped the union marker — the gate debt is now invisible"
+fi
+
+# ── ARM 7: NEGATIVE CONTROL — an M outside the plan dirs still full-gates ──
+# Without this, arm 6 is satisfied by admitting every M, which is the escape
+# hatch the lane exists to keep shut. build.sh can reach the build.
+reset_branch
+printf 'packets: []\n' > plan/index.d/20260905t000006z-fixture.yaml
+printf 'fn other() {}\n' >> src_placeholder.rs
+G add -A >/dev/null; G commit -q -m "fragment plus a modified non-plan file"
+G merge -q --no-edit origin/linux-next -m "mandated merge of origin/linux-next"
+_outgoing="$(G diff --name-only origin/windows-next HEAD)"
+case "$_outgoing" in
+    *src_placeholder.rs*) ;;
+    *) bad "ARM 7 is VACUOUS — the modified file is not in the outgoing diff" ;;
+esac
+out="$(run_guard)"; rc=$?
+if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q "outside plan/index.d/"; then
+    ok "ARM 7: an M outside the plan directories still requires the full gate"
+elif [ "$rc" -ne 0 ]; then
+    bad "ARM 7: refused, but not by the path-scope rule — $(printf '%s' "$out" | grep -m1 'plan-only lane')"
+else
+    bad "ARM 7: a modified non-plan file rode the lane — the M relaxation is too wide"
 fi
 
 echo "plan-lane-after-merge: $pass passed, $fail failed"

@@ -457,6 +457,8 @@ Hard rules:
 
 - **On Windows, name the runner beside a test count: native cargo or the gate's WSL re-exec.** A `cfg(all(test, unix))` module reports "7 passed" natively while three of its tests are broken, because the broken ones were never compiled; only the WSL re-exec runs them (972-umik commit B, 2026-09-05). Windows-native cargo output is not evidence about a unix-cfg module. And a litmus verdict from a Windows host before df5708607 (1049-s35z) is unearned: CRLF from jq.exe made bound tests unfindable, and the runner counted the skips as PASS.
 
+- **Under the relay protocol, `git pull --rebase` on linux-next fuses the two lanes.** A slow-gate host pushes gated code to `work/<order>` for the coordinator to relay-land and pushes ledger fragments directly through the plan-only lane. If both commits exist on the same local linux-next, a rebase carries the code into the "plan-only" push and the hook refuses it (`plan-only lane: not applicable — … outside plan/index.d/`), which is correct; the refusal's output offers `git push --no-verify`, which would push the violation through. Never use it. After a `work/` push, reset local linux-next to `origin/linux-next` before starting plan-only work, so the lanes never share a branch; if they already do, reset to trunk and cherry-pick the fragment commit alone after confirming the `work/` ref is safe on origin (lenovinha, 2026-09-05, 1059-pb2j).
+
 ---
 
 ## 6 — Commit, Push & Checkpoint
