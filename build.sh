@@ -3271,6 +3271,21 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Missing-bound-test check passed"
 
+    # 891-5shq: the TILLANDSIAS_* namespace forward has ONE implementation and
+    # both dispatch boundaries use it. The toolbox boundary was fixed and the
+    # reasoning written down; the WSL boundary then received its own separate
+    # copy of the same four lines, and a control flag that works on one
+    # platform's dispatch and not the other's is worse than one that works on
+    # neither, because only one of those gets noticed. The fixture also pins
+    # that the forward never MANUFACTURES a value and that values are quoted --
+    # unquoted, a flag carrying a semicolon is a command-injection seam.
+    _step "Checking the env-forward is shared by every dispatch boundary (891-5shq)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-env-forward-shared.sh" 2>&1; then
+        _error "a dispatch boundary rolls its own TILLANDSIAS_* forward, or the forward manufactures/unquotes values (891-5shq) — see the verdict line above"
+        exit 1
+    fi
+    _info "Env-forward sharing check passed"
+
     # 965-sxec: a missing or unusable ruby must read as COULD-NOT-RUN (exit 3),
     # never as a claim about the ready set. Inside a forge `command -v ruby`
     # finds a brew shim that cannot install one, exits 127, and the caller's

@@ -252,10 +252,12 @@ done
 #
 # TILLANDSIAS_SKIP_WSL2 is exported AFTER this string, so the recursion guard
 # always wins over anything forwarded here.
-_ENV_FORWARD=""
-while IFS= read -r _w2_var; do
-    _ENV_FORWARD="${_ENV_FORWARD}export $(printf '%q' "$_w2_var")=$(printf '%q' "${!_w2_var}"); "
-done < <(compgen -v | grep '^TILLANDSIAS_' || true)
+# ORDER 891-5shq: ONE implementation, shared with the toolbox dispatch. This
+# loop stood here as a second copy of the toolbox's, which is the divergence
+# that packet's fourth criterion forbids -- a third boundary must not be able
+# to reimplement it a third time.
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-env-forward.sh"
+_ENV_FORWARD="$(tillandsias_env_forward_prefix)"
 
 # ORDER 922-curm — the TILLANDSIAS_SKIP_TOOLBOX=1 that stood here is GONE, and
 # its removal is the point rather than a tidy-up. 889-8tcb set it at this
