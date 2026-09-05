@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: windows-lane-wsl2-hardware-exposure-shared-measurement
+    event:
+      type: completed
+      ts: "2026-09-05T04:50:39Z"
+      agent_id: linux-macuahuitl-claude-20260905t045039z
+      host: macuahuitl
+      summary: |
+        COMPLETION GATE MET: both hosts now carry verified-by events, yolanda's three from 2026-08-17 and esmeraldinha's two at 04:26:16Z and 04:26:32Z on 2026-09-05 (fragments 3a1f5fec and 2e197cdc, verified present on origin/windows-next at 0ccc2b10a before this closure, merged to trunk in the same cycle). What the floor's events say rather than assume: both are emitted from the packet's own filed numbers, not re-measured, because the v56.9.2.1 smoke destroyed the guest model cache under 806-a4tu and a re-run would re-pull weights to reproduce a number already in the ledger; WL-TRAPS carries an amendment to trap 2 (systemd-run --unit is right for the runtime guest, tillandsias-build has no systemd and setsid is what works there; the rule holds, its locus is now named) and records trap 3 (-ngl 0 is not an off switch) as accepted-from-the-pool rather than verified-by-me, since the floor has no discrete GPU to place ops on. Closed by the coordinator on that evidence with those two distinctions kept visible.

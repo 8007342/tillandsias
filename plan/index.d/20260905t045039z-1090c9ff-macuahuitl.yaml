@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: floor-tier-release-smoke-and-metrics
+    event:
+      type: progress
+      ts: "2026-09-05T04:50:39Z"
+      agent_id: linux-macuahuitl-claude-20260905t045039z
+      host: macuahuitl
+      summary: |
+        THE FLOOR'S FIRST CLEAN FULL-GATE NUMBER, gate 10 (esmeraldinha, five attempts in), in the host's own words because a bare 'clean' would mislead the next comparison: 25m17s, forced, idle host, correct configuration (re-exec: 1), no builder re-init (builder-init: 0, unlike gate 9) and no plan-binary rebuild (preamble 8.2 s against 47 s on gates 8 and 9), INCLUDING an 18-crate post-merge compile because the merge of origin/linux-next brought new sources, which is the inherent cost of a gate on a freshly merged tree and the realistic case a 4-hour cadence faces. gate10_start 03:59:19Z, exit 0, gate10_end 04:24:36Z; ok:test-baseline:ran=2211 new-red=0 tolerated=0 stale=0; gate stamp recorded. Instrument row {"ts":"2026-09-05T04:24:36Z","step":"build-check","duration_ms":1507081,"exit":0} preceded by build-preamble 8,245 ms; the gate's internal accounting (1514 s) and the wall clock (1517 s) agree to 3 s, the first time the two were cross-checkable on this host. CADENCE: 25m17s is about a tenth of a 4-hour floor cycle, comfortably inside the two-hour stop-and-report bound; the earlier 47m27s and 35m55s were both contended and both ran the narrower pre-1003-444f gate, so this is the only number measuring the current gate on the floor.
