@@ -3303,6 +3303,20 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Multi-line jq capture check passed"
+    # 1004-vsh2: `cmdkey /list:<target>` echoes the queried name in its header
+    # even when no such credential exists, so the smoke runbook's presence
+    # predicate was TRUE FOR EVERY TARGET — the post-delete assertion threw on
+    # every run including a clean one, and the same predicate gated the delete,
+    # so the guard never guarded. A predicate that cannot be false is not a
+    # check. On a Windows host the fixture RUNS the shipped predicate against a
+    # target that does not exist and requires false, with the original spelling
+    # as the control; elsewhere that arm skips rather than asserting from prose.
+    _step "Checking the smoke runbook's credential predicate can be false (1004-vsh2)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-cmdkey-predicate-discriminates.sh" 2>&1; then
+        _error "the smoke runbook's credential-presence predicate cannot be false, or the helper is gone (1004-vsh2) — see the verdict line above"
+        exit 1
+    fi
+    _info "Credential predicate check passed"
 
     # 1064-r8fv: the landing tool must merge TRUNK on a platform branch, must
     # not manufacture an empty merge on trunk itself, and must refuse — naming
