@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: brew-aarch64-harness-strategy
+    field: status
+    value: blocked
+    ts: "2026-09-05T19:57:58Z"
+    host: macuahuitl
+
+events:
+  - packet_id: brew-aarch64-harness-strategy
+    event:
+      type: note
+      ts: "2026-09-05T19:57:58Z"
+      host: macuahuitl
+      summary: |-
+        the only remaining work is an orchestrated forge launch needing operator-authorised proxy and vault credentials; macbookair released it correctly but the blocker was in a note summary, which the selector does not read, so 317 was being offered to every macOS host (1 of 1 in tillandsias-plan ready)

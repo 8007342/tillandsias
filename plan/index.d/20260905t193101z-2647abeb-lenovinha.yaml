@@ -1,0 +1,46 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: two-orphan-fixtures-are-marked-manual-and-there-is-no-vocabulary-that-says-what-manual-means
+    event:
+      type: progress
+      ts: "2026-09-05T19:31:01Z"
+      agent_id: linux-lenovinha-claude-20260905t192710z
+      host: lenovinha
+      summary: |
+        DECIDED, AND THE ANSWER IS THAT THE TREE ALREADY HAS THE VOCABULARY. I did not invent one, and I think inventing one would have been the wrong output.
+
+        WHAT I FOUND BEFORE CHOOSING. Both fixtures self-describe, in their own second line, as "Diagnostic script: Launch <X> container in isolation", and both contain ZERO assertions — no _pass, no _fail, no comparison, no exit-code check. They are not manual because they need hardware. They are diagnostics wearing a test- name, which is a category error rather than a coverage gap.
+
+        Then the decisive evidence: scripts/ ALREADY carries ten `diagnose-*` scripts, including scripts/diagnose-proxy.sh, which is 127 lines against test-proxy.sh's 40, has three times the proxy-probing surface, and IS referenced (images/proxy/entrypoint.sh, scripts/test-tool-dispatch-lib.sh) where test-proxy.sh is referenced by nothing.
+
+        THE VOCABULARY, therefore, is two terms already in use and expressed as a FILENAME PREFIX:
+
+          test-*      asserts something. Its exit code IS a verdict. It must be bound
+                      to a caller or retired; an unbound one is a silent gap.
+          diagnose-*  produces output for a human to interpret. Its exit code is NOT a
+                      verdict and nothing is guarded by running it. It is expected to
+                      be unbound, and being unbound says nothing about its health.
+
+        A READER MAY CONCLUDE, from `diagnose-`: nobody is relying on this to catch anything. What they may NOT conclude: that a clean run means the subject is correct, or that anything was asserted.
+
+        WHY A PREFIX BEATS THE MARKER THE PACKET ASKED FOR, and this is the whole argument: a marker has to be remembered, and a fixture with a forgotten marker is indistinguishable from an orphan — which is the exact state this packet exists to end. A NAME cannot be forgotten, because the scan keys on it. `diagnose-git-mirror.sh` is invisible to a test-fixture scan BY CONSTRUCTION, not by anyone maintaining a list. It also needs no new mechanism, no schema change, and no guard to enforce the marker's presence.
+
+        DISPOSITIONS, both applied:
+          scripts/test-git-mirror.sh -> RENAMED to scripts/diagnose-git-mirror.sh. A genuine diagnostic with no existing counterpart. Its header now records what a reader may and may not conclude from the prefix.
+          scripts/test-proxy.sh      -> RETIRED. Superseded by diagnose-proxy.sh, which is larger, better-covered and actually referenced. Retired on "duplicate, superseded" rather than "pins nothing", though it pins nothing either.
+
+        Orphan count 13 -> 11.
+
+        I NEARLY BROKE THE RENAME ON A FALSE POSITIVE. Grepping `test-git-mirror` found three cheatsheets and I almost concluded the file was referenced. They cite scripts/test-git-mirror-relay-verified-ack.sh and test-git-mirror-safe-refspec — DIFFERENT scripts that share the prefix. Only grepping the exact filename with its extension showed the file is genuinely unreferenced. A prefix match is not a reference, and this is the same substring-versus-thing error that has run through the whole orphan family.
+
+        A THIRD INSTANCE FOUND AND DELIBERATELY NOT TOUCHED: scripts/test-inference.sh also self-describes as a "Diagnostic script" and has the same category error. It is NOT an orphan — openspec/litmus-tests/litmus-inference-readiness-probe-shape.yaml invokes it — so it is a naming inconsistency rather than a coverage gap, and renaming it means editing a bound litmus. That is outside this packet's two fixtures and I have left it, named here so the next reader does not have to rediscover it.
+
+        WHAT IS LEFT, and it is the scorable half the packet describes: a check that every scripts/test-*.sh is bound or retired, with no third state. It is now MEANINGFUL in a way it was not this morning, because diagnostics no longer live under test-*. It belongs with 1063-nraf's guard rather than here, and it inherits that packet's constraint: it must not land until the remaining orphans are disposed of, or it reds the gate on day one.

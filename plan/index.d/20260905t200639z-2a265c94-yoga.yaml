@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: linux-native-stream-audit
+    event:
+      type: progress
+      ts: "2026-09-05T20:06:39Z"
+      agent_id: linux-yoga-claude-20260905t200639z
+      host: yoga
+      summary: |-
+        AUDIT HALF DELIVERED as a slice; the refactor half and the four-agent verification are not claimed. COUNTED BEFORE LISTING: 14 sleep sites in crates/tillandsias-headless/src/tray/mod.rs, but NINE ARE INSIDE TEST FUNCTIONS (watch_shutdown_blocking_flips_phase_to_stopping_when_atomic_flips, async_executor_* x7). Production sites: FIVE. A naive count would have overstated the target by three times, which is the same shape as reading a capped grep as a total. THE FIVE, CLASSIFIED, with the enclosing function rather than the line alone: (1) mod.rs:813 watch_shutdown_and_mark_stopping_blocking - `while !shutdown.load(SeqCst) { thread::sleep(250ms) }`, TRUE SHUTDOWN POLL, belongs to 679-vdi6. (2) mod.rs:4764 run_tray_mode_with_debug - the same 250ms AtomicBool poll, ALSO 679-vdi6, and it carries a constraint that packet does not mention: the loop body also calls service.flush_pending_emit() as the trailing flush of a coalesced signal burst (944-jaef), so a Notify/watch conversion must preserve that flush or it silently drops the coalescing. (3) mod.rs:4373 inside the github-login task - `thread::sleep(1s)` in a loop waiting for a token to appear in Vault, with elapsed logging every 15 iterations. TRUE LOGIN-STATE POLL, belongs to 679-rp9m. (4) mod.rs:3014 handle_clone_project - `thread::sleep(2s)` then rebuild the menu, commented "Refresh menu after a short delay to show results". NOT a poll: a fixed cosmetic delay. It is a different defect (an arbitrary wait where a completion signal exists) and should not be swept into either child. (5) mod.rs:5172 zombie-reap quiescence - polls to quiescence with a HARD 10s ceiling and a recorded reason (500ms was not reliably enough, process-wide count, flaked in ci-full run 9 2026-08-30). Bounded, test-support, deliberate. NOT a defect. So the packet criterion "no polling loops for VM status, login state, or cloud projects" has THREE real sites, not fourteen and not five. CRITERION 3 IS ALREADY MET AND I CHECKED RATHER THAN ASSUMING: mpsc::unbounded appears ZERO times in crates/tillandsias-headless/src/, against 6 broadcast/watch channels. Nothing to do there. LINE NUMBERS IN THE CHILDREN HAVE DRIFTED, which is 147 shape again: 679-vdi6 deliverable cites ~L640-655 and ~L4081-4082; the sites are now 813 and 4764. Whoever takes it should locate by FUNCTION NAME (watch_shutdown_and_mark_stopping_blocking, run_tray_mode_with_debug) rather than by line. NOT DELIVERED: criterion 1, SC-01 through SC-15 verified across the path, which needs the four-agent verification this packet requires and is not a one-host slice.

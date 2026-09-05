@@ -1,0 +1,150 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: binding-an-orphaned-fixture-imports-its-whole-legacy-body-into-the-gate-past-every-diff-scoped-guard
+    order: 1076-kft9
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    owner_host: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags:
+      - guard
+      - gate
+      - fail-loud
+      - corpus
+      - multi-host
+    estimated_hours: 4
+    owned_files:
+      - scripts/check-sigpipe-verdict-pipelines-added.sh
+      - build.sh
+    verifiable_closure: |
+      bash scripts/test-orphan-binding-review.sh exits 0, and each arm reds on
+      the pre-fix tree:
+
+      ARM 1 (a newly BOUND fixture is scanned in full). A scratch repo whose
+      change adds only a `_step` invocation of a pre-existing, unmodified
+      fixture file containing a producer-into-`grep -q` pipeline under pipefail
+      is REFUSED. PRE-FIX RESULT: FAILS — every -added guard is diff-scoped and
+      the fixture body contains no added line, so nothing looks at it.
+
+      ARM 2 (an ordinary edit is unaffected). The same scratch repo, changing a
+      line inside an already-bound fixture, behaves exactly as today. This is
+      the NEGATIVE CONTROL: a fix that scanned every bound fixture on every push
+      would satisfy arm 1 while charging the whole corpus on every change, which
+      is how a guard gets switched off (977-448j).
+
+      ARM 3 (the SIGPIPE check judges by BYTES, not by pattern). Given a
+      pipeline whose producer emits MORE than the pipe buffer after the match
+      offset, the check flags it; given one that emits far less, it does not,
+      and it SAYS which side it measured. PRE-FIX RESULT: FAILS — the current
+      check matches producer NAMES from a regex list and never measures.
+    title: |
+      binding an orphaned fixture moves its entire unreviewed legacy body inside the gate while every -added guard sees no added line — so the fixture arrives already green on the host that bound it and reds later on a host with a different pipe buffer
+    context: |
+      FOUND by esmeraldinha 2026-09-05 while working 1072-b7eq, reported as a
+      stop-the-line. Reproduced and measured on macuahuitl before this packet
+      was filed.
+
+      THE INSTANCE. 1063-nraf bound the orphaned fixture
+      scripts/test-scorable-obligation-gate.sh into ./build.sh --check. Its arm
+      17, written long before and never gated, is:
+
+        sed 's/#.*//' "$lane" | grep -qE "bash[[:space:]]+[^|]*$needle"
+
+      under `set -uo pipefail`. `grep -q` exits at the match, `sed` keeps
+      writing, takes SIGPIPE, and pipefail promotes 141 to the pipeline's
+      status — so THE ARM REPORTS FAIL BECAUSE THE LANE IS CORRECTLY WIRED.
+      esmeraldinha measured PIPESTATUS=(141 0) in the WSL builder on a tree with
+      the wiring present, and gate 20 there died at 16/17 after 28m32s.
+
+      IT IS GREEN ON MACUAHUITL, AND THE REASON IS THE DEFECT. Measured here:
+
+        lane file          1169 lines, 67708 bytes
+        first match        line 875
+        tail after match   294 lines, 10161 bytes
+        set -uo pipefail   rc=0, PIPESTATUS=(0 0)
+
+      Ten thousand bytes against a 64 KB pipe buffer, so the producer finishes
+      before it can be signalled. The verdict is decided by HOW MUCH OUTPUT
+      HAPPENS TO REMAIN AFTER THE MATCH, not by whether the match exists. This
+      host is one that flips later, not one that is safe: the lane file is
+      already 67 KB and every guard added to it grows the tail past line 875.
+
+      WHY NO GUARD CAUGHT IT, AND THIS IS THE PACKET.
+      check-sigpipe-verdict-pipelines-added.sh is diff-scoped BY DESIGN and its
+      own output says so: it flags only pipelines ADDED in a change. A fixture
+      that has sat orphaned for weeks contains no new lines, so binding it moves
+      its whole body inside the gate without a single -added guard looking at
+      it. The binding is one `_step` line; the code it imports is arbitrary.
+
+      SCALE, MEASURED NOT GUESSED: 1063-nraf is a wave of roughly thirty
+      orphaned fixtures and thirteen remain. Its own commit message records two
+      of the already-bound ones as having had genuine defects. This is a third,
+      with the OPPOSITE POLARITY — the defect is in the fixture rather than in
+      the thing it tests, so it reds a correct tree. Three defects in the first
+      seventeen bindings is not a tail risk.
+
+      THE SECOND HALF, and it is why arm 3 exists. The SIGPIPE check recognises
+      producers by NAME from a regex list — cat, find, journalctl, coredumpctl,
+      cargo, podman, git grep — which is how it missed plain recursive grep
+      (1070-a4gc) and how it would miss `sed`. Names are a proxy for the real
+      question, which is whether the producer can still be writing when the
+      consumer exits. esmeraldinha answered that question directly, by measuring
+      producer bytes and match offset for ten verdict-position candidates: nine
+      safe, one live. Two earlier line-oriented counts of the same corpus had
+      returned ZERO.
+
+      THE COUNT'S PROGRESSION IS THE ARGUMENT FOR THE METHOD, and it belongs
+      here rather than in any of the three packets it passed through:
+        yoga, line-oriented pattern count ............. 0
+        lenovinha, folding line continuations ......... 1 (latent)
+        esmeraldinha, producer bytes vs match offset .. 2 (one LIVE)
+      Each method found what the previous one was structurally unable to
+      represent. A count is only as good as the shapes its matcher can
+      represent, and none of the three was careless.
+
+      A NEAR-MISS WORTH KEEPING, because it is the control this class invites
+      you to get wrong: esmeraldinha nearly called
+      scripts/hooks/pre-push-local-gate.sh:697 live at 60 KB of producer output,
+      and the 60 KB was the SYNTHETIC PRODUCER used to test it. The real
+      producer is `grep -E '^## '` over a single loop-status fragment — one line
+      of about forty bytes. A control deriving from its treatment, caught before
+      it became a finding.
+    next_action: |
+      LEFT TO DO:
+
+      1. LAND esmeraldinha's standalone fix for the live instance FIRST, on its
+         own, ahead of this packet's design work. It is one line plus a comment
+         — the 792-ksr8 rewrite, capture then match a herestring — and it
+         unblocks every SIGPIPE-honouring host. It must arrive as a pushed
+         `work/` ref and not as a local SHA; a SHA on one host is a phantom on
+         every other.
+
+      2. Make a NEWLY BOUND fixture reviewable. The signal is a change that adds
+         a `_step`/`_run` invocation naming a script whose body is unchanged in
+         the same diff — then scan that script's body as if it were new. Arm 2
+         is what stops this becoming a whole-corpus scan on every push.
+
+      3. Make the SIGPIPE check measure instead of pattern-match: producer bytes
+         after the match offset against the platform pipe buffer, and SAY which
+         side it measured. Keep the name list as a cheap pre-filter if it helps,
+         but the verdict must come from the measurement — `sed` is not on the
+         list and `sed` is the live instance.
+
+      4. Re-run the corpus count with the measuring check once it exists, and
+         report it as a FLOOR over the shapes the matcher can represent, naming
+         what it still cannot see: a pipeline inside a multi-line command
+         substitution, and one assembled through a variable.
+
+      NOT IN SCOPE: widening check-sigpipe-verdict-pipelines-added.sh to the
+      whole corpus on every push. 1070-a4gc declined that on a measurement and
+      the reasoning stands — a full-corpus arm that charges every push is how a
+      guard gets switched off. This packet's arm 1 targets the one entry path
+      that genuinely bypasses the diff scope.
+
+      CREDIT: esmeraldinha found it, measured it, fixed it and swept the corpus
+      by bytes; lenovinha's continuation folding found the latent sibling and
+      established that the earlier zero was blind; yoga established the corpus
+      method and the design call this packet deliberately does not overturn.

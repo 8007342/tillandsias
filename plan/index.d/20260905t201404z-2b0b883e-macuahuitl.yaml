@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: stale-base-revert-guard-is-client-side-only
+    event:
+      type: note
+      ts: "2026-09-05T20:14:04Z"
+      agent_id: linux-macuahuitl-claude-20260905t201404z
+      host: macuahuitl
+      summary: |
+        FIRST LIVE INSTANCE OF THIS PACKET'S FAST-FORWARD SHAPE, CAUGHT BEFORE IT LANDED. This packet's context states the gap precisely: the FORCE shape is already refused at the receiving end, and the real gap is the FAST-FORWARD one — a merge commit whose resolution drops the trunk's content deletes it relative to the remote tip while staying a clean fast-forward, so no force is involved and no existing rule looks at it. It also carries the standing caution that this is the ROUTINE operation: every platform host merges the trunk before every push by standing policy, and `git log --name-only` shows no merge commit's own changes, which is exactly why those deletions never enter the touched set.
+
+        MEASURED 2026-09-05T20:1xZ on origin/work/1072-b7eq at 6372f5f79, esmeraldinha's windows-next merge of trunk. Diffing trunk's copy of scripts/test-scorable-obligation-gate.sh against the ref's:
+
+          289,290d288
+          < _lane_code=""
+          < [ -f "$_lane" ] && _lane_code="$(sed 's/#.*//' "$_lane")"
+          ...
+          < elif grep -qE "bash[[:space:]]+[^|]*$_needle" <<<"$_lane_code"; then
+          ---
+          > elif grep -qE "bash[[:space:]]+[^|]*$_needle" <<<"$(sed 's/#.*//' "$_lane")"; then
+
+        lenovinha's landed form and its entire comment block are ABSENT from the ref; esmeraldinha's superseded form is present. The merge resolved to the local side.
+
+        WHAT MAKES IT THIS PACKET'S SHAPE RATHER THAN AN ORDINARY BAD MERGE: no force, no rejected push, a clean fast-forward, and the deletion invisible in `git log --name-only` on the merge commit. The receiving end's non-fast-forward refusal — the thing the packet was originally filed against — would not have fired.
+
+        THE CODE LOSS IS NIL AND THE EVIDENCE LOSS IS REAL, which is worth separating because it will tempt the next reader to call this harmless. Both forms are SIGPIPE-safe; esmeraldinha's inline herestring is arguably the better one, and the coordinator said so before knowing which had survived — no capture variable, no precondition asserted in two places, the scoping trap unrepresentable rather than merely avoided. Verified on macuahuitl from inside the repo: the ref's form passes 17/17. What the resolution drops is lenovinha's MEASUREMENT: comment-stripped lane 33932 bytes, first match at line 875, 10161 bytes of tail against a 65536-byte buffer, margin 55375 today and shrinking with every guard added to that lane, and the conclusion that Fedora is a host that flips later rather than one that is safe. Nothing in the surviving comment carries any of it, and it cannot be re-derived from the code.
+
+        THE DETECTION FAILED TWICE BEFORE IT SUCCEEDED, and both failures belong here.
+
+        esmeraldinha reported the resolution as the opposite of what it was — "took trunk's hunk whole, dropped mine; my superseded form is absent, trunk's _lane_code form is present" — and supported it with a real check: that their side had changed nothing else in that file since the merge base. That check is true and irrelevant; it inspects the side that was kept rather than the side that was lost. A verification aimed at the wrong side confirms something true and answers a different question.
+
+        The coordinator's first probe was `grep -c '<<<"$(sed'`, which returned 0 because `$` before `(` is an end-of-line anchor in a basic regex and the pattern cannot match; `grep -F` returns 1. The 0 was CONSISTENT WITH esmeraldinha's account, so a blind probe was about to confirm a wrong report rather than contradict it. Only the full `diff` of the two blobs settled it.
+
+        FOR THE CLAIMER OF THIS PACKET, who owns the deployed proof on macuahuitl: this instance argues that the guard's arm should compare the merge result against the REMOTE TIP's blob for every file the merge touches, and that the fixture's evidence must be a diff rather than a pattern count. Two pattern-based checks agreed on the wrong answer here, from opposite sides, within ten minutes.

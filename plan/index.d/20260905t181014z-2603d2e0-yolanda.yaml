@@ -1,0 +1,48 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: jq-crlf-on-windows-turns-shell-reads-into-silent-wrong-answers
+    event:
+      type: progress
+      ts: "2026-09-05T18:10:14Z"
+      agent_id: windows-yolanda-opus5-20260905t181014z
+      host: yolanda
+      summary: |
+        THE SWEEP IS SIZED, AND MY OWN PACKET OVERSTATED IT BY MORE THAN AN ORDER OF MAGNITUDE. I wrote that "26 scripts under scripts/ pipe jq -r into shell values and every one of them is exposed on a Windows host". Measured, that is wrong. Correcting it here rather than letting a future host sweep 63 sites that do not need touching.
+
+        THE DISCRIMINATOR, measured with od -c on the VALUE as macuahuitl specified, because MSYS grep hides the CR:
+
+          v="$(echo '{"a":"x"}' | jq -r .a)"   -> len 1, od shows "x", [ "$v" = x ] is TRUE
+
+        Command substitution on this host strips the trailing line ending INCLUDING the CR. So the ordinary single-value capture idiom -- which is what 62 of the 63 sites are -- is NOT exposed.
+
+        WHERE THE CR ACTUALLY SURVIVES, same instrument:
+
+          while IFS= read -r l; do ...; done < <(jq -r '.a[]')   -> "one" arrives len 4, od shows o n e \r
+
+        and through a herestring reading two lines, the FIRST arrives len 4 and the LAST len 3. So the rule is exact: ONLY THE FINAL LINE OF jq OUTPUT LOSES ITS CR. Every preceding line keeps it. Exposure is therefore a property of whether a capture can yield MORE THAN ONE LINE, not of whether it uses jq.
+
+        THAT IS WHY THE LITMUS RUNNER BROKE AND NOTHING ELSE DID. _yaml_jq's callers read a MULTI-line list of test names line by line, so every name but the last carried a CR. A sibling call reading a single scalar through the same helper was fine, which is exactly why the defect looked like it should be everywhere and was not.
+
+        THE ACTUAL SIZE. 63 capture sites across 19 scripts. Of those, 10 use a filter that CAN emit multiple lines. Three of those ten collapse to one line by construction (`| max // 0` twice in bench-accel-lane.sh, `| join(", ")` in spec-index-ensure.sh) and are safe. The remaining SEVEN are the sweep:
+
+          bench-inference-floor.sh:158, :159      .models[]? | select(...) | .size / .size_vram
+          check-local-expert-health.sh:33         .models[].name // empty
+          check-long-running-view.sh:141          .[] | select(...) | [...]
+          refusal-calibration/measure-recall-at-k.sh:61   for m in $(... .models[]?.name)
+          test-hardware-fingerprint.sh:37, :38    .devices[]|select(gpu)|.name
+
+        WINDOWS REACHABILITY NARROWS IT FURTHER. Only four of the nineteen scripts are referenced from build.sh at all: bench-inference-floor.sh, hardware-fingerprint.sh, run-litmus-test.sh (already fixed) and test-hardware-fingerprint.sh. So of the seven, exactly THREE sit on a path this host's gate runs.
+
+        AND THE GATE-BOUND ONE IS SAFE TODAY BY DATA, NOT BY CONSTRUCTION, which is the finding worth carrying. test-hardware-fingerprint.sh:37-38 compares two GPU-name captures; both fixtures currently contain exactly ONE gpu row, so each capture is single-line and the CR never appears. Add a second GPU to either fixture and the comparison silently breaks on Windows only. That is a latent trap with no guard, and it is the shape this packet is about: correct today because of the data, not because anyone decided it.
+
+        CAVEAT I AM NOT GLOSSING: the safety of single-value captures rests on THIS shell's handling of the trailing line ending, measured on MSYS bash 5.3 on yolanda. It is not a POSIX guarantee -- POSIX says command substitution strips trailing NEWLINES, and a CR is not a newline, so a different Windows bash could retain it and re-expose all 63. The measurement is host-specific and should be re-run before anyone relies on it elsewhere.
+
+        RECOMMENDATION for whoever takes the remaining work: seven sites, not twenty-five scripts, and the per-site control is od -c on the captured value with a fixture that yields TWO rows -- because a one-row fixture cannot distinguish a fixed site from an unfixed one.

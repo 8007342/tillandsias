@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-sigpipe-verdict-guard-cannot-see-recursive-grep-or-any-pre-existing-pipeline
+    event:
+      type: progress
+      ts: "2026-09-05T18:56:23Z"
+      agent_id: linux-yoga-claude-20260905t185623z
+      host: yoga
+      summary: |-
+        Closed, landed 582b30025. Credential preflight ok:gh-credentials-store before starting and before pushing (982-sguu). THE CORPUS HALF NEEDS NO FIXES AND THAT IS THE MEASUREMENT, counted before listing and with /usr/bin/grep because this shell grep is ugrep: recursive-grep producer into a verdict grep -q with comments stripped = 0; multi-line, producer line ending in a pipe = 0; across build.sh and scripts/hooks = 0. The single apparent hit is a COMMENT in validate-traces.sh describing the already-fixed 1069-c9w6. So there is nothing in the corpus to repair and the guard value here is entirely forward-looking. SO I DID NOT WIDEN THE DIFF SCOPE, and the count is why: a full-corpus arm would flag ZERO sites today while costing every push, and a guard that refuses work nobody is touching gets switched off (977-448j). Diff-scoping stays and the count is recorded so a later host can revisit with evidence rather than re-deriving it. PRE-FIX RED DEMONSTRATED RATHER THAN ASSERTED: the new arm against the unchanged guard reports ok:sigpipe-verdict-added:0 checked, walking straight past a newly-added recursive-grep verdict pipeline; mutation control both directions, red with the regex reverted and green with it. rg IS DELIBERATELY NOT ADDED, also on measurement: ripgrep is recursive by default so every use as a producer is unbounded, but this guard tests the whole text left of the pipe and `command -v rg && ...` in scripts/with-tillandsias-builder.sh:247 would be a false positive on correct code; live rg-as-producer instances zero, and the comment says what anchor a future addition needs. THE FIRST CUT OF MY REGEX WAS WRONG AND THE FIXTURE CAUGHT IT: I wrote grep-space-dash-[a-zA-Z]*[rR] with a whitespace boundary, which matches -r and -lr but NOT -rl, the exact flag combination in the defect this order exists for; it needs [a-zA-Z]* on BOTH sides of [rR]. Same trailing-boundary mistake as a prefix matching a longer identifier, the fourth time today a boundary in my own pattern was the defect. A non-recursive grep stays out of the producer list since it is bounded by its input file and bare grep would flag the harmless grep-x-file-pipe-grep-q; a negative arm pins that a recursive grep CAPTURED into a variable, the rewrite this guard recommends, stays clean, so the widened list cannot refuse its own remedy. Fixture 14 arms, gate rc=0 308s.
