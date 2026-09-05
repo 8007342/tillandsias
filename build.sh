@@ -3154,6 +3154,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Host-tools check passed"
 
+    _step "Checking cross-branch claim visibility refuses a packet held elsewhere (1034-whsp)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-claims-across-branches.sh" 2>&1; then
+        _error "the cross-branch claim check is unsound (1034-whsp) — a false 'nobody holds this' hands a claimed packet to a second host, which is the 814-iyu7 duplication"
+        exit 1
+    fi
+    _info "Cross-branch claim visibility passed"
+
     _step "Checking the raw frame-decode ratchet (795-5itp)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-framing-raw-decodes.sh" 2>&1; then
         _error "the framing ratchet refused (795-5itp) — a new hand-rolled u32-BE frame decode, or a baseline nobody tightened after a migration"

@@ -235,12 +235,44 @@ automates. Canonical: `methodology/distributed-work.yaml` → `cycle_batch_triag
 1.  **Claim by flipping status, and push it BEFORE the work.**
 
     ```bash
+    scripts/check-claims-across-branches.sh <packet-id>   # FIRST. see below
     tillandsias-plan set-field <packet-id> status in_progress \
         --host "$(hostname -s)" --reason "claimed for cycle <UTC ts> by $agent_id"
     git add plan/index.d/
-    git commit -m "claim(<packet-id>): <host>"
+    git commit -m "claim(<packet-id>): <host>"   # the fragment and NOTHING else
     git push origin <active-branch>
     ```
+
+    **YOUR FOLD DOES NOT SHOW OTHER HOSTS' CLAIMS, and the gap is measured in
+    HOURS, not seconds** (1034-whsp). A claim lands on the claimant's PLATFORM
+    branch. It reaches a trunk host only when the coordinator relays that branch
+    into `linux-next`. Measured on tlatoanis-macbook-air 2026-09-05:
+
+    | | |
+    |---|---|
+    | claim push, claim-only diff, platform branch | **12.0s** |
+    | `osx-next` → `linux-next` relay gaps, last 9 | **19m – 2h02m** |
+    | time since the last relay, when this was written | **6h28m** |
+    | this host's own claims still unseen on `linux-next` | **1h55m, 2h11m** |
+
+    At that moment `origin/linux-next` folded 1034-whsp to `ready` while the
+    claiming host held it `in_progress`. A second host reading its own fold is
+    reading a state that can be hours stale, and 814-iyu7 (two hosts, 1009-gccx,
+    claims 5m14s apart) is what that costs.
+
+    So `check-claims-across-branches.sh` folds every sibling branch's ledger and
+    exits 1 with `claimed-elsewhere:<packet>:<branch>`. **One fetch, ~1s.** It is
+    NOT a lock: two hosts claiming inside the same fetch still collide, and the
+    timestamp rule below still arbitrates. It turns an hours-wide race into a
+    seconds-wide one. `blocked:` from it means STOP — it could not see the
+    siblings, which is not the same as nobody holding the packet.
+
+    **The claim commit must contain the claim fragment and NOTHING else**
+    (1034-whsp, yoga): anything else in the outgoing diff takes the push off the
+    plan-only lane and onto a full gate, ~250s instead of ~6.5s. Note that on a
+    platform branch the pre-push gate will first demand a merge of
+    `origin/linux-next`; that is expected, and the lane is merge-aware, so
+    re-push after merging rather than reaching for `--no-verify`.
 
     `$agent_id` is the §1.4 helper output (`scripts/agent-identity.sh id
     <backend>`) — if the helper refused, there is no identity to claim with, and
