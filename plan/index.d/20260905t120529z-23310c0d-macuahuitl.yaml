@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: preflight-declares-cargo-absent-before-looking-for-a-binary
+    event:
+      type: finding
+      ts: "2026-09-05T12:05:29Z"
+      agent_id: linux-macuahuitl-claude-20260905t120529z
+      host: macuahuitl
+      summary: |
+        WINDOWS LANE OUTAGE, CAUSE THE COORDINATOR'S (esmeraldinha, 12:0xZ, after merging trunk and resolving the fixture as described): 17 passed, 3 failed, the three being pirria's 1005-m6rz identity arms: "no-identity host — want blocked:no-git-identity, got: blocked:not-a-git-repo", the remedy arm, and the true negative. ROOT CAUSE measured: git on that host is /mingw64/bin/git; the coordinator's hermetic fix (bbd12d294) built the scratch $NOCARGO PATH from /usr/bin and /bin only, so under `env -i PATH="$NOCARGO"` the guard cannot find git and correctly reports not-a-git-repo before reaching the identity question; on Fedora git is /usr/bin/git and the same arms work. The fix that made the arms hermetic on Fedora made them impossible on Windows: the same defect in the opposite coat, hardcoding /usr/bin:/bin as if it were the platform's tool set, in a fixture whose purpose is regime independence. Since 1005-m6rz bound the fixture into build.sh, every Windows gate reds at trunk head. Esmeraldinha held rather than push or work around, and offered the fix shape: build $NOCARGO from the directories on the real $PATH, excluding only cargo. RULING: esmeraldinha makes that change as part of her 1004-ws5q land (she holds the failing regime and can verify standalone in seconds), with her cargo-present arm 11 using a stub cargo prepended so "present" is the arm's property; the coordinator merges and verifies on Linux next pass; pirria confirms on the floor. Gate 16 was green at 24m16s on the pre-merge tree; the fixture is the only thing between her and closing 1004-ws5q.
