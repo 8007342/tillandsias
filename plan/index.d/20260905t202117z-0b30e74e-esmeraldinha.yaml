@@ -1,0 +1,48 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: binding-an-orphaned-fixture-imports-its-whole-legacy-body-into-the-gate-past-every-diff-scoped-guard
+    event:
+      type: note
+      ts: "2026-09-05T20:21:17Z"
+      agent_id: linux-macuahuitl-claude-20260905t202117z
+      host: esmeraldinha
+      summary: |
+        THE PIPE-BUFFER MODEL IS FALSIFIED AND IT WAS THE COORDINATOR'S. This packet's next_action item 3 asks a check to measure "producer bytes after the match offset against the platform pipe buffer". esmeraldinha falsified that model on the host where the defect is live, before building the check that would have encoded it.
+
+        THE DECISIVE PAIR, same lane file, byte counts reproduced exactly across hosts:
+
+          macuahuitl (Fedora)  67708 B file, first match line 875, 10161 B of tail  ->  0/N wrong
+          esmeraldinha (WSL)   same quantities                                       ->  40/40 SIGPIPE, PIPESTATUS=(141 0)
+
+        The consumer MATCHED and the pipeline still failed. Identical quantities, opposite verdicts, deterministic on both. esmeraldinha's first count of 30/30 counted `rc != 0`, which also counts a plain no-match; they re-ran reading PIPESTATUS and confirmed it is genuinely 141 with grep returning 0.
+
+        AND THE MODEL FAILS IN THE OTHER DIRECTION TOO, which is why this is not a smaller-buffer story. Synthetics of the same shape on the failing host, with a pipe verified by filling it to hold 65536 bytes:
+
+          500 lines,  match@1     total 36439 B  tail 36427 B   wrong 1/10
+          500 lines,  match@450   total 36439 B  tail  3650 B   wrong 0/10
+          1200 lines, match@875   total 87539 B  tail 23725 B   wrong 1/10
+          1200 lines, match@1199  total 87539 B  tail    73 B   wrong 0/10
+
+        A 36 KB tail is nearly always fine there; the real 10 KB tail is never fine. The quantity does not order the outcomes. It is NOT mis-parameterised — it is the wrong quantity.
+
+        NO MECHANISM IS CLAIMED AND esmeraldinha REFUSED TO GUESS ONE. What distinguishes the real pipeline from every synthetic is unexplained; the candidates they can see and have not separated are a complex ERE consumer with `[^|]*` rather than a literal, many emptied lines after comment-stripping, and a match at 75% of a stream written in many chunks. Their stated reason for stopping: the last cost model published from three observations did not survive seven. That restraint is the finding's value — a third model would have been published, believed and re-falsified.
+
+        ITEM 3 IS SIMPLIFIED RATHER THAN COMPLICATED. The check must not compute a margin at all. It should EXECUTE the pipeline under pipefail and read PIPESTATUS — a direct observation of the thing itself, costing nothing extra, because the producers in scope are exactly the pure reads it is safe to run — and report `unmeasured` with a reason for everything else. That supersedes item 3 as written.
+
+        THE CALIBRATION RUN IS THE PROOF, and it is why "test the check against a known answer" belongs in this packet's closure. esmeraldinha's draft, on its calibration pass, emitted
+
+          measured-safe:scripts/hooks/pre-push-local-gate.sh:291:10242Bof65536
+
+        for the very pipeline that fails 40/40 on the host it was running on. A check hard-coding 65536 would have blessed the live instance. The code review would not have caught it; the calibration did.
+
+        esmeraldinha'S `unmeasured:...:no-match-today-safe-only-while-absent` VERDICT FOR THE TWO NIX GUARDS IS KEPT and is the right shape: a guard searching for a forbidden token cannot early-exit until it has something to report, so "safe" and "has nothing to say" are the same observation there.
+
+        CORRECTION MADE TO THE TREE. The comment block in scripts/test-scorable-obligation-gate.sh carried the falsified model as though it were a property of the pipeline. It was a property of ONE HOST, measured by the coordinator and generalised without warrant — esmeraldinha's words: a true measurement of one object read as a fact about another, the same shape as the work-ref error made an hour earlier. The comment now carries both hosts' results, the synthetics, the explicit statement that no mechanism is established, and the instruction to execute rather than model. What survives is the only thing that was ever load-bearing: on both hosts, in opposite directions, the verdict was decided by something other than whether the match existed.
