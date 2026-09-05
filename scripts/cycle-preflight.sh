@@ -226,15 +226,11 @@ if [ "${CYCLE_PREFLIGHT_SKIP_BUILD:-0}" != "1" ]; then
     # (704-zcgi); and never blocks — a failed refresh is a report, because a
     # stale expert is bad but refusing to start the cycle is worse.
     expert_bin="${HOME}/.local/bin/tillandsias-plan"
-    expert_report="absent"
-    if [ -e "$expert_bin" ]; then
-        if cmp -s "$plan_bin" "$expert_bin"; then
-            expert_report="current"
-        elif install -m0755 "$plan_bin" "$expert_bin" 2>/dev/null; then
-            expert_report="refreshed"
-        else
-            expert_report="refresh-failed"
-        fi
+    # ORDER 1060-wxdh: the decision lives in the probe, which runs the binary
+    # before installing it. See refresh_plan_binary_copy for what this cost.
+    expert_report="$(refresh_plan_binary_copy "$plan_bin" "$expert_bin")"
+    if [ "$expert_report" = "refresh-refused-not-runnable" ]; then
+        echo "warn:preflight:plan:expert-refresh-refused: $plan_bin does not run here, so it was NOT installed over $expert_bin (1060-wxdh)"
     fi
     plan_verdict="${plan_verdict}+expert-${expert_report}"
 
