@@ -3154,6 +3154,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Host-tools check passed"
 
+    _step "Checking cross-branch claim visibility refuses a packet held elsewhere (1034-whsp)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-claims-across-branches.sh" 2>&1; then
+        _error "the cross-branch claim check is unsound (1034-whsp) — a false 'nobody holds this' hands a claimed packet to a second host, which is the 814-iyu7 duplication"
+        exit 1
+    fi
+    _info "Cross-branch claim visibility passed"
+
     _step "Checking the raw frame-decode ratchet (795-5itp)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-framing-raw-decodes.sh" 2>&1; then
         _error "the framing ratchet refused (795-5itp) — a new hand-rolled u32-BE frame decode, or a baseline nobody tightened after a migration"
@@ -3285,6 +3292,19 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Env-forward sharing check passed"
+
+    # 1064-r8fv: the landing tool must merge TRUNK on a platform branch, must
+    # not manufacture an empty merge on trunk itself, and must refuse — naming
+    # the relay lane rather than taking it — when a push is refused server-side
+    # rather than lost to a race. Both defects were invisible on linux-next,
+    # where the branch and trunk are the same ref, which is why the tool worked
+    # exactly where it was not needed.
+    _step "Checking the landing tool merges trunk and refuses honestly (1064-r8fv)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-land-merges-trunk.sh" 2>&1; then
+        _error "land-on-platform-branch.sh does not merge trunk on a platform branch, or retries a server-side refusal (1064-r8fv) — see the verdict line above"
+        exit 1
+    fi
+    _info "Landing tool trunk-merge check passed"
 
     # 965-sxec: a missing or unusable ruby must read as COULD-NOT-RUN (exit 3),
     # never as a claim about the ready set. Inside a forge `command -v ruby`
@@ -3543,6 +3563,26 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Freshness regime-budget fixture passed"
+
+    # 1063-nraf / 1041-up99: this fixture was ORPHANED — invoked by no script,
+    # no litmus binding and no skill — while plan/index.yaml stated, of it, "THE
+    # NEGATIVE CONTROL, pinned by scripts/test-expert-accuracy-record-shape.sh,
+    # 6/6". The ledger recorded an enforcement that did not run. That is worse
+    # than recording none: a later reader has no reason to doubt it, and the
+    # control it names is the one that keeps a never-called expert from being
+    # reported as 100% accurate rather than as null.
+    #
+    # Wired here rather than left to a human's memory, which is the whole of
+    # 1063-nraf: a fixture pinning a verdict that can delete a host's cycle runs
+    # only when someone remembers to run it. Verified green before wiring
+    # (ok:test-expert-accuracy-record-shape:6-passed) — wiring a red fixture
+    # would trade a silent gap for a broken gate.
+    _step "Checking the expert-accuracy record shape (917-6iwv)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-expert-accuracy-record-shape.sh" 2>&1; then
+        _error "the expert-accuracy record shape regressed (917-6iwv) — a never-called expert must record rate=null, never 0 and never 100, and a partial run must carry its denominator"
+        exit 1
+    fi
+    _info "Expert-accuracy record fixture passed"
 
     _step "Checking litmus steps can actually fail (972-cvdg)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-steps-can-fail.sh" 2>&1; then

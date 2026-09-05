@@ -20,6 +20,13 @@
 #   build.sh (gate)                     Refuses at the container boundary before
 #                                       reaching a compiler at all; see the
 #                                       toolbox note below.
+#   scripts/check-host-tools.sh         1004-x9ua. THE FIFTH SITE, added here per
+#                                       the instruction below rather than found on
+#                                       a floor host. Reported
+#                                       missing:host-tools:macos:timeout,cargo,rustc,pkg-config
+#                                       on tlatoanis-macbook-air with all four
+#                                       installed, and printed each one a remedy
+#                                       to install what was already there.
 #
 # ADD TO THIS LIST WHEN YOU FIND THE NEXT ONE. That is the whole point: the
 # packet's exit criterion is that the next site is added here rather than
@@ -31,6 +38,25 @@
 # advisory; a shared resolver those scripts CALL is load-bearing. Sourcing this
 # gets a site the same resolution cycle-preflight has, so "add the next site"
 # means "call cargo_resolve" rather than "copy nine lines and hope".
+#
+# CHECK-HOST-TOOLS DELIBERATELY DOES NOT SOURCE THIS EITHER, for a different
+# reason than cycle-preflight's, and the reason is worth stating because "why
+# didn't you just call cargo_resolve" is the obvious review question.
+#
+# It resolves TWO prefix families, not one. Its false positives were cargo and
+# rustc (~/.cargo/bin) AND timeout and pkg-config (/opt/homebrew/bin), so
+# cargo_resolve closes half of them. More decisively, its fixture must be able to
+# CONSTRUCT the genuinely-absent case, and every prefix but the cargo ones is an
+# absolute path — a host that really has /opt/homebrew/bin cannot hide it. So
+# check-host-tools resolves through a list that its fixture can override
+# (TILLANDSIAS_HOST_TOOL_PREFIXES). cargo_resolve reads $HOME directly and
+# ignores that seam, so sourcing it would make "a tool absent from PATH and every
+# prefix still fails" unprovable — the arm would pass because cargo is really
+# installed, not because the check works.
+#
+# The registry entry above is the load-bearing part: the next reader looking for
+# "where does this assumption live" finds all five, which is what the criterion
+# asks for.
 #
 # CYCLE-PREFLIGHT DELIBERATELY DOES NOT SOURCE THIS. Its loop is pinned by a
 # fixture that greps the shipped script for the literal loop
@@ -78,6 +104,7 @@ cargo_sites() {
 scripts/cycle-preflight.sh
 scripts/check-cheatsheet-tiers.sh
 scripts/host-capability-probe.sh
+scripts/check-host-tools.sh
 build.sh
 SITES
 }

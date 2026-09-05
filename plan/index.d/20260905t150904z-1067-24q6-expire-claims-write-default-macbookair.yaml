@@ -1,0 +1,68 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: expire-claims-mutates-other-hosts-leases-by-default-so-a-read-probe-releases-them
+    order: 1067-24q6
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [plan, claims, multi-host, safety, cli]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-plan/src/main.rs
+    title: |
+      tillandsias-plan expire-claims defaults to mode=write, so asking what it would do RELEASES other hosts' claims as a side effect
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-09-05T14:49Z, while inventorying
+      existing claim machinery for 1034-whsp. I ran bare
+      `tillandsias-plan expire-claims` intending to READ what it does. It ran
+      in write mode — its own summary line says so — and released another host's
+      lease:
+
+        expired-claim  980-ja2m  diagnose-reports-healthy-during-a-total-outage
+                       2026-09-04T14:42:02Z  claimant:tlatoanis-macbook-neo
+        fragment: plan/index.d/20260905t144900z-0bb3d1b0-macos.yaml
+        summary: in_progress=4 expired=1 held=0 unknown_age=0 ttl_hours=24 mode=write
+
+      The fragment flipped 980-ja2m from in_progress back to ready. I deleted it
+      unpushed and 980-ja2m is untouched, so nothing landed — but only because I
+      happened to check `git status` afterwards. A cycle that ran the same probe
+      and then did `git add plan/index.d/` — which every claim recipe in the
+      skill does — would have published another host's lease release without
+      ever intending to, and without any line in its own commit naming it.
+
+      WHY THIS IS WORSE THAN AN ORDINARY FOOTGUN. The victim is by construction
+      ANOTHER host, so the person who runs it sees nothing wrong and the person
+      affected is not present. macneo's claim was the one released here, on a
+      host that currently cannot push (1025-a896): they would have lost the lease
+      and been unable to re-take it promptly. The TTL rule (641-e2qa criterion 2)
+      may well be RIGHT that a 24h-stale claim should be released — that is not
+      what this packet disputes. It disputes that the release happens as a side
+      effect of someone else's read.
+
+      THE DEFAULT IS BACKWARDS FOR A FLEET TOOL. A subcommand whose name is a
+      VERB in the imperative can reasonably write; but every other read-shaped
+      plan subcommand (status, query, ready, next, blocked-by) is pure, so the
+      shape of the CLI teaches that asking is safe. mode=write appears only in
+      the summary line AFTER the mutation has happened.
+    unscoreable: |
+      The pin is the both-directions fixture this packet's own criteria require and which does not yet
+      exist: a scratch ledger where every documented read/list flag leaves the bytes identical, and the
+      opt-in still expires a genuinely stale claim so 641-e2qa is preserved rather than weakened. The
+      claimer adds it. (unscoreable block added on trunk by the coordinator so the fragment satisfies
+      977-448j; a closure may only name a test that already exists, and this packet's test is the fix.)
+    exit_criteria:
+      - "bare `expire-claims` does not mutate: it reports what it WOULD expire and exits 0, with the dry-run stated in its own output"
+      - "writing requires an explicit opt-in (--write or --apply), and the flag name appears in the dry-run output so the reader learns it without the docs"
+      - "a fixture proves BOTH directions: bare invocation leaves the ledger byte-identical, and the opt-in still expires a genuinely stale claim (the 641-e2qa behaviour is preserved, not weakened)"
+      - "any caller that relied on the old default (scripts, litmus, coordinator recipes) is found and updated in the same commit, or shown by grep to not exist"
+    events:
+      - type: filed
+        ts: "2026-09-05T15:09:04Z"
+        agent_id: "macos-tlatoanis-macbook-air-claude-20260905t144547z"
+        host: tlatoanis-macbook-air
+        summary: |
+          Filed from an accidental mutation during 1034-whsp's machinery
+          inventory. Disclosed in that packet's progress event too, so the
+          finding is discoverable from either side.
