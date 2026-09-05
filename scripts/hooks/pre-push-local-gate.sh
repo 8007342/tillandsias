@@ -1132,5 +1132,38 @@ if [[ -f scripts/gate-stamp.sh ]]; then
     esac
 fi
 
+# ORDER 1069-5sp4, SECOND HALF — A VALID STAMP CANNOT VOUCH FOR PLAN FRAGMENTS,
+# BECAUSE IT DELIBERATELY DOES NOT HASH THEM.
+#
+# I put this guard in the plan-only lane first and watched my very next
+# plan-only push bypass it. The lane is "attempted only when the stamp is
+# missing/stale" (its own header), and a plan-only change NEVER staleness the
+# stamp — gate-stamp.sh:343 excludes plan/index.d/*.yaml on purpose. So the
+# common case is: stamp valid -> accepted here -> lane never consulted -> the
+# guard never runs. MEASURED on this host: the push carrying 1070-qi2e and
+# 1071-adhj printed one "local gate: preflight clean" line and ZERO
+# "plan-only lane" lines.
+#
+# That is the same composition as the defect itself, one level down, and the
+# first fix would have looked correct while firing only in the uncommon case.
+#
+# So ask here too. The checker is self-scoping — it prints skip:no-new-packets
+# and exits 0 when the outgoing diff adds no packet-declaring fragment — so this
+# costs a fork on every push and refuses only what it should. Absence is a NOTED
+# skip, not a refusal, for the reason recorded in the lane: the branch fires only
+# in synthetic repos, and build.sh's fast refusal invokes the checker directly.
+if [[ -f scripts/check-scorable-obligation-added.sh ]]; then
+    if ! _scorable_out="$(bash scripts/check-scorable-obligation-added.sh 2>&1)"; then
+        echo "${RED}✗ a packet in this push has no scorable obligation (977-448j)${RST}" >&2
+        echo "$_scorable_out" | head -8 | sed 's/^/  /' >&2
+        echo "  Name a litmus in verifiable_closure, or say 'unscoreable: <reason>'." >&2
+        echo "  NOTE: a valid gate stamp does not cover this — the stamp excludes" >&2
+        echo "  plan/index.d/*.yaml by design (930-i6x4), so it never re-ran the check." >&2
+        exit 1
+    fi
+else
+    echo "${YLW}note: scripts/check-scorable-obligation-added.sh absent — scorable-obligation check skipped${RST}" >&2
+fi
+
 echo "${GRN}✓ local gate: preflight clean, ./build.sh --check current for this tree${RST}" >&2
 exit 0
