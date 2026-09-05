@@ -1,0 +1,24 @@
+# Gate step 1004-vsh2 — data, not code (order 1072-b7eq).
+#
+# SECOND near-drop in twenty minutes, and the reason the freeze exists. This
+# region gains a step every time any host lands a fixture, so a 32-minute gate
+# on this box cannot win the race by construction: gate 22 raced yolanda's jq
+# fixture, gate 23 raced this one. Resolving "take my side whole" would have
+# removed its only binding both times — a valid file with an entry dropped,
+# which bash -n cannot see. Prefix 045 sits between 040 and 050; the ten-spacing
+# is there so a step can land between two without renaming either.
+#
+# STEP_SCRIPT is a LITERAL path on purpose: a binding assembled from a
+# variable is invisible to every name-based scan, including the
+# bound-or-retired guard (1063-nraf). Keep it a plain string.
+#
+# Yolanda's rationale, carried over verbatim: the predicate matched on every run
+# including a clean one, and the same predicate gated the delete, so the guard
+# never guarded. A predicate that cannot be false is not a check. On a Windows
+# host the fixture RUNS the shipped predicate against a target that does not
+# exist and requires false, with the original spelling as the control;
+# elsewhere that arm skips rather than asserting from prose.
+STEP_DESC="Checking the smoke runbook's credential predicate can be false (1004-vsh2)"
+STEP_SCRIPT="scripts/test-cmdkey-predicate-discriminates.sh"
+STEP_ERROR="the smoke runbook's credential-presence predicate cannot be false, or the helper is gone (1004-vsh2) — see the verdict line above"
+STEP_OK="Credential predicate check passed"

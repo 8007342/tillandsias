@@ -1,0 +1,160 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-gate-fixture-that-asserts-a-number-nobody-chose-is-a-snapshot-not-a-threshold-and-it-fires-later-with-the-wrong-label
+    order: 1083-gzqj
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    owner_host: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags:
+      - gate
+      - fail-loud
+      - testing
+      - corpus
+      - multi-host
+    estimated_hours: 5
+    owned_files:
+      - scripts/test-check-credential-channel.sh
+      - scripts/test-selector-drops-cross-branch-claims.sh
+      - scripts/test-forge-project-guard-hooks.sh
+    verifiable_closure: |
+      bash scripts/test-gate-thresholds-are-chosen.sh exits 0, and each arm reds
+      on the pre-fix tree.
+
+      ARM 1 (the armed one). A fixture arm comparing a LIVE-TREE-derived count
+      against a literal must not have zero margin. PRE-FIX RESULT: FAILS —
+      measured on macuahuitl 2026-09-05, test-check-credential-channel.sh:335
+      asserts `probes -le 3` and the live count is exactly 3 at HEAD, HEAD~10
+      and HEAD~30.
+
+      ARM 2 (the vacuity baseline must not be the live pool).
+      test-selector-drops-cross-branch-claims.sh:59 requires the REAL selector
+      against the LIVE ledger to emit at least one packet line. PRE-FIX RESULT:
+      FAILS — the arm reds when the linux ready pool empties, which siblings
+      holding rows or a release bump can cause without any code change.
+
+      ARM 3 (a hardcoded list that must track a real set declares the coupling).
+      test-forge-project-guard-hooks.sh:63 copies eight hook sources by name.
+      PRE-FIX RESULT: FAILS — adding a ninth to install-hooks.sh's required set
+      reds arm 1 of that fixture pointing at hook installation rather than at
+      the list.
+
+      NEGATIVE CONTROL, and it is what stops this becoming a ban on live-tree
+      assertions: a DECLARED vacuity floor whose number was chosen and stated
+      must still pass. test-precommit-zero-trace-scan-scope.sh's `n_all -gt 20`
+      is the reference case — both sweeps examined it and both cleared it.
+    title: |
+      nine gate fixtures assert numbers nobody chose against the live checkout, and one has ZERO margin — a snapshot in a gate fires later, on a host that changed nothing, with a label pointing at the wrong subsystem
+    context: |
+      FOUND by lenovinha 2026-09-05 while re-checking two binding candidates for
+      1077-vzwq, then swept deliberately by two independent methods.
+
+      THE CLASS, in lenovinha's general form, which is the test to apply rather
+      than a pattern to grep: FIND THE NUMBER, AND ASK WHO CHOSE IT AND WHERE
+      THAT CHOICE IS WRITTEN DOWN. If the answer is "whatever the tree measured
+      when the arm was written", it is NOT A THRESHOLD, IT IS A SNAPSHOT. A
+      snapshot in a gate fires later, on a host that changed nothing, with a
+      label pointing at the wrong subsystem.
+
+      THE ORIGINATING INSTANCE, caught before binding: test-trace-coverage.sh
+      Test 6 ran the validator against the LIVE tree at --coverage-threshold 80
+      and required PASS, under an arm named "Status PASS when coverage meets
+      threshold". Binding it would have added an undeclared 80% trace-coverage
+      floor to --check on all three hosts. Measured: 50 untraced spec
+      directories drop live coverage to 77% (227 active, 177 traced), and
+      adding ~45 spec directories ahead of their code does it too — a normal
+      OpenSpec-driven shape. Coverage is 100% today, so it had TWENTY POINTS OF
+      HEADROOM and would have fired months from now.
+
+      THE SHARPEST INSTANCE IS ARMED RATHER THAN LATENT, and this is why the
+      packet is p1. scripts/test-check-credential-channel.sh:335:
+
+        probes="$(grep -nE 'timeout [0-9]+ +git push --dry-run|_probe_cmd=' "$GUARD" | grep -vcE ':[[:space:]]*#')"
+        [ "$probes" -le 3 ] && ok "reverify added no probe to the hot path ($probes invocation sites)"
+
+      Verified independently on macuahuitl: the live count is 3 at HEAD, HEAD~10
+      and HEAD~30. THE THRESHOLD IS 3. THE MARGIN IS ZERO. The next refusal
+      class that legitimately needs its own `push --dry-run` reds the LANDING
+      GATE on every host, under a message telling the operator that reverify
+      added a probe to the hot path — when what happened is that the guard grew
+      a fourth legitimate probe and nobody chose three as a ceiling.
+
+      The comment directly above that assertion describes fixing a COUNTING bug
+      in this very line. The author was careful about HOW to count and never
+      asked whether the number they were counting to was a decision or a
+      snapshot.
+
+      SECOND, AND IT HAS ALREADY FIRED ONCE:
+      test-selector-drops-cross-branch-claims.sh:59 requires the real selector
+      against the live ledger to emit at least one packet line. Its own comment
+      records this fixture doing this exact thing already — "a control depending
+      on live external state, and it went red the first time a sibling actually
+      held something: this fixture passed when I wrote it and refused a real
+      land hours later, having tested nothing but the fleet's claim state." The
+      repair stubbed the CHECKER and left the BASELINE on the live ledger.
+      Principle half-applied, which is the same thing lenovinha did to
+      themselves on trace-coverage the same day in a different file.
+
+      TWO METHODS, AND THE ONE CASE BOTH EXAMINED AGREES. macuahuitl swept 87
+      bound fixtures mechanically for threshold-shaped flags (0) and bare
+      -ge/-gt/-le/-lt comparisons (1 candidate). lenovinha sharded 160 script
+      paths across 10 readers tracing where each compared value comes from,
+      with every candidate sent to an independent verifier told to default to
+      refuted: 18 raised, 9 refuted, 9 confirmed, 3 high and personally
+      re-verified. THE VERIFIERS REFUTED macuahuitl'S ONE CANDIDATE, on the
+      grounds both hosts had reached separately — the number 20 was chosen, is
+      stated, and guards a named vacuity. Opposite methods, same answer on the
+      shared case.
+
+      THE DISTINCTION THAT DECIDES EACH CASE, and it is lenovinha's correction
+      of a weaker framing: comparing against live content is NOT the defect.
+      Test 6 was bad because NOBODY CHOSE 80 AS POLICY and its label pointed at
+      the validator. `n_all -gt 20` compares against the live tree too, chose
+      its number deliberately, and says so in a comment. The remedy for a
+      declared floor is only that its failure message name the real cause, so a
+      shrunken corpus does not read as a broken sweep.
+
+      NINE IS A FLOOR, NOT A TOTAL, and both methods share the same blind spot:
+      neither read anything outside `--check`. Nothing here says anything about
+      --test, --ci-full, the litmus corpus, or the hooks.
+    next_action: |
+      LEFT TO DO, cheapest and most urgent first:
+
+      1. FIX THE ARMED ONE. test-check-credential-channel.sh:335 has zero
+         margin today. Either choose a ceiling and say who chose it and why, or
+         assert the property the arm is actually about — that reverify does not
+         add a probe to the HOT PATH — rather than a count of probes anywhere.
+         Do this before the rest; it reds the landing gate for every host the
+         moment a fourth probe is legitimate.
+
+      2. Then the two other high-confidence instances, each with the general
+         test applied and the answer recorded: who chose the number, where is
+         that choice written.
+
+      3. The six medium/low leads are NOT personally re-verified by their
+         finder and must be re-checked before being treated as instances:
+         test-subdomain-routing.sh:147, test-litmus-missing-bound-test-reds.sh:93
+         (whose bound-name convention differs from check-litmus-bindings.sh's
+         `name:` field match — worth its own look), test-git-credential-helper.sh:61,
+         test-yaml-reader-availability.sh:39, test-archiver-ruby-could-not-run.sh:67.
+         test-freshness-regime-budget.sh:135 is lenovinha's own and they are
+         fixing it rather than reporting it.
+
+      4. EXTEND THE SWEEP PAST --check. Both methods stopped at the landing
+         gate. --test, --ci-full, the litmus corpus and the hooks are unexamined
+         and are where a snapshot would be even less visible.
+
+      DO NOT ban live-tree assertions. The negative control exists because a
+      declared vacuity floor is legitimate and load-bearing, and a fix that
+      removed them all would delete the guards that stop a fixture certifying an
+      empty answer.
+    provenance: |
+      Class found and named by lenovinha-silverblue; the 10-reader/160-path
+      sweep with refute-defaulting verifiers is theirs. The mechanical 87-fixture
+      sweep, the independent verification of the zero-margin instance, and the
+      declared-versus-unchosen distinction's weaker first form are macuahuitl's.
+      Filed by macuahuitl at lenovinha's request; they explicitly declined to
+      file it themselves tonight.

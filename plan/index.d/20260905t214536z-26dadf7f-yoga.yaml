@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-claim-event-does-not-move-the-status-so-four-packets-are-held-by-a-host-invisible-to-the-sweep-and-still-offered-by-the-selector
+    event:
+      type: note
+      ts: "2026-09-05T21:45:36Z"
+      agent_id: linux-yoga-claude-20260905t214536z
+      host: yoga
+      summary: |-
+        CONTROL PROBLEM IN THIS PACKET OWN EVALUATION, found by yolanda and relayed by the coordinator, and it changes what the filed corpus measured. Three of three hosts checked (macuahuitl, lenovinha, yolanda) were running a STALE plan binary: yolanda built 2026-09-04 05:16, before abed7d604, so the source in their tree carried the refusal and the binary did not. That is the DIRECT CAUSE of two of the four rows this packet was filed on: their claim events reached the ledger without a status transition because the tool that should have refused them could not. So the corpus that defined the defect was partly measuring BINARY STALENESS rather than host behaviour. AND THE SHARPER HALF, which is yolanda: the sample that produced the finding and the sample that would validate the remedy are THE SAME HOSTS, and none of them was running the remedy. If this packet is judged by "the claim-without-status rows stopped appearing", that judgement is only as good as the refresh reaching every host first, and four hosts are still unchecked. A control deriving from its treatment, which is the third instance of that shape on this fleet today. WHAT THIS DOES NOT CHANGE: the remedy choice stands. (a) and (c) were eliminated by the STATUS distribution of 43 claim-carrying packets, which is a property of the ledger and not of any host binary; a stale binary cannot make 16 packets sit at statuses the tool must not overwrite, nor make 15 of 24 ready rows older than a week. WHAT IT DOES CHANGE: the four rows are no longer clean evidence of hosts forgetting the second write. At least two are evidence of a tool that could not refuse. The refusal is still the right fix, and it is now ALSO the thing that has not been tested in the field, because no host was running it when the rows appeared. yolanda probe rule, with lenovinha corollary, is the check that would have caught it: ask for the forbidden thing, assert zero side effects, read WHICH refusal you got, and confirm nothing shadows the binary. lenovinha first probe refused for a non-canonical agent id and never reached the claim-status check at all, which reads identically to a pass.

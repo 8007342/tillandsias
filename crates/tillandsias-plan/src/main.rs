@@ -5453,6 +5453,7 @@ fn main() {
             };
             let mut counts: std::collections::BTreeMap<String, usize> =
                 std::collections::BTreeMap::new();
+            let mut scanned = 0usize;
             for p in query_packets(
                 &ledger,
                 Some("ready"),
@@ -5462,6 +5463,7 @@ fn main() {
                 &[],
                 options.limit,
             ) {
+                scanned += 1;
                 if let Some(deps) = p.get("depends_on").and_then(serde_yaml::Value::as_sequence) {
                     for d in deps {
                         let key = match d {
@@ -5475,6 +5477,16 @@ fn main() {
             }
             for (id, n) in counts {
                 emit(&format!("{id}	{n}"));
+            }
+            // ORDER 1081-gynk: SAY WHEN THE SCAN WAS CAPPED. Exactly-at-the-cap
+            // is the tell that a list is a SAMPLE, and this output is
+            // well-formed either way — nothing else would say so.
+            if scanned == options.limit {
+                emit(&format!(
+                    "  (scan stopped at --limit {}: this is a SAMPLE, not every ready packet — \
+                     pass --limit <n> to scan further)",
+                    options.limit
+                ));
             }
         }
         "select-rows" => {
@@ -6890,6 +6902,41 @@ fn main() {
                     let Some(seq) = p.get("events").and_then(serde_yaml::Value::as_sequence) else {
                         continue;
                     };
+                    // ORDER 1082-k3wp: A CLAIM CAN BE ANSWERED BY SAYING SO, and the
+                    // answer must be a TYPE rather than a sentence.
+                    //
+                    // yolanda claimed 823-u5zf, then deliberately did NOT set it
+                    // in_progress because the remaining half needs an observed
+                    // interactive launch on the operator's machine that no agent
+                    // can perform — and a FALSE HOLD is the worse half of this
+                    // defect: a missing transition makes every host see a free
+                    // packet that is held, while a false hold makes every host
+                    // skip a packet that is free. They were right, and this row
+                    // told them they owed a transition anyway, every cycle.
+                    //
+                    // WHY A TYPED EVENT AND NOT THE PROSE. yolanda's release says
+                    // "RELEASED, and deliberately NOT set to in_progress"; an
+                    // earlier note says "I AM NOT CLAIMING IT". Both are
+                    // unambiguous to a reader and neither is a signal. Matching
+                    // either would be a string check on prose, which is the
+                    // exact family this fleet spent 2026-09-05 filing — a guard
+                    // matching a doc comment, a lane pinning a quoting style, a
+                    // sweep keyed on "claimed for cycle". Event types are
+                    // free-form strings today (no whitelist), so `--type release`
+                    // is writable with no new machinery.
+                    //
+                    // Closure types answer it too: a packet that reached
+                    // completed/verified/implemented is not owing a claim
+                    // transition, whatever its status field says.
+                    let answered = seq.iter().any(|ev| {
+                        matches!(
+                            ev.get("type").and_then(serde_yaml::Value::as_str),
+                            Some("release" | "released" | "completed" | "verified" | "implemented")
+                        )
+                    });
+                    if answered {
+                        continue;
+                    }
                     let mut newest: Option<(&str, &str)> = None; // (ts, host)
                     for ev in seq {
                         if ev.get("type").and_then(serde_yaml::Value::as_str) != Some("claim") {
@@ -6927,8 +6974,11 @@ fn main() {
                 if claim_no_status > 0 {
                     emit(&format!(
                         "  ({claim_no_status} packet(s) carry a recent claim EVENT but status \
-                         `ready`: the claiming host owes `set-field <id> status in_progress`. \
-                         Not transitioned here — that would rewrite their authorship (1079-qb8k))"
+                         `ready`: the claiming host owes either `set-field <id> status \
+                         in_progress` or, if it decided NOT to hold the packet, \
+                         `append-event <id> release \"<why>\"` — a typed release, because prose \
+                         saying so is not a signal any reader can act on (1082-k3wp). Not \
+                         transitioned here — that would rewrite their authorship (1079-qb8k))"
                     ));
                 }
 
@@ -7796,6 +7846,88 @@ mod tests {
     /// any host may note on a claimed row), a claim-less in_progress row
     /// yields nothing, and both the activity AND the claim itself must be
     /// inside the TTL.
+    /// ORDER 1082-k3wp. A CLAIM IS ANSWERED BY A TYPE, NOT BY A SENTENCE.
+    ///
+    /// yolanda claimed 823-u5zf and then deliberately did NOT set it
+    /// in_progress: the remaining half needs an observed interactive launch on
+    /// the operator's machine, which no agent can perform. A FALSE HOLD is the
+    /// worse half of 1079-qb8k's defect — a missing transition makes every host
+    /// see a free packet that is held, a false hold makes every host skip a
+    /// packet that is free — so declining was right, and the sweep told them
+    /// they owed a transition anyway, every cycle.
+    ///
+    /// THE PROSE ARM IS THE POINT. yolanda's release reads "RELEASED, and
+    /// deliberately NOT set to in_progress" and an earlier note reads "I AM NOT
+    /// CLAIMING IT". Both are unambiguous to a reader and neither is a signal.
+    /// Honouring either would be a string check on prose — a guard matching a
+    /// doc comment, a lane pinning a quoting style, a sweep keyed on "claimed
+    /// for cycle". This asserts prose is NOT enough, which is the design
+    /// decision rather than an omission.
+    #[test]
+    fn a_claim_is_answered_by_a_typed_release_and_never_by_prose() {
+        let raw = concat!(
+            "packets:\n",
+            // Claimed, nothing since: still owed. REPORTED.
+            "  - packet_id: owed\n    order: 1\n    title: \"o\"\n    status: ready\n    desired_release: v0.5\n",
+            "    events:\n      - type: claim\n        ts: \"2026-08-10T00:00:00Z\"\n        host: hosta\n",
+            "        summary: claimed for cycle\n",
+            // Claimed then TYPED release: answered. SILENT.
+            "  - packet_id: released\n    order: 2\n    title: \"r\"\n    status: ready\n    desired_release: v0.5\n",
+            "    events:\n      - type: claim\n        ts: \"2026-08-10T00:00:00Z\"\n        host: hostb\n",
+            "        summary: claimed for cycle\n",
+            "      - type: release\n        ts: \"2026-08-10T08:00:00Z\"\n        host: hostb\n",
+            "        summary: needs an operator-observed launch; no agent can move it\n",
+            // Claimed then a NOTE that SAYS released: still owed. PROSE IS NOT A SIGNAL.
+            "  - packet_id: prose\n    order: 3\n    title: \"p\"\n    status: ready\n    desired_release: v0.5\n",
+            "    events:\n      - type: claim\n        ts: \"2026-08-10T00:00:00Z\"\n        host: hostc\n",
+            "        summary: claimed for cycle\n",
+            "      - type: note\n        ts: \"2026-08-10T08:00:00Z\"\n        host: hostc\n",
+            "        summary: RELEASED, and deliberately NOT set to in_progress\n",
+            // Claimed then completed: a closure answers it too. SILENT.
+            "  - packet_id: closed\n    order: 4\n    title: \"c\"\n    status: ready\n    desired_release: v0.5\n",
+            "    events:\n      - type: claim\n        ts: \"2026-08-10T00:00:00Z\"\n        host: hostd\n",
+            "        summary: claimed for cycle\n",
+            "      - type: completed\n        ts: \"2026-08-10T09:00:00Z\"\n        host: hostd\n",
+            "        summary: shipped\n",
+        );
+        let ledger = Ledger::parse(raw, Default::default()).expect("synthetic ledger parses");
+        let cutoff = "2026-08-09T00:00:00Z";
+        let mut reported: Vec<&str> = Vec::new();
+        for p in query_packets(&ledger, Some("ready"), None, None, None, &[], usize::MAX) {
+            let Some(pid) = str_field(p, "packet_id") else {
+                continue;
+            };
+            let Some(seq) = p.get("events").and_then(serde_yaml::Value::as_sequence) else {
+                continue;
+            };
+            let answered = seq.iter().any(|ev| {
+                matches!(
+                    ev.get("type").and_then(serde_yaml::Value::as_str),
+                    Some("release" | "released" | "completed" | "verified" | "implemented")
+                )
+            });
+            if answered {
+                continue;
+            }
+            if seq.iter().any(|ev| {
+                ev.get("type").and_then(serde_yaml::Value::as_str) == Some("claim")
+                    && ev
+                        .get("ts")
+                        .and_then(serde_yaml::Value::as_str)
+                        .is_some_and(|ts| ts > cutoff)
+            }) {
+                reported.push(pid);
+            }
+        }
+        assert_eq!(
+            reported,
+            vec!["owed", "prose"],
+            "a TYPED release or a closure answers the claim; a note that SAYS \
+             released does not, because a reader cannot act on prose and this \
+             fleet spent a day removing exactly that kind of match"
+        );
+    }
+
     /// ORDER 1079-qb8k. A CLAIM EVENT IS NOT A CLAIM, AND THE TOOL SAYS SO
     /// RATHER THAN DECIDING WHAT THE HOST MEANT.
     ///

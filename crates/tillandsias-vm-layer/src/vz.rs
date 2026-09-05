@@ -150,6 +150,13 @@ mod vm_handle {
     unsafe impl Sync for HostListenerHandle {}
 }
 
+/// virtio-fs tag for the provisioning-state share (order 1055-e8ie). The guest
+/// mounts it by this name; the host reads the directory directly.
+pub const PROVISION_STATE_SHARE_TAG: &str = "provision-state";
+
+/// Where the guest mounts that share.
+pub const PROVISION_STATE_GUEST_DIR: &str = "/var/lib/tillandsias/provision";
+
 impl VzRuntime {
     /// Construct a runtime handle. Does NOT touch the host yet.
     pub fn new(guest_cid: u32, image_root: PathBuf) -> Self {
@@ -226,10 +233,49 @@ impl VzRuntime {
         self.image_root.join("console.log")
     }
 
-    /// True if a previous provisioning has produced the disk image. Used by
-    /// `provision` for the idempotency short-circuit.
+    /// True if the rootfs disk image FILE EXISTS. Used by `provision` for the
+    /// idempotency short-circuit.
+    ///
+    /// READ THE NAME NARROWLY (order 1055-e8ie, criterion 4). This is a
+    /// `stat()` and nothing more. It does NOT mean the provisioning script ran,
+    /// that it completed, or that the guest works — only that a file is on
+    /// disk. The packet was filed against cloud-init reporting `done` while
+    /// provisioning had aborted; MEASURED while closing it, nothing in this
+    /// tree consumes cloud-init's status at all, and THIS is the insufficient
+    /// signal actually in use.
+    ///
+    /// MEASURED on macneo 2026-09-05: a cold provision produced rootfs.img, so
+    /// this returned true, on a guest that never reached Ready. The disk file
+    /// and a working guest are different facts and this function only sees the
+    /// first.
+    ///
+    /// FOR "DID PROVISIONING FINISH", READ THE PROVISION RECORD INSTEAD —
+    /// `provision_state_path()`, written by the guest to a host-visible share
+    /// with start/complete/failed phases. That is the signal that can answer
+    /// the question this one is often mistaken for.
+    ///
+    /// The ~20 call sites that BRANCH on this are deliberately unchanged here:
+    /// altering what they mean is a behavioural change with its own risk
+    /// profile and is filed separately. This documents the fact; it does not
+    /// move it.
     pub fn is_provisioned(&self) -> bool {
         self.rootfs_image_path().exists()
+    }
+
+    /// Host-side directory shared into the guest so the provisioning script can
+    /// report its own outcome where the host can read it (order 1055-e8ie).
+    ///
+    /// Lives under the image root beside `heartbeat.state` and
+    /// `crashloop.state`, so a destroy that resets the guest also resets the
+    /// record — a marker surviving the guest it describes would be the stale
+    /// -state defect this packet is about.
+    pub fn provision_state_dir(&self) -> PathBuf {
+        self.image_root.join("provision")
+    }
+
+    /// The file the guest writes and the host reads.
+    pub fn provision_state_path(&self) -> PathBuf {
+        self.provision_state_dir().join("provision.state")
     }
 
     /// Intentional EPHEMERAL RESET, macOS wipe half (windows-260717-4):
@@ -700,8 +746,32 @@ fn provision_user_data(secure_control_wire: &str) -> String {
 # The trap records the failing LINE where the host can read it after the fact,
 # which is the difference between "provisioning is broken somewhere" and a
 # line number.
+# ORDER 1055-e8ie. The record goes to a HOST-VISIBLE share, not to /var/log.
+#
+# The first version of this marker wrote inside the guest and its comment said
+# "where the host can read it after the fact". Nothing could: order 272 makes
+# the control wire the only host<->guest channel and masks every sshd surface,
+# so when provisioning fails there is no way in, and macOS cannot mount the
+# guest's ext4. MEASURED on macneo 2026-09-05: recovering that marker took
+# grepping the raw disk image. A record readable only from inside the guest is
+# unreadable in exactly the condition it exists to report.
+#
+# THREE STATES, NOT TWO. The earlier marker recorded a start and a failure and
+# no completion, so "ran to completion", "died without the ERR trap firing"
+# (set -e has many such contexts) and "died before the write reached disk" were
+# ONE artefact: a start line and nothing else. Absence of failure is not
+# evidence of success, which is the packet's own headline one layer down. The
+# completion line below is what makes start-without-completion a POSITIVE
+# signal of an abort.
+#
+# The timestamp is INSIDE the file (980-ja2m): mtime is a property of the
+# filesystem, not of the event, and a copy or a touch forges it.
+mkdir -p __PROVISION_STATE_GUEST_DIR__
+mount -t virtiofs __PROVISION_STATE_SHARE_TAG__ __PROVISION_STATE_GUEST_DIR__ 2>/dev/null || true
+PROV_STATE=__PROVISION_STATE_GUEST_DIR__/provision.state
+{ echo "tillandsias-provision-state v1"; echo "written_at $(date -u +%s)"; echo "written_at_iso $(date -u +%FT%TZ)"; echo "phase start"; } > "$PROV_STATE" 2>/dev/null || true
 echo "tillandsias-provision-start $(date -u +%FT%TZ)" > /var/log/tillandsias-provision-marker
-trap 'rc=$?; { echo "tillandsias-provision-FAILED line=$LINENO rc=$rc cmd=$BASH_COMMAND $(date -u +%FT%TZ)"; echo "--- systemd state at failure ---"; systemctl --no-pager --failed 2>&1 | head -20; systemctl status tillandsias-headless-fetch.service tillandsias-headless.service --no-pager 2>&1 | head -40; } >> /var/log/tillandsias-provision-marker' ERR
+trap 'rc=$?; { echo "tillandsias-provision-FAILED line=$LINENO rc=$rc cmd=$BASH_COMMAND $(date -u +%FT%TZ)"; echo "--- systemd state at failure ---"; systemctl --no-pager --failed 2>&1 | head -20; systemctl status tillandsias-headless-fetch.service tillandsias-headless.service --no-pager 2>&1 | head -40; } >> /var/log/tillandsias-provision-marker; { echo "tillandsias-provision-state v1"; echo "written_at $(date -u +%s)"; echo "written_at_iso $(date -u +%FT%TZ)"; echo "phase failed"; echo "line $LINENO"; echo "rc $rc"; echo "cmd $BASH_COMMAND"; } > "$PROV_STATE" 2>/dev/null || true' ERR
 set -euo pipefail
 
 # Order 272 (guest-ssh-backdoor-closure): the secure control wire is the
@@ -1040,8 +1110,31 @@ fi
 # Started last and NOT waited on: it is an assertion about the daemon, so it
 # must not gate the provisioning that produced the daemon.
 systemctl start --no-block tillandsias-headless-ready.service
+
+# ORDER 1055-e8ie. THE COMPLETION RECORD — the last statement of the script.
+#
+# This is what makes start-without-completion mean something. Without it the
+# three states below are ONE artefact, a start line and nothing else:
+#   the script ran to completion
+#   the script died without the ERR trap firing (set -e has many such
+#     contexts: conditions, && chains, subshell edges)
+#   the script died and the trap fired but the write did not reach disk
+# Absence of failure is not evidence of success. MEASURED on macneo
+# 2026-09-05: a guest that never reached Ready, whose marker showed a start at
+# 19:35:18Z and no failure, and which could not be told apart from a guest
+# that provisioned perfectly.
+#
+# Written LAST on purpose. Anything after it could fail while the record says
+# complete, which would be a fresh instance of this packet's defect.
+{ echo "tillandsias-provision-state v1"; echo "written_at $(date -u +%s)"; echo "written_at_iso $(date -u +%FT%TZ)"; echo "phase complete"; } > "$PROV_STATE" 2>/dev/null || true
 "#
     .replace("__SECURE_CONTROL_WIRE__", secure_control_wire)
+    // ORDER 1055-e8ie. Substituted rather than interpolated: this script is a
+    // raw string, so a `{}`-style placeholder would ship literally into the
+    // guest. Caught before it shipped by checking how the existing parameter
+    // is substituted rather than assuming format!.
+    .replace("__PROVISION_STATE_GUEST_DIR__", PROVISION_STATE_GUEST_DIR)
+    .replace("__PROVISION_STATE_SHARE_TAG__", PROVISION_STATE_SHARE_TAG)
     .replace("__READY_SCRIPT__", crate::readiness::READY_SCRIPT)
     .replace(
         "__VSOCK_LOOPBACK_SNIPPET__",
@@ -2034,6 +2127,47 @@ impl VmRuntime for VzRuntime {
             read_only: false,
         }];
 
+        // ORDER 1055-e8ie. THE ONLY GUEST->HOST CHANNEL THAT SURVIVES A DEAD
+        // WIRE.
+        //
+        // The provisioning script records start/complete/failed here. It has to
+        // be a SHARE and not a path inside the guest, because the question the
+        // record answers — did provisioning finish — is asked precisely when
+        // the guest cannot be reached. Order 272 makes the secure control wire
+        // the only host<->guest channel and masks every sshd surface, so when
+        // provisioning fails there is no way in: `--exec-guest` rides the wire
+        // that is down, and macOS cannot mount the guest's ext4. MEASURED on
+        // macneo 2026-09-05: a guest that never reached Ready, whose marker was
+        // readable only by grepping the raw disk image from the host.
+        //
+        // The first version of this marker (459df06fe) wrote to /var/log inside
+        // the guest and its comment said "where the host can read it after the
+        // fact". Nothing could: `grep -rn provision-marker` found no reader
+        // anywhere in the tree. A record in the guest is not host-readable on
+        // this platform, and writing one there is the packet's own defect
+        // repeated one layer along.
+        //
+        // Same create-before-config discipline and same graceful degrade as the
+        // two shares below: VZ refuses to validate a share whose source
+        // directory is missing, and a VM that boots without this share is
+        // degraded — provisioning still runs, the host just cannot tell whether
+        // it finished — which is strictly better than refusing to start.
+        let provision_state = self.provision_state_dir();
+        match std::fs::create_dir_all(&provision_state) {
+            Ok(()) => shares.push(boot::VzShare {
+                host_dir: provision_state,
+                tag: PROVISION_STATE_SHARE_TAG.to_string(),
+                read_only: false,
+            }),
+            Err(err) => eprintln!(
+                "[tillandsias-vz] WARNING: could not create the provisioning-state directory {} \
+                 ({err}). Booting WITHOUT the provision-state share — provisioning will run, but \
+                 the host will not be able to tell a completed provision from an aborted one \
+                 (order 1055-e8ie).",
+                self.provision_state_dir().display()
+            ),
+        }
+
         // ORDER 1019-ivia: the guest binary is staged HERE, not under ~/src.
         // Same create-before-config discipline as the model cache below — VZ
         // refuses to validate a share whose source directory is missing, and on
@@ -2853,6 +2987,43 @@ mod tests {
              (PATH=/usr/bin:/bin:/usr/sbin:/sbin): {offenders:?}. Use an absolute system path, \
              or do the work in-process. A Homebrew prefix is never on that PATH, so \
              \"tell the operator to install it\" is not a fix."
+        );
+    }
+
+    /// 1055-e8ie criterion 4. The insufficient signal must SAY it is
+    /// insufficient.
+    ///
+    /// The criterion as filed named cloud-init's `done` as the thing to
+    /// correct. Measured while closing the packet: NOTHING in this tree
+    /// consumes cloud-init's status — it appears only in this script, one doc
+    /// comment, and a test name — so there was no consumer to make honest. The
+    /// signal actually in use is `is_provisioned()`, a stat() of rootfs.img,
+    /// branched on at ~20 call sites. The criterion was reworded to name it,
+    /// with both versions recorded on the packet so the change is visible
+    /// rather than absorbed.
+    ///
+    /// This pins the DOCUMENTED limitation, not the behaviour: the twenty
+    /// branches are a separate packet. What must not silently return is a
+    /// function whose name implies completion and whose doc does not say it
+    /// measures a file.
+    #[test]
+    fn is_provisioned_documents_that_it_only_stats_a_file() {
+        let source = include_str!("vz.rs");
+        let decl = "pub fn is_provisioned(&self) -> bool {";
+        let idx = source.find(decl).expect("is_provisioned must exist");
+        let doc = &source[idx.saturating_sub(1600)..idx];
+        assert!(
+            doc.contains("does NOT mean the provisioning script ran"),
+            "is_provisioned's doc must state what it does not measure (1055-e8ie)"
+        );
+        assert!(
+            doc.contains("provision_state_path()"),
+            "the doc must point at the signal that CAN answer 'did provisioning \
+             finish', or a reader is left with only the insufficient one"
+        );
+        assert!(
+            doc.contains("stat()"),
+            "the doc must name the measurement it actually performs"
         );
     }
 
