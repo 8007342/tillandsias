@@ -161,7 +161,27 @@ case "$got" in
     *)  bad "no cargo + no binary — want blocked:preflight:plan:cargo-absent, got $got" ;;
 esac
 
-# ── 8. MUTATION CONTROL: without the probe, arm 6's host blocks. If this ever
+# ── 8. CARGO PRESENT still yields the build path, not the probe path. The
+#      third regime: 1004-ws5q must not divert a host that CAN compile onto an
+#      instrument that happens to be lying around — `existing` is for hosts with
+#      no compiler, and a host with one still rebuilds.
+make_cargo "$W/present-cargo"
+got="$(env -i PATH="$W/present-cargo:/usr/bin:/bin" HOME="$W/empty-home" ROOT="$ROOT" \
+    TILLANDSIAS_PLAN_BIN="$W/stub-plan" bash -c '
+    plan_verdict="skipped"
+    if ! command -v cargo >/dev/null 2>&1; then
+        . "$ROOT/scripts/plan-binary-probe.sh"
+        if plan_bin="$(resolve_plan_binary)"; then plan_verdict="existing"
+        else echo "blocked:preflight:plan:cargo-absent"; exit 1; fi
+    fi
+    # cargo present: the real script builds here and sets rebuilt.
+    [ "$plan_verdict" = skipped ] && echo "build-path" || echo "$plan_verdict"
+')"
+[ "$got" = build-path ] \
+    && ok "cargo present takes the build path even with a resolvable binary — existing does not shadow rebuilt" \
+    || bad "cargo present — want build-path, got $got"
+
+# ── 9. MUTATION CONTROL: without the probe, arm 6's host blocks. If this ever
 #      reports 'existing' the arm above has stopped testing anything.
 got="$(env -i PATH="/usr/bin:/bin" HOME="$W/empty-home" bash -c '
     if ! command -v cargo >/dev/null 2>&1; then
