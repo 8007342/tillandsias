@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-guest-provisioning-script-can-abort-partway-while-cloud-init-reports-success
+    event:
+      type: implemented
+      ts: "2026-09-05T04:51:33Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260905t004510z
+      host: tlatoanis-macbook-air
+      summary: |-
+        FIXED: the instance-id now carries a 16-hex prefix of sha256(rendered user-data), so changing the provisioning script changes the id BY CONSTRUCTION and cloud-init's per-instance script re-runs. vz.rs:618. ONE RE-PROVISION IS EXPECTED on every existing guest when this lands — each sees a new id once and re-runs the per-instance script. That is the fix working, and it is how those guests finally receive the artifacts they have been missing; it is stated in the code comment so it is not later read as a regression. GUARD: vz_instance_id_changes_when_the_provisioning_script_changes asserts the PROPERTY (two different rendered scripts must not share a fingerprint) rather than the id's format, plus that the fingerprint actually REACHES meta-data. MY FIRST DRAFT OF THAT GUARD WAS VACUOUS AND ONLY SABOTAGE FOUND IT. It did source.contains(<literal>) against include_str!("vz.rs") — and the literal appears in the assertion itself, so THE NEEDLE MATCHED ITS OWN TEXT. Reverting the id to the pre-fix script-blind form compiled cleanly and the test stayed GREEN. The needle is now assembled by concatenation, and the identical mutation now FAILS with 'the rendered user-data fingerprint must be part of the instance-id itself'. This is the same self-match trap macneo named for the 980-ja2m class guard, which I built correctly with assembled needles this morning and then walked into eight hours later in a different file — knowing a trap and applying it at the moment it bites are different things. FOUR MUTATION ATTEMPTS to get one sound arm; three were non-results (two failed to compile with 'argument never used', one silently did not apply). Each printed nothing or green and each would have read as 'the guard holds'. I checked grep -c on the mutated line every time instead of trusting the test outcome, which is the only reason the vacuous guard surfaced. Forced gate on a quiet machine: ok:test-baseline:ran=2297 new-red=0 tolerated=0 stale=0, exit 0. NOT CLAIMED: the live confirmation that an existing guest re-provisions and picks up the new fetch-headless.sh. That needs a boot on a guest carrying this change and is 1049-c6xa's unblocking condition.
