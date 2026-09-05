@@ -1,0 +1,82 @@
+packets:
+  - packet_id: fourteen-test-fixtures-are-invoked-by-no-automation-and-nothing-marks-which-are-deliberately-manual
+    order: 1041-up99
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: any
+    owner_host: any
+    capability_tags:
+      - testing
+      - linux
+    title: >-
+      14 scripts/test-*.sh fixtures are invoked by neither build.sh nor
+      local-ci.sh, and nothing distinguishes "deliberately manual" from
+      "silently dropped"
+    context: |
+      Found while wiring test-freshness-regime-budget.sh into build.sh for
+      1038-d7vw, after I nearly filed a WRONG version of this finding:
+      I claimed test-gate-fast-refusals.sh was dead because I grepped only
+      build.sh. It is invoked, from scripts/local-ci.sh:1525. Checking both
+      callers before filing is what turned a false claim into a real one.
+
+      Searching every .sh and .yaml for each fixture's own name, and
+      confirming no caller globs scripts/test-*.sh, leaves 14 with zero
+      invocations anywhere:
+
+        test-cache-semantics.sh, test-check-carry-forward.sh,
+        test-chromium-framework-launch.sh, test-forge-findings-persisted.sh,
+        test-forge.sh, test-git-mirror.sh, test-guest-unit-hardening.sh,
+        test-proxy.sh, test-secrets.sh, test-skills-single-source.sh,
+        test-spec-index-endpoint-classification.sh, test-subdomain-routing.sh,
+        test-trace-coverage.sh, test-expert-accuracy-record-shape.sh
+
+      THE FINDING IS NOT "DELETE THEM". Several plainly need a live podman or
+      a container (test-proxy, test-git-mirror, test-subdomain-routing,
+      test-chromium-framework-launch) and are reasonably manual. The defect is
+      that NOTHING RECORDS WHICH. A fixture that is deliberately manual and a
+      fixture whose invocation was dropped in a refactor are byte-identical
+      from outside: executable, passing, and never run.
+
+      THE SHARPEST INSTANCE IS MINE. test-expert-accuracy-record-shape.sh
+      (917-6iwv, written 2026-09-04) appears nowhere but its own source and
+      plan/index.yaml:44712, where the ledger states: "THE NEGATIVE CONTROL,
+      pinned by scripts/test-expert-accuracy-record-shape.sh, 6/6." That
+      sentence claims a control is pinned. Nothing runs it. The ledger records
+      an enforcement that does not exist, which is worse than recording none —
+      a later reader has no reason to doubt it.
+
+      This is the same class the fleet has hit repeatedly today: a green that
+      means "not examined" rather than "examined and fine". Six such traps were
+      recorded across two hosts in one evening (1038-d7vw), all of them an
+      environment or wiring difference producing a plausible result instead of
+      an error.
+    exit_criteria:
+      - >-
+        every scripts/test-*.sh is either invoked by build.sh or local-ci.sh,
+        or carries an explicit machine-readable marker naming why it is manual
+        and what runs it instead (a bare comment is not enough — the marker
+        must be greppable by the guard below); pre-fix result: 14 fixtures
+        satisfy neither
+      - >-
+        a guard refuses when a fixture is added with neither an invocation nor
+        a marker, so this cannot silently recur; the guard counts INVOCATIONS
+        rather than name mentions (the 901-jtvi defect, which recurred twice
+        more the same day — once in test-gate-fast-refusals.sh and once inside
+        the 1038-d7vw budget test), and it is mutation-tested by adding an
+        unreferenced fixture and confirming rc!=0
+      - >-
+        the ledger claim at plan/index.yaml:44712 that
+        test-expert-accuracy-record-shape.sh pins a 6/6 negative control is
+        made true by wiring it in, or corrected as unenforced; a recorded
+        enforcement that does not exist is the specific harm this packet names
+      - >-
+        the guard distinguishes could-not-run from violation (923-ws3r): on a
+        host with no way to enumerate callers it must refuse as an instrument
+        failure, not report zero orphans
+    next_action: >-
+      classify the 14 into manual-with-reason vs dropped-invocation, then write
+      the guard; start with test-expert-accuracy-record-shape.sh since the
+      ledger already asserts it is enforced

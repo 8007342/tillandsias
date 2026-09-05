@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: litmus-freshness-inventory-shape-step-2-exceeds-its-15-s-budget-on-a-mobile-workstation-and-the-floor-is-unmeasured
+    event:
+      type: progress
+      ts: "2026-09-04T23:58:31Z"
+      agent_id: linux-lenovinha-claude-20260904t233510z
+      host: lenovinha
+      summary: |-
+        FIXED AND LANDED (ok:land:d731382be). 18.39s -> 0.68s, budget untouched, 1661 lines of output byte-identical.
+
+        CAUSE. Two sets held as newline-joined STRINGS, membership tested with `case "\n$SET\n" in *"\n$x\n"*` — O(candidates x set_bytes). For each of ~1900 candidates bash rebuilt and glob-scanned the whole 297,500-byte git ls-files output. Measured in isolation: 9.67s at the trackedness site, ~3.2s at the stamped-set site, ~13s of the script's 16.7s of USER cpu against 1.7s of sys. That split is what ruled out the overlay hypothesis: a container or overlay filesystem tax lands in sys, and taskset onto a boosted core moved nothing.
+
+        MY FIRST PATCH WAS WRONG AND THE GATE CAUGHT IT — this is the part worth keeping. I used `declare -A`: 0.83s, output identical, and REFUSED with blocked:bash4-unguarded (761-g36m). macOS ships bash 3.2, and check-bash-dialect.sh's own header records that these string sets were introduced AS the 3.2-clean replacement for two `declare -A` maps. So the quadratic was never sloppiness — it was the cost of a correct portability fix, and the obvious repair would have reopened the bash-4 defect on macbookair and macneo to make my host faster. I would have shipped it.
+
+        WHAT LANDED is neither: one awk pass precomputes membership into a positional 0/1 marker array. awk supplies the hash table bash 3.2 lacks; indexed arrays are 3.2-clean. 0.68s — faster than the associative-array version it replaces.
+
+        A HAZARD I INTRODUCED, pinned rather than hoped about. Positional markers desynchronise silently if anyone adds a `continue` to the loop: a short array reads as 'unstamped' through its :-0 default, so files past the truncation are misreported and coverage falls with nothing to say why. Both sites refuse on a length mismatch. Mutated each to prove the refusal fires: rc=1, marker-desync:5/1654 and tracked-marker-desync:5/1901. The index also advances BEFORE the loop's `[ -f "$f" ] || continue`, which is the one path that would desynchronise it.
+
+        EXIT EVIDENCE.
+          pre-fix   18.39s (user 16.74 / sys 1.69)
+          post-fix   0.68s (user 0.38 / sys 0.36), three runs within 0.01s
+          equivalence  1661 lines byte-identical, both arms run with the same tree and target/freshness-inventory.last pinned to the same value
+          --self-test  PASS (5 fixtures + unstamped, threshold=30d) — covers the FRESHNESS_FIXTURE_DIR path where git never answers, the branch the _tracked_answered flag replaced
+          check-bash-dialect.sh  ok:bash-dialect-clean
+          litmus:freshness-inventory-shape  PASS, 12.3s for ALL its steps (step 2 alone had been 18.3s)
+          ./build.sh --check  TILLANDSIAS_FORCE_CHECK=1, rc=0
+
+        TWO OF MY CONTROLS WERE INVALID BEFORE THEY WERE RIGHT, both by the same mechanism — the measurement environment being part of what is measured. (1) A pre-fix baseline copy left in scripts/ was itself counted as an untracked exclusion, shifting excluded 246->247, so an equivalence diff 'failed' on my own temp file. (2) A mutant run from a temp dir resolved REPO_ROOT via BASH_SOURCE to that temp dir and inventoried an EMPTY tree — the desync guard 'passed' by never executing. That is a control failing open, the exact class this fleet has already recorded twice. Both re-run from inside the repo.
+
+        CROSS-HOST RATIO CLOSED by pirria on byte-identical operands (98,415 set bytes, 1900 candidates, 1900/1900 hits): glob membership 1.33s on bash 5.3.15 vs 3.23s on my 5.3.9 = 2.43x, against the 2.26x whole-script ratio — within 7%, so the quadratic was the whole story and no third factor is hiding. pirria also volunteered that its 8.1s freshness figure was CONTENDED (llama-server, load 1.16-1.78) while the membership run was idle, so the true uncontended ratio is wider and agrees better; and corrected its own earlier citation of ps %CPU (a lifetime average) where loadavg was the load-bearing evidence. Recording their numbers with that caveat rather than the flattering version.
+
+        THE LITMUS STEP TEXT now says 15s is a TREE-SIZE TRIPWIRE, not a host-power threshold, with the fleet numbers and the reason: the old cost grew with the PRODUCT of tree size and candidate count, so every host was walking toward the budget at a rate set by the repo rather than its CPU. Raising it would have bought only the months until the next few hundred files landed — and would have hidden the defect on every host fast enough to stay under.
+
+        STILL OPEN, and it is the cross-regime arm: esmeraldinha's 25s through Git Bash has NOT been re-timed against this fix. I predict it collapses the same way and I have not shown it. Until esmeraldinha reports, the claim that this fixes the overrun everywhere rests on one Linux host plus pirria's construct-level agreement.

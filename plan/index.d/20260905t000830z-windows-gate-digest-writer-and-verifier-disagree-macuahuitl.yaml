@@ -1,0 +1,65 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: on-windows-the-gate-stamp-is-computed-in-the-wsl2-builder-and-verified-under-msys-so-a-memoised-gate-deadlocks-every-push
+    order: 1039-b64k
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: linux
+    capability_tags: [gate, windows, wsl2, gate-stamp, memoisation, pre-push, multi-host, deadlock]
+    estimated_hours: 4
+    owned_files:
+      - scripts/gate-stamp.sh
+      - build.sh
+      - scripts/pre-push-version-guard.sh
+    title: |
+      On Windows the gate stamps a digest computed inside the WSL2 builder and the pre-push hook verifies one computed under MSYS git, so they can never agree; the one-shot pass token hid it all day and a memoised gate, which mints no token, deadlocks every push
+    context: |
+      REPRODUCED FOUR TIMES by yolanda 2026-09-04T23:2xZ-00:0xZ on windows-next at 3dd0e195f (a litmus YAML pin, gated
+      green): `./build.sh --check` exit 0, then `bash scripts/gate-stamp.sh verify` -> stale:tree-changed-since-gate,
+      consecutive commands in the same shell, nothing between them, and the hook's own mtime diagnostic prints an EMPTY
+      changed-list before falling through to "a deletion, a mode change, or a same-mtime rewrite". MECHANISM, measured:
+      stamped digest (written BY the gate) 7e0f2670c332f30a836e48e8d8df67b0462c9880f351b1d8056025ff9c2ab1c4; hand-run
+      `scripts/gate-stamp.sh compute` ae1bff9c1d5bd971bce1fb56bec2a1ae02d6b3fafe4107852f11a31ea15816f3; same tree, same
+      second. The gate re-execs into the tillandsias-build WSL2 distro ("[wsl2-builder] Re-execing inside...") and stamps
+      a digest computed under LINUX semantics; the pre-push hook and any hand-run verify execute under Windows MSYS git and
+      compute a different one; exec bits and line-end handling differ across that boundary and the digest hashes both.
+      Writer and verifier cannot agree on this host, not sometimes, ever. WHY IT WAS LATENT: build.sh also mints a
+      ONE-SHOT tillandsias-gate-pass-token and the hook accepts it without comparing digests; every successful Windows
+      land today rode the token. WHAT EXPOSED IT: a MEMOISED gate ("ok:gate-fresh (stamped 2026-09-04T23:20:11Z ...)
+      Tree bytes and toolchain are unchanged since that passing gate; nothing re-run") skipped everything INCLUDING
+      minting a token, exited 0, and left the hook on the comparison that can never pass there. Two implementations of
+      "has this tree changed" disagree about the same bytes at the same instant (704-zcgi's shape in the gate's own
+      plumbing). TILLANDSIAS_FORCE_CHECK=1 did not rescue it: 1198 s, "Gate stamp recorded", the SAME Linux digest
+      rewritten, the push refused again, no pass token on disk afterwards. Yolanda refused to hand-write a stamp, disable
+      the hook, or push --no-verify; the hook is right that it cannot vouch for the tree. MACBOOKAIR'S "FLAKE" IS THIS
+      (1033-iycs/1035-qf8t context): refused:land:gate-failed, then --check passed on the identical tree, then a retry
+      landed clean, because the retry ran a NON-memoised gate that minted a fresh token. Esmeraldinha and every Windows
+      worker deadlock the moment their gate memoises. COORDINATOR RULING, so the claimer implements a decision: (1) the
+      memoiser MUST mint the pass token whenever it declares the tree fresh, the smallest change and it closes the
+      deadlock; (2) separately, the digest becomes environment-independent, computed from index blob hashes and modes
+      (`git ls-files -s`) rather than worktree bytes, which order 889-8tcb already records as the only source both sides
+      of the drvfs boundary agree on and which is what 1036-e5w9's memo-scope question wants too; (3) the pass token is
+      documented as a mechanism, not a workaround, with the conditions under which the hook falls back to the digest.
+      Route for yolanda's stuck 3dd0e195f meanwhile: patch relay to the coordinator, applied with `git am` on linux-next
+      with yolanda's authorship, landed with the tool.
+    exit_criteria:
+      - "on a Windows host, after a memoised `./build.sh --check` (ok:gate-fresh), `git push` is accepted by the pre-push hook without a forced run; pre-fix result: FAILS (stale:tree-changed-since-gate, reproduced four times)"
+      - "on a Windows host, the stamped digest and `scripts/gate-stamp.sh verify` agree on the same tree; pre-fix result: FAILS (7e0f2670… vs ae1bff9c…)"
+      - "a fixture proves the digest is identical when computed under two different exec-bit/line-ending regimes for the same index state, and differs when the index changes; pre-fix result: FAILS"
+      - "the pass token's role and the fallback conditions are stated in gate-stamp.sh's header and in the worker skill; a Linux host's memoised push still works unchanged (765-tkq2 preserved)"
+    unscoreable: |
+      The pin is a two-regime digest fixture plus a Windows-host push after a
+      memoised gate (litmus lane to be named by the claimer; the existing
+      gate-stamp litmus family is the home).
+    events:
+      - type: note
+        ts: "2026-09-05T00:08:30Z"
+        host: macuahuitl
+        summary: |
+          FILED by the coordinator from yolanda's four-run reproduction, with the
+          ruling in the context; assigned to lenovinha as the gate-surface owner
+          (adjacent to 1036-e5w9), yolanda verifies on Windows. Macbookair's
+          refused-then-passed land (1035-qf8t context) is the same mechanism.

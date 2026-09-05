@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-windows-workers-litmus-runs-are-degraded-without-yq-and-still-print-pass
+    order: 1040-eniv
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: windows
+    capability_tags: [litmus, windows, toolbox, yq, fail-loud, evidence]
+    estimated_hours: 2
+    owned_files:
+      - scripts/run-litmus-test.sh
+      - scripts/ensure_toolbox.sh
+    title: |
+      yolanda's litmus runs open with `warn:litmus-degraded-no-yq` because yq is absent on the Windows worker and cannot be provisioned from the tillandsias-builder toolbox, so every yq-dependent litmus verdict from that host is unearned
+    context: |
+      REPORTED by yolanda 2026-09-05T00:0xZ while landing the 997-e4v2 WIRE_VERSION litmus re-pin: every
+      scripts/run-litmus-test.sh invocation on that host opens with `warn:litmus-degraded-no-yq`, and the runner
+      states outright that a verdict from such a run should not be trusted for yq-using steps. The re-pin litmus uses
+      no yq, so its PASS is sound; but the Windows worker's verdicts on any yq-dependent litmus are not evidence
+      until yq is present there. yq could not be provisioned from the builder toolbox on that host. This is the
+      toolbox-first rule's edge on Windows: the tool the runner needs must come with the toolbox or the runner must
+      refuse yq-dependent steps loudly per step (not warn once at the top and then print PASS), so a degraded run
+      cannot be read as a full one. Esmeraldinha, the other Windows host, should be checked for the same warning.
+    exit_criteria:
+      - "on yolanda, scripts/run-litmus-test.sh opens without warn:litmus-degraded-no-yq, or every yq-dependent step reports could-not-run (exit 2 shape, 1021-a944) instead of PASS; pre-fix result: FAILS (warn once, then PASS lines)"
+      - "the provisioning path for yq on the Windows worker is named (builder toolbox or the WSL2 distro's package set) and verified on yolanda and esmeraldinha"
+      - "a fixture proves a yq-dependent step under a yq-less PATH reports could-not-run and never PASS; pre-fix result: FAILS"
+    unscoreable: |
+      The pin is a runner fixture under a yq-less PATH plus a Windows-host run
+      opening clean; the claimer names the litmus lane if one applies.
+    events:
+      - type: note
+        ts: "2026-09-05T00:14:53Z"
+        host: macuahuitl
+        summary: |
+          FILED by the coordinator from yolanda's caveat on its own litmus PASS
+          (the re-pin uses no yq, so that verdict stands); esmeraldinha to check
+          for the same warning line.
