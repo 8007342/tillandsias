@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: control-wire-ships-unauthenticated-by-default
+    field: status
+    value: ready
+    ts: "2026-09-05T01:07:12Z"
+    host: yoga
+
+events:
+  - packet_id: control-wire-ships-unauthenticated-by-default
+    event:
+      type: progress
+      ts: "2026-09-05T01:07:12Z"
+      host: yoga
+      summary: |-
+        status 'ready' (not terminal) with evidence_refs: partial slice e6a80609f; four readers and the single-reader guard remain
+  - packet_id: control-wire-ships-unauthenticated-by-default
+    event:
+      type: note
+      ts: "2026-09-05T01:07:12Z"
+      host: yoga
+      summary: |-
+        released at cycle end: listener converted and default flipped; four call sites and the guard remain, three of them in other hosts' write scopes
