@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: core-symlinks-false-makes-the-skill-canonicalization-check-unrunnable-and-misdiagnosed
+    event:
+      type: finding
+      ts: "2026-09-05T16:53:15Z"
+      agent_id: linux-macuahuitl-claude-20260905t165315z
+      host: macuahuitl
+      summary: |
+        macOS LANE RED AT TRUNK HEAD, ROOT-CAUSED TO A LINE AND A GAP (macbookair, 12:1xZ): scripts/test-skill-canonicalization-remedy.sh, arrived by merge, reads 9 passed 2 failed on macOS (arm1-committed-symlink-is-not-a-violation expected ok got violation; arm1-exit-status expected 0 got 1) while its sibling arm confirms the index really says mode 120000, so the CHECKER misreads: scripts/check-skill-canonicalization.sh:104 `[ "$osize" -gt 0 ] && IFS= read -r -N "$osize" content` fails with `read: -N: invalid option` on /bin/bash 3.2.57 (arm64-apple-darwin25); read -N is bash 4+, macOS ships 3.2, the exact class 761-g36m already rules on (the mapfile note in lib-common). THE GUARD THAT EXISTS FOR THIS DOES NOT LOOK FOR IT: scripts/check-bash-dialect.sh returns ok:bash-dialect-clean on the tree and has no pattern for read's bash-4 options, readarray or mapfile; it refuses GNU date and du forms only, so it passed a file that cannot run on the platform it exists to protect. Third silent-region finding of the day (with 1064-5hv2's 1x–4x band and 1063-htns's changed-files-only scan): real coverage with a quiet band where the absence of a complaint reads as health. RULING: macbookair fixes both halves, a bash-3.2 read chosen by what the checker does with the bytes (credited on this packet, yolanda's file) and the missing guard pattern with the pre-fix checker as its red, files the guard's silent region as its own packet naming the three-instance pattern, and lands on osx-next once green; the coordinator merges next pass. macbookair's 1044-2raf (faee19974) and 1063-htns filing (cb9efbbc6) are committed and held behind the red, not landed on a red gate.
