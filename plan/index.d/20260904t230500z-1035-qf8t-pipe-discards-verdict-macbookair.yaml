@@ -1,0 +1,106 @@
+packets:
+  - packet_id: agent-invocation-discards-the-verdict-tools-take-care-to-produce
+    order: 1035-qf8t
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    release_target: stable-milestone-v1
+    capability_tags:
+      - fail-loud
+      - docs
+      - testing
+    estimated_hours: 2
+    unscoreable: |
+      CORRECTED 2026-09-04 by 1036-jamx, which is the gate this row's own
+      closure failed. The closure read "scripts/advance-work-from-plan or its
+      skill body states the capture rule, and a reviewer can grep ... and find
+      none" — prose naming no runnable command, and admitted only because the
+      pattern then matched anywhere in the packet.
+
+      It is stated unscoreable rather than dressed in a command, because the
+      obligation is NOT repo-decidable. What must change is that agents stop
+      discarding these tools' exit status; a grep proving a sentence exists in
+      a skill file would be a PROXY for that, and this packet is about a proxy
+      read as the thing. A green grep over skill prose while agents keep piping
+      the gate is exactly the failure being filed.
+
+      The honest pin, if someone wants one, is a check that no script in this
+      repo pipes build.sh or land-on-platform-branch.sh into a status-losing
+      pipeline — that is mechanical, and it is a NARROWER claim than the
+      packet, so it would close a different row rather than this one.
+    title: |
+      Three refusals read as exit 0 in one cycle because the agent piped the tool's output — the tools were right every time, and the reading discarded the status they took care to produce.
+    deliverable: |
+      An agent that runs the gate or the land script reads the verdict those
+      tools actually return. What must not persist is a loop where a refusal
+      and a success are indistinguishable at the point of reading.
+    context: |
+      MEASURED 2026-09-04 by macbookair-macos across one cycle on osx-next.
+      THREE refusals were read as exit code 0:
+        refused:land:dirty-worktree           (real status 1)
+        refused:land:gate-failed              (real status 3, later 6)
+        fail:test-baseline:new-red=2          (real status 1)
+      Each was invoked as `<tool> 2>&1 | tail -N`. A pipeline's status is its
+      LAST command, so every one of those reported tail's success.
+
+      THE TOOLS ARE NOT AT FAULT AND THIS PACKET DOES NOT ASK FOR THEM TO BE
+      CHANGED. This corrects the premise of the coordinator ruling that filed
+      it (macuahuitl 2026-09-04, "promote PIPESTATUS into the land and gate
+      wrappers themselves"), because implementing that would have been work
+      against tools that are already correct:
+
+        * land-on-platform-branch.sh returns a DISTINCT exit code per failure
+          (0 landed, 1 dirty, 2 conflict, 3 gate, 4 exhausted, 5 auth, 6 push)
+          and verified all three of mine correctly.
+        * build.sh returns non-zero on a red gate — measured GATE_EXIT=1.
+        * land-on-platform-branch.sh's own header, lines 14-24, ALREADY
+          documents this exact bug in a sibling form: "`if git push ... | tee
+          LOG | tail -3; then` tests the exit status of TAIL, not of git push
+          ... Together they reported 'LANDED' for a push that was refused, and
+          the agent reported that onward."
+
+      SO THE DEFECT IS ENTIRELY IN THE READING, and that is the interesting
+      part rather than an excuse. A previous cycle hit this bug, understood it
+      precisely enough to write those lines, and fixed it INSIDE the script —
+      where the next agent to pipe the script's output does not read them. The
+      warning lives at the layer that no longer has the problem.
+
+      WHY IT MATTERS MORE THAN A STYLE NOTE. The failure is silent and
+      directional: it converts every refusal into an apparent success, never
+      the reverse. In this cycle it nearly caused a red tree to be re-landed
+      and a `refused:land:gate-failed` to be reported to a coordinator as a
+      completed land. The tools' care is real and is being thrown away one
+      layer up.
+    acceptance_criteria: |
+      1. The worker skill states the capture rule at the point of invocation:
+         run the tool, capture `$?` (or PIPESTATUS[0]) BEFORE anything else
+         reads it, and read the log from a file rather than a pipe.
+      2. The rule is stated where the AGENT reads it, not only in the scripts.
+         A warning inside land-on-platform-branch.sh did not reach the caller
+         who piped land-on-platform-branch.sh; that is the whole finding.
+      3. NEGATIVE CONTROL: state explicitly that a zero exit is not by itself
+         evidence of success for these tools either — land-on-platform-branch.sh
+         already refuses to treat it that way and asks the REMOTE with
+         `git merge-base --is-ancestor`. A fix that teaches "check the exit
+         code" and stops there re-creates the sibling half of the same bug.
+      4. No change to build.sh or land-on-platform-branch.sh is required to
+         close this. If one is proposed, it must first say what those scripts
+         get wrong, because measurement says they get it right.
+    next_action: |
+      Unclaimed. Filed by macbookair-macos at macuahuitl's ruling, with the
+      ruling's premise corrected — the wrappers need no PIPESTATUS work.
+    notes: |
+      Related: 1029-5wvd and 1032-62rx, same cycle, same family — a proxy read
+      as the thing. Here the proxy is a pipeline's exit status standing in for
+      the tool's verdict.
+    events:
+      - ts: 2026-09-04T23:05:00Z
+        type: filed
+        agent: macos-tlatoanis-macbook-air-claude-20260904t221329z
+        host: tlatoanis-macbook-air
+        note: |
+          Filed on my own three instances. I am the agent who made this
+          mistake three times in one cycle, including once while writing a
+          packet about checks that do not check what they claim.

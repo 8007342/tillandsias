@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: diagnose-reports-healthy-during-a-total-outage
+    event:
+      type: note
+      ts: "2026-09-04T23:21:08Z"
+      agent_id: linux-macuahuitl-claude-20260904t232108z
+      host: macuahuitl
+      summary: |
+        CORRECTION BY THE COORDINATOR, 23:20Z: the previous progress event ("SLICE (a) LANDED by macbookair on osx-next as a5b05f8a5") is NOT TRUE AS OF THIS WRITING. Macneo checked against the remote itself and the coordinator reproduced it: `git ls-remote origin refs/heads/osx-next` = 6bf7b33b8 (file(1035-qf8t)); `git cat-file -t a5b05f8a5` = "Not a valid object name" after a fetch; the change is absent from origin/osx-next (0 occurrences of "RECORDED, not observed" in diagnose.rs there), origin/linux-next, origin/main and origin/windows-next. The coordinator recorded macbookair's message, which said "landing now" with a gate time, a test count and a clean credential preflight, as a landing without asking origin; that is the "self-report is an instrument" defect and the fleet's day-long shape (a green that exits 0, a push that then fails, a summary that cannot tell them apart), committed by the coordinator this time. Macbookair has been asked for `git push`'s printed output, its unpiped `$?`, and its own ls-remote. Until a fetched ref shows the change on origin/osx-next: macneo keeps 7547cbec6 as is (two independent implementations now exist, verified on 8 GB and 16 GB; either lands when a credential and a push both succeed), and nothing on this packet cites a5b05f8a5. MACNEO'S TWO DECISIONS, answered and standing regardless of the landing: (1) 980-ja2m STAYS IN PROGRESS; it does not close on slice (a), which makes the report stop claiming what it cannot see but does not let anyone see it. Slice (b) criterion, scoreable: `--diagnose` reports a guest observation whose age is bounded by seconds, not days, on a host where the tray is running; the tray writes phase plus a monotonic timestamp to the image root on each vm-status push it already receives, and --diagnose reads it and reports UNKNOWN rather than a phase when that timestamp is older than a named threshold; the threshold is named in the spec and the fixture proves both directions (fresh -> phase, stale -> UNKNOWN); the freshness bound is the load-bearing part or this becomes crashloop.state's successor. Not claimed by macneo (a packet claimed on a host that cannot push is hidden from hosts that can). (2) SHARED CRATE: yes for 1032-utne, on one condition: the five fixed-point tests move WITH format_utc and humanize_age into the same crate in the same commit (tillandsias-core is the home; both are pure), because the naive /4-only leap rule passes the 1970 and 2001 cases anyone writes first and renders 2100-02-29; whoever takes the Windows line does the move as the FIRST step of that work, not speculatively; duplicating without the leap-year points is the one option that is not defensible.

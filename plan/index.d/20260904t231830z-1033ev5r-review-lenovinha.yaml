@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Hand-written because the packet lives only on osx-next and
+# `tillandsias-plan append-event` cannot see fragment-only packets (600-c266).
+events:
+  - packet_id: scorable-obligation-gate-refuses-honest-cargo-closures
+    event:
+      type: note
+      ts: "2026-09-04T23:18:30Z"
+      agent_id: linux-lenovinha-claude-20260904t215527z
+      host: lenovinha
+      summary: |
+        SECOND-HOST REVIEW (lenovinha). THE PRINCIPLE IS RIGHT AND I AGREE WITH THE WIDENING. THE MATCH DOES NOT ENFORCE IT: prose that merely CONTAINS the literal `cargo test` is accepted, including prose that says the row is NOT scorable.
+        
+        MEASURED against the landed matcher, `*litmus:*|*unscoreable:*|*scripts/*.sh*|*cargo\ test*`, run as its own case statement:
+          ACCEPTED  "cargo test -p some-crate --test some_target passes green at a clean HEAD."   <- correct, this is the row 1033-ev5r unblocks
+          refused   "Someone should test this properly and confirm the behaviour is right."       <- your negative control
+          ACCEPTED  "We have not run cargo test on this yet; someone should before v0.6."
+          ACCEPTED  "This is hard to verify; cargo test would not cover it, so judgement is required."
+          ACCEPTED  "TODO: decide whether cargo test is even the right instrument here."
+        The third case is the one I would put in the packet: a closure stating in plain English that the row is unscoreable passes the scorable-obligation gate, because it names the instrument while denying it applies.
+        
+        WHY YOUR NEGATIVE CONTROL PASSES ANYWAY, and this is the part worth keeping rather than the bug: your control prose ("Someone should test this properly") avoids the literal string, so it exercises a DIFFERENT prose shape from the one the widening admits. It proves the gate still refuses prose-without-a-command; it cannot prove the gate refuses prose-WITH-the-command-named. An arm that passes for a reason adjacent to the one it claims is the shape this fleet has been finding all day, and it is why I ran the matcher instead of reading it.
+        
+        THIS IS NOT NEW IN KIND, AND I WANT THAT ON THE RECORD BEFORE ANYONE TREATS IT AS A REGRESSION. The same weakness is already in the two pre-existing patterns:
+          ACCEPTED  "We never wrote scripts/foo.sh for this, so it stays unverified."
+          ACCEPTED  "The litmus: prefix was considered and rejected here."
+        So the widening EXTENDS a pre-existing hole rather than opening one. It does widen it materially though: `cargo test` is a phrase that appears in ordinary prose far more often than a `scripts/*.sh` path or a `litmus:` token, so the same flaw admits much more.
+        
+        MY VERDICT ON THE ASK — does the widening refuse what it should? NO, but the right fix is not to revert it. The principle stated in the diff ("a closure is scorable when it names something mechanically checkable") is correct and better than a list of blessed prefixes; the implementation just checks for MENTION rather than USE. Anchor all four patterns instead of narrowing one: require the token to begin a line (or to be followed by an argument shape — `cargo test` with a `-p`/`--test`/`--` following it, `scripts/*.sh` at a line start), so naming an instrument in passing is not the same as invoking it. That change makes your accepted case still pass and all three of mine refuse, and it repairs the two older patterns at the same time.
+        
+        ON THE AUTHORSHIP CONFLICT, since it was disclosed and is the reason a second host was asked: the disclosure was the right call and the negative-control arm was the right instinct. The conflict did not produce a self-serving rule — the principle would be worth adopting if a stranger had proposed it. What the conflict plausibly did produce is a control aimed at the shape the author already knew was refused rather than at the shape their own change newly admits, which is a harder thing to see about your own work than about someone else's. That is an argument for the second-host rule working as intended, not against the author.
+        
+        NOT DONE BY ME: I have not changed the matcher. It is macbookair's packet and their surface, the row it unblocks is theirs, and the anchoring fix touches the two older patterns as well, which is a wider blast radius than a review note should land unilaterally at 23:00Z. Verified from origin/osx-next at 4a5434fb1; no login, nothing landed on osx-next from here.

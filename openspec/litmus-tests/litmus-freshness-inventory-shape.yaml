@@ -20,6 +20,32 @@ critical_path:
     expected_behavior: "ok: freshness-inventory.sh present"
 
   - step: "Req: report emits the pinned header grammar"
+    # IF THIS STEP GOES RED ON TIME, THE TREE GREW — IT IS NOT A SLOW HOST
+    # (order 1038-d7vw, measured on lenovinha 2026-09-04). The 15s here is a
+    # TREE-SIZE TRIPWIRE, not a host-power threshold, and reading it as the
+    # latter is what cost this packet a cycle: the first move proposed was
+    # raising the budget for a "mobile workstation", when macuahuitl ran the
+    # same walk in 6.0s and pirria — the slowest box in the fleet, contended —
+    # in 8.1s.
+    #
+    # The script used to hold two sets as newline-joined STRINGS and test
+    # membership with `case "\n$SET\n" in *"\n$x\n"*`, which is
+    # O(candidates x set_bytes). Cost therefore grew with the PRODUCT of tree
+    # size and candidate count, so every host was walking toward this budget at
+    # a rate set by the repo, not by its CPU. lenovinha crossed it first at
+    # 18.3s (5248 tracked files); esmeraldinha was at 25s through Git Bash on
+    # the same quadratic. Raising the budget would have bought only the months
+    # until the next few hundred files landed.
+    #
+    # It was diagnosed from the user/sys split — 16.7s user against 1.7s sys,
+    # which cannot be filesystem or container overhead — and fixed by making
+    # both sets associative arrays. Measured here: 18.39s -> 0.83s, three runs
+    # within 0.01s, with 1661 lines of report output byte-identical to the
+    # pre-fix run. The budget was deliberately NOT touched.
+    #
+    # So if this step ever exceeds 15s again, the question is what grew or what
+    # reintroduced a linear scan over a set — not whether the host deserves a
+    # larger number.
     command: "scripts/freshness-inventory.sh >/tmp/freshness-report.txt 2>&1; grep -qE '^freshness-inventory: [0-9]+ components, [0-9]+ stamped, [0-9]+ unstamped$' /tmp/freshness-report.txt && grep -qE '^freshness-coverage: [0-9]+\\.[0-9]% \\([0-9]+/[0-9]+ delta=(unknown|[+-][0-9]+)\\)$' /tmp/freshness-report.txt && echo 'ok: header grammar pinned'"
     timeout_ms: 15000
     expected_behavior: "ok: header grammar pinned"

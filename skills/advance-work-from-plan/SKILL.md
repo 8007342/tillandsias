@@ -379,6 +379,16 @@ Hard rules:
   falsifiable; "635 passed under tray,listen-vsock" is. Use the gate's set, and
   write the set next to the number in every claim.
 
+- **`./build.sh --check` runs no litmus (748-tkjx); run the bound spec before
+  landing on any surface a litmus covers.** On 2026-09-04 lenovinha ran the
+  gate four times green over gate-stamp.sh and landed a change whose guard,
+  `litmus:mode-only-regression-gate`, states in its own arm text why that exact
+  change deadlocked every Windows host once (889-8tcb); the daily release gate
+  and the coordinator's union litmus were the first places it could go red.
+  "My gate was green" is evidence about the gate's lane, not about the change:
+  `scripts/run-litmus-test.sh --diff-scope origin/linux-next --compact` (or the
+  bound spec by name) before the land, not after.
+
 ---
 
 ## 6 — Commit, Push & Checkpoint

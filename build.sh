@@ -1619,6 +1619,11 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
 
+    if ! _run bash "$SCRIPT_DIR/scripts/check-tray-process-running-naming.sh" 2>&1; then
+        _error "the --diagnose field that observes a PROCESS is named for a VM again (980-ja2m) — see the verdict line above"
+        exit 1
+    fi
+
     if ! _run bash "$SCRIPT_DIR/scripts/check-issue-citation-convention.sh" 2>&1; then
         _error "a newly added plan/issues citation names a source LINE (881-29me) — see the verdict line above"
         exit 1
@@ -1743,7 +1748,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _run bash "$SCRIPT_DIR/scripts/check-fragment-events-land.sh" 2>&1         | tee "$_events_land_log" || true
     _events_land_rc="${PIPESTATUS[0]}"
     if [ "$_events_land_rc" -eq 2 ]; then
-        _error "check-fragment-events-land COULD NOT RUN (exit 2) — this says NOTHING about whether any event lands on a packet; the instrument is what needs repair (1021-a944). Verdict: $(tr -d '' < "$_events_land_log" | tail -n 1)"
+        _error "check-fragment-events-land COULD NOT RUN (exit 2) — this says NOTHING about whether any event lands on a packet; the instrument is what needs repair (1021-a944). Verdict: $(tr -d '
+' < "$_events_land_log" | tail -n 1)"
         _error "remedy: scripts/cycle-preflight.sh rebuilds the plan binary for this tree, or run 'cargo build --release -p tillandsias-plan' in this locus"
         rm -f "$_events_land_log"
         exit 1
