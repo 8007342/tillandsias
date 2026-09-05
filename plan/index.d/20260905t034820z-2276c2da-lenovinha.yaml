@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: vault-blocking-watch
+    field: next_action
+    value: 'RE-VERIFIED AT HEAD 2026-09-05 (lenovinha). The 2026-07-28 refutation still holds in substance — community Vault 1.18 KV v2 has no blocking GET ?wait=, so SC-14 is unimplementable as written — but its CITATION IS STALE: main.rs:11629-11637 is now unrelated code. The real site is crates/tillandsias-headless/src/main.rs around 15438: a 2s tokio::time::sleep tick (SC-01''s violation) plus ticks_since_presence >= 30, i.e. the 60s heavy presence poll. ALSO: the ''ratify sentinel'' half of the proposed rewrite ALREADY EXISTS — login_transition_sentinel_path() short-circuits the 60s wait, so a transition is seen on the next 2s tick, not after a minute; nobody recorded that against this packet. WHAT REMAINS is a criteria-vs-implementation mismatch, not a live defect: the residual poll is bounded and cheap. The decision — make the sentinel authoritative and delete the tick, OR rewrite SC-01/SC-14 around what community Vault can do, OR keep the bounded poll and say so — belongs with 151''s ratification rather than one host picking quietly.'
+    ts: "2026-09-05T03:48:20Z"
+    host: lenovinha
+
+events:
+  - packet_id: vault-blocking-watch
+    event:
+      type: note
+      ts: "2026-09-05T03:48:20Z"
+      host: lenovinha
+      summary: |-
+        record the verified base; the choice is 151's
