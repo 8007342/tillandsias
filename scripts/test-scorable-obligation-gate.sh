@@ -288,7 +288,16 @@ _lane="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/scripts/hooks/pre-push-l
 _needle="check-scorable""-obligation-added.sh"
 if [ ! -f "$_lane" ]; then
     fail=$((fail+1)); echo "FAIL: the plan-only lane script is missing: $_lane"
-elif sed 's/#.*//' "$_lane" | grep -qE "bash[[:space:]]+[^|]*$_needle"; then
+# SIGPIPE-SAFE (792-ksr8). `sed ... | grep -q` under `set -o pipefail` lets the
+# verdict be decided by the producer's death rather than by the question asked:
+# grep -q exits on the match at line 875 of 1136, sed keeps writing, takes
+# SIGPIPE, and pipefail promotes 141 to the pipeline's status. Measured on
+# esmeraldinha 2026-09-05 inside the WSL builder, on a tree whose lane IS
+# correctly wired: PIPESTATUS=(141 0) — grep MATCHED and this arm still said
+# FAIL. It passed under MSYS bash only because Windows pipe buffering absorbed
+# the remainder, which is why the fixture looked green where it was authored.
+# Capture first, then match a herestring: no pipeline, no producer to kill.
+elif grep -qE "bash[[:space:]]+[^|]*$_needle" <<<"$(sed 's/#.*//' "$_lane")"; then
     pass=$((pass+1))
 else
     fail=$((fail+1))
