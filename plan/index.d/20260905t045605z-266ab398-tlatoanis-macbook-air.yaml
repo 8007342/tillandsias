@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-guest-provisioning-script-can-abort-partway-while-cloud-init-reports-success
+    field: status
+    value: ready
+    ts: "2026-09-05T04:56:05Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: the-guest-provisioning-script-can-abort-partway-while-cloud-init-reports-success
+    event:
+      type: falsified
+      ts: "2026-09-05T04:56:05Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        falsified 'implemented' claim; evidence: plan/index.d/20260905t045133z-0b940128-tlatoanis-macbook-air.yaml — status set to 'ready', new attempt epoch
+  - packet_id: the-guest-provisioning-script-can-abort-partway-while-cloud-init-reports-success
+    event:
+      type: note
+      ts: "2026-09-05T04:56:05Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        the id fix is delivered and correct but does not change the observed symptom; the abort mechanism is still unproven

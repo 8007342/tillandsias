@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: plan-binary-built-on-the-host-and-consumed-inside-the-toolbox-dies-on-glibc-skew-and-the-fixture-guard-tests-the-wrong-property
+    order: 1058-fenk
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: any
+    capability_tags: [gate, build, linux, toolbox]
+    estimated_hours: 3
+    owned_files:
+      - scripts/test-pre-push-issue-capture-lane.sh
+      - scripts/cycle-preflight.sh
+      - scripts/with-tillandsias-builder.sh
+    title: |
+      cycle-preflight builds target/release/tillandsias-plan on the host and the gate consumes it inside the tillandsias-builder toolbox; on a host whose distro glibc is newer than the toolbox image (pirria, CachyOS glibc 2.44 vs fedora-toolbox:42) the binary runs on the host and cannot link inside the gate, and test-pre-push-issue-capture-lane.sh's `[ -x ]` precondition guard treats the unlinkable ELF as present rather than skipping, so the gate is red on every run at any head
+    context: |
+      ROOT-CAUSED by pirria 2026-09-05T05:1xZ (889-twhe finding, relayed). Verbatim inside the toolbox:
+        ./target/release/tillandsias-plan: /lib64/libm.so.6: version `GLIBC_2.44' not found
+      On the host the same binary folds a minimal ledger. The fixture's precondition (lines 101-109) is
+      `[ -x "$_probe_bin" ]`, which tests the executable bit, not runnability; its own comment says the lane
+      should skip when no plan binary is resolvable, and an ELF that cannot link is exactly as unusable as
+      an absent one but takes the opposite branch. The same head went green (ran=2203) when target/release
+      was empty (precondition skipped) and red on every gate after cycle-preflight built the binary
+      host-side: the variable was a host-built artefact sitting in target/release, not trunk. Latent on
+      every rolling-release host that adopts the toolbox gate; the two loci disagree about what "the plan
+      binary" is and nothing notices.
+      Fix shape, two halves: (a) the fixture probes runnability (`"$_probe_bin" --version >/dev/null 2>&1`),
+      one exec, correct for cross-glibc and cross-arch; (b) cycle-preflight builds the plan binary in the
+      locus that consumes it (inside the builder when the gate runs there), or the gate detects the skew
+      and names it (`skip:plan-binary-not-runnable-here:<reason>`), never a silent precondition FAIL.
+    exit_criteria:
+      - "with an unlinkable plan binary in target/release, the issue-capture fixture SKIPS with a named reason instead of failing its precondition; pre-fix result: FAILS (pirria, every gate since 19:07Z 09-04: 'FAIL: PRECONDITION — the scratch base ledger does not fold')"
+      - "on a host whose glibc is newer than the toolbox's, a full gate after cycle-preflight is green or names the skew; pre-fix result: FAILS (red on every run at the same head that was green with an empty target/release)"
+      - "a runnable plan binary still exercises the lane's ledger arms (no vacuous skip on healthy hosts); pre-fix result: passes and must keep passing"
+    unscoreable: |
+      The pin is the fixture's own precondition with a stub that exits 127 in place of the binary, asserting
+      skip-with-reason; plus a control with a real binary asserting the arms ran. The claimer adds both.
+    events:
+      - type: note
+        ts: "2026-09-05T05:17:14Z"
+        host: macuahuitl
+        summary: |
+          FILED by the coordinator from pirria's root cause, relayed because that host's credential channel is
+          missing; the host proposed the --version probe and the reading that the two loci disagree.

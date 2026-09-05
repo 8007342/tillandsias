@@ -578,14 +578,47 @@ impl VzRuntime {
         // 1. Write user-data
         let user_data_content = provision_user_data(secure_control_wire);
 
+        // 1055-e8ie. THE PROVISIONING SCRIPT IS PART OF THE INSTANCE IDENTITY.
+        //
+        // cloud-init runs a shebang user-data ONCE PER INSTANCE-ID. The id used
+        // to be keyed on the guest BINARY fingerprint alone, so a change to
+        // this script did not move it, the per-instance semaphore stayed
+        // satisfied, and the new user-data was delivered to the guest and never
+        // executed.
+        //
+        // MEASURED 2026-09-05: after landing a change to fetch-headless.sh, the
+        // guest's copy still had mtime 01:03:59 and lacked the new line, while
+        // /var/lib/cloud/instances/<id>/user-data.txt.i — written that boot —
+        // contained it, cloud-init reported `status: done, errors: []`, and the
+        // config_scripts_user semaphore for that id already existed. Rebuilding
+        // produced a byte-identical guest binary (sha 2469469454b2… both
+        // times), which is exactly why the id did not move: a HOST-side change
+        // cannot move a GUEST-binary fingerprint.
+        //
+        // So every host-side fix to guest provisioning — this script, the
+        // systemd units, the fstab lines — was invisible on an existing guest
+        // unless the guest binary happened to change in the same release.
+        // Hashing the rendered user-data makes the id change BY CONSTRUCTION
+        // when the thing it provisions changes.
+        //
+        // ONE RE-PROVISION IS EXPECTED when this lands: every existing guest
+        // sees a new id once and re-runs the per-instance script. That is the
+        // fix working, not a regression — and it is how those guests finally
+        // receive the artifacts they have been missing.
+        let user_data_fingerprint = {
+            use sha2::{Digest, Sha256};
+            format!("{:x}", Sha256::digest(user_data_content.as_bytes()))
+        };
+
         std::fs::write(temp_dir.join("user-data"), user_data_content)
             .map_err(|e| format!("failed to write user-data: {e}"))?;
 
         // 2. Write meta-data
         let meta_data_content = format!(
-            "instance-id: tillandsias-vm-secure-{secure_control_wire}-{guest_binary_fingerprint}\n\
+            "instance-id: tillandsias-vm-secure-{secure_control_wire}-{guest_binary_fingerprint}-{}\n\
 local-hostname: tillandsias-vm
-"
+",
+            &user_data_fingerprint[..16]
         );
 
         std::fs::write(temp_dir.join("meta-data"), meta_data_content)
@@ -3241,6 +3274,68 @@ mod tests {
     /// the staged binary exists and is invisible (retry / check the share); a
     /// genuinely absent staged file means nothing was ever staged (run the .app
     /// bundle — 701-kgvk).
+    /// 1055-e8ie. THE INSTANCE-ID MUST MOVE WHEN THE PROVISIONING SCRIPT MOVES.
+    ///
+    /// cloud-init runs a shebang user-data once per instance-id. Keyed on the
+    /// guest BINARY alone, a host-side change to this script left the id
+    /// unchanged, so the per-instance semaphore stayed satisfied and the new
+    /// user-data was delivered and never executed — measured live: the guest
+    /// kept a fetch-headless.sh from hours earlier while that boot's
+    /// user-data.txt.i carried the new content and cloud-init reported done.
+    ///
+    /// This asserts the PROPERTY rather than the format: two different rendered
+    /// scripts must not produce the same identity component. A test that
+    /// pinned the id string would pass while the id was still blind to the
+    /// script, which is the defect.
+    // `provision_user_data` is macos-gated (see the shim above `provision_user_data_for_test`):
+    // an ungated test that calls it breaks every Linux/Windows `cargo test` build. Caught by
+    // the linux-next union gate on 2026-09-05 when osx-next merged (each side green alone).
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn vz_instance_id_changes_when_the_provisioning_script_changes() {
+        use sha2::{Digest, Sha256};
+
+        let off = provision_user_data("off");
+        let on = provision_user_data("on");
+        assert_ne!(
+            off, on,
+            "the two renderings must differ, or this test proves nothing"
+        );
+
+        let fp = |s: &str| format!("{:x}", Sha256::digest(s.as_bytes()))[..16].to_string();
+        assert_ne!(
+            fp(&off),
+            fp(&on),
+            "the user-data fingerprint must distinguish two different rendered \
+             provisioning scripts; if it does not, a script change cannot move \
+             the instance-id and cloud-init will never re-run it (1055-e8ie)"
+        );
+
+        // And the id must actually CARRY it. Without this the fingerprint can
+        // be computed, be perfectly distinguishing, and never reach meta-data —
+        // which is the state this packet found, one layer down.
+        //
+        // THE NEEDLE IS ASSEMBLED, NOT WRITTEN. A literal here appears in this
+        // file too, so `source.contains(<literal>)` matches THE ASSERTION'S OWN
+        // TEXT and passes whatever the format string does. The first draft of
+        // this test did exactly that: reverting the id to its pre-fix form
+        // compiled cleanly and the test stayed green. Same self-match the
+        // 980-ja2m class guard was built to avoid, rediscovered here by
+        // sabotage rather than by care.
+        let source = include_str!("vz.rs");
+        let needle = format!(
+            "{}-{}-{}",
+            "instance-id: tillandsias-vm-secure-{secure_control_wire}",
+            "{guest_binary_fingerprint}",
+            "{}\\n"
+        );
+        assert!(
+            source.contains(&needle),
+            "the rendered user-data fingerprint must be part of the instance-id \
+             itself, not merely computed beside it (1055-e8ie)"
+        );
+    }
+
     #[test]
     fn vz_cloud_init_fetch_script_names_why_it_skipped_the_staged_binary() {
         let source = include_str!("vz.rs");

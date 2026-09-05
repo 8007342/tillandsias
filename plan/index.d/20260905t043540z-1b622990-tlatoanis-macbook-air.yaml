@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-guest-provisioning-script-can-abort-partway-while-cloud-init-reports-success
+    event:
+      type: evidence
+      ts: "2026-09-05T04:35:40Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260905t004510z
+      host: tlatoanis-macbook-air
+      summary: |-
+        MECHANISM ESTABLISHED, and it is SYSTEMATIC rather than a crash artifact. The instance-id is keyed on the GUEST BINARY, and the provisioning script's own content is not part of the key: vz.rs:586 formats 'instance-id: tillandsias-vm-secure-{secure_control_wire}-{guest_binary_fingerprint}'. cloud-init runs a shebang user-data ONCE PER INSTANCE-ID, so the user script only re-runs when that id changes. DECISIVE MEASUREMENT: I rebuilt the bundle from a tree carrying my 1049-c6xa change to vz.rs and the guest binary sha was IDENTICAL before and after — 2469469454b207ab both times. So the guest binary build is reproducible with respect to a host-side change, the fingerprint does not move, the instance-id does not move, the per-instance semaphore config_scripts_user already exists for it, and the new user-data is delivered and never executed. That is exactly the observed state: user-data.txt.i written 04:21 containing the new line, fetch-headless.sh on disk from 01:03:59 without it. CONSEQUENCE, which is the packet's real severity: ANY change to the cloud-init-written guest artifacts — fetch-headless.sh, the systemd units, the fstab lines — is INVISIBLE to an existing guest unless the guest BINARY also changes in the same release. The id was designed to force re-provisioning when the binary changes; nothing forces it when only the provisioning script changes, which is the case for every host-side fix to guest provisioning. THE FIX FOLLOWS FROM THE DIAGNOSIS: include a hash of the rendered user-data in the instance-id, so changing the provisioning script changes the id by construction. That also makes the id self-describing about what it provisioned. NOTE ON MY EARLIER CANDIDATES: the set -euo pipefail abort hypothesis is NOT needed to explain any of this and should not be carried as the leading one; the BrokenPipeError crash is real but was from a different boot. Both are recorded above and both are superseded by this.

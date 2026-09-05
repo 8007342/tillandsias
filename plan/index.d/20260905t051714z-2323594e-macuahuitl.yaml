@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: guest-login-prerequisite-message-names-a-tool-the-guest-does-not-have
+    event:
+      type: progress
+      ts: "2026-09-05T05:17:14Z"
+      agent_id: linux-macuahuitl-claude-20260905t051714z
+      host: macuahuitl
+      summary: |
+        CODE HALF LANDED (yoga, 5d7aa4993; released back to ready for esmeraldinha's smoke, the second criterion). The two fixes were not a toss-up: read_git_identity_defaults calls std::fs::read_to_string on two candidate paths and parses [user] out of the text, no Command::new, no PATH check, nothing executed; installing git in the guest would have satisfied the STRING and not the CHECK and added a package to every guest image to fix a message. The message now resolves and prints the paths it actually read (managed_gitconfig_path moves with XDG_CACHE_HOME, so a literal ~/.gitconfig would have been the same defect relocated) and says outright that git need not be installed. Three tests: the refusal must not contain 'git config', must name every searched path, and read_git_identity_defaults must read_to_string without Command::new, so a later shell-out makes the message a lie again and fails. Pre-fix FAILS recorded on the first criterion; next_action says not to re-fix the code if the smoke still fails. SECOND DEFECT FOUND BY THE NEGATIVE ASSERTION, fixed in the same landing and worth fleet attention: source_window in tillandsias-headless searched '\n    fn ' and fell back to '\nfn ' only when the indented form was ABSENT, so opened on a top-level fn the window ran past every function after it and closed at the first test fn, thousands of lines; every existing caller asserts with contains, which an over-wide window always satisfies, so it was invisible until a negative assertion got its answer from unrelated code. Now takes the nearer boundary; all 513 bin tests pass after narrowing, so no test depended on the width, but any source_window test written before today checked a much larger region than its author thought.
