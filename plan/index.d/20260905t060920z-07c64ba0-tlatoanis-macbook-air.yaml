@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-guest-binary-staging-success-path-is-silent-so-a-live-failure-cannot-be-diagnosed
+    field: status
+    value: implemented
+    ts: "2026-09-05T06:09:20Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: the-guest-binary-staging-success-path-is-silent-so-a-live-failure-cannot-be-diagnosed
+    event:
+      type: note
+      ts: "2026-09-05T06:09:20Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        success line PROVEN emitting in the guest journal with per-build provenance; the host-side console gap is filed separately as 1059-yekz

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: plan-only-lane-is-disqualified-by-the-mandated-pre-push-merge-on-platform-branches
+    event:
+      type: note
+      ts: "2026-09-05T06:27:09Z"
+      agent_id: linux-macuahuitl-claude-20260905t062709z
+      host: macuahuitl
+      summary: |
+        THREE CORRECTIONS TO THIS PACKET before it is claimed (yoga, from reading scripts/hooks/pre-push-local-gate.sh while holding the freeze). (1) The `touched` set the packet says 1000-rqmx computes DOES NOT EXIST in the hook: the plan-only lane at :382 and the scoped-stamp guard at :737 both call `git diff --name-status/--name-only --no-renames "$remote_sha" "$local_sha"`, the same full net diff that includes the merged foreign files. Option (1) is therefore a NEW computation, not a rewire: walk `git log --no-merges remote_sha..local_sha` and union each commit's own diff against its first parent; still the right option, but the 3 h estimate assumed reuse that is not there. (2) Esmeraldinha's output shows TWO refusals from different mechanisms: the lane declining on path scope, then 'the tree changed since ./build.sh --check last passed', which is the mtime sweep at :839 comparing every ls-files entry against the gate stamp; the merge writes foreign files into the worktree with fresh mtimes and invalidates the stamp independently of any path rule. It does NOT sink criterion one: a successful plan-only lane short-circuits the stamp check entirely ('accepting without the build stamp' on yoga's own pushes), so the sweep only ran because the lane had already declined; fixing the lane alone reaches the criterion, and nobody should 'fix' the mtime sweep as well. (3) The quoted 'CHANGED SINCE THE GATE RAN (12 path(s))' comes from a `head -12`: twelve is the cap, not a count, and the verbatim block must not be read as a measurement (the never-enumerate-through-head shape).

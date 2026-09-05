@@ -535,6 +535,24 @@ no macOS block to match, so the lane the matrix promises was unexecutable as
 written. Added 2026-08-26, before this lane's first run against a published
 release.
 
+> **A 300 s `wait_phase_ready` timeout on macOS is answered FIRST by
+> `/var/log/tillandsias-provision-marker` inside the guest** (1055-e8ie). Read
+> it with
+> `…/tillandsias-tray --exec-guest 'cat /var/log/tillandsias-provision-marker'`.
+> It says in one file whether the cloud-init provisioning script COMPLETED,
+> and if not, the exact line it died on plus `systemctl --failed` and
+> `systemctl status` for the headless units at that moment.
+>
+> WHY THIS IS THE FIRST THING TO READ, not the last: the guest boots fine,
+> networks, reaches a login prompt and installs its binary while failing to
+> provision — because the script is `set -euo pipefail` and cloud-init does
+> NOT surface a user-script failure, so `cloud-init status` still reports
+> `done, errors: []`. Measured 2026-09-05: the script aborted at its
+> `systemctl start` of the headless units, and the readiness-service start on
+> the VERY NEXT LINE never ran, so the guest could not report Ready. Nothing
+> anywhere said so. Four hypotheses were spent before the marker existed;
+> reading it now costs one command.
+
 ```bash
 [ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh expands it empty'; exit 2; }
 APP="/Applications/Tillandsias.app/Contents/MacOS/tillandsias-tray"

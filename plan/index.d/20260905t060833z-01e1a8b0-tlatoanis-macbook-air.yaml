@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-guest-binary-staging-success-path-is-silent-so-a-live-failure-cannot-be-diagnosed
+    event:
+      type: progress
+      ts: "2026-09-05T06:08:33Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260905t004510z
+      host: tlatoanis-macbook-air
+      summary: |-
+        FIELD HALF: THE LINE WORKS, AND IT DOES NOT REACH THE HOST. Both halves measured on the same boot. IN THE GUEST JOURNAL, verbatim: 'Sep 05 06:08:00 tillandsias-vm fetch-headless.sh[1095]: [tillandsias-fetch] staged_binary=installed src=/var/lib/tillandsias/guest-bin/tillandsias-headless dest=/usr/local/bin/tillandsias-headless {"sha256":"1c1ffd372a6d6aa5b5103ed7b059e74a0ce939e197931e08213bc651824976f0","build_time":"2026-09-05T03:14:35Z","git_sha":"6691ab36d"}'. So the success path speaks, carries per-build provenance, and the deliverable 'the guest says what it did' is MET where the guest can be asked. IT WAS ONLY REACHABLE AFTER 1055-e8ie: the guest ran a script from 01:03:59 until the instance-id started hashing the user-data, which is why this could not be observed earlier tonight. ON THE HOST, console.log carries ZERO 'staged_binary' lines on that same boot — grep -ac = 0 against 417 lines. The unit declares StandardOutput=journal+console AND StandardError=journal+console, so the intent is explicit and unmet. THAT IS A NEW AND SEPARATE DEFECT and I am not folding it into this packet's close: guest unit output that is CONFIGURED to reach the console does not reach the host's console.log, which is the file an operator reads and the file this packet's own context reasoned about ('grep -c tillandsias-fetch console.log returning 0'). Note console.log also carries zero cloud-init lines, so the gap is not specific to this unit. WHERE THAT LEAVES THE PACKET: the source half is landed and guarded; the emitted line is PROVEN in the guest journal; the host-side channel is broken independently. The honest reading of the original context is that 'zero lines in console.log' was ambiguous for TWO reasons at once — a stale script (1055-e8ie) and a console that does not carry unit output — and only the first has been fixed. I would close this packet on the journal evidence and file the console-capture gap separately rather than let one packet own two unrelated causes.

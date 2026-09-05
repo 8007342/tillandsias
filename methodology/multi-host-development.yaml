@@ -261,8 +261,15 @@ multi_host_development:
       about whether lanes are sanctioned (criterion 1), the missing reaper
       (criterion 5), or the green-exit command.
     pre_push_gate_amendment: >
-      pull_merge_cadence.pre_push_gate.applies_to EXCLUDES agent/* and
-      salvage/* refs (mid-cycle lane checkpoints need no trunk merge). The
+      pull_merge_cadence.pre_push_gate.applies_to EXCLUDES agent/*,
+      salvage/* and work/<order> refs (mid-cycle lane checkpoints need no
+      trunk merge; a work/<order> ref is a GATED commit a slow-gate host hands
+      to the coordinator, who merges it into linux-next and gates the union on
+      a fast host, so the slowest gate never enters the land tool's
+      race-loss re-gate loop — 2026-09-05, lenovinha's four-attempt land and
+      yolanda's two lost pushes). The hook already behaves this way:
+      scripts/hooks/pre-push-linux-next-merged.sh matches exactly the two
+      platform refs; the local gate stamp still applies to every push. The
       lane green-exit procedure and ledger checkpoints MUST merge
       origin/linux-next first when <base> != linux-next, preserving the
       gate's intent for platform branches.

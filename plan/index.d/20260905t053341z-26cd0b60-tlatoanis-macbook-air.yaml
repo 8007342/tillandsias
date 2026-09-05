@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-guest-provisioning-script-can-abort-partway-while-cloud-init-reports-success
+    event:
+      type: evidence
+      ts: "2026-09-05T05:33:41Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260905t004510z
+      host: tlatoanis-macbook-air
+      summary: |-
+        THE ABORT IS INTERMITTENT, and I can bound the claim only loosely — stating the limit rather than a rate I did not measure. After extending the trap to capture systemd state, the rebuilt bundle changed the user-data hash, so the instance-id changed and the script RE-RAN: the marker was reset and contains ONLY 'tillandsias-provision-start 2026-09-05T05:31:53Z' with NO FAILED line. So that run completed past line 373, where the 05:01:47 run did not. Same host, same units, minutes apart, opposite outcomes: THE ABORT IS INTERMITTENT. That is consistent with everything else on this packet — some of my --exec-guest boots timed out at 300s and others reached Ready in seconds, which a deterministic abort cannot explain and an intermittent one does. WHY I CANNOT GIVE A RATE: the marker is rewritten only when the provisioning script RUNS, and the script runs only when the instance-id changes. Three further boots at the same id re-ran nothing, so they are not samples. Measuring a rate needs a forced new id per trial, i.e. a bundle rebuild per sample, which is minutes each. I am not reporting a frequency I did not measure. LEADING MECHANISM, stated as one and consistent with the 05:01:47 journal: the units are started TWICE on a provisioning boot — once by systemd from WantedBy=multi-user.target, and once by the script's explicit 'systemctl start' — and the journal shows systemd's start landing at 05:01:47 with the script's start arriving at 05:01:49. A 'systemctl start' racing a start already in progress is the obvious candidate for a non-zero return against units that are, seconds later, perfectly healthy. That is a race between two starts of the same units, not a missing dependency, and if it holds then the fix is for the script not to duplicate what WantedBy already does, or to tolerate the already-starting case. NOT PROVEN. The discriminating capture is now in the trap (systemctl --failed and systemctl status at the moment of failure) and will land with it; the next occurrence records systemd's own account rather than requiring this to be re-derived.

@@ -86,11 +86,25 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
     fi
     [ "$_integrated" -eq 1 ] || { echo "refused:land:not-integrated" >&2; exit 2; }
 
+    # ORDER 1056-5344. The plan-only lane may accept a push whose head is a
+    # UNION of two separately-green sides that were never gated together, and
+    # it records that debt in .git/tillandsias-union-ungated. This gate is what
+    # pays it. The gate below is therefore MANDATORY whenever that marker
+    # exists — asserted rather than assumed, because the whole point of writing
+    # the debt down is that a future "skip the gate when nothing changed"
+    # shortcut must not silently inherit it.
+    _um="$(git rev-parse --absolute-git-dir 2>/dev/null)/tillandsias-union-ungated"
+    if [ -s "$_um" ]; then
+        echo "land: head carries un-gated union debt ($(wc -l < "$_um" | tr -d ' ') record(s)); the gate below is mandatory (1056-5344)"
+    fi
+
     echo "land: attempt $attempt — gate (./build.sh --check)"
     if ! ./build.sh --check >/dev/null 2>&1; then
         echo "refused:land:gate-failed — run ./build.sh --check to see why" >&2
         exit 3
     fi
+    # The gate just built this exact tree, union included, so the debt is paid.
+    if [ -s "$_um" ]; then rm -f "$_um"; fi
 
     echo "land: attempt $attempt — push"
     # No pipeline: the exit status must be git push's own. KEEP THE OUTPUT — an
