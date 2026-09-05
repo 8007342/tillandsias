@@ -461,6 +461,25 @@ verification:
           alone pass on a file with the field deleted, a different defect
           wearing the fixed state's clothes), and builds its needles by
           concatenation.
+        earned_by_fourfold: >
+          THE SAME FILE DEMONSTRATED IT FOUR TIMES IN ONE DAY, twice inside the
+          text explaining it. lenovinha, 2026-09-05, on
+          scripts/test-trace-coverage.sh: the ghost-trace ratchet flagged (1) a
+          synthetic trace marker written literally in the fixture, then (2) the
+          COMMENT explaining that hazard, which spelled the marker out — the
+          warning reproducing the defect it warned about. A repair the same day
+          added (3) a third instance in an assertion that grepped for the literal
+          marker to check the validator's trailer, and (4) a fourth in the first
+          draft of the comment explaining that the third had just happened. The
+          fourth was caught only by grepping their own fix before re-gating,
+          rather than by trusting a lesson they were in the middle of writing
+          down.
+        rule_general_form: >
+          A FILE THAT CONTAINS THE STRING IT REASONS ABOUT IS A FALSE POSITIVE
+          FOR EVERY SCANNER KEYED ON THAT STRING, AND PROSE IS NOT EXEMPT. The
+          scanner cannot distinguish an assertion from a mention and should not
+          have to; the discipline belongs on the author. Assemble the needle at
+          runtime — in fixtures, in assertions, and in the comments about both.
       - id: an_explanation_offered_before_the_evidence_disarms_the_detector
         kind: judgment
         rule: >
