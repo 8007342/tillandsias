@@ -1,0 +1,78 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: credential-guard-remedy-is-not-runnable-and-echoes-the-token
+    order: 1052-548e
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [scripts, credentials, fail-loud, security, evidence]
+    estimated_hours: 1
+    owned_files:
+      - scripts/check-credential-channel.sh
+    title: |
+      check-credential-channel.sh's printed REMEDY pipes a bare token into `git credential-store store`, which refuses it, leaves the store empty and ECHOES THE TOKEN IN PLAINTEXT — so the fix an operator runs at the moment they are least able to debug it fails while disclosing the secret, and leaves the guard's verdict unchanged so it reads as "the refresh did not work"
+    context: |
+      MEASURED on esmeraldinha 2026-09-05T03:00Z, immediately after the operator ran `gh auth refresh` to end a
+      full day of this host being credential-blocked. `scripts/check-credential-channel.sh` emitted
+      `blocked:interactive-credential-helper` together with a three-line REMEDY it describes as
+      "measured 18s on esmeraldinha after a 10-minute hang". Its first line, run verbatim:
+
+        gh auth token | git credential-store --file "$(git rev-parse --git-dir)/.gh-credentials" store
+
+      produced, verbatim:
+
+        warning: invalid credential line: gho_****************************************
+        fatal: unable to read credential
+
+      and left `.git/.gh-credentials` at **0 bytes**, so the guard's next verdict was still
+      `blocked:interactive-credential-helper` — indistinguishable, to the operator, from the refresh
+      itself having failed. `git credential-store ... store` reads the credential DESCRIPTION on stdin
+      (`protocol=`, `host=`, `username=`, `password=`, terminated by a blank line), not a bare token.
+
+      THE WORKING FORM, which produced `ok:gh-credentials-store` and a live authenticated push probe
+      on this host:
+
+        printf 'protocol=https\nhost=github.com\nusername=<account>\npassword=%s\n\n' "$(gh auth token)" \
+          | git credential-store --file "$(git rev-parse --git-dir)/.gh-credentials" store
+
+      The remedy's other two lines (an empty `credential.helper` entry to drop the system manager, then
+      adding the repo-local store) are correct and were used unchanged.
+
+      WHY p1 ON THE DISCLOSURE ALONE, independent of the breakage: git's failure path prints the
+      rejected line, and the rejected line IS the token. Anything capturing that output — a terminal
+      transcript, a cycle log, a pasted bug report, an agent's session record — now contains a live
+      credential. Mine is in this session's transcript. A remedy that fails by printing the secret is
+      worth fixing on that ground even if it worked.
+
+      SHAPE, for the record: this is the same class this fleet has been finding all night in guards —
+      a prescribed action that produces a plausible failure for a reason unrelated to what is being
+      diagnosed — but located in the REPAIR path rather than the check. The guard correctly identified
+      an interactive-only helper chain; its own fix then failed for a stdin-format reason, and the
+      operator's reasonable reading of the unchanged verdict is that their credential is still bad.
+
+      NOT INVESTIGATED: whether the "measured 18s" claim in the remedy text was measured with a
+      different first line, or on a host where the store was already populated. Worth a look by
+      whoever takes this, because a measured-and-recorded remedy that does not run suggests the
+      measurement and the text diverged at some point.
+    exit_criteria:
+      - "the remedy's seeding line uses the credential-description form and a fresh operator can follow it verbatim to reach ok:gh-credentials-store; pre-fix result: FAILS — `fatal: unable to read credential`, store 0 bytes, verdict unchanged"
+      - "no path through the remedy writes the token to stdout or stderr, including git's own rejection path; pre-fix result: FAILS — `warning: invalid credential line: gho_...` prints the live token"
+      - "a fixture runs the printed REMEDY text itself (not a hand-copy of it) against a stub credential-store and asserts both that it succeeds and that the token appears nowhere in the captured output; pre-fix result: FAILS — no such fixture exists"
+    unscoreable: |
+      The pin is a shell fixture over the guard's own emitted remedy text; no
+      litmus lane covers check-credential-channel.sh's remedy today. The
+      claimer names one if they add it.
+    events:
+      - type: filed
+        ts: "2026-09-05T04:27:00Z"
+        agent_id: windows-esmeraldinha-claude-20260905t042700z
+        host: esmeraldinha
+        summary: |
+          Filed by the host that hit it, with the instance in hand: esmeraldinha
+          was credential-blocked all of 2026-09-04, the operator refreshed, and
+          the guard's own remedy failed while echoing the token. Coordinator
+          directed that this stays the finding host's to file rather than a
+          relay (2026-09-05T04:0xZ).
