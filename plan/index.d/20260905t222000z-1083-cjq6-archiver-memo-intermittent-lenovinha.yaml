@@ -1,0 +1,105 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-archiver-memo-fixture-reports-the-memo-failed-to-notice-a-fragment-when-its-own-probe-never-became-one
+    order: 1083-cjq6
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    owner_host: any
+    capability_tags:
+      - testing
+      - gate
+      - fail-loud
+    estimated_hours: 2
+    owned_files:
+      - scripts/test-archiver-check-memo.sh
+    verifiable_closure: |
+      bash scripts/test-archiver-check-memo.sh
+
+      A fixture run in which the probe fragment does NOT register must report
+      that fact, not a memo verdict.
+
+      Arrange it by pointing the probe write at a path the digest does not glob
+      (or by removing the file between the write and the check) and assert the
+      fixture says the probe did not land. PRE-FIX RESULT: FAILS — today the
+      fixture reports "FAIL new fragment: ok:archiver-check-memoized:<d8>",
+      which names the memo as the defective party.
+
+      NEGATIVE CONTROL: a genuinely broken memo — one that ignores plan/index.d
+      entirely — must still be caught and must still be reported AS a memo
+      failure. A repair that turned every red into "the probe did not land"
+      would satisfy the arm above while destroying the fixture.
+    title: |
+      test-archiver-check-memo.sh blames the memo for a probe that never became a fragment
+    context: |
+      OBSERVED ONCE, on lenovinha, inside a real ./build.sh --check, 2026-09-05:
+
+        ok   unchanged ledger -> hit (ok:archiver-check-memoized:c074c49b)
+        FAIL new fragment: ok:archiver-check-memoized:c074c49b
+        ok   fragment removed -> hit again (digest is content, not time)
+        FAIL: archiver-check memo 1/6 red (911-m7js)
+
+      Arm 4 writes plan/index.d/zz-archiver-memo-probe.yaml into the real
+      checkout and requires the memo to MISS. It HIT, with the same digest
+      c074c49b as the unchanged-ledger arm immediately before it — so adding the
+      fragment changed the digest not at all. Arm 5 hitting too is consistent:
+      the probe never entered the digest in the first place.
+
+      NOT REPRODUCIBLE, and the negatives are the useful part. Ruled out by
+      running each rather than by reasoning: three standalone runs (6/6 each);
+      CARGO_BUILD_JOBS=1 and TILLANDSIAS_FORCE_CHECK=1; a different working
+      directory (the fixture cd's to its own BASH_SOURCE-derived root); the
+      neighbouring gate ordering run by hand (memo check ->
+      archive-plan-packets.sh --check -> memo record -> fixture); and a second
+      full ./build.sh --check on the SAME tree, which passed 6/6 with the same
+      base digest c074c49b. macuahuitl ran the same fixture in a real --check on
+      their host at 22:13Z and got 6/6, so it is not the shared gate being
+      broken for everyone.
+
+      TWO HYPOTHESES RAISED AND BOTH KILLED, recorded so nobody re-runs them.
+      (1) The toolbox re-exec: dead — macuahuitl's gate re-execs into
+      tillandsias-builder too and passed. (2) Silverblue path divergence:
+      archiver-check-memo.sh globs RELATIVE paths after cd to
+      `git rev-parse --show-toplevel`, while the fixture derives its root from
+      BASH_SOURCE, and /home is a symlink to /var/home on this host — but
+      measured on lenovinha, on the host AND inside the tillandsias-builder
+      toolbox, show-toplevel, pwd -P and the fixture's own ROOT expression all
+      return /var/home/lenovinha/claudia/tillandsias. Dead.
+
+      So the mechanism is still unknown, and this packet is NOT about finding
+      it. What is certain from the evidence is narrower and fixable: the probe
+      did not become a fragment the digest could see, and the fixture had no way
+      to notice that, so it reported the wrong subject.
+
+      COST OF THE MISDIAGNOSIS: this red cost a full ~9-minute gate cycle and
+      would have been recorded as a memo defect. The next host to hit it will
+      re-run and go green, which is how a real defect becomes a flaky-test
+      story. That is the reason to fix the reporting even though the trigger is
+      unknown.
+    exit_criteria:
+      - "arm 4 CONFIRMS its own precondition before interpreting the result: the probe file exists, and is inside the set _digest actually globs, at the moment the check runs"
+      - "when the precondition does not hold the verdict names THE PROBE, not the memo, and does not claim anything about the memo's behaviour"
+      - "a genuinely broken memo is still caught and still reported as a memo failure (negative control above)"
+      - "the run records enough to diagnose a recurrence without a second gate: the digest before and after the write, and whether the probe path was present in the glob"
+    next_action: |
+      DO NOT START BY HUNTING THE INTERMITTENT. The evidence for it is one
+      observation and five failed reproductions, and a second observer already
+      could not reproduce it. Fix the REPORTING first, which is provable today
+      and is what turns a future recurrence into a diagnosis instead of a
+      re-run.
+
+      The fixture's own header calls it "Hermetic", and it is not: arm 4 writes
+      into the real plan/index.d and depends on that write being visible to a
+      digest computed by a separate process that resolves its own root
+      independently. Either make it genuinely hermetic (drive the memo against a
+      temp ledger root) or make the dependence explicit and checked.
+
+      Leave the intermittent open. If a recurrence arrives with the extra
+      recording in place, it will say which of the two it is.
+    provenance: |
+      Observed by linux-lenovinha-claude-20260905t213827z on 2026-09-05 during a
+      landing gate for 1077-vzwq. Non-reproduction on a second host confirmed by
+      macuahuitl-fedora at 22:13Z. Both killed hypotheses are recorded above
+      with the measurement that killed them.
