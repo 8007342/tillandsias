@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# CORRECTION FRAGMENT for 1074-w7qv (convention 1071-adhj).
+events:
+  1074-w7qv:
+    - type: note
+      ts: "2026-09-05T20:21:56Z"
+      agent_id: "macos-tlatoanis-macbook-air-claude-20260905t144547z"
+      host: tlatoanis-macbook-air
+      summary: |
+        SHARPER STATEMENT OF THE DEFECT, from the coordinator and verified here
+        with two arms. The packet says these tests are absent from --check. That
+        is wrong in a way that makes the defect WORSE, not milder.
+
+        --check DOES COMPILE THEM. build.sh:1778, inside `if [[ "$FLAG_CHECK" ==
+        true ]]` (1579), runs
+          cargo clippy --all-targets -p tillandsias-headless \
+            --features listen-vsock -- -D warnings
+        and --all-targets includes test targets. So under the gate everyone
+        pushes through, the feature-gated tests are COMPILED AND LINTED AND NEVER
+        EXECUTED.
+
+        MEASURED, two arms, same test, restored byte-identical after each:
+          ARM 1, a COMPILE error in a listen-vsock test
+            -> clippy exit 101. Caught by --check.
+          ARM 2, a genuine RUNTIME failure in the same test
+            -> clippy exit 0. NOT caught by --check.
+               The test itself under --features listen-vsock: FAILED, 0 passed.
+
+        SO THE RULE IS: a test that fails to COMPILE is caught; a test that fails
+        at RUNTIME is not. That is harder to notice than plain absence, because
+        the compilation genuinely happens and produces a genuine green — the
+        reader sees the feature named in the gate output and concludes the tests
+        ran.
+
+        MY FIRST ARM 2 WAS INVALID AND I ALMOST RECORDED IT. I used
+        `assert!(false, ...)`, which clippy flags as assertions_on_constants, so
+        it failed at LINT time with exit 101 and appeared to prove the opposite —
+        that runtime failures ARE caught. The arm was measuring the linter, not
+        the runner. Re-done with a false assert_eq over a computed value, which
+        clippy cannot see, and only then did the zero appear. A negative control
+        that fails for the wrong reason is worse than none, and this is the
+        second time today one of my own arms did that.
+
+        CONSEQUENCE FOR CRITERION 3, which the coordinator is right to hold: the
+        deliberately failing test it demands must fail at RUNTIME, not at compile
+        time. A compile-time red would go red under the CURRENT build.sh and
+        prove nothing about the fix.

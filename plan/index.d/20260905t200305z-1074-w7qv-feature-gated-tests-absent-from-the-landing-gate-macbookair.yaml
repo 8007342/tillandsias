@@ -1,0 +1,77 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-feature-gated-test-pass-runs-under-build-test-but-not-under-build-check-which-is-the-gate-that-guards-landing
+    order: 1074-w7qv
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [gate, testing, fail-loud, coverage, build]
+    estimated_hours: 2
+    owned_files:
+      - build.sh
+    unscoreable: |
+      THE TEST IS THE FIX: criterion 3 is the arm. A closure may only pin a test
+      that exists, and the thing being asserted is which tests a given dispatch
+      RUNS, which no current lane asks.
+    title: |
+      build.sh runs the tray/listen-vsock test pass only under --test; --check is what gates every push, so 139+ tests including any newly added to pty_handler or vsock_server never run before landing
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-09-05, while adding tests for
+      1072-qk43 to crates/tillandsias-headless/src/pty_handler.rs.
+
+      build.sh ALREADY KNOWS THIS CLASS AND SAYS SO, at the feature-gated step
+      (build.sh:1547-1553): "`tray` and `listen-vsock` are NOT default features,
+      so the plain pass above compiles neither `mod tray` nor `mod vsock_server`
+      — 139 of that binary's 522 tests. ... A test added there runs nowhere and
+      the suite still counts it as coverage (measured 2026-08-19: two new bound
+      tests reported '0 passed; 383 filtered out', indistinguishable from a
+      filter typo)."
+
+      THE STEP THAT FIXES IT IS IN THE WRONG DISPATCH. That pass lives at
+      build.sh:1562, inside `if [[ "$FLAG_TEST" == true ]]`. FLAG_TEST is set by
+      exactly one thing: the `--test` flag (build.sh:389). The landing gate is
+      `./build.sh --check`, which runs its OWN workspace pass at build.sh:2412
+      without those features.
+
+      MEASURED, three separate successful gate logs from this host:
+        grep -c 'Feature-gated tests passed'  -> 0
+        grep -c 'ok:test-baseline'            -> 1
+      The baseline ran; the feature pass never did. And locally:
+        cargo test -p tillandsias-headless --bins -- child_env
+          -> 0 matched, 495 filtered out
+        cargo test ... --features listen-vsock -- child_env
+          -> 9 matched, 559 filtered out
+      Same binary, different compiled test set.
+
+      SO THE FIX FOR ORDER 254 WAS APPLIED TO THE DISPATCH THAT DOES NOT GATE.
+      `--test` is run deliberately by a human; `--check` is what the pre-push
+      hook stamps and what land-on-platform-branch.sh runs before every push. A
+      test added to pty_handler, vsock_server or the tray today is invisible to
+      the only pass that can stop a bad change from landing.
+
+      HOW IT SURFACED, and it is the same shape one level up: I added nine tests
+      for 1072-qk43, ran them green under --features listen-vsock, and was about
+      to record "gated" as coverage. They do run — under a command nobody runs
+      before pushing. "I added tests" and "the tests run in the gate" are
+      different claims, and only the second one protects anything.
+
+      NOT A DUPLICATE OF 254: that order established the class and produced the
+      feature-gated pass. This packet is that pass being absent from --check.
+      Verify before repointing — a stale name and a live gap look identical from
+      the declaration side.
+    exit_criteria:
+      - "./build.sh --check compiles and runs the tray and listen-vsock test sets, or refuses with a named verdict saying which sets it did not run — a gate that silently covers less than the reader assumes is the defect"
+      - "the verdict states the number of tests actually executed for the feature-gated sets, so 'ran 0 because the feature was off' is distinguishable from 'ran and passed'"
+      - "a fixture proves the gate reaches them: add a deliberately failing test behind listen-vsock and show ./build.sh --check goes RED; remove it and show green — without the red half this only proves the command was typed"
+      - "the cost is measured and recorded on the packet, because the reason the pass sits in --test may be runtime; if adding it to --check is too slow, the honest outcome is a named verdict about what was skipped, not silence"
+    events:
+      - type: filed
+        ts: "2026-09-05T20:03:05Z"
+        agent_id: "macos-tlatoanis-macbook-air-claude-20260905t144547z"
+        host: tlatoanis-macbook-air
+        summary: |
+          Found while adding tests for 1072-qk43 that would not have run in the
+          gate. Filed rather than folded into that packet because it is about
+          which dispatch runs which tests, not about the exec-guest environment.

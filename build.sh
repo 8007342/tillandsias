@@ -3291,6 +3291,19 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Missing-bound-test check passed"
 
+    # 1049-s35z: jq.exe writes CRLF, and command substitution strips only the
+    # FINAL line ending — so a capture that can yield MORE THAN ONE line arrives
+    # with a carriage return on every line but the last. That is why the litmus
+    # runner reported PASS over an unrun corpus while 62 sibling call sites
+    # reading a single scalar were fine. MSYS grep hides the CR; only od -c
+    # shows it, so this must be a check rather than a habit.
+    _step "Checking multi-line jq captures strip carriage returns (1049-s35z)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-jq-multiline-capture.sh" 2>&1; then
+        _error "a multi-line jq capture does not strip CR, or the checker enforcing it cannot fail (1049-s35z) — see the verdict line above"
+        exit 1
+    fi
+    _info "Multi-line jq capture check passed"
+
     # 1004-vsh2: `cmdkey /list:<target>` echoes the queried name in its header
     # even when no such credential exists, so the smoke runbook's presence
     # predicate was TRUE FOR EVERY TARGET — the post-delete assertion threw on

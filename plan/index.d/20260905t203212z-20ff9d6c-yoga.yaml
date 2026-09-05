@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-claim-event-does-not-move-the-status-so-four-packets-are-held-by-a-host-invisible-to-the-sweep-and-still-offered-by-the-selector
+    event:
+      type: progress
+      ts: "2026-09-05T20:32:12Z"
+      agent_id: linux-yoga-claude-20260905t203212z
+      host: yoga
+      summary: |-
+        Closed, landed abed7d604. REMEDY (b) CHOSEN ON THE MEASUREMENT, which ruled out the other two rather than an argument doing it. Fleet-wide 43 packets carry a claim event; current statuses are 24 ready, 6 completed, 4 obsoleted, 4 blocked, 3 in_progress, 2 pending. (a) transitioning on the claim event: SIXTEEN of the 43 sit at a status the tool must never overwrite, so one subcommand doing two things needs an exception table on day one. (c) readers honouring claim events: of the 24 ready rows only FOUR have a claim event under 24h old and 15 are older than a week, so a reader honouring them would treat 20 RELEASED packets as held and empty the ready set, which this packet names as worse than the defect. (b) refuse and name the missing write: no hidden behaviour, no exception table, and it enforces exactly the order the worker skill already documents, set-field first then the optional narrative event. Verified both directions: a claim event on a ready packet exits 1 with the exact set-field command to run, and a claim event on a packet the host DOES hold is still appended. ARM 2 REPORTED AND NOT RESOLVED: the sweep gains a claim-without-status row naming the four live rows with their claiming host and claim ts (823-u5zf yolanda 12:29:30Z, 1004-4xie esmeraldinha 17:11:34Z, 1049-s35z yolanda 12:59:13Z, 1072-b7eq esmeraldinha 18:17:49Z). I did NOT transition them: writing another host status from here rewrites their authorship, and the coordinator has asked them. Nor is the event treated as a lease, which would remove work from the ready set on the strength of a write the fold does not read. Both would be the tool deciding what a host meant, so it says what it sees. AGE IS LOAD-BEARING rather than tidiness: reporting all 24 would bury the four live rows under twenty released packets, the same shape as a guard that flags the whole corpus. THE NEGATIVE CONTROL IS PINNED because the packet says it is not optional: the unit test carries a recent claim without status (reported), an old one (released history, silent) and one with no claim event at all (silent), and asserts the reported packet status is UNCHANGED. Measured after: ready linux still returns 378 packets and the selector still emits a batch, so the ready set was not emptied to be safe. Gate rc=0 362s, test-reclaim-stranded-claims 6 of 6. Canonical ~/.local/bin copy refreshed from the new build and verified runnable before installing (1060-wxdh); other hosts need the same or their append-event keeps the old behaviour.
