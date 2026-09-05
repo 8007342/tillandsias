@@ -53,21 +53,47 @@ echo "== 1059-ry6t: a placeholder guest asset must not build a silent no-op tray
 # Run the same emptiness test the script applies, against a 0-byte asset and a
 # real one. Executed rather than pattern-matched: the question is whether the
 # condition discriminates, and only running it answers that.
-if command -v powershell.exe >/dev/null 2>&1; then
+#
+# THE PROBE IS CHECKED BEFORE ITS ANSWER IS TRUSTED (order 1059-ry6t, learned
+# the hard way here). The first version guarded on `command -v powershell.exe`,
+# which is TRUE inside the WSL distro the gate re-execs into — via interop —
+# while the path translation these arms need is not available there. The arms
+# then compared an EMPTY STRING against "missing" and reported two failures on
+# a correct tree. An empty result is not a verdict; it is the absence of one,
+# and treating absence as a value is the family this whole packet belongs to.
+#
+# So: probe first, and SKIP loudly if the probe cannot answer. A fixture that
+# cannot run its own arm must say so rather than fail the tree.
+_ps_usable=no
+if command -v powershell.exe >/dev/null 2>&1 && command -v cygpath >/dev/null 2>&1; then
+    if [ "$(powershell.exe -NoProfile -Command "'probe-ok'" 2>/dev/null | tr -d '\r\n ')" = "probe-ok" ]; then
+        _ps_usable=yes
+    fi
+fi
+
+if [ "$_ps_usable" = yes ]; then
     W="$(mktemp -d)"
     : > "$W/placeholder"
     printf 'ELF-ish real bytes' > "$W/real"
-    verdict() { # path -> missing|ok
+    verdict() { # name -> missing|ok|<empty means the probe broke>
+        local win
+        win="$(cygpath -w "$W/$1")"
         powershell.exe -NoProfile -Command "
-            \$a = '$(cygpath -w "$W/$1" 2>/dev/null || echo "$W/$1")'
+            \$a = '$win'
             if ((-not (Test-Path \$a)) -or ((Get-Item \$a).Length -eq 0)) { 'missing' } else { 'ok' }
         " 2>/dev/null | tr -d '\r\n '
     }
-    _result "arm1-a-zero-byte-asset-is-detected" "missing" "$(verdict placeholder)"
-    _result "arm2-NEGATIVE-CONTROL-a-real-asset-is-not-flagged" "ok" "$(verdict real)"
+    v_placeholder="$(verdict placeholder)"
+    v_real="$(verdict real)"
+    if [ -z "$v_placeholder" ] || [ -z "$v_real" ]; then
+        echo "  SKIP arms 1-2: powershell probed usable but returned nothing; not scoring an absent answer" >&2
+    else
+        _result "arm1-a-zero-byte-asset-is-detected" "missing" "$v_placeholder"
+        _result "arm2-NEGATIVE-CONTROL-a-real-asset-is-not-flagged" "ok" "$v_real"
+    fi
     rm -rf "$W"
 else
-    echo "  SKIP arms 1-2: no powershell.exe; not asserting the predicate from prose" >&2
+    echo "  SKIP arms 1-2: no usable powershell+cygpath here (the gate re-execs into WSL); not asserting the predicate from prose" >&2
 fi
 
 # ---- ARM 3: the packaging script actually REFUSES on that condition ---------
