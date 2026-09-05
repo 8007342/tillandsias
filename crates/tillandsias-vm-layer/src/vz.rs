@@ -3301,6 +3301,16 @@ mod tests {
     /// scripts must not produce the same identity component. A test that
     /// pinned the id string would pass while the id was still blind to the
     /// script, which is the defect.
+    ///
+    /// GATED because it calls `provision_user_data`, which is macos-only. The
+    /// rule is stated at that function's test shim — "an ungated #[cfg(test)]
+    /// here breaks every Linux/Windows `cargo test` build" — and I wrote this
+    /// test ungated anyway. My gate is green on macOS and STRUCTURALLY CANNOT
+    /// see this class; the pre-build union litmus cannot either, because it
+    /// never compiles. Only the gate on the merged union catches it, which is
+    /// where macuahuitl found it (E0425 at vz.rs, tillandsias-vm-layer lib
+    /// tests, Linux).
+    #[cfg(target_os = "macos")]
     #[test]
     fn vz_instance_id_changes_when_the_provisioning_script_changes() {
         use sha2::{Digest, Sha256};
