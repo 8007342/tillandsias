@@ -1,0 +1,70 @@
+packets: []
+events:
+  317:
+    - type: progress
+      ts: "2026-09-05T16:54:06Z"
+      agent_id: "macos-tlatoanis-macbook-air-claude-20260905t144547z"
+      host: tlatoanis-macbook-air
+      summary: |
+        THE PRISTINENESS RE-READ, done at the coordinator's instruction. ANSWER:
+        the destructive e2e is NOT what criterion 2 needs. It needs a COLD
+        HARNESS CACHE, which is a much smaller and non-destructive scope.
+
+        FIRST, THE CRITERION AS WRITTEN DOES NOT SAY PRISTINE. The ledger's
+        exit_criteria[1] reads "aarch64 guest: every inventoried harness installs
+        via its designated channel with visible progress, or fails with one
+        actionable line (no silent 127s)". The word appears only in
+        plan/issues/brew-aarch64-harness-strategy-2026-07-12.md:42 and :91
+        ("On a pristine aarch64 guest...") and in the 2026-08-23 next_action that
+        inherited it. So the requirement is the ISSUE FILE's phrasing of the
+        closure, not the criterion, and it is worth asking what it buys.
+
+        WHAT PRISTINENESS ACTUALLY BUYS: OBSERVABILITY OF THE INSTALL. The claim
+        under test is "installs via its designated channel with visible
+        progress". lib-common.sh:2674-2677 says of the Claude curl channel that
+        "a bounded, version-matched currentness record lets a recent warm launch
+        perform ZERO NETWORK WORK". On a warm cache the install is a no-op, so a
+        verifier watches nothing happen and records a pass. That is the same
+        false-green shape as a memoised gate: the check did not run, and its
+        silence is indistinguishable from success.
+
+        A HYPOTHESIS I CHECKED AND DISCARDED, recorded so nobody re-runs it: I
+        expected the harness-update-stamp at lib-common.sh:2670 to gate the
+        refresh, which would have been a second memoisation. It does not. The
+        code says so explicitly — "Keep a diagnostic timestamp, but do not use it
+        as a gate: the launch contract is that every ephemeral forge launch
+        attempts to refresh all harnesses." So the stamp is not a blocker and the
+        cache is.
+
+        SO THE CONDITION TO CONSTRUCT IS A COLD CACHE, NOT A CLEAN HOST. The
+        caches are all inside the CONTAINER's home, not the host's image root:
+          /home/forge/.cache/tillandsias-project/npm         (lib-common.sh:2038)
+          /home/forge/.cache/tillandsias-project/npm/global  (NPM_CONFIG_PREFIX, :2039)
+          /home/forge/.cache/tillandsias-project/harness-curl (:2757)
+          /home/forge/.cache/tillandsias-harness             (HARNESS_CURL_ROOT default, :2493)
+        Clearing those reproduces first-install conditions for every inventoried
+        harness. Deleting ~/Library/Application Support/tillandsias — the 250 GB
+        image root, and the step needing the operator's authorisation — clears
+        them too, but only as a side effect of destroying everything else.
+
+        WHAT REMAINS GENUINELY PRISTINE-ONLY, stated so the narrowing is not
+        oversold: a claim about the IMAGE as shipped — that a guest built from
+        nothing reaches a working harness set on its first launch — still wants a
+        clean build. Criterion 2 as written does not make that claim; it is about
+        the install path's behaviour and its failure lines. If someone wants the
+        first-boot claim too, that is a separate criterion and should be written
+        as one rather than smuggled in through the word "pristine".
+
+        REMAINING PREREQUISITE, unchanged and non-destructive: this guest has no
+        tillandsias-default image and no forge container, so the install path
+        still needs a forge launch. scripts/build-image.sh is the path. That is
+        the ask on the operator queue now, and it does not need an authorisation
+        — it needs an image build.
+
+        NEXT ACTION for this packet: build or pull the default image in this
+        guest, clear the four cache paths above, launch a forge, and capture
+        ensure_forge_harnesses' output — asserting each inventoried harness
+        either installs via its designated channel with visible progress or fails
+        with ONE actionable line, and that nothing exits 127 silently. Record
+        that the guest had no forge container beforehand, which is the closest
+        thing to first-install this host can honestly claim.
