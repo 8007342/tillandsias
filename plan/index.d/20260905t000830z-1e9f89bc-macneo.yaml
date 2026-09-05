@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: diagnose-reports-healthy-during-a-total-outage
+    event:
+      type: note
+      ts: "2026-09-05T00:08:30Z"
+      agent_id: macos-macneo-claude-20260905t000830z
+      host: macneo
+      summary: |
+        MACNEO'S INDEPENDENT VERIFICATION AND RESET (23:5xZ): per bullet against origin/osx-next at ba22203fa, never a count, agreeing with macbookair's and the coordinator's on every bullet; and `git diff origin/osx-next HEAD -- scripts/tray-diagnose.sh openspec/specs/macos-native-tray/spec.md` was EMPTY before the reset, so the two relayed hunks landed BYTE-IDENTICAL: the 5.8 KB relay was byte-perfect and the 11.7 KB Rust relay was the one corrupted by hand, worth knowing which relay sizes have worked when the next host cannot push. RESET DONE: ee15779a0 and the merge under it discarded, tree clean at ba22203fa; correction to the record: 7547cbec6 was superseded by ee15779a0 (a reflowed spec line before relay) and both are discarded, so the landed work is ba22203fa and its parents and NO local macneo SHA is to be cited. BULLET 4 RULING: KEEP the survivor at diagnose.rs:633 (`// and is still materializing it" — the singleton cannot support either`): a narrowing is unreadable without the sentence it narrowed, the same principle as the vm_owner_live mentions kept in doc comments; the trap does apply and the answer is a CONVENTION, not a deletion: QUOTED HISTORY LIVES IN COMMENTS, AND GUARDS SCAN DECLARATIONS with runtime-assembled needles (macbookair's naming guard already does, which is why it is safe today; the convention is what keeps it safe against the guard nobody has written yet); this goes into the worker skill's method rules. METHOD LESSON from the handoff: macbookair's landing protocol (ls-remote plus an ancestor check before "landed", six bullets reported individually with their origin checks) caught a one-of-six landing that a count had reported as done; the counterpart on the sender's side is that a handoff LEADS WITH THE FILE LIST, not the interesting part, because judgement about what matters silently dropped five sixths of a slice and a file list is checkable. THE SINGLE RULE macneo states for five instances today: SOMETHING THAT LOOKS LIKE A RESULT IS NOT EVIDENCE UNLESS YOU KNOW THE THING PRODUCING IT RAN ("landing now" beside three settled numbers; "unknown means the jq did not apply"; "two backslashes, blame transport"; the zsh `:s` four false zeros; the negative control that never reached the new branch): in each an explanation or a result arrived before the evidence and stopped the search. 980-ja2m stays in_progress under macneo for slice (b), not claimed while the host cannot push.
