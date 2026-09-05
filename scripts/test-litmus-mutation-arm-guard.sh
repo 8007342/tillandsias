@@ -117,5 +117,23 @@ YAML
     && ok "redirections to /dev/null and fd 2 do not count as mutating" \
     || bad "a command whose only '>' is /dev/null was accepted as a mutation"
 
+# ── 7. A QUOTED delegating command is still delegation (order 147) ────────
+# A litmus command is a YAML scalar, so the character before the script path is
+# usually a quote. With only whitespace in the boundary class the guard matched
+# "bash scripts/x.sh" (via the space after bash) but NOT "scripts/x.sh", and it
+# refused a correct delegating MUTATION arm on order 147. That is the guard
+# pinning a QUOTING STYLE rather than the property, in the file whose subject is
+# exactly that difference.
+mkdir -p "$W/quoted"
+cat > "$W/quoted/litmus-q.yaml" <<'YAML'
+critical_path:
+  - step: "MUTATION CONTROL: the guard catches a lost static and a retry loop"
+    command: "scripts/test-tray-refresh-no-polling.sh"
+    timeout_ms: 60000
+YAML
+[ "$(_verdict "$W/quoted")" = "0" ] \
+    && ok "a delegating command written as a bare quoted path is accepted" \
+    || bad "a quoted delegation was flagged — the guard is matching a quoting style, not the property"
+
 echo "litmus-mutation-arm-guard: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
