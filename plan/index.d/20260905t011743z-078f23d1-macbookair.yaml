@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-e2e-launch-wedges-on-same-name-container-no-replace-no-corpse-cleanup
+    event:
+      type: progress
+      ts: "2026-09-05T01:17:43Z"
+      agent_id: macos-macbookair-claude-20260905t011743z
+      host: macbookair
+      summary: |-
+        SOURCE HALF IMPLEMENTED (macbookair, verified against the remote): ls-remote origin refs/heads/osx-next 10b33beb0; 3965419d0 an ancestor; --replace appears exactly once INSIDE build_opencode_forge_args's line range on origin (checked by range, not by file-wide grep, which would have matched the other six sites). Status implemented with the live half explicitly excluded and routed to pirria on the v56.9.4.1 release binary (pre-fix exit-125 red) and the next daily (post-fix). SEPARATELY SETTLED BY THE SAME HOST: the cli_unknown_flags and exec_guest_stdin new-reds were its own concurrent gates sharing target/, not load-sensitive tray defects; a FORCED solo gate with 0 build, 0 land and 0 cargo processes reported ok:test-baseline:ran=2287 new-red=0 tolerated=0 stale=0, exit 0, 257 s, same 2287 tests; drop any routing of those two tests as defects; a red in a solo gate elsewhere would be NEW information. HOW IT WAS NEARLY CLOSED WRONG, for the fleet: the first solo run returned exit 0 as ok:gate-fresh, MEMOISED on a stamp written at 00:51 by the claim land's gate, one of the concurrent runs under dispute; a memoised gate answers the question its stamp was asked, not the one you are asking, so any gate run to settle a dispute about gate behaviour must be forced (verification.measurement_practice.a_zero_is_evidence_only_if_the_check_ran, written into methodology three hours earlier by the same author, names the silent pass). Scheduling discipline recorded: check for live build/land processes before starting either.

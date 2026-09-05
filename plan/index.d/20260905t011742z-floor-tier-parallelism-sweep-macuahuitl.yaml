@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: floor-tier-parallelism-sweep
+    order: 1048-aumz
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: any
+    capability_tags: [low-end, windows, build, measurement, cargo]
+    estimated_hours: 3
+    owned_files:
+      - skills/advance-work-from-plan/SKILL.md
+      - scripts/cycle-metrics.sh
+    title: |
+      Floor-tier parallelism sweep: forced gates at three job counts with the pressure sampler on esmeraldinha and pirria, to find where fewer rustc processes both speed the build and stop stalls, and set the floor row of the host-class job table
+    context: |
+      OPERATOR ASK (2026-09-05): "I wonder if Esme and Pirria could also detect where else reducing parallelism could actually speed up
+      build time, and reduce freezing." On the floor the answer may invert the desktop's: four cores and 15.8 GB (esmeraldinha N100) or four
+      cores (pirria) can lose to memory pressure and swap at full parallelism, where fewer rustc processes finish sooner. PROTOCOL, the same as
+      the desktop trial (protocol file on the build-tune-ups packet): arms A = CARGO_BUILD_JOBS unset (cargo default = nproc), B = nproc/2,
+      C = 2; each arm a FORCED `./build.sh --check` (TILLANDSIAS_FORCE_CHECK=1) on the same tree, back to back, idle host confirmed by loadavg
+      before each, through the host's normal entry point (Windows: the Windows entry point so with-wsl2-builder re-execs and sets
+      CARGO_TARGET_DIR); each arm records the gate's own ok:test-baseline:ran=N line (an arm without it is void), wall time, and
+      /proc/pressure (io some/full avg10, cpu some, memory some; on Windows read inside the distro) sampled every 5 s, plus max rustc
+      count and peak memory (free -m sampled). Falsifier stated first: a lower job count is the floor's setting only if it is NOT slower
+      than arm A by more than 10% AND reduces io-full peak or memory pressure; if every arm is slower, parallelism is not the floor's lever
+      and its stalls are I/O regime (1038-d7vw's finding: the tier label does not predict the number, the regime does). Pirria cannot run
+      the gate without a toolchain (rustup absent, operator queue), so pirria's arms wait on that or run through the builder toolbox if it
+      carries cargo; esmeraldinha runs first. Results are relayed through the coordinator (neither host has a credential channel).
+    exit_criteria:
+      - "esmeraldinha reports three arms with ran=N, wall, io-full peak, memory peak; pre-fix result: FAILS (no floor number exists)"
+      - "pirria reports the same three arms or states the toolchain blocker; pre-fix result: FAILS"
+      - "the floor row of the host-class job table is set from the two hosts' winners with the regime named, or the packet records that parallelism is not the floor's lever"
+    unscoreable: |
+      The pins are forced-gate pairs with the pressure sampler on named hosts; no
+      litmus lane covers host I/O regime yet, and the claimer names one if added.
+    events:
+      - type: note
+        ts: "2026-09-05T01:17:41Z"
+        host: macuahuitl
+        summary: |
+          FILED by the coordinator on the operator's ask; esmeraldinha is running the arms now (to first red, comparable across arms; WSLENV workaround for CARGO_BUILD_JOBS not crossing wsl.exe), pirria blocked two deep (toolbox absent, then the toolchain) and correctly refusing TILLANDSIAS_SKIP_TOOLBOX=1 as a different regime.
