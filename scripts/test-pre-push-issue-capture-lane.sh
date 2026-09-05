@@ -201,7 +201,14 @@ out="$(run_guard)"
 # path is turned away as outside the allowlist is the behaviour 889-twhe
 # changed. The CONTROL arm always drew that distinction; the acceptance arms
 # did not, and that inconsistency is what made this fixture host-dependent.
-lane_qualified() { ! grep -q "is outside plan/index.d/" <<<"$1"; }
+# ORDER 1060-7mmm: ANY "not applicable" is a disqualification, not just the
+# out-of-scope spelling. This helper used to check for one refusal string, so an
+# arm asserting qualification passed while the lane was refusing for a DIFFERENT
+# reason — measured here: the new M-qualifies arm was green against the pre-fix
+# hook, which refuses an M with "has status 'M' ... only NEW issue captures
+# qualify". That is the same defect as pinning one spelling of a class
+# (1060-6fx7): a control that names one refusal certifies the others away.
+lane_qualified() { ! grep -qE "plan-only lane: not applicable" <<<"$1"; }
 if lane_qualified "$out" && grep -qE 'plan-only lane clean|plan-only lane: validated plan/issues/new-capture.md' <<<"$out"; then
     ok "a NEW plan/issues capture qualifies for the lane"
 else
@@ -226,15 +233,52 @@ else
 fi
 reset_to_remote
 
-# ── 3. (a) A MODIFIED capture is refused — captures are immutable here for
-#      the same reason fragments are: a new file is a capture, a modified one
-#      can carry anything.
-printf 'appended\n' >> plan/issues/existing.md
-G add -A >/dev/null; G commit -q -m "modify an existing capture"
+# ── 3. A MODIFIED capture now QUALIFIES (order 1060-7mmm) ──────────────────
+# THIS ARM WAS INVERTED, DELIBERATELY. It previously asserted that an M is
+# refused, by analogy with the fragment arms — but the analogy does not hold.
+# plan/index.d/ entries are CRDT records whose contract is append-only, so an M
+# there is a corrupted ledger; a plan/issues capture is PROSE, and correcting it
+# is the ordinary way it improves.
+#
+# esmeraldinha measured the asymmetry on 2026-09-05: the lane accepted the
+# CREATION of a smoke report unreviewed and refused a FOUR-CHARACTER fix to it
+# (a cited order id, 1029-5vwd, with no referent). A lane whose economics favour
+# appending a new record over correcting an existing one selects for records
+# that read as settled while carrying something wrong.
+#
+# The blast radius is unchanged and that is the argument: the M is validated
+# per-file by check-issue-citation-convention against the PUSHED bytes, the same
+# gate the A path runs, and case 3b below asserts an M elsewhere still takes the
+# full gate.
+printf 'See `main.rs` `resolve_probe`.\n' >> plan/issues/existing.md
+G add -A >/dev/null; G commit -q -m "correct an existing capture"
+out="$(run_guard)"
+if lane_qualified "$out"; then
+    ok "a CORRECTED capture (M under plan/issues/) qualifies for the lane"
+else
+    bad "a corrected capture was refused: $(grep -m1 'plan-only lane' <<<"$out")"
+fi
+reset_to_remote
+
+# ── 3b. NEGATIVE CONTROL: an M ELSEWHERE still takes the full gate ─────────
+# Without this, case 3 alone would be satisfied by admitting every M — which is
+# the escape hatch this lane exists to keep shut. build.sh can reach the build.
+printf '\n# touched by a fixture\n' >> build.sh
+G add -A >/dev/null; G commit -q -m "modify build.sh"
 out="$(run_guard)"
 grep -q 'plan-only lane clean' <<<"$out" \
-    && bad "a MODIFIED plan/issues file rode the lane" \
-    || ok "a MODIFIED capture takes the full gate"
+    && bad "a MODIFIED build.sh rode the lane" \
+    || ok "a MODIFIED file outside the plan dirs still takes the full gate"
+reset_to_remote
+
+# ── 3c. A DELETED capture is still refused ────────────────────────────────
+# D stays out: the lane cannot validate the absence of a record.
+G rm -q plan/issues/existing.md
+G commit -q -m "delete a capture"
+out="$(run_guard)"
+grep -q 'plan-only lane clean' <<<"$out" \
+    && bad "a DELETED capture rode the lane" \
+    || ok "a DELETED capture still takes the full gate"
 reset_to_remote
 
 # ── 4. (c) A class subdirectory is admitted at exactly one level deep. ─────

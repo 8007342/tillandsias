@@ -407,11 +407,54 @@ attempt_plan_only_lane() {
                     # filing LESS. Ruled approved by the coordinator with the
                     # four conditions enforced here and in the validator below.
                     #
-                    # NEW FILES ONLY — status A, never M/D/T. Same immutability
-                    # rule the fragment arms apply, for the same reason: a new
-                    # file is a capture, a modified one can carry anything.
-                    if [[ "$status" != "A" ]]; then
-                        echo "plan-only lane: not applicable — '$path' has status '$status' in the outgoing diff; only NEW issue captures qualify (full gate required)" >&2
+                    # A OR M, NEVER D OR T (order 1060-7mmm). This was A only,
+                    # by analogy with the fragment arms — but the analogy does
+                    # not hold, and the asymmetry it produced points the wrong
+                    # way.
+                    #
+                    # FRAGMENTS ARE IMMUTABLE BY CONSTRUCTION: plan/index.d/
+                    # entries are CRDT records whose whole contract is
+                    # append-only, so an M there is a corrupted ledger. A
+                    # plan/issues capture is PROSE. Nothing about it is
+                    # append-only, and a correction to it is the ordinary way it
+                    # improves.
+                    #
+                    # MEASURED on esmeraldinha 2026-09-05, in the same push,
+                    # seconds apart, differing only in whether one correction was
+                    # included:
+                    #   refused: '...smoke-e2e-findings-v56.9.5.1...md' has status
+                    #            'M'; only NEW issue captures qualify
+                    #   accepted: outgoing diff adds only new plan fragment files
+                    # The change was FOUR CHARACTERS — the report cited order
+                    # 1029-5vwd, which has no referent; the real one is
+                    # 1029-5wvd. The lane accepted the creation of that report
+                    # unreviewed and refused the fix to it.
+                    #
+                    # WHY THIS IS WORTH RELAXING RATHER THAN LIVING WITH. A lane
+                    # whose economics favour APPENDING a new record over
+                    # CORRECTING an existing one selects for records that read as
+                    # settled while carrying something wrong — the failure mode
+                    # this fleet keeps finding. The cheap path should be the
+                    # honest one. On the night this was filed the finding host
+                    # made three corrections to landed or relayed records in one
+                    # shift, and this rule taxed every one of them.
+                    #
+                    # THE BLAST RADIUS IS UNCHANGED, which is the whole argument.
+                    # An M here is still validated per-file by
+                    # check-issue-citation-convention against the PUSHED bytes,
+                    # the same gate the A path runs; the diff it reads is
+                    # base..head, so a modification is checked exactly as an
+                    # addition is. Prose under plan/issues/ cannot reach the
+                    # build and cannot change what the gate validates. An M
+                    # ANYWHERE ELSE still takes the full gate — that refusal is
+                    # the escape hatch this lane exists to keep shut, and the
+                    # fixture asserts it.
+                    #
+                    # D and T stay refused: a DELETION removes a record the lane
+                    # cannot validate the absence of, and a type change is not a
+                    # correction.
+                    if [[ "$status" != "A" && "$status" != "M" ]]; then
+                        echo "plan-only lane: not applicable — '$path' has status '$status' in the outgoing diff; issue captures qualify as new (A) or corrected (M) only (full gate required)" >&2
                         return 1
                     fi
                     # DEPTH IS DECIDED EXPLICITLY, not left to a glob. The
