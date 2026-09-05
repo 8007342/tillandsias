@@ -23,6 +23,22 @@ ok()  { echo "ok: $1"; pass=$((pass+1)); }
 bad() { echo "FAIL: $1" >&2; fail=$((fail+1)); }
 
 W="$(mktemp -d "${TMPDIR:-/tmp}/preflight-cargo-test.XXXXXX")"
+
+# HERMETIC ON A HOST THAT SHIPS A DISTRO CARGO. The absence arms used to drop
+# PATH to /usr/bin:/bin and call cargo absent; on macuahuitl (Fedora 44)
+# /usr/bin/cargo exists, so "absent" read "found" and the mutation control read
+# the same, four arms red the first time this suite ran inside a gate
+# (2026-09-05, the day 1005-m6rz bound it). The scratch PATH below carries
+# every executable in /usr/bin and /bin EXCEPT cargo, so absence is a property
+# of the fixture rather than of the host that happens to run it.
+NOCARGO="$W/bin"; mkdir -p "$NOCARGO"
+for _d in /usr/bin /bin; do
+    [ -d "$_d" ] || continue
+    for _x in "$_d"/*; do
+        _n="${_x##*/}"; [ "$_n" = cargo ] && continue
+        [ -e "$NOCARGO/$_n" ] || ln -s "$_x" "$NOCARGO/$_n" 2>/dev/null || true
+    done
+done
 trap 'rm -rf "$W"' EXIT INT TERM
 
 # A stub cargo that satisfies `command -v` and makes the build step succeed
@@ -41,7 +57,7 @@ STUB
 # real binary and refreshes a real inference endpoint — neither is hermetic and
 # neither is what 876-irn7 changed.
 resolve_arm() { # resolve_arm <extra-env...> ; echoes "found" | "absent"
-    env -i PATH="/usr/bin:/bin" HOME="$W/home" "$@" bash -c '
+    env -i PATH="$NOCARGO" HOME="$W/home" "$@" bash -c '
         if ! command -v cargo >/dev/null 2>&1; then
             for _cargo_dir in "${CARGO_HOME:-}/bin" "$HOME/.cargo/bin"; do
                 case "$_cargo_dir" in /bin) continue ;; esac
@@ -86,7 +102,7 @@ got="$(resolve_arm)"
 #      "${CARGO_HOME:-}/bin" expands to exactly that, and /bin/cargo on some
 #      host would be silently accepted as a CARGO_HOME hit.
 mkdir -p "$W/fakebin"; make_cargo "$W/fakebin"
-got="$(env -i PATH="/usr/bin:/bin" HOME="$W/empty-home" bash -c '
+got="$(env -i PATH="$NOCARGO" HOME="$W/empty-home" bash -c '
     probed=""
     if ! command -v cargo >/dev/null 2>&1; then
         for _cargo_dir in "${CARGO_HOME:-}/bin" "$HOME/.cargo/bin"; do
@@ -102,10 +118,10 @@ case "$got" in
 esac
 
 # ── 5. MUTATION CONTROL: without the loop, arm 1 must fail. ────────────────
-got="$(env -i PATH="/usr/bin:/bin" HOME="$W/home" bash -c '
+got="$(env -i PATH="$NOCARGO" HOME="$W/home" bash -c '
     command -v cargo >/dev/null 2>&1 && echo found || echo absent')"
 make_cargo "$W/home/.cargo/bin"
-got2="$(env -i PATH="/usr/bin:/bin" HOME="$W/home" bash -c '
+got2="$(env -i PATH="$NOCARGO" HOME="$W/home" bash -c '
     command -v cargo >/dev/null 2>&1 && echo found || echo absent')"
 [ "$got2" = absent ] \
     && ok "MUTATION: without the loop the same host reads absent — arm 1 has teeth" \
@@ -124,8 +140,16 @@ got2="$(env -i PATH="/usr/bin:/bin" HOME="$W/home" bash -c '
 GUARD="$ROOT/scripts/check-committable-branch.sh"
 mkdir -p "$W/norepo"
 git init -q "$W/noident"
+# HOST-REGIME NOTE. On pirria the hostname is `pirria.(none)` and git refuses
+# to auto-detect an identity; on macuahuitl the hostname is a resolvable FQDN
+# and git auto-detects one happily, so with nothing configured this arm read
+# ok:branch-linux-next there. The guard's refusal path is what this arm pins,
+# and git's own switch for "do not guess" is user.useConfigOnly: with it set,
+# `git var GIT_AUTHOR_IDENT` fails exactly as a commit would on a host that
+# cannot auto-detect, regardless of what the fixture host's hostname is.
+( cd "$W/noident" && git config user.useConfigOnly true )
 ( cd "$W/noident" && git checkout -q -b linux-next 2>/dev/null || true )
-got="$(cd "$W/noident" && env -i PATH="/usr/bin:/bin" HOME="$W/empty-home" \
+got="$(cd "$W/noident" && env -i PATH="$NOCARGO" HOME="$W/empty-home" \
         GIT_CONFIG_NOSYSTEM=1 bash "$GUARD" 2>/dev/null)"
 [ "$got" = "blocked:no-git-identity" ] \
     && ok "a host with no git identity is refused (blocked:no-git-identity)" \
@@ -133,7 +157,7 @@ got="$(cd "$W/noident" && env -i PATH="/usr/bin:/bin" HOME="$W/empty-home" \
 
 # The remedy must be PRINTED, not implied: the measured incident cost a whole
 # cycle's work because the failure named no fix at the point it was hit.
-remedy="$(cd "$W/noident" && env -i PATH="/usr/bin:/bin" HOME="$W/empty-home" \
+remedy="$(cd "$W/noident" && env -i PATH="$NOCARGO" HOME="$W/empty-home" \
         GIT_CONFIG_NOSYSTEM=1 bash "$GUARD" 2>&1 >/dev/null)"
 case "$remedy" in
     *"git config user.email"*) ok "the refusal names the exact git config remedy" ;;
@@ -143,7 +167,7 @@ esac
 # TRUE NEGATIVE: an identity present must NOT be refused, or the guard would
 # stop every healthy host in the fleet.
 ( cd "$W/noident" && git config user.name t && git config user.email t@example.invalid )
-got="$(cd "$W/noident" && env -i PATH="/usr/bin:/bin" HOME="$W/empty-home" \
+got="$(cd "$W/noident" && env -i PATH="$NOCARGO" HOME="$W/empty-home" \
         GIT_CONFIG_NOSYSTEM=1 bash "$GUARD" 2>/dev/null)"
 case "$got" in
     ok:branch-*) ok "an identity present passes the guard ($got)" ;;
@@ -157,7 +181,7 @@ if grep -q 'cargo_resolve' "$ROOT/scripts/check-cheatsheet-tiers.sh"; then
 else
     bad "check-cheatsheet-tiers still assumes cargo is on PATH"
 fi
-got="$(env -i PATH="$W/nothing:/usr/bin:/bin" HOME="$W/empty-home" \
+got="$(env -i PATH="$W/nothing:$NOCARGO" HOME="$W/empty-home" \
         bash "$ROOT/scripts/check-cheatsheet-tiers.sh" 2>&1 | head -1)"
 case "$got" in
     skip:cheatsheet-tiers:cargo-absent*) ok "absent cargo reads as a SKIP, not an ERROR ($got)" ;;
