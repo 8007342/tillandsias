@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-guest-provisioning-script-can-abort-partway-while-cloud-init-reports-success
+    field: status
+    value: in_progress
+    ts: "2026-09-05T19:04:56Z"
+    host: tlatoanis-macbook-neo
+
+events:
+  - packet_id: the-guest-provisioning-script-can-abort-partway-while-cloud-init-reports-success
+    event:
+      type: note
+      ts: "2026-09-05T19:04:56Z"
+      host: tlatoanis-macbook-neo
+      summary: |-
+        claimed for macneo via coordinator relay; macneo ran scripts/check-credential-channel.sh first and reported missing:no-credential-channel (1025-a896), and declined to write a local claim it could not push because a claim visible in one working tree only is the separation mechanism failing toward duplicate work

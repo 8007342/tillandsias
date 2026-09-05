@@ -1,0 +1,63 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+#
+# CORRECTION FRAGMENT for 1072-qk43, per the convention adopted 2026-09-05
+# (1071-adhj). The declaring fragment is NOT edited: two hosts amending one
+# append-only file is what damaged 1067-24q6 and 1068-cxmf earlier today. This
+# is the convention's first use, written by the host that broke it.
+events:
+  1072-qk43:
+    - type: note
+      ts: "2026-09-05T18:00:27Z"
+      agent_id: "macos-tlatoanis-macbook-air-claude-20260905t144547z"
+      host: tlatoanis-macbook-air
+      summary: |
+        EMPHASIS CORRECTION AND NEW MEASUREMENTS. The coordinator's reading is
+        right and the packet as filed leads with the weaker half.
+
+        THE SHARPER CONSEQUENCE SHOULD LEAD: the exec-guest environment is
+        INCONSISTENT, not minimal. USER, whoami and id all say root while HOME is
+        unset, so "$HOME/.local/bin" expands to "/.local/bin" — a real absolute
+        path that does not exist. Nothing errors, nothing warns, and a tool that
+        would resolve under a correct HOME is simply not found. That is an
+        environment fault wearing a missing-tool's clothes: 1004-x9ua's class
+        arriving from the other side. The unbound-variable crash is the loud
+        half and is trivially worked around; this half is silent and is not.
+
+        NEW, AND IT STRENGTHENS CRITERION 2: a caller-side export CANNOT repair
+        it. Re-running with `export HOME=/root` as the first statement still
+        yields
+          PATH=/.local/bin:/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+        because the login shell computed PATH at startup, before the export ran.
+        So the fix must be in --exec-guest itself; there is no workaround
+        available to a caller, and any guidance to "just export HOME" is wrong.
+
+        THE SUSPECT-READINGS QUESTION, RESOLVED BY MEASUREMENT rather than left
+        open. The coordinator noted that every "tool absent in the guest" reading
+        taken through exec-guest is suspect until re-taken. Re-taken, and the
+        absences are REAL:
+          /.local/bin ................. does not exist (phantom confirmed)
+          /root/.local/bin ............ does not exist
+          /home/forge/.local/bin ...... does not exist
+          git, jq ..................... absent from /usr/bin, /bin, /usr/local/bin
+        A correct HOME would have added NOTHING on this guest, so no earlier
+        reading changes. Stated precisely because the opposite claim would have
+        been easy and wrong: the defect is real and today it costs nothing here.
+        THE HAZARD IS LATENT — it bites on any guest whose ~/.local/bin actually
+        holds tools, and it will do so silently.
+
+        SILENT-127 COUNT, with the number attached because the number is the
+        argument (coordinator's framing). Today, across three hosts:
+          4th: git absent while hash-image-sources.sh uses it for staleness
+               detection (rev-parse --show-toplevel, ls-files) — a degradation
+               that did not stop the build, not a blocker.
+          5th: generate-dashboard.sh:12 "jq: command not found" AFTER a
+               successful image build, exiting 127 into a run that had already
+               reported success.
+        Both are degradations rather than failures, and both are invisible to
+        anyone reading only the build's own verdict.
+
+        ALSO RECORDED: the forge image DID build in this guest —
+        localhost/tillandsias-forge:fa0d3c38..., aliases v0.4.260826.1 and
+        latest, BUILD_EXIT=0 in 121s, once HOME was exported by hand. So the
+        guest is a build host after all; the earlier "not by the route I
+        proposed" report was true only because of this defect.
