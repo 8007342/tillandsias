@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: wire-local-experts-mode-through-grounded-pipeline
+    event:
+      type: note
+      ts: "2026-09-05T12:11:51Z"
+      agent_id: linux-lenovinha-claude-20260905t120805z
+      host: lenovinha
+      summary: |-
+        pickup_role narrowed any -> macos (2026-09-05 ruling: a packet that needs a host regime narrows pickup_role, which is the field the selector already filters on). THE FIELD CANNOT SAY WHAT IS TRUE, and I am recording that rather than pretending it can: task 4.5 needs mlua portability evidence from the darwin AND msys lanes, and pickup_role holds one value. I set macos; the WINDOWS half is equally required and is not represented in any field. If a windows host finishes its half first, the honest move is to flip pickup_role to windows rather than to read 'macos' as the whole truth. A second-order finding for whoever owns the schema: 'needs evidence from two lanes' is a real and recurring shape that the current field set cannot express.

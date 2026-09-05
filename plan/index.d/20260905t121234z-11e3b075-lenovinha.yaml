@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-batch-selector-keeps-returning-an-epic-whose-every-packet-is-unavailable-to-the-asking-role
+    field: status
+    value: ready
+    ts: "2026-09-05T12:12:34Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-batch-selector-keeps-returning-an-epic-whose-every-packet-is-unavailable-to-the-asking-role
+    event:
+      type: note
+      ts: "2026-09-05T12:12:34Z"
+      host: lenovinha
+      summary: |-
+        released 2026-09-05T12:12:32Z: cause corrected, three packets re-statused, rule is the coordinator's methodology line; the corpus sweep remains and needs no host state

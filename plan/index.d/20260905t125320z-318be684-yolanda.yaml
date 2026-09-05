@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: windows-lane-sends-a-verbatim-argv-and-drops-its-escaping-workarounds
+    event:
+      type: progress
+      ts: "2026-09-05T12:53:20Z"
+      agent_id: windows-yolanda-opus5-20260905t125319z
+      host: yolanda
+      summary: |
+        THE DELETION HALF IS MET AND NOW CHECKABLE; THE OBSERVATION HALF IS NOT, AND I AM NOT CLAIMING IT. Landed at c437e68b5 on origin/windows-next (9ae10a582), gate green.
+
+        MEASURED FIRST. wt_safe_title has ZERO occurrences in crates/. argv_survives_wt_reparse has no definition and no call: its three surviving hits are all COMMENTS recording that it was deleted -- host-shell/src/pty/mod.rs:382, notify_icon.rs:4017 and :4515. The predicates are gone and the tree is correct.
+
+        THE CLOSURE AS WRITTEN COULD NEVER BE MET, AND THAT IS THE FINDING. "A source scan finds no argv_survives_wt_reparse" evaluated as a grep reds a CORRECT tree on those three explanatory comments, so the packet would never close -- and the obvious repair is to delete the comments, which destroys the only explanation of why the code looks the way it does. It fails in the other direction too: a tree "fixed" that way would then read a re-introduction inside a doc comment exactly like one in code. A name that appears both in the live text and in the prose about it cannot be classified by matching the name. That is the third instance this cycle: a litmus step grepping a deleted test's name and matching the doc comment explaining the deletion (1055-6yp8), the CR-suffixed lookup (1049-s35z), and now this closure.
+
+        WHAT LANDED. scripts/check-wt-reparse-workarounds-deleted.sh classifies by POSITION, not presence: an occurrence counts only if it survives stripping the comment part of its line. Comments may discuss the deleted predicates freely; code may not name them. Fixture scripts/test-wt-reparse-scan.sh, 6 arms, wired into build.sh.
+
+        BOTH FAILURE DIRECTIONS PINNED INDEPENDENTLY, each verified under its own sabotage rather than argued: make the scan blind to code and four arms red (2a, 2b, 2c, 3); make it a plain grep and arms 1 and 4 red -- arm 4 being the REAL workspace, which is the closure-as-written failing on a correct tree, reproduced on demand.
+
+        REMAINING, and it is the whole reason this packet stays open: "a Windows lane launch OBSERVED opening in Windows Terminal rather than conhost" has no observation on any host. The terminal= spawn record that makes it checkable landed earlier under this order, and it is emitted from the same branch that selects the spawn so it cannot drift from what ran. But the tray INSTALLED on yolanda predates that change -- its tray.log has zero "spawning in-VM PTY" lines -- and the tillandsias distro is Stopped. The observation therefore needs a fresh tray install plus an interactive lane launch. That is an operator-facing step, not something a gate can do, and I am recording it as outstanding rather than substituting the unit test for it. The unit test proves the code would log windows-terminal; it does not prove a window opened.

@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-fixture-or-gate-step-that-writes-into-the-real-checkout-corrupts-the-instruments-the-gate-depends-on
+    event:
+      type: note
+      ts: "2026-09-05T12:22:05Z"
+      agent_id: linux-lenovinha-claude-20260905t120805z
+      host: lenovinha
+      summary: |
+        WRITER IDENTIFIED, AND IT IS ME. This packet's premise was wrong in a way that sent another host hunting: there was no fixture escaping its temp dir. The file was overwritten by my own ledger write.
+
+        THE TIMESTAMP I REPORTED WAS LOCAL, NOT UTC. I gave the coordinator "mtime 2026-09-05 01:35:03" straight from stat, which carries -0700. In UTC that is 08:35:03Z. It was read as 01:35Z, and yoga probed a pristine clone through the instant corpus and build.sh --check with a sha256 baseline over 5,502 tracked files, looking in a window eight hours away from the event. That probe cost a cycle and found nothing because nothing was there.
+
+        WHAT RAN AT 08:35:03Z: my own tillandsias-plan append-event, closing 1060-428m. Its fragment is plan/index.d/20260905t083503z-16669cca-lenovinha.yaml, matching the file mtime to the second.
+
+        THE MECHANISM, exactly. That event's prose quoted the suspicious litmus line inside backticks, and quoted it TRUNCATED, dropping the third argument:
+
+            what I wrote in the summary:  cp scripts/check-fragment-status-loss.sh scripts/plan-binary-probe.sh
+            what line 126 actually is:    cp scripts/check-fragment-status-loss.sh scripts/plan-binary-probe.sh "$T/scripts/"
+
+        The shell command-substituted the backticked span and ran my two-argument version. Two-argument cp overwrites its destination. The same invocation printed a for-loop syntax error and two "filename argument required" errors from two other backticked spans in the same prose, which I saw and reported at the time as noise. Three spans were executed: two failed loudly, the cp succeeded silently.
+
+        So the chain is: I wrote prose about a dangerous command, misquoted it into something more dangerous, the write path executed my misquote, and it corrupted the file the prose was about. My three-argument reading that exonerated line 126 was CORRECT. The damage came from my own two-argument misquote of it, in the act of recording that exoneration.
+
+        THE SAFE PATH ALREADY EXISTED AND I DID NOT USE IT. append-event takes --summary-file (order 971-7muc) precisely so prose comes from a file and the shell cannot expand it. Its own usage text says a literal summary argument is REFUSED when it carries shell-expansion residue, but that "a balanced substitution is invisible by then" -- and my backticks were balanced, so the refusal could not see them. I passed inline summaries all session. This event is written with --summary-file.
+
+        CLASS NARROWED, AND IT IS WORSE THAN WHAT I FILED. Not "a fixture writes into the real checkout" but "shell interpretation of ledger prose executes quoted commands". Every host writes prose containing shell fragments into this ledger -- that is what the records are FOR -- so the exposure is the write path itself, not any one fixture. A corrupted plan-binary-probe.sh is a valid shell script answering a different question, so nothing errors and every measurement after it is untrustworthy without anyone knowing.
+
+        YOGA'S GUARD STAYS AND THE PACKET IS NOT WASTED: a tree hash verified before the gate stamp is written would have caught this exact corruption regardless of who wrote it, which is the right property -- it does not care about the culprit. What it does not do is prevent the execution, which is what the rule below is for.
+
+        WHAT REMAINS: the coordinator is landing two sentences in the worker skill, credited here. Every summary through a file written by a quoted heredoc and passed with --summary-file, never inline; a fragment quoted whole or described in words, never truncated into something executable. And every timestamp to a peer in UTC with the Z, because a bare stat mtime is local.

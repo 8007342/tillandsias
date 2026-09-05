@@ -1250,6 +1250,19 @@ _write_gate_stamp() {
         } > "$_pass_token" 2>/dev/null || true
     fi
 
+    # ORDER 1063-363b. Verify BEFORE the stamp: the stamp's whole claim is "the
+    # gate validated THIS tree", and a tree the gate itself rewrote mid-run is
+    # not that tree. Refusing here keeps a corrupted run from minting the token
+    # that lets it push.
+    if [ -n "${_TRACKED_STATE:-}" ]; then
+        _step "Checking the gate did not write into the checkout (1063-363b)..."
+        if ! _run bash "$SCRIPT_DIR/scripts/check-tracked-files-unwritten.sh" verify "$_TRACKED_STATE" 2>&1; then
+            _error "the gate modified tracked files while measuring them (1063-363b) — every verdict after the write is suspect; restore with 'git checkout --' and see the named paths above"
+            exit 1
+        fi
+        _info "No tracked file was written during the gate"
+    fi
+
     _step "Writing the gate stamp..."
     if bash "$SCRIPT_DIR/scripts/gate-stamp.sh" write --scope full --dispatch "$_stamp_dispatch" >/dev/null 2>&1; then
         _info "Gate stamp recorded (pre-push will accept this tree)"
@@ -1671,6 +1684,16 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # than the clippy pass it would jump ahead of (2.3s), so hoisting it would
     # add more to every GREEN run than it saves on the red ones. If a guard here
     # ever grows past a second, it belongs back in the body.
+    # ORDER 1063-363b: BASELINE THE TREE THE GATE IS ABOUT TO MEASURE.
+    # On lenovinha 2026-09-05 something in the gates and litmus overwrote
+    # scripts/plan-binary-probe.sh in the WORKING TREE with the contents of
+    # scripts/check-fragment-status-loss.sh. That file is an instrument — half
+    # the gate resolves the plan binary through it — so every verdict taken
+    # after the write measured something other than the tree under test, and
+    # said so confidently. 61ms against a 254s gate.
+    _TRACKED_STATE="$(git rev-parse --absolute-git-dir 2>/dev/null)/tillandsias-tracked-baseline"
+    bash "$SCRIPT_DIR/scripts/check-tracked-files-unwritten.sh" snapshot "$_TRACKED_STATE" >/dev/null 2>&1 || true
+
     _step "Fast refusals: sub-second deciders before any compile (1009-gccx)..."
 
     if ! _run bash "$SCRIPT_DIR/scripts/check-scorable-obligation-added.sh" 2>&1; then
@@ -3222,6 +3245,20 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Skill canonicalization remedy check passed"
 
+    # 823-u5zf: the wt.exe re-parse workarounds must stay deleted, and a comment
+    # RECORDING their deletion must not count as one. The packet's closure asks
+    # for "a source scan finds no argv_survives_wt_reparse"; a literal grep
+    # cannot serve, because it reds the correct tree on three explanatory
+    # comments and would be "fixed" by deleting the only explanation of why the
+    # code looks the way it does. Classifying by position rather than presence
+    # is the same lesson 1055-6yp8 and 1049-s35z paid for.
+    _step "Checking the wt-reparse workarounds stay deleted (823-u5zf)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-wt-reparse-scan.sh" 2>&1; then
+        _error "the wt-reparse deletion scan cannot tell a live symbol from a comment about it (823-u5zf) — see the verdict line above"
+        exit 1
+    fi
+    _info "wt-reparse deletion scan check passed"
+
     # 965-sxec: a missing or unusable ruby must read as COULD-NOT-RUN (exit 3),
     # never as a claim about the ready set. Inside a forge `command -v ruby`
     # finds a brew shim that cannot install one, exits 127, and the caller's
@@ -3350,6 +3387,16 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Closure-evidence landing pin passed"
+
+    # Order 1063-363b. The guard above only helps if it can still SEE a write —
+    # a comparison that drops paths with spaces, or reads a missing baseline as
+    # a clean tree, would be worse than none.
+    _step "Checking the tracked-file guard still detects a write (1063-363b)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-tracked-files-unwritten-guard.sh" 2>&1; then
+        _error "the tracked-file guard lost an arm (1063-363b) — see the verdict line above"
+        exit 1
+    fi
+    _info "Tracked-file guard fixture passed"
 
     # Order 1056-5344. The lane now scopes PAST a mandated merge of
     # origin/linux-next, which widens the bypass further: without the ancestry
