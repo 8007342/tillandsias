@@ -89,6 +89,9 @@ chmod +x scripts/*.sh scripts/hooks/*.sh
 # macuahuitl, where it blocked the trunk's only gate.
 printf 'packets: []\n' > plan/index.yaml
 printf 'base\n' > plan/issues/existing.md
+# A shared work-queue ledger for the 1013-xm63 arms. Several hosts append to one
+# of these, which is why an append and a rewrite are different in kind here.
+printf -- '- 2026-09-01 macuahuitl: See `main.rs` `resolve_probe`.\n' > plan/issues/linux-next-work-queue-2026-05-25.md
 G add -A >/dev/null; G commit -q -m base
 git push -q -u origin linux-next
 
@@ -279,6 +282,52 @@ out="$(run_guard)"
 grep -q 'plan-only lane clean' <<<"$out" \
     && bad "a DELETED capture rode the lane" \
     || ok "a DELETED capture still takes the full gate"
+reset_to_remote
+
+# ── 3d. AN APPEND to a work-queue ledger qualifies (order 1013-xm63) ───────
+# pirria's case: a cargo-less host can work and report but not COMPLY, because
+# the worker skill's §6.3 mandates a work-queue line and that is an M by
+# construction. The refusal sent it to a full gate it had no toolchain to run,
+# and it complied by filing a NEW capture instead — fragmenting its history away
+# from the queue a reader actually consults.
+#
+# PRESENCE OF THE SUCCESS, not absence of a failure string: this asserts the
+# lane NAMED the validated file, which only happens on the accepting path. A
+# control that tests for the absence of a particular refusal is only as strong
+# as the enumeration of refusals, and that enumeration is never complete
+# (1060-7mmm).
+printf -- '- 2026-09-05 pirria: See `lib.rs` `resolve_plan_binary`.\n' >> plan/issues/linux-next-work-queue-2026-05-25.md
+G add -A >/dev/null; G commit -q -m "append a work-queue line"
+out="$(run_guard)"
+grep -q 'plan-only lane: validated plan/issues/linux-next-work-queue-2026-05-25.md' <<<"$out" \
+    && ok "an APPEND to a work-queue ledger qualifies and is named" \
+    || bad "an append to a work-queue ledger was refused: $(grep -m1 'plan-only lane' <<<"$out")"
+reset_to_remote
+
+# ── 3e. A REWRITE of a work-queue ledger is still refused ──────────────────
+# The negative control for 3d, and the reason the work-queue case is narrower
+# than 1060-7mmm's: several hosts share this document, so the lane cannot tell a
+# correction from an erasure of a sibling's line, and neither can a reader.
+printf -- '- 2026-09-01 macuahuitl: REWRITTEN, and the original line is gone.\n' \
+    > plan/issues/linux-next-work-queue-2026-05-25.md
+G add -A >/dev/null; G commit -q -m "rewrite the work-queue ledger"
+out="$(run_guard)"
+if grep -q 'is a work-queue ledger and this edit REMOVES or REWRITES lines' <<<"$out"; then
+    ok "a REWRITE of a work-queue ledger takes the full gate, naming the hunk"
+else
+    bad "a rewrite of a work-queue ledger was not refused by name: $(grep -m1 'plan-only lane' <<<"$out")"
+fi
+reset_to_remote
+
+# ── 3f. A correction to NON-queue prose is still free (1060-7mmm holds) ────
+# Guards the interaction: 1013-xm63 must not re-impose append-only on the
+# ordinary report corrections 1060-7mmm deliberately enabled an hour earlier.
+printf 'See `lib.rs` `other_fn`.\n' >> plan/issues/existing.md
+G add -A >/dev/null; G commit -q -m "correct a non-queue capture"
+out="$(run_guard)"
+grep -q 'plan-only lane: validated plan/issues/existing.md' <<<"$out" \
+    && ok "a correction to a non-queue capture is still free (1060-7mmm intact)" \
+    || bad "the work-queue rule leaked onto ordinary captures: $(grep -m1 'plan-only lane' <<<"$out")"
 reset_to_remote
 
 # ── 4. (c) A class subdirectory is admitted at exactly one level deep. ─────
