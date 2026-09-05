@@ -3245,6 +3245,20 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Skill canonicalization remedy check passed"
 
+    # 823-u5zf: the wt.exe re-parse workarounds must stay deleted, and a comment
+    # RECORDING their deletion must not count as one. The packet's closure asks
+    # for "a source scan finds no argv_survives_wt_reparse"; a literal grep
+    # cannot serve, because it reds the correct tree on three explanatory
+    # comments and would be "fixed" by deleting the only explanation of why the
+    # code looks the way it does. Classifying by position rather than presence
+    # is the same lesson 1055-6yp8 and 1049-s35z paid for.
+    _step "Checking the wt-reparse workarounds stay deleted (823-u5zf)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-wt-reparse-scan.sh" 2>&1; then
+        _error "the wt-reparse deletion scan cannot tell a live symbol from a comment about it (823-u5zf) — see the verdict line above"
+        exit 1
+    fi
+    _info "wt-reparse deletion scan check passed"
+
     # 965-sxec: a missing or unusable ruby must read as COULD-NOT-RUN (exit 3),
     # never as a claim about the ready set. Inside a forge `command -v ruby`
     # finds a brew shim that cannot install one, exits 127, and the caller's
