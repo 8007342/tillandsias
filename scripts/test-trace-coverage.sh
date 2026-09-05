@@ -119,22 +119,59 @@ else
     _fail "Should exit 0 when coverage meets threshold"
 fi
 
-# Test 9: Exit code 1 when failing
-echo "Test 9: Exit code 1 when failing"
-if bash "$SCRIPT_DIR/validate-traces.sh" --coverage-threshold 100 >/dev/null 2>&1; then
-    _fail "Should exit 1 when coverage below threshold"
+# Tests 9 and 10: the FAILURE path, driven by a SYNTHETIC TREE.
+#
+# ORDER 1069-c9w6 BROKE THESE ARMS AND EXPOSED WHY THEY WERE WRONG. They used
+# to run `validate-traces.sh --coverage-threshold 100` against the LIVE
+# checkout and require it to FAIL. That only ever passed because coverage was
+# reported as 98%, and it was 98% because `grep -rl ... | grep -q .` under
+# pipefail took SIGPIPE and recorded the three BEST-traced specs as uncovered.
+# So these arms pinned the SYMPTOM OF A BUG as a contract: "this repo must
+# never reach full trace coverage". Fixing the producer made real coverage
+# 100%, no threshold in the valid range 0-100 can fail, and both arms went red.
+#
+# The deeper defect is that they asserted a property of the CHECKOUT rather
+# than of the VALIDATOR. A synthetic root fixes that permanently: one spec
+# traced, one spec not, so coverage is deterministically 50% regardless of what
+# the real tree does. `--coverage-threshold 101` is NOT the fix — it is
+# rejected as an invalid threshold before any coverage is computed, so it
+# exercises argument validation and says nothing about the failure path.
+_synthetic_root() {
+    local t; t="$(mktemp -d)"
+    mkdir -p "$t/scripts" "$t/openspec/specs/covered-spec" "$t/openspec/specs/uncovered-spec"
+    cp "$SCRIPT_DIR/validate-traces.sh" "$t/scripts/"
+    printf '# spec\n' > "$t/openspec/specs/covered-spec/spec.md"
+    printf '# spec\n' > "$t/openspec/specs/uncovered-spec/spec.md"
+    # exactly one trace, to the first spec only -> 1 of 2 covered = 50%
+    printf '#!/usr/bin/env bash\n# @trace spec:covered-spec\n' > "$t/scripts/traced.sh"
+    printf '%s' "$t"
+}
+
+echo "Test 9: Exit code 1 when coverage is below threshold"
+_T9="$(_synthetic_root)"
+if bash "$_T9/scripts/validate-traces.sh" --coverage-threshold 90 >/dev/null 2>&1; then
+    _fail "Should exit non-zero when coverage (50%) is below the threshold (90)"
 else
-    _pass "Exit code 1 when coverage below threshold"
+    _pass "Exit non-zero when coverage below threshold"
 fi
 
-# Test 10: Uncovered specs list
-echo "Test 10: Uncovered specs list on failure"
-output=$(bash "$SCRIPT_DIR/validate-traces.sh" --coverage-threshold 100 2>&1 || true)
-if echo "$output" | grep -q "Uncovered specs"; then
+echo "Test 10: Uncovered specs listed on failure"
+_out="$(bash "$_T9/scripts/validate-traces.sh" --coverage-threshold 90 2>&1 || true)"
+if printf '%s' "$_out" | grep -q "Uncovered specs"; then
     _pass "Lists uncovered specs when coverage fails"
 else
     _fail "Should list uncovered specs when coverage fails"
 fi
+
+# POSITIVE CONTROL: the same synthetic tree must PASS a threshold it meets, so
+# these arms cannot pass by the validator simply failing everything.
+echo "Test 11: A met threshold passes on the same synthetic tree"
+if bash "$_T9/scripts/validate-traces.sh" --coverage-threshold 50 >/dev/null 2>&1; then
+    _pass "Exit zero when coverage meets the threshold"
+else
+    _fail "Should exit zero when coverage (50%) meets the threshold (50)"
+fi
+rm -rf "$_T9"
 
 echo ""
 echo "=== Test Summary ==="
