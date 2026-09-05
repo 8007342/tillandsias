@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-phase-drift-warning-has-a-blind-band-from-one-to-four-times-budget
+    field: next_action
+    value: 'INSTRUMENTATION LANDED (yoga, 08a9c752c). THE THRESHOLD BAR IS NOT MET AND A PLAN-ONLY RUN CANNOT MEET IT. lenovinha reported ghost 0.01x, zero_trace 0.04x, staleness 0.02x, cheatsheet_source 0.01x, cheatsheet_tier 0.19x, nothing at or above 1x, BUT the commit was plan-only (two fragments), so four of the five phases had almost nothing to scan. lenovinha said so rather than letting it stand: that is a FLOOR for the regime, not a sample of it. THE MEASUREMENT THIS PACKET NEEDS is the per-phase multiples from TILLANDSIAS_HOOK_PHASE_TIMING=1 on a commit that TOUCHES crates/ OR openspec/, on BOTH hosts, because those are the commits where ghost_check and zero_trace_check have real content to walk and where a 1x threshold would fire if it fires at all. yoga''s own figures (ghost 0.00x, zero_trace 0.03x, cheatsheet_tier 0.16x) were also taken on a light tree and carry the same caveat. DECISION RULE unchanged: if both hosts stay well under 1x on a content-bearing commit, move the threshold to 1x; if a HEALTHY phase sits above 1x, that phase''s BUDGET is wrong and must be corrected before the threshold moves. Fixture arm 6 asserts the band is still open and will fail when it is closed.'
+    ts: "2026-09-05T17:10:24Z"
+    host: yoga
+
+events:
+  - packet_id: the-phase-drift-warning-has-a-blind-band-from-one-to-four-times-budget
+    event:
+      type: progress
+      ts: "2026-09-05T17:10:24Z"
+      host: yoga
+      summary: |-
+        status 'INSTRUMENTATION LANDED (yoga, 08a9c752c). THE THRESHOLD BAR IS NOT MET AND A PLAN-ONLY RUN CANNOT MEET IT. lenovinha reported ghost 0.01x, zero_trace 0.04x, staleness 0.02x, cheatsheet_source 0.01x, cheatsheet_tier 0.19x, nothing at or above 1x, BUT the commit was plan-only (two fragments), so four of the five phases had almost nothing to scan. lenovinha said so rather than letting it stand: that is a FLOOR for the regime, not a sample of it. THE MEASUREMENT THIS PACKET NEEDS is the per-phase multiples from TILLANDSIAS_HOOK_PHASE_TIMING=1 on a commit that TOUCHES crates/ OR openspec/, on BOTH hosts, because those are the commits where ghost_check and zero_trace_check have real content to walk and where a 1x threshold would fire if it fires at all. yoga's own figures (ghost 0.00x, zero_trace 0.03x, cheatsheet_tier 0.16x) were also taken on a light tree and carry the same caveat. DECISION RULE unchanged: if both hosts stay well under 1x on a content-bearing commit, move the threshold to 1x; if a HEALTHY phase sits above 1x, that phase's BUDGET is wrong and must be corrected before the threshold moves. Fixture arm 6 asserts the band is still open and will fail when it is closed.' (not terminal) with evidence_refs: 08a9c752c
+  - packet_id: the-phase-drift-warning-has-a-blind-band-from-one-to-four-times-budget
+    event:
+      type: note
+      ts: "2026-09-05T17:10:24Z"
+      host: yoga
+      summary: |-
+        lenovinha's numbers are a floor from a plan-only commit, not warning volume
