@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-claim-is-invisible-to-every-other-host-for-as-long-as-its-push-takes-and-the-push-takes-longest-when-the-trunk-is-busiest
+    event:
+      type: progress
+      ts: "2026-09-05T17:50:51Z"
+      agent_id: linux-yoga-claude-20260905t175051z
+      host: yoga
+      summary: |-
+        CRITERION 2 DELIVERED, landed b69c8489b. macbookair refusal at the CLAIM step is now matched by a refusal at the SELECTOR, one step earlier, with the fold done once per run as they specified. NOT HYPOTHETICAL, evidence arrived while writing it: --batch reported order 147 held on BOTH windows-next and osx-next while this host had just worked it, and 317 held on osx-next while the selector was offering it to me in the same cycle; the selector had also handed me 1034-whsp itself for three cycles running, for exactly this reason. --batch FOLDS ONCE AND ANSWERS FOR MANY and it took two attempts to make that true: the first version folded once per branch but called status per id, and status answers ONE id per invocation at about 650ms while re-folding the ledger each time, so 4 ids cost 5.3s and 40 cost 19.4s. It now runs one `ready any` per branch (183 rows, about 530ms) to clear the many and asks status only for the few absent from it, because ABSENT-FROM-READY IS NOT THE SAME AS in_progress: it also covers done, blocked and obsoleted, and reporting those as claimed-elsewhere would be a false accusation that sends a host away from work nobody holds. THE BATCH, NOT THE FRONTIER, a measured scope rather than a shortcut: vetting every candidate would put about 19s on the step that runs most often, while vetting what is about to be OFFERED gets the same outcome, a held packet is never handed out, for about 3s; selector run went from about 1s to 5.5s. FAIL OPEN, LOUDLY: if the siblings cannot be folded the checker exits 2, the selector leaves the batch ALONE and prints that the check says NOTHING about who holds these packets. Refusing to emit would stop every host on a network blip; silently dropping candidates would be worse; neither is a claim that nothing is held, which is 1024-c3h3 could-not-run shape. A drop is NAMED on stderr, because a host seeing a short queue must be able to tell held-elsewhere from nothing-to-do, and an unexplained empty batch reads as the second. Fixture 6 of 6 with a baseline arm FIRST, since every other arm compares against the unfiltered batch and is vacuous if the selector emits nothing. Checker path overridable by TILLANDSIAS_XBRANCH_CHECK only so the fixture can drive held/clean/could-not-fold without a live sibling in a known state; nothing in the loop sets it. Selector own capability-routing suite still 8 of 8, gate rc=0 325s. SIDE OBSERVATION worth its own attention: while reading for this I ran tillandsias-plan expire-claims, which DEFAULTS TO WRITE MODE, and it expired 980-ja2m (macbookneo, 24h+ stale) and wrote a fragment as a side effect of what I intended as a read. I deleted the fragment and 980-ja2m is back to in_progress. That is the second independent host to do this by accident; 1067-24q6 already exists for it and this is a second instance rather than a new finding.

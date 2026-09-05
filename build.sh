@@ -3457,6 +3457,19 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Hook phase-instrumentation pin passed"
 
+    # Order 1034-whsp. A claim lands on the claimant's PLATFORM branch and only
+    # reaches a trunk host when the coordinator relays it — measured gaps of 19
+    # minutes to 2h02m — so a selector reading its own branch alone hands out
+    # work another host is doing. The third arm is the one that matters: a
+    # checker that cannot fold the siblings must leave the batch ALONE and say
+    # so, or a network blip stops every host.
+    _step "Checking the selector drops packets held on a sibling branch (1034-whsp)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-selector-drops-cross-branch-claims.sh" 2>&1; then
+        _error "the selector's cross-branch claim filter changed (1034-whsp) — see the verdict line above"
+        exit 1
+    fi
+    _info "Selector cross-branch filter pin passed"
+
     # Order 1056-5344. The lane now scopes PAST a mandated merge of
     # origin/linux-next, which widens the bypass further: without the ancestry
     # gate a host could park code on a side branch, merge it --no-ff, and the
