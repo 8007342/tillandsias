@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-batch-selector-keeps-returning-an-epic-whose-every-packet-is-unavailable-to-the-asking-role
+    event:
+      type: note
+      ts: "2026-09-05T12:12:17Z"
+      agent_id: linux-lenovinha-claude-20260905t120805z
+      host: lenovinha
+      summary: |-
+        CAUSE CORRECTED, AND THE PACKET AS I FILED IT WAS WRONG ABOUT IT. I accused the epic ranking. Reading the code says otherwise:
+
+          the score is awk at scripts/select-work-batch.sh:811 — (2.0*urgency)+(1.5*blocking)+neglect — and the plan crate only QUOTES that formula in a comment at main.rs:1329-1335; lib.rs:986's 'frontier' is an unrelated graph traversal;
+          the rows fed to the scorer are ALREADY role-filtered, so the three packets were not offered by a ranking bug;
+          all three were genuinely status: ready — 821-73es (pickup_role linux), 919-vvyv (any), 920-pxg6 (unset);
+          every blocker I cited across four observations lives in PROSE, in next_action or an event summary, and no machine-readable blocked field exists in the schema.
+
+        So the selector was correct on its inputs. The ledger was the thing that could not be trusted, and 'ready' is carrying two meanings: startable now, and released-with-a-blocker-nobody-can-grep.
+
+        I CAUSED ONE OF THE THREE. I released 821-73es back to ready myself after the from-scratch verification, with the blocker in next_action prose. yoga did the same before me. The defect I filed as somebody's ranking bug is in part my own release discipline, and the four observations are a symptom of it rather than evidence for the cause I named.
+
+        RULING TAKEN (coordinator, 2026-09-05): option (b) with vocabulary the ledger already has, so no schema change. A packet released with a blocker is BLOCKED, with depends_on when the blocker is another packet; a packet needing a host regime narrows pickup_role, the field the selector already filters on; prose in next_action is for the human who claims it, never the only place a blocker lives. Option (c), prose heuristics in the selector, stays refused — guessing at meaning the ledger declined to state is the substring class this fleet spent the night removing.
+
+        RE-STATUSED, all three, by me:
+          821-73es  ready -> blocked, depends_on expert-validation-layer-returns-verified-not-merely-verifiable (853-6gz3)
+          919-vvyv  ready -> blocked, next_action naming the disposable enclave it waits for
+          920-pxg6  pickup_role any -> macos
+
+        TWO THINGS THE VOCABULARY COULD NOT EXPRESS, recorded rather than papered over:
+          blocked_by is NOT a field. It appears once in plan/index.yaml, inside an event summary, and nowhere in the crate; depends_on is the schema's dependency field and is what I used.
+          pickup_role is SINGLE-VALUED — 776 packets, only linux/any/windows/macos/operator/tlatoani. 920-pxg6 needs evidence from the darwin AND msys lanes and the field holds one value. I set macos and named the windows half in an event. 'Needs evidence from two lanes' is a recurring shape the field set cannot express, which is the schema owner's to weigh.
+
+        A NEAR-MISS WORTH THE LINE: resolving 853-6gz3's packet_id by scanning backwards for the nearest packet_id gave the WRONG packet, because in that block order: precedes packet_id:. I caught it only because the name that came back — an accel-capability-cache packet — did not match what 821's prose describes. One more step and I would have written a false dependency into the ledger while fixing a packet about false records.
