@@ -125,6 +125,44 @@ distributed_work:
             writer per file; immutable once written) and, when pushed through
             the enclave mirror, is additionally refused by the mirror's YAML
             gate — see mirror_psych_gate.
+          fragment_repair_is_a_correction_fragment: >
+            ORDER 1071-adhj, 2026-09-05. The rule above forbids editing the
+            BASE in place. This one forbids editing a FRAGMENT in place, which
+            is the case that actually bit, because a fragment looks editable in
+            a way the base does not — it is small, you wrote it, and the repair
+            is one missing key. A fragment repair is a NEW CORRECTION FRAGMENT
+            declaring the same packet_id with the corrected field. Never an
+            amendment to the fragment already written, and never by a second
+            party under any circumstances. Corrections compose under the
+            G-Set union; two in-place amendments of an append-only file do not.
+            EVIDENCE, and the collision is the argument. The coordinator amended
+            1067-24q6 and 1068-cxmf on trunk to add missing scorable blocks;
+            another host amended the same two files locally, having checked
+            origin/linux-next and found the repair absent. The next merge
+            combined both edits additively, each file ended with TWO
+            unscoreable: keys, and a duplicate mapping key is not valid YAML:
+            blocked:all-fragments-intact:2 damaged, and
+            blocked:fragment-events-land:3 event(s) attached to no packet —
+            the second a consequence of the first, since an unparseable
+            fragment contributes no packet and its own events orphan.
+            NEITHER HOST WAS CARELESS AND THAT IS WHY IT NEEDS A RULE RATHER
+            THAN MORE CARE. Both checked before editing. The safeguard is what
+            failed: both consulted trunk to see whether the other's repair had
+            landed, and trunk is the view 1034-whsp measured as HOURS stale for
+            a platform host (relay gaps 19m to 2h02m). A check that cannot see
+            in-flight work is not a check, so an in-place amendment by a second
+            party is a race neither party can observe. check-all-fragments-intact
+            already says the consequence in its own refusal: damage here is not
+            a merge to resolve but a file to restore from its authoring commit.
+            THE GUARD THAT USED TO FORBID THE FIX NOW ALLOWS IT.
+            check-scorable-obligation-added.sh judged one fragment's bytes, so a
+            declaration whose obligation arrived in a correction was still
+            refused and the author was pushed back into the in-place edit. It
+            now asks whether the packet AS FOLDED carries an obligation — a
+            union scan over fragments, since the predicate is monotone under the
+            G-Set, needing no plan binary and costing 36ms over 585 fragments
+            plus the base. If you are ever told to amend a fragment to satisfy a
+            gate, the gate is wrong; say so rather than editing.
           mirror_psych_gate: >
             ORDER 627-c9c2, learned from a twice-rejected forge push
             2026-08-09. The enclave git mirror's pre-receive hook
