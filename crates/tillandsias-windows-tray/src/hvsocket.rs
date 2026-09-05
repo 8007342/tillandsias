@@ -470,6 +470,60 @@ mod tests {
         server.await.expect("server task");
     }
 
+    /// ORDER 972-umik COMMIT B, THE SABOTAGE ARM: with the default flipped to
+    /// On, a peer left on PLAINTEXT must be REFUSED, loudly, rather than
+    /// quietly carrying bytes in the clear.
+    ///
+    /// This is the arm that proves the flip. `absent_means_secure_now_that_
+    /// every_reader_is_converted` pins the parsed value, but a parsed value is
+    /// not a guarantee about a wire: the failure that actually matters is a
+    /// converted end and an unconverted end silently agreeing to speak
+    /// plaintext, which no mode-value assertion can see. So this test does not
+    /// assert that the flip is green — it reconstructs the mismatch the flip is
+    /// supposed to make impossible and requires it to be RED.
+    ///
+    /// The plaintext peer is simulated exactly as an unconverted reader would
+    /// behave: it writes application bytes straight onto the duplex without a
+    /// handshake, which is what every pre-972-umik client did when the variable
+    /// was absent. The secure server must not accept them. macbookair predicted
+    /// the signature from the macOS lane — `noise: decrypt error` or
+    /// `early eof` — and this asserts the REFUSAL rather than the exact string,
+    /// since the two spellings are one outcome and pinning the wording would
+    /// make a message edit look like a security regression.
+    ///
+    /// If a converter is ever reverted, the reverted end becomes this plaintext
+    /// peer and its traffic is refused here rather than in the field.
+    ///
+    /// @trace order:972-umik
+    #[tokio::test]
+    async fn a_plaintext_peer_is_refused_by_the_now_secure_default() {
+        use tokio::io::AsyncWriteExt;
+
+        let (plaintext_side, server_side) = tokio::io::duplex(64 * 1024);
+
+        let server = tokio::spawn(async move {
+            let psk = tillandsias_secure_channel::channel_psk(
+                env!("WORKSPACE_VERSION"),
+                tillandsias_control_wire::WIRE_VERSION,
+                tillandsias_secure_channel::HopId::HostGuest,
+            );
+            tillandsias_secure_channel::server_handshake(server_side, &psk).await
+        });
+
+        // An unconverted reader's behaviour verbatim: no handshake, straight to
+        // application bytes. This is a well-formed control frame, which is the
+        // point — it is refused for being UNENCRYPTED, not for being malformed.
+        let mut plaintext = plaintext_side;
+        let _ = plaintext.write_all(b"ping ").await;
+        let _ = plaintext.flush().await;
+
+        let outcome = server.await.expect("server task must not panic");
+        assert!(
+            outcome.is_err(),
+            "a plaintext peer completed a handshake against the secure default              — that is the silent downgrade 972-umik removed, and it is back"
+        );
+    }
+
     /// Secure-wire flag-ON proof (order 191, windows evidence slice): with the
     /// in-VM headless running a version-matched binary under
     /// `TILLANDSIAS_SECURE_CONTROL_WIRE=on`, the tray-side wrapper

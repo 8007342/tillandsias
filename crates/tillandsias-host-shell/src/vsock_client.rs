@@ -650,7 +650,22 @@ mod tests {
     ) -> tokio::task::JoinHandle<()> {
         let listener = UnixListener::bind(&path).expect("bind responder");
         tokio::spawn(async move {
-            let (mut stream, _addr) = listener.accept().await.expect("accept");
+            let (stream, _addr) = listener.accept().await.expect("accept");
+            // ORDER 972-umik COMMIT B: the responder speaks NOISE, because the
+            // default is now On and this fixture stands in for a real guest.
+            //
+            // The three tests using it went red the moment the default flipped,
+            // and that was the correct signal rather than an inconvenience: a
+            // plaintext fixture behind a secure client is precisely the
+            // e6a80609f shape, one end defaulting to plaintext against an end
+            // that refuses it. The fix is to move the FIXTURE, not to opt the
+            // test out with an explicit `off` — an opt-out would have kept the
+            // suite green while testing the path production no longer takes,
+            // and the flip would then be pinned by nothing but a parser test.
+            let psk = channel_psk(crate::version(), WIRE_VERSION, HopId::HostGuest);
+            let mut stream = tillandsias_secure_channel::server_handshake(stream, &psk)
+                .await
+                .expect("responder server handshake (the default is On)");
             // Read Hello.
             let mut len_buf = [0u8; 4];
             stream.read_exact(&mut len_buf).await.expect("read len");
@@ -806,6 +821,16 @@ mod tests {
         let stream = tokio::net::UnixStream::connect(&path)
             .await
             .expect("connect");
+        // ORDER 972-umik COMMIT B: the pre-opened stream is HANDSHAKED before
+        // being handed to from_stream, which is what the macOS VZ path it
+        // stands in for actually does — action_host wraps the
+        // VZVirtioSocketConnection and passes the encrypted stream on. Before
+        // the default flipped, this test handed over a bare socket and passed,
+        // so it was pinning a shape production had already stopped using.
+        let psk = channel_psk(crate::version(), WIRE_VERSION, HopId::HostGuest);
+        let stream = client_handshake(stream, &psk)
+            .await
+            .expect("client handshake against the now-secure responder");
         let mut client = Client::from_stream(Box::new(stream), Transport::Unix(path));
         let (wire, _guest_version) = client.handshake().await.expect("handshake succeeds");
         assert_eq!(wire, WIRE_VERSION);
