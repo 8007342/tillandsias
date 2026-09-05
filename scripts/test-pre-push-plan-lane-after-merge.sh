@@ -53,6 +53,51 @@ fail=0; pass=0
 ok()  { echo "ok:   $1"; pass=$((pass+1)); }
 bad() { echo "FAIL: $1" >&2; fail=$((fail+1)); }
 
+# ── A VALIDATOR, HANDED OVER HERMETICALLY (macbookair, 2026-09-05) ──────────
+#
+# THIS FIXTURE TOOK EVERY macOS HOST OUT OF THE LANDING PATH. Arms 1, 4 and 5
+# failed at trunk HEAD with:
+#   plan-only lane: not applicable — neither yq nor target/release/tillandsias-plan
+#   is available to validate fragments (fail closed; full gate required)
+# so the gate refused and no macOS host could land anything.
+#
+# WHY IT PASSED ON LINUX AND NOWHERE ELSE. The hook resolves its validator with
+# cwd inside the SCRATCH repo, which by construction has no target/, so
+# resolve_plan_binary walks past every checkout candidate and reaches
+# `command -v tillandsias-plan`. On a Linux host with ~/.local/bin on PATH that
+# silently succeeds; on macOS, where that is absent and yq is absent by policy,
+# the lane fails closed — correctly. The fixture was depending on ambient host
+# tooling and calling it a lane property.
+#
+# It is the SAME defect I fixed in test-pre-push-issue-capture-lane.sh for
+# 1058-fenk hours earlier — a cwd-relative probe in a script that has cd-ed into
+# scratch — and I left it in the fixture I was writing at the time. macbookair's
+# discriminating measurement is what separated the two candidate causes: putting
+# a stub yq on PATH changed nothing, so the fault was how the temp repo reaches
+# a validator, not which tools the host has.
+#
+# So the checkout's OWN binary is resolved here, in the checkout, where the
+# probe can see it — and resolving EXECUTES `capabilities`, so what is exported
+# below has been run, not merely found. That matters because the probe honours
+# an explicit TILLANDSIAS_PLAN_BIN on existence alone (1060-wxdh): handing over
+# an unverified path is exactly the shape that installed a dead binary over a
+# canonical copy on yoga.
+_validator="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary 2>/dev/null)" || _validator=""
+case "$_validator" in ./*) _validator="$ROOT/${_validator#./}" ;; esac
+if [ -n "$_validator" ]; then
+    export TILLANDSIAS_PLAN_BIN="$_validator"
+elif command -v yq >/dev/null 2>&1; then
+    : # yq alone satisfies the lane's fragment validation
+else
+    # NAMED SKIP, NOT RED. A host with no validator cannot exercise the lane's
+    # acceptance arms, and refusing there would red the gate for missing
+    # tooling rather than for a lane defect — which is how this fixture took
+    # macOS out of the landing path in the first place.
+    echo "skip:plan-lane-after-merge:no-validator — no runnable tillandsias-plan and no yq, so the lane cannot validate fragments on this host; the acceptance arms would fail on tooling, not behaviour" >&2
+    echo "plan-lane-after-merge: 0 passed, 0 failed (skipped)"
+    exit 0
+fi
+
 W="$(mktemp -d "${TMPDIR:-/tmp}/prepush-lane-merge.XXXXXX")"
 trap 'rm -rf "$W"' EXIT INT TERM
 export GIT_TERMINAL_PROMPT=0
@@ -66,6 +111,12 @@ git remote add origin "$W/bare.git"
 # ~/.gitconfig and the seeding push below would run the REAL hooks against this
 # scratch tree. Same trap already documented in test-pre-push-issue-capture-lane.sh.
 git config core.hooksPath .git/hooks
+# CRLF noise is not a finding. On the Windows floor every arm logged "LF will be
+# replaced by CRLF" for the scratch repos' own files, which reads like a fixture
+# fault and is not one (esmeraldinha, 2026-09-05, where all 5 arms passed under
+# MSYS git on drvfs). Pinning it keeps the output legible so a real message is
+# not lost among warnings about files this fixture wrote itself.
+git config core.autocrlf false
 # The guard sources siblings relative to itself, so it must sit at scripts/hooks/.
 mkdir -p scripts/hooks plan/index.d
 cp "$GUARD" scripts/hooks/pre-push-local-gate.sh

@@ -95,6 +95,57 @@ resolve_plan_binary() {
     return 1
 }
 
+# ── Installing a resolved binary over a canonical copy (order 1060-wxdh) ─────
+#
+# RUN IT BEFORE YOU INSTALL IT. resolve_plan_binary honours an explicit
+# TILLANDSIAS_PLAN_BIN on EXISTENCE alone and never executes it — deliberately,
+# so a stub failing the way a STALE binary fails stays distinguishable from an
+# absent one. cycle-preflight then installs the resolved path over
+# ~/.local/bin/tillandsias-plan so the MCP experts do not read a stale copy —
+# also deliberate, also conservative. Composed, they wrote an UNVERIFIED path
+# over the one binary CLAUDE.md makes the default read path for every agent on
+# the host.
+#
+# MEASURED on yoga 2026-09-05, by causing it: a positive-control run
+# `TILLANDSIAS_PLAN_BIN=<stub exiting 127> cycle-preflight` installed the stub,
+# and the next `tillandsias-plan next-order` answered
+# `/lib64/libm.so.6: version GLIBC_2.44 not found`. Silent, and recoverable only
+# by knowing preflight writes there at all.
+#
+# It lives HERE rather than inline in cycle-preflight for two reasons: this file
+# is already the one place that decides anything about "the plan binary", and a
+# sourceable function can be pinned without running a whole preflight — which,
+# under a redirected HOME, provisions an entire second builder toolbox.
+#
+# Never blocks: a canonical copy that stays PUT is the safe outcome, and the
+# caller's contract is that a failed refresh is a report, not a refusal to start.
+#
+# Prints exactly one token: absent | current | refreshed |
+# refresh-refused-not-runnable | refresh-failed
+refresh_plan_binary_copy() {
+    local src="$1" dest="$2"
+    [ -e "$dest" ] || { printf 'absent
+'; return 0; }
+    if cmp -s "$src" "$dest"; then
+        printf 'current
+'
+        return 0
+    fi
+    if ! "$src" capabilities >/dev/null 2>&1; then
+        printf 'refresh-refused-not-runnable
+'
+        return 0
+    fi
+    if install -m0755 "$src" "$dest" 2>/dev/null; then
+        printf 'refreshed
+'
+    else
+        printf 'refresh-failed
+'
+    fi
+    return 0
+}
+
 # True when the resolved binary carries a named subcommand. Lets a caller
 # distinguish "this binary predates the rule I enforce" (host state — skip and
 # say so) from "the thing I check is wrong" (a real finding). Conflating those

@@ -3244,6 +3244,34 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Issue-capture lane fixture passed"
 
+    # Order 1058-fenk. That fixture's precondition guarded on the executable
+    # BIT, so an ELF that cannot link inside the toolbox took the branch meant
+    # for a present binary and every gate on a rolling-release host went red at
+    # a head that was green with an empty target/release. This pin drives the
+    # fixture with an unlinkable stub at target/release and asserts it SKIPS
+    # with a named reason, plus the control that a runnable binary still
+    # exercises the ledger arms — a fix of "skip always" would pass the first
+    # arm and remove the validation the lane depends on.
+    _step "Checking an unrunnable plan binary skips with a reason, not a precondition FAIL (1058-fenk)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-plan-binary-runnability-precondition.sh" 2>&1; then
+        _error "the issue-capture precondition no longer distinguishes an unrunnable binary from an absent one (1058-fenk) — see the verdict line above"
+        exit 1
+    fi
+    _info "Plan-binary runnability pin passed"
+
+    # Order 1060-wxdh. cycle-preflight installs the resolved plan binary over
+    # ~/.local/bin/tillandsias-plan, and resolve_plan_binary honours an explicit
+    # override WITHOUT running it — so a preflight with a broken override
+    # replaced this host's canonical copy with a binary that could not link.
+    # 30ms, and it pins both the refusal and that preflight still routes through
+    # the guarded function rather than installing directly.
+    _step "Checking an unrunnable binary is never installed over the canonical copy (1060-wxdh)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-plan-binary-copy-refresh.sh" 2>&1; then
+        _error "the expert-refresh no longer refuses an unrunnable binary (1060-wxdh) — see the verdict line above"
+        exit 1
+    fi
+    _info "Expert-refresh runnability pin passed"
+
     # Order 1056-5344. The lane now scopes PAST a mandated merge of
     # origin/linux-next, which widens the bypass further: without the ancestry
     # gate a host could park code on a side branch, merge it --no-ff, and the

@@ -1,0 +1,81 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: build-windows-tray-embeds-a-zero-byte-headless-and-reports-success
+    order: 1059-ry6t
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: windows
+    capability_tags: [windows, tray, build, fail-loud, evidence, docs]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-windows-tray/build.rs
+      - scripts/build-windows-tray.ps1
+      - skills/build-windows-tray/SKILL.md
+    title: |
+      `scripts\build-windows-tray.ps1` alone embeds a ZERO-BYTE guest binary and prints `Built:` with no warning, so the documented "build + install the windows tray locally" path produces a tray whose guest injection is a silent no-op — the asset has been 0 bytes on esmeraldinha since 2026-08-23 and nothing has ever said so
+    context: |
+      FOUND on esmeraldinha 2026-09-05 while building a tray to verify 1052-984i, which is a
+      guest-side fix: the corrected login message lives in `tillandsias-headless`, which the tray
+      EMBEDS and injects (`crates/tillandsias-windows-tray/src/wsl_lifecycle.rs:194` include_bytes!,
+      injected at :1453-1454).
+
+      `scripts\build-windows-tray.ps1` ran clean — `Finished release profile in 4m 13s`,
+      `Built: C:\Users\bullo\claudia\tillandsias\target\release\tillandsias-windows-tray.exe`,
+      exit 0, no warning of any kind. The embedded asset it compiled in:
+
+        -rw-r--r-- 1 bullo 197609 0 Aug 22 21:45 crates/tillandsias-windows-tray/assets/tillandsias-headless-x86_64-unknown-linux-musl
+
+      ZERO BYTES, and by its mtime it has been zero bytes on this host since 2026-08-23. The cause
+      is deliberate and documented one line away: `crates/tillandsias-windows-tray/build.rs:44-53`
+      writes empty placeholder files when the assets are missing, with the comment "Generate dummy
+      headless binaries if they do not exist so include_bytes! compiles". That is a reasonable
+      accommodation for `cargo check` on a host that will never package — the defect is that
+      NOTHING DISTINGUISHES the placeholder from a real staged binary at build time, at package
+      time, or in the skill.
+
+      `skills/build-windows-tray/SKILL.md` — whose own description is "Build + install the
+      windows-tray release binary on the local Windows host" — does not mention the asset at all:
+      `grep -niE 'musl|asset|embed|headless'` over it returns nothing. So an agent or operator
+      following the documented path gets a tray that reports success and cannot inject a working
+      guest binary.
+
+      THE FAILURE DIRECTION IS THE DANGEROUS ONE, and the file already knows it. Immediately below
+      the placeholder code, build.rs records a sibling trap measured 2026-08-15: cargo does not
+      rebuild when only the asset changes, so a developer who restages the guest binary and rebuilds
+      gets the PREVIOUS embed while believing otherwise, and the fix is to touch a `.rs`. Both traps
+      are the same shape — the build succeeds while the thing it exists to carry is wrong or absent —
+      and only one of them has a comment.
+
+      A tray built this way does not fail at build. It fails later, in a guest that behaves like an
+      older release for no visible reason, which is the kind of symptom this fleet then spends a
+      night bisecting.
+
+      NOT ESTABLISHED, deliberately: whether the release pipeline stages the asset correctly (it
+      evidently does — shipped trays inject a working headless), and whether any host other than
+      esmeraldinha carries a zero-byte asset. This packet is about the local build path and its
+      silence, not about the release.
+    exit_criteria:
+      - "a build that would embed a zero-byte or absent guest binary either refuses, or emits a warning naming the asset path and that guest injection will be a no-op; pre-fix result: FAILS — the build prints `Built: …` and exits 0 with a 0-byte asset compiled in"
+      - "skills/build-windows-tray/SKILL.md names the staging step for tillandsias-headless-<arch>-unknown-linux-musl, so the documented path produces a tray that can inject; pre-fix result: FAILS — the skill does not mention the asset, musl, or embedding at all"
+      - "a fixture builds with a placeholder asset present and asserts the refusal or warning fires, and builds with a real asset and asserts it does not; pre-fix result: FAILS — no such fixture exists"
+    unscoreable: |
+      The pin is a build-script fixture; no litmus lane covers the windows-tray
+      build's asset staging today. The claimer names one if they add it.
+    events:
+      - type: filed
+        ts: "2026-09-05T06:02:30Z"
+        agent_id: windows-esmeraldinha-claude-20260905t060230z
+        host: esmeraldinha
+        summary: |
+          Filed from the floor while building a tray to verify 1052-984i.
+          METHOD NOTE for anyone verifying a guest-side fix on Windows without
+          fixing this first: build the musl headless directly in the builder
+          distro (`cargo build --release -p tillandsias-headless --bin
+          tillandsias --target x86_64-unknown-linux-musl`, 4m16s here), then
+          transfer it into the runtime guest OVER STDIN — the appliance guest
+          has /mnt/c present but unpopulated (automount off), so a drvfs copy
+          fails with "No such file or directory". Byte counts matched exactly
+          (14,152,888), which is the check that makes the transfer trustworthy.
