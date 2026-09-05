@@ -236,10 +236,34 @@ if [[ "${1:-}" == "--coverage-threshold" ]]; then
   while IFS= read -r spec_name; do
     [[ -z "$spec_name" ]] && continue
     # Check if this spec has at least one trace annotation
-    if /usr/bin/grep -rl --include='*.rs' --include='*.sh' --include='*.toml' --include='*.yaml' \
+    # ORDER 1069-c9w6: THIS METRIC WAS A SIGPIPE ARTIFACT AND IT WAS INVERTED.
+    # The test used to be `grep -rl ... | grep -q .` under this file's `set -o
+    # pipefail` (line 20). `grep -q` exits on the FIRST match; the upstream
+    # `grep -rl`, still traversing crates/ and methodology/, takes SIGPIPE and
+    # returns 141; pipefail propagates it; the `if` takes the else branch and
+    # the spec is recorded UNCOVERED.
+    #
+    # MEASURED on lenovinha 2026-09-05, and note which way it fails:
+    #     spec:methodology-accountability   83 matching files  ->  rc 141 -> "uncovered"
+    #     spec:ci-release                   56 matching files  ->  rc 141 -> "uncovered"
+    #     spec:git-mirror-service           60 matching files  ->  rc 141 -> "uncovered"
+    #     spec:host-shell-architecture      20 matching files  ->  rc 0   -> covered
+    #     spec:spec-trace-coverage-threshold 2 matching files  ->  rc 0   -> covered
+    # THE BETTER-TRACED A SPEC IS, THE MORE LIKELY IT WAS REPORTED UNCOVERED,
+    # because a wider match keeps the producer traversing past the consumer's
+    # exit. All three specs this repo reported as uncovered were false
+    # negatives, so the honest number was 177/177 rather than 174/177 — and it
+    # was host-dependent, since the winner of that race is a function of disk
+    # speed, cache warmth and grep implementation.
+    #
+    # `grep -rq` asks the same question with NO PIPE, so nothing can be
+    # signalled mid-answer. Verified in both directions: the three specs above
+    # return 0, and a fabricated `spec:nonexistent-spec-xyz` still returns 1.
+    # Same defect class as 792-ksr8, which refused a `| grep -q` I wrote hours
+    # earlier for letting a signal decide a verdict.
+    if /usr/bin/grep -rq --include='*.rs' --include='*.sh' --include='*.toml' --include='*.yaml' \
         "spec:${spec_name}" \
-        "$ROOT/scripts" "$ROOT/crates" "$ROOT/images" "$ROOT/methodology" "$ROOT"/*.sh 2>/dev/null \
-        | /usr/bin/grep -q . 2>/dev/null; then
+        "$ROOT/scripts" "$ROOT/crates" "$ROOT/images" "$ROOT/methodology" "$ROOT"/*.sh 2>/dev/null; then
       SPECS_WITH_TRACES=$((SPECS_WITH_TRACES + 1))
     else
       UNCOVERED_SPECS+=("$spec_name")

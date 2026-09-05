@@ -3236,6 +3236,19 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Preamble host-readiness checks passed"
 
+    # 1026-ps4n. A timing record must outlive the shell measuring it, or the log
+    # must say so. The arm that matters is the negative one: a lost record is
+    # filed under <step>-supervisor-lost and NEVER under the real step name,
+    # because the recurrence rung groups by step and a lower bound averaged into
+    # the real timings would corrupt the decision the log exists to inform.
+    # Hermetic: scratch stamp dir and scratch log, no smoke, no containers.
+    _step "Checking a timing record outlives its supervisor (1026-ps4n)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-timing-supervisor-lost.sh" 2>&1; then
+        _error "a killed supervisor no longer leaves a named-cause timing record (1026-ps4n) — see the verdict line above"
+        exit 1
+    fi
+    _info "Supervisor-loss timing check passed"
+
     # 1055-6yp8: the skill-canonicalization check must judge what is COMMITTED,
     # and its printed remedy must not damage a correct tree. On a checkout with
     # core.symlinks=false the check read the worktree and reported all 75 skill

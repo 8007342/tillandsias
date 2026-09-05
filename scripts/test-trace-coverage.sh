@@ -33,10 +33,20 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 passed=0
+# 1063-nraf: `passed` was NEVER INITIALISED and both counters used `((var++))`.
+# Under this file's own `set -euo pipefail` that is two bugs in one line:
+#   * set -u kills the first _pass on the unset `passed`;
+#   * `((passed++))` POST-increments, so from 0 the arithmetic result is 0 and
+#     the compound returns exit 1, which set -e treats as failure.
+# The fixture therefore died on its FIRST passing assertion — which is why it
+# exits non-zero while its last line reads like a pass ("✓ Rejects negative
+# threshold"). It fails identically on macOS bash 3.2 and MSYS, so this was
+# never a portability escape hatch. Assignment form returns 0 unconditionally.
+passed=0
 failed=0
 
-_pass() { echo "✓ $*"; ((passed++)); }
-_fail() { echo "✗ $*"; ((failed++)); }
+_pass() { echo "✓ $*"; passed=$((passed + 1)); }
+_fail() { echo "✗ $*"; failed=$((failed + 1)); }
 
 echo "=== Trace Coverage Threshold Tests ==="
 echo ""

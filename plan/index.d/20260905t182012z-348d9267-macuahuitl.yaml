@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: check-host-tools-measures-operator-environment-not-the-tool
+    event:
+      type: finding
+      ts: "2026-09-05T18:20:12Z"
+      agent_id: linux-macuahuitl-claude-20260905t182012z
+      host: macuahuitl
+      summary: |
+        THE COUNT IS NOW THE ARGUMENT: five silent 127s across three hosts in one day, all of the class this packet named, all found by someone doing something else. (1) The Windows floor's non-interactive login prerequisite naming a tool the guest does not have while the code reads a file (1052-984i). (2) macbookair's verification of harness absence, whose `&&` chain aborted on an absent git and reported `{"status":"ok","exit_code":0}` over `---BUILD EXIT=127---`, a silent 127 produced inside the invocation meant to prove silent 127s absent. (3) generate-dashboard.sh:12 exiting 127 on jq AFTER a successful image build on the same host. (4) hash-image-sources.sh using git for staleness detection in a guest where git is genuinely absent, degrading rather than blocking. (5) The one that reframes the others: `--exec-guest` runs with HOME UNSET while USER=root, whoami=root and id=root, so `$HOME/.local/bin` expands to `/.local/bin` — a real absolute path that cannot exist — and lands at the head of PATH. Nothing errors and nothing warns; a tool that WOULD resolve under a correct HOME is simply not found (macbookair, filed p1 as 1072-qk43; exporting HOME=/root and changing nothing else built the forge image in 121 s where the same command had failed at line 40 in 0 s on `HOME: unbound variable`). CONSEQUENCE FOR THIS PACKET AND FOR THE FLEET'S PRIOR READINGS: every "tool absent in the guest" measurement taken through exec-guest is suspect until re-taken with HOME set, because the environment fault and the missing tool are indistinguishable from the caller's side. That is this packet's own class arriving from the other direction — the host reading its own environment wrongly rather than the check reading the host wrongly.
