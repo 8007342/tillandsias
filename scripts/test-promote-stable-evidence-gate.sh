@@ -522,5 +522,102 @@ PASS
     fi
 fi
 
+# ── ORDER 1061-zd83: STEP 3 MUST BE VERIFIED, NOT ASSUMED ───────────────────
+#
+# The cases above all stop at --dry-run, which is what makes them safe; these
+# three are the only ones that run PAST it, and they do so against a fully
+# stubbed gh and git so nothing outward-facing is touched. That is the whole
+# reason they can exist: the tag push is a stub, so "the push failed" and "the
+# tag landed on the wrong commit" become observable without publishing anything.
+#
+# WHAT THEY PIN. refs/tags/stable peeled to 341ab0010 (v0.4.260826.1) while the
+# latest non-prerelease release was v56.9.2.1 at d6d3e3ed9 — found by the
+# operator's tillandsias.org session, not by this suite. The script had printed
+# `promoted:` for a promotion whose step 3 did not take effect.
+#
+# The MISMATCH arm is the important one. A failing push already exits non-zero
+# under `set -e`, so an arm that only stubs the push to fail would pass against
+# the PRE-FIX script and prove nothing. The mismatch arm — push reports success
+# while origin's tag points elsewhere — is the shape that actually shipped, and
+# it is red before this change and green after.
+_stub_dir() { # $1=dir $2=push-rc $3=remote-stable-sha
+    mkdir -p "$1"
+    cat > "$1/gh" <<GHSTUB
+#!/usr/bin/env bash
+case "\$*" in
+  "repo view"*)            echo "8007342/tillandsias" ;;
+  *"release view"*targetCommitish*) echo "main" ;;   # a BRANCH, as GitHub returns
+  *"release view"*)        exit 0 ;;
+  *"release edit"*)        exit 0 ;;
+  *"api"*releases/latest*) echo "$VER" ;;
+  *) exit 0 ;;
+esac
+GHSTUB
+    cat > "$1/git" <<GITSTUB
+#!/usr/bin/env bash
+args="\$*"
+case "\$args" in
+  *"push origin refs/tags/stable"*) exit $2 ;;
+  *"ls-remote origin refs/tags/stable^{}"*) [ -n "$3" ] && echo -e "$3\trefs/tags/stable^{}"; exit 0 ;;
+  *"rev-parse --verify --quiet refs/tags/"*"^{commit}"*) echo "1111111111111111111111111111111111111111"; exit 0 ;;
+  *"rev-parse --verify --quiet main^{commit}"*) echo "2222222222222222222222222222222222222222"; exit 0 ;;
+  *"tag -f -a stable"*) exit 0 ;;
+  *"fetch"*) exit 0 ;;
+  *) exec /usr/bin/git "\$@" ;;
+esac
+GITSTUB
+    chmod +x "$1/gh" "$1/git"
+}
+
+# Writes the run's output to $WORK/promote.out and RETURNS the script's exit
+# code as its own. It must not both print and set a variable: a `$( )` capture
+# runs in a subshell, so an _rc assigned inside it never reaches the caller —
+# the same scoping trap that would have silently discarded the union marker in
+# 1056-5344 this morning.
+_run_promote() { # $1=push-rc $2=remote-sha -> rc; output in $WORK/promote.out
+    local d rc; d="$WORK/stub.$$.$RANDOM"
+    _stub_dir "$d" "$1" "$2"
+    ( cd "$WORK/root" && PATH="$d:$PATH" bash "$WORK/root/scripts/promote-stable.sh" "$VER" ) \
+        > "$WORK/promote.out" 2>&1
+    rc=$?
+    rm -rf "$d"
+    return "$rc"
+}
+
+# 1. The push FAILS: the script must not report a promotion.
+_run_promote 1 ""; rc1=$?
+if [ "$rc1" -ne 0 ] && ! grep -q '^promoted:' "$WORK/promote.out"; then
+    printf 'ok   %-52s -> rc=%s, no promoted: line\n' "tag push failure is not a promotion" "$rc1"
+    pass=$((pass + 1))
+else
+    printf 'FAIL %-52s -> rc=%s out=%s\n' "tag push failure is not a promotion" "$rc1" "$(tail -1 "$WORK/promote.out")"
+    fail=$((fail + 1))
+fi
+
+# 2. THE SHIPPED SHAPE: push succeeds, origin's tag points somewhere else.
+_run_promote 0 "9999999999999999999999999999999999999999" || true
+if grep -q '^refused:stable-tag-not-moved:' "$WORK/promote.out"; then
+    printf 'ok   %-52s -> %s\n' "origin tag disagreeing is refused by name" \
+        "$(grep '^refused:' "$WORK/promote.out" | head -1 | cut -c1-58)"
+    pass=$((pass + 1))
+else
+    printf 'FAIL %-52s -> %s\n' "origin tag disagreeing is refused by name" "$(tail -1 "$WORK/promote.out")"
+    fail=$((fail + 1))
+fi
+
+# 3. NEGATIVE CONTROL: origin agrees -> the promotion is reported, and says so.
+# Without this the fix could be "always refuse", which passes 1 and 2 while
+# making promotion impossible.
+_run_promote 0 "1111111111111111111111111111111111111111"; rc3=$?
+if [ "$rc3" -eq 0 ] \
+   && grep -q '^verified:stable-tag:1111111111111111111111111111111111111111' "$WORK/promote.out" \
+   && grep -q "^promoted:$VER" "$WORK/promote.out"; then
+    printf 'ok   %-52s -> verified + promoted\n' "a landed tag still reports a promotion"
+    pass=$((pass + 1))
+else
+    printf 'FAIL %-52s -> rc=%s out=%s\n' "a landed tag still reports a promotion" "$rc3" "$(tail -2 "$WORK/promote.out" | tr '\n' ' ')"
+    fail=$((fail + 1))
+fi
+
 printf '\n%s/%s passed\n' "$pass" "$((pass + fail))"
 [ "$fail" -eq 0 ]

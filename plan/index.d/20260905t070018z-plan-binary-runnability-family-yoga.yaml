@@ -1,0 +1,136 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: preflight-installs-a-nonrunnable-plan-binary-as-the-canonical-expert-copy
+    order: 1060-wxdh
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: any
+    capability_tags: [scripts, build, plan, fail-loud]
+    estimated_hours: 1
+    owned_files:
+      - scripts/cycle-preflight.sh
+    title: |
+      cycle-preflight's expert refresh copies whatever resolve_plan_binary returns into ~/.local/bin/tillandsias-plan, and an explicit TILLANDSIAS_PLAN_BIN override is honoured on EXISTENCE alone and never executed, so a preflight run with a broken override REPLACES the host's working canonical binary with a non-runnable one
+    context: |
+      MEASURED on yoga 2026-09-05T06:5xZ, on this host, by doing it. While proving the 1058-fenk
+      locus-skew detector NAMES a skew, I ran `TILLANDSIAS_PLAN_BIN=<stub exiting 127> bash
+      scripts/cycle-preflight.sh` as a positive control. The detector worked. It also silently
+      installed the stub over ~/.local/bin/tillandsias-plan, and the next `tillandsias-plan
+      next-order` answered:
+        /var/home/tlatoani/.local/bin/tillandsias-plan: /lib64/libm.so.6: version `GLIBC_2.44' not found
+      Restored by hand from ./target/release/tillandsias-plan.
+      THE CHAIN, and every link is individually defensible. resolve_plan_binary honours an explicit
+      override without running it, DELIBERATELY (704-zcgi: a stub that fails the way a STALE binary
+      fails must stay distinguishable from an absent one). cycle-preflight's expert-refresh step
+      (order 799-m2vk) then installs `$plan_bin` into ~/.local/bin so the MCP experts do not read a
+      stale copy — conservative by construction, refreshing only a path that already exists, never
+      blocking. Composed, they take an UNVERIFIED path and write it over the one binary CLAUDE.md
+      makes the default read path for every agent on the host.
+      WHY p1 DESPITE NEEDING AN OVERRIDE TO TRIGGER. The blast radius is the canonical expert copy,
+      the failure is silent, and the recovery requires knowing that preflight writes there at all.
+      It is also exactly the shape 1058-fenk is about, one level up: a step that trusts a path it has
+      not executed. The refresh already has `$plan_bin` in hand — running `capabilities` on it before
+      the copy costs one exec.
+      NOT INVESTIGATED: whether the Windows/WSL lane below the same block (770-f6u4 / 770-ehym) has
+      the same shape for its own copy. Worth a look by whoever takes this.
+    exit_criteria:
+      - "a preflight run whose resolved binary does not execute leaves ~/.local/bin/tillandsias-plan untouched and says why; pre-fix result: FAILS (yoga 2026-09-05, the stub was installed and the next plan call died on GLIBC_2.44)"
+      - "a preflight run with a runnable binary still refreshes the expert copy; pre-fix result: passes and must keep passing"
+    unscoreable: |
+      The pin is a fixture running cycle-preflight with TILLANDSIAS_PLAN_BIN pointed at a stub that
+      exits 127, against a sentinel file at the expert path, asserting the sentinel survives; plus
+      the control with a real binary asserting the refresh still happens. The claimer adds both.
+
+  - packet_id: plan-only-lane-blames-the-ledger-when-the-plan-binary-cannot-run
+    order: 1060-6fx7
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [gate, plan, fail-loud]
+    estimated_hours: 1
+    owned_files:
+      - scripts/hooks/pre-push-local-gate.sh
+    title: |
+      Given a TILLANDSIAS_PLAN_BIN that exists but cannot execute, the pre-push plan-only lane reports "validation FAILED — tillandsias-plan check refused the folded ledger", attributing an instrument failure to the data
+    context: |
+      MEASURED on yoga 2026-09-05 while fixing 1058-fenk. Running
+      scripts/test-pre-push-issue-capture-lane.sh with TILLANDSIAS_PLAN_BIN pointed at a stub that
+      exits 127 turned three lane arms red with, verbatim:
+        plan-only lane: validation FAILED — tillandsias-plan check refused the folded ledger (full gate required)
+      The ledger was fine; the binary could not link. This is the 923-ws3r / 965-sxec class the fleet
+      has been correcting all week — "the instrument is missing, not the data" — surviving in the
+      lane's own validation step. The lane already knows how to say a checker was absent (it appends
+      to LANE_NOTES and proceeds); it has no vocabulary for a checker that is PRESENT and DEAD.
+      DOES NOT BITE ON pirria's host, and that is worth stating so nobody merges this with 1058-fenk:
+      there TILLANDSIAS_PLAN_BIN is unset, so resolve_plan_binary executes `capabilities`, rejects
+      the unlinkable ELF, and the lane correctly skips validation with a note. It bites wherever the
+      override IS set, which cycle-preflight and several fixtures do.
+      Fix shape: distinguish "check refused the ledger" from "check could not run", the way the
+      archiver was taught to (965-sxec, could-not-run:no-usable-ruby). A refusal that names the wrong
+      layer sends the reader to the ledger, confidently, and they stop when they find nothing wrong.
+    exit_criteria:
+      - "with a present-but-unrunnable plan binary, the lane reports a could-not-run verdict naming the instrument, not a ledger refusal; pre-fix result: FAILS (yoga 2026-09-05, three arms red with 'refused the folded ledger')"
+      - "a genuinely malformed ledger still reports a ledger refusal; pre-fix result: passes and must keep passing (arm 2 of test-pre-push-issue-capture-lane.sh)"
+    unscoreable: |
+      The pin is scripts/test-pre-push-issue-capture-lane.sh driven with TILLANDSIAS_PLAN_BIN set to
+      a stub exiting 127, asserting the could-not-run verdict; the existing malformed-capture arm is
+      the control. The claimer adds the first.
+
+  - packet_id: probe-usage-guard-accepts-a-comment-as-compliance
+    order: 1060-428m
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [gate, scripts, plan]
+    estimated_hours: 2
+    owned_files:
+      - scripts/check-plan-binary-probe-usage.sh
+    title: |
+      check-plan-binary-probe-usage.sh decides compliance with `grep -q plan-binary-probe.sh "$f"` on the RAW file, so a file is compliant if the probe's FILENAME appears anywhere in it — a comment, or a loop that copies it into a scratch tree — while the code resolves the binary by hand
+    context: |
+      MEASURED on yoga 2026-09-05, as the reason 1058-fenk was possible at all. That guard exists
+      because "fixing instances is not enough": four scripts had hand-rolled
+      `[ -x target/release/tillandsias-plan ]` and a fifth was expected. The fifth arrived —
+      test-pre-push-issue-capture-lane.sh line 101 — and the guard reported
+      `ok:plan-binary-probe-usage:24 eligible of 943 scanned`.
+      WHY IT PASSED. Eligibility is computed on comment-STRIPPED code (`code="$(sed 's/#.*//' "$f")"`,
+      correctly, to avoid the 601-462g "gate that greps its own comment" antipattern). Compliance is
+      then tested with `grep -q "$PROBE_REL" "$f"` — the RAW file, comments included. The fixture
+      names plan-binary-probe.sh twice: once in a comment explaining why the guard must sit at
+      scripts/hooks/, and once in a `for f in plan-binary-probe.sh gate-stamp.sh common.sh` copy
+      loop. It never sourced it and never called resolve_plan_binary. Verified: `grep -n
+      'resolve_plan_binary\|source .*probe' ` returned nothing before the 1058-fenk fix.
+      So the guard tests a PROXY (does this string appear) rather than the property (is the binary
+      resolved through the probe), and the proxy is satisfiable by prose. That is the same class the
+      guard itself exists to catch, one level up — and the same class as 1058-fenk's `[ -x ]`: a
+      cheap signal standing in for the expensive question.
+      Fix shape: compliance should require actual USE — sourcing the probe and calling
+      resolve_plan_binary / mf_plan_binary in comment-stripped code — not a filename mention.
+      EXPECT THIS TO GO RED ON MORE THAN ONE FILE. Tightening it is the point, but the claimer should
+      run it first and size the sweep before changing the rule, and should NOT add an allow-list: the
+      guard's own header argues that a genuine exception is a signal to reconsider the rule.
+    exit_criteria:
+      - "a file that only MENTIONS plan-binary-probe.sh while hand-rolling the resolution is reported as a violation; pre-fix result: FAILS (test-pre-push-issue-capture-lane.sh was compliant with two mentions and zero uses)"
+      - "a file that sources the probe and calls resolve_plan_binary is compliant; pre-fix result: passes and must keep passing"
+      - "the verdict line still names each surface and its counts (751-vega); pre-fix result: passes and must keep passing"
+    unscoreable: |
+      The pin is a two-case fixture over the guard: a scratch script mentioning the probe only in a
+      comment must be a violation, and one sourcing it must not. The claimer adds it.
+    events:
+      - type: filed
+        ts: "2026-09-05T07:00:18Z"
+        host: yoga
+        summary: |
+          Filed by yoga from three findings measured while closing 1058-fenk, none of them in that
+          packet's owned_files. 1060-wxdh was found by causing it: a positive-control run of
+          cycle-preflight with a stub override installed the stub over this host's canonical
+          tillandsias-plan, restored by hand.

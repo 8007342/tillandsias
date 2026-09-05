@@ -178,5 +178,53 @@ if [[ -d .github/workflows ]]; then
     note "actions budget clean (release.yml only)"
 fi
 
+# ── Gate 5: the stable tag agrees with the release page (order 1061-zd83) ─────
+#
+# refs/tags/stable is a PUBLIC claim, and nothing compared it to the releases
+# page. Found by the operator's tillandsias.org session 2026-09-05 while pinning
+# the site's "stable" definition, not by any gate here: the tag peeled to
+# 341ab0010 (v0.4.260826.1, tagged 2026-08-25) while the latest non-prerelease
+# release was v56.9.2.1 at d6d3e3ed9. The site derives stable from
+# /releases/latest and only warns; the tag had been wrong for eleven days.
+#
+# ADVISORY, NOT BLOCKING, and the distinction is deliberate. Moving a public
+# force-pushed tag is the operator's call (1061-zd83 routes it there), so a
+# release-time refusal would block releases on a condition the runner is not
+# permitted to fix. Naming it every preflight is what turns "nobody noticed for
+# eleven days" into "everybody sees it".
+#
+# COULD-NOT-RUN IS NOT DISAGREEMENT (923-ws3r). gh may be unauthenticated — it
+# is on this host right now, answering 401 — and a network read may simply fail.
+# Reporting "the tag is wrong" when the question could not be asked is how three
+# hosts diagnosed the wrong subsystem from one string (894-scxy). So the
+# unauthenticated path says so and moves on.
+_stable_remote="$(git ls-remote origin 'refs/tags/stable^{}' 2>/dev/null | awk '{print $1}' | head -1)"
+if [[ -z "$_stable_remote" ]]; then
+    note "stable-vs-latest: could not read refs/tags/stable from origin — not checked"
+elif ! command -v gh >/dev/null 2>&1; then
+    note "stable-vs-latest: gh absent — not checked"
+else
+    _latest_tag="$(gh api 'repos/{owner}/{repo}/releases/latest' --jq .tag_name 2>/dev/null)" || _latest_tag=""
+    if [[ -z "$_latest_tag" ]]; then
+        note "stable-vs-latest: /releases/latest unreadable (gh unauthenticated or offline) — NOT a disagreement, the check could not run"
+    else
+        _latest_commit="$(git ls-remote origin "refs/tags/${_latest_tag}^{}" 2>/dev/null | awk '{print $1}' | head -1)"
+        if [[ -z "$_latest_commit" ]]; then
+            note "stable-vs-latest: origin has no peeled tag for $_latest_tag — not checked"
+        elif [[ "$_stable_remote" != "$_latest_commit" ]]; then
+            echo "  WARNING stable-tag-disagrees-with-latest (1061-zd83):" >&2
+            echo "    refs/tags/stable  -> $_stable_remote" >&2
+            echo "    $_latest_tag (latest) -> $_latest_commit" >&2
+            echo "    The public 'stable' tag does not name the latest release." >&2
+            echo "    Moving it is the OPERATOR's call (a public force-pushed tag)." >&2
+            echo "    Remedy, on the operator's word:" >&2
+            echo "      git tag -f -a stable -m 'Stable channel: $_latest_tag' $_latest_commit" >&2
+            echo "      git push origin refs/tags/stable --force" >&2
+        else
+            note "stable-vs-latest: stable == $_latest_tag ($_stable_remote)"
+        fi
+    fi
+fi
+
 echo "ok:release-preflight"
 exit 0

@@ -98,15 +98,88 @@ git push -q -u origin linux-next
 # the next reader debugs the lane. Assert the base FIRST so a broken base
 # reports as a broken base. Skipped when no plan binary is resolvable, because
 # then the lane skips ledger validation too and the base is not load-bearing.
-_probe_bin="${TILLANDSIAS_PLAN_BIN:-$ROOT/target/release/tillandsias-plan}"
-if [ -x "$_probe_bin" ]; then
-    if ( cd "$W/wc" && "$_probe_bin" --index plan/index.yaml check >/dev/null 2>&1 ); then
-        ok "PRECONDITION: the scratch base ledger folds"
-    else
-        echo "FAIL: PRECONDITION — the scratch base ledger does not fold; the arms below would fail for an environment reason, not a lane defect" >&2
-        echo "issue-capture-lane: 0 passed, 1 failed"
-        exit 1
-    fi
+# ORDER 1058-fenk. RUNNABILITY, NOT THE EXECUTABLE BIT. This guard was
+# `[ -x "$_probe_bin" ]`, and the bit is a CLAIM while running the binary is
+# EVIDENCE — the rule scripts/plan-binary-probe.sh was centralised to enforce,
+# rediscovered here the hard way.
+#
+# MEASURED by pirria 2026-09-05: cycle-preflight builds
+# target/release/tillandsias-plan on the HOST, the gate consumes it inside the
+# tillandsias-builder toolbox, and on a rolling-release host whose glibc is
+# newer than the image (CachyOS 2.44 vs fedora-toolbox:42) the ELF runs on the
+# host and cannot link in the toolbox:
+#   ./target/release/tillandsias-plan: /lib64/libm.so.6: version `GLIBC_2.44' not found
+# `[ -x ]` is true for that file. So an unlinkable binary took the branch meant
+# for a present one, the fold failed for an environment reason, and the
+# precondition reported a FAIL. Every gate on that host was red from 19:07Z at
+# a head that had been green while target/release was empty — the variable was
+# a host-built artefact, not trunk.
+#
+# An ELF that cannot link is exactly as unusable as an absent one and must take
+# the SAME branch. resolve_plan_binary decides by executing `capabilities`, so
+# it answers the question this guard was actually asking.
+# RESOLVED FROM $ROOT, NOT FROM THE CURRENT DIRECTORY. This script has already
+# `cd`-ed into the scratch repo by this point, and the probe's candidates are
+# cwd-relative (./target/release/...), so resolving here searched a tree that by
+# construction has no target/ and fell through to `command -v`. On a host with
+# ~/.local/bin on PATH that silently still worked; INSIDE THE BUILDER TOOLBOX,
+# where it is not, every ledger arm quietly stopped being exercised — a green
+# fixture measuring nothing. Caught by this file's own control arm, which is
+# the argument for having one. The replaced `[ -x "$ROOT/target/..." ]` was
+# absolute and had no such dependency, so the runnability fix must not
+# introduce one.
+_probe_bin="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary)" || _probe_bin=""
+case "$_probe_bin" in
+    ./*) _probe_bin="$ROOT/${_probe_bin#./}" ;;
+    ""|/*) ;;
+    *) _probe_bin="$ROOT/$_probe_bin" ;;
+esac
+# shellcheck source=scripts/plan-binary-probe.sh
+. "$ROOT/scripts/plan-binary-probe.sh"
+# An explicit TILLANDSIAS_PLAN_BIN is honoured by the probe on EXISTENCE alone
+# (deliberately — a stub that fails like a stale binary must stay
+# distinguishable from an absent one), so runnability still has to be asked
+# here rather than assumed from a successful resolve.
+_probe_why=""
+if [ -n "$_probe_bin" ]; then
+    _probe_why="$("$_probe_bin" capabilities 2>&1 >/dev/null)" || _probe_bin=""
+else
+    # RECOVER THE REASON. resolve_plan_binary answers "which binary can I run"
+    # and discards WHY each candidate lost — correct for its job, useless for a
+    # skip message. "no runnable binary" and "the binary you built cannot link
+    # here" send a reader to completely different places, and it was not
+    # knowing which that cost pirria a day of red gates. So if a file IS sitting
+    # at the conventional path, run it once and keep what it says.
+    for _cand in "${CARGO_TARGET_DIR:-$ROOT/target}/release/tillandsias-plan" \
+                 "$ROOT/target/release/tillandsias-plan"; do
+        [ -f "$_cand" ] || continue
+        _probe_why="$("$_cand" capabilities 2>&1 >/dev/null)" && continue
+        _probe_why="${_probe_why:-$_cand exists but did not run}"
+        break
+    done
+fi
+if [ -z "$_probe_bin" ] && ! command -v yq >/dev/null 2>&1; then
+    # NO VALIDATOR AT ALL. The lane must fail closed here (correctly), so every
+    # arm below that expects ACCEPTANCE would fail on host tooling rather than on
+    # lane behaviour — which is exactly how a sibling fixture took macOS out of
+    # the landing path (1056-5344). Skip the whole file with a name.
+    echo "skip:issue-capture-lane:no-validator — ${_probe_why:-no runnable tillandsias-plan} and no yq, so the lane cannot validate fragments here; the acceptance arms would fail on tooling, not behaviour" >&2
+    echo "issue-capture-lane: 0 passed, 0 failed (skipped)"
+    exit 0
+fi
+if [ -z "$_probe_bin" ]; then
+    # NAMED, never silent: a skip that does not say why is indistinguishable
+    # from a check that passed.
+    echo "skip:plan-binary-not-runnable-here:${_probe_why:-no runnable tillandsias-plan resolved}" >&2
+    echo "  The lane skips ledger validation without a runnable binary, so the" >&2
+    echo "  scratch base is not load-bearing and the arms below still mean what" >&2
+    echo "  they say. This is host state, not a lane defect (1058-fenk)." >&2
+elif ( cd "$W/wc" && "$_probe_bin" --index plan/index.yaml check >/dev/null 2>&1 ); then
+    ok "PRECONDITION: the scratch base ledger folds"
+else
+    echo "FAIL: PRECONDITION — the scratch base ledger does not fold; the arms below would fail for an environment reason, not a lane defect" >&2
+    echo "issue-capture-lane: 0 passed, 1 failed"
+    exit 1
 fi
 
 # Drive the guard the way git does: one "<lref> <lsha> <rref> <rsha>" line on
@@ -128,7 +201,14 @@ out="$(run_guard)"
 # path is turned away as outside the allowlist is the behaviour 889-twhe
 # changed. The CONTROL arm always drew that distinction; the acceptance arms
 # did not, and that inconsistency is what made this fixture host-dependent.
-lane_qualified() { ! grep -q "is outside plan/index.d/" <<<"$1"; }
+# ORDER 1060-7mmm: ANY "not applicable" is a disqualification, not just the
+# out-of-scope spelling. This helper used to check for one refusal string, so an
+# arm asserting qualification passed while the lane was refusing for a DIFFERENT
+# reason — measured here: the new M-qualifies arm was green against the pre-fix
+# hook, which refuses an M with "has status 'M' ... only NEW issue captures
+# qualify". That is the same defect as pinning one spelling of a class
+# (1060-6fx7): a control that names one refusal certifies the others away.
+lane_qualified() { ! grep -qE "plan-only lane: not applicable" <<<"$1"; }
 if lane_qualified "$out" && grep -qE 'plan-only lane clean|plan-only lane: validated plan/issues/new-capture.md' <<<"$out"; then
     ok "a NEW plan/issues capture qualifies for the lane"
 else
@@ -153,15 +233,52 @@ else
 fi
 reset_to_remote
 
-# ── 3. (a) A MODIFIED capture is refused — captures are immutable here for
-#      the same reason fragments are: a new file is a capture, a modified one
-#      can carry anything.
-printf 'appended\n' >> plan/issues/existing.md
-G add -A >/dev/null; G commit -q -m "modify an existing capture"
+# ── 3. A MODIFIED capture now QUALIFIES (order 1060-7mmm) ──────────────────
+# THIS ARM WAS INVERTED, DELIBERATELY. It previously asserted that an M is
+# refused, by analogy with the fragment arms — but the analogy does not hold.
+# plan/index.d/ entries are CRDT records whose contract is append-only, so an M
+# there is a corrupted ledger; a plan/issues capture is PROSE, and correcting it
+# is the ordinary way it improves.
+#
+# esmeraldinha measured the asymmetry on 2026-09-05: the lane accepted the
+# CREATION of a smoke report unreviewed and refused a FOUR-CHARACTER fix to it
+# (a cited order id, 1029-5vwd, with no referent). A lane whose economics favour
+# appending a new record over correcting an existing one selects for records
+# that read as settled while carrying something wrong.
+#
+# The blast radius is unchanged and that is the argument: the M is validated
+# per-file by check-issue-citation-convention against the PUSHED bytes, the same
+# gate the A path runs, and case 3b below asserts an M elsewhere still takes the
+# full gate.
+printf 'See `main.rs` `resolve_probe`.\n' >> plan/issues/existing.md
+G add -A >/dev/null; G commit -q -m "correct an existing capture"
+out="$(run_guard)"
+if lane_qualified "$out"; then
+    ok "a CORRECTED capture (M under plan/issues/) qualifies for the lane"
+else
+    bad "a corrected capture was refused: $(grep -m1 'plan-only lane' <<<"$out")"
+fi
+reset_to_remote
+
+# ── 3b. NEGATIVE CONTROL: an M ELSEWHERE still takes the full gate ─────────
+# Without this, case 3 alone would be satisfied by admitting every M — which is
+# the escape hatch this lane exists to keep shut. build.sh can reach the build.
+printf '\n# touched by a fixture\n' >> build.sh
+G add -A >/dev/null; G commit -q -m "modify build.sh"
 out="$(run_guard)"
 grep -q 'plan-only lane clean' <<<"$out" \
-    && bad "a MODIFIED plan/issues file rode the lane" \
-    || ok "a MODIFIED capture takes the full gate"
+    && bad "a MODIFIED build.sh rode the lane" \
+    || ok "a MODIFIED file outside the plan dirs still takes the full gate"
+reset_to_remote
+
+# ── 3c. A DELETED capture is still refused ────────────────────────────────
+# D stays out: the lane cannot validate the absence of a record.
+G rm -q plan/issues/existing.md
+G commit -q -m "delete a capture"
+out="$(run_guard)"
+grep -q 'plan-only lane clean' <<<"$out" \
+    && bad "a DELETED capture rode the lane" \
+    || ok "a DELETED capture still takes the full gate"
 reset_to_remote
 
 # ── 4. (c) A class subdirectory is admitted at exactly one level deep. ─────
@@ -219,7 +336,13 @@ reset_to_remote
 # Point the lane's validator at this checkout's real plan binary; the scratch
 # tree has no target/. Without it the control arm would fail on a missing tool
 # rather than on the behaviour it exists to protect.
-export TILLANDSIAS_PLAN_BIN="${TILLANDSIAS_PLAN_BIN:-$ROOT/target/release/tillandsias-plan}"
+# ORDER 1060-6fx7: hand over a binary that RUNS, or none at all. This used to
+# export $ROOT/target/release/tillandsias-plan unconditionally, and the probe
+# honours an explicit override on existence alone — so on a host where that file
+# exists and cannot link, the lane took it as a validator and reported the
+# LEDGER refused. $_probe_bin above is resolved AND executed, so exporting it is
+# a claim the fixture has evidence for.
+[ -n "$_probe_bin" ] && export TILLANDSIAS_PLAN_BIN="$_probe_bin"
 printf 'packets: []\n' > plan/index.d/20260101t000000z-control.yaml
 G add -A >/dev/null; G commit -q -m "a plain fragment"
 out="$(run_guard)"

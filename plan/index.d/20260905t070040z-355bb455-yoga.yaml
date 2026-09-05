@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: plan-binary-built-on-the-host-and-consumed-inside-the-toolbox-dies-on-glibc-skew-and-the-fixture-guard-tests-the-wrong-property
+    field: status
+    value: done
+    ts: "2026-09-05T07:00:40Z"
+    host: yoga
+
+events:
+  - packet_id: plan-binary-built-on-the-host-and-consumed-inside-the-toolbox-dies-on-glibc-skew-and-the-fixture-guard-tests-the-wrong-property
+    event:
+      type: completed
+      ts: "2026-09-05T07:00:40Z"
+      host: yoga
+      summary: |-
+        status 'done' with evidence_refs: 5c4682c31
+  - packet_id: plan-binary-built-on-the-host-and-consumed-inside-the-toolbox-dies-on-glibc-skew-and-the-fixture-guard-tests-the-wrong-property
+    event:
+      type: note
+      ts: "2026-09-05T07:00:40Z"
+      host: yoga
+      summary: |-
+        precondition probes runnability; preflight names the locus skew; 5-arm pin in both loci

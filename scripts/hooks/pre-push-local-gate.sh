@@ -407,11 +407,54 @@ attempt_plan_only_lane() {
                     # filing LESS. Ruled approved by the coordinator with the
                     # four conditions enforced here and in the validator below.
                     #
-                    # NEW FILES ONLY — status A, never M/D/T. Same immutability
-                    # rule the fragment arms apply, for the same reason: a new
-                    # file is a capture, a modified one can carry anything.
-                    if [[ "$status" != "A" ]]; then
-                        echo "plan-only lane: not applicable — '$path' has status '$status' in the outgoing diff; only NEW issue captures qualify (full gate required)" >&2
+                    # A OR M, NEVER D OR T (order 1060-7mmm). This was A only,
+                    # by analogy with the fragment arms — but the analogy does
+                    # not hold, and the asymmetry it produced points the wrong
+                    # way.
+                    #
+                    # FRAGMENTS ARE IMMUTABLE BY CONSTRUCTION: plan/index.d/
+                    # entries are CRDT records whose whole contract is
+                    # append-only, so an M there is a corrupted ledger. A
+                    # plan/issues capture is PROSE. Nothing about it is
+                    # append-only, and a correction to it is the ordinary way it
+                    # improves.
+                    #
+                    # MEASURED on esmeraldinha 2026-09-05, in the same push,
+                    # seconds apart, differing only in whether one correction was
+                    # included:
+                    #   refused: '...smoke-e2e-findings-v56.9.5.1...md' has status
+                    #            'M'; only NEW issue captures qualify
+                    #   accepted: outgoing diff adds only new plan fragment files
+                    # The change was FOUR CHARACTERS — the report cited order
+                    # 1029-5vwd, which has no referent; the real one is
+                    # 1029-5wvd. The lane accepted the creation of that report
+                    # unreviewed and refused the fix to it.
+                    #
+                    # WHY THIS IS WORTH RELAXING RATHER THAN LIVING WITH. A lane
+                    # whose economics favour APPENDING a new record over
+                    # CORRECTING an existing one selects for records that read as
+                    # settled while carrying something wrong — the failure mode
+                    # this fleet keeps finding. The cheap path should be the
+                    # honest one. On the night this was filed the finding host
+                    # made three corrections to landed or relayed records in one
+                    # shift, and this rule taxed every one of them.
+                    #
+                    # THE BLAST RADIUS IS UNCHANGED, which is the whole argument.
+                    # An M here is still validated per-file by
+                    # check-issue-citation-convention against the PUSHED bytes,
+                    # the same gate the A path runs; the diff it reads is
+                    # base..head, so a modification is checked exactly as an
+                    # addition is. Prose under plan/issues/ cannot reach the
+                    # build and cannot change what the gate validates. An M
+                    # ANYWHERE ELSE still takes the full gate — that refusal is
+                    # the escape hatch this lane exists to keep shut, and the
+                    # fixture asserts it.
+                    #
+                    # D and T stay refused: a DELETION removes a record the lane
+                    # cannot validate the absence of, and a type change is not a
+                    # correction.
+                    if [[ "$status" != "A" && "$status" != "M" ]]; then
+                        echo "plan-only lane: not applicable — '$path' has status '$status' in the outgoing diff; issue captures qualify as new (A) or corrected (M) only (full gate required)" >&2
                         return 1
                     fi
                     # DEPTH IS DECIDED EXPLICITLY, not left to a glob. The
@@ -470,7 +513,7 @@ attempt_plan_only_lane() {
     # pushed YAML blob; tillandsias-plan check validates fragment schema by
     # folding every fragment (so it also parses them — which is why yq-absent
     # may delegate to it, but BOTH absent is a refusal, never a pass).
-    local have_yq=0 have_plan=0 plan_bin=""
+    local have_yq=0 have_plan=0 plan_bin="" plan_why="" plan_not_runnable=""
     command -v yq >/dev/null 2>&1 && have_yq=1
     # Order 721-nyev: `-x` is a CLAIM; running the binary is evidence. On a
     # shared Windows/WSL checkout that test passes on a Linux ELF sitting
@@ -479,7 +522,40 @@ attempt_plan_only_lane() {
     # gather, which is the worst shape in this file.
     . "$(dirname "${BASH_SOURCE[0]}")/../plan-binary-probe.sh"
     plan_bin="$(resolve_plan_binary || true)"
-    [[ -n "$plan_bin" ]] && have_plan=1
+    # ORDER 1060-6fx7: RESOLVED IS NOT THE SAME AS RUNNABLE, and conflating them
+    # made this lane blame the DATA for a missing INSTRUMENT.
+    #
+    # resolve_plan_binary honours an explicit TILLANDSIAS_PLAN_BIN on EXISTENCE
+    # alone — deliberately (704-zcgi), so a stub failing the way a STALE binary
+    # fails stays distinguishable from an absent one. So `plan_bin` may name a
+    # file that cannot execute, and every consumer below then read a non-zero
+    # exit as a verdict about the ledger.
+    #
+    # MEASURED on yoga 2026-09-05: with the override pointed at a binary that
+    # dies on exec, three arms of test-pre-push-issue-capture-lane.sh went red
+    # with, verbatim:
+    #   plan-only lane: validation FAILED — tillandsias-plan check refused the
+    #   folded ledger (full gate required)
+    # The ledger was sound. That is the 923-ws3r class — "the instrument is
+    # missing, not the data" — surviving inside the lane's own validation, and a
+    # refusal naming the wrong layer sends the reader to the ledger confidently
+    # and they stop when they find nothing wrong there.
+    #
+    # ONE EXEC, HERE, rather than pattern-matching exit codes at each of the
+    # three call sites below: a dynamic-link failure and a genuine refusal are
+    # both non-zero, and only running the thing separates them. A binary that
+    # cannot answer `capabilities` is not a validator, so the lane treats it as
+    # ABSENT — which routes into the existing fail-closed path — and says which
+    # of the two it was.
+    if [[ -n "$plan_bin" ]]; then
+        if plan_why="$("$plan_bin" capabilities 2>&1 >/dev/null)"; then
+            have_plan=1
+        else
+            LANE_NOTES+=("$plan_bin resolved but does NOT run here, so it is not a validator: ${plan_why:-no output}")
+            plan_not_runnable="$plan_bin"
+            plan_bin=""
+        fi
+    fi
     # Order 889-twhe: fail closed only when this push actually carries YAML that
     # needs a YAML parser. Before, an issues-only or loop-status-only push was
     # refused for lacking a validator it had nothing to run — the fail-closed
@@ -490,7 +566,15 @@ attempt_plan_only_lane() {
         case "$f" in plan/index.d/*) needs_yaml=1 ;; esac
     done
     if [[ $needs_yaml -eq 1 && $have_yq -eq 0 && $have_plan -eq 0 ]]; then
-        echo "plan-only lane: not applicable — neither yq nor target/release/tillandsias-plan is available to validate fragments (fail closed; full gate required)" >&2
+        # NAME WHICH OF THE TWO IT WAS. "not available" reads as absent, and an
+        # operator who can see the file sitting in target/release will not
+        # believe it — then look for the wrong problem (1060-6fx7).
+        if [[ -n "$plan_not_runnable" ]]; then
+            echo "plan-only lane: not applicable — $plan_not_runnable exists but does NOT run here, and yq is absent, so no validator (fail closed; full gate required)" >&2
+            echo "  ${plan_why:-}" >&2
+        else
+            echo "plan-only lane: not applicable — neither yq nor target/release/tillandsias-plan is available to validate fragments (fail closed; full gate required)" >&2
+        fi
         return 1
     fi
 
