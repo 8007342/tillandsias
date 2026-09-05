@@ -63,7 +63,41 @@ packets:
 YAML
 }
 
+# The checker resolves its validator with a cwd-relative probe, and every arm
+# below runs it from a scratch repo that has no target/. So on a host where
+# nothing else supplies the binary the probe finds none, the checker takes its
+# "not built" branch, and the fixture measures the SKIP instead of the rule.
+#
+# That is the SAME defect as test-pre-push-plan-lane-after-merge.sh:82 and
+# test-pre-push-issue-capture-lane.sh (1058-fenk, 1060-wxdh): a cwd-relative
+# probe in a script that has cd-ed into scratch. It hid on Linux because the
+# fall-through found the host's tillandsias-plan on PATH, so the arms passed
+# for a reason unrelated to what they assert; macOS has no such copy and the
+# fixture went red for tooling, not behaviour.
+#
+# Worse than the three reds it caused: arm 5 is a NEGATIVE control ("a
+# reachable SHA is not a ghost"), and a skipped gate flags nothing, so it
+# PASSED VACUOUSLY — agreeing with the fixture for exactly the wrong reason.
+#
+# So resolve the checkout's own binary HERE, in the checkout, where the probe
+# can see it. Resolving EXECUTES the candidate, so what is exported has been
+# run and not merely found — the probe honours an explicit TILLANDSIAS_PLAN_BIN
+# on existence alone (1060-wxdh), and handing it an unverified path is the
+# shape that installed a dead binary over a canonical copy on yoga.
+_validator="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary 2>/dev/null)" || _validator=""
+case "$_validator" in ./*) _validator="$ROOT/${_validator#./}" ;; esac
+if [ -z "$_validator" ]; then
+    # NAMED SKIP, NOT RED, and not a silent pass either. Without a validator
+    # every arm here measures the checker's skip branch; reporting that as
+    # green is what this fix exists to stop.
+    echo "skip:closure-evidence-survives-landing:no-validator — no runnable tillandsias-plan in this checkout, so the arms would measure the checker's skip branch rather than the rule (build with ./build.sh to enable)" >&2
+    echo "closure-evidence-survives-landing: 0 passed, 0 failed (skipped)"
+    exit 0
+fi
+export TILLANDSIAS_PLAN_BIN="$_validator"
+
 _run() { ( cd "$W/wc" && TILLANDSIAS_CLOSURE_EVIDENCE_BASE=origin/linux-next \
+    TILLANDSIAS_PLAN_BIN="$_validator" \
     bash scripts/check-fragment-closure-evidence-added.sh ) 2>&1; }
 
 # ── Reproduce the landing rewrite ──────────────────────────────────────────
