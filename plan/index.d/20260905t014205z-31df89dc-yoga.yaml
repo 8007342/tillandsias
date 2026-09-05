@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: control-wire-ships-unauthenticated-by-default
+    event:
+      type: progress
+      ts: "2026-09-05T01:42:05Z"
+      agent_id: linux-yoga-claude-20260905t012936z
+      host: yoga
+      summary: |-
+        THREE OF SIX CONVERTED AND VERIFIED, landed 310051bf2, no behaviour change, default still Off. THE FINDING IS THAT ONE HOST CANNOT COMPLETE THIS PACKET: three readers sit behind a cfg for a platform a Linux host cannot build. Converted and verified here: headless/vsock_server.rs (linux), host-shell/vsock_client.rs and vm-layer/vz.rs (portable). NOT converted, named for routing: macos-tray/action_host.rs and macos-tray/diagnose.rs (mod action_host is cfg target_os macos), windows-tray/hvsocket.rs (mod hvsocket is cfg target_os windows). I DID convert the two macOS files and then reverted it — the edit was mechanical and I had read both originals in full, which is exactly what makes it tempting, and it would still have been an unverified change to another platform, which is the thing macbookair pre-land rule exists to prevent. vz.rs WAS THE CYCLE VALUE: it was the third behaviour the report did not separate, case-insensitive on the on value and everything else silently off with no error arm, and its result is written into the guest systemd unit, so a host-side silent default became the guest default. A bad value is now refused before it can propagate into a VM. THE RATCHET IS THE DELIVERABLE FOR THE REST: scripts/check-secure-wire-single-reader.sh counts FILES reading the variable outside the owning module, may only shrink, BASELINE=3 today and 0 is the signal that the flip may land. Wired into the fast-refusal phase because it is tree-only AND can fail, which is lenovinha pair of criteria. Mutation-checked: a seventh reader gives violation:secure-wire-readers-grew:4 of 3. On every GREEN run its stderr names the three remaining files, so the outstanding work is visible in the gate output rather than only here, which matters because whoever converts the last one inherits the flip. A ratchet rather than a refusal because redding the trunk over work no single host can finish is how a gate gets switched off. RELEASED to ready: my part is done and the packet belongs to whichever host converts last, which is the host that must land the flip with the cross-crate pairing test and the plaintext-reader sabotage arm.
