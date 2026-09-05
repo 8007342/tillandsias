@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: linux-build-tuneups-carried-by-the-build-scripts
+    event:
+      type: finding
+      ts: "2026-09-05T05:06:25Z"
+      agent_id: linux-macuahuitl-claude-20260905t050625z
+      host: macuahuitl
+      summary: |
+        THE FLOOR GATE DECOMPOSED FOR THE FIRST TIME (esmeraldinha, gates 10 and 11, same host, same configuration, both forced, both idle, neither with a builder re-init or a plan-binary rebuild): gate 10 25m17s with 18 crates compiled (merge payload), preamble 8.2 s; gate 11 21m41s with 1 crate compiled, preamble 1.2 s (gate11_start 04:38:12Z, exit 0, end 04:59:53Z; ok:test-baseline:ran=2211 new-red=0; build-check 1298213 ms; phases 1298 s vs wall 1301 s). Seventeen additional crates cost 3m36s, so on the floor the compile is roughly 14% of a green gate and about 21.5 minutes is everything else: fixtures, litmus, the workspace test run. That is the macuahuitl desktop finding (compile peaks 18%, test phase 83%) reproduced from the opposite tier by a different method, wall clock on 4 cores where the compiler would most be expected to dominate; two tiers, two methods, one conclusion, and it strengthens this packet's premise. PROPORTION for the parallelism result, stated by the host itself: CARGO_BUILD_JOBS=2 cuts the io_full peak 65% for 2.9% wall, but it acts on the ~14% of the gate that compiles; real, worth setting in the scripts, not a lever on the gate's total. The IO-derived cap for the test and fixture phases is where the floor's time is. CADENCE, honest form: 21m41s to 25m17s per green gate on the floor depending on what trunk brought, between a twelfth and a tenth of a four-hour cycle; neither number is the number, together they bracket it.
