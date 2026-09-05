@@ -11,7 +11,6 @@
 #![allow(dead_code)]
 
 use std::io;
-use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
@@ -69,33 +68,13 @@ pub const STANDARD_HOST_CAPABILITIES: &[&str] = &[
 /// (order 145).
 ///
 /// @trace plan/issues/secure-channel-maturity-ladder-2026-07-04.md
-const SECURE_CONTROL_WIRE_ENV: &str = "TILLANDSIAS_SECURE_CONTROL_WIRE";
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum SecureControlWireMode {
-    Off,
-    On,
-}
-
-fn parse_secure_control_wire_mode(
-    raw: Result<String, std::env::VarError>,
-) -> Result<SecureControlWireMode, String> {
-    match raw {
-        Ok(v) if v.eq_ignore_ascii_case("on") => Ok(SecureControlWireMode::On),
-        Ok(v) if v.eq_ignore_ascii_case("off") || v.is_empty() => Ok(SecureControlWireMode::Off),
-        Ok(v) => Err(format!(
-            "{SECURE_CONTROL_WIRE_ENV} must be 'on' or 'off' (got {v:?})"
-        )),
-        Err(std::env::VarError::NotPresent) => Ok(SecureControlWireMode::Off),
-        Err(err) => Err(format!("{SECURE_CONTROL_WIRE_ENV}: {err}")),
-    }
-}
-
-fn secure_control_wire_mode() -> Result<SecureControlWireMode, String> {
-    static MODE: OnceLock<Result<SecureControlWireMode, String>> = OnceLock::new();
-    MODE.get_or_init(|| parse_secure_control_wire_mode(std::env::var(SECURE_CONTROL_WIRE_ENV)))
-        .clone()
-}
+// ORDER 972-umik. The mode comes from the ONE reader in
+// tillandsias-control-wire::secure_wire_mode. This file used to carry its own
+// copy; there were six across the tree with THREE different behaviours, and the
+// divergence shipped a plaintext client to anyone who capitalised a word.
+use tillandsias_control_wire::secure_wire_mode::{
+    SecureWireMode as SecureControlWireMode, secure_wire_mode as secure_control_wire_mode,
+};
 
 /// Backoff schedule for the reconnect loop. Mirrors the spec's
 /// `250ms / 500ms / 1s / 2s / 4s` cap.

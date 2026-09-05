@@ -1654,6 +1654,14 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
 
+
+    # 972-umik: tree-only, sub-second, and it ratchets the number of files
+    # deciding whether the control wire is encrypted. Belongs in the fast phase
+    # by both of lenovinha's criteria — it reads the tree and it can FAIL.
+    if ! _run bash "$SCRIPT_DIR/scripts/check-secure-wire-single-reader.sh" 2>&1; then
+        _error "a new reader of TILLANDSIAS_SECURE_CONTROL_WIRE appeared (972-umik) — see the verdict line above"
+        exit 1
+    fi
     _info "Fast refusals passed"
 
     # 765-uti9 quick win (velocity audit F3): the dedicated `cargo check
