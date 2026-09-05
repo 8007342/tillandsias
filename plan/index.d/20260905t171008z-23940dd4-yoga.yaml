@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: transport-negligible-overhead-audit
+    field: next_action
+    value: 'CRITERION 4 DONE (yoga, bde83aa26): litmus:no-polling-noops is added, bound and green, pinning the tray refresh as single-shot over a persistent client. Criteria 1, 2 and 5 were already delivered 2026-08-16. WHAT REMAINS IS CRITERION 3 ONLY, the headless crash root cause behind the wire oscillation, and it is PACKET 148''s subject (wire-oscillation-root-cause, also ready, socket-audit-master). Whoever takes 148 closes 147''s criterion 3 with it; do not investigate the same crash twice. NOTE the line citations in this packet''s 2026-08-16 events are now stale (the symbols moved to :134, :1475, :2211, :2389); the properties are pinned by the new lane, so re-read the lane rather than the line numbers.'
+    ts: "2026-09-05T17:10:08Z"
+    host: yoga
+
+events:
+  - packet_id: transport-negligible-overhead-audit
+    event:
+      type: progress
+      ts: "2026-09-05T17:10:08Z"
+      host: yoga
+      summary: |-
+        status 'CRITERION 4 DONE (yoga, bde83aa26): litmus:no-polling-noops is added, bound and green, pinning the tray refresh as single-shot over a persistent client. Criteria 1, 2 and 5 were already delivered 2026-08-16. WHAT REMAINS IS CRITERION 3 ONLY, the headless crash root cause behind the wire oscillation, and it is PACKET 148's subject (wire-oscillation-root-cause, also ready, socket-audit-master). Whoever takes 148 closes 147's criterion 3 with it; do not investigate the same crash twice. NOTE the line citations in this packet's 2026-08-16 events are now stale (the symbols moved to :134, :1475, :2211, :2389); the properties are pinned by the new lane, so re-read the lane rather than the line numbers.' (not terminal) with evidence_refs: bde83aa26
+  - packet_id: transport-negligible-overhead-audit
+    event:
+      type: note
+      ts: "2026-09-05T17:10:08Z"
+      host: yoga
+      summary: |-
+        criterion 4 landed; criterion 3 is packet 148's
