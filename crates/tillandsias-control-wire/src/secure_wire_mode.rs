@@ -32,14 +32,17 @@
 //! secure-channel would have added a dependency to vm-layer, which is the
 //! coupling the "this is a move, not a new edge" argument was meant to avoid.
 //!
-//! # The default is SECURE
+//! # The default is NOT YET SECURE, and that is what this order changes
 //!
-//! Absent means On. The shipped default was a plaintext, credential-carrying
+//! Absent still means Off. The shipped default is a plaintext, credential-carrying
 //! listener bound to any CID, opt-in through a variable that nothing in the
 //! product sets — six files read it, none set it, and the only `export` in the
 //! tree sits inside the message string of an `#[ignore]`d test. A security
 //! posture that requires an undocumented environment variable to reach is not a
-//! posture, it is a hope.
+//! posture, it is a hope. The flip is prepared here and lands in the commit
+//! that converts the LAST of the six readers, because "the default is secure"
+//! is one fact about a HANDSHAKE: flipping one side of it is not a smaller
+//! version of flipping both, it is an outage. See the wildcard arm below.
 //!
 //! # An EMPTY value is a hard error, and that was contested
 //!
@@ -55,9 +58,10 @@
 /// Whether the control wire runs the Noise handshake or passes plaintext.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SecureWireMode {
-    /// Version-bound Noise handshake. The default.
+    /// Version-bound Noise handshake. Reached today only by an explicit `on`;
+    /// becomes the default when the last reader is converted (972-umik).
     On,
-    /// Plaintext. Reachable only by an explicit, exact `off`.
+    /// Plaintext. Today also the default when the variable is absent.
     Off,
 }
 
@@ -88,7 +92,7 @@ pub fn parse_secure_wire_mode(
             "{SECURE_CONTROL_WIRE_ENV} is set but empty. Blank does NOT mean \
              'off' — it is the shape an unfilled CI variable takes, and reading \
              it as 'insecure' is the worst available guess. Set it to 'on' or \
-             'off' explicitly, or unset it entirely (absent means ON)."
+             'off' explicitly. Note that absent currently means OFF and becomes ON when 972-umik converts the last reader."
         )),
         Ok(v) => Err(format!(
             "{SECURE_CONTROL_WIRE_ENV} must be 'on' or 'off' (got {v:?}). Note \
@@ -96,8 +100,27 @@ pub fn parse_secure_wire_mode(
              'secure' on some surfaces and 'plaintext' on others, which is the \
              divergence order 972-umik removed."
         )),
-        // ABSENT IS SECURE. This is the flip.
-        Err(std::env::VarError::NotPresent) => Ok(SecureWireMode::On),
+        // ABSENT IS STILL PLAINTEXT, AND THIS IS THE ONE LINE 972-umik EXISTS
+        // TO CHANGE. It is deliberately NOT changed yet.
+        //
+        // I flipped it to On in e6a80609f with only the LISTENER converted, and
+        // that broke the product: all four clients still carry their own
+        // parsers defaulting to plaintext, nothing in scripts/ or packaging/
+        // sets the variable, so every client opened a plaintext connection to a
+        // server that had just started refusing plaintext. A silent insecurity
+        // became a total outage, which is strictly worse.
+        //
+        // THE DECISION IS ATOMIC ACROSS SIX READERS. "The default is secure" is
+        // one fact about a handshake, and flipping one side of a handshake is
+        // not a smaller version of flipping both — it is a different, worse
+        // change. A partial slice is only valid when the partial state is
+        // COHERENT, and slicing this packet by crate produced a partial state
+        // that was not.
+        //
+        // So the flip belongs in the commit that converts the LAST reader, not
+        // the first. Until then this module's value is that the divergence
+        // above is documented and single-sourced, with no behaviour change.
+        Err(std::env::VarError::NotPresent) => Ok(SecureWireMode::Off),
         Err(err) => Err(format!("{SECURE_CONTROL_WIRE_ENV}: {err}")),
     }
 }
@@ -112,12 +135,18 @@ mod tests {
     use super::*;
     use std::env::VarError;
 
+    /// THE DEFAULT IS STILL PLAINTEXT AND THIS TEST PINS THAT, deliberately.
+    /// 972-umik exists to flip it, and the flip must land in the commit that
+    /// converts the LAST of the six readers — flipping the listener alone
+    /// (e6a80609f) left every client opening plaintext to a server that had
+    /// started refusing it. When the last reader lands, this test inverts and
+    /// its name changes with it.
     #[test]
-    fn absent_is_secure() {
+    fn absent_is_still_plaintext_until_every_reader_is_converted() {
         assert_eq!(
             parse_secure_wire_mode(Err(VarError::NotPresent)).unwrap(),
-            SecureWireMode::On,
-            "the shipped default must be encrypted; opt-in security is not security"
+            SecureWireMode::Off,
+            "the flip is atomic across six readers; see the module comment"
         );
     }
 

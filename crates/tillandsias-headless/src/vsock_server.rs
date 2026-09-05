@@ -1865,7 +1865,7 @@ mod tests {
     // function itself. The vsock-side fetch_cloud_projects wrapper is
     // now a thin token-read shim, not worth a separate token-read target.)
 
-    /// ORDER 972-umik. THE FLIP. This test used to be called
+    /// ORDER 972-umik. THE FLIP IS NOT HERE YET, deliberately. This test used to be called
     /// `secure_control_wire_flag_defaults_off_and_fails_closed` and asserted
     /// that an absent variable meant PLAINTEXT — "so the flip is opt-in and
     /// off is a no-op". That was the defect: the flip was opt-in through a
@@ -1880,14 +1880,15 @@ mod tests {
     /// module's own tests; what is asserted HERE is that this listener reads
     /// it rather than carrying a seventh copy.
     #[test]
-    fn secure_control_wire_defaults_on_through_the_shared_reader() {
+    fn secure_control_wire_reads_the_shared_reader_not_a_local_copy() {
         use std::env::VarError;
         use tillandsias_control_wire::secure_wire_mode::parse_secure_wire_mode;
-        // THE DEFAULT IS SECURE. Absent means On.
+        // The default is STILL plaintext: the flip is atomic across six
+        // readers and lands with the last of them, not the first (972-umik).
         assert_eq!(
             parse_secure_wire_mode(Err(VarError::NotPresent)).unwrap(),
-            SecureControlWireMode::On,
-            "an absent variable must mean ENCRYPTED; opt-in security is not security"
+            SecureControlWireMode::Off,
+            "flipping the listener alone left every client refused (e6a80609f)"
         );
         // Only an explicit, exact opt-out disables it.
         assert_eq!(
