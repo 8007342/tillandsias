@@ -1099,23 +1099,27 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
 
     let project_label = identity.project;
 
-    // Validate project label by equality against enumerated local projects (never sanitize).
-    let known_projects =
-        crate::local_projects::scan_project_root(&crate::local_projects::host_project_root());
-    let is_valid_project =
-        known_projects.is_empty() || known_projects.iter().any(|p| p.label == project_label);
-    if !is_valid_project {
+    // Validate project label by equality against the known project set (never
+    // sanitize). 1031-q4pb: this site carried the INVERTED spelling of the same
+    // bypass — `known.is_empty() || known.iter().any(..)` evaluates to TRUE, i.e.
+    // valid, on an empty enumeration. Two spellings of one bug across four sites
+    // is exactly why the check now lives in one helper that fails closed.
+    //
+    // This is the site that matters most: it is the MCP tool socket, so the
+    // label it admits is the lane an unattributed client gets to act as.
+    if let Err(reason) = crate::local_projects::validate_project_label(&project_label) {
         warn!(
             spec = "mcp-tool-socket",
             project = %project_label,
-            "MCP connection for non-enumerated project denied and closed (-32000)"
+            reason = %reason,
+            "MCP connection for unknown project denied and closed (-32000)"
         );
         let deny = serde_json::json!({
             "jsonrpc": "2.0",
             "id": serde_json::Value::Null,
             "error": {
                 "code": -32000,
-                "message": format!("Project '{project_label}' is not an enumerated local project"),
+                "message": reason,
             }
         });
         let _ = writeln!(writer, "{deny}");
@@ -5404,7 +5408,7 @@ mod tests {
         use std::io::{BufRead, BufReader, Write};
         use std::os::unix::net::UnixStream;
 
-        with_empty_project_root(|| {
+        with_known_demo_project(|| {
             let (client, server) = UnixStream::pair().expect("socketpair");
             let handle = std::thread::spawn(move || {
                 serve_mcp_connection(server, Some(LaneIdentity::new("demo", "default")));
@@ -5498,7 +5502,7 @@ mod tests {
         use std::io::{BufRead, BufReader, Write};
         use std::os::unix::net::UnixStream;
 
-        with_empty_project_root(|| {
+        with_known_demo_project(|| {
             let (client, server) = UnixStream::pair().expect("socketpair");
             let handle = std::thread::spawn(move || {
                 serve_mcp_connection(server, Some(LaneIdentity::new("demo", "default")));
@@ -5604,7 +5608,7 @@ mod tests {
         use std::io::{BufRead, BufReader, Write};
         use std::os::unix::net::UnixStream;
 
-        with_empty_project_root(|| {
+        with_known_demo_project(|| {
             let (client, server) = UnixStream::pair().expect("socketpair");
             let handle = std::thread::spawn(move || {
                 serve_mcp_connection(server, Some(LaneIdentity::new("demo", "default")));
@@ -5703,36 +5707,138 @@ mod tests {
         server.join().expect("server thread joined");
     }
 
-    /// Pin TILLANDSIAS_HOST_PROJECT_ROOT to an empty per-test directory for
-    /// the tests that reach serve_mcp_connection's project validation. The
-    /// validator scans the AMBIENT project root, so without this these tests
-    /// pass or fail based on which other test mutated the env first and on
-    /// whether the host's ~/src happens to be empty — the 638-ehzi
-    /// schedule-race class, reproduced 2026-08-16 when newly added tests
-    /// shifted the schedule and a non-empty ~/src (created 08-12) made solo
-    /// runs fail deterministically. An EMPTY root is the deliberate fixture:
+    /// Pin the order-505 validation set to the KNOWN projects these tests
+    /// attribute to (`demo`, `alpha`) for
+    /// the tests that reach `serve_mcp_connection`'s project validation.
+    ///
+    /// THIS HELPER USED TO BE `with_empty_project_root`, and its own doc said
+    /// what was wrong with it: "An EMPTY root is the deliberate fixture:
     /// empty-scan-is-valid is the documented open-host behavior these tests
-    /// had been relying on implicitly.
-    fn with_empty_project_root<T>(f: impl FnOnce() -> T) -> T {
+    /// had been relying on implicitly." That behaviour was the 1031-q4pb
+    /// bypass — with nothing enumerated, the validator admitted ANY label,
+    /// so these tests were handshaking as `demo` only because validation was
+    /// being skipped entirely. Five of them failed the moment the check
+    /// started failing closed, which is the fixture doing its job on the way
+    /// out: the assumption was recorded, so its removal was visible rather
+    /// than silent.
+    ///
+    /// The root stays EMPTY on purpose. `demo` is supplied through the
+    /// confirmed-cloud half of the set instead, so these tests now exercise
+    /// the cloud-only end state (776-jcf3) — the arrangement every host will
+    /// have once ~/src is retired — rather than a local checkout that will
+    /// not exist.
+    ///
+    /// Both env vars are pinned for the same 638-ehzi reason the original
+    /// gave: the validator reads ambient state, so without pinning these
+    /// tests pass or fail based on which test mutated the env first and on
+    /// whether the host's real ~/src happens to be empty.
+    fn with_known_demo_project<T>(f: impl FnOnce() -> T) -> T {
         static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
         let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         let dir = std::env::temp_dir().join(format!(
-            "tillandsias-empty-project-root-{}",
+            "tillandsias-known-demo-project-{}",
             std::process::id()
         ));
         let _ = std::fs::create_dir_all(&dir);
-        let prev = std::env::var_os(crate::local_projects::HOST_PROJECT_ROOT_ENV);
+        let cache = dir.join("known-cloud-projects");
+        let prev_root = std::env::var_os(crate::local_projects::HOST_PROJECT_ROOT_ENV);
+        let prev_cache = std::env::var_os(crate::local_projects::CLOUD_LABEL_CACHE_ENV);
         unsafe {
             std::env::set_var(crate::local_projects::HOST_PROJECT_ROOT_ENV, &dir);
+            std::env::set_var(crate::local_projects::CLOUD_LABEL_CACHE_ENV, &cache);
         }
+        // `alpha` alongside `demo` because the forged-environ test attributes to
+        // it: its subject is that listener attribution beats TILLANDSIAS_PROJECT,
+        // which it can only demonstrate if the attributed label is servable.
+        let _ =
+            crate::local_projects::persist_cloud_labels(&["demo".to_string(), "alpha".to_string()]);
         let out = f();
         unsafe {
-            match prev {
+            match prev_root {
                 Some(v) => std::env::set_var(crate::local_projects::HOST_PROJECT_ROOT_ENV, v),
                 None => std::env::remove_var(crate::local_projects::HOST_PROJECT_ROOT_ENV),
             }
+            match prev_cache {
+                Some(v) => std::env::set_var(crate::local_projects::CLOUD_LABEL_CACHE_ENV, v),
+                None => std::env::remove_var(crate::local_projects::CLOUD_LABEL_CACHE_ENV),
+            }
+        }
+        let _ = std::fs::remove_file(&cache);
+        out
+    }
+
+    /// The same fixture with NOTHING known, for the arm that must be denied.
+    fn with_no_known_projects<T>(f: impl FnOnce() -> T) -> T {
+        static ENV_LOCK2: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let _guard = ENV_LOCK2.lock().unwrap_or_else(|p| p.into_inner());
+        let dir = std::env::temp_dir().join(format!(
+            "tillandsias-no-known-projects-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::create_dir_all(&dir);
+        let cache = dir.join("absent-cache");
+        let _ = std::fs::remove_file(&cache);
+        let prev_root = std::env::var_os(crate::local_projects::HOST_PROJECT_ROOT_ENV);
+        let prev_cache = std::env::var_os(crate::local_projects::CLOUD_LABEL_CACHE_ENV);
+        unsafe {
+            std::env::set_var(crate::local_projects::HOST_PROJECT_ROOT_ENV, &dir);
+            std::env::set_var(crate::local_projects::CLOUD_LABEL_CACHE_ENV, &cache);
+        }
+        let out = f();
+        unsafe {
+            match prev_root {
+                Some(v) => std::env::set_var(crate::local_projects::HOST_PROJECT_ROOT_ENV, v),
+                None => std::env::remove_var(crate::local_projects::HOST_PROJECT_ROOT_ENV),
+            }
+            match prev_cache {
+                Some(v) => std::env::set_var(crate::local_projects::CLOUD_LABEL_CACHE_ENV, v),
+                None => std::env::remove_var(crate::local_projects::CLOUD_LABEL_CACHE_ENV),
+            }
         }
         out
+    }
+
+    /// 1031-q4pb: THE BYPASS, pinned so it cannot come back.
+    ///
+    /// A host that knows of no projects — every fresh curl-install, and every
+    /// host once ~/src retires — must REFUSE an attributed lane rather than
+    /// serve it. Before the fix this connection completed the handshake,
+    /// because `known.is_empty() || any(..)` is true when the set is empty.
+    ///
+    /// @trace spec:mcp-tool-socket
+    #[test]
+    fn mcp_connection_is_denied_when_the_host_knows_no_projects() {
+        use std::io::{BufRead, BufReader, Write};
+        use std::os::unix::net::UnixStream;
+
+        with_no_known_projects(|| {
+            let (server_side, client_side) =
+                UnixStream::pair().expect("UnixStream::pair available on linux");
+            let identity = LaneIdentity::new("demo", "default");
+            let server =
+                std::thread::spawn(move || serve_mcp_connection(server_side, Some(identity)));
+
+            let mut writer = client_side.try_clone().expect("clone client side");
+            let mut lines = BufReader::new(client_side).lines();
+            writeln!(
+                writer,
+                r#"{{"jsonrpc":"2.0","id":1,"method":"initialize","params":{{}}}}"#
+            )
+            .expect("write initialize");
+
+            let resp: serde_json::Value =
+                serde_json::from_str(&lines.next().expect("a reply").expect("readable"))
+                    .expect("valid JSON");
+            assert_eq!(
+                resp["error"]["code"], -32000,
+                "an unknown project must be denied, not served: {resp}"
+            );
+            assert!(
+                resp["result"].is_null(),
+                "a denied connection must not carry a result: {resp}"
+            );
+            let _ = server.join();
+        });
     }
 
     /// Order 505: The NDJSON transport round-trips the MCP handshake for an attributed
@@ -5744,7 +5850,7 @@ mod tests {
         use std::io::{BufRead, BufReader, Write};
         use std::os::unix::net::UnixStream;
 
-        with_empty_project_root(|| {
+        with_known_demo_project(|| {
             let (server_side, client_side) =
                 UnixStream::pair().expect("UnixStream::pair available on linux");
             let identity = LaneIdentity::new("demo", "default");
@@ -5856,7 +5962,7 @@ mod tests {
         use std::io::{BufRead, BufReader, Write};
         use std::os::unix::net::UnixStream;
 
-        with_empty_project_root(|| {
+        with_known_demo_project(|| {
             // Set a forged environment variable in the test process
             unsafe {
                 std::env::set_var("TILLANDSIAS_PROJECT", "attacker-wins");

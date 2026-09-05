@@ -16702,16 +16702,12 @@ pub(crate) async fn publish_local_service(
         ));
     }
 
-    // Order 505: project label MUST be validated by EQUALITY against enumerated
-    // local projects (never sanitized) before use in paths or container names.
-    let known_projects =
-        crate::local_projects::scan_project_root(&crate::local_projects::host_project_root());
-    if !known_projects.is_empty() && !known_projects.iter().any(|p| p.label == project_name) {
-        return Err(format!(
-            "Project '{project_name}' is not an enumerated local project in {}",
-            crate::local_projects::host_project_root().display()
-        ));
-    }
+    // Order 505: project label MUST be validated by EQUALITY against the known
+    // project set (never sanitized) before use in paths or container names.
+    // 1031-q4pb: the inline form here skipped validation entirely when the
+    // enumeration was empty, which is every fresh install. One helper now, so
+    // the sites cannot drift apart again, and it FAILS CLOSED.
+    crate::local_projects::validate_project_label(project_name)?;
 
     crate::container_deps::ensure_service_catalog(debug)?;
 
@@ -16782,14 +16778,8 @@ pub(crate) async fn publish_local_service(
 
 #[cfg(feature = "tray")]
 pub(crate) async fn service_status(project_name: &str) -> Result<String, String> {
-    // Order 505: project label validation by equality against enumerated local projects
-    let known_projects =
-        crate::local_projects::scan_project_root(&crate::local_projects::host_project_root());
-    if !known_projects.is_empty() && !known_projects.iter().any(|p| p.label == project_name) {
-        return Err(format!(
-            "Project '{project_name}' is not an enumerated local project"
-        ));
-    }
+    // Order 505 label validation, fail-closed via the shared helper (1031-q4pb).
+    crate::local_projects::validate_project_label(project_name)?;
 
     let client = tillandsias_podman::PodmanClient::new();
     let container_name = format!("tillandsias-{project_name}-web");
@@ -16814,14 +16804,8 @@ pub(crate) async fn service_stop(
         ));
     }
 
-    // Order 505: project label validation by equality against enumerated local projects
-    let known_projects =
-        crate::local_projects::scan_project_root(&crate::local_projects::host_project_root());
-    if !known_projects.is_empty() && !known_projects.iter().any(|p| p.label == project_name) {
-        return Err(format!(
-            "Project '{project_name}' is not an enumerated local project"
-        ));
-    }
+    // Order 505 label validation, fail-closed via the shared helper (1031-q4pb).
+    crate::local_projects::validate_project_label(project_name)?;
 
     let client = tillandsias_podman::PodmanClient::new();
     let container_name = format!("tillandsias-{project_name}-web");
