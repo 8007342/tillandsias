@@ -120,12 +120,20 @@ git config core.autocrlf false
 # The guard sources siblings relative to itself, so it must sit at scripts/hooks/.
 mkdir -p scripts/hooks plan/index.d
 cp "$GUARD" scripts/hooks/pre-push-local-gate.sh
-for f in plan-binary-probe.sh gate-stamp.sh common.sh; do
+for f in plan-binary-probe.sh gate-stamp.sh common.sh check-issue-citation-convention.sh; do
     cp "$ROOT/scripts/$f" "scripts/$f" 2>/dev/null || true
 done
 chmod +x scripts/*.sh scripts/hooks/*.sh 2>/dev/null || true
 printf 'packets: []\n' > plan/index.yaml
 printf 'base\n' > README.md
+# A landed capture for the correction arms (1060-7mmm) to modify.
+mkdir -p plan/issues
+printf 'See `main.rs` `resolve_probe`.\n' > plan/issues/existing-report.md
+# A tracked non-plan file for arm 7. NOT README.md: trunk modifies that in this
+# fixture, so an arm editing it hits a MERGE CONFLICT and the guard refuses for
+# a reason that has nothing to do with the lane — a pass for the wrong reason,
+# which the first run of arm 7 produced.
+printf 'fn main() {}\n' > src_placeholder.rs
 G add -A >/dev/null; G commit -q -m base
 git push -q -u origin linux-next
 # Both platform branches start level, as they do in the fleet.
@@ -253,6 +261,57 @@ if [ "$rc" -eq 0 ] && [ ! -s .git/tillandsias-union-ungated ]; then
 else
     bad "ARM 5: a merge-free push either failed the lane or recorded a spurious union marker (rc=$rc)"
     printf '%s\n' "$out" | sed 's/^/      /' >&2
+fi
+
+# ── ARM 6: a CORRECTION to a landed report rides the lane after the merge ──
+# ORDER 1060-7mmm, and cross-branch because that is the shape it was found in:
+# esmeraldinha hit it on windows-next in the same push that first exercised
+# 1056-5344 live. The lane had accepted the CREATION of a smoke report
+# unreviewed and refused a four-character fix to a wrong order id in it.
+#
+# The correction sits BESIDE a new fragment on purpose: a real cycle pushes
+# both, and an arm that modified a report alone would not prove the mixed case.
+reset_branch
+printf 'packets: []\n' > plan/index.d/20260905t000005z-fixture.yaml
+printf 'Also see `lib.rs` `resolve_plan_binary`.\n' >> plan/issues/existing-report.md
+G add -A >/dev/null; G commit -q -m "new fragment plus a correction to a landed report"
+G merge -q --no-edit origin/linux-next -m "mandated merge of origin/linux-next"
+rm -f .git/tillandsias-union-ungated
+out="$(run_guard)"; rc=$?
+if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q 'plan-only lane'; then
+    ok "ARM 6: an M confined to plan/issues/ rides the lane beside a new fragment"
+else
+    bad "ARM 6: a correction to a landed report was refused after the merge (rc=$rc)"
+    printf '%s\n' "$out" | grep -m2 'plan-only lane' | sed 's/^/      /' >&2
+fi
+# Criterion 3 of the packet: relaxing the file-status rule must not quietly drop
+# the gate debt the scoped lane incurs.
+if [ -s .git/tillandsias-union-ungated ]; then
+    ok "ARM 6: the un-gated union is still recorded when a correction takes the lane"
+else
+    bad "ARM 6: relaxing the M rule dropped the union marker — the gate debt is now invisible"
+fi
+
+# ── ARM 7: NEGATIVE CONTROL — an M outside the plan dirs still full-gates ──
+# Without this, arm 6 is satisfied by admitting every M, which is the escape
+# hatch the lane exists to keep shut. build.sh can reach the build.
+reset_branch
+printf 'packets: []\n' > plan/index.d/20260905t000006z-fixture.yaml
+printf 'fn other() {}\n' >> src_placeholder.rs
+G add -A >/dev/null; G commit -q -m "fragment plus a modified non-plan file"
+G merge -q --no-edit origin/linux-next -m "mandated merge of origin/linux-next"
+_outgoing="$(G diff --name-only origin/windows-next HEAD)"
+case "$_outgoing" in
+    *src_placeholder.rs*) ;;
+    *) bad "ARM 7 is VACUOUS — the modified file is not in the outgoing diff" ;;
+esac
+out="$(run_guard)"; rc=$?
+if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q "outside plan/index.d/"; then
+    ok "ARM 7: an M outside the plan directories still requires the full gate"
+elif [ "$rc" -ne 0 ]; then
+    bad "ARM 7: refused, but not by the path-scope rule — $(printf '%s' "$out" | grep -m1 'plan-only lane')"
+else
+    bad "ARM 7: a modified non-plan file rode the lane — the M relaxation is too wide"
 fi
 
 echo "plan-lane-after-merge: $pass passed, $fail failed"

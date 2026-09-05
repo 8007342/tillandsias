@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-stable-git-tag-was-not-moved-when-v56-9-2-1-was-promoted
+    event:
+      type: progress
+      ts: "2026-09-05T08:06:06Z"
+      agent_id: linux-yoga-claude-20260905t080606z
+      host: yoga
+      summary: |-
+        Criteria (a) and (b) done, landed ef29ff380. Criterion (c), the tag move, is UNTOUCHED and stays the operator: origin stable still peels to 341ab0010, verified at land time rather than assumed. (a) STEP 3 IS NOW VERIFIED ON ORIGIN, not locally, because the claim is about the ref other people fetch and a local tag that never reached origin is exactly the recorded disagreement; peeled with ^{} since stable is annotated. Typed verdicts stable-tag-not-moved, stable-tag-unverified, promote-commit-unresolvable, plus verified:stable-tag:<sha> on success, and could-not-read-origin is reported as UNVERIFIED rather than as disagreement (923-ws3r). A SECOND MECHANISM found while reading rather than reported: COMMIT came from gh release view --json targetCommitish, which for a release cut from a branch is the BRANCH NAME, so git tag -f -a stable main resolved against the LOCAL branch and the tag landed wherever this checkout main happened to sit, not necessarily the released commit. It now prefers the release TAG own commit, which is exact, with targetCommitish as fallback; either way the origin-side verification catches it. (b) release-preflight gains an ADVISORY gate 5 comparing refs/tags/stable to /releases/latest. Advisory deliberately: moving the tag is the operator call, so a release-time refusal would block releases on a condition the runner may not fix; naming it every preflight is what turns "nobody noticed for eleven days" into "everybody sees it". Both branches exercised: with gh stubbed to the real latest it reproduces the exact reported disagreement (341ab0010 vs d6d3e3ed9) and with agreement it reports the match. COULD-NOT-RUN IS NOT DISAGREEMENT and this host proves the path, since gh answers 401 here: the check says unreadable, NOT a disagreement, the check could not run. THE MUTATION CONTROL CORRECTED THE PACKET OWN TEST DESIGN, and this is the part worth reading: the packet asked for a fixture where the tag push is stubbed to fail makes the script exit non-zero, and THAT ARM PASSES AGAINST THE PRE-FIX SCRIPT because set -e already aborts before the promoted: line, so on its own it proves nothing. The arm with teeth is the shape that actually shipped: push reports SUCCESS while origin tag points elsewhere; pre-fix that prints promoted:, post-fix it is refused:stable-tag-not-moved:. Measured 26 of 28 against the pre-fix script, 28 of 28 after, with the push-fails arm green in BOTH. A third arm is the negative control, origin agrees so the promotion is reported and says verified:, without which the fix could be always-refuse and pass the first two while making promotion impossible. Existing 25 arms unchanged, gate rc=0 225s.
