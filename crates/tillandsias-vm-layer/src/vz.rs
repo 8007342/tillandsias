@@ -747,6 +747,27 @@ DEST="/usr/local/bin/tillandsias-headless"
 STAGED="/var/lib/tillandsias/guest-bin/tillandsias-headless"
 if [[ -x "$STAGED" ]]; then
   install -D -m 0755 "$STAGED" "$DEST"
+  # 1049-c6xa. SAY SO. Every other line in this script is on a failure branch,
+  # so a boot log with no [tillandsias-fetch] line was equally consistent with
+  # "staged and succeeded" and "never ran" — and those call for opposite next
+  # steps. That ambiguity blocked a live diagnosis: a guest that booted fine
+  # (Fedora 44, network up, login prompt) never reached Ready, and the log
+  # could not say whether the host-staged binary had been installed at all.
+  #
+  # The identity comes from the provenance sidecar the tray writes beside the
+  # binary, so the line CHANGES PER BUILD rather than merely proving the unit
+  # ran: two consecutive boots staging different binaries are distinguishable,
+  # which "installed ok" alone would not be. Missing or unreadable sidecar
+  # degrades to `provenance=unavailable` rather than failing the install —
+  # the binary is in place either way and refusing the boot over a missing
+  # log field would be the worse trade.
+  PROV="${STAGED}.provenance.json"
+  if [[ -r "$PROV" ]]; then
+    prov="$(tr -d ' \n\t' < "$PROV")"
+  else
+    prov="provenance=unavailable"
+  fi
+  echo "[tillandsias-fetch] staged_binary=installed src=$STAGED dest=$DEST $prov" >&2
   exit 0
 fi
 # 701-iu9b TRAP 1. Say WHY the staged binary was not used, and distinguish the
@@ -3237,6 +3258,30 @@ mod tests {
             script.contains("staged_binary=absent"),
             "a genuinely absent staged binary must be distinguishable from an unreachable one"
         );
+        // 1049-c6xa: THE SUCCESS BRANCH MUST SPEAK TOO. The three failure
+        // branches above were carefully worded, which is exactly why nobody
+        // noticed the success path said nothing — the file READS as
+        // well-instrumented. A boot log with no [tillandsias-fetch] line was
+        // equally consistent with "staged and succeeded" and "never ran".
+        assert!(
+            script.contains("staged_binary=installed"),
+            "the SUCCESS branch must say so; otherwise an absent log line cannot \
+             distinguish a successful stage from a unit that never ran (1049-c6xa)"
+        );
+        // ...and it must carry something that ROLLS PER BUILD, or it proves
+        // only that the unit ran, not WHICH binary landed. The tray writes a
+        // provenance sidecar beside the staged file for exactly this.
+        assert!(
+            script.contains("provenance.json"),
+            "the success line must report per-build provenance, so two boots \
+             staging different binaries are distinguishable (1049-c6xa)"
+        );
+        assert!(
+            script.contains("provenance=unavailable"),
+            "a missing sidecar must degrade the LOG, never the install — the \
+             binary is in place either way (1049-c6xa)"
+        );
+
         assert!(
             script.contains("findmnt"),
             "probe the mount with findmnt, which is verified present in this guest — under \
