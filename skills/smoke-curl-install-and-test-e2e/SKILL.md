@@ -182,7 +182,14 @@ download cache.
    ```bash
    . "$PWD/scripts/timing-log.sh" 2>/dev/null || true
    command -v timing_emit >/dev/null 2>&1 || { timing_now_ms() { echo 0; }; timing_emit() { return 0; }; }
+   command -v timing_begin >/dev/null 2>&1 || { timing_begin() { return 0; }; timing_commit() { return 0; }; timing_reap() { return 0; }; }
+   timing_reap
    ```
+   `timing_reap` reports on the PREVIOUS run, not this one (order 1026-ps4n).
+   If a earlier smoke's supervising shell was killed mid-step, its start stamp
+   is still on disk; reaping turns it into a `<step>-supervisor-lost` record so
+   the log says what happened instead of being silent. Run it first, before any
+   step below writes a stamp of its own.
    **Why this and not the gate.** Every other emitter in the tree is a
    build/test/litmus step in `build.sh`, `scripts/local-ci.sh` or
    `scripts/run-litmus-test.sh`, and all of those need cargo. A floor host
@@ -203,6 +210,14 @@ download cache.
    `smoke-init-pristine`, `smoke-forge-lane`, `smoke-health-check`. They land
    in `<checkout>/.cache/metrics/tillandsias-timing.jsonl` (the same log the
    gate steps write) and are read back by `scripts/cycle-metrics.sh`.
+
+   A sixth name appears only when something went wrong:
+   `smoke-forge-lane-supervisor-lost` (order 1026-ps4n). It means a previous
+   run's shell was killed while the lane was running, and its `duration_ms` is
+   a **lower bound** — the end was never observed. It is deliberately a
+   separate step name so it can never be averaged into `smoke-forge-lane`;
+   see §4a for what that state looks like on the host and why it is not a
+   product failure.
 
 ---
 
@@ -719,13 +734,62 @@ if ($diag.PSObject.Properties.Name -contains 'version') {
 ```bash
 [ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh expands it empty'; exit 2; }
 _T0="$(timing_now_ms)"
+timing_begin smoke-forge-lane smoke
 TILLANDSIAS_SMOKE_LOCK_LOG=target/smoke-e2e/00-smoke-lock.log \
   scripts/with-smoke-lock.sh --name release-smoke-e2e -- \
   env TILLANDSIAS_NO_TRAY=1 tillandsias . --opencode --prompt "Use the /meta-orchestration skill" 2>&1 \
   | tee target/smoke-e2e/04-opencode.log
 LANE_RC=${PIPESTATUS[0]}; printf 'opencode_exit=%s\n' "$LANE_RC" | tee target/smoke-e2e/04-opencode-exit.txt
-timing_emit smoke-forge-lane smoke "$_T0" "${LANE_RC:-1}" || true
+timing_commit smoke-forge-lane smoke "$_T0" "${LANE_RC:-1}"
 ```
+
+> **THIS IS THE STEP MOST LIKELY TO LOSE ITS SUPERVISOR, so it is the one that
+> stamps** (order 1026-ps4n). `timing_begin` writes the start to disk before
+> the lane runs; `timing_commit` emits the real record and clears the stamp. If
+> the shell running this block is killed, the stamp survives and the NEXT run's
+> `timing_reap` (§0) emits `smoke-forge-lane-supervisor-lost` instead of
+> nothing. The lost record is reported under a DIFFERENT step name on purpose:
+> the recurrence rung groups by step, so a lower-bound duration from a killed
+> run can never be averaged into real `smoke-forge-lane` timings.
+>
+> **RUN IT DETACHED ON A FLOOR HOST.** `setsid nohup … &` survived on pirria
+> where a plain backgrounded run did not, because the kill takes the process
+> group. Detaching does not make the host less short of memory — it stops the
+> supervisor being collateral.
+
+### 4a — What a killed supervisor looks like, and what it is not
+
+**Containers alive, wrapper gone.** Measured on pirria 2026-09-04: the agent
+harness reported "system is running low on memory" and killed the shell running
+§4; `journalctl` showed **no kernel oom-kill**; all six enclave containers
+including inference were **still up and healthy 56 minutes later**. Only the
+supervising bash died. The same lane had completed in 71m30s that morning on
+the same host, so the condition is **marginal, not deterministic** — it fails
+intermittently, which is worse than failing reliably, because the floor's
+largest measurement is the one least likely to be captured.
+
+Read that state correctly: **the lane did not fail.** A reader who sees the
+wrapper gone and concludes the release is broken is reading a host-resource
+event as a product defect. The discriminating checks, in order:
+
+```bash
+podman ps --format '{{.Names}} {{.Status}}'   # lane containers still Up? -> the lane lives
+journalctl --since '1 hour ago' | grep -iE 'oom-kill|Killed process'   # empty -> not the kernel
+```
+Containers up **and** no kernel oom-kill means the supervisor was killed by the
+agent harness, not the product and not the OOM killer. The run is unfinished,
+not red.
+
+**The memory floor this step needs.** The forge lane brings up six containers
+(vault, proxy, router, git, inference, forge). Measured on **pirria, 15 GiB
+total, 4 cores**: the lane itself completes, and it is the *supervisor* that
+gets sacrificed under pressure — so 15 GiB is **at** the boundary, not below
+it. No host with less has been measured, and no host above 16 GiB has reported
+this, so the honest statement is a boundary observation and not a threshold:
+**at 15 GiB the wrapper is collateral; the number at which it stops being is
+unmeasured.** Do not invent one. If a host with 8 or 32 GiB runs this step,
+record which side of the line it lands on and the floor gets a real threshold
+instead of a single point.
 
 > The guard and the `LANE_RC` capture arrived with the timing wrapper
 > (1013-qv7c). This block had neither: it piped to `tee` and recorded no status
