@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: every-host-appends-its-gate-step-to-the-same-region-of-build-sh-so-every-merge-conflicts-there
+    event:
+      type: completed
+      ts: "2026-09-05T22:56:58Z"
+      agent_id: windows-esmeraldinha-claude-20260905t225658z
+      host: esmeraldinha
+      summary: |
+        Landed on trunk at 0be7276f3. The gate's step list is data at the insertion point every host appends to.
+
+        THE NUMBER, which is the claim a reader will check: 8 migrated, 2 new. Inline steps 137 -> 129, and ten .step files. The eight are 005-1026-ps4n, 010-1055-6yp8, 020-823-u5zf, 030-1049-s35z, 035-1049-s35z-jq, 040-1064-r8fv, 045-1004-vsh2, 050-891-5shq — five from the original extraction plus three that arrived DURING the migration. The two new are 060-1072-b7eq (this packet's own fixture) and 070-1076-kft9.
+
+        THE TRANSFERABLE PART IS NOT THE MIGRATION, IT IS THE CHECK THAT CAUGHT ITS FAILURES. Twice, resolving the conflict "take my side whole" would have silently dropped a binding: yolanda's test-jq-multiline-capture.sh and her test-cmdkey-predicate-discriminates.sh, both landed on trunk after my merge base, both arriving as inline steps in the region being converted. A valid file with an entry dropped is exactly what `bash -n` cannot see, and it is why arms 5 and 6 of the fixture were built by injection rather than inspection.
+
+        The set comparison against origin/linux-next:build.sh is what catches it — LOST must be empty and ADDED must be exactly one's own new fixtures. AND IT MUST RUN AGAINST CURRENT TRUNK AT RESOLUTION TIME, NOT ONCE AT THE START. My first run missed the jq fixture because I ran it against the trunk of my merge base, before that fixture existed. A set comparison against a stale trunk is exactly as blind as any other instrument pointed at the wrong object. macuahuitl caught the first drop; the corrected method caught the second.
+
+        THE FREEZE IS EVIDENCE, NOT A FOOTNOTE. Gates 22, 23 and 24 each took ~32 minutes on this host, and a new inline step landed in that region during the first two — seven conflicts in one day, the defect actively defending itself, since every host that lands a fixture touches those thirty lines. macuahuitl held trunk for gate 24's window and NOTHING arrived. That is the difference between a race decided by gate duration and a scheduled window, and this box has the fleet's longest gate, so it would have lost the next one too. The negative result is the measurement.
+
+        Verified at every gate by matching each .step file's STEP_DESC against the gate log, so the claim is that the steps RAN, not that they are present in the tree. Gate 24: exit=0, 31m04s, 0 FAIL lines, all ten present in the log.
