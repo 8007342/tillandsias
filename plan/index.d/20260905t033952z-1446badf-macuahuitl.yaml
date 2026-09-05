@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: floor-tier-release-smoke-and-metrics
+    event:
+      type: progress
+      ts: "2026-09-05T03:39:52Z"
+      agent_id: linux-macuahuitl-claude-20260905t033952z
+      host: macuahuitl
+      summary: |
+        VALIDATION LANE 2, macOS (macbookair, 03:2xZ), GREEN on the published tag, finding-shaped: host tlatoanis-macbook-air (macOS 26, Apple M5, arm64); tag v56.9.5.1, run 33938905320; base https://github.com/8007342/tillandsias/releases/download/v56.9.5.1; install_exit=0; sha256 ok d33cf70eef31a0957b6c40c3463cd5d032372f5d970e23684a8e41d80512ba29; branch /Applications asserted, NOT the ~/Applications fallback ("not writable; using" absent from the log); version "tillandsias-tray 56.9.5.1 (git b528680d2, built 2026-09-05T03:10:27Z)", version_exit=0, exact-tag assertion PASS; the installer's own check "installed: version=56.9.5.1 pin=55c60a3b80d3"; replaced tillandsias-tray 0.4.260830.5 (backed up to Tillandsias.app.bak by the installer). CORRECTION TO THE DISPATCH, recorded so the daily's lane list is right: there are two skills with a §1, and build-install-and-smoke-test-e2e's §1 is the LOCAL-BUILD lane (runs build-macos-tray.sh, installs to ~/Applications, asserts the installed binary's embedded SHA equals HEAD), which tests the working tree and would have passed while saying nothing about the tag; the release lane is smoke-curl-install-and-test-e2e's macOS block with TILLANDSIAS_RELEASE_BASE pinned to the tag, which is what ran, verbatim; the lane list names the skill, never a section number. NOT RUN, deliberately: the substrate destruction (both skills go on to delete ~/Library/Application Support/tillandsias, the 250 GB image root, on the operator's laptop); the daily's macOS lane is install plus the two assertions and the destructive step is the operator's to authorise. Record note: this lane's runbook says it "had never once been run against a published release" before 727-kmks's fixes were ported; this is the first known run on a real tag with the PIPESTATUS captures live, and they mattered, since install ran through `| tee` and a failed curl-install would otherwise have exited 0.

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: diagnose-reports-healthy-during-a-total-outage
+    event:
+      type: decision
+      ts: "2026-09-05T03:39:52Z"
+      agent_id: linux-macuahuitl-claude-20260905t033952z
+      host: macuahuitl
+      summary: |
+        SLICE (b) CADENCE MEASUREMENT (macneo, tray launched 03:04:00Z under a verified minimal PATH, stdout timestamped per line): TEN LINES in 25m34s and exactly ONE vm-status push (03:04:09Z phase=Ready podman_ready=true), then silence for 1525 s and counting; the silence PROVEN to be health before reporting (VZ XPC helper pid 52095 alive, ELAPSED 25:44, 2.6% CPU, RSS 802 MB, found with an UNFILTERED ps | grep -i Virtualization, because the earlier false negative came from a filter that cannot match "Virtualization"; tray 52086 alive). SC-07's own line names why: "push subscription established (vm-status/login/cloud/local polls demoted to fallback)", the polls that would produce periodic evidence are deliberately off while the subscription is healthy; the silence is by design and correct, the bug is reading its absence as information. WHAT IT SETTLES: a push-driven timestamp on a healthy guest would have been 25 minutes stale and unbounded; any threshold short enough to detect death reports UNKNOWN continuously on a working system (the original defect with extra steps), any threshold long enough to avoid that cannot tell dead from quiet; there is no threshold that works over a push-driven write, so THE HEARTBEAT ON A TIMER IS THE MECHANISM, not an optimisation. RULING (coordinator): P = 30 s (worst-case staleness 30 s, two ~100-byte writes a minute, negligible on the fleet's most constrained host, which sets the floor); T = 3P = 90 s (three consecutive missed writes, one miss under load or suspend must not flip a healthy system, the crash-loop detector's threshold-3 shape); age > T reads UNKNOWN naming the age, never a phase; both numbers in the spec. FIXTURE both directions (aged 10 s -> phase; aged 120 s -> UNKNOWN naming the age) plus the REQUIRED live arm: boot, wait past 3P with the guest healthy and the push channel silent, assert a PHASE, the arm a push-driven design fails, which makes the heartbeat load-bearing. THE TIMESTAMP LIVES INSIDE THE FILE and mtime is never the truth (a copy, a restore or a touch must not manufacture freshness); to avoid a deliberate inconsistency with slice (a)'s Guest health line, which derives its age from mtime today, ONE reader serves both files: it prefers a content timestamp when present and falls back to mtime with the word "mtime" in the printed source, and the crashloop.state writer gains a content timestamp, so both verdicts read the same way. Host state after the run: tray stopped cleanly, VZ helper count 0, substrate provisioned; credential alive at the end of the run, no re-auth.

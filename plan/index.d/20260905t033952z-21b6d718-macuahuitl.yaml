@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: test-stress-no-resource-leaks-asserts-a-ratio-between-ten-sample-means-of-sub-millisecond-cycles-with-no-absolute-floor-so-it-measures-scheduler-jitter-on-the-floor
+    event:
+      type: progress
+      ts: "2026-09-05T03:39:52Z"
+      agent_id: linux-macuahuitl-claude-20260905t033952z
+      host: macuahuitl
+      summary: |
+        FIXED (macbookair, gate running at report time): esme's diagnosis confirmed; THE FIRST FIX FAILED ITS OWN SABOTAGE ARM, a branch (ratio above a floor, 2 ms absolute slack below) let the growing-work mutation pass, because a cushion loose enough to swallow every jitter also swallows the leak. Replaced with one expression, `last_10 <= first_10 * 2 + 250us`, which keeps the original meaning where cycles are real work and absorbs jitter where they are not, without asserting different things on different hosts. Sabotage now trips it ("last-10 mean 384µs exceeds 2x first-10 (60.974µs) plus 250µs jitter cushion = 371.948µs"); restore green 6/6; the failed first draft is recorded in the code comment beside the expression so the next widener knows why the cushion is not wider. Land with the tool; esmeraldinha verifies on the floor, where the green gate is also the floor's first honest full-gate number.
