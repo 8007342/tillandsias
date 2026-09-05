@@ -1,0 +1,81 @@
+packets:
+  - packet_id: guest-unit-output-configured-for-the-console-does-not-reach-the-hosts-console-log
+    order: 1059-yekz
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: macos
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags:
+      - macos
+      - fail-loud
+      - diagnostics
+    estimated_hours: 3
+    verifiable_closure: |
+      A boot whose guest emits a known marker to a unit with
+      StandardOutput=journal+console leaves that marker in the host's
+      console.log; removing the console capture makes the assertion fail.
+    title: |
+      Guest systemd units declare `StandardOutput=journal+console` and their output does not appear in the host's `console.log` — the file an operator actually reads.
+    deliverable: |
+      What a guest unit sends to the console is readable on the host. What
+      must not persist is a console file that silently carries a subset,
+      while units declare otherwise and readers reason from its absences.
+    context: |
+      MEASURED 2026-09-05 on tlatoanis-macbook-air, on a single boot, both
+      halves at once.
+
+      IN THE GUEST JOURNAL (boot of 06:08:00):
+        Sep 05 06:08:00 tillandsias-vm fetch-headless.sh[1095]:
+        [tillandsias-fetch] staged_binary=installed
+        src=/var/lib/tillandsias/guest-bin/tillandsias-headless
+        dest=/usr/local/bin/tillandsias-headless {"sha256":"1c1ffd372a6d…"}
+
+      ON THE HOST, same boot:
+        grep -ac "staged_binary" ~/Library/Application\\ Support/tillandsias/console.log
+        -> 0        (against 417 lines of console.log)
+
+      The emitting unit, tillandsias-headless-fetch.service, declares BOTH
+        StandardOutput=journal+console
+        StandardError=journal+console
+      so the intent is explicit and unmet.
+
+      NOT SPECIFIC TO THIS UNIT: console.log also carries zero `cloud-init`
+      lines, while cloud-init demonstrably runs and logs. So the gap is in
+      what the host captures, not in one service's configuration.
+
+      WHY IT MATTERS MORE THAN A MISSING LOG LINE. console.log is the file a
+      host-side operator and every host-side tool can read without entering
+      the guest; the guest journal requires a working control wire and a
+      booted VM, which is exactly what is unavailable when something is
+      wrong. 1049-c6xa's whole context reasoned from "grep -c
+      tillandsias-fetch console.log returning 0" — an absence that turned out
+      to have TWO causes at once (a stale script, fixed by 1055-e8ie, and
+      this), and only the first was found because only the first was looked
+      for.
+
+      A CONSOLE THAT CARRIES A SUBSET IS WORSE THAN ONE THAT CARRIES NOTHING:
+      it reads as complete. 417 lines of plausible boot output invite the
+      reader to treat an absence as evidence.
+    exit_criteria:
+      - 'a marker emitted by a guest unit with journal+console appears in the host console.log for that boot'
+      - 'if the host cannot capture all console output, console.log SAYS what it is a subset of, so an absence is never read as evidence'
+      - 'the cloud-init case is covered too, or explicitly named as out of scope with the reason'
+    notes: |
+      Found while closing 1049-c6xa's field half. That packet's fix is proven
+      working IN THE GUEST JOURNAL; this is the separate reason it is still
+      invisible host-side, and the two are deliberately not merged — one
+      packet should not own two unrelated causes of one symptom.
+
+      Related: 1055-e8ie (the stale script, the other cause of the same
+      absence), 1049-c6xa (the line itself).
+    events:
+      - ts: 2026-09-05T06:10:00Z
+        type: filed
+        agent: macos-tlatoanis-macbook-air-claude-20260905t004510z
+        host: tlatoanis-macbook-air
+        note: |
+          Filed rather than folded into 1049-c6xa, because that packet's
+          symptom had two independent causes and closing it on one would
+          leave the other owning nothing.
