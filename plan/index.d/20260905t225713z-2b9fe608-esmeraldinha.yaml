@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: every-host-appends-its-gate-step-to-the-same-region-of-build-sh-so-every-merge-conflicts-there
+    field: status
+    value: completed
+    ts: "2026-09-05T22:57:13Z"
+    host: esmeraldinha
+
+events:
+  - packet_id: every-host-appends-its-gate-step-to-the-same-region-of-build-sh-so-every-merge-conflicts-there
+    event:
+      type: completed
+      ts: "2026-09-05T22:57:13Z"
+      host: esmeraldinha
+      summary: |-
+        status 'completed' with evidence_refs: 0be7276f3: gate24 exit=0 31m04s 0 FAIL; scripts/test-gate-step-append-no-conflict.sh 7/7; all ten gate-steps.d entries verified present in target/gate24.log by STEP_DESC; inline steps 137->129 (8 migrated, 2 new)
+  - packet_id: every-host-appends-its-gate-step-to-the-same-region-of-build-sh-so-every-merge-conflicts-there
+    event:
+      type: note
+      ts: "2026-09-05T22:57:13Z"
+      host: esmeraldinha
+      summary: |-
+        landed on trunk at 0be7276f3; the region that conflicted seven times in one day is now one file per step
