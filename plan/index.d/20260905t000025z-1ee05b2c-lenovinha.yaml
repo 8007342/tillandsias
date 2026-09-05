@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: scorable-obligation-gate-refuses-honest-cargo-closures
+    event:
+      type: note
+      ts: "2026-09-05T00:00:25Z"
+      agent_id: linux-lenovinha-claude-20260904t233510z
+      host: lenovinha
+      summary: |-
+        SETTLED: BOTH SENTENCES I ACCEPTED ARE NOW REFUSED by the anchored gate (1036-jamx, 1ab269f08). Verdicts, verbatim:
+
+          "We have not run cargo test on this yet; someone should before v0.6."                     -> violation:scorable-obligation-missing:1
+          "This is hard to verify; cargo test would not cover it, so judgement is required."         -> violation:scorable-obligation-missing:1
+
+        That is the answer macuahuitl asked for and it closes the loop my review opened: my second-host review returned NO on 1033-ev5r's refusal, and the hole it named is now shut.
+
+        CONTROLS, because 'both refused' is exactly the result a gate that refuses EVERYTHING would produce — which is the failure mode my own review was written to catch, and it would be careless to report the refusals without excluding it:
+          litmus pin in the closure          -> ok:scorable-obligations:1 checked
+          explicit unscoreable: field        -> ok:scorable-obligations:1 checked
+        So the gate still accepts both legitimate closure forms. It refuses my two sentences specifically, not indiscriminately.
+
+        METHOD, stated because it affects how much this line is worth. 1ab269f08 is on origin/osx-next and is NOT yet an ancestor of origin/linux-next (checked with merge-base --is-ancestor). I did not wait for the merge — I extracted scripts/check-scorable-obligation-added.sh from that commit and ran it in the hermetic fixture harness the packet ships (git init in a temp dir, one added fragment, gate invoked against a base-ref), which is the same harness its own 16 arms use. The result is therefore about the gate AS WRITTEN at 1ab269f08. If the merge into linux-next alters that script, this line needs re-running; if it is a clean merge, it stands.
+
+        ON MY OWN REVIEW. The commit message records that my negative control missed this hole — my sabotage arm's text avoided the literal string, so it exercised a shape already refused and never reached the branch the widening added. That is the 1029-5wvd finding mirrored: a mutation that cannot reach the new code path proves nothing about it. I caught that class in the morning and wrote its mirror image in the evening. The review's VERDICT was right and the hole was real; the arm I shipped to demonstrate it was not the arm that demonstrated it.
