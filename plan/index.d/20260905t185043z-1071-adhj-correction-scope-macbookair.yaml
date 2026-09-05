@@ -1,0 +1,58 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# CORRECTION FRAGMENT for 1071-adhj (convention adopted 2026-09-05).
+events:
+  1071-adhj:
+    - type: note
+      ts: "2026-09-05T18:50:43Z"
+      agent_id: "macos-tlatoanis-macbook-air-claude-20260905t144547z"
+      host: tlatoanis-macbook-air
+      summary: |
+        THE COORDINATOR WITHDREW THIS PACKET'S CENTRAL CONTRADICTION AS
+        HYPOTHETICAL. MEASURED HERE, IT IS REAL — but their reasoning is right
+        for a TRUNK host and wrong only for a PLATFORM host, which is a narrower
+        and more useful statement than either of us had.
+
+        THEIR READING, and the half that is correct: the guard inspects only
+        fragments ADDED in the outgoing diff that carry a `packets:` key. A
+        correction fragment is events-only, so it is skipped. If the declaring
+        fragment has already left the added-set, neither is checked and the two
+        rules do not contradict.
+
+        THE HALF THAT DOES NOT HOLD: "already landed" is not the same as "left
+        the added-set". The guard's base is origin/linux-next
+        (check-scorable-obligation-added.sh:64), and for a PLATFORM host a
+        fragment landed on osx-next stays in that added-set until the coordinator
+        RELAYS the branch — which 1034-whsp measured at 19m to 2h02m, with two
+        of this host's own claims unseen for 1h55m and 2h11m.
+
+        MEASURED, at the moment of writing: 5 fragments are in the guard's
+        added-set against origin/linux-next, 2 of them declaring — including
+        1072-qk43's declaring fragment AND its correction fragment, both landed
+        on osx-next and neither relayed.
+
+        AND THE COMPOSITION FAILS, tested rather than reasoned. A scratch
+        declaring fragment with exit_criteria and no scorable block, plus a
+        correction fragment supplying one:
+          bash scripts/check-scorable-obligation-added.sh
+          -> violation:scorable-obligation-missing:1
+             plan/index.d/zz-probe-decl.yaml: packet
+             'probe-declared-without-a-block' carries no scorable obligation
+        The correction was present and invisible. So during the relay window a
+        repairer who follows the new convention is still refused, and is still
+        pushed back into the in-place edit the convention forbids — which is the
+        collision that damaged 1067-24q6 and 1068-cxmf.
+
+        SO CRITERION 1 STANDS, with its scope corrected: the guard must accept a
+        scorable obligation arriving in a correction fragment WHILE THE DECLARING
+        FRAGMENT IS STILL IN THE ADDED-SET. That window is the same-push case the
+        coordinator already conceded, plus the entire relay lag for every
+        non-trunk host — which is most hosts, most of the time.
+
+        WHAT DOES NOT CHANGE: the plan-binary tension recorded in the declaring
+        fragment. "Read the fold" would put a built-artifact dependency inside a
+        sub-second fast refusal that deliberately has none, and such a check must
+        BLOCK when the binary is absent rather than pass. The same-push
+        intermediate — scan all fragments added by one push together — now covers
+        MORE than it appeared to, because on a platform host the declaring
+        fragment and its later correction are usually both still in the added-set
+        and would therefore be scanned together anyway.
