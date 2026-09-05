@@ -1,0 +1,33 @@
+# Gate step 1049-s35z (jq CR strip) — data, not code (order 1072-b7eq).
+#
+# THIS ENTRY IS THE ONE THE MIGRATION NEARLY DROPPED, and it is worth saying how.
+# 1049-s35z contributes TWO steps to this region, not one. My extraction pulled
+# the five steps present at my merge base and lifted them into .step files;
+# yolanda's jq fixture landed on trunk from work/1049-s35z AFTERWARDS, as a
+# sixth inline block. Resolving the resulting conflict by "take my side whole"
+# would have removed its only binding — a 142-line green fixture silently
+# unbound, inside a diff that reads as a clean migration. macuahuitl caught it
+# by comparing the two 1049-s35z steps in trunk's region against my seven .step
+# files; my own SET comparison against origin/linux-next:build.sh catches it too,
+# and did not the first time only because I ran it before this fixture existed.
+#
+# That is exactly the failure arms 5 and 6 of test-gate-step-append-no-conflict.sh
+# exist for — a syntactically valid result with an entry dropped, which `bash -n`
+# cannot see — arriving in the change that introduces the data form. The lesson
+# is that the SET comparison must be re-run against CURRENT trunk at resolution
+# time, not once at the start.
+#
+# STEP_SCRIPT is a LITERAL path on purpose: a binding assembled from a
+# variable is invisible to every name-based scan, including the
+# bound-or-retired guard (1063-nraf). Keep it a plain string.
+#
+# Yolanda's rationale, carried over verbatim: jq.exe writes CRLF, and command
+# substitution strips only the FINAL line ending — so a capture that can yield
+# MORE THAN ONE line arrives with a carriage return on every line but the last.
+# That is why the litmus runner reported PASS over an unrun corpus while 62
+# sibling call sites reading a single scalar were fine. MSYS grep hides the CR;
+# only od -c shows it, so this must be a check rather than a habit.
+STEP_DESC="Checking multi-line jq captures strip carriage returns (1049-s35z)"
+STEP_SCRIPT="scripts/test-jq-multiline-capture.sh"
+STEP_ERROR="a multi-line jq capture does not strip CR, or the checker enforcing it cannot fail (1049-s35z) — see the verdict line above"
+STEP_OK="Multi-line jq capture check passed"
