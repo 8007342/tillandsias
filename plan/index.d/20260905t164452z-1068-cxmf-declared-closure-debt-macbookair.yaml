@@ -1,0 +1,84 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: four-declared-closures-name-litmus-tests-that-do-not-exist-and-the-gate-line-has-no-owner
+    order: 1068-cxmf
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [plan, litmus, closure, fail-loud, gate]
+    estimated_hours: 3
+    owned_files:
+      - plan/index.yaml
+      - openspec/litmus-tests
+    title: |
+      violation:declared-closure-unresolvable:4 has printed on every gate with no owner: four packets declare litmus names no test defines, and they are four DIFFERENT defects, not one backlog
+    context: |
+      FILED at the coordinator's instruction 2026-09-05, after both of us
+      independently observed that this line is unowned. It prints on EVERY
+      `./build.sh --check`, flagged "not a gate", and has done so all night.
+
+      A GATE LINE THAT PRINTS FOREVER WITH NO OWNER IS THE THING EVERYONE LEARNS
+      TO READ PAST. That is the cost, and it is larger than the four packets:
+      every reader who trains themselves to skip this line also skips the NEXT
+      count when it goes from 4 to 5. The number is the only signal, and nobody
+      is watching a number they have learned is furniture.
+
+      THE FOUR ARE NOT ONE CLASS, which is why "resolve the debt" is the wrong
+      framing and this packet enumerates them. Enumerated 2026-09-05, each name
+      confirmed absent from openspec/litmus-tests/ by grep:
+
+      1. 795-jeym  [status: blocked]  declares
+         litmus:guest-vsock-bound-before-provisioning
+         NEAREST EXISTING NAME: litmus:guest-vsock-loopback-ordered-before-readiness-probe
+         Almost certainly a RENAME DRIFT — the existing test appears to cover the
+         same ordering claim under a later name. If so the fix is to repoint the
+         declaration, and NOT to write a test. VERIFY THE SPAN BEFORE REPOINTING:
+         a red pin can be a stale name or a load-bearing dependency, and the two
+         look identical from the declaration side.
+
+      2. 795-tb4a  [status: ready]  declares
+         litmus:windows-connect-is-bounded-and-exits
+         No near-miss. The windows litmus names present are tray/menu/routing
+         shapes; none covers a bounded connect. This looks like a closure
+         declared for a test nobody has written yet, on an OPEN packet — so the
+         honest disposition is to write it or to drop the declaration and let the
+         packet's closure rest on something that exists.
+
+      3. 795-vq6b  [status: ready]  declares
+         litmus:exec-transcript-capped-in-every-driver
+         No near-miss covering transcript capping. NOTE THE PACKET'S OWN TITLE:
+         "third-exec-driver-transcript-uncapped-contradicting-a-done-closure" —
+         it exists BECAUSE a closure was declared that reality contradicted. A
+         packet about an unearned closure carrying an unresolvable closure of its
+         own is the same defect one turn deeper, and it should be read that way
+         rather than as bookkeeping.
+
+      4. 795-bmbq  [status: OBSOLETED]  declares
+         litmus:opencode-forge-lane-interactive-tty
+         The packet is obsoleted. A dead packet is still contributing to a live
+         gate count, which means part of the standing "debt" is not debt at all —
+         it is a tombstone that was never swept. Whatever the other three cost,
+         this one should simply stop being counted.
+
+      SO THE REAL DEFECT MAY BE THE COUNTER, NOT ONLY THE FOUR. An obsoleted
+      packet contributing to the count means the check does not filter by
+      packet status. Anyone taking this should decide that FIRST: if obsoleted
+      and blocked packets should not count, the line may drop from 4 to 2 with
+      no closure work at all, and the two that remain are real and actionable.
+    exit_criteria:
+      - "each of the four is dispositioned INDIVIDUALLY and the disposition is recorded on its own packet: repointed to an existing litmus (with the span read, not just the name matched), test written, declaration dropped, or excluded because the packet is obsoleted/blocked"
+      - "the check states which packet statuses it counts, so a reader can tell 'four live closures are unearned' from 'four declarations exist, two on packets nobody will ever work'"
+      - "the gate line reaches 0, or reaches a number whose remainder is OWNED by a named packet — a standing non-zero count with no owner is the defect this packet is about and must not survive its own closure"
+      - "a fixture proves the counter moves in BOTH directions: adding an unresolvable declaration raises it, and resolving one lowers it (a count that only ever grows is not a measurement)"
+    events:
+      - type: filed
+        ts: "2026-09-05T16:44:52Z"
+        agent_id: "macos-tlatoanis-macbook-air-claude-20260905t144547z"
+        host: tlatoanis-macbook-air
+        summary: |
+          Filed in my name at the coordinator's instruction, both of us having
+          independently noticed the line is unowned. The four were enumerated and
+          each name grep-confirmed absent from openspec/litmus-tests/ before
+          filing, and the near-miss for 795-jeym was found the same way.

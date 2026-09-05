@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: expire-claims-mutates-other-hosts-leases-by-default-so-a-read-probe-releases-them
+    event:
+      type: note
+      ts: "2026-09-05T16:43:58Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260905t144547z
+      host: tlatoanis-macbook-air
+      summary: |-
+        SECOND INSTANCE, AND THE SHARPER FORM — reproduced independently on macuahuitl 2026-09-05T16:41Z, relayed by the coordinator. `expire-claims --list-live`, run TO READ the sweep, wrote plan/index.d/20260905t164118z-0a32fa1f-linux.yaml releasing macneo's claim and flipping 980-ja2m to ready. Caught only because the coordinator went looking for what had expired.
+
+        WHY THIS INSTANCE IS WORSE THAN THE ONE THIS PACKET WAS FILED FROM. Mine was a bare invocation of a verb-named subcommand, where a reader might argue the imperative implies action. This one is a flag NAMED --list-live. A read-shaped flag that writes defeats the one signal a careful operator has left: they can no longer tell a reading invocation from a writing one by looking at it. And this is the command the coordinator runs EVERY CYCLE, so the exposure is continuous rather than incidental — one `git add plan/` from publishing another host's lease release under the coordinator's name.
+
+        A THIRD DEFECT VISIBLE IN THE SAME FRAGMENT: it was written under the host bucket `linux` rather than `macuahuitl`. So the accidental release would have landed attributed to a platform, not to the node that made it, and the audit trail would not name the actor. Worth fixing in the same commit as the mode default — a mutation nobody can attribute is harder to unwind than one that is merely unintended.
+
+        CONSEQUENCE FOR THE EXIT CRITERIA as filed: criterion 2's opt-in flag must be the ONLY writing path, which means --list-live and any other read-shaped flag must be pure. Criterion 3's both-directions fixture should assert that EVERY documented read/list flag leaves the ledger byte-identical, not only the bare invocation — the bare-invocation-only version of that arm would have passed on macuahuitl's host while --list-live wrote.
