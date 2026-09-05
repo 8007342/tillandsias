@@ -12,10 +12,20 @@ packets:
       - fail-loud
       - diagnostics
     estimated_hours: 3
-    verifiable_closure: |
-      A boot whose guest emits a known marker to a unit with
-      StandardOutput=journal+console leaves that marker in the host's
-      console.log; removing the console capture makes the assertion fail.
+    unscoreable: |
+      The pin is a LIVE BOOT and no litmus exists for it yet, so naming one
+      would be the forward reference 885-92iu refuses. Intended shape, for
+      whoever claims this: a guest unit emits a known marker with
+      journal+console, the host's console.log is asserted to contain it, and
+      the arm that matters is REMOVING the console capture and requiring red —
+      a test that only asserts presence passes on a console that carries
+      everything by accident.
+
+      Corrected 2026-09-05 after this fragment refused the gate: my closure's
+      first line was prose ("A boot whose guest emits a known marker…"), and
+      the guard anchors on the FIRST line naming something mechanically
+      checkable. I wrote that anchoring myself in 1036-jamx and then filed a
+      row it refuses.
     title: |
       Guest systemd units declare `StandardOutput=journal+console` and their output does not appear in the host's `console.log` — the file an operator actually reads.
     deliverable: |
