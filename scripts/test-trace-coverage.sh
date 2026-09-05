@@ -71,93 +71,10 @@ failed=0
 _pass() { echo "✓ $*"; passed=$((passed + 1)); }
 _fail() { echo "✗ $*"; failed=$((failed + 1)); }
 
-echo "=== Trace Coverage Threshold Tests ==="
-echo ""
-
-# Test 1: Invalid threshold (negative)
-echo "Test 1: Reject negative threshold"
-if bash "$SCRIPT_DIR/validate-traces.sh" --coverage-threshold -1 >/dev/null 2>&1; then
-    _fail "Should reject negative threshold"
-else
-    _pass "Rejects negative threshold"
-fi
-
-# Test 2: Invalid threshold (>100)
-echo "Test 2: Reject threshold > 100"
-if bash "$SCRIPT_DIR/validate-traces.sh" --coverage-threshold 101 >/dev/null 2>&1; then
-    _fail "Should reject threshold > 100"
-else
-    _pass "Rejects threshold > 100"
-fi
-
-# Test 3: Invalid threshold (non-numeric)
-echo "Test 3: Reject non-numeric threshold"
-if bash "$SCRIPT_DIR/validate-traces.sh" --coverage-threshold abc >/dev/null 2>&1; then
-    _fail "Should reject non-numeric threshold"
-else
-    _pass "Rejects non-numeric threshold"
-fi
-
-# Test 4: Valid threshold 0
-echo "Test 4: Accept threshold 0"
-if bash "$SCRIPT_DIR/validate-traces.sh" --coverage-threshold 0 >/dev/null 2>&1; then
-    _pass "Accepts threshold 0"
-else
-    _fail "Should accept threshold 0"
-fi
-
-# Test 5: JSON output format
-echo "Test 5: JSON output format"
-# 1063-nraf: `|| true` on every capture. validate-traces.sh exits 1 whenever
-# coverage is below the threshold, and an unguarded assignment under this
-# file's `set -euo pipefail` ABORTS the fixture mid-run — the operator sees a
-# truncated log and no failing-test name, instead of a reported failure.
-output=$(bash "$SCRIPT_DIR/validate-traces.sh" --coverage-threshold 80 2>/dev/null || true)
-if [ "$JQ_AVAILABLE" -eq 0 ]; then
-    _skip_jq "coverage_percentage arm"
-elif printf '%s' "$output" | "${JQ_CMD[@]}" -e '.coverage_percentage' >/dev/null 2>&1; then
-    _pass "JSON contains all required fields"
-else
-    _fail "JSON missing required fields"
-fi
-
-# Test 6: Status PASS when threshold met
-echo "Test 6: Status PASS when coverage meets threshold"
-status=""
-[ "$JQ_AVAILABLE" -eq 1 ] && status=$(printf '%s' "$output" | "${JQ_CMD[@]}" -r '.status' 2>/dev/null || true)
-if [ "$JQ_AVAILABLE" -eq 0 ]; then
-    _skip_jq "status arm"
-elif [[ "$status" == "PASS" ]]; then
-    _pass "Correctly reports PASS status"
-else
-    _fail "Should report PASS when threshold met (got: $status)"
-fi
-
-# Test 7: Default threshold 90
-echo "Test 7: Default threshold is 90"
-output=$(bash "$SCRIPT_DIR/validate-traces.sh" --coverage-threshold 2>/dev/null || true)
-threshold=""
-[ "$JQ_AVAILABLE" -eq 1 ] && threshold=$(printf '%s' "$output" | "${JQ_CMD[@]}" -r '.threshold' 2>/dev/null || true)
-if [ "$JQ_AVAILABLE" -eq 0 ]; then
-    _skip_jq "default-threshold arm"
-elif [[ "$threshold" == "90" ]]; then
-    _pass "Default threshold is 90"
-else
-    _fail "Default threshold should be 90 (got: $threshold)"
-fi
-
-# Test 8: Exit code 0 when passing
-echo "Test 8: Exit code 0 when passing"
-if bash "$SCRIPT_DIR/validate-traces.sh" --coverage-threshold 0 >/dev/null 2>&1; then
-    _pass "Exit code 0 when coverage meets threshold"
-else
-    _fail "Should exit 0 when coverage meets threshold"
-fi
-
-# Tests 9 and 10: the FAILURE path, driven by a SYNTHETIC TREE.
+# THE SYNTHETIC ROOT, AND WHY ALMOST EVERY ARM NOW USES IT.
 #
-# ORDER 1069-c9w6 BROKE THESE ARMS AND EXPOSED WHY THEY WERE WRONG. They used
-# to run `validate-traces.sh --coverage-threshold 100` against the LIVE
+# ORDER 1069-c9w6 BROKE TESTS 9 AND 10 AND EXPOSED WHY THEY WERE WRONG. They
+# used to run `validate-traces.sh --coverage-threshold 100` against the LIVE
 # checkout and require it to FAIL. That only ever passed because coverage was
 # reported as 98%, and it was 98% because `grep -rl ... | grep -q .` under
 # pipefail took SIGPIPE and recorded the three BEST-traced specs as uncovered.
@@ -166,11 +83,31 @@ fi
 # 100%, no threshold in the valid range 0-100 can fail, and both arms went red.
 #
 # The deeper defect is that they asserted a property of the CHECKOUT rather
-# than of the VALIDATOR. A synthetic root fixes that permanently: one spec
-# traced, one spec not, so coverage is deterministically 50% regardless of what
-# the real tree does. `--coverage-threshold 101` is NOT the fix — it is
+# than of the VALIDATOR. `--coverage-threshold 101` is NOT the fix — it is
 # rejected as an invalid threshold before any coverage is computed, so it
 # exercises argument validation and says nothing about the failure path.
+#
+# 1077-vzwq: I FIXED TWO ARMS AND LEFT THE PRINCIPLE HALF-APPLIED. Tests 5, 6
+# and 7 still drove the live checkout, and Test 6 required
+# `--coverage-threshold 80` to report PASS — an undeclared 80% coverage FLOOR
+# on the real tree, wired into --check on all three hosts under an arm named
+# "Status PASS when coverage meets threshold". Coverage is 100% today, so it
+# had 20 points of headroom and would have gone red only later; and a red would
+# have been TRUE but diagnosed wrongly, because an operator reading "Test 6
+# failed" looks for a broken validator, not a coverage regression. The trigger
+# is not only losing annotations — adding ~36 spec directories ahead of their
+# code does it too, which is a normal OpenSpec-driven shape.
+#
+# So the synthetic root is built ONCE and every arm asserting a property of the
+# VALIDATOR runs against it: one spec traced, one not, coverage deterministically
+# 50% regardless of the real tree. Exactly one arm (Test 8) still touches the
+# real checkout, deliberately — a validator that crashes on the real repo is a
+# real defect and nothing else would catch it — and it uses threshold 0, which
+# no coverage figure can fail, so it cannot smuggle a floor back in.
+#
+# It is also most of the fixture's cost. Each live coverage run spawns ~177
+# basename calls plus 177 recursive greps over scripts/crates/images/methodology,
+# and there were five of them.
 _synthetic_root() {
     local t; t="$(mktemp -d)"
     mkdir -p "$t/scripts" "$t/openspec/specs/covered-spec" "$t/openspec/specs/uncovered-spec"
@@ -191,17 +128,125 @@ _synthetic_root() {
     printf '%s' "$t"
 }
 
+echo "=== Trace Coverage Threshold Tests ==="
+echo ""
+
+_SYNTH="$(_synthetic_root)"
+# 1077-vzwq: the synthetic root used to be removed by a straight-line `rm -rf`
+# at the end, so any interrupt between creation and that line leaked a mktemp
+# dir. Sibling fixtures use a trap; so does this one now.
+trap 'rm -rf "$_SYNTH"' EXIT
+_V="$_SYNTH/scripts/validate-traces.sh"
+
+# 1077-vzwq: ASSERT THE DIAGNOSTIC, NOT MERELY A NON-ZERO EXIT. Tests 2 and 3
+# were mutation-insensitive: deleting validate-traces.sh's entire threshold
+# validation block killed only Test 1. Test 2 (`101`) still "passed" because
+# with validation gone `[[ 50 -ge 101 ]]` is false and the validator exits 1
+# anyway — it could not distinguish "rejected an out-of-range threshold" from
+# "coverage below threshold", and never could, since coverage cannot exceed 101.
+# Test 3 (`abc`) still "passed" because an unvalidated non-numeric threshold
+# dies on set -u — it detected a crash, not a rejection. Matching the message
+# is what separates the three.
+_expect_invalid_threshold() {
+    local _rc=0 _out=""
+    _out="$(bash "$_V" --coverage-threshold "$1" 2>&1)" || _rc=$?
+    if [ "$_rc" -eq 0 ]; then
+        _fail "$2: should have been rejected"
+    elif grep -q "Invalid threshold: $1" <<<"$_out"; then
+        _pass "$2, and names it as an invalid threshold"
+    else
+        _fail "$2: rejected, but not AS an invalid threshold (first line: $(head -1 <<<"$_out"))"
+    fi
+}
+
+echo "Test 1: Reject negative threshold"
+_expect_invalid_threshold -1 "Rejects negative threshold"
+
+echo "Test 2: Reject threshold > 100"
+_expect_invalid_threshold 101 "Rejects threshold > 100"
+
+echo "Test 3: Reject non-numeric threshold"
+_expect_invalid_threshold abc "Rejects non-numeric threshold"
+
+# Test 4: Valid threshold 0
+echo "Test 4: Accept threshold 0"
+if bash "$_V" --coverage-threshold 0 >/dev/null 2>&1; then
+    _pass "Accepts threshold 0"
+else
+    _fail "Should accept threshold 0"
+fi
+
+# Test 5: JSON output format
+echo "Test 5: JSON output format"
+# 1063-nraf: `|| true` on every capture. validate-traces.sh exits 1 whenever
+# coverage is below the threshold, and an unguarded assignment under this
+# file's `set -euo pipefail` ABORTS the fixture mid-run — the operator sees a
+# truncated log and no failing-test name, instead of a reported failure.
+output=$(bash "$_V" --coverage-threshold 50 2>/dev/null || true)
+if [ "$JQ_AVAILABLE" -eq 0 ]; then
+    _skip_jq "coverage_percentage arm"
+elif printf '%s' "$output" | "${JQ_CMD[@]}" -e '.coverage_percentage' >/dev/null 2>&1; then
+    _pass "JSON contains all required fields"
+else
+    _fail "JSON missing required fields"
+fi
+
+# Test 6: Status PASS when threshold met
+# The threshold is 50 against a tree that is deterministically 50% covered, so
+# this asserts the IMPLICATION (coverage >= threshold => PASS) rather than the
+# real repo's coverage.
+echo "Test 6: Status PASS when coverage meets threshold"
+status=""
+[ "$JQ_AVAILABLE" -eq 1 ] && status=$(printf '%s' "$output" | "${JQ_CMD[@]}" -r '.status' 2>/dev/null || true)
+if [ "$JQ_AVAILABLE" -eq 0 ]; then
+    _skip_jq "status arm"
+elif [[ "$status" == "PASS" ]]; then
+    _pass "Correctly reports PASS status"
+else
+    _fail "Should report PASS when threshold met (got: $status)"
+fi
+
+# Test 7: Default threshold 90
+echo "Test 7: Default threshold is 90"
+output=$(bash "$_V" --coverage-threshold 2>/dev/null || true)
+threshold=""
+[ "$JQ_AVAILABLE" -eq 1 ] && threshold=$(printf '%s' "$output" | "${JQ_CMD[@]}" -r '.threshold' 2>/dev/null || true)
+if [ "$JQ_AVAILABLE" -eq 0 ]; then
+    _skip_jq "default-threshold arm"
+elif [[ "$threshold" == "90" ]]; then
+    _pass "Default threshold is 90"
+else
+    _fail "Default threshold should be 90 (got: $threshold)"
+fi
+
+# Test 8: THE ONLY LIVE ARM.
+# 1077-vzwq: this used to be a byte-identical duplicate of Test 4 — same
+# invocation, same expectation, a different label. Repurposed into the one
+# thing the synthetic root genuinely cannot cover: that the validator survives
+# the REAL checkout and produces a report there. Threshold 0 is unfailable on
+# coverage, so this asserts liveness without re-introducing a floor. Deliberately
+# jq-free, so it still runs on a host with no jq.
+echo "Test 8: Validator runs to completion on the REAL checkout"
+_live_rc=0
+_live_out="$(bash "$SCRIPT_DIR/validate-traces.sh" --coverage-threshold 0 2>/dev/null)" || _live_rc=$?
+if [ "$_live_rc" -ne 0 ]; then
+    _fail "Should exit 0 on the real tree at threshold 0 (rc=$_live_rc)"
+elif grep -q '"coverage_percentage"' <<<"$_live_out"; then
+    _pass "Runs on the real tree and emits a coverage report"
+else
+    _fail "Ran on the real tree but emitted no coverage_percentage field"
+fi
+
 echo "Test 9: Exit code 1 when coverage is below threshold"
-_T9="$(_synthetic_root)"
-if bash "$_T9/scripts/validate-traces.sh" --coverage-threshold 90 >/dev/null 2>&1; then
+if bash "$_V" --coverage-threshold 90 >/dev/null 2>&1; then
     _fail "Should exit non-zero when coverage (50%) is below the threshold (90)"
 else
     _pass "Exit non-zero when coverage below threshold"
 fi
 
 echo "Test 10: Uncovered specs listed on failure"
-_out="$(bash "$_T9/scripts/validate-traces.sh" --coverage-threshold 90 2>&1 || true)"
-if printf '%s' "$_out" | grep -q "Uncovered specs"; then
+_out="$(bash "$_V" --coverage-threshold 90 2>&1 || true)"
+if grep -q "Uncovered specs" <<<"$_out"; then
     _pass "Lists uncovered specs when coverage fails"
 else
     _fail "Should list uncovered specs when coverage fails"
@@ -210,12 +255,11 @@ fi
 # POSITIVE CONTROL: the same synthetic tree must PASS a threshold it meets, so
 # these arms cannot pass by the validator simply failing everything.
 echo "Test 11: A met threshold passes on the same synthetic tree"
-if bash "$_T9/scripts/validate-traces.sh" --coverage-threshold 50 >/dev/null 2>&1; then
+if bash "$_V" --coverage-threshold 50 >/dev/null 2>&1; then
     _pass "Exit zero when coverage meets the threshold"
 else
     _fail "Should exit zero when coverage (50%) meets the threshold (50)"
 fi
-rm -rf "$_T9"
 
 echo ""
 echo "=== Test Summary ==="
