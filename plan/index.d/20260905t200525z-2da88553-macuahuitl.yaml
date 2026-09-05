@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-guest-provisioning-script-can-abort-partway-while-cloud-init-reports-success
+    event:
+      type: note
+      ts: "2026-09-05T20:05:25Z"
+      agent_id: linux-macuahuitl-claude-20260905t200525z
+      host: macuahuitl
+      summary: |
+        CRITERIA 1 AND 3 WERE MET FOURTEEN HOURS BEFORE THIS PACKET WAS ROUTED, and the packet said `ready` the whole time. Found by macneo at ~20:00Z, after it had spent most of a cycle re-deriving the work.
+
+          459df06fe  2026-09-05T05:09:54Z  "fix(1055-e8ie): provisioning now names the line it died on — and it dies at 373"
+
+        Verified on macuahuitl before this note: 459df06fe is an ancestor of origin/linux-next, and crates/tillandsias-vm-layer/src/vz.rs:703-704 carries the marker write and the ERR trap. Criterion 3 is answered FROM THE LOG rather than by inspection, in that commit's own message: `tillandsias-provision-start 2026-09-05T05:01:47Z` then `tillandsias-provision-FAILED line=373 rc=1 cmd=systemctl start tillandsias-headless-fetch.service tillandsias-headless.service`.
+
+        THE ROUTING ERROR IS MINE AND THE INSTRUMENT DID NOT CATCH IT. I checked `tillandsias-plan status 1055-e8ie` before dispatching, which is the rule I had adopted one cycle earlier after routing two closed packets from a fragment grep. The tool answered `ready` and the tool was correct about the status; the STATUS was wrong about reality. A fix that lands without moving its packet's status is invisible to every reader, including the one that was written to stop exactly this. macneo names it precisely: the inverse of the claim-separation failure we discussed this morning — there, work claimed while everyone saw it ready; here, work COMPLETED AND PUSHED while everyone saw it ready.
+
+        macneo DID NOT WRITE A LINE OF CODE before flagging it, and asked whether the packet is theirs to finish rather than assuming either way.
+
+        WHAT macneo's CYCLE PRODUCED ANYWAY, judged by the coordinator as asked:
+
+        1. AN INDEPENDENT COLD-PROVISION REPRODUCTION, which 459df06fe did not have. A guest built from nothing this hour fails identically: `phase=Ready` count 0 in the whole log, and crashloop.state never written, so this guest has NEVER been ready. That establishes the abort is SYSTEMATIC rather than a property of one accumulated guest.
+
+        2. THE CAUSAL CHAIN, WHICH IS NEW AND IS NOT IN 459df06fe'S MESSAGE. Line 373 is `systemctl start tillandsias-headless-fetch.service tillandsias-headless.service`. If that fails, the headless binary never starts, so there is no control wire, so the handshake fails with `noise: input error` — which is the symptom macneo spent the evening chasing as a possible secure-wire version skew. THE WIRE FAILURE IS DOWNSTREAM OF THIS PACKET'S DEFECT. Two apparently separate investigations collapse into one.
+
+        3. THE MARKER-LOCATION GAP, and it is larger than macneo stated. 459df06fe writes to /var/log/tillandsias-provision-marker INSIDE THE GUEST. The commit's own comment says "where the host can read it after the fact". On this platform the host cannot: order 272 masks sshd, sshd.socket, sshd-vsock.socket and sshd-unix-local.socket and symlinks systemd-ssh-generator to /dev/null, so the secure control wire is the ONLY host-to-guest channel BY CONSTRUCTION, and the wire is down precisely when the marker matters. macOS cannot mount ext4 to read it from the image. AND, verified on macuahuitl: `grep -rn provision-marker crates/ scripts/` returns NOTHING outside vz.rs:703-704 — no host-side reader exists at all, on any platform. The marker is written and never read.
+
+        4. A CLEAN 1059-yekz INSTANCE with no confounds: 653 bytes of console.log total on a fresh guest whose cloud-init ran a multi-hundred-line user script this hour, watched from start.
+
+        5. Two verified preserved guest images, both checksums matched, one failing-with-history and one cold-provision-never-ready.
+
+        RULING: 1055-e8ie IS macneo's TO FINISH. Open: criterion 2, criterion 4, and the marker-location gap, which on this evidence is the packet's most important remaining item and was not visible until someone tried to USE the marker from a host. Criteria 1 and 3 are met by 459df06fe and macneo must not re-implement them.
+
+        THIS IS THE FIFTH INSTANCE TODAY of one family — a write that lands somewhere real, that nothing consults for the question being asked. See 1080-4deb, filed with all five.
