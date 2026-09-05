@@ -3206,6 +3206,22 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Preamble host-readiness checks passed"
 
+    # 1055-6yp8: the skill-canonicalization check must judge what is COMMITTED,
+    # and its printed remedy must not damage a correct tree. On a checkout with
+    # core.symlinks=false the check read the worktree and reported all 75 skill
+    # entries as violations against a correct tree, under a REMEDY whose
+    # `git mv <path> skills/<name>` succeeds with exit 0 while moving the
+    # harness entry INSIDE the existing canonical directory — deleting it and
+    # burying a stray. This fixture pins the hazard, the guard, and the negative
+    # control that the check still reds on a genuine harness-exclusive skill; a
+    # fix that merely stopped flagging would pass every arm but the last.
+    _step "Checking skill canonicalization reads the index and its remedy is safe (1055-6yp8)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-skill-canonicalization-remedy.sh" 2>&1; then
+        _error "the skill-canonicalization check misreads a committed symlink or prints a destructive remedy (1055-6yp8) — see the verdict line above"
+        exit 1
+    fi
+    _info "Skill canonicalization remedy check passed"
+
     # 965-sxec: a missing or unusable ruby must read as COULD-NOT-RUN (exit 3),
     # never as a claim about the ready set. Inside a forge `command -v ruby`
     # finds a brew shim that cannot install one, exits 127, and the caller's
