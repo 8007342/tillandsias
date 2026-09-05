@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: linux-build-tuneups-carried-by-the-build-scripts
+    event:
+      type: finding
+      ts: "2026-09-05T06:27:09Z"
+      agent_id: linux-macuahuitl-claude-20260905t062709z
+      host: macuahuitl
+      summary: |
+        THREE GREEN GATES GIVE A MODEL (esmeraldinha, gates 10, 11, 12; same host, same configuration, all forced and idle, none with a builder re-init or plan-binary rebuild): gate 11 21m41s with 1 crate compiled; gate 12 22m30s with 5 (ran=2214, new-red=0; the price of pushing the 1052-gw8w report correction under 1056-5344); gate 10 25m17s with 18. Intervals: 1 → 5 crates +49 s = 12.3 s/crate; 5 → 18 crates +167 s = 12.8 s/crate; two independent intervals agreeing within 4%: FLOOR GATE ≈ 21m30s FIXED + ~12.5 s PER CRATE COMPILED. The fixed 21m30s is the fixtures, litmus and workspace-test floor that no compile setting touches, and it is the number this packet's design acts on: at 18 crates the compile is 15% of the gate, at 5 crates 5%, at 1 crate under 1%; CARGO_BUILD_JOBS=2 is worth setting and is a rounding error on a typical cycle's gate. CAVEAT attached by the host: three points, one host, one workspace shape, every one a FORCED gate; a memoised gate is ~41 s (build-check-memoized) and obeys none of this.

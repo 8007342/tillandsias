@@ -2983,15 +2983,39 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
 
+    # ORDER 1054-zvq4. The check is pure over the dictionary, the locale files
+    # it scans and the checker itself, so its verdict is memoised on a digest of
+    # exactly those inputs (scripts/terminology-check-memo.sh). A hit repeats a
+    # verdict the same bytes earned; a change to any of them is a miss and runs
+    # it. Measured before memoising: 14.3s (yoga), 33.4s (lenovinha), 29.8s
+    # (macbookair), 25.4s (pirria), fail_pct=0 on all four — the step topped the
+    # skippable list on three hosts in the 2026-09-05 recurrence audit.
+    #
+    # The timing record carries hit= so the NEXT audit can measure the hit rate
+    # instead of bounding it: saved_ms_upper was only ever an upper bound
+    # because the timing log carried no input identity, and a memo that did not
+    # say whether it hit would leave the next reader with the same bound.
     _step "Checking user-visible terminology against the dictionary (629-t6bx)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-terminology.sh" 2>&1; then
-        # The script names the file, the variant and the offending string, and
-        # says the two remedies (fix the string, or add the variant to the
-        # dictionary if it is correct). Do not restate a cause here — its
-        # verdict distinguishes a violation from a blocked/unreadable
-        # dictionary, and a wrapper that collapses those sends the reader to
-        # the wrong fix.
-        exit 1
+    _term_t0="$(timing_now_ms)"
+    if _term_memo="$(bash "$SCRIPT_DIR/scripts/terminology-check-memo.sh" check 2>/dev/null)"; then
+        _info "$_term_memo — dictionary, locales and checker unchanged since the last pass; check not re-run"
+        timing_emit terminology-check-hit check "$_term_t0" 0 || true
+    else
+        if ! _run bash "$SCRIPT_DIR/scripts/check-terminology.sh" 2>&1; then
+            timing_emit terminology-check-miss check "$_term_t0" 1 || true
+            # The script names the file, the variant and the offending string, and
+            # says the two remedies (fix the string, or add the variant to the
+            # dictionary if it is correct). Do not restate a cause here — its
+            # verdict distinguishes a violation from a blocked/unreadable
+            # dictionary, and a wrapper that collapses those sends the reader to
+            # the wrong fix.
+            exit 1
+        fi
+        # RECORD ONLY AFTER A PASS, the same rule the gate stamp follows: a red
+        # verdict must never be memoised, or the next gate would repeat a
+        # failure's exit code as a hit and the check would go permanently green.
+        bash "$SCRIPT_DIR/scripts/terminology-check-memo.sh" record >/dev/null 2>&1 || true
+        timing_emit terminology-check-miss check "$_term_t0" 0 || true
     fi
     _info "Terminology gate passed"
 
@@ -3158,6 +3182,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Archiver-check memo check passed"
 
+    # 1054-zvq4: the terminology memo's sibling fixture. Same bar as the
+    # archiver's above — a memo is only safe while it still MISSES, so the
+    # negative controls (dictionary, scanned source, a file appearing, the
+    # checker) are what this pins. A memo that only ever hits has stopped
+    # checking and would turn a gate green by never running it.
+    _step "Checking the terminology memo keys on the dictionary, the locales and the checker (1054-zvq4)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-terminology-check-memo.sh" 2>&1; then
+        _error "the terminology memo does not miss on a dictionary, locale or instrument change (1054-zvq4) — see the verdict line above"
+        exit 1
+    fi
+    _info "Terminology memo check passed"
+
     # 965-sxec: a missing or unusable ruby must read as COULD-NOT-RUN (exit 3),
     # never as a claim about the ready set. Inside a forge `command -v ruby`
     # finds a brew shim that cannot install one, exits 127, and the caller's
@@ -3207,6 +3243,19 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Issue-capture lane fixture passed"
+
+    # Order 1056-5344. The lane now scopes PAST a mandated merge of
+    # origin/linux-next, which widens the bypass further: without the ancestry
+    # gate a host could park code on a side branch, merge it --no-ff, and the
+    # first-parent view would not see it. Arm 3 of this fixture is that negative
+    # control, so it belongs inside the gate for the same reason its sibling
+    # does — a control nothing executes cannot protect the hole it names.
+    _step "Checking the plan-only lane survives the mandated merge without opening a bypass (1056-5344)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-pre-push-plan-lane-after-merge.sh" 2>&1; then
+        _error "the plan-only lane's merge scoping lost a boundary (1056-5344) — see the verdict line above"
+        exit 1
+    fi
+    _info "Plan-lane merge-scoping fixture passed"
 
     # Order 251 criterion LM-04. `plan/long-running.md` is declared a filtered
     # view of the ledger's active multi_cycle packets and nothing enforced it.
