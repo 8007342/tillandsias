@@ -3398,6 +3398,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Tracked-file guard fixture passed"
 
+    # Order 1064-5hv2. The hook can now report its own per-phase timings, so a
+    # host measuring drift no longer has to make a throwaway copy with the
+    # warning forced true — which macbookair and yoga both did, independently,
+    # hours apart. The last arm pins that the 1x-to-4x blind band is still OPEN,
+    # so closing it cannot happen quietly without the volume evidence.
+    _step "Checking the hook can report its own phase timings (1064-5hv2)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-hook-phase-instrumentation.sh" 2>&1; then
+        _error "the hook's phase instrumentation or its drift warning changed (1064-5hv2) — see the verdict line above"
+        exit 1
+    fi
+    _info "Hook phase-instrumentation pin passed"
+
     # Order 1056-5344. The lane now scopes PAST a mandated merge of
     # origin/linux-next, which widens the bypass further: without the ancestry
     # gate a host could park code on a side branch, merge it --no-ff, and the

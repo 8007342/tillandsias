@@ -397,10 +397,42 @@ run_phase() {
     if [[ -t 2 ]]; then
         printf '\033[2K\r' >&2
     fi
+    # ── INSTRUMENTATION, opt-in (order 1064-5hv2) ────────────────────────────
+    #
+    # WHY THIS EXISTS AT ALL. Re-measuring 734-sjb3 required per-phase numbers,
+    # and the shipped hook would not produce them — so macbookair made a
+    # throwaway copy with the warning condition forced true, and hours later, on
+    # a different host, so did I. Independently, for the same reason. When two
+    # hosts have to DEFEAT a signal in order to read it, the signal is set
+    # wrong, and the fix is not to keep making copies.
+    #
+    # Opt-in rather than default because the volumes that decide the threshold
+    # question below are not in yet: lenovinha's hook runs 0.25s total with no
+    # per-phase breakdown, and a second Linux regime cannot be read without
+    # this. So this lands first, the hosts report, and the threshold changes on
+    # the evidence.
+    if [[ -n "${TILLANDSIAS_HOOK_PHASE_TIMING:-}" ]]; then
+        if [[ "$budget" -gt 0 ]]; then
+            printf '  OpenSpec phase: %-28s %6sms  budget %5sms  %sx\n' \
+                "$fn" "$elapsed" "$budget" \
+                "$(awk -v e="$elapsed" -v b="$budget" 'BEGIN{printf "%.2f", e/b}')" >&2
+        else
+            printf '  OpenSpec phase: %-28s %6sms  (no budget)\n' "$fn" "$elapsed" >&2
+        fi
+    fi
+
     # Over budget is worth saying out loud even in a scripted commit -- that is
     # the signal that would have named the original thirteen-minute scan.
+    #
+    # THE MULTIPLE IS NOW IN THE MESSAGE (1064-5hv2, macbookair's remedy shape).
+    # "took 10373ms (budget ~2500ms)" makes a reader do the division; "4.1x"
+    # does not, and it is the number that says whether this is a nudge or a
+    # regression. The THRESHOLD is deliberately unchanged here — it still fires
+    # only above 4x, so this commit cannot alter warning volume on any host.
+    # That change waits on two hosts' volumes, which is what the instrumentation
+    # above exists to collect.
     if [[ "$budget" -gt 0 && "$elapsed" -gt $((budget * 4)) ]]; then
-        echo "  ⚠ OpenSpec: ${fn} took ${elapsed}ms (budget ~${budget}ms) — the scan is drifting; see order 734-sjb3" >&2
+        echo "  ⚠ OpenSpec: ${fn} took ${elapsed}ms ($(awk -v e="$elapsed" -v b="$budget" 'BEGIN{printf "%.1f", e/b}')x its ~${budget}ms budget) — the scan is drifting; see order 734-sjb3" >&2
     fi
 }
 
