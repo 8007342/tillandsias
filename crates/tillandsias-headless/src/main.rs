@@ -3110,6 +3110,24 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
     if std::env::var("TILLANDSIAS_HOST_KIND").as_deref() == Ok("forge") {
         // The forge environment does not have openssl CLI and is not responsible
         // for generating CAs. The CA is injected by the host.
+        //
+        // ORDER 1042-svey — THIS EXEMPTION IS FORGE-ONLY AND THE BUILDER DISTRO
+        // IS NOT COVERED BY IT, deliberately. The tillandsias-build WSL2 distro
+        // is where `./build.sh --check` actually runs on a Windows host, it is
+        // NOT a forge, and it DOES reach this code — esmeraldinha's gate died
+        // here with `os error 2` eleven minutes into a run because that distro
+        // had `openssl-devel` but not the `openssl` CLI (separate Fedora
+        // packages).
+        //
+        // The fix is to give the builder the tool, not to widen this arm: a
+        // forge is exempt because the host injects its CA, and nothing injects
+        // one into the builder. Widening the exemption to "any environment
+        // without openssl" would turn a loud missing-tool failure into a
+        // silently CA-less run, which is the same trade the 989-ykks host-tools
+        // list exists to refuse. openssl is now a required tool there
+        // (scripts/check-host-tools.sh) and installed by
+        // scripts/with-wsl2-builder.sh, so the gate refuses in seconds naming
+        // the tool instead of dying eleven minutes in naming an errno.
         return Ok(certs_dir);
     }
     let crt = certs_dir.join("intermediate.crt");

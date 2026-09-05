@@ -1,0 +1,46 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: test-stress-no-resource-leaks-asserts-a-ratio-between-ten-sample-means-of-sub-millisecond-cycles-with-no-absolute-floor-so-it-measures-scheduler-jitter-on-the-floor
+    order: 1051-f7e2
+    status: in_progress
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: any
+    claimed_by: tlatoanis-macbook-air
+    capability_tags: [testing, low-end, gate, headless, measurement]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-headless/tests/stress_concurrent_operations.rs
+    title: |
+      test_stress_no_resource_leaks asserts `ratio < 2.0` between the mean of the first ten and the last ten cycle durations with no absolute floor; on a host where the cycles are microseconds (podman absent, every call fails fast, the six-test binary finishes in 0.01 s) it measures scheduler jitter, 4.46x on esmeraldinha under the gate's own I/O pressure, and reds the floor's gate
+    context: |
+      FOUND by esmeraldinha on floor gate 9 (03:11:45Z-03:21:15Z, 9m30s, the first floor gate past the openssl gap
+      1042-svey): fail:test-baseline:ran=2211 new-red=1 first=stress_concurrent_operations::test_stress_no_resource_leaks;
+      "Potential resource leak: later cycles 4.4638826185101586 slower than early"; test result 5 passed 1 failed
+      finished in 0.01 s. The assertion (stress_concurrent_operations.rs:407-413): first_10_avg and last_10_avg over
+      cycle_times, ratio = last/first, assert!(ratio < 2.0). Each cycle is attach / launch_all_containers /
+      stop_all_containers / detach with results discarded; in the builder distro podman is absent, so every call fails
+      fast and a cycle is close to no work; a 2.0x ratio between two ten-sample means of microsecond durations on a
+      4-core N100 under io_full peaks of 45 is jitter with a threshold on it. Not claimed: that the test is wrong
+      everywhere (it passes elsewhere) or that there is no leak; the cycle scale is inferred from the binary total, sound
+      but indirect. The honest framing: the assertion has no floor on absolute duration, so on any host fast or
+      degenerate enough to make cycles trivial it measures noise. Third distinct blocker between the floor and a green
+      gate tonight (1022-px54, openssl, this), each real, each unrelated, each visible only because the gate runs the
+      full suite since 1003-444f. Assigned to macbookair (cross-platform test; has cargo); esmeraldinha verifies on the
+      floor, where the green gate that follows is also the floor's first honest full-gate cost.
+    exit_criteria:
+      - "a minimum on first_10_avg (or a fixed absolute slack) is applied before the ratio, so the assertion means the same thing on every host; pre-fix result: FAILS (4.46x at 0.01 s on esmeraldinha)"
+      - "a sabotage arm that grows work per cycle still trips the guard, so a real leak is still caught; pre-fix result: n/a, must be shown"
+      - "esmeraldinha's floor gate passes this test on the fixed tree; pre-fix result: FAILS"
+    unscoreable: |
+      The pin is the test itself run on the floor plus its sabotage arm; the claimer names
+      the litmus lane if one applies.
+    events:
+      - type: note
+        ts: "2026-09-05T03:24:16Z"
+        host: macuahuitl
+        summary: |
+          FILED by the coordinator from esmeraldinha's gate 9 characterisation and routed to
+          macbookair as its primary; esmeraldinha verifies on the floor.
