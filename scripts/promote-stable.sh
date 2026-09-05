@@ -26,7 +26,9 @@
 #   ^would-promote:v[0-9][A-Za-z0-9.\-]*$         --dry-run, gates all passed
 #   ^demoted:<mistaken>:latest-now:<intended>$    demotion happened AND verified
 #   ^would-demote:<mistaken>:latest-would-be:<intended>$   --dry-run
-#   ^refused:(no-evidence|no-release|bad-tag|missing-target|demote-verify-failed):.*$
+#   ^verified:stable-tag:<sha>$                   step 3 landed on origin (1061-zd83)
+#   ^refused:(no-evidence|no-release|bad-tag|missing-target|demote-verify-failed
+#            |promote-commit-unresolvable|stable-tag-not-moved|stable-tag-unverified):.*$
 #                                                 refusal (exit 1)
 #
 # --dry-run RUNS EVERY GATE AND MUTATES NOTHING (order 864-8tqv). It exists
@@ -349,9 +351,60 @@ fi
 gh release edit "$TAG" --prerelease=false --latest
 
 # Move the annotated stable tag to the release's commit.
-COMMIT="$(gh release view "$TAG" --json targetCommitish --jq '.targetCommitish')"
+#
+# ORDER 1061-zd83. THE TAG IS A PUBLIC CLAIM AND NOTHING CHECKED IT. Found by
+# the operator's tillandsias.org session 2026-09-05 while pinning the site's
+# "stable" definition: refs/tags/stable peeled to 341ab0010 (v0.4.260826.1,
+# tagged 2026-08-25) while the latest non-prerelease release was v56.9.2.1 at
+# d6d3e3ed9. So either this step failed silently on that promotion or the
+# promotion bypassed this script — and either way the script had already
+# printed `promoted:` and no one was told.
+#
+# `targetCommitish` IS NOT A SHA for a release cut from a branch; GitHub returns
+# the BRANCH NAME. `git tag -f -a stable <branch>` then resolves against the
+# LOCAL branch ref, so the tag lands wherever this checkout's `main` happens to
+# sit — which need not be the released commit at all. The release TAG's own
+# commit is exact, so prefer it and keep targetCommitish only as a fallback.
+COMMIT_RAW="$(gh release view "$TAG" --json targetCommitish --jq '.targetCommitish')"
+git -C "$REPO_ROOT" fetch -q --force origin "refs/tags/$TAG:refs/tags/$TAG" 2>/dev/null || true
+COMMIT="$(git -C "$REPO_ROOT" rev-parse --verify --quiet "refs/tags/$TAG^{commit}" || true)"
+if [ -z "$COMMIT" ]; then
+    COMMIT="$(git -C "$REPO_ROOT" rev-parse --verify --quiet "${COMMIT_RAW}^{commit}" || true)"
+fi
+if [ -z "$COMMIT" ]; then
+    echo "The release's commit could not be resolved from '$TAG' or from" >&2
+    echo "targetCommitish '${COMMIT_RAW:-<empty>}', so the stable tag would be" >&2
+    echo "moved to an unknown place. Refusing (1061-zd83)." >&2
+    echo "refused:promote-commit-unresolvable:${COMMIT_RAW:-empty}"
+    exit 1
+fi
 git -C "$REPO_ROOT" tag -f -a stable -m "Stable channel: promoted $TAG" "$COMMIT"
 git -C "$REPO_ROOT" push origin refs/tags/stable --force
+
+# VERIFY ON ORIGIN, not locally. The claim this script makes is about the ref
+# other people fetch; a local tag that never reached origin is exactly the
+# disagreement 1061-zd83 records. `^{}` asks for the PEELED object, because
+# `stable` is annotated and its own sha is the tag object, not the commit.
+STABLE_REMOTE="$(git -C "$REPO_ROOT" ls-remote origin 'refs/tags/stable^{}' 2>/dev/null | awk '{print $1}' | head -1)"
+if [ -z "$STABLE_REMOTE" ]; then
+    # Could not ASK is not the same as disagreed (923-ws3r). Say which.
+    echo "The stable tag was pushed, but origin could not be read back to" >&2
+    echo "confirm it. This is NOT a report that the tag is wrong — the check" >&2
+    echo "could not run. Verify by hand:" >&2
+    echo "  git ls-remote origin 'refs/tags/stable^{}'   # expect $COMMIT" >&2
+    echo "refused:stable-tag-unverified:$COMMIT"
+    exit 1
+fi
+if [ "$STABLE_REMOTE" != "$COMMIT" ]; then
+    echo "origin's stable tag does NOT point at the promoted release." >&2
+    echo "  expected (release $TAG): $COMMIT" >&2
+    echo "  origin refs/tags/stable: $STABLE_REMOTE" >&2
+    echo "The GitHub release and the git tag now disagree, which is the state" >&2
+    echo "1061-zd83 was filed for. Do not report this promotion as done." >&2
+    echo "refused:stable-tag-not-moved:$STABLE_REMOTE:expected:$COMMIT"
+    exit 1
+fi
+echo "verified:stable-tag:$COMMIT"
 
 echo "Stable channel now serves $TAG (README /releases/latest URLs resolve to it)." >&2
 echo "NEXT: run a ONE-SHOT stable curl-install smoke to prove the promoted" >&2
