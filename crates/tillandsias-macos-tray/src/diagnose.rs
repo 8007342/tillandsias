@@ -84,6 +84,115 @@ pub fn crashloop_state_path() -> PathBuf {
     image_root().join("crashloop.state")
 }
 
+/// What the guest's provisioning script recorded about its own outcome
+/// (order 1055-e8ie).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum ProvisionRecord {
+    /// The script wrote a completion line as its last statement.
+    Complete { written_at: Option<u64> },
+    /// The ERR trap fired and named the failing line.
+    Failed {
+        written_at: Option<u64>,
+        line: Option<String>,
+        rc: Option<String>,
+        cmd: Option<String>,
+    },
+    /// A start with NO completion and NO failure. This is a POSITIVE signal of
+    /// an aborted provision, not an absence of information: the completion line
+    /// is the script's last statement, so a start that is not followed by one
+    /// means the script did not reach its end.
+    StartedNeverFinished { written_at: Option<u64> },
+    /// No record at all. Either no provisioning has run since this image root
+    /// was created, or the share is not mounted. NEVER read as success.
+    Absent,
+}
+
+/// Read the provisioning record the guest wrote to the host-visible share.
+///
+/// THIS READER IS THE POINT. Before 1055-e8ie the marker was written inside the
+/// guest at /var/log and NOTHING read it — `grep -rn provision-marker` found no
+/// consumer anywhere in the tree — so a record existed that no host could ever
+/// consult, in exactly the condition it was written for. Order 272 makes the
+/// control wire the only host<->guest channel, so when provisioning fails there
+/// is no way in: `--exec-guest` rides the wire that is down and macOS cannot
+/// mount the guest's ext4.
+///
+/// The timestamp is read from INSIDE the file, never from mtime (980-ja2m): a
+/// copy, a restore or a `touch` forges an mtime, and mtime is a property of the
+/// filesystem rather than of the event.
+pub(crate) fn provision_record_from(text: &str) -> ProvisionRecord {
+    let mut phase = None;
+    let mut written_at = None;
+    let (mut line, mut rc, mut cmd) = (None, None, None);
+    for l in text.lines() {
+        let mut parts = l.splitn(2, ' ');
+        match (parts.next(), parts.next()) {
+            (Some("phase"), Some(v)) => phase = Some(v.trim().to_string()),
+            (Some("written_at"), Some(v)) => written_at = v.trim().parse::<u64>().ok(),
+            (Some("line"), Some(v)) => line = Some(v.trim().to_string()),
+            (Some("rc"), Some(v)) => rc = Some(v.trim().to_string()),
+            (Some("cmd"), Some(v)) => cmd = Some(v.trim().to_string()),
+            _ => {}
+        }
+    }
+    match phase.as_deref() {
+        Some("complete") => ProvisionRecord::Complete { written_at },
+        Some("failed") => ProvisionRecord::Failed {
+            written_at,
+            line,
+            rc,
+            cmd,
+        },
+        Some("start") => ProvisionRecord::StartedNeverFinished { written_at },
+        _ => ProvisionRecord::Absent,
+    }
+}
+
+/// Where the host reads the provisioning record.
+pub fn provision_state_path() -> std::path::PathBuf {
+    image_root().join("provision").join("provision.state")
+}
+
+/// The `Provisioning` line of the report.
+pub(crate) fn provision_report_line() -> String {
+    let text = std::fs::read_to_string(provision_state_path()).unwrap_or_default();
+    match provision_record_from(&text) {
+        ProvisionRecord::Complete { written_at } => format!(
+            "Provisioning: COMPLETE — the guest script recorded its own completion{}",
+            written_at
+                .map(|t| format!(" at {}", format_utc(t)))
+                .unwrap_or_default()
+        ),
+        ProvisionRecord::Failed {
+            written_at,
+            line,
+            rc,
+            cmd,
+        } => format!(
+            "Provisioning: FAILED{} — line {}, rc {}, cmd: {}",
+            written_at
+                .map(|t| format!(" at {}", format_utc(t)))
+                .unwrap_or_default(),
+            line.unwrap_or_else(|| "?".into()),
+            rc.unwrap_or_else(|| "?".into()),
+            cmd.unwrap_or_else(|| "?".into())
+        ),
+        ProvisionRecord::StartedNeverFinished { written_at } => format!(
+            "Provisioning: ABORTED — the script started{} and never recorded completion. \
+             The completion line is its LAST statement, so a start without one means it did \
+             not reach the end. This guest may be assembled from a mixture of runs.",
+            written_at
+                .map(|t| format!(" at {}", format_utc(t)))
+                .unwrap_or_default()
+        ),
+        ProvisionRecord::Absent => {
+            "Provisioning: UNKNOWN — no record. Either nothing has provisioned this image \
+             root, or the provision-state share is not mounted. Never read as success."
+                .to_string()
+        }
+    }
+}
+
 /// Heartbeat period: how often the live tray writes `heartbeat.state`
 /// (980-ja2m slice (b)).
 ///
@@ -751,6 +860,7 @@ fn print_human(r: &DiagnoseReport) {
     // restart/unseal/handshake pattern flips it to crash-loop:<subsystem>.
     // Additive — does NOT affect the 0/2/1 exit-code contract.
     // @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+    println!("{}", provision_report_line());
     println!("{}", guest_state_report_line_at(unix_now_secs()));
     println!("{}", guest_health_report_line());
     println!("No live probe was made; this report cannot contact the guest.");
@@ -3007,6 +3117,92 @@ mod tests {
     ///
     /// 2000-02-29 is the case the `year % 4 == 0 && year % 100 != 0` rule gets
     /// WRONG on its own: 2000 is divisible by 100 and IS a leap year because it
+    /// 1055-e8ie CRITERION 2: a partially-provisioned guest is distinguishable
+    /// from a completed one.
+    ///
+    /// ALL THREE STATES, because two would not settle it. The defect this
+    /// closes is that the previous marker recorded a start and a failure and NO
+    /// completion, so "ran to completion", "died without the ERR trap firing"
+    /// and "died before the write landed" collapsed into one artefact — a start
+    /// line and nothing else. A fixture that only proved failure-is-detected
+    /// would pass on that broken marker, because the broken marker detects
+    /// failure too. What it could not do is tell success from silence.
+    #[test]
+    fn provision_record_distinguishes_complete_aborted_and_failed() {
+        let complete = "tillandsias-provision-state v1\nwritten_at 1800000000\nphase complete\n";
+        assert_eq!(
+            super::provision_record_from(complete),
+            super::ProvisionRecord::Complete {
+                written_at: Some(1_800_000_000)
+            }
+        );
+
+        // The case the old marker could not express: started, never finished.
+        // This must NOT read as success and must NOT read as "no information".
+        let aborted = "tillandsias-provision-state v1\nwritten_at 1800000000\nphase start\n";
+        assert_eq!(
+            super::provision_record_from(aborted),
+            super::ProvisionRecord::StartedNeverFinished {
+                written_at: Some(1_800_000_000)
+            },
+            "a start with no completion is a POSITIVE abort signal, not an absence"
+        );
+
+        let failed = "tillandsias-provision-state v1\nwritten_at 1800000000\nphase failed\n\
+                      line 373\nrc 1\ncmd systemctl start tillandsias-headless.service\n";
+        assert_eq!(
+            super::provision_record_from(failed),
+            super::ProvisionRecord::Failed {
+                written_at: Some(1_800_000_000),
+                line: Some("373".into()),
+                rc: Some("1".into()),
+                cmd: Some("systemctl start tillandsias-headless.service".into()),
+            },
+            "the failing line must survive into the verdict; a bare FAILED is what \
+             sent an investigation to the raw disk image"
+        );
+
+        // NEGATIVE CONTROL, load-bearing: absence must not be any of the three.
+        // Without this, a reader that returned Complete for everything would
+        // satisfy the first assertion.
+        assert_eq!(
+            super::provision_record_from(""),
+            super::ProvisionRecord::Absent
+        );
+        assert_eq!(
+            super::provision_record_from("garbage\nphase wat\n"),
+            super::ProvisionRecord::Absent
+        );
+    }
+
+    /// 1055-e8ie. The record must be read from INSIDE the file, never mtime.
+    /// A copy, a restore or a `touch` forges an mtime; mtime is a property of
+    /// the filesystem and not of the event (980-ja2m).
+    #[test]
+    fn provision_record_takes_its_timestamp_from_the_content() {
+        let no_ts = "tillandsias-provision-state v1\nphase complete\n";
+        assert_eq!(
+            super::provision_record_from(no_ts),
+            super::ProvisionRecord::Complete { written_at: None },
+            "a record without a content timestamp reports None rather than \
+             borrowing the filesystem's"
+        );
+    }
+
+    /// 1055-e8ie. The reader must exist and be WIRED IN. The previous marker's
+    /// defect was not that it was written badly — it was that nothing read it:
+    /// `grep -rn provision-marker` found no consumer anywhere in the tree, so a
+    /// record was produced for a reader that had never been written.
+    #[test]
+    fn the_provisioning_line_is_actually_printed_by_the_report() {
+        let source = include_str!("diagnose.rs");
+        assert!(
+            source.contains("println!(\"{}\", provision_report_line());"),
+            "the provisioning record must be PRINTED; a reader nothing calls is \
+             the same defect as a record nothing reads (1055-e8ie)"
+        );
+    }
+
     /// 980-ja2m slice (b). BOTH DIRECTIONS, round-tripped through the real
     /// parser. A bound proved only on the stale side is satisfied by a reader
     /// that says UNKNOWN always — and that reader is the original defect
