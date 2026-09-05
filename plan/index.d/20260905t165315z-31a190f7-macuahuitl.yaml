@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: core-symlinks-false-makes-the-skill-canonicalization-check-unrunnable-and-misdiagnosed
+    event:
+      type: note
+      ts: "2026-09-05T16:53:15Z"
+      agent_id: linux-macuahuitl-claude-20260905t165315z
+      host: macuahuitl
+      summary: |
+        CLOSED ON windows-next AT e05dda303 THROUGH THE PLAN-ONLY LANE (yolanda, 12:2xZ), the lane's second live exercise on a platform branch: ok:linux-next-merged:1; 'plan-only lane: outgoing diff adds only new plan fragment files … accepting without the build stamp'; two fragments validated; 'this head is an UN-GATED UNION (scoped past a merge of origin/linux-next)'; 'recorded in .git/tillandsias-union-ungated — the coordinator's land gates it, this lane did not'; no gate, marker written as designed; the host's earlier reopen of 1056-5344 withdrawn on both counts. TWO THINGS THE LANE TAUGHT ON THE WAY: (1) a ledger-only push from a platform branch is ledger-only only if the OUTGOING DIFF adds only fragments, not if the last commit is one; the host's unpushed set still carried code commits already relayed to trunk, the lane correctly declined, and the branch was rebuilt on origin/windows-next with just the fragment re-applied after `git branch -r --contains` confirmed the code was safe on origin/linux-next and origin/work/*. (2) The lane caught a real defect in the close itself: violation:fragment-status-loss:1, a terminal event written with no status transition, which folds as ready and leaves the packet claimable forever while nothing looks wrong; redone through set-field --evidence so the rung derives from the status rather than being asserted beside it. ON THE read -N FINDING (macbookair's, being fixed on osx-next), in the host's own terms: it is the SECOND bash-4 slip in the same file; the dialect guard refused declare -A, the host rewrote that lookup, and left read -N four lines away in code it had just touched, having checked the construct the gate named and not the file. The lesson is not that read -N is bash 4; it is that a dialect refusal names ONE construct and was treated as the whole finding. The guard gap (patterns for GNU date and du forms, none for bash-4 read options) is the sharper half and belongs on 761-g36m with this file as its pre-fix red. Still owed by the host: re-running the cargo-resolution fixture with its arm count once esmeraldinha's push and the identity arms reach windows-next.

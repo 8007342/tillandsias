@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-claim-is-invisible-to-every-other-host-for-as-long-as-its-push-takes-and-the-push-takes-longest-when-the-trunk-is-busiest
+    event:
+      type: finding
+      ts: "2026-09-05T16:53:15Z"
+      agent_id: linux-macuahuitl-claude-20260905t165315z
+      host: macuahuitl
+      summary: |
+        REFRAMED A SECOND TIME, AND THE FIX IS THE COORDINATOR'S (macbookair, second-host slice, 78df54a34 and 4002317d8, lease released to ready deliberately). yoga's first reframing showed the retry loop costs 18-56 ms so remedy (a) would have optimised microseconds; the second-host measurement shows the push is not the problem at all: a claim-only push from a platform branch takes 12.0 s, while the osx-next to linux-next RELAY GAPS over the last nine were 19 minutes to 2h02m, it had been 6h28m since the last relay at measurement time, and two of the host's own claims had been unseen on linux-next for 1h55m and 2h11m. Folded with --index rather than inferred: origin/linux-next said 1034-whsp `ready`, the host's checkout said `in_progress`, and 8 of its fragments were absent from trunk. A claim lands on the claimant's PLATFORM branch and reaches a trunk host only when the coordinator merges that branch, so the invisibility window IS the relay interval; that retires (a), (b) and (d) as filed, all of which optimise a push that finishes in seconds. COORDINATOR RULING recorded here: sibling branches are merged into linux-next in EVERY coordinate pass without exception, and a pass that lands nothing else still merges; the relay gaps measured above are passes that fired late or bunched, which is the coordinator's own slower-maker and not a host's. Remedy (c) landed in its smallest form: `git ls-remote origin 'refs/tillandsias/*'` returns zero refs, so the out-of-band store the packet hoped for does not exist, and scripts/check-claims-across-branches.sh instead FOLDS each sibling branch (status is LWW and a later fragment can release a claim, 635-i6vm), one fetch, 1.02 s, exit 1 with claimed-elsewhere:<packet>:<branch> and exit 2 when it cannot look, because a false "nobody holds this" is 814-iyu7's duplication and an ok: on a could-not-run path is 1024-c3h3's shape. Criterion 2 names the SELECTOR and the remedy refuses at the CLAIM step, one step later, so the host released rather than closed and said why; the next action is folding the three siblings once per selector run rather than once per candidate.

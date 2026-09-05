@@ -101,7 +101,32 @@ _load_index() {
     while read -r osha otype osize; do
         [ -n "${osize:-}" ] || continue
         content=""
-        [ "$osize" -gt 0 ] && IFS= read -r -N "$osize" content
+        # BASH 3.2 HAS NO `read -N` (1055-6yp8, fixed on macOS by
+        # tlatoanis-macbook-air). `-N` is bash 4+; macOS ships 3.2.57, where
+        # this line printed "read: -N: invalid option" three times and the
+        # checker then reported a violation against a perfectly canonical
+        # tree. Same family as the `mapfile` ban 761-g36m already records.
+        #
+        # `-n` IS in 3.2 and reads exactly $osize bytes for this data, spaces
+        # intact, without over-reading the stream — verified against a
+        # two-record `git cat-file --batch` fixture with a spaced target.
+        # A BUILTIN IS REQUIRED, NOT head -c OR dd: this loop runs per
+        # indexed path, and the per-path fork is what made the first version
+        # of this checker time out (see the note on _index_target below).
+        #
+        # THE ONE REAL DIFFERENCE: `-n` stops early at a newline where `-N`
+        # does not. A newline inside a symlink target is legal on POSIX and
+        # would make the read short and desync the stream. Rather than
+        # pretend the forms are identical, the short read is DETECTED and
+        # reported — a mis-parsed index is exactly what this order exists to
+        # stop, so it must not be papered over.
+        if [ "$osize" -gt 0 ]; then
+            IFS= read -r -n "$osize" content
+            if [ "${#content}" -ne "$osize" ]; then
+                echo "violation:skills-canonical:index-unreadable — a committed symlink target is $osize bytes but read back ${#content}; a newline in the target would do this (1055-6yp8)"
+                return 1
+            fi
+        fi
         read -r discard || true
         IDX_TARGETS+=("$content")
     done < <(printf '%s\n' "${shas[@]}" | git cat-file --batch 2>/dev/null)

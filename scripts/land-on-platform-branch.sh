@@ -34,6 +34,7 @@
 set -uo pipefail
 
 BRANCH="${1:-$(git rev-parse --abbrev-ref HEAD)}"
+TRUNK="${TILLANDSIAS_TRUNK_BRANCH:-linux-next}"
 ATTEMPTS="${2:-4}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 1
@@ -86,6 +87,43 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
     fi
     [ "$_integrated" -eq 1 ] || { echo "refused:land:not-integrated" >&2; exit 2; }
 
+    # ORDER 1064-r8fv: MERGE TRUNK TOO, or this tool cannot land on a platform
+    # branch AT ALL.
+    #
+    # Everything above integrates onto origin/$BRANCH. The pre-push guard
+    # (scripts/hooks/pre-push-linux-next-merged.sh) requires the branch to
+    # contain origin/LINUX-NEXT's current head, which is a DIFFERENT ref on
+    # every platform branch — so the loop could retry to exhaustion and never
+    # satisfy it. The comment forty lines above already names
+    # pull_merge_cadence.pre_push_gate as the reason the unpushed set carries
+    # merge commits; the code read the rule and then integrated the wrong ref.
+    #
+    # MEASURED ON YOLANDA 2026-09-05: four consecutive refusals landing
+    # 1055-6yp8 from windows-next, three of them
+    # blocked:linux-next-not-merged, with the tool reporting
+    # `refused:land:push-failed — not a lost race, so retrying cannot help`.
+    # That verdict is TRUE and it is the wrong shape: the cause was fixable in
+    # one command, and "retrying cannot help" reads as a dead end rather than
+    # "merge trunk and come back".
+    #
+    # WHY IT WENT UNNOTICED: on linux-next itself $BRANCH and linux-next are the
+    # same ref, so the merge above already satisfies the guard and the tool
+    # works. It fails only where it was needed most — the slow platform hosts it
+    # was written for.
+    if [ "$BRANCH" != "$TRUNK" ]; then
+        git fetch -q origin "$TRUNK" || { echo "land:fetch-failed:$TRUNK" >&2; exit 4; }
+        if git merge-base --is-ancestor "origin/$TRUNK" HEAD 2>/dev/null; then
+            echo "land: attempt $attempt — origin/$TRUNK already contained"
+        else
+            echo "land: attempt $attempt — merging origin/$TRUNK (mandated before every non-$TRUNK push)"
+            if ! git merge --no-edit "origin/$TRUNK" >/dev/null 2>&1; then
+                git merge --abort >/dev/null 2>&1
+                echo "refused:land:trunk-merge-conflict — resolve origin/$TRUNK by hand" >&2
+                exit 2
+            fi
+        fi
+    fi
+
     # ORDER 1056-5344. The plan-only lane may accept a push whose head is a
     # UNION of two separately-green sides that were never gated together, and
     # it records that debt in .git/tillandsias-union-ungated. This gate is what
@@ -126,9 +164,35 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
             echo "    scripts/land-on-platform-branch.sh $BRANCH" >&2
             rm -f "$_plog"; exit 5
         fi
-        if ! grep -qiE "non-fast-forward|fetch first|rejected|stale info" "$_plog"; then # sigpipe-ok: safe pipeline
+        # RETRYING ONLY HELPS A LOST RACE, and "rejected" alone does not mean
+        # one. ORDER 1064-r8fv: this pattern used to carry a bare `rejected`,
+        # which also matches `! [remote rejected] ... (pre-receive hook
+        # declined)` — a server-side REFUSAL that will be refused identically
+        # forever. Found by this order's own fixture, whose arm 3 rejects a push
+        # with a pre-receive hook and got exit 4 (attempts exhausted) where the
+        # honest answer is exit 6: the loop burned a full gate run per attempt
+        # on a push that could never succeed. That is the same shape the header
+        # of this file warns about — matching a substring that appears in the
+        # rejection line too — one layer down.
+        #
+        # A lost race says so specifically: non-fast-forward, fetch first, or
+        # stale info. Nothing else is retryable.
+        if ! grep -qiE "non-fast-forward|fetch first|stale info" "$_plog"; then # sigpipe-ok: safe pipeline
             echo "refused:land:push-failed — not a lost race, so retrying cannot help:" >&2
             sed -n '1,6p' "$_plog" >&2
+            # ORDER 1064-r8fv. NAME THE LANE, DO NOT TAKE IT. A refusal that
+            # says only "retrying cannot help" reads as a dead end; four
+            # consecutive refusals on yolanda ended in a hand-rolled loop
+            # because the message named no way forward. It is deliberately a
+            # HINT and not an action: this tool must never retarget a push on
+            # its own — work landed on a ref the author did not look at is the
+            # failure mode this fleet spends its time removing, and the choice
+            # of lane belongs to whoever is watching.
+            echo "  If this is a gate or merge policy your host cannot satisfy, push the" >&2
+            echo "  GATED tree to a relay ref and ask a trunk host to merge it:" >&2
+            echo "      git push origin HEAD:refs/heads/work/<order>" >&2
+            echo "  That ref matches no platform pattern, so the mandated-merge guard" >&2
+            echo "  does not apply; the local gate stamp still does." >&2
             rm -f "$_plog"; exit 6
         fi
     fi

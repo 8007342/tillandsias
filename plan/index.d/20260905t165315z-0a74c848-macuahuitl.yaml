@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: store-msix-free-signing-research
+    event:
+      type: note
+      ts: "2026-09-05T16:53:15Z"
+      agent_id: linux-macuahuitl-claude-20260905t165315z
+      host: macuahuitl
+      summary: |
+        CRITERION 2 RULING (coordinator, 16:4xZ): "mapped end to end with costs and lead times recorded" means DOCUMENTED, so yolanda's map meets it and the packet closes on it; the exercised reading is unreachable by any agent, because five operator ACCOUNT actions gate every execution path (an Azure AD directory with Global administrator, associating Partner Center, creating the AAD application with the Manager role, generating the key with its one-time visibility, and completing one manual submission including the age-ratings questionnaire), all $0 but operator time. Those five are routed to the operator queue as one ask. THE FINDING THAT WOULD HAVE COST A DAY, kept here because it is the map's most valuable line: there are TWO Microsoft APIs called the Store submission API and both rank for the same searches; the MSI/EXE one takes a token scoped https://api.store.microsoft.com/.default, and ours — MSIX, since the operator deleted the EXE/MSI draft and created an MSIX listing — takes resource=https://manage.devcenter.microsoft.com; the wrong resource mints a token that authenticates fine and then fails every call, and the wrong one is what a search surfaces first. Packages never go to the API: the create call returns a fileUploadUrl that is an Azure blob SAS URI, packages and listing images go up as a SINGLE ZIP, then commit, then poll, and Published is the ONLY success state, so a job treating "not failed" as success reports green while a submission sits in Certification. CORROBORATION RATHER THAN AGREEMENT: a previous agent recommended a manual first submission before automating as a judgement call; the docs make it MANDATORY, the API cannot create the app. COST AND LEAD TIME: $0, no certificate; certification typically hours, up to THREE BUSINESS DAYS, then ~15 minutes to visibility — so a Store release is not same-hour reliable and nothing in the release lane may block on Published.

@@ -235,12 +235,44 @@ automates. Canonical: `methodology/distributed-work.yaml` → `cycle_batch_triag
 1.  **Claim by flipping status, and push it BEFORE the work.**
 
     ```bash
+    scripts/check-claims-across-branches.sh <packet-id>   # FIRST. see below
     tillandsias-plan set-field <packet-id> status in_progress \
         --host "$(hostname -s)" --reason "claimed for cycle <UTC ts> by $agent_id"
     git add plan/index.d/
-    git commit -m "claim(<packet-id>): <host>"
+    git commit -m "claim(<packet-id>): <host>"   # the fragment and NOTHING else
     git push origin <active-branch>
     ```
+
+    **YOUR FOLD DOES NOT SHOW OTHER HOSTS' CLAIMS, and the gap is measured in
+    HOURS, not seconds** (1034-whsp). A claim lands on the claimant's PLATFORM
+    branch. It reaches a trunk host only when the coordinator relays that branch
+    into `linux-next`. Measured on tlatoanis-macbook-air 2026-09-05:
+
+    | | |
+    |---|---|
+    | claim push, claim-only diff, platform branch | **12.0s** |
+    | `osx-next` → `linux-next` relay gaps, last 9 | **19m – 2h02m** |
+    | time since the last relay, when this was written | **6h28m** |
+    | this host's own claims still unseen on `linux-next` | **1h55m, 2h11m** |
+
+    At that moment `origin/linux-next` folded 1034-whsp to `ready` while the
+    claiming host held it `in_progress`. A second host reading its own fold is
+    reading a state that can be hours stale, and 814-iyu7 (two hosts, 1009-gccx,
+    claims 5m14s apart) is what that costs.
+
+    So `check-claims-across-branches.sh` folds every sibling branch's ledger and
+    exits 1 with `claimed-elsewhere:<packet>:<branch>`. **One fetch, ~1s.** It is
+    NOT a lock: two hosts claiming inside the same fetch still collide, and the
+    timestamp rule below still arbitrates. It turns an hours-wide race into a
+    seconds-wide one. `blocked:` from it means STOP — it could not see the
+    siblings, which is not the same as nobody holding the packet.
+
+    **The claim commit must contain the claim fragment and NOTHING else**
+    (1034-whsp, yoga): anything else in the outgoing diff takes the push off the
+    plan-only lane and onto a full gate, ~250s instead of ~6.5s. Note that on a
+    platform branch the pre-push gate will first demand a merge of
+    `origin/linux-next`; that is expected, and the lane is merge-aware, so
+    re-push after merging rather than reaching for `--no-verify`.
 
     `$agent_id` is the §1.4 helper output (`scripts/agent-identity.sh id
     <backend>`) — if the helper refused, there is no identity to claim with, and
@@ -522,6 +554,9 @@ Hard rules:
 - **Under the relay protocol, `git pull --rebase` on linux-next fuses the two lanes.** A slow-gate host pushes gated code to `work/<order>` for the coordinator to relay-land and pushes ledger fragments directly through the plan-only lane. If both commits exist on the same local linux-next, a rebase carries the code into the "plan-only" push and the hook refuses it (`plan-only lane: not applicable — … outside plan/index.d/`), which is correct; the refusal's output offers `git push --no-verify`, which would push the violation through. Never use it. After a `work/` push, reset local linux-next to `origin/linux-next` before starting plan-only work, so the lanes never share a branch; if they already do, reset to trunk and cherry-pick the fragment commit alone after confirming the `work/` ref is safe on origin (lenovinha, 2026-09-05, 1059-pb2j).
 
 - **Relay-lane order is fetch, rebase, gate, push; and never sequence a destructive git command after a push in the same block.** Gating before the rebase invalidates the stamp and the hook refuses correctly (lenovinha, 2026-09-05). And `git push && …` is not enough when the push is refused by a hook that exits non-zero only sometimes: a `git reset --hard` placed after a push in one block ran on a refused push and discarded a commit that existed nowhere else, recovered from the reflog. Under the relay protocol a `work/` push is followed by a reset to keep the lanes apart, which makes this likelier: read the push's verdict line, then reset in a separate command.
+
+- **Ledger prose is data, and the shell will execute it if you let it.** On 2026-09-05 a host wrote an event whose prose quoted a litmus line in backticks; the write path command-substituted them and a truncated two-argument `cp` overwrote a gate instrument in the working tree, silently (1063-363b, reframed). Write every event summary to a file through a quoted heredoc and pass `--summary-file`; never an inline `--summary "…"` or an unquoted heredoc; quote a shell fragment whole or describe it in words. And report every timestamp to a peer in UTC with the Z (`date -u`, `stat --time-style=+%FT%TZ`): a bare `stat` mtime is local time and sent a pristine-clone probe eight hours from the event.
+- **A ledger-only push from a platform branch is only ledger-only if the outgoing diff says so.** The lane judges the diff against the remote, not your last commit: an unpushed set that still carries code already relayed to trunk is declined, correctly. Before a plan-only push, confirm the code is safe on origin (`git branch -r --contains <sha>`), rebuild the branch on `origin/<branch>`, re-apply only the fragments, then push (yolanda, 1055-6yp8 close, 2026-09-05). And a terminal event needs the status transition with it: a `completed` event beside status `ready` folds as ready and the packet stays claimable forever; the fragment-status-loss guard catches it, and `set-field --evidence` is the path that derives the rung from the status.
 
 ---
 

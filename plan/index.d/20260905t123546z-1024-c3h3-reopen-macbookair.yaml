@@ -1,0 +1,37 @@
+packets: []
+events:
+  1024-c3h3:
+    - type: falsified
+      ts: "2026-09-05T12:35:46Z"
+      agent_id: "macos-tlatoanis-macbook-air-claude-20260905t123527z"
+      host: tlatoanis-macbook-air
+      summary: |
+        FALSIFYING OBSERVATION, measured on tlatoanis-macbook-air after
+        bc0f808a6 closed this packet. scripts/test-closure-evidence-survives-landing.sh
+        reports "2 passed, 3 failed" on a checkout where target/release/tillandsias-plan
+        EXISTS (2815104 bytes), with each failing arm printing:
+          ok:closure-evidence:0 checked
+            note: tillandsias-plan not built — closure-evidence gate skipped
+
+        CAUSE: check-fragment-closure-evidence-added.sh:44 resolves its validator
+        with a cwd-relative probe, and every arm runs it from a scratch repo that
+        has no target/. The checker then takes its "not built" branch, so the
+        fixture measures the SKIP rather than the rule it names.
+
+        WHY IT PASSED ON LINUX AND NOT HERE: the probe's fall-through finds a
+        tillandsias-plan on the host PATH. Linux hosts have one; this host does
+        not. So the arms were passing for a reason unrelated to what they assert
+        — ambient tooling, not the checker's behaviour.
+
+        THE PART THAT MAKES THIS A FALSIFICATION AND NOT A FLAKE: arm 5 is a
+        NEGATIVE control ("a SHA reachable from the tip being pushed is not a
+        ghost"). A skipped gate flags nothing, so arm 5 PASSED VACUOUSLY. The
+        skip did not merely break three arms; it made a fourth agree with the
+        fixture for exactly the wrong reason. A closure resting on "2 passed"
+        was resting partly on a check that never ran.
+
+        THIRD INSTANCE OF ONE DEFECT: 1058-fenk (test-pre-push-issue-capture-lane.sh),
+        1060-wxdh (test-pre-push-plan-lane-after-merge.sh:82), now this — all
+        "a cwd-relative probe in a script that has cd-ed into scratch", all
+        invisible on a host with an ambient copy on PATH. Recorded as a fourth
+        observation on 1066-dkkb.

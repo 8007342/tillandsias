@@ -1,0 +1,79 @@
+packets: []
+events:
+  317:
+    - type: progress
+      ts: "2026-09-05T16:51:01Z"
+      agent_id: "macos-tlatoanis-macbook-air-claude-20260905t144547z"
+      host: tlatoanis-macbook-air
+      summary: |
+        CURRENT-GUEST SLICE, taken at the coordinator's ruling. Criterion 2 is
+        NOT met by this and I am not claiming any part of it met. What this
+        slice delivers is a CORRECTION to why it is not met, which changes the
+        work the next claimer does.
+
+        WHICH HALF THIS EVIDENCE REACHES: neither, and the install path is
+        UNTOUCHED. Read the narrowing below rather than the pass/fail.
+
+        MEASURED in the current guest (aarch64, confirming the Tier-2 premise),
+        via /Applications/Tillandsias.app --exec-guest:
+
+          claude opencode codex openspec agy direnv gemini -> ALL ABSENT
+          podman ps -a  -> tillandsias-proxy (Exited), tillandsias-vault (starting)
+          podman images -> tillandsias-git, -proxy, -vault only
+
+        I NEARLY REPORTED "SEVEN HARNESSES MISSING" AND IT WOULD HAVE BEEN THE
+        WRONG LAYER MEASURED CONFIDENTLY. Their absence from the guest VM is
+        CORRECT and expected: images/default/Containerfile.base:38-41 records
+        that agent harnesses are installed EVERY_LAUNCH by
+        ensure_forge_harnesses (lib-common.sh:2635, order 181), in the FORGE
+        CONTAINER, and are deliberately not baked at image build. agy carries
+        its own note there: not installed at build because the upstream
+        installer is a pipe-to-shell with a floating version that would bake the
+        wrong arch on this very aarch64 guest. So the guest's PATH is not where
+        this criterion lives, and a probe of it proves nothing either way.
+
+        THE NARROWING, AND IT CONTRADICTS THIS PACKET'S OWN next_action. The
+        next_action sends criterion 2 to a PRISTINE guest, on the reading that
+        installing is a first-boot event. It is not. ensure_forge_harnesses runs
+        on EVERY forge launch — curl_install_claude for Claude, npm on-demand
+        via _require_harness for OpenCode (which left the curl channel
+        2026-08-31 by operator ruling), install-if-missing for agy. A guest that
+        has launched a forge before exercises exactly the same code path as one
+        that never has. So the blocker is NOT pristineness.
+
+        THE ACTUAL BLOCKER, MEASURED: this guest has no forge container and no
+        tillandsias-default image at all. The install path cannot be exercised
+        without a forge launch, and a forge launch needs that image built or
+        pulled. That is a different and much cheaper prerequisite than the
+        destructive pristine-guest e2e, and it does NOT require the operator's
+        authorisation — it requires an image.
+
+        SO THE NEXT CLAIMER SHOULD: launch a forge in an ordinary guest and
+        capture ensure_forge_harnesses' output, asserting each inventoried
+        harness either installs via its designated channel with visible progress
+        or fails with ONE actionable line. The "no silent 127s" half is
+        precisely about that launch path. The PRISTINE requirement should be
+        re-read before it is inherited: it may only be needed for the
+        first-install-on-a-clean-image case, which is a narrower claim than the
+        criterion as written.
+
+        WHAT THIS SLICE CANNOT SPEAK TO, INDEPENDENTLY OF THE ABOVE: the tray
+        REFUSED to stage its guest binary — "REFUSING to stage an OLDER guest
+        binary (701-kgvk); already staged 2026-09-05T03:14:35Z, this bundle
+        03:10:27Z". The guard is working correctly, and it means everything
+        above describes the binary the guest currently holds, not this checkout.
+        A bare target/release/tillandsias-tray cannot substitute: it fails with
+        "The process doesn't have the com.apple.security.virtualization
+        entitlement", so guest work on this host must go through
+        /Applications/Tillandsias.app or a freshly built bundle.
+
+        ONE ANOMALY, RECORDED NOT DIAGNOSED: podman reports the proxy container
+        as "Exited (0) 292 years ago". 292 years is the i64-nanosecond span, so
+        this looks like a zero/overflowed creation timestamp rather than a real
+        date. I did not chase it and it may be cosmetic, but a container whose
+        age is nonsense is worth a look by whoever next reads podman state here.
+
+        RELEASING THE LEASE back to ready. The pristine/destructive half remains
+        the operator's, and the coordinator's queued authorisation still stands
+        for whatever genuinely needs it — which, per the narrowing above, may be
+        less than the packet assumes.

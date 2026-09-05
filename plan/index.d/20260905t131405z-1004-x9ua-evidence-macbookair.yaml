@@ -1,0 +1,87 @@
+packets: []
+events:
+  1004-x9ua:
+    - type: progress
+      ts: "2026-09-05T13:14:05Z"
+      agent_id: "macos-tlatoanis-macbook-air-claude-20260905t125159z"
+      host: tlatoanis-macbook-air
+      summary: |
+        ALL FOUR CRITERIA MET on tlatoanis-macbook-air. Evidence per criterion,
+        with what each was measured against.
+
+        C1 (the timeout entry states its precondition and SKIPS rather than
+        FAILS): done, and generalised to EVERY prover instead of special-casing
+        the entry. The arm now runs the prover WITH the tool as a control; if
+        the without-tool verdict is identical, the tool made no difference, the
+        dependency was never reached, and the arm skips BY NAME and counts as
+        unverified rather than as a pass.
+        REPRODUCED macneo's host with a gh stub, since this host's token is live:
+          dead-token gh, fix in place -> ok SKIP timeout/check-credential-channel.sh
+                                         (both=[missing:no-credential-channel])
+          dead-token gh, skip removed -> FAIL without timeout ... blocked:gh-cli-only
+                                         FAIL: host-tools 1/17 red
+        The second line is macneo's original 1/12 symptom reproduced, then closed.
+        MY FIRST CONDITION WAS WRONG AND THIS HOST COULD NOT HAVE SHOWN IT: I
+        skipped when the control ALREADY reported $expect, which never fires for
+        the real case — on macneo's Mac the prover said missing:no-credential-channel
+        in BOTH runs, never $expect at all. With a live token neither form fires,
+        so 17/17 was green for the wrong condition too. Found by reasoning about
+        their transcript rather than by trusting a green.
+
+        C2 (no remedy names an installed tool): met, and the fault was WIDER than
+        filed. Under the non-login PATH an agent tool call gets,
+          missing:host-tools:macos:timeout,cargo,rustc,pkg-config
+        with all four installed — timeout/gtimeout/pkg-config in /opt/homebrew/bin,
+        cargo/rustc in ~/.cargo/bin (cargo 1.96.1 runs). TWO prefix families, not
+        one; the filed diagnosis named ~/.cargo/bin only and would have left
+        timeout and pkg-config still lying. Pinned by a fixture arm asserting no
+        verdict on the live host names a tool that is installed on it.
+        Additionally, a MISSING verdict now states WHICH prefixes it searched
+        (1066-dkkb), so "not installed" is distinguishable from "not where I
+        looked" — the prefix list is standard, not exhaustive, and saying so is
+        cheaper than pretending otherwise.
+
+        C3 (resolve through CARGO_HOME/bin then $HOME/.cargo/bin, matching
+        cycle-preflight.sh:104; the genuinely-absent case keeps its verdict):
+        met, plus the homebrew prefixes the filed fix would have missed.
+        REGISTERED AS THE FIFTH SITE in scripts/lib-cargo-sites.sh per that
+        file's own instruction to add the next site rather than find it on a
+        floor host, with the reason it does not call cargo_resolve recorded
+        there. The packet named check-cheatsheet-tiers.sh:57 as an open third
+        site; it was ALREADY FIXED by 1005-m6rz — verified under
+        `env -i PATH=/usr/bin:/bin`, not assumed.
+
+        C4 (both sides proved): met, three sabotages each isolating a distinct
+        mechanism.
+          pre-fix have() restored -> positive + gtimeout arms RED (2/17)
+          have() always true      -> true-absence + arm 2 RED     (2/17)
+          alternates removed only -> gtimeout arm RED             (1/17)
+          restored -> 17/17, tree byte-identical (diff -q)
+        A TEST SEAM WAS REQUIRED and is justified rather than smuggled: every
+        prefix but the cargo ones is an ABSOLUTE path, so a host that really has
+        /opt/homebrew/bin cannot construct the absent case for a tool living
+        there. Without TILLANDSIAS_HOST_TOOL_PREFIXES this criterion would be
+        provable for cargo and silently unprovable for timeout and pkg-config —
+        an arm covering half of what it claims. Unlike the CYCLE_PREFLIGHT_SKIP_BUILD
+        shape 1004-ws5q declined, it is exercised by the fixture on every gate
+        run, so it cannot rot unnoticed.
+
+        MY CHANGE FIRST BROKE THE FIXTURE'S EXISTING ARM 2, measured rather than
+        predicted: the farm still hid timeout, but the check now reached past it
+        to /opt/homebrew/bin. The farm defines the PATH and had to be taught to
+        constrain the prefixes too, or it constrains nothing.
+
+        ALTERNATES ARE READ OFF THE CONSUMER: check-credential-channel.sh:17-20
+        accepts timeout OR gtimeout, so a gtimeout-only host is not missing
+        coreutils. Deriving the alternate from the consumer keeps this file from
+        drifting into accepting what the gate would then reject.
+
+        SIDE EFFECT WORTH NAMING: macneo reported ./build.sh --check red on
+        exactly the C1 arm, so a Mac whose gh token had been evicted could not
+        land anything. A dead token now yields a named skip instead of a red
+        gate, which cuts that coupling to 1025-a896.
+
+        Forced gate on a quiet machine: ok:test-baseline:ran=2303 new-red=0
+        tolerated=0 stale=0, exit 0. Registry fixture
+        test-cycle-preflight-cargo-resolution: 19 passed, 0 failed.
+        Commits 2fd6f3e7d (C2/C3/C4) and 9f3f11d9a (C1).
