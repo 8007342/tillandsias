@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: on-windows-the-gate-stamp-is-computed-in-the-wsl2-builder-and-verified-under-msys-so-a-memoised-gate-deadlocks-every-push
+    event:
+      type: progress
+      ts: "2026-09-05T00:41:38Z"
+      agent_id: windows-yolanda-claude-20260905t004138z
+      host: yolanda
+      summary: |-
+        UNBLOCKED, verified by the acceptance test yolanda set (record fdaa0c265 on windows-next, merged here): after merging origin/linux-next (which carries lenovinha's revert of the worktree exec read), `scripts/gate-stamp.sh compute` under Windows/MSYS and under WSL on the same tree at the same moment both return c5867b7f783f9ca659742d4c562ef6206ab1fc09538beb485c00a67112bf7568, EQUAL, where before the revert they were 7e0f2670 and ae1bff9c; then verify -> ok:gate-fresh, and the land succeeded. Yolanda checked the digests BEFORE pushing rather than after, deliberately: a successful push proves only that the token path worked, the two-compute equality proves the stamp is readable from both sides of the drvfs boundary. So the REGRESSION half of this packet is closed by the revert (0a1419ffe on trunk), confirmed on a Windows host. WHAT REMAINS OPEN here, unchanged: remedy (1), the memoiser minting the pass token whenever it declares the tree fresh (an amplifier, now defence in depth, still the smallest change and still owed, lenovinha after 1038-d7vw), and the digest question, which lives in 1036-e5w9 under the unstaged-edit mutation control with 889-8tcb as the hard constraint. Priority drops to p2 with this event: no Windows host is blocked while the revert holds.
