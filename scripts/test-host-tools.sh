@@ -113,13 +113,57 @@ while IFS='|' read -r tool platforms prover expect why remedy; do
         unverified=$((unverified + 1)); continue
     fi
     [ -x "$ROOT/scripts/$prover" ] || { check FAIL "prover for $tool exists: $prover"; continue; }
+
+    # ORDER 1004-x9ua — THE CONTROL RUN, AND WHY THIS ARM NEEDED ONE.
+    #
+    # A falsification arm says "remove the tool and the prover flips to
+    # <expect>". That sentence is only meaningful if, with the tool PRESENT, the
+    # prover does NOT already say <expect>. When it does, removing the tool
+    # changes nothing and the arm is measuring some unrelated precondition.
+    #
+    # MEASURED by macneo-macos 2026-09-04 on a Mac whose gh keyring token had
+    # rotted: `timeout|macos|check-credential-channel.sh|blocked:gh-cli-only`
+    # went red with got=[missing:no-credential-channel], and host-tools read
+    # 1/12. The blocked:gh-cli-only branch (check-credential-channel.sh:612) is
+    # reachable only AFTER the guard's token arm passes; with a dead token the
+    # guard short-circuits long before the timeout dependency is ever exercised.
+    # So the arm was reporting the OPERATOR'S gh login state as a fact about
+    # coreutils, and its remedy told them to install a package they had.
+    #
+    # A HOST WHOSE TOKEN HAS BEEN EVICTED THEN CANNOT LAND ANYTHING, which is
+    # how this coupled to 1025-a896.
+    #
+    # The control below is the packet's criterion 1 in its "states its
+    # precondition and SKIPS (not FAILS)" form, generalised so it protects every
+    # prover rather than special-casing this one entry. NOTE THE ASYMMETRY: a
+    # skip here is NOT a pass. It is counted and named, because "the precondition
+    # did not hold" and "the tool is genuinely not required" must not read alike.
+    ctl="$(bash "$ROOT/scripts/$prover" 2>/dev/null | tail -1)"
+
     # coreutils ships both names; hiding one leaves the fallback in place.
     if [ "$tool" = timeout ]; then farm "$tmp/f2" timeout gtimeout; else farm "$tmp/f2" "$tool"; fi
     got="$(PATH="$tmp/f2" bash "$ROOT/scripts/$prover" 2>/dev/null | tail -1)"
+
     if printf '%s' "$got" | grep -q "^$expect"; then
         check ok "without $tool, $prover reports $expect"
+    elif [ "$got" = "$ctl" ]; then
+        # THE PRECONDITION DID NOT HOLD, and this is the shape that must not read
+        # as a tool failure. Removing the tool changed NOTHING: the prover gives
+        # the same answer either way, so it never reached the dependency and this
+        # arm cannot speak about $tool at all.
+        #
+        # Getting the CONDITION right here took two attempts, and the first one
+        # is worth recording because it looks correct. I first skipped when the
+        # control ALREADY reported $expect — which never fires for the case this
+        # exists to handle: on macneo's Mac the prover answered
+        # missing:no-credential-channel in BOTH runs, never $expect at all. The
+        # discriminator is not "control equals expect", it is "the tool made no
+        # difference". On THIS host, with a live token, neither form fires and no
+        # local run could have told them apart.
+        unverified=$((unverified + 1))
+        check ok "SKIP $tool/$prover: precondition does not hold here — the verdict is identical with and without the tool, so the prover never reached the dependency (both=[$got])"
     else
-        check FAIL "without $tool, $prover reports $expect" "got=[$got]"
+        check FAIL "without $tool, $prover reports $expect" "got=[$got] with-tool=[$ctl]"
     fi
 done <<EOF
 $(awk '/cat <<.SPEC.$/{f=1;next} /^SPEC$/{f=0} f' "$CHECK")
