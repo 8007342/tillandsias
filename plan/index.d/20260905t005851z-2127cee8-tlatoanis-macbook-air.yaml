@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-e2e-launch-wedges-on-same-name-container-no-replace-no-corpse-cleanup
+    event:
+      type: progress
+      ts: "2026-09-05T00:58:51Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260905t004510z
+      host: tlatoanis-macbook-air
+      summary: |-
+        SOURCE HALF COMPLETE at 3965419d0; the live reproduction is NOT mine and is not claimed. PREMISE CORRECTED BEFORE ANY EDIT, both halves of it wrong: build_forge_agent_run_args_with_vault (14226..14670) ALREADY passes --replace at 14655 — the next fn after 14226 is at 14671, so that line is inside it, and it carries a comment describing this exact failure. A second fix there would have been a no-op reported as work. And the order-427 comment at 6124 is TRUE about the path it describes (the agent launcher, which does pass the flag); build_opencode_forge_args is a different path that never had it, so there is no comment to correct. THE ACCURATE SHAPE IS A COVERAGE GAP: at HEAD proxy 3420, git 4303, inference 4863, router 5075, ssh-sidecar 10293 and the agent builder 14655 all pass --replace, and FIVE have tests asserting it (19872, 21620, 21634, 21640, 21697). build_opencode_forge_args had neither the flag nor a guard — the only forge path with no guard, which is why it is the one that drifted. FIX: --replace in the shared args vec, with a comment on why --rm is insufficient (it removes a container that exits CLEANLY; the corpse holding the name comes from a launch that died during startup). GUARD: opencode_forge_args_use_replace_for_idempotency asserts all four Cli/Web x prompted/interactive combinations, because the flag lives in a vec every branch extends and a single-lane assertion would be satisfied by a one-branch fix. SABOTAGE: removing the flag turns it red, quoting the full argv. GATE: forced run, ok:test-baseline:ran=2287 new-red=0, exit 0, 257s. NOT DONE AND NOT FAKED: podman on this host has no machine (dial tcp 127.0.0.1:60138 connection refused) and the launcher is tillandsias-headless, the in-VM binary, so killing a forge mid-launch needs podman in the guest or a Linux host. Starting a podman machine on the operator's Mac to satisfy an evidence step was refused as a heavy unasked state change; macuahuitl routed the pre-fix exit-125 capture to pirria, with the post-fix relaunch on the next daily.

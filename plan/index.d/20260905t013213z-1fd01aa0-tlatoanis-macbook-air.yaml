@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-e2e-launch-wedges-on-same-name-container-no-replace-no-corpse-cleanup
+    event:
+      type: progress
+      ts: "2026-09-05T01:32:13Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260905t004510z
+      host: tlatoanis-macbook-air
+      summary: |-
+        REVISED AFTER PIRRIA'S REPRODUCTION SHOWED MY FIX WAS DANGEROUS. My first version added --replace to build_opencode_forge_args. Pirria reproduced the real collision on v56.9.4.1 with a 62 ms kill-to-relaunch gap and it was against a STILL-RUNNING sibling, not an exited corpse: podman's --replace reuses a name by KILLING the holder, the forge workspace is a CLONE ONLY holding unpushed in-forge work, and a container NAME carries no ownership. That is the work-loss order 494 forbids, and my fix would have shipped it. ESCALATION I FOUND WHILE FIXING IT: build_forge_agent_run_args_with_vault already passed --replace at 14655 -- the same line I had cited two hours earlier as evidence the agent path was 'already fixed'. It was broken the same way and had been shipping. Its comment said --replace 'atomically removes the exited container', true of a corpse and silent about a running holder, which is how it read as correct to order 378, to the coordinator and to me. BOTH BUILDERS FIXED IN ONE COMMIT at the coordinator's ruling, so no forge path is left work-destroying while its sibling is safe. --replace removed from both and restored to neither; the collision is handled once at the shared launch path both reach (run_agent_container_attached): non-force podman rm clears an exited corpse and podman itself REFUSES a running one, then a bounded backoff (2s doubling to 15s, cap 360s) waits the holder out before refusing loudly with the 494 wording. NO OWNERSHIP METADATA, deliberately: pirria measured the orphan self-removing at ~20s, ~45s and ~4min, which makes a bound SAFE without it, and a wrong ownership reading is precisely the order-443 misread that killed a live lane on 2026-07-27. Metadata would make this faster, never safer. The Failed(_) arm treats an error as evidence of neither state and proceeds without removing anything. The agent test at 19872 is INVERTED rather than deleted and says so. SABOTAGE, four arms, every one made to compile so none could produce a silent non-result: --replace back in the opencode builder -> RED; --replace back in the agent builder -> RED; collision handling removed -> RED on BOTH tests; restored -> 2 passed. My first attempt at the removal arm renamed a call to something nonexistent, which broke compilation so the test never ran and printed nothing, and I nearly recorded that silence as a pass. SEVERITY, both halves: the collision window is MINUTES not indefinite -- a human retrying later recovers unaided, an automated runner retrying immediately is inside the window by construction; the backoff turns the second into a wait. NOT DONE: the live pre-fix exit-125 capture is pirria's, and the 'next:' hint that cannot tell the two exit-125 sources apart is filed separately rather than bolted on.
