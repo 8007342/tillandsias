@@ -105,6 +105,68 @@ fragments in the first place.
 Only you could have produced that filename, so git has nothing to merge. The
 packet is queryable immediately — reads fold fragments in automatically.
 
+## Repairing a fragment: write a correction, never edit it
+
+A fragment is append-only and **immutable once written**. That applies to
+repairing one too, and this is the case that actually goes wrong, because a
+fragment *looks* editable in a way the base does not — it is small, you probably
+wrote it, and the repair is usually one missing key.
+
+**A fragment repair is a NEW correction fragment** declaring the same
+`packet_id` with the corrected field. Never an amendment to the fragment already
+written, and never by a second party under any circumstances.
+
+```yaml
+# plan/index.d/<utc>-<suffix>-<host>.yaml   <- a NEW file
+packets:
+  - packet_id: the-packet-being-repaired   # same id; that is what folds them
+    order: 1071-adhj
+    unscoreable: |
+      The field that was missing, supplied here rather than added in place.
+```
+
+Corrections compose under the G-Set union. Two in-place amendments of an
+append-only file do not.
+
+### The collision that made this a rule
+
+On 2026-09-05 the coordinator amended two fragments on trunk to add missing
+scorable blocks. Another host amended the same two files locally, having checked
+`origin/linux-next` first and found the repair absent. The next merge combined
+both edits **additively**, so each file ended with two `unscoreable:` keys — a
+duplicate mapping key, which is not valid YAML:
+
+```
+blocked:all-fragments-intact:2 damaged
+blocked:fragment-events-land:3 event(s) attached to no packet
+```
+
+The second was a consequence of the first: an unparseable fragment contributes
+no packet, so its own events orphan.
+
+**Neither host was careless, which is why this is a rule and not advice.** Both
+checked before editing. What failed was the safeguard: both consulted trunk to
+see whether the other's repair had landed, and trunk is hours stale for a
+platform host — measured relay gaps of 19 minutes to 2 hours 2 minutes
+(`1034-whsp`). A check that cannot see in-flight work is not a check, so an
+in-place amendment by a second party is a race neither party can observe.
+
+`check-all-fragments-intact` already states the consequence in its own refusal:
+damage here is *not a merge to resolve but a file to restore from its authoring
+commit*.
+
+### If a gate tells you to edit in place, the gate is wrong
+
+`check-scorable-obligation-added.sh` used to judge one fragment's bytes alone, so
+a declaration whose obligation arrived in a correction fragment was still
+refused — and the only way through was the in-place edit this section forbids.
+The two rules contradicted each other. It now asks whether the packet **as
+folded** carries an obligation (`1071-adhj`).
+
+Say so rather than editing. Canonical rule:
+`methodology/distributed-work.yaml` →
+`distributed_work.crdt_principles.invariants.append_only_history.implementation.fragment_repair_is_a_correction_fragment`.
+
 ## Rules
 
 - **Never edit a fragment after writing it.** Immutability is what makes the fold
