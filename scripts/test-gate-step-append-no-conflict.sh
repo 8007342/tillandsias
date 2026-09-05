@@ -111,5 +111,38 @@ else
     bad "build.sh no longer refuses a missing step script — the skip-is-a-green hazard is back"
 fi
 
+# ── 5. NO TWO .step FILES NAME THE SAME SCRIPT. This is the data-shaped form of
+#      the fourth conflict macuahuitl resolved on 2026-09-05, and it is the one
+#      worth pinning hardest: that conflict was not two hosts adding DIFFERENT
+#      steps, it was two hosts adding the SAME step at different offsets, so the
+#      correct resolution leaves exactly one copy and the obvious resolution
+#      leaves two. In data form a duplicate is two well-formed files whose
+#      STEP_SCRIPT matches — syntactically perfect, silently running the step
+#      twice, and invisible to `bash -n` because there is no script to parse.
+dupes="$(for f in "$ROOT"/scripts/gate-steps.d/*.step; do
+             [ -e "$f" ] || continue
+             grep -m1 '^STEP_SCRIPT=' "$f" | sed 's/^STEP_SCRIPT="//; s/"$//'
+         done | sort | uniq -d)"
+[ -z "$dupes" ] \
+    && ok "no two .step files name the same script — a duplicated entry cannot hide" \
+    || bad "two .step files name the same script, so the gate would run it twice:$(printf ' %s' $dupes)"
+
+# ── 6. EVERY .step IS COMPLETE. A conflict resolved by truncation produces a
+#      file that is still valid shell and still sources without error, but with
+#      a field missing — the loop would then run with an empty description or an
+#      empty error string. `bash -n` cannot see this either: the failure mode of
+#      data is not a syntax error, it is a well-formed file that says less than
+#      it should.
+incomplete=""
+for f in "$ROOT"/scripts/gate-steps.d/*.step; do
+    [ -e "$f" ] || continue
+    for k in STEP_DESC STEP_SCRIPT STEP_ERROR STEP_OK; do
+        grep -q "^$k=\"..*\"$" "$f" || incomplete="$incomplete ${f##*/}:$k"
+    done
+done
+[ -z "$incomplete" ] \
+    && ok "every .step declares all four fields non-empty — a truncated resolution cannot pass" \
+    || bad "a .step is missing or has an empty field:$incomplete"
+
 echo "gate-step-append-no-conflict: $pass passed, $fail failed"
 [ "$fail" = 0 ] || exit 1
