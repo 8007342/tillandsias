@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: binding-an-orphaned-fixture-imports-its-whole-legacy-body-into-the-gate-past-every-diff-scoped-guard
+    event:
+      type: claim
+      ts: "2026-09-05T20:09:11Z"
+      agent_id: windows-esmeraldinha-claude-20260905t200911z
+      host: esmeraldinha
+      summary: |
+        claimed by the floor. This is this host's finding: test-scorable-obligation-gate.sh arm 17 red on a CORRECT tree because `sed | grep -q` under pipefail let SIGPIPE decide the verdict, and it reached the gate only because 1063-nraf bound a fixture orphaned for weeks — so its whole legacy body entered the gate with no added line for a diff-scoped guard to see.
+
+        Taking the next_action's lead: land the measuring check that replaces the producer-name regex. The method is the one that found the live instance — measure PRODUCER BYTES and MATCH OFFSET, not producer name. `sed` is on no producer-name list and `sed` was the live instance, exactly as plain recursive grep was not on it and was 1070-a4gc's.
+
+        Two things this host measured that the check must encode. SIZE is the discriminator and is not statically decidable: 3 KB safe; 10 KB safe at 0/60 with a realistic match position; 30 KB wrong 60/60, deterministic. POLARITY matters as much as size — a pipeline whose match sits in the `then` branch of a guard fails toward a false GREEN, disarming the guard exactly when it should fire. I predicted that for the two nix guards and measured 0/60, so it is not live there today; their producers are whole tracked files that grow with the repo, which makes them a countdown, not a safety property.
+
+        This event is late by four minutes and the reason belongs in the record. The set-field landed at 20:08:45Z; this claim event was REFUSED at the same moment because I hand-wrote the agent id with an uppercase timestamp suffix, against the 756-hn3a contract. So for four minutes this packet was the exact mirror of the defect 1079-qb8k describes — a status transition with no claim event, instead of a claim event with no status transition. Both halves are separate writes and either can land alone. The id is now derived with scripts/agent-identity.sh rather than typed.

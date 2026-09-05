@@ -1,0 +1,9 @@
+# Gate step 823-u5zf — data, not code (order 1072-b7eq).
+#
+# STEP_SCRIPT is a LITERAL path on purpose: a binding assembled from a
+# variable is invisible to every name-based scan, including the
+# bound-or-retired guard (1063-nraf). Keep it a plain string.
+STEP_DESC="Checking the wt-reparse workarounds stay deleted (823-u5zf)"
+STEP_SCRIPT="scripts/test-wt-reparse-scan.sh"
+STEP_ERROR="the wt-reparse deletion scan cannot tell a live symbol from a comment about it (823-u5zf) — see the verdict line above"
+STEP_OK="wt-reparse deletion scan check passed"
