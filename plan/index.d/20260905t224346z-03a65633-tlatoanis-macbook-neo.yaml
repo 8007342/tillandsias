@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-guest-provisioning-script-can-abort-partway-while-cloud-init-reports-success
+    field: status
+    value: completed
+    ts: "2026-09-05T22:43:46Z"
+    host: tlatoanis-macbook-neo
+
+events:
+  - packet_id: the-guest-provisioning-script-can-abort-partway-while-cloud-init-reports-success
+    event:
+      type: completed
+      ts: "2026-09-05T22:43:46Z"
+      host: tlatoanis-macbook-neo
+      summary: |-
+        status 'completed' with evidence_refs: 895a03440
+  - packet_id: the-guest-provisioning-script-can-abort-partway-while-cloud-init-reports-success
+    event:
+      type: note
+      ts: "2026-09-05T22:43:46Z"
+      host: tlatoanis-macbook-neo
+      summary: |-
+        all four criteria met: 1 and 3 by 459df06fe, 2 by e16319e28, 4 by 895a03440; both relays hash-verified under macneo's authorship. Closes with its most consequential finding SPLIT INTO 1082-9rub rather than resolved — ~20 sites still branch on is_provisioned() as though a stat() meant provisioning completed

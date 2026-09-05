@@ -233,8 +233,31 @@ impl VzRuntime {
         self.image_root.join("console.log")
     }
 
-    /// True if a previous provisioning has produced the disk image. Used by
-    /// `provision` for the idempotency short-circuit.
+    /// True if the rootfs disk image FILE EXISTS. Used by `provision` for the
+    /// idempotency short-circuit.
+    ///
+    /// READ THE NAME NARROWLY (order 1055-e8ie, criterion 4). This is a
+    /// `stat()` and nothing more. It does NOT mean the provisioning script ran,
+    /// that it completed, or that the guest works — only that a file is on
+    /// disk. The packet was filed against cloud-init reporting `done` while
+    /// provisioning had aborted; MEASURED while closing it, nothing in this
+    /// tree consumes cloud-init's status at all, and THIS is the insufficient
+    /// signal actually in use.
+    ///
+    /// MEASURED on macneo 2026-09-05: a cold provision produced rootfs.img, so
+    /// this returned true, on a guest that never reached Ready. The disk file
+    /// and a working guest are different facts and this function only sees the
+    /// first.
+    ///
+    /// FOR "DID PROVISIONING FINISH", READ THE PROVISION RECORD INSTEAD —
+    /// `provision_state_path()`, written by the guest to a host-visible share
+    /// with start/complete/failed phases. That is the signal that can answer
+    /// the question this one is often mistaken for.
+    ///
+    /// The ~20 call sites that BRANCH on this are deliberately unchanged here:
+    /// altering what they mean is a behavioural change with its own risk
+    /// profile and is filed separately. This documents the fact; it does not
+    /// move it.
     pub fn is_provisioned(&self) -> bool {
         self.rootfs_image_path().exists()
     }
@@ -2920,6 +2943,43 @@ mod tests {
              (PATH=/usr/bin:/bin:/usr/sbin:/sbin): {offenders:?}. Use an absolute system path, \
              or do the work in-process. A Homebrew prefix is never on that PATH, so \
              \"tell the operator to install it\" is not a fix."
+        );
+    }
+
+    /// 1055-e8ie criterion 4. The insufficient signal must SAY it is
+    /// insufficient.
+    ///
+    /// The criterion as filed named cloud-init's `done` as the thing to
+    /// correct. Measured while closing the packet: NOTHING in this tree
+    /// consumes cloud-init's status — it appears only in this script, one doc
+    /// comment, and a test name — so there was no consumer to make honest. The
+    /// signal actually in use is `is_provisioned()`, a stat() of rootfs.img,
+    /// branched on at ~20 call sites. The criterion was reworded to name it,
+    /// with both versions recorded on the packet so the change is visible
+    /// rather than absorbed.
+    ///
+    /// This pins the DOCUMENTED limitation, not the behaviour: the twenty
+    /// branches are a separate packet. What must not silently return is a
+    /// function whose name implies completion and whose doc does not say it
+    /// measures a file.
+    #[test]
+    fn is_provisioned_documents_that_it_only_stats_a_file() {
+        let source = include_str!("vz.rs");
+        let decl = "pub fn is_provisioned(&self) -> bool {";
+        let idx = source.find(decl).expect("is_provisioned must exist");
+        let doc = &source[idx.saturating_sub(1600)..idx];
+        assert!(
+            doc.contains("does NOT mean the provisioning script ran"),
+            "is_provisioned's doc must state what it does not measure (1055-e8ie)"
+        );
+        assert!(
+            doc.contains("provision_state_path()"),
+            "the doc must point at the signal that CAN answer 'did provisioning \
+             finish', or a reader is left with only the insufficient one"
+        );
+        assert!(
+            doc.contains("stat()"),
+            "the doc must name the measurement it actually performs"
         );
     }
 
