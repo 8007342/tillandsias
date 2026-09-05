@@ -315,12 +315,37 @@ if [ ! -f "$_lane" ]; then
 #     1200 lines, match@1199  tail     73 B   wrong 0/10
 # A 36 KB tail is nearly always fine there; the real 10 KB tail is never fine.
 # The margin does not order the outcomes. It is not mis-parameterised, it is the
-# wrong quantity, and no mechanism has been established — the real pipeline
-# differs from every synthetic in ways nobody has separated (a complex ERE
-# consumer rather than a literal, many emptied lines after comment-stripping, a
-# match at 75% of a stream written in many chunks). Do not publish a third model
-# from this; a check for this class must EXECUTE the pipeline under pipefail and
-# read PIPESTATUS, and report `unmeasured` with a reason otherwise.
+# wrong quantity.
+#
+# THE MECHANISM IS PRODUCER I/O LATENCY, established causally by esmeraldinha and
+# not by correlation. Byte-identical file, one distinct md5, same command:
+#     drvfs  /mnt/c/.../pre-push-local-gate.sh    10/10 SIGPIPE
+#     ext4   a copy in /tmp                        0/10
+# and the control that makes it causal rather than a filesystem story — on ext4,
+# a deliberately SLOWED producer (per-line bash read loop, same bytes, same
+# consumer) reproduces it 10/10. Read times: drvfs 207 ms / 5 reads, ext4 10 ms.
+#
+# A FAST producer writes its whole output into the 64 KB pipe buffer before
+# `grep -q` is scheduled to exit, so it has nothing left to write and never sees
+# EPIPE. A SLOW producer is still blocked on read I/O when grep matches and
+# exits; its next write goes to a pipe with no reader, and that is the 141. Size
+# matters only ABOVE the buffer; below it, latency decides.
+#
+# CONFIRMED FROM THE FAST SIDE on macuahuitl: checkout on local NVMe btrfs,
+# producer 6 ms / 5 reads (~35x faster than drvfs), verdict 0/10 SIGPIPE.
+#
+# SO A CHECK FOR THIS CLASS MUST EXECUTE THE PIPELINE AGAINST THE REAL FILE ON
+# THE REAL CHECKOUT FILESYSTEM. A synthetic calibration case in /tmp reports SAFE
+# and is worthless — every synthetic esmeraldinha built lived on ext4, which is
+# why none reproduced the defect at any size, match position or ERE complexity.
+# The live file is REQUIRED, not brittle. Report `unmeasured` with a reason
+# otherwise, and never model it.
+#
+# FLEET CONSEQUENCE: any host whose checkout is reached over a slow-backed
+# filesystem is exposed where a local-disk host is not — WSL drvfs, a network
+# mount, a container bind mount, a macOS virtiofs share. A green here says
+# nothing about those. 792-ksr8's own "0 below 6 KB, mixed 8-14 KB, certain
+# above 19 KB" was one host's slice and conflated size with buffer-fill.
 #
 # WHAT SURVIVES, AND IT IS WHY THE CAPTURE STAYS: the verdict was decided by
 # something other than whether the match existed, on both hosts, in opposite
