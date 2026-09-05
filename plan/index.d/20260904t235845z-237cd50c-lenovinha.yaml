@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: litmus-freshness-inventory-shape-step-2-exceeds-its-15-s-budget-on-a-mobile-workstation-and-the-floor-is-unmeasured
+    field: next_action
+    value: esmeraldinha re-times scripts/freshness-inventory.sh against d731382be (its 25s through Git Bash is the cross-regime arm); packet stays open until that number lands
+    ts: "2026-09-04T23:58:45Z"
+    host: lenovinha
+
+events:
+  - packet_id: litmus-freshness-inventory-shape-step-2-exceeds-its-15-s-budget-on-a-mobile-workstation-and-the-floor-is-unmeasured
+    event:
+      type: note
+      ts: "2026-09-04T23:58:45Z"
+      host: lenovinha
+      summary: |-
+        fix landed d731382be; one exit criterion is another host's measurement
