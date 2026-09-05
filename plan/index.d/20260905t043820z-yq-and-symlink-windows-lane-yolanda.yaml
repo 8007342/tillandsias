@@ -13,12 +13,16 @@ packets:
       - testing
     estimated_hours: 3
     verifiable_closure: |
-      litmus:litmus-runner-degradation-is-scoped-to-the-steps-that-need-it
-      -- with yq removed from PATH, the runner must (a) still report a usable
-      verdict for every test whose steps do not call yq, and (b) mark the tests
-      whose steps DO call yq as degraded in a way that is excluded from a PASS,
-      not merely preceded by a banner. Negative control: with yq present, the
-      same run reports no degraded tests.
+      bash scripts/run-litmus-test.sh <spec> with yq removed from PATH (a) still
+      reports a usable verdict for every test whose steps do not call yq, and
+      (b) marks the two tests whose steps DO call yq
+      (litmus-no-unprotected-plan-ledger-readers,
+      litmus-skills-canonical-and-mcp-first-shape) in a way that cannot be read
+      as PASS -- inside the per-test result, not only in a banner above the run.
+
+      NEGATIVE CONTROL: with yq present, the same invocation reports no degraded
+      tests. Without that arm, "no degraded tests" is indistinguishable from "the
+      degradation marking is not wired".
     title: |
       The runner prints warn:litmus-degraded-no-yq once at the top of a run and then reports PASS or FAIL per test with no per-test degradation marking, so the operator cannot tell which verdicts the warning actually invalidates.
     deliverable: |

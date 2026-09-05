@@ -14,14 +14,20 @@ packets:
       - tooling
     estimated_hours: 5
     verifiable_closure: |
-      litmus:litmus-runner-reds-on-a-missing-bound-test -- a new litmus test
-      that binds a name with no file on disk and requires the
-      runner to exit NON-ZERO. It must carry its own negative control: with the
-      file present the same step goes green, so the test distinguishes "the
-      runner reds on a missing test" from "the runner reds at all".
+      bash scripts/run-litmus-test.sh <any spec> --phase pre-build --size
+      instant exits NON-ZERO when a name bound in openspec/litmus-bindings.yaml
+      has no file on disk, instead of logging SKIP and excluding it from
+      coverage. Reproduce the condition by binding a name with no file; the run
+      must not be able to report PASS.
 
-      That pin covers the half that turned this bug into a PASS verdict. The CR
-      half is scored per site, below.
+      NEGATIVE CONTROL, and it is the scorable half: with the file present the
+      same invocation goes green, so the test distinguishes "the runner reds on
+      a missing bound test" from "the runner reds at all". Without that arm a
+      green proves nothing here -- a green verdict over an unrun corpus is the
+      exact defect being fixed.
+
+      That covers the half that turned this bug into a PASS verdict. The CR half
+      is scored per site, below.
 
       On a Windows host, for each of the 26 scripts under scripts/ that pipes
       `jq -r` into a shell value, either the value is CR-stripped at the read
