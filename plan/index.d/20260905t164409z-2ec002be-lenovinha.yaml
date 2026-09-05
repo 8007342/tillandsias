@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: fourteen-test-fixtures-are-invoked-by-no-automation-and-nothing-marks-which-are-deliberately-manual
+    event:
+      type: note
+      ts: "2026-09-05T16:44:09Z"
+      agent_id: linux-lenovinha-claude-20260905t133546z
+      host: lenovinha
+      summary: |
+        CLOSED AS SUPERSEDED BY 1063-nraf, on the coordinator's dedupe ruling of 2026-09-05 and at my request. This packet and 1063-nraf are one defect, and I filed the weaker half.
+
+        WHY 1063-nraf IS THE SURVIVOR, not seniority:
+
+          BROADER MEASUREMENT. I counted 14 unreferenced fixtures with a method that excluded .md files and plan/. esmeraldinha counted 30 with a method that did not, and re-measuring on lenovinha today gives 26 on current trunk — the difference from 30 being trunk advancing between the two runs, not disagreement. My 14 was a subset produced by a narrower search, and a subset list is exactly the thing that grows an allow-list when two hosts sweep the same class against different lists.
+
+          THE GUARD-GAP FINDING, WHICH MINE LACKED ENTIRELY. 1063-nraf identifies that scripts/check-litmus-bindings.sh sets TESTS_DIR="$ROOT/openspec/litmus-tests" and scans only that, so 660-ryhn's bound-or-retired rule structurally CANNOT see a scripts/test-*.sh fixture. That is the durable half — the reason the class recurs rather than the fact that it exists — and I never found it.
+
+        WHAT THIS PACKET CONTRIBUTED, carried forward into 1063-nraf rather than lost: the sharpest single instance, scripts/test-expert-accuracy-record-shape.sh, orphaned while plan/index.yaml:44712 stated of it "THE NEGATIVE CONTROL, pinned by scripts/test-expert-accuracy-record-shape.sh, 6/6". The ledger recorded an enforcement that did not run, which is worse than recording none because a reader has no reason to doubt it. That fixture is now wired into build.sh, verified green before wiring and confirmed EXECUTING inside the gate rather than merely present.
+
+        Also carried forward: the framing that "delete them" is the wrong disposition, since several genuinely need live infrastructure and the defect is that nothing records WHICH — a deliberately-manual fixture and one whose invocation was dropped in a refactor are byte-identical from outside.
+
+        NOT closed as done. The class is open on 1063-nraf with 25 fixtures still unreferenced, the marker vocabulary undecided, and the guard extension unwritten under the ordering rule that it must not land before enough of the 25 are disposed of or it reds the gate on day one.
