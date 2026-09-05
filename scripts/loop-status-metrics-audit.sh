@@ -25,12 +25,34 @@
 #    2026-09-05T18:52Z). Entry names begin with a UTC stamp, so a reverse
 #    lexical sort IS newest-first and needs no clock.
 #
-# 2. ANCHOR ON THE MACHINE TOKEN AND TAKE THE FIRST MATCH. A handoff that
-#    pastes the verbatim block and then DISCUSSES it has two lines starting
+# 2. MATCH THE WHOLE MACHINE SHAPE, NOT AN ANCHOR TOKEN. A handoff that pastes
+#    the verbatim block and then DISCUSSES it has two lines starting
 #    `skippable: `; `tail -1` takes the prose one. That reported esmeraldinha as
 #    not pasting when it was pasting AND interpreting — the instrument
-#    penalising the extra work. `skippable: candidates=` matches only the
-#    machine line, and `head -1` takes the paste rather than the commentary.
+#    penalising the extra work.
+#
+#    ANCHORING ON `skippable: candidates=` WAS NOT ENOUGH AND THIS SCRIPT SHIPPED
+#    WITH THAT BUG. The very entry that DESCRIBED the new anchor, in backticks,
+#    satisfied it: `skippable: candidates=` inside prose matched, the value came
+#    back empty, and macuahuitl reported as pasting with no top3. A guard that a
+#    comment can satisfy is satisfied by the history of the thing rather than the
+#    thing (methodology/verification.yaml,
+#    quoted_history_lives_in_comments_guards_scan_declarations) — and this is
+#    that shape inside the fix for that shape.
+#
+#    The discriminator is the FULL EMITTED SHAPE: candidates=, floor_ms=,
+#    min_runs= and top3= in order. Prose quoting the anchor cannot satisfy it.
+#    A LINE ANCHOR (^) would be wrong: lenovinha and yoga indent their pasted
+#    block, so `^skippable:` matches on two hosts and misses two others —
+#    measured 2026-09-05T19:5xZ before choosing the shape match.
+#
+# 3. A HOST THAT WRITES TWO ENTRIES PER CYCLE IS NOT A HOST THAT STOPPED
+#    PASTING. The newest entry answers "did the last thing this host wrote carry
+#    its metrics", which is the right question, but a cycle that ends with a
+#    short closing note then reads NOT-PASTING while its own full report sits one
+#    entry back. So when the newest entry has no machine line, the row also names
+#    the most recent entry that DOES, with its timestamp, and says `last-paste`.
+#    Silence and staleness are then distinguishable, which is the whole point.
 #
 # A stem that is a PLATFORM LABEL is a shared bucket, not a host (order
 # 1012-hu7d): `loop-status-append` without --host falls back to
@@ -65,8 +87,24 @@ for h in $stems; do
     # Reverse LEXICAL sort on a UTC-stamped name: newest first, no clock, no mtime.
     f="$(printf '%s\n' "$entries" | grep -E "z-([0-9a-f]{8}-)?$h\.md$" | sort -r | head -1)"
     [ -n "$f" ] || { echo "$h NO-ENTRY"; continue; }
-    line="$(grep -o 'skippable: candidates=[^`|·]*' "$f" | head -1)"
-    if [ -n "$line" ]; then echo "$h $line"; else echo "$h NOT-PASTING ($f)"; fi
+    SHAPE='skippable: candidates=[0-9]+ floor_ms=[0-9]+ min_runs=[0-9]+ top3=[^`|·]*'
+    line="$(grep -oE "$SHAPE" "$f" | head -1)"
+    if [ -n "$line" ]; then
+        echo "$h $line"
+        continue
+    fi
+    # Newest entry carries no machine line. Say whether the host has EVER pasted
+    # and when, so a quiet closing note is distinguishable from a silent host.
+    prev=""
+    for _e in $(printf '%s\n' "$entries" | grep -E "z-([0-9a-f]{8}-)?$h\.md$" | sort -r); do
+        if grep -qE "$SHAPE" "$_e"; then prev="$_e"; break; fi
+    done
+    if [ -n "$prev" ]; then
+        _ts="$(basename "$prev" | sed -E 's/^([0-9]{8}t[0-9]{6}z).*/\1/')"
+        echo "$h NOT-PASTING (newest: $f) last-paste=$_ts"
+    else
+        echo "$h NOT-PASTING ($f) last-paste=never"
+    fi
 done
 # The two MUST be equal. A dropped stem under-counts the two-or-more-hosts
 # trigger that decides whether a step gets a memoisation packet.
