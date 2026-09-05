@@ -11,7 +11,6 @@
 #![allow(dead_code)]
 
 use std::io;
-use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
@@ -51,7 +50,10 @@ pub const DEFAULT_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(2);
 pub const STANDARD_HOST_CAPABILITIES: &[&str] = &[
     "VmStatusRequest",
     "VmShutdownRequest",
-    "EnumerateLocalProjects",
+    // 997-e4v2 step 3: "EnumerateLocalProjects" left with the wire variant. A
+    // capability string is a PROMISE — advertising an RPC the guest no longer
+    // implements is worse than not advertising it, because a peer selects on
+    // this list.
     "CloudRefreshRequest",
     "pty.attach@v1",
 ];
@@ -66,33 +68,13 @@ pub const STANDARD_HOST_CAPABILITIES: &[&str] = &[
 /// (order 145).
 ///
 /// @trace plan/issues/secure-channel-maturity-ladder-2026-07-04.md
-const SECURE_CONTROL_WIRE_ENV: &str = "TILLANDSIAS_SECURE_CONTROL_WIRE";
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum SecureControlWireMode {
-    Off,
-    On,
-}
-
-fn parse_secure_control_wire_mode(
-    raw: Result<String, std::env::VarError>,
-) -> Result<SecureControlWireMode, String> {
-    match raw {
-        Ok(v) if v.eq_ignore_ascii_case("on") => Ok(SecureControlWireMode::On),
-        Ok(v) if v.eq_ignore_ascii_case("off") || v.is_empty() => Ok(SecureControlWireMode::Off),
-        Ok(v) => Err(format!(
-            "{SECURE_CONTROL_WIRE_ENV} must be 'on' or 'off' (got {v:?})"
-        )),
-        Err(std::env::VarError::NotPresent) => Ok(SecureControlWireMode::Off),
-        Err(err) => Err(format!("{SECURE_CONTROL_WIRE_ENV}: {err}")),
-    }
-}
-
-fn secure_control_wire_mode() -> Result<SecureControlWireMode, String> {
-    static MODE: OnceLock<Result<SecureControlWireMode, String>> = OnceLock::new();
-    MODE.get_or_init(|| parse_secure_control_wire_mode(std::env::var(SECURE_CONTROL_WIRE_ENV)))
-        .clone()
-}
+// ORDER 972-umik. The mode comes from the ONE reader in
+// tillandsias-control-wire::secure_wire_mode. This file used to carry its own
+// copy; there were six across the tree with THREE different behaviours, and the
+// divergence shipped a plaintext client to anyone who capitalised a word.
+use tillandsias_control_wire::secure_wire_mode::{
+    SecureWireMode as SecureControlWireMode, secure_wire_mode as secure_control_wire_mode,
+};
 
 /// Backoff schedule for the reconnect loop. Mirrors the spec's
 /// `250ms / 500ms / 1s / 2s / 4s` cap.
@@ -384,11 +366,7 @@ mod capability_tests {
 
     #[test]
     fn standard_capabilities_include_core_rpc_set() {
-        for cap in &[
-            "VmStatusRequest",
-            "VmShutdownRequest",
-            "EnumerateLocalProjects",
-        ] {
+        for cap in &["VmStatusRequest", "VmShutdownRequest"] {
             assert!(
                 STANDARD_HOST_CAPABILITIES.contains(cap),
                 "STANDARD_HOST_CAPABILITIES must include \"{cap}\""
@@ -658,6 +636,18 @@ mod tests {
     use tokio::net::UnixListener;
 
     async fn spawn_hello_responder(path: std::path::PathBuf) -> tokio::task::JoinHandle<()> {
+        spawn_hello_responder_with_version(path, WIRE_VERSION).await
+    }
+
+    /// The same responder with the HelloAck's advertised wire version under the
+    /// caller's control, so the mismatch arm can be driven without a second
+    /// harness. ORDER 1032-62rx: a copy would be a second implementation of
+    /// "what a server says on handshake", which is how the two come to
+    /// disagree; this is the existing fixture with one field parameterised.
+    async fn spawn_hello_responder_with_version(
+        path: std::path::PathBuf,
+        ack_version: u16,
+    ) -> tokio::task::JoinHandle<()> {
         let listener = UnixListener::bind(&path).expect("bind responder");
         tokio::spawn(async move {
             let (mut stream, _addr) = listener.accept().await.expect("accept");
@@ -674,7 +664,7 @@ mod tests {
                 wire_version: WIRE_VERSION,
                 seq: env.seq,
                 body: ControlMessage::HelloAck {
-                    wire_version: WIRE_VERSION,
+                    wire_version: ack_version,
                     server_caps: vec![
                         "v1".to_string(),
                         tillandsias_control_wire::CAP_EXEC_ARGV_VECTOR.to_string(),
@@ -692,6 +682,60 @@ mod tests {
             // Keep the stream alive briefly so the client can complete the read.
             tokio::time::sleep(Duration::from_millis(100)).await;
         })
+    }
+
+    /// ORDER 1032-62rx: the CLIENT-SIDE wire-version refusal actually fires.
+    ///
+    /// vsock_client.rs's mismatch arm existed with NOTHING exercising it. The
+    /// six assertions in the tree that mention WIRE_VERSION are all
+    /// `assert_eq!(wire_version, WIRE_VERSION)` after a SUCCESSFUL handshake —
+    /// tautological, because the value came back from a peer built in the same
+    /// build from the same constant. They cannot fail whatever WIRE_VERSION is
+    /// set to, so none of them is a version check.
+    ///
+    /// This drives a server that advertises WIRE_VERSION + 1 and asserts the
+    /// handshake REFUSES with InvalidData. Deleting the arm at vsock_client.rs
+    /// turns this red — which is the whole point, and is checked rather than
+    /// assumed (1032-62rx criterion 3).
+    ///
+    /// KNOWN ASYMMETRY, deliberately not asserted here: against a CURRENT
+    /// server this arm is unreachable, because vsock_server validates the
+    /// client's Hello and returns BEFORE sending any HelloAck, and when it does
+    /// answer it fills the ack with its own WIRE_VERSION. So the arm serves
+    /// only a peer old enough to answer without validating — which is exactly
+    /// the peer that cannot be fixed from here, and why the branch must stay.
+    ///
+    /// @trace order:1032-62rx, spec:vsock-transport
+    #[tokio::test]
+    async fn handshake_refuses_a_server_advertising_a_different_wire_version() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("control.sock");
+        let _server = spawn_hello_responder_with_version(path.clone(), WIRE_VERSION + 1).await;
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        // `expect_err` needs `T: Debug` and `Client` does not derive it, so match
+        // instead. (Windows hid this: the module is `cfg(all(test, unix))`, so a
+        // Windows `cargo test` compiled none of it and reported 0 tests run.)
+        let err =
+            match connect_with_handshake(Transport::Unix(path), DEFAULT_HANDSHAKE_TIMEOUT).await {
+                Ok(_) => panic!("a server advertising a different wire version must be REFUSED"),
+                Err(e) => e,
+            };
+        assert_eq!(
+            err.kind(),
+            io::ErrorKind::InvalidData,
+            "the refusal must be InvalidData, not a timeout or a transport error: {err}"
+        );
+        let msg = err.to_string();
+        assert!(
+            msg.contains("wire version mismatch"),
+            "the error must name the mismatch so an operator can act: {msg}"
+        );
+        assert!(
+            msg.contains(&WIRE_VERSION.to_string())
+                && msg.contains(&(WIRE_VERSION + 1).to_string()),
+            "and must name BOTH versions, local and peer: {msg}"
+        );
     }
 
     /// @trace spec:host-shell-architecture, spec:vsock-transport

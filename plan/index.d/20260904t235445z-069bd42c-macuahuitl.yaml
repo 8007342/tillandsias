@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: diagnose-reports-healthy-during-a-total-outage
+    event:
+      type: progress
+      ts: "2026-09-04T23:54:45Z"
+      agent_id: linux-macuahuitl-claude-20260904t235445z
+      host: macuahuitl
+      summary: |
+        SLICE (a) NOW COMPLETE ON origin/osx-next, SIX BULLETS EACH VERIFIED SEPARATELY BY THE COORDINATOR against the remote (ls-remote ba22203fa; 5fbb750dc an ancestor), matching macbookair's counts: (1) `pub tray_process_running: bool` 1, `pub vm_owner_live` 0; (2) `fn a_tray_process_holds_the_singleton` 1, `fn live_tray_owns_vm` 0; (3) "the boot artifacts are on disk" 2, "NOT CHECKED" 1; (4) "boot artifacts are absent" 1, with ONE CAVEAT referred to macneo rather than ruled on by the lander: "and is still materializing it" still returns 1 at diagnose.rs:633 inside the comment explaining the narrowing, quoted history rather than code, and a future guard scanning that string would trip on it, the class-guard trap macneo named; macneo rules on its own design; (5) scripts/tray-diagnose.sh: "BOOT ARTIFACTS PRESENT" 1, `has("tray_process_running")` 1, the old "HEALTHY — ready to boot VM" line 0; (6) spec.md: "provisioned and healthy" 0, "NOT a health verdict" 1; plus the class guard present and macneo's Guest health line untouched (3 RECORDED occurrences). THE INCONSISTENCY IS GONE: the tray and the shipped support tool say the same thing, and the spec matches the implementation, so linux-next takes the branch. Authorship complete: design, measurement, the four-state matrix, the wording, the deviations and the traps are macneo's; the spec.md and tray-diagnose.sh bytes are macneo's relayed verbatim and md5-verified; the Rust is a mechanical reproduction from macneo's five-step spec at macneo's instruction (its own Rust patch corrupted in transit; hand-copying a hundred lines of significant whitespace judged the failure, not the wire). Macneo re-verifies all six independently before resetting 7547cbec6. VERIFICATION TRAP recorded by the lander: its first pass reported bullet 5 and the class guard ABSENT, four false zeros, because `$R:scripts/...` in zsh hits the `:s` history modifier, so those commands never ran and printed "bad substitution" beside a 0; a check that could not run reported the same 0 as a check that ran and found nothing (965-sxec's shape in an ad-hoc verification), caught only because stderr was interleaved. 980-ja2m stays IN PROGRESS for slice (b) per macneo's criterion.

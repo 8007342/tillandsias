@@ -368,6 +368,91 @@ Hard rules:
 - **Pre-commit hooks and release signing** are not optional.
 - **Acquire the smoke lock for source-mutating migrations**: Destructive, file-moving, or source-mutating directory migrations (e.g., file-restructuring tasks) MUST run under the shared smoke lock `build-install-smoke-e2e` (using `scripts/with-smoke-lock.sh`) or a corresponding lease, so that concurrent E2E gates do not read or execute from a half-migrated or half-restructured tree.
 
+- **Check and test with the gate's feature set, and quote the set beside the
+  count.** `cargo check -p tillandsias-headless --features tray` does NOT
+  compile the vsock surfaces (vsock_server.rs, vsock_client.rs, the
+  control_dispatch.rs arms behind `listen-vsock`); on 2026-09-04 macbookair
+  spent six rounds getting truthful zero-error results about code the check was
+  not compiling, and every "588 passed" it reported that day was the same suite
+  under `--features tray` — the gate's set, `--features tray,listen-vsock`, runs
+  635. A count whose denominator depends on flags nobody states is not
+  falsifiable; "635 passed under tray,listen-vsock" is. Use the gate's set, and
+  write the set next to the number in every claim.
+
+- **`./build.sh --check` runs no litmus (748-tkjx); run the bound spec before
+  landing on any surface a litmus covers.** On 2026-09-04 lenovinha ran the
+  gate four times green over gate-stamp.sh and landed a change whose guard,
+  `litmus:mode-only-regression-gate`, states in its own arm text why that exact
+  change deadlocked every Windows host once (889-8tcb); the daily release gate
+  and the coordinator's union litmus were the first places it could go red.
+  "My gate was green" is evidence about the gate's lane, not about the change:
+  `scripts/run-litmus-test.sh --diff-scope origin/linux-next --compact` (or the
+  bound spec by name) before the land, not after.
+
+- **The gate pass token gates the STAMP, never the PUSH (1039-b64k).** A push
+  needs a *stamp* whose digest matches the tree being pushed; the pre-push hook
+  calls `gate-stamp.sh verify`, which compares recorded-vs-computed digest and
+  nothing else. `<git-dir>/tillandsias-gate-pass-token` is minted by a green
+  `build.sh` and consumed by `gate-stamp.sh write`, so an unearned stamp is
+  impossible by accident (940-f77j) — but no branch of the hook reads it. Two
+  consequences worth knowing before you debug a refused push: a **memoised**
+  gate mints no token and writes no stamp and still pushes fine, because the
+  existing stamp covers the unchanged tree; and a fix that adds or moves the
+  token cannot affect a push at all. 1039-b64k was filed with a remedy resting
+  on the opposite belief, and the remedy was dropped once the push path was
+  actually read rather than inferred from the packet.
+
+- **After a gate run, rebuild before exercising a feature-gated path
+  (1031-q4pb).** `./build.sh --check` rebuilds `target/debug/tillandsias`
+  WITHOUT `--features tray`, so a control arm that drives a `#[cfg(feature =
+  "tray")]` surface after a gate is exercising a binary in which the code under
+  test does not exist. On 2026-09-04 that turned a working control into a hang;
+  had the absent path fallen through to success instead, it would have been a
+  green arm for absent code. `cargo build -p <crate> --features <feature>`
+  immediately before the arm, every time — a gate silently replaces the binary.
+
+- **Read a file's own comments before concluding a failure is novel
+  (yolanda, 2026-09-04).** yolanda spent ~40 minutes and four gate runs
+  rediscovering the Windows drvfs deadlock from scratch — the mechanism, the
+  memo amplifier, and the measurement — all of which were already written eighty
+  lines above the line being debugged, in `gate-stamp.sh`'s `compute`, from
+  order 889-8tcb. They had read the file three times during the diagnosis, each
+  time for a different question, and never the paragraph directly above the
+  suspicious line. A file that has been bitten before usually says so, and this
+  project records that more reliably than most. (The defect being rediscovered
+  was lenovinha's 1034-ihxw, landed against that same warning — so the two
+  halves of this lesson are one event.)
+
+- **Quoted history lives in comments; guards scan declarations.** A codebase
+  that explains itself contains the strings it forbids (a doc comment names the
+  identifier it replaced, a narrowing quotes the sentence it narrowed), so a
+  class guard that scans for a bare substring fails on its own file the day it
+  is written. Scan declarations (`pub old_name:`, `fn old_name`) and assemble
+  the needles at runtime (`format!("pub vm_{}_live:", "owner")`) so the guard
+  cannot match its own source; keep the quoted history where it explains the
+  change. Named by macneo on 980-ja2m, 2026-09-04, after its first class guard
+  went red on its own doc comments.
+
+- **A gate run silently replaces the binary without the tray feature.**
+  `./build.sh --check` rebuilds `target/debug/tillandsias` without `--features
+  tray`; every order-505 site and much of the tray surface is
+  `#[cfg(feature = "tray")]`, so a control arm run after a gate can exercise a
+  binary in which the code under test does not exist. On 2026-09-04 lenovinha's
+  arms hung against such a binary, which was luck: an absent path falling
+  through to success is a green arm for absent code. Build with the feature
+  set the change needs (`cargo build --features tray,listen-vsock`) immediately
+  before any live control arm, and quote the feature set beside the arm.
+
+- **A control variable set outside the builder does not reach cargo inside it.**
+  `scripts/with-tillandsias-builder.sh` forwards only `TILLANDSIAS_*`, `LITMUS_*`,
+  `FORGE_*`, `NIX_*`, `CONTAINER_HOST` and `DOCKER_HOST` into the toolbox, and
+  `with-wsl2-builder.sh` forwards only `TILLANDSIAS_*` across wsl.exe; on
+  2026-09-05 `CARGO_BUILD_JOBS=10` was UNSET inside the builder on both Linux and
+  Windows, so a "ten-job arm" ran at twenty and would have reported a confident
+  null. A build setting must be applied inside the build scripts, or forwarded by
+  name with a probe that proves it arrived (`with-tillandsias-builder.sh bash -c
+  'echo ${VAR:-UNSET}'`) before any measurement is read.
+
 ---
 
 ## 6 — Commit, Push & Checkpoint

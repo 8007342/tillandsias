@@ -39,10 +39,23 @@ critical_path:
     timeout_ms: 300000
     success_pattern: "test result: ok."
 
-  - step: "Req: no WIRE_VERSION bump rode along with the additive variants"
-    command: "grep -qE 'pub const WIRE_VERSION: u(16|32) = 2;' crates/tillandsias-control-wire/src/lib.rs && echo 'ok: WIRE_VERSION still 2 (additive-only)'"
+  - step: "Req: no WIRE_VERSION bump rode along with the additive variants (baseline 3 since 997-e4v2)"
+    # The PROPERTY is unchanged: this packet's metrics variants are ADDITIVE and
+    # must not bump the wire version. What changed is the BASELINE they are
+    # additive against.
+    #
+    # ORDER 997-e4v2 bumped WIRE_VERSION 2 -> 3 by REMOVING
+    # EnumerateLocalProjects, LocalProjectsReply and LocalProjectsPush. A
+    # mid-enum removal renumbers every later variant, so the bump was mandatory
+    # and has nothing to do with the additive metrics variants this litmus
+    # guards. Pinning 2 after that landed would assert a premise that is no
+    # longer true and read as though the metrics work had caused a bump.
+    #
+    # The literal is deliberate: the next bump must edit this number and say
+    # which change earned it, exactly as this one does.
+    command: "grep -qE 'pub const WIRE_VERSION: u(16|32) = 3;' crates/tillandsias-control-wire/src/lib.rs && echo 'ok: WIRE_VERSION still 3 (additive-only since the 997-e4v2 removal)'"
     timeout_ms: 10000
-    expected_behavior: "ok: WIRE_VERSION still 2 (additive-only)"
+    expected_behavior: "ok: WIRE_VERSION still 3 (additive-only since the 997-e4v2 removal)"
 
   - step: "ROUTING: vsock-only request, response-only reply, pinned in both matrices"
     command: "cargo test -q -p tillandsias-headless --bin tillandsias control_dispatch::tests::vsock_routing_matrix -- --exact 2>&1 | tail -3"

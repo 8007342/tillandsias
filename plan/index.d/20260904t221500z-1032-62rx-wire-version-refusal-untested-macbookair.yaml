@@ -1,0 +1,230 @@
+packets:
+  - packet_id: wire-version-refusal-is-untested-on-both-sides
+    order: 1032-62rx
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    release_target: stable-milestone-v1
+    capability_tags:
+      - architecture
+      - fail-loud
+      - wire
+      - testing
+    estimated_hours: 4
+    verifiable_closure: |
+      cargo test -p tillandsias-headless --test vsock_listener_e2e and
+      cargo test -p tillandsias-host-shell vsock_client each pass a case that
+      drives a WIRE_VERSION+1 handshake and asserts refusal, AND deleting all
+      ten refusal branches in one mutation turns at least one of them RED.
+      The deletion arm is the scorable half: two green tests alone do not
+      distinguish a guard from a tautology, which is the defect being fixed.
+    title: |
+      Ten wire-version refusal sites across six crates, one happy-path handshake test, and zero mismatch tests — the WIRE_VERSION doc asserts the guarantee they collectively provide, and deleting any of them keeps the gate green.
+    deliverable: |
+      The wire-version refusals are exercised, so that deleting one turns the
+      gate red. What must not persist is a safety argument written in a doc
+      comment, resting on ten branches that no test touches.
+    context: |
+      MEASURED 2026-09-04, jointly: macbookair-macos reviewing yolanda's wire
+      commit 54a9471a1 (997-e4v2), yolanda-windows confirming and enumerating
+      the sites, macbookair re-counting. Line numbers as read on 54a9471a1.
+
+      THE CLAIM UNDER REVIEW. The WIRE_VERSION doc states the bump's whole
+      rationale: "So the bump is the guard: the handshake refuses a mismatched
+      peer at vsock_server.rs and host-shell/src/vsock_client.rs BEFORE any
+      frame is decoded. A refused connection is loud and recoverable; a
+      misdecoded credentials frame is neither." The argument is correct and the
+      bump was the right call. This packet is not a dispute with it — it is
+      that nothing holds it in place, and that the doc names two of the ten
+      places it is implemented.
+
+      FINDING 1 — NO MISMATCH TEST EXISTS ANYWHERE IN THE WORKSPACE.
+      The ten comparison sites:
+        tillandsias-headless/src/vsock_server.rs:875        (guest; the one that fires)
+        tillandsias-host-shell/src/vsock_client.rs:203      (the asymmetric one, below)
+        tillandsias-macos-tray/src/pty_vsock_bridge.rs:229
+        tillandsias-vm-layer/src/vsock_exec.rs:592
+        tillandsias-vm-layer/src/vsock_exec.rs:853
+        tillandsias-vm-layer/src/vsock_exec.rs:1029
+        tillandsias-vm-layer/src/vsock_exec.rs:1113
+        tillandsias-vm-layer/src/vsock_exec.rs:1251         (guard-arm form)
+        tillandsias-router-sidecar/src/main.rs:150          (guard-arm form)
+        tillandsias-windows-tray/src/hvsocket.rs:91
+      Tests exercising any of them as REFUSALS: ZERO. What exists instead is
+      six assertions, and they are worse than happy-path — they are
+      TAUTOLOGICAL (enumerated by yolanda-windows 2026-09-04, each verified at
+      the line by macbookair-macos before being recorded here):
+        windows-tray/hvsocket.rs:312, :423
+        macos-tray/pty_vsock_bridge.rs:418, :502
+        host-shell/vsock_client.rs:766
+        headless/tests/vsock_listener_e2e.rs:176
+      Every one is assert_eq!(wire_version, WIRE_VERSION) after a SUCCESSFUL
+      handshake against a peer built from THE SAME BUILD. The value on the
+      left IS the constant on the right, round-tripped through framing. Set
+      WIRE_VERSION to 9 and all six still pass. They cannot fail unless
+      framing corrupts a u16 — a real thing to test, but not a version check,
+      and vsock_listener_e2e.rs:176 carries the message "wire version must
+      match", which is precisely what it does not test.
+
+      These six matter more than their count: they are the tests a reader
+      looking for version coverage finds FIRST, and is reassured by. Same role
+      control_message_kind_names_every_declared_variant played in 1029-5wvd.
+
+      There is also a happy-path fixture —
+      vsock_client.rs:698 handshake_succeeds_against_fake_unix_server — so a
+      fake peer already exists and the mismatch case is a smaller job on that
+      side than a from-scratch estimate suggests.
+
+      What IS pinned is `wire_version_constant_is_three` (lib.rs:2113), which
+      asserts a constant equals 3. It is honest about being a tripwire and its
+      docstring records each version's reason — it is not the defect. The
+      defect is that it is the ONLY guard. Delete every refusal branch above
+      and WIRE_VERSION is still 3, that test still passes, ./build.sh --check
+      still exits 0, and the doc's central sentence is false on a clean green.
+
+      THE NUMBER IS A PROXY FOR THE REFUSAL, AND ONLY THE PROXY HAS A GUARD.
+      Same shape as 1029-5wvd one layer down: a check that proves the crate
+      agrees with itself, standing in for a claim about a DIFFERENT build.
+
+      FINDING 2 — THE HOST-SHELL CLIENT CHECK CANNOT FIRE AGAINST A CURRENT
+      PEER. The server validates first.wire_version at :875 and returns before
+      any HelloAck; when it does answer, :902/:905 fill the ack with its OWN
+      WIRE_VERSION. So vsock_client.rs:203 compares WIRE_VERSION against
+      WIRE_VERSION whenever it is reached against a current server.
+
+      THIS IS NOT A CASE FOR DELETING IT, and the packet should be closed
+      against anyone who tries. The branch is live against a peer old enough to
+      answer a Hello without validating it — exactly the peer that cannot be
+      fixed from here, and the only thing standing between it and a misdecode.
+
+      The defect is twofold. Its docstring says "Surfaces a wire-version
+      mismatch as an InvalidData error", which describes the common case, and
+      the common case is the one where it never runs. And the operator
+      consequence: on a genuine mismatch the host sees a socket closed before
+      HelloAck, while the diagnosis is a warn! inside the guest. The doc says a
+      refused connection is "loud and recoverable". It is loud on the side that
+      cannot read it.
+
+      THE IN-TREE EXEMPLAR FOR THE FIX. vsock_exec.rs:1251 and
+      router-sidecar/main.rs:150 use a guard arm (`HelloAck { wire_version, ..
+      } if wire_version == WIRE_VERSION`) with an EXPLICIT mismatch arm below
+      it that returns an error naming BOTH versions to the side that initiated
+      the connection. They were checked on the suspicion that a guard arm falls
+      through silently; it does not, and they are the best-written sites in the
+      tree. Whatever the host-side reporting fix is, it already exists there —
+      it does not need designing.
+    acceptance_criteria: |
+      1. A test hands the server a Hello carrying WIRE_VERSION + 1 and asserts
+         the connection closes WITHOUT a HelloAck.
+      2. A test hands the client a HelloAck carrying WIRE_VERSION + 1 and
+         asserts an InvalidData error naming both versions.
+         NEITHER TEST NEEDS A NEW HARNESS, and the first filing implied both
+         did. vsock_listener_e2e.rs:95 test_vsock_end_to_end_localhost already
+         drives the real listener through Hello/HelloAck with write_envelope /
+         read_envelope helpers in the same file, and vsock_client.rs:698
+         handshake_succeeds_against_fake_unix_server already stands up a fake
+         server that writes a HelloAck. Each mismatch case is ONE FIELD
+         CHANGED in an existing fixture. The reason these were never written
+         is therefore not cost.
+      3. SABOTAGE, run and quoted in the closing evidence. Per-site: deleting
+         the refusal at vsock_server.rs:875 turns (1) red, and deleting the
+         one at vsock_client.rs:203 turns (2) red. A test that survives
+         deletion of the branch it exists to guard does not close this packet.
+         AND, the arm that actually matters (yolanda-windows 2026-09-04):
+         delete ALL TEN refusal branches in ONE mutation and require red.
+         Deleting them one at a time only ever proves things about sites
+         someone ENUMERATED; deleting them together tests the PROPERTY — that
+         no unguarded version path survives — and is the only arm that would
+         catch an eleventh site nobody thought to grep for. Given ten was
+         first counted as two, then eight, then ten, an eleventh is a live
+         possibility and the property arm is the only defence against it.
+      4. Every one of the ten sites is either covered or EXPLICITLY listed as
+         uncovered with the reason. A partial fix is fine; a partial fix that
+         reads as complete is what this packet is about.
+      5. The vsock_client.rs handshake docstring says which peer generation
+         its check is live against, rather than describing the common case.
+      6. Either the host-side diagnosis on a mismatch names the wire version
+         (per the exemplar above), or the doc's "loud and recoverable" is
+         corrected to say which side hears it. Whichever — it is stated.
+    next_action: |
+      yolanda-windows OWNS this and asked for it; the overstated guarantee is
+      in their commit message and source doc. It spans platforms and no single
+      host can exercise all ten sites: yolanda takes the Windows and
+      host-shell sites, macuahuitl routes the macOS (pty_vsock_bridge) and
+      vm-layer sites. Doc narrowing lands FIRST and alone — it is cheap and it
+      stops the sentence being quoted as a guarantee while the tests are
+      written.
+    notes: |
+      NOT a defect in the collapse or the bump, and it did not block
+      54a9471a1's land — shipping that change un-bumped was the dangerous
+      option. Filed separately rather than bolted onto a landing commit, per
+      macuahuitl 2026-09-04.
+
+      Related: 1029-5wvd. Version 4 is RESERVED for 890-y72v's
+      DeliverCredentialsReply discriminator under the stowaway rule; current
+      is 3, and nothing has bumped to it.
+    events:
+      - ts: 2026-09-04T22:15:00Z
+        type: filed
+        agent: macos-tlatoanis-macbook-air-claude-20260904t221329z
+        host: tlatoanis-macbook-air
+        note: |
+          Filed from a review of 54a9471a1 at macuahuitl's direction, then
+          revised before commit when yolanda confirmed both findings and
+          enumerated further sites.
+
+          PROVENANCE, because it matters for what is owed. Both findings are
+          SOURCE-READS on 54a9471a1, not measurements of a running handshake:
+          the branches were read at the cited lines, and "no mismatch test"
+          is a sweep of the whole workspace at that commit. No mutation was
+          executed — criterion 3 exists because the deletion arms are the
+          evidence this packet still owes.
+
+          TWO CORRECTIONS TO THE FILING ITSELF, both mine.
+
+          I first wrote this packet as TWO sites, because I reported the two
+          the doc named and never counted the implementations. Yolanda found
+          eight and diagnosed my error as sweeping only their branch's diff;
+          that diagnosis is wrong — my sweep was tree-wide and correctly
+          returned zero TESTS. I did not miscount the sites, I never counted
+          them. Re-counting tree-wide gives TEN, the two beyond yolanda's
+          eight being the guard-arm form (vsock_exec.rs:1251,
+          router-sidecar/main.rs:150) that a `!=` search does not match.
+
+          I looked at those two expecting a silent fall-through and said so.
+          They have explicit mismatch arms and are the best sites in the
+          tree. The hunch is recorded here because it was wrong and because
+          the search that found them was shaped by it.
+      - ts: 2026-09-04T22:55:00Z
+        type: progress
+        agent: macos-tlatoanis-macbook-air-claude-20260904t221329z
+        host: tlatoanis-macbook-air
+        note: |
+          Revised before push, from yolanda-windows' review of the filing.
+          Three changes, each correcting something I asserted without
+          checking it:
+
+          (1) SIX TAUTOLOGICAL ASSERTIONS added to context. yolanda found
+          them by sweeping every comparison-ish context around WIRE_VERSION
+          rather than the two shapes we had already seen — deliberately not
+          searching for the pattern already known, which is why it found
+          things both our patterns missed. I verified all six at the line
+          before recording them.
+
+          (2) FIXTURE COST CORRECTED. I wrote criterion 2 as though both
+          mismatch tests needed new harnesses. Both fixtures already exist and
+          each case is one field changed. That was an estimate I did not
+          check, inside a packet about not checking things.
+
+          (3) CRITERION 3 NOW REQUIRES THE ALL-TEN DELETION as the arm that
+          matters, which is yolanda's idea and better than my per-site
+          version: per-site sabotage only proves things about sites someone
+          enumerated. The count went two -> eight -> ten during this review,
+          so the property arm is the only defence against an eleventh.
+
+          ALSO: this packet's first push was REFUSED by the 977-448j gate for
+          carrying no scorable obligation, which is why verifiable_closure
+          now exists. The gate was right and I had filed a row that stated a
+          defect without stating how anyone would know it was fixed.

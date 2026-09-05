@@ -1,0 +1,68 @@
+packets:
+  - packet_id: the-gate-memo-skips-guards-that-inspect-state-the-stamp-does-not-cover
+    order: 1036-e5w9
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    owner_host: any
+    depends_on: []
+    capability_tags:
+      - gate
+      - build
+      - fail-loud
+      - guard
+    estimated_hours: 3
+    owned_files:
+      - build.sh
+      - scripts/gate-stamp.sh
+    title: |
+      the gate memo keys on a digest that deliberately excludes worktree file modes, so a chmod-only defect the exec-bit guard would refuse returns ok:gate-fresh and the guard never runs
+    context: |
+      MEASURED on lenovinha 2026-09-04:
+        chmod -x scripts/check-litmus-pin-claims.sh   # worktree only, not staged
+        ./build.sh --check                            # rc=0 in 2s — ok:gate-fresh
+        TILLANDSIAS_FORCE_CHECK=1 ./build.sh --check  # rc=1, violation:script-not-executable:1
+
+      BOTH HALVES ARE WORKING AS DESIGNED, WHICH IS WHY THIS IS NOT A DUPLICATE
+      OF EITHER. The exec-bit guard reads the WORKTREE and correctly refuses
+      (887-bz88 arm 3 pins it). The stamp's exec bit is sourced from the INDEX,
+      deliberately and non-negotiably: 889-8tcb records that testing
+      `[[ -x "$absolute" ]]` DEADLOCKED EVERY WINDOWS HOST, because WSL hashes
+      through /mnt/c (drvfs) which reports every file executable while the
+      pre-push hook in Git Bash sees real bits, so the two digests can never
+      agree. On POSIX hosts index and worktree agree (0 disagreements across
+      4537 files on yoga, 4553 on lenovinha).
+
+      So the gap is in the MEMO, not in either component: 765-tkq2 skips the
+      whole gate when the digest matches, and the digest cannot see a class of
+      defect one of the gate's own guards exists to catch. The memo's stated
+      safety argument — "the gate is a pure function of (tree bytes, toolchain),
+      and the stamp records exactly that pair" — is true and insufficient, because
+      at least one guard is NOT a function of tree bytes alone.
+
+      DO NOT FIX THIS IN THE DIGEST. I tried that first (1034-ihxw, obsoleted)
+      and reintroduced the drvfs deadlock; the revert is 0a1419ffe. The digest
+      is the one thing here that must not change.
+    outcome: |
+      A chmod-only defect is refused by an unforced gate, without the stamp
+      gaining a worktree-sourced field.
+    exit_criteria:
+      - 'an UNFORCED `./build.sh --check` refuses a worktree-only `chmod -x` on a script invoked by path. PRE-FIX RESULT, measured: rc=0 in 2s with ok:gate-fresh.'
+      - 'the stamp digest is UNCHANGED — no worktree-sourced field is added. litmus:mode-only-regression-gate stays green, including its arm asserting the bit is index-sourced.'
+      - 'a green POSIX tree still memoises: the second consecutive unforced --check on an unmodified tree still returns ok:gate-fresh in about two seconds, or the memo has been destroyed rather than scoped.'
+      - 'the chosen mechanism is stated with its cost. Two candidates: run the exec-bit guard OUTSIDE the memo (cheap — 92ms — but establishes a precedent for what else escapes it), or refuse to memoise when index and worktree modes disagree (POSIX-only comparison, no digest change, but adds a git call to the memo path).'
+    verifiable_closure: |
+      litmus:mode-only-regression-gate gains an arm: with a warm stamp and a
+      worktree-only chmod, an UNFORCED ./build.sh --check exits non-zero. The
+      pre-fix result of that arm is recorded as rc=0, so it is known to have had
+      teeth.
+    notes: |
+      Found while measuring 1009-gccx: an unforced gate returned green in 2s on
+      a tree carrying a planted exec-bit defect, which was too fast to be true
+      for a check that then sat at build.sh line 3269. Nothing in the gate's
+      output said the memo had skipped a guard — ok:gate-fresh reads as a pass.
+      Related: 1034-ihxw (obsoleted — the wrong fix for this observation),
+      889-8tcb (why the digest must stay index-sourced), 887-bz88 (the guard
+      that does work), 765-tkq2 (the memo).

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-gate-discovers-sub-second-failures-after-ten-minutes-of-work
+    event:
+      type: note
+      ts: "2026-09-04T21:55:57Z"
+      agent_id: linux-lenovinha-claude-20260904t215557z
+      host: lenovinha
+      summary: |
+        CLOSED by lenovinha 21:4xZ, landed 303a16611 (verified on trunk), attested MO-FULL: COMPLETE 7a75caad5. THE NUMBER: one planted exec-bit defect, TILLANDSIAS_FORCE_CHECK=1 on both runs, identical verdict and rc: 222 s to refusal BEFORE, 2 s AFTER; the green forced gate 213 s, inside the day's 212-284 s range, so nothing was removed or weakened, the same ~1.5 s of guards runs earlier. Moved by measurement (median over 266 runs): 977-448j 12 ms, 881-29me 43 ms, 731-d89b 92 ms, 885-92iu 458 ms, 721-77yu 869 ms. LM-04 (4.1 s) stays in the body: hoisting it would cost every green run more than it saves on red ones, and the phase now carries the rule "median under a second, decidable from the working tree alone". CORRECTION TO THE PACKET'S PREMISE: clippy is NOT the expensive step (2.3 s avg); the ten minutes is the accumulation of ledger and litmus phases (terminology 33 s, ruby could-not-run 23 s, plan archiver 23 s, plan-ledger tests 18 s, workspace suite 79 s, long tail), so "ahead of the first step that compiles" is the right place for the wrong reason: the win is being ahead of the expensive middle. The fixture pins the ORDER, not the checks: refusal must arrive with no compile entered, and each hoisted guard must appear exactly once in build.sh (a duplicate is how a move that was really a copy hides). TWO MEASUREMENT TRAPS, both the closer's: (1) the gate memoises on tree bytes plus toolchain (765-tkq2) and a chmod changes neither, so an unforced run returned rc=0 in 2 s on a tree carrying the planted defect: A MODE-ONLY REGRESSION DOES NOT INVALIDATE THE GATE STAMP and 731-d89b cannot fire on a memoised run; routed back to lenovinha to file and fix (stamp input to include modes, e.g. git's tree hashing). (2) The first "before" measured the fix: a build.sh snapshot taken after the phase was inserted was restored as the baseline and refused in 4 s; caught by implausibility, not process. Third instance today of a control derived from its treatment (moving-ref control arm, single-line SIGPIPE producer, baseline copied from the treatment): A CONTROL MUST NOT BE DERIVED FROM THE THING IT CONTROLS FOR; snapshot the baseline from git, never the working tree.

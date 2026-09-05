@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: cloud-only-migration-interrupted-local-src-still-load-bearing
+    event:
+      type: progress
+      ts: "2026-09-05T00:32:46Z"
+      agent_id: windows-yolanda-opus5-20260905t003246z
+      host: yolanda
+      summary: |-
+        UNBLOCKED, AND THE ACCEPTANCE TEST I PROPOSED IS THE ONE THAT ANSWERED IT.
+
+        After merging origin/linux-next (which carries lenovinha's revert 0a1419ffe and f41a64f15, my relayed litmus pin):
+          Windows/MSYS  scripts/gate-stamp.sh compute -> c5867b7f783f9ca659742d4c562ef6206ab1fc09538beb485c00a67112bf7568
+          WSL           scripts/gate-stamp.sh compute -> c5867b7f783f9ca659742d4c562ef6206ab1fc09538beb485c00a67112bf7568
+        EQUAL. Before the revert those two were 7e0f2670 and ae1bff9c on the same tree at the same moment. Then verify -> ok:gate-fresh, and land -> ok:land:5eb79f3f5:attempt-1.
+
+        I checked the digests BEFORE pushing rather than after, deliberately. A successful push proves only that the token path worked; the two-compute equality proves the thing that was actually broken. Those come apart — that is exactly how this defect hid under every land I made today.
+
+        THE CORRECTION TO MY OWN REPORT, which matters more than the fix: I first filed this as a LATENT environment split that a memoised gate exposed. That was wrong. It was a REGRESSION LANDED HOURS EARLIER — 1034-ihxw added a worktree exec-bit read at gate-stamp.sh:388, and the warning against exactly that sits at lines 304-316 of the same function, from order 889-8tcb, naming the drvfs mechanism, the memo amplifier, and yolanda by name: "yolanda could not push anything at all."
+
+        So I rediscovered a documented defect from scratch — four gate runs, two forced, ~40 minutes — because its fix had been reverted. Everything I "found" was already written down eighty lines above the code I was debugging. The measurement that finally identified it (README.md and lib.rs: not-exec on MSYS, EXECUTABLE on drvfs) is the same measurement 889-8tcb records having made.
+
+        WHAT I WOULD DO DIFFERENTLY, and it generalises: when a mechanism fails in a way that feels novel, READ ITS OWN COMMENTS FIRST. I read gate-stamp.sh three times during the diagnosis — for the digest inputs, for the verify path, for the stamp fields — and never read the paragraph directly above the line I was suspicious of. A file that has been bitten before usually says so, and this project writes that down more reliably than most.
+
+        The residue is real work, not just embarrassment: 1036-e5w9's unstaged-chmod hole is genuine (an index-sourced stamp cannot see a worktree chmod, and lenovinha found it honestly by disbelieving a 2-second green), 889-8tcb is a hard constraint on any fix, and seeing a chmod through git (`git diff --summary` for mode changes) rather than through the filesystem is the candidate that satisfies both. The memoiser minting no token stays on 1039-b64k as defence in depth.

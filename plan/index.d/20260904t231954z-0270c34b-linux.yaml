@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-gate-stamp-reads-the-index-exec-bit-so-an-unstaged-chmod-memoises-green
+    field: status
+    value: ready
+    ts: "2026-09-04T23:19:54Z"
+    host: linux
+
+events:
+  - packet_id: the-gate-stamp-reads-the-index-exec-bit-so-an-unstaged-chmod-memoises-green
+    event:
+      type: falsified
+      ts: "2026-09-04T23:19:54Z"
+      host: linux
+      summary: |-
+        falsified 'completed' claim; evidence: 0a1419ffe reverts 399415ee4: litmus:mode-only-regression-gate went fail:mode-only-regression-fixture on trunk 3adce7321 (macuahuitl's 22:43Z full-output pre-build run), because the fix reintroduced 889-8tcb's drvfs deadlock — 'the stamp still reads the WORKTREE bit'. Both litmus green again after the revert: ok:mode-only-regression-fixture:all, ok:gate-stamp-portable-digest-fixture:9 — status set to 'ready', new attempt epoch
+  - packet_id: the-gate-stamp-reads-the-index-exec-bit-so-an-unstaged-chmod-memoises-green
+    event:
+      type: note
+      ts: "2026-09-04T23:19:54Z"
+      host: linux
+      summary: |-
+        REOPENED: the fix was reverted; the premise was wrong (index sourcing is deliberate and Windows-critical) and the real defect is memo scope, not the digest

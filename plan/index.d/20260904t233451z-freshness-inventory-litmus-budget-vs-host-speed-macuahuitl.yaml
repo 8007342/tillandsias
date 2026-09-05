@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: litmus-freshness-inventory-shape-step-2-exceeds-its-15-s-budget-on-a-mobile-workstation-and-the-floor-is-unmeasured
+    order: 1038-d7vw
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: any
+    capability_tags: [litmus, budget, low-end, measurement, spec-traceability]
+    estimated_hours: 2
+    owned_files:
+      - openspec/litmus-tests/litmus-freshness-inventory-shape.yaml
+      - scripts/freshness-inventory.sh
+    title: |
+      litmus:freshness-inventory-shape step 2 is killed at its 15 s budget on lenovinha (18.3 s, reproducible to 31 ms, not contended), passes on macuahuitl, and the floor hosts have never been timed
+    context: |
+      MEASURED by lenovinha 2026-09-04T22:57Z: "[STEP 2/13] Req: report emits the pinned header grammar (timeout: 15s)...
+      [TIMEOUT]", with the 956-llei kill-time adjudicator's line "cpu.pressure some-stall 1654us over 15s (0%) in this
+      cgroup — step NOT contended at kill time; genuinely too slow for its 15s budget". Three consecutive runs of
+      scripts/freshness-inventory.sh on lenovinha: 18336 / 18367 / 18345 ms, rc=0 each; variance 31 ms, so neither a flake
+      nor load: the host is 22% over the budget, reproducibly. The step is green on macuahuitl (the coordinator's timing
+      is on this packet's first event). Neither a host-state red nor a landing: a BUDGET red, and the regime must travel
+      with it. RULE FOR THE CLAIMER, from lenovinha: do not raise the budget without a number from a slower host;
+      lenovinha is a mobile workstation and not the floor (esmeraldinha, pirria, macneo are), and a budget set from the
+      second-fastest host moves the red to them. The useful next measurement is one timed run of
+      scripts/freshness-inventory.sh on a floor host; if it comes back at 40 s the question stops being the budget and
+      becomes whether a 13-step shape litmus should invoke an inventory that walks the whole tree at all (the shape
+      steps could run against a cached or fixture inventory and a separate size-tagged litmus could time the walk).
+    exit_criteria:
+      - "timed runs of scripts/freshness-inventory.sh from at least one floor host (esmeraldinha or pirria) and macuahuitl are on this packet with rc; pre-fix result: FAILS (only lenovinha's number exists)"
+      - "the decision is written here: a budget derived from the floor's number with its regime named, OR the shape steps decoupled from the tree walk with the walk timed by its own size-tagged litmus; the chosen fix makes step 2 green on the floor host that was measured; pre-fix result: FAILS"
+      - "the 956-llei adjudicator line is quoted in the closure as the discriminator that made this a budget red and not a flake"
+    unscoreable: |
+      The pin is the litmus itself once its budget or its shape is fixed, run on
+      the floor host that was measured; the claimer names the size tag.
+    events:
+      - type: note
+        ts: "2026-09-04T23:34:51Z"
+        host: macuahuitl
+        summary: |
+          FILED by the coordinator from lenovinha's measurement. The floor hosts have
+          been asked for one timed run each (esmeraldinha, pirria); macuahuitl's own
+          timing is in the next event.

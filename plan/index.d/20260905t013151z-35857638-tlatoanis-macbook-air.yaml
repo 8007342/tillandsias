@@ -1,0 +1,13 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 699-usxc).
+#
+# forge-e2e-launch-wedges-on-same-name-container-no-replace-no-corpse-cleanup.status was ALREADY 'implemented', so no field changed — but the caller
+# supplied a note, and discarding it silently is what this packet is about.
+events:
+  - packet_id: forge-e2e-launch-wedges-on-same-name-container-no-replace-no-corpse-cleanup
+    event:
+      type: note
+      ts: "2026-09-05T01:31:51Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        both forge builders; landed on a twice-green forced gate after 1043-kvvn cleared the pre-existing red

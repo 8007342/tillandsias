@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: order-505s-project-label-validation-fails-open-when-the-local-enumeration-is-empty-and-enumerates-the-root-997-e4v2-retires
+    field: status
+    value: verified
+    ts: "2026-09-05T01:32:04Z"
+    host: lenovinha
+
+events:
+  - packet_id: order-505s-project-label-validation-fails-open-when-the-local-enumeration-is-empty-and-enumerates-the-root-997-e4v2-retires
+    event:
+      type: completed
+      ts: "2026-09-05T01:32:04Z"
+      host: lenovinha
+      summary: |-
+        status 'verified' with evidence_refs: 19aef52d7: build.sh --check rc=0 (253s); cargo test -p tillandsias-headless --features tray --bins 615 passed 0 failed (was 609/5); litmus:host-browser-mcp-lane-socket-shape PASS run before the land; live control on an empty project root ARM1 rc=1 / ARM2 rc=0 cloud-known / ARM3 rc=1; pre-fix same invocation returned rc=0 'stopped'
+  - packet_id: order-505s-project-label-validation-fails-open-when-the-local-enumeration-is-empty-and-enumerates-the-root-997-e4v2-retires
+    event:
+      type: note
+      ts: "2026-09-05T01:32:04Z"
+      host: lenovinha
+      summary: |-
+        four sites unified behind a fail-closed helper; empty known set now denies

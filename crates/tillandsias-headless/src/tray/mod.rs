@@ -1099,23 +1099,27 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
 
     let project_label = identity.project;
 
-    // Validate project label by equality against enumerated local projects (never sanitize).
-    let known_projects =
-        crate::local_projects::scan_project_root(&crate::local_projects::host_project_root());
-    let is_valid_project =
-        known_projects.is_empty() || known_projects.iter().any(|p| p.label == project_label);
-    if !is_valid_project {
+    // Validate project label by equality against the known project set (never
+    // sanitize). 1031-q4pb: this site carried the INVERTED spelling of the same
+    // bypass — `known.is_empty() || known.iter().any(..)` evaluates to TRUE, i.e.
+    // valid, on an empty enumeration. Two spellings of one bug across four sites
+    // is exactly why the check now lives in one helper that fails closed.
+    //
+    // This is the site that matters most: it is the MCP tool socket, so the
+    // label it admits is the lane an unattributed client gets to act as.
+    if let Err(reason) = crate::local_projects::validate_project_label(&project_label) {
         warn!(
             spec = "mcp-tool-socket",
             project = %project_label,
-            "MCP connection for non-enumerated project denied and closed (-32000)"
+            reason = %reason,
+            "MCP connection for unknown project denied and closed (-32000)"
         );
         let deny = serde_json::json!({
             "jsonrpc": "2.0",
             "id": serde_json::Value::Null,
             "error": {
                 "code": -32000,
-                "message": format!("Project '{project_label}' is not an enumerated local project"),
+                "message": reason,
             }
         });
         let _ = writeln!(writer, "{deny}");
@@ -1422,28 +1426,6 @@ fn handle_control_connection(
                         },
                     };
                     let _ = write_control_envelope(&mut stream, &ack);
-                }
-                ControlMessage::EnumerateLocalProjects { seq } => {
-                    // Linux-native EnumerateLocalProjects handler (Q4
-                    // answer of the convergence packet). Mirrors the
-                    // vsock-side `enumerate_local_projects` but points
-                    // at the host filesystem (default `$HOME/src`)
-                    // instead of the in-VM bind-mount root.
-                    //
-                    // @trace spec:host-shell-architecture
-                    // @trace plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q4)
-                    let entries = crate::local_projects::scan_project_root(
-                        &crate::local_projects::host_project_root(),
-                    );
-                    let reply = ControlEnvelope {
-                        wire_version: WIRE_VERSION,
-                        seq: first.seq,
-                        body: ControlMessage::LocalProjectsReply {
-                            seq_in_reply_to: seq,
-                            entries,
-                        },
-                    };
-                    let _ = write_control_envelope(&mut stream, &reply);
                 }
                 ControlMessage::CloudRefreshRequest { seq } => {
                     // Linux-native CloudRefreshRequest handler (Q4
@@ -2045,13 +2027,6 @@ impl TrayService {
             state.selected_agent = agent;
             state.bump_revision();
         });
-    }
-
-    fn project_by_name(&self, name: &str) -> Option<ProjectEntry> {
-        self.snapshot()
-            .projects
-            .into_iter()
-            .find(|project| project.name == name)
     }
 
     /// Lookup a cloud (GitHub-sourced) project by name. Cloud projects are
@@ -3218,15 +3193,11 @@ impl LeafAction {
 /// Project namespace: which top-level submenu owns a given project base.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ProjectScope {
-    Local,
     Cloud,
 }
 
-const LOCAL_BASE_LO: i32 = 0x1000_0000;
-const LOCAL_BASE_HI: i32 = 0x5000_0000;
 const CLOUD_BASE_LO: i32 = 0x5000_0000;
 const CLOUD_BASE_HI: i32 = 0x7FFF_FFF0;
-const LOADING_LOCAL_ID: i32 = 0x7FFF_FFFD;
 const LOADING_CLOUD_ID: i32 = 0x7FFF_FFFE;
 /// Disabled leaf shown at the bottom of the `☁️ Cloud >` submenu when the
 /// cloud-project list overflows [`resolved_max_cloud_projects_in_menu`].
@@ -3275,8 +3246,10 @@ pub(super) fn resolved_max_cloud_projects_in_menu() -> usize {
 /// cycle makes that queue grow forever, and one tray click wedged the whole
 /// Wayland session. An unknown item as a DEAD, uniquely-numbered leaf is
 /// harmless (its click dispatches nowhere); an unknown item as id 0 is a
-/// session killer. Range 0x0800_0000..0x1000_0000 sits below LOCAL_BASE_LO
-/// and above every fixed top-level id, so it collides with nothing.
+/// session killer. Range 0x0800_0000..0x1000_0000 sits below CLOUD_BASE_LO and
+/// above every fixed top-level id, so it collides with nothing. (It used to be
+/// described relative to LOCAL_BASE_LO, removed with the local scope in
+/// 997-e4v2 step 3; the range itself is unchanged.)
 fn fallback_menu_id(id_str: &str) -> i32 {
     use std::hash::Hash;
     use std::hash::Hasher;
@@ -3291,7 +3264,6 @@ fn project_base(name: &str, scope: ProjectScope) -> i32 {
     let mut hash = std::collections::hash_map::DefaultHasher::new();
     name.hash(&mut hash);
     let (lo, hi) = match scope {
-        ProjectScope::Local => (LOCAL_BASE_LO, LOCAL_BASE_HI),
         ProjectScope::Cloud => (CLOUD_BASE_LO, CLOUD_BASE_HI),
     };
     // Quantise to multiples of 16 so leaf offsets (0..=5) never overflow
@@ -3299,10 +3271,6 @@ fn project_base(name: &str, scope: ProjectScope) -> i32 {
     let span = ((hi - lo) / 16) as u32;
     let raw = (hash.finish() as u32) % span.max(1);
     lo + (raw as i32) * 16
-}
-
-fn local_project_base(name: &str) -> i32 {
-    project_base(name, ProjectScope::Local)
 }
 
 fn cloud_project_base(name: &str) -> i32 {
@@ -3316,19 +3284,6 @@ fn project_action_from_id(
     state: &TrayUiState,
     id: i32,
 ) -> Option<(String, ProjectScope, Option<LeafAction>)> {
-    for project in &state.projects {
-        let base = local_project_base(&project.name);
-        if id >= base && id < base + PROJECT_LEAF_COUNT {
-            return Some((
-                project.name.clone(),
-                ProjectScope::Local,
-                LeafAction::from_offset(id - base),
-            ));
-        }
-        if id == base + PROJECT_SUBMENU_OFFSET {
-            return Some((project.name.clone(), ProjectScope::Local, None));
-        }
-    }
     for project in &state.cloud_projects {
         let base = cloud_project_base(&project.name);
         if id >= base && id < base + PROJECT_LEAF_COUNT {
@@ -3361,7 +3316,6 @@ fn build_project_submenu(
     scope: ProjectScope,
 ) -> MenuNode {
     let base = match scope {
-        ProjectScope::Local => local_project_base(&project.name),
         ProjectScope::Cloud => cloud_project_base(&project.name),
     };
     let leaf_enabled = state.podman_available;
@@ -3403,40 +3357,6 @@ fn build_project_submenu(
 
 /// Build the `~/src >` submenu listing every discovered local project.
 ///
-/// When the project list is empty (still loading, or genuinely empty
-/// `~/src`), a single disabled `(loading…)` child is emitted so the
-/// submenu chevron doesn't dead-end.
-///
-/// @trace dead_code — retired by order 628-p5tj convergence.
-#[allow(dead_code)]
-fn build_local_projects_submenu(state: &TrayUiState) -> MenuNode {
-    let mut children: Vec<OwnedValue> = state
-        .projects
-        .iter()
-        .map(|p| child(build_project_submenu(state, p, ProjectScope::Local)))
-        .collect();
-    if children.is_empty() {
-        children.push(child(node(
-            LOADING_LOCAL_ID,
-            props(vec![
-                ("label".to_string(), ov_str("(loading\u{2026})")),
-                ("enabled".to_string(), ov(Value::from(false))),
-                ("visible".to_string(), ov(Value::from(true))),
-            ]),
-            Vec::new(),
-        )));
-    }
-    node(
-        21,
-        props(vec![
-            ("label".to_string(), ov_str("\u{1F3E0} ~/src")),
-            ("enabled".to_string(), ov(Value::from(true))),
-            ("visible".to_string(), ov(Value::from(true))),
-            ("children-display".to_string(), ov_str("submenu")),
-        ]),
-        children,
-    )
-}
 
 /// Build the `☁️ Cloud >` submenu listing every discovered cloud project.
 ///
@@ -3829,7 +3749,6 @@ fn shared_id_to_int(id: &str) -> i32 {
                 let (scope_str, remainder) = rest.split_once('.').unwrap_or((rest, ""));
                 let (name, verb) = remainder.rsplit_once('.').unwrap_or((remainder, ""));
                 let scope = match scope_str {
-                    "local" => ProjectScope::Local,
                     "cloud" => ProjectScope::Cloud,
                     _ => return fallback_menu_id(other),
                 };
@@ -4010,7 +3929,7 @@ fn build_menu_layout(
 ///
 /// ```text
 /// 1. Status (disabled, live-updating)            id=1
-/// 2. 🔑 GitHubLogin                              id=20  (visible iff NOT authenticated)
+/// 2. 🔑 GitHub Login                             id=20  (visible iff NOT authenticated)
 ///    OR
 ///    🏠 ~/src >                                  id=21  (visible iff authenticated)
 ///    ☁️ Cloud >                                  id=22  (visible iff authenticated)
@@ -4525,11 +4444,6 @@ impl DbusMenuIface {
                             LeafAction::Codex => LaunchKind::Codex,
                         };
                         match scope {
-                            ProjectScope::Local => {
-                                if let Some(project_entry) = self.0.project_by_name(&project_name) {
-                                    handle_launch_project(self.0.clone(), project_entry, kind);
-                                }
-                            }
                             ProjectScope::Cloud => {
                                 if let Some(cloud_entry) =
                                     self.0.cloud_project_by_name(&project_name)
@@ -5494,7 +5408,7 @@ mod tests {
         use std::io::{BufRead, BufReader, Write};
         use std::os::unix::net::UnixStream;
 
-        with_empty_project_root(|| {
+        with_known_demo_project(|| {
             let (client, server) = UnixStream::pair().expect("socketpair");
             let handle = std::thread::spawn(move || {
                 serve_mcp_connection(server, Some(LaneIdentity::new("demo", "default")));
@@ -5588,7 +5502,7 @@ mod tests {
         use std::io::{BufRead, BufReader, Write};
         use std::os::unix::net::UnixStream;
 
-        with_empty_project_root(|| {
+        with_known_demo_project(|| {
             let (client, server) = UnixStream::pair().expect("socketpair");
             let handle = std::thread::spawn(move || {
                 serve_mcp_connection(server, Some(LaneIdentity::new("demo", "default")));
@@ -5694,7 +5608,7 @@ mod tests {
         use std::io::{BufRead, BufReader, Write};
         use std::os::unix::net::UnixStream;
 
-        with_empty_project_root(|| {
+        with_known_demo_project(|| {
             let (client, server) = UnixStream::pair().expect("socketpair");
             let handle = std::thread::spawn(move || {
                 serve_mcp_connection(server, Some(LaneIdentity::new("demo", "default")));
@@ -5793,36 +5707,138 @@ mod tests {
         server.join().expect("server thread joined");
     }
 
-    /// Pin TILLANDSIAS_HOST_PROJECT_ROOT to an empty per-test directory for
-    /// the tests that reach serve_mcp_connection's project validation. The
-    /// validator scans the AMBIENT project root, so without this these tests
-    /// pass or fail based on which other test mutated the env first and on
-    /// whether the host's ~/src happens to be empty — the 638-ehzi
-    /// schedule-race class, reproduced 2026-08-16 when newly added tests
-    /// shifted the schedule and a non-empty ~/src (created 08-12) made solo
-    /// runs fail deterministically. An EMPTY root is the deliberate fixture:
+    /// Pin the order-505 validation set to the KNOWN projects these tests
+    /// attribute to (`demo`, `alpha`) for
+    /// the tests that reach `serve_mcp_connection`'s project validation.
+    ///
+    /// THIS HELPER USED TO BE `with_empty_project_root`, and its own doc said
+    /// what was wrong with it: "An EMPTY root is the deliberate fixture:
     /// empty-scan-is-valid is the documented open-host behavior these tests
-    /// had been relying on implicitly.
-    fn with_empty_project_root<T>(f: impl FnOnce() -> T) -> T {
+    /// had been relying on implicitly." That behaviour was the 1031-q4pb
+    /// bypass — with nothing enumerated, the validator admitted ANY label,
+    /// so these tests were handshaking as `demo` only because validation was
+    /// being skipped entirely. Five of them failed the moment the check
+    /// started failing closed, which is the fixture doing its job on the way
+    /// out: the assumption was recorded, so its removal was visible rather
+    /// than silent.
+    ///
+    /// The root stays EMPTY on purpose. `demo` is supplied through the
+    /// confirmed-cloud half of the set instead, so these tests now exercise
+    /// the cloud-only end state (776-jcf3) — the arrangement every host will
+    /// have once ~/src is retired — rather than a local checkout that will
+    /// not exist.
+    ///
+    /// Both env vars are pinned for the same 638-ehzi reason the original
+    /// gave: the validator reads ambient state, so without pinning these
+    /// tests pass or fail based on which test mutated the env first and on
+    /// whether the host's real ~/src happens to be empty.
+    fn with_known_demo_project<T>(f: impl FnOnce() -> T) -> T {
         static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
         let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         let dir = std::env::temp_dir().join(format!(
-            "tillandsias-empty-project-root-{}",
+            "tillandsias-known-demo-project-{}",
             std::process::id()
         ));
         let _ = std::fs::create_dir_all(&dir);
-        let prev = std::env::var_os(crate::local_projects::HOST_PROJECT_ROOT_ENV);
+        let cache = dir.join("known-cloud-projects");
+        let prev_root = std::env::var_os(crate::local_projects::HOST_PROJECT_ROOT_ENV);
+        let prev_cache = std::env::var_os(crate::local_projects::CLOUD_LABEL_CACHE_ENV);
         unsafe {
             std::env::set_var(crate::local_projects::HOST_PROJECT_ROOT_ENV, &dir);
+            std::env::set_var(crate::local_projects::CLOUD_LABEL_CACHE_ENV, &cache);
         }
+        // `alpha` alongside `demo` because the forged-environ test attributes to
+        // it: its subject is that listener attribution beats TILLANDSIAS_PROJECT,
+        // which it can only demonstrate if the attributed label is servable.
+        let _ =
+            crate::local_projects::persist_cloud_labels(&["demo".to_string(), "alpha".to_string()]);
         let out = f();
         unsafe {
-            match prev {
+            match prev_root {
                 Some(v) => std::env::set_var(crate::local_projects::HOST_PROJECT_ROOT_ENV, v),
                 None => std::env::remove_var(crate::local_projects::HOST_PROJECT_ROOT_ENV),
             }
+            match prev_cache {
+                Some(v) => std::env::set_var(crate::local_projects::CLOUD_LABEL_CACHE_ENV, v),
+                None => std::env::remove_var(crate::local_projects::CLOUD_LABEL_CACHE_ENV),
+            }
+        }
+        let _ = std::fs::remove_file(&cache);
+        out
+    }
+
+    /// The same fixture with NOTHING known, for the arm that must be denied.
+    fn with_no_known_projects<T>(f: impl FnOnce() -> T) -> T {
+        static ENV_LOCK2: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let _guard = ENV_LOCK2.lock().unwrap_or_else(|p| p.into_inner());
+        let dir = std::env::temp_dir().join(format!(
+            "tillandsias-no-known-projects-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::create_dir_all(&dir);
+        let cache = dir.join("absent-cache");
+        let _ = std::fs::remove_file(&cache);
+        let prev_root = std::env::var_os(crate::local_projects::HOST_PROJECT_ROOT_ENV);
+        let prev_cache = std::env::var_os(crate::local_projects::CLOUD_LABEL_CACHE_ENV);
+        unsafe {
+            std::env::set_var(crate::local_projects::HOST_PROJECT_ROOT_ENV, &dir);
+            std::env::set_var(crate::local_projects::CLOUD_LABEL_CACHE_ENV, &cache);
+        }
+        let out = f();
+        unsafe {
+            match prev_root {
+                Some(v) => std::env::set_var(crate::local_projects::HOST_PROJECT_ROOT_ENV, v),
+                None => std::env::remove_var(crate::local_projects::HOST_PROJECT_ROOT_ENV),
+            }
+            match prev_cache {
+                Some(v) => std::env::set_var(crate::local_projects::CLOUD_LABEL_CACHE_ENV, v),
+                None => std::env::remove_var(crate::local_projects::CLOUD_LABEL_CACHE_ENV),
+            }
         }
         out
+    }
+
+    /// 1031-q4pb: THE BYPASS, pinned so it cannot come back.
+    ///
+    /// A host that knows of no projects — every fresh curl-install, and every
+    /// host once ~/src retires — must REFUSE an attributed lane rather than
+    /// serve it. Before the fix this connection completed the handshake,
+    /// because `known.is_empty() || any(..)` is true when the set is empty.
+    ///
+    /// @trace spec:mcp-tool-socket
+    #[test]
+    fn mcp_connection_is_denied_when_the_host_knows_no_projects() {
+        use std::io::{BufRead, BufReader, Write};
+        use std::os::unix::net::UnixStream;
+
+        with_no_known_projects(|| {
+            let (server_side, client_side) =
+                UnixStream::pair().expect("UnixStream::pair available on linux");
+            let identity = LaneIdentity::new("demo", "default");
+            let server =
+                std::thread::spawn(move || serve_mcp_connection(server_side, Some(identity)));
+
+            let mut writer = client_side.try_clone().expect("clone client side");
+            let mut lines = BufReader::new(client_side).lines();
+            writeln!(
+                writer,
+                r#"{{"jsonrpc":"2.0","id":1,"method":"initialize","params":{{}}}}"#
+            )
+            .expect("write initialize");
+
+            let resp: serde_json::Value =
+                serde_json::from_str(&lines.next().expect("a reply").expect("readable"))
+                    .expect("valid JSON");
+            assert_eq!(
+                resp["error"]["code"], -32000,
+                "an unknown project must be denied, not served: {resp}"
+            );
+            assert!(
+                resp["result"].is_null(),
+                "a denied connection must not carry a result: {resp}"
+            );
+            let _ = server.join();
+        });
     }
 
     /// Order 505: The NDJSON transport round-trips the MCP handshake for an attributed
@@ -5834,7 +5850,7 @@ mod tests {
         use std::io::{BufRead, BufReader, Write};
         use std::os::unix::net::UnixStream;
 
-        with_empty_project_root(|| {
+        with_known_demo_project(|| {
             let (server_side, client_side) =
                 UnixStream::pair().expect("UnixStream::pair available on linux");
             let identity = LaneIdentity::new("demo", "default");
@@ -5946,7 +5962,7 @@ mod tests {
         use std::io::{BufRead, BufReader, Write};
         use std::os::unix::net::UnixStream;
 
-        with_empty_project_root(|| {
+        with_known_demo_project(|| {
             // Set a forged environment variable in the test process
             unsafe {
                 std::env::set_var("TILLANDSIAS_PROJECT", "attacker-wins");
@@ -6598,8 +6614,8 @@ mod tests {
             "Missing Cloud submenu"
         );
         assert!(
-            !label_list.iter().any(|l| l.contains("GitHubLogin")),
-            "GitHubLogin must not appear when authenticated"
+            !label_list.iter().any(|l| l.contains("GitHub Login")),
+            "the GitHub Login row must not appear when authenticated"
         );
         // ABSENCE pin (operator order 2026-07-22, tray-ux "UX curation
         // governance"): no reset-guest leaf in the authenticated shape either.
@@ -6724,8 +6740,8 @@ mod tests {
             "Missing the transitional Logging in… row. labels={label_list:?}"
         );
         assert!(
-            !label_list.iter().any(|l| l.contains("GitHubLogin")),
-            "The actionable GitHubLogin row must not render mid-flow"
+            !label_list.iter().any(|l| l.contains("GitHub Login")),
+            "The actionable GitHub Login row must not render mid-flow"
         );
         assert!(!label_list.iter().any(|l| l.contains("~/src")));
         assert!(!label_list.iter().any(|l| l.contains("Cloud")));
@@ -6802,7 +6818,7 @@ mod tests {
             "a succeeded probe must surface the Cloud submenu. labels={labels_in:?}"
         );
         assert!(!labels_in.iter().any(|l| l.contains("~/src")));
-        assert!(!labels_in.iter().any(|l| l.contains("GitHubLogin")));
+        assert!(!labels_in.iter().any(|l| l.contains("GitHub Login")));
         assert!(!labels_in.iter().any(|l| l.contains("Logging in")));
     }
 
@@ -7180,12 +7196,18 @@ mod tests {
         assert_eq!(after.2.len(), 5);
         let before_labels = labels(&before);
         let after_labels = labels(&after);
-        // NOTE the SPACE: the rendered label is "🔑 GitHub Login". Several
-        // existing absence-assertions in this module test `contains("GitHubLogin")`
-        // without it, which can never match and therefore always pass — they are
-        // vacuous. Reported as a finding rather than fixed here, because that is
-        // a different migration from this one; using the wrong spelling in a
-        // PRESENCE assert simply fails, which is how this was found.
+        // NOTE the SPACE: the rendered label is "🔑 GitHub Login", pinned by
+        // tillandsias-host-shell/src/lib.rs:93. Three absence-assertions in
+        // this module tested `contains("GitHubLogin")` without it, which can
+        // never match and therefore always passed — vacuous. Corrected under
+        // 1028-3eiz; using the wrong spelling in a PRESENCE assert simply
+        // fails, which is how lenovinha found it.
+        //
+        // ONE un-spaced assert SURVIVES on purpose, and is not the same
+        // defect: the one in confirmed_signed_out_row_uses_canonical_github_
+        // spelling asserts the RETIRED spelling never renders. Its subject IS
+        // the un-spaced string, so it is a spelling regression pin rather than
+        // a login-row absence check, and correcting it would delete the guard.
         assert!(
             before_labels.iter().any(|l| l.contains("GitHub Login")),
             "unauthenticated menu must offer login. labels={before_labels:?}"
@@ -7269,7 +7291,7 @@ mod tests {
             .enclave_status(EnclaveStatus::AllHealthy)
             .projects(vec![project.clone()])
             .build();
-        let submenu = build_project_submenu(&state, &project, ProjectScope::Local);
+        let submenu = build_project_submenu(&state, &project, ProjectScope::Cloud);
 
         // Seven leaves, no sub-submenus.
         assert_eq!(submenu.2.len(), 7);
@@ -7300,13 +7322,13 @@ mod tests {
             .enclave_status(EnclaveStatus::Failed)
             .projects(vec![project.clone()])
             .build();
-        let submenu = build_project_submenu(&state, &project, ProjectScope::Local);
+        let submenu = build_project_submenu(&state, &project, ProjectScope::Cloud);
 
         let mut flat = Vec::new();
         flatten_layout(&submenu, &mut flat);
         for (id, props) in flat.iter() {
             // Skip the submenu container itself.
-            if *id == local_project_base(&project.name) + PROJECT_SUBMENU_OFFSET {
+            if *id == cloud_project_base(&project.name) + PROJECT_SUBMENU_OFFSET {
                 continue;
             }
             let enabled = props
@@ -8056,39 +8078,27 @@ mod tests {
         assert_eq!(shared_id_to_int(ids::VERSION), 30);
         assert_eq!(shared_id_to_int(ids::QUIT), 31);
 
-        // Per-project items: project.local.<name>.<verb> → base + offset
-        let base_local = local_project_base("my-project");
-        assert_eq!(
-            shared_id_to_int("project.local.my-project."),
-            base_local + PROJECT_SUBMENU_OFFSET
+        // 997-e4v2 step 3: `project.local.*` no longer parses as a scope, so
+        // these fall to fallback_menu_id and land in 0x0800_0000..0x1000_0000.
+        //
+        // NOT ZERO, AND THE DISTINCTION IS THE WHOLE POINT. My first version of
+        // this assertion expected 0 on the reasoning that an unresolvable id
+        // "maps to nothing". Read fallback_menu_id's docstring: id 0 is a
+        // SESSION KILLER — gnome-shell's appindicator walks the item graph with
+        // an unguarded queue, and an unknown item at id 0 makes a root cycle
+        // that wedged an entire Wayland session on one click. Had the code
+        // returned 0 my test would have PINNED that as correct. It returns a
+        // dead, uniquely-numbered leaf instead, which is the behaviour that
+        // exists precisely because 0 is catastrophic.
+        let stale = shared_id_to_int("project.local.my-project.claude");
+        assert!(
+            (0x0800_0000..0x1000_0000).contains(&stale),
+            "a stale local id must land in the dead-leaf fallback range, got {stale}"
         );
-        assert_eq!(
-            shared_id_to_int("project.local.my-project.claude"),
-            base_local + 0
-        );
-        assert_eq!(
-            shared_id_to_int("project.local.my-project.codex"),
-            base_local + 1
-        );
-        assert_eq!(
-            shared_id_to_int("project.local.my-project.opencode"),
-            base_local + 2
-        );
-        assert_eq!(
-            shared_id_to_int("project.local.my-project.antigravity"),
-            base_local + 3
-        );
-        assert_eq!(
-            shared_id_to_int("project.local.my-project.opencode-web"),
-            base_local + 4
-        );
-        assert_eq!(
-            shared_id_to_int("project.local.my-project.observatorium"),
-            base_local + 5
-        );
-        assert_eq!(
-            shared_id_to_int("project.local.my-project.maintenance"),
-            base_local + 6
+        assert_ne!(stale, 0, "id 0 wedges the session — see fallback_menu_id");
+        assert!(
+            stale < CLOUD_BASE_LO,
+            "a stale local id must not collide with a cloud project base"
         );
 
         // Cloud projects use cloud_project_base

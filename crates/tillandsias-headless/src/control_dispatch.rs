@@ -98,10 +98,10 @@ pub fn decide_route(msg: &ControlMessage, transport: TransportKind) -> DispatchO
         // UI state consistency even without a real VM.
         (VmStatusRequest { .. } | VmShutdownRequest { .. }, _) => Handle,
 
-        // Q4: project enumeration + cloud refresh on BOTH transports.
-        // Each host's local scanner populates the response from its own
-        // filesystem / `gh` invocation.
-        (EnumerateLocalProjects { .. } | CloudRefreshRequest { .. }, _) => Handle,
+        // Q4: cloud refresh on BOTH transports. Each host's `gh` invocation
+        // populates the response. 997-e4v2 removed EnumerateLocalProjects from
+        // this arm with the rest of the local-projects surface.
+        (CloudRefreshRequest { .. }, _) => Handle,
 
         // Order 153: Subscribe opens the server-push event stream on BOTH
         // transports — the Linux-native tray/headless local path (order 156)
@@ -173,7 +173,6 @@ pub fn decide_route(msg: &ControlMessage, transport: TransportKind) -> DispatchO
             | IssueAck { .. }
             | Error { .. }
             | VmStatusReply { .. }
-            | LocalProjectsReply { .. }
             | CloudRefreshReply { .. }
             | DeliverCredentialsReply { .. }
             | VaultHandoverReply { .. }
@@ -269,17 +268,6 @@ mod tests {
                     drain_timeout_ms: 0,
                 },
                 "VmShutdownRequest",
-            ),
-            (
-                ControlMessage::EnumerateLocalProjects { seq: 1 },
-                "EnumerateLocalProjects",
-            ),
-            (
-                ControlMessage::LocalProjectsReply {
-                    seq_in_reply_to: 1,
-                    entries: vec![],
-                },
-                "LocalProjectsReply",
             ),
             (
                 ControlMessage::CloudRefreshRequest { seq: 1 },
@@ -425,39 +413,37 @@ mod tests {
     fn unix_socket_routing_matrix() {
         for (msg, name) in one_of_each() {
             let expected = match name {
-                "Hello"
-                | "IssueWebSession"
-                | "EvictProject"
-                | "McpFrame"
-                | "VmStatusRequest"
-                | "VmShutdownRequest"
-                | "EnumerateLocalProjects"
-                | "CloudRefreshRequest"
-                | "Subscribe" => DispatchOutcome::Handle,
-                "PtyOpen"
-                | "PtyData"
-                | "PtyResize"
-                | "PtyClose"
-                | "DeliverCredentials"
-                | "GetVaultHandover"
-                | "GithubLoginStatusRequest"
-                // Order 333: guest-only facts (cgroup + /proc sampling).
-                | "MetricsSnapshotRequest" => DispatchOutcome::Unsupported,
-                "HelloAck"
-                | "IssueAck"
-                | "Error"
-                | "VmStatusReply"
-                | "LocalProjectsReply"
-                | "CloudRefreshReply"
-                | "DeliverCredentialsReply"
-                | "VaultHandoverReply"
-                | "GithubLoginStatusReply"
-                | "SubscribeAck"
-                | "VmStatusPush"
-                | "LoginStatePush"
-                | "CloudProjectsPush"
-                | "MetricsSnapshotReply" => DispatchOutcome::ResponseOnly,
-                _ => unreachable!("test fixture missing case for {name}"),
+"Hello"
+| "IssueWebSession"
+| "EvictProject"
+| "McpFrame"
+| "VmStatusRequest"
+| "VmShutdownRequest"
+| "CloudRefreshRequest"
+| "Subscribe" => DispatchOutcome::Handle,
+"PtyOpen"
+| "PtyData"
+| "PtyResize"
+| "PtyClose"
+| "DeliverCredentials"
+| "GetVaultHandover"
+| "GithubLoginStatusRequest"
+// Order 333: guest-only facts (cgroup + /proc sampling).
+| "MetricsSnapshotRequest" => DispatchOutcome::Unsupported,
+"HelloAck"
+| "IssueAck"
+| "Error"
+| "VmStatusReply"
+| "CloudRefreshReply"
+| "DeliverCredentialsReply"
+| "VaultHandoverReply"
+| "GithubLoginStatusReply"
+| "SubscribeAck"
+| "VmStatusPush"
+| "LoginStatePush"
+| "CloudProjectsPush"
+| "MetricsSnapshotReply" => DispatchOutcome::ResponseOnly,
+_ => unreachable!("test fixture missing case for {name}"),
             };
             assert_eq!(
                 decide_route(&msg, TransportKind::UnixSocket),
@@ -469,8 +455,8 @@ mod tests {
 
     /// Exhaustively pin the vsock matrix. Diverges from unix on:
     ///   * IssueWebSession / EvictProject → Unsupported (Q1)
-    ///   * McpFrame                       → Unsupported (host-only tunnel)
-    ///   * PTY family                     → Handle (vsock is the PTY producer)
+    ///   * McpFrame       → Unsupported (host-only tunnel)
+    ///   * PTY family     → Handle (vsock is the PTY producer)
     #[test]
     fn vsock_routing_matrix() {
         for (msg, name) in one_of_each() {
@@ -478,7 +464,6 @@ mod tests {
                 "Hello"
                 | "VmStatusRequest"
                 | "VmShutdownRequest"
-                | "EnumerateLocalProjects"
                 | "CloudRefreshRequest"
                 | "PtyOpen"
                 | "PtyData"
@@ -494,7 +479,6 @@ mod tests {
                 | "IssueAck"
                 | "Error"
                 | "VmStatusReply"
-                | "LocalProjectsReply"
                 | "CloudRefreshReply"
                 | "DeliverCredentialsReply"
                 | "VaultHandoverReply"
@@ -529,7 +513,6 @@ mod tests {
                 seq: 1,
                 drain_timeout_ms: 0,
             },
-            ControlMessage::EnumerateLocalProjects { seq: 1 },
             ControlMessage::CloudRefreshRequest { seq: 1 },
             ControlMessage::Subscribe {
                 topics: vec![tillandsias_control_wire::SubscriptionTopic::VmStatus],
@@ -565,10 +548,6 @@ mod tests {
                 phase: VmPhase::Ready,
                 podman_ready: true,
                 last_event: None,
-            },
-            ControlMessage::LocalProjectsReply {
-                seq_in_reply_to: 1,
-                entries: vec![],
             },
             ControlMessage::CloudRefreshReply {
                 seq_in_reply_to: 1,

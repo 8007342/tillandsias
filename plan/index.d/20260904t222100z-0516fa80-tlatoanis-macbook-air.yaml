@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: nothing-in-the-tree-notices-a-control-wire-renumbering
+    event:
+      type: progress
+      ts: "2026-09-04T22:21:00Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260904t221329z
+      host: tlatoanis-macbook-air
+      summary: |-
+        COST OF LANDING THE PIN AFTER THE COLLAPSE, recorded before the fact rather than as hindsight. The exhaustive discriminant pin gated green on osx-next (325s, 66 tests, three sabotage mutations red as designed) against the PRE-collapse 35-variant enum, and is being held uncommitted at macuahuitl's ruling until yolanda's 54a9471a1 is an ancestor of origin/linux-next, then rebased onto the collapsed 32-variant enum. The cost, stated plainly: a discriminant guard landed BEFORE the collapse would have gone red ON the collapse, which is the guard working. Landing it after means the first renumbering in this tree's history is the one renumbering the guard never sees. That is unrecoverable — it cannot be tested retroactively. It is accepted because a merge conflict inside a live land gate is worse and because yolanda's renumbering is deliberate and independently measured, not accidental. Recorded, not reopened. ALSO CORRECTING A NUMBER I CARRIED: I had 890-y72v as WIRE_VERSION 4 current. Version 4 is RESERVED for its DeliverCredentialsReply discriminator under the stowaway rule in the WIRE_VERSION doc; current is 3 and nothing has bumped to it. Related packet filed this cycle: 1032-62rx, the same proxy-for-the-thing shape one layer up (the version number is pinned, the ten refusal branches that give it meaning are not).

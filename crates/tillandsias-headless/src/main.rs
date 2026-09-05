@@ -6943,6 +6943,24 @@ fn build_opencode_forge_args(
     // that date; an older podman may genuinely have refused.)
     let mut args = vec![
         "--rm".into(),
+        // 873-vgyg: `--replace` MUST NOT be added here, and was, briefly.
+        //
+        // `--rm` removes a container that EXITS CLEANLY and does nothing for
+        // one left by a launch that died during startup, so an exited corpse
+        // keeps the name and blocks the next launch with a raw exit-125. The
+        // obvious fix is `--replace`, which is what the five stack builders
+        // pass. IT IS WRONG HERE, measured by pirria on v56.9.4.1: the
+        // collision they reproduced was against a STILL-RUNNING sibling, not a
+        // corpse, and podman's `--replace` removes a running container by
+        // killing it. That is precisely what order 494 forbids — the forge's
+        // workspace is a CLONE ONLY and holds unpushed in-forge work, so
+        // destroying a live lane is work-loss, and the name alone cannot tell
+        // an orphan from a working sibling.
+        //
+        // The corpse is therefore cleared BEFORE the run by a non-force
+        // `podman rm`, which is atomic against container state: it removes an
+        // exited container and REFUSES (exit 2) a running one. See
+        // `clear_exited_forge_corpse` at the call site.
         "--name".into(),
         forge_container_name(project_name),
         "--hostname".into(),
@@ -11869,6 +11887,91 @@ async fn run_agent_container_attached(
         }
     }
 
+    // 873-vgyg. CLEAR AN EXITED CORPSE; WAIT OUT A RUNNING HOLDER; NEVER KILL ONE.
+    //
+    // A launch that dies during startup leaves a container EXITED but holding
+    // the name — `--rm` fires on a clean exit and does not cover that — so
+    // every later launch dies on podman's raw exit-125 "name already in use",
+    // an error naming neither Tillandsias nor the remedy.
+    //
+    // WHY NOT `--replace`, which the five stack builders pass and which was
+    // briefly added here. Measured by pirria on v56.9.4.1 with a 62 ms
+    // kill-to-relaunch gap: the collision reproduced there was against a
+    // STILL-RUNNING sibling, and podman's `--replace` reuses the name by
+    // KILLING the holder. The forge workspace is a CLONE ONLY holding unpushed
+    // in-forge work, so that is work-loss and exactly what order 494 forbids.
+    // The container NAME cannot tell an orphan from a working sibling.
+    //
+    // WHY WAIT-AND-RETRY RATHER THAN OWNERSHIP METADATA. Also pirria, three
+    // kills: the orphan SELF-REMOVED at ~45 s, ~20 s and ~4 min. So the
+    // collision window is minutes, not indefinite — a human retrying later
+    // recovers unaided, while an automated runner retrying immediately (yoga's
+    // litmus wrapper at its hard cap) is inside the window by construction.
+    // That makes a bounded backoff correct WITHOUT any owner record: ownership
+    // metadata would only make this faster, never safer, and a wrong ownership
+    // reading is precisely the order-443 misread that killed a live lane on
+    // 2026-07-27.
+    //
+    // `podman rm` without force is atomic against container state: it removes
+    // an exited container and REFUSES (exit 2) a running one. The decision is
+    // therefore made by podman against live state, never by us against a name.
+    {
+        // Past pirria's slowest observed self-removal (~4 min) with margin.
+        const MAX_WAIT: std::time::Duration = std::time::Duration::from_secs(360);
+        let started = std::time::Instant::now();
+        let mut delay = std::time::Duration::from_secs(2);
+        let mut announced = false;
+        loop {
+            match client.remove_container_unless_running(container_name).await {
+                tillandsias_podman::NonForceRemoval::Removed => break,
+                // An error is NOT evidence either way — not that the name is
+                // free, and not that a sibling holds it. Say so and let the
+                // launch speak: podman's own refusal is a better report than a
+                // guess, and nothing has been destroyed. Retrying an unknown
+                // failure would spin for MAX_WAIT on, say, a broken socket.
+                tillandsias_podman::NonForceRemoval::Failed(err) => {
+                    eprintln!(
+                        "[tillandsias] could not check whether {container_name} is held: \
+                         {err}. Proceeding — if the name is taken, podman reports it \
+                         below. Nothing was removed (leak-not-destroy, order 494)."
+                    );
+                    break;
+                }
+                tillandsias_podman::NonForceRemoval::RefusedRunning(_) => {
+                    if started.elapsed() >= MAX_WAIT {
+                        eprintln!(
+                            "[tillandsias] REFUSING to launch {container_name}: the name is \
+                             held by a RUNNING container and still was after {}s.\n\
+                             [tillandsias]   Not replacing it: a concurrent sibling lane \
+                             likely owns it and its clone-only workspace may hold unpushed \
+                             in-forge work (leak-not-destroy, order 494).\n\
+                             [tillandsias]   Stop that lane, or launch with a different \
+                             instance component (order 427).",
+                            MAX_WAIT.as_secs()
+                        );
+                        return Err(format!(
+                            "refusing to launch {container_name}: name held by a running \
+                             container (order 494; 873-vgyg)"
+                        ));
+                    }
+                    if !announced {
+                        eprintln!(
+                            "[tillandsias] {container_name} is held by a RUNNING container. \
+                             Waiting for it to exit rather than replacing it — a sibling \
+                             lane may own it and hold unpushed work (order 494). An \
+                             orphan from a killed launch clears itself, measured at 20s to \
+                             4min; waiting up to {}s. Ctrl-C to abandon.",
+                            MAX_WAIT.as_secs()
+                        );
+                        announced = true;
+                    }
+                    tokio::time::sleep(delay).await;
+                    delay = std::cmp::min(delay * 2, std::time::Duration::from_secs(15));
+                }
+            }
+        }
+    }
+
     let Some(config) = delegated else {
         return client
             .run_container_attached_observed(stage, container_name, args, debug)
@@ -14646,13 +14749,29 @@ pub(crate) fn build_forge_agent_run_argv(
 ) -> Vec<String> {
     let mut argv = vec!["podman".to_string()];
     argv.push("run".to_string());
-    // Order 314 class (order 378): relaunching a forge-agent lane (incl. the
-    // `--bash` maintenance terminal) while an exited container still holds the
-    // name must not die 125 "name already in use". `--replace` atomically
-    // removes the exited container and creates a fresh one — mirrors the
-    // inference-container ensure fix. Applies to every agent mode since all
-    // share the `tillandsias-<project>-forge-<mode>` name.
-    argv.push("--replace".to_string());
+    // 873-vgyg: `--replace` WAS HERE AND IS REMOVED. Do not restore it.
+    //
+    // Order 314/378 was right that relaunching a forge-agent lane (incl. the
+    // `--bash` maintenance terminal) while an EXITED container holds the name
+    // must not die 125 "name already in use". The comment that stood here said
+    // `--replace` "atomically removes the exited container" — true, and silent
+    // about the case that matters. podman's `--replace` also reuses the name by
+    // KILLING a RUNNING holder, and it cannot tell the two apart because a
+    // container NAME carries no ownership.
+    //
+    // Measured by pirria on v56.9.4.1 with a 62 ms kill-to-relaunch gap: the
+    // real collision was against a STILL-RUNNING sibling. Every agent mode
+    // shares `tillandsias-<project>-forge-<mode>`, and the forge workspace is a
+    // CLONE ONLY holding unpushed in-forge work — so replacing a live one is
+    // work-loss, which order 494 forbids and which this line would have done on
+    // every agent launch.
+    //
+    // The collision is handled at the shared launch path instead
+    // (`run_agent_container_attached`): a non-force `podman rm` clears an exited
+    // corpse and REFUSES a running one, and a running holder is waited out
+    // within a bound rather than killed. Both this builder and
+    // `build_opencode_forge_args` reach podman through that path, so neither
+    // needs — or may have — the flag.
     argv.extend(build_forge_agent_run_args(
         project_path,
         project_name,
@@ -15459,43 +15578,6 @@ fn maybe_spawn_vsock_listener(
             }
         });
 
-        // Order 260: guest-side LocalProjects rescan. Replaces the host
-        // tray's last steady-state WIRE poll (the 30s EnumerateLocalProjects
-        // tick) with a guest-internal readdir on a 15s cadence, change-gated
-        // in set_local_projects and subscriber-gated so an idle headless
-        // spends zero scans. A local readdir costs no podman exec and no
-        // wire round-trip; an inotify upgrade is a future enhancement
-        // (headless has no notify dep today).
-        //
-        // Order 690-xeda: "zero scans" is now also zero WAKEUPS — with no
-        // LocalProjects subscriber (or a non-Ready VM) the loop parks on
-        // subscriber_nudge instead of ticking every 15s to decide to do
-        // nothing. On wake the scan runs immediately, so a new subscriber
-        // sees a list without waiting out a tick; the 15s cadence applies
-        // only between scans of an active subscription. The 60s timeout
-        // backstops the documented notify_waiters race and phase flips.
-        let local_projects_state = state.clone();
-        let local_projects_nudge = state.subscriber_nudge();
-        let local_projects_rescan = tokio::spawn(async move {
-            loop {
-                if local_projects_state.current_phase() != tillandsias_control_wire::VmPhase::Ready
-                    || !local_projects_state.has_local_projects_subscribers()
-                {
-                    let _ = tokio::time::timeout(
-                        std::time::Duration::from_secs(60),
-                        local_projects_nudge.notified(),
-                    )
-                    .await;
-                    continue;
-                }
-                let entries = tokio::task::spawn_blocking(vsock_server::enumerate_local_projects)
-                    .await
-                    .unwrap_or_default();
-                local_projects_state.set_local_projects(entries);
-                tokio::time::sleep(std::time::Duration::from_secs(15)).await;
-            }
-        });
-
         // Podman events monitor: reads `podman events --format json`
         // and pushes curated step names to the tray. Order 690-xeda: this
         // is also the event source that drives the liveness probe above.
@@ -15622,8 +15704,6 @@ fn maybe_spawn_vsock_listener(
         let _ = liveness.await;
         login_probe.abort();
         let _ = login_probe.await;
-        local_projects_rescan.abort();
-        let _ = local_projects_rescan.await;
     }))
 }
 
@@ -16741,16 +16821,12 @@ pub(crate) async fn publish_local_service(
         ));
     }
 
-    // Order 505: project label MUST be validated by EQUALITY against enumerated
-    // local projects (never sanitized) before use in paths or container names.
-    let known_projects =
-        crate::local_projects::scan_project_root(&crate::local_projects::host_project_root());
-    if !known_projects.is_empty() && !known_projects.iter().any(|p| p.label == project_name) {
-        return Err(format!(
-            "Project '{project_name}' is not an enumerated local project in {}",
-            crate::local_projects::host_project_root().display()
-        ));
-    }
+    // Order 505: project label MUST be validated by EQUALITY against the known
+    // project set (never sanitized) before use in paths or container names.
+    // 1031-q4pb: the inline form here skipped validation entirely when the
+    // enumeration was empty, which is every fresh install. One helper now, so
+    // the sites cannot drift apart again, and it FAILS CLOSED.
+    crate::local_projects::validate_project_label(project_name)?;
 
     crate::container_deps::ensure_service_catalog(debug)?;
 
@@ -16821,14 +16897,8 @@ pub(crate) async fn publish_local_service(
 
 #[cfg(feature = "tray")]
 pub(crate) async fn service_status(project_name: &str) -> Result<String, String> {
-    // Order 505: project label validation by equality against enumerated local projects
-    let known_projects =
-        crate::local_projects::scan_project_root(&crate::local_projects::host_project_root());
-    if !known_projects.is_empty() && !known_projects.iter().any(|p| p.label == project_name) {
-        return Err(format!(
-            "Project '{project_name}' is not an enumerated local project"
-        ));
-    }
+    // Order 505 label validation, fail-closed via the shared helper (1031-q4pb).
+    crate::local_projects::validate_project_label(project_name)?;
 
     let client = tillandsias_podman::PodmanClient::new();
     let container_name = format!("tillandsias-{project_name}-web");
@@ -16853,14 +16923,8 @@ pub(crate) async fn service_stop(
         ));
     }
 
-    // Order 505: project label validation by equality against enumerated local projects
-    let known_projects =
-        crate::local_projects::scan_project_root(&crate::local_projects::host_project_root());
-    if !known_projects.is_empty() && !known_projects.iter().any(|p| p.label == project_name) {
-        return Err(format!(
-            "Project '{project_name}' is not an enumerated local project"
-        ));
-    }
+    // Order 505 label validation, fail-closed via the shared helper (1031-q4pb).
+    crate::local_projects::validate_project_label(project_name)?;
 
     let client = tillandsias_podman::PodmanClient::new();
     let container_name = format!("tillandsias-{project_name}-web");
@@ -19870,13 +19934,27 @@ mod tests {
         );
     }
 
-    /// Order 378 (order-314 class): relaunching any forge-agent lane — incl. the
-    /// `--bash` maintenance terminal — while an exited container still holds the
+    /// 873-vgyg. THE AGENT LANE MUST NOT PASS `--replace` EITHER. This test
+    /// asserted the opposite until 2026-09-05 and is inverted deliberately.
+    ///
+    /// Order 378 was right that relaunching a forge-agent lane — incl. the
+    /// `--bash` maintenance terminal — while an EXITED container holds the
     /// `tillandsias-<project>-forge-<mode>` name must not die 125 "name already
-    /// in use". `--replace` on `podman run` atomically removes the exited
-    /// container and creates a fresh one.
+    /// in use". Its remedy was wrong. The old text here said `--replace`
+    /// "atomically removes the exited container and creates a fresh one": true
+    /// of a corpse, and silent about a RUNNING holder, which podman's
+    /// `--replace` reuses the name by KILLING. Pirria measured the real
+    /// collision on v56.9.4.1 against a still-running sibling, and the forge
+    /// workspace is a clone only holding unpushed in-forge work — so the flag
+    /// made every agent launch capable of the work-loss order 494 forbids.
+    ///
+    /// The corpse case is still handled, at the shared launch path: a non-force
+    /// `podman rm` clears an exited container and REFUSES a running one, and a
+    /// running holder is waited out within a bound. Both halves are asserted
+    /// below, so deleting the collision handling fails this test rather than
+    /// leaving it satisfied by the mere absence of a flag.
     #[test]
-    fn forge_agent_run_args_use_replace_for_idempotent_relaunch() {
+    fn forge_agent_run_args_never_replace_a_running_sibling() {
         let _pseam = podman_false_seam();
         for mode in [
             ForgeAgentMode::Maintenance,
@@ -19895,13 +19973,28 @@ mod tests {
                 false,
             );
             assert!(
-                has_arg(&argv, "--replace"),
-                "{:?} run args must include --replace so an exited container \
-                 does not block the next launch with a Permanent exit-125 \
-                 (order 378): {argv:?}",
+                !has_arg(&argv, "--replace"),
+                "{:?} run args must NOT pass --replace: it reuses the name by \
+                 killing a RUNNING sibling whose clone-only workspace may hold \
+                 unpushed in-forge work (order 494, 873-vgyg): {argv:?}",
                 mode
             );
         }
+
+        // The positive half. Without it this test is satisfied by a build that
+        // handles the collision NOWHERE, which is the pre-378 bug restored.
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let launch = source_window(source, "async fn run_agent_container_attached(");
+        assert!(
+            launch.contains("remove_container_unless_running(container_name)"),
+            "the shared launch path must clear an EXITED corpse by state, which \
+             is what order 378 actually wanted (873-vgyg)"
+        );
+        assert!(
+            launch.contains("RefusedRunning"),
+            "the shared launch path must WAIT OUT a running holder rather than \
+             replacing it (order 494, 873-vgyg)"
+        );
     }
 
     // @trace spec:tray-ux, spec:browser-isolation-tray-integration
@@ -21715,6 +21808,69 @@ mod tests {
     /// EXITED container holding the name must not block the next launch with
     /// a Permanent exit-125. `--replace` on `podman run` atomically removes
     /// the exited container and creates a fresh one.
+    /// 873-vgyg. THE FORGE LAUNCH MUST NOT PASS `--replace`, AND MUST CLEAR A
+    /// CORPSE BY STATE INSTEAD.
+    ///
+    /// This asserts the OPPOSITE of the five stack builders, deliberately.
+    /// `--replace` reuses a name by KILLING a running holder; pirria measured
+    /// the real collision on v56.9.4.1 against a STILL-RUNNING sibling, and the
+    /// forge workspace is a clone only holding unpushed in-forge work, so that
+    /// is work-loss and is what order 494 forbids. A container NAME cannot tell
+    /// an orphan from a working sibling, so the flag is wrong here however
+    /// convenient it is elsewhere.
+    ///
+    /// The corpse is cleared at the launch path by a non-force `podman rm`,
+    /// which podman refuses on a running container, and a running holder is
+    /// WAITED OUT within a bound (pirria: orphans self-removed at ~20s, ~45s
+    /// and ~4min) rather than replaced.
+    ///
+    /// SABOTAGE: adding `--replace` back to the builder turns this red, which
+    /// is the arm that stops a live sibling being replaced.
+    #[test]
+    fn opencode_forge_args_never_replace_a_running_sibling() {
+        for (mode, prompt) in [
+            (ForgeMode::Cli, None),
+            (ForgeMode::Cli, Some("do a thing")),
+            (ForgeMode::Web, None),
+            (ForgeMode::Web, Some("do a thing")),
+        ] {
+            let argv = build_opencode_forge_args(
+                &PathBuf::from("/tmp/project"),
+                "alpha",
+                None,
+                prompt,
+                &PathBuf::from("/tmp/ca"),
+                "1.2.3",
+                mode,
+                None,
+                false,
+                false,
+            );
+            assert!(
+                !has_arg(&argv, "--replace"),
+                "{mode:?} (prompt={prompt:?}) forge args must NOT pass --replace: it \
+                 reuses the name by killing a RUNNING sibling whose clone-only \
+                 workspace may hold unpushed work (order 494, 873-vgyg): {argv:?}"
+            );
+        }
+
+        // The positive half: the corpse is still cleared, by state, at the
+        // shared launch path. Without this the test is satisfied by simply
+        // never handling the collision at all, which is the pre-fix bug.
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let launch = source_window(source, "async fn run_agent_container_attached(");
+        assert!(
+            launch.contains("remove_container_unless_running(container_name)"),
+            "the attached launch path must clear an EXITED corpse by state \
+             (873-vgyg)"
+        );
+        assert!(
+            launch.contains("RefusedRunning"),
+            "the launch path must handle a RUNNING holder explicitly rather \
+             than replacing it (order 494, 873-vgyg)"
+        );
+    }
+
     #[test]
     fn inference_run_args_use_replace_for_idempotency() {
         let certs = PathBuf::from("/tmp/ca");

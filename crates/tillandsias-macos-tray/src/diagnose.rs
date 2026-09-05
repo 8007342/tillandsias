@@ -47,6 +47,7 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::OnceLock;
 use std::task::{Context, Poll};
+use tillandsias_control_wire::secure_wire_mode::SecureWireMode;
 
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
@@ -101,26 +102,127 @@ pub fn guest_health_verdict() -> String {
         .verdict()
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum SecureControlWireMode {
-    Off,
-    On,
+/// Render a Unix timestamp as `YYYY-MM-DDTHH:MM:SSZ`.
+///
+/// A local civil-from-days conversion rather than a date crate: this binary
+/// ships to the fleet's most memory-constrained target and the dependency is
+/// not worth one timestamp. The algorithm is Howard Hinnant's days-from-civil
+/// inverted; the era arithmetic handles the /100 and /400 leap rules together,
+/// which a naive `year % 4` check gets wrong in 2000 and 2100 — both pinned as
+/// fixed points in `format_utc_fixed_points`.
+///
+/// @trace order:980-ja2m
+fn format_utc(secs: u64) -> String {
+    let days = (secs / 86_400) as i64;
+    let rem = secs % 86_400;
+    // Shift so the era starts 0000-03-01, which puts the leap day last in the
+    // year and makes the month arithmetic uniform.
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u64; // [0, 146096]
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365; // [0, 399]
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100); // [0, 365]
+    let mp = (5 * doy + 2) / 153; // [0, 11], March-based
+    let d = doy - (153 * mp + 2) / 5 + 1; // [1, 31]
+    let m = if mp < 10 { mp + 3 } else { mp - 9 }; // [1, 12]
+    let y = if m <= 2 { y + 1 } else { y };
+    format!(
+        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
+        y,
+        m,
+        d,
+        rem / 3600,
+        (rem % 3600) / 60,
+        rem % 60
+    )
 }
 
-fn secure_control_wire_mode() -> Result<SecureControlWireMode, String> {
-    static MODE: OnceLock<Result<SecureControlWireMode, String>> = OnceLock::new();
-    MODE.get_or_init(|| match std::env::var("TILLANDSIAS_SECURE_CONTROL_WIRE") {
-        Ok(raw) if raw.eq_ignore_ascii_case("on") => Ok(SecureControlWireMode::On),
-        Ok(raw) if raw.eq_ignore_ascii_case("off") || raw.is_empty() => {
-            Ok(SecureControlWireMode::Off)
+/// Render an age in seconds as a short human string (`5d 1h`, `3h 12m`, `47s`).
+///
+/// @trace order:980-ja2m
+fn humanize_age(secs: u64) -> String {
+    let d = secs / 86_400;
+    let h = (secs % 86_400) / 3600;
+    let m = (secs % 3600) / 60;
+    if d > 0 {
+        format!("{d}d {h}h")
+    } else if h > 0 {
+        format!("{h}h {m}m")
+    } else if m > 0 {
+        format!("{m}m")
+    } else {
+        format!("{secs}s")
+    }
+}
+
+/// The `Guest health:` line, rendered so a RECORDED verdict cannot be read as a
+/// live observation.
+///
+/// THE DEFECT THIS EXISTS FOR (980-ja2m, filed macneo, instance macbookair on
+/// the 16 GiB host): `guest_health_verdict()` is a pure disk read of
+/// crashloop.state with no live probe and no VM contact, so `healthy` means
+/// "the last RECORDED phase was not a crash loop" and NEVER "a guest is alive
+/// now". Measured: `--diagnose --with-metrics` printed `Guest health: healthy`
+/// with no VM process running for the full 70 s sampled, FIVE DAYS after
+/// crashloop.state was written. The two cases were indistinguishable in the
+/// output.
+///
+/// WHY THE VERDICT WORD IS KEPT, QUOTED, INSIDE THE FRAMING rather than
+/// replaced: the pinned grammar `^(healthy|starting|crash-loop:<subsystem>)$`
+/// is the only place the report names WHICH subsystem is looping. Dropping the
+/// word to avoid the false-liveness reading would take that with it.
+///
+/// WHY THE `Guest health:` LABEL IS KEPT: windows-tray prints the same label
+/// (notify_icon.rs:2915) and two surface tests pin the literal (macos-tray
+/// main.rs:722, windows-tray main.rs:402). The Windows line carries the
+/// identical defect and is filed separately.
+///
+/// AN UNKNOWN AGE MUST NOT READ AS FRESH. If the file is absent or its mtime
+/// is unreadable, the age is printed as UNKNOWN rather than omitted — an
+/// omitted age is read as "just now" by exactly the reader this line is for.
+///
+/// @trace order:980-ja2m
+fn guest_health_report_line() -> String {
+    let verdict = guest_health_verdict();
+    let path = crashloop_state_path();
+    let age = std::fs::metadata(&path)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs());
+
+    match age {
+        Some(written) => {
+            let now = unix_now_secs();
+            let elapsed = now.saturating_sub(written);
+            format!(
+                "Guest health: RECORDED, not observed — last recorded verdict \
+                 \"{verdict}\" (crashloop.state, written {}, {} ago)",
+                format_utc(written),
+                humanize_age(elapsed)
+            )
         }
-        Ok(raw) => Err(format!(
-            "TILLANDSIAS_SECURE_CONTROL_WIRE must be 'on' or 'off' (got {raw:?})"
-        )),
-        Err(std::env::VarError::NotPresent) => Ok(SecureControlWireMode::Off),
-        Err(err) => Err(format!("TILLANDSIAS_SECURE_CONTROL_WIRE: {err}")),
-    })
-    .clone()
+        None => format!(
+            "Guest health: RECORDED, not observed — last recorded verdict \
+             \"{verdict}\" (crashloop.state age UNKNOWN: file absent or unreadable)"
+        ),
+    }
+}
+
+/// 972-umik: DELEGATES to the one reader in tillandsias-control-wire. This
+/// crate used to parse `TILLANDSIAS_SECURE_CONTROL_WIRE` itself, which is how
+/// six copies of one parse drifted apart. The `OnceLock` is kept — it memoises
+/// the RESULT, including the error, so a bad value fails identically on every
+/// call — but the environment is read once, inside the shared module.
+///
+/// The default is whatever the shared reader gives (Off today). It is NOT
+/// restated here: a local default is exactly the drift this conversion removes,
+/// and the flip to On belongs to the commit that converts the LAST reader.
+fn secure_control_wire_mode() -> Result<SecureWireMode, String> {
+    static MODE: OnceLock<Result<SecureWireMode, String>> = OnceLock::new();
+    MODE.get_or_init(tillandsias_control_wire::secure_wire_mode::secure_wire_mode)
+        .clone()
 }
 
 type GuestWireStream = Box<dyn tillandsias_control_wire::transport::AsyncReadWrite + Unpin + Send>;
@@ -182,8 +284,8 @@ async fn open_control_wire_stream(
         .map_err(|e| e.to_string())?;
 
     match secure_control_wire_mode()? {
-        SecureControlWireMode::Off => Ok(ControlWireStream::Plain(stream)),
-        SecureControlWireMode::On => {
+        SecureWireMode::Off => Ok(ControlWireStream::Plain(stream)),
+        SecureWireMode::On => {
             let psk = channel_psk(
                 tillandsias_secure_channel::workspace_version(),
                 tillandsias_control_wire::WIRE_VERSION,
@@ -273,18 +375,27 @@ pub struct DiagnoseReport {
     /// bundle carries. `None` means undecidable (no bundle, or nothing staged
     /// yet) and must never be read as "fine".
     pub guest_binary_staged_matches_bundle: Option<bool>,
-    /// Order 735-2g5i. Whether a live tray process owns the VM right now,
-    /// established by probing the tray's own singleton lock.
+    /// Whether a tray PROCESS is running right now, established by probing the
+    /// tray's own singleton lock (order 735-2g5i; renamed from `vm_owner_live`
+    /// by 980-ja2m).
     ///
-    /// This is macOS's answer to the question Windows answers with
-    /// `wire.reachable`: is somebody actively working on this? macOS cannot ask
-    /// the guest directly — its vsock is per-VM-handle with no AF_VSOCK, so the
-    /// live phase is reachable ONLY from inside the tray process (see the
-    /// "Control wire status" note in `print_human`). Singleton ownership is the
-    /// strongest FACT a separate `--diagnose` process can establish, and like
-    /// the Windows probe it is an observation rather than an inference from
-    /// timing.
-    pub vm_owner_live: bool,
+    /// READ THE NAME LITERALLY: this observes a PROCESS, not a VM. It was
+    /// called `vm_owner_live` and documented as "a live tray process owns the
+    /// VM", which is a claim the probe cannot support — the lock says a tray is
+    /// running and nothing more. A tray that is running but wedged, holding no
+    /// VM at all, holds the lock exactly as a healthy one does; the field
+    /// cannot separate them in either direction.
+    ///
+    /// This is NOT macOS's answer to what Windows answers with
+    /// `wire.reachable`, and the old comment saying so overstated it. Windows
+    /// asks the guest and believes the phase it names; this asks the host
+    /// whether a process is alive. macOS cannot ask the guest from here — its
+    /// vsock is per-VM-handle with no AF_VSOCK, so the live phase is reachable
+    /// ONLY from inside the tray process (see the "Control wire status" note in
+    /// `print_human`). Process liveness is the strongest fact a separate
+    /// `--diagnose` can establish today; naming it for the fact it establishes
+    /// is the point of the rename.
+    pub tray_process_running: bool,
 
     /// Guest metrics snapshot (778-n9z2), read over the control wire.
     ///
@@ -371,7 +482,7 @@ fn collect_report() -> DiagnoseReport {
         guest_binary_bundle_sha256: provenance.bundle_sha256,
         guest_binary_staged_sha256: provenance.staged_sha256,
         guest_binary_staged_matches_bundle: provenance.staged_matches_bundle,
-        vm_owner_live: live_tray_owns_vm(),
+        tray_process_running: a_tray_process_holds_the_singleton(),
         // collect_report() runs in a process with no VM handle by
         // construction. It must NOT boot one: install-macos.sh runs
         // `--diagnose --json` synchronously during install, so a wire read
@@ -382,15 +493,18 @@ fn collect_report() -> DiagnoseReport {
     }
 }
 
-/// Is a live tray holding the VM singleton right now? (order 735-2g5i)
+/// Is a tray PROCESS holding the singleton right now? (order 735-2g5i; renamed
+/// from `live_tray_owns_vm` by 980-ja2m)
 ///
-/// `Ok(None)` is WouldBlock — the lock is held, i.e. a running tray owns the
-/// VM. Acquiring and immediately dropping the guard is side-effect free when
-/// the lock is free, which is what makes this safe to call from a read-only
-/// report. A probe infrastructure error returns false: an unknown owner must
-/// never be reported as a live one, because that is the direction that tells
-/// automation to keep waiting.
-fn live_tray_owns_vm() -> bool {
+/// `Ok(None)` is WouldBlock — the lock is held, i.e. a tray process is running.
+/// It does NOT mean that process owns a VM, that a VM exists, or that the guest
+/// is reachable; the old name and comment claimed the first of those and the
+/// probe cannot see any of them. Acquiring and immediately dropping the guard
+/// is side-effect free when the lock is free, which is what makes this safe to
+/// call from a read-only report. A probe infrastructure error returns false: an
+/// unknown state must never be reported as a running one, because that is the
+/// direction that tells automation to keep waiting.
+fn a_tray_process_holds_the_singleton() -> bool {
     matches!(
         tillandsias_core::singleton::SingletonGuard::try_acquire("tillandsias-macos-tray"),
         Ok(None)
@@ -444,7 +558,8 @@ fn print_human(r: &DiagnoseReport) {
     // restart/unseal/handshake pattern flips it to crash-loop:<subsystem>.
     // Additive — does NOT affect the 0/2/1 exit-code contract.
     // @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
-    println!("Guest health: {}", guest_health_verdict());
+    println!("{}", guest_health_report_line());
+    println!("No live probe was made; this report cannot contact the guest.");
     println!();
     // 701-kgvk. The guest reinstalls its headless binary from the staged copy on
     // EVERY boot, and that path is keyed only on $HOME — so an older .app
@@ -487,16 +602,36 @@ fn print_human(r: &DiagnoseReport) {
     }
     println!();
     if r.provisioned {
-        println!("Status: PROVISIONED — first-launch materialization complete.");
-    } else if r.vm_owner_live {
-        // Order 735-2g5i. Distinct from the line below, and distinctly EXITED:
-        // a running tray owns the VM and the boot artifacts are not there yet,
-        // which is what provisioning-in-progress looks like from outside the
-        // tray process. Telling the operator to "launch the tray once" here
-        // would be advice to do the thing they are already doing.
+        // 980-ja2m. Say what was MEASURED — the boot artifacts are on disk —
+        // and then say plainly what was not. This used to read "PROVISIONED —
+        // first-launch materialization complete." and stop, which an operator
+        // reasonably read as "the system is healthy". Nothing in this report
+        // observes the VM or the guest, so the report must not leave the
+        // impression that something did.
+        println!("Status: PROVISIONED — the boot artifacts are on disk.");
+        if r.tray_process_running {
+            println!("        A tray process is running (singleton lock held).");
+        } else {
+            println!("        No tray process is running.");
+        }
         println!(
-            "Status: CONVERGING (exit {DIAGNOSE_EXIT_CONVERGING}) — a running tray owns the VM \
-             and is still materializing it."
+            "        NOT CHECKED: whether a VM is running, or whether the guest is healthy. This"
+        );
+        println!("        report cannot see either — macOS has no AF_VSOCK, so the live phase is");
+        println!(
+            "        readable only from inside the tray process. Open the menubar chip for live status."
+        );
+    } else if r.tray_process_running {
+        // Order 735-2g5i, narrowed by 980-ja2m. Distinct from the line below,
+        // and distinctly EXITED. The old text said "a running tray owns the VM
+        // and is still materializing it" — the singleton cannot support either
+        // half of that: a WEDGED tray with no VM holds the lock identically.
+        // What is actually known is that the artifacts are absent and a tray
+        // process exists. Telling the operator to "launch the tray once" here
+        // would still be advice to do what they are already doing.
+        println!(
+            "Status: CONVERGING (exit {DIAGNOSE_EXIT_CONVERGING}) — boot artifacts are absent \
+             and a tray process is running."
         );
         println!(
             "        Not an error. Re-run --diagnose in a few moments; the tray's \
@@ -566,7 +701,7 @@ fn exit_code_from(r: &DiagnoseReport) -> i32 {
     // for something that will never arrive. Staging residue (`rootfs.qcow2`,
     // `rootfs.img.xz.partial`, `*.part`) survives a crashed provision, so its
     // mere presence is not evidence that anything is still running.
-    if r.vm_owner_live {
+    if r.tray_process_running {
         return DIAGNOSE_EXIT_CONVERGING;
     }
     2
@@ -1862,6 +1997,89 @@ fn parse_aarch64_qcow2_sha(manifest_toml: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use tillandsias_control_wire::secure_wire_mode::{SecureWireMode, parse_secure_wire_mode};
+
+    /// 972-umik. THE macOS LANE PAIRS SERVER AND CLIENT UNDER THE SHARED
+    /// READER'S `On`.
+    ///
+    /// The conversion's risk is not that the parse is wrong — it is that this
+    /// crate and its peer stop agreeing about WHICH mode they are in, and a
+    /// disagreement is invisible until a real guest refuses to talk. So this
+    /// drives the actual handshake both sides use, with the psk built from the
+    /// same expression `probe_phase_secure_or_plain` uses, and passes a frame
+    /// through it.
+    #[tokio::test]
+    async fn macos_lane_pairs_server_and_client_under_shared_reader_on() {
+        use tillandsias_secure_channel::{HopId, channel_psk};
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        // Precondition, asserted rather than assumed: this test is only about
+        // the secure path, so a build whose shared reader stopped offering On
+        // must fail here rather than silently test nothing.
+        assert_eq!(
+            parse_secure_wire_mode(Ok("on".to_string())),
+            Ok(SecureWireMode::On),
+            "the shared reader must still resolve 'on' to On"
+        );
+
+        let psk = channel_psk(
+            tillandsias_secure_channel::workspace_version(),
+            tillandsias_control_wire::WIRE_VERSION,
+            HopId::HostGuest,
+        );
+        let psk_server = *psk;
+        let psk_client = *psk;
+
+        let (host, guest) = tokio::io::duplex(64 * 1024);
+
+        let server = tokio::spawn(async move {
+            let mut s =
+                tillandsias_secure_channel::secure_stream::server_handshake(guest, &psk_server)
+                    .await
+                    .expect("server handshake");
+            let mut buf = [0u8; 5];
+            s.read_exact(&mut buf).await.expect("server read");
+            s.write_all(b"pong!").await.expect("server write");
+            buf
+        });
+
+        let mut c = tillandsias_secure_channel::secure_stream::client_handshake(host, &psk_client)
+            .await
+            .expect("client handshake");
+        c.write_all(b"ping!").await.expect("client write");
+        let mut back = [0u8; 5];
+        c.read_exact(&mut back).await.expect("client read");
+
+        assert_eq!(&server.await.expect("server task")[..], b"ping!");
+        assert_eq!(&back[..], b"pong!");
+    }
+
+    /// 972-umik. THE DEFAULT IS THE SHARED READER'S, NOT A LOCAL ONE.
+    ///
+    /// Absent still means Off today; the flip to On belongs to the commit that
+    /// converts the LAST reader (yolanda holds it, hvsocket.rs). Pinned through
+    /// the pure parser so no process-global `set_var` is touched — that race is
+    /// how three ca_path tests failed under concurrent cargo (1002-9xmb).
+    ///
+    /// THE BLANK CASE IS A DELIBERATE BEHAVIOUR CHANGE ON macOS. Both readers
+    /// this crate used to carry matched `raw.is_empty()` to Off, so a blank
+    /// variable meant PLAINTEXT here. The shared reader refuses blank, because
+    /// blank is the shape an unfilled CI variable takes and reading it as
+    /// insecure is the worst available guess. This is the conversion's one
+    /// non-mechanical effect and it is asserted rather than left to be noticed.
+    #[test]
+    fn shared_reader_owns_the_default_and_refuses_blank() {
+        assert_eq!(
+            parse_secure_wire_mode(Err(std::env::VarError::NotPresent)),
+            Ok(SecureWireMode::Off),
+            "absent must still mean Off until the last reader is converted"
+        );
+        assert!(
+            parse_secure_wire_mode(Ok(String::new())).is_err(),
+            "blank must be an error, not the plaintext this crate used to infer"
+        );
+    }
+
     /// 795-zshi slice 5. The two exec preambles were duplicated VERBATIM and
     /// differed by exactly one token — a `diff` of the two blocks reported a
     /// single changed line. This pins the property that made the duplication
@@ -2413,7 +2631,7 @@ mod tests {
             guest_binary_staged_sha256: Some("26f120b6b1ef".to_string()),
             guest_binary_staged_matches_bundle: Some(true),
             // A provisioned host at rest: nothing is mid-materialization.
-            vm_owner_live: false,
+            tray_process_running: false,
             metrics: None,
             metrics_status: METRICS_STATUS_NO_HANDLE.to_string(),
         }
@@ -2500,7 +2718,7 @@ mod tests {
         // broken. This is the case that used to collapse into 2 and made a
         // scripted post-install check call a still-materializing host broken.
         report.provisioned = false;
-        report.vm_owner_live = true;
+        report.tray_process_running = true;
         assert_eq!(
             exit_code_from(&report),
             DIAGNOSE_EXIT_CONVERGING,
@@ -2512,7 +2730,7 @@ mod tests {
         // unprovisioned" would satisfy the assertion above — and that is the
         // worse failure, because it tells automation to keep waiting on a host
         // where nothing is running.
-        report.vm_owner_live = false;
+        report.tray_process_running = false;
         assert_eq!(
             exit_code_from(&report),
             2,
@@ -2523,7 +2741,7 @@ mod tests {
         // regardless of who holds the VM (the steady state — the tray is
         // normally running).
         report.provisioned = true;
-        report.vm_owner_live = true;
+        report.tray_process_running = true;
         assert_eq!(
             exit_code_from(&report),
             0,
@@ -2576,6 +2794,81 @@ mod tests {
         assert!(
             tillandsias_control_wire::crashloop::verdict_matches_grammar(&v),
             "guest-health verdict {v:?} must match ^(healthy|starting|crash-loop:[a-z0-9-]+)$"
+        );
+    }
+
+    /// `format_utc` against fixed points chosen where a naive implementation
+    /// breaks, not where it is easy.
+    ///
+    /// 2000-02-29 is the case the `year % 4 == 0 && year % 100 != 0` rule gets
+    /// WRONG on its own: 2000 is divisible by 100 and IS a leap year because it
+    /// is divisible by 400. 2100-03-01 is the converse — divisible by 100, not
+    /// by 400, NOT a leap year — and the day after the February that a wrong
+    /// implementation gives 29 days. An implementation that handles only the
+    /// /4 rule passes 1970 and 2001 and fails both of these.
+    ///
+    /// @trace order:980-ja2m
+    #[test]
+    fn format_utc_fixed_points() {
+        assert_eq!(super::format_utc(0), "1970-01-01T00:00:00Z");
+        assert_eq!(super::format_utc(1_000_000_000), "2001-09-09T01:46:40Z");
+        assert_eq!(super::format_utc(951_825_600), "2000-02-29T12:00:00Z");
+        assert_eq!(super::format_utc(4_107_542_400), "2100-03-01T00:00:00Z");
+    }
+
+    /// @trace order:980-ja2m
+    #[test]
+    fn humanize_age_pins() {
+        assert_eq!(super::humanize_age(0), "0s");
+        assert_eq!(super::humanize_age(47), "47s");
+        assert_eq!(super::humanize_age(60), "1m");
+        assert_eq!(super::humanize_age(11_520), "3h 12m");
+        assert_eq!(super::humanize_age(436_800), "5d 1h");
+    }
+
+    /// THE GUARD WITH TEETH for 980-ja2m: the `Guest health:` line may not
+    /// print the bare verdict, and must name both its SOURCE and its AGE.
+    ///
+    /// The pre-fix line was exactly `Guest health: healthy` for a state file
+    /// five days old with no VM running. This asserts the shape that makes
+    /// that unreadable as a live observation — if someone reverts to printing
+    /// `guest_health_verdict()` directly, every arm here fails.
+    ///
+    /// @trace order:980-ja2m
+    #[test]
+    fn guest_health_line_names_source_and_age_and_is_never_the_bare_verdict() {
+        let line = super::guest_health_report_line();
+
+        // The bare-verdict shape is what the defect was. Reject it whatever
+        // the verdict word happens to be on this host.
+        for bare in ["healthy", "starting"] {
+            assert_ne!(
+                line,
+                format!("Guest health: {bare}"),
+                "the Guest health line is the bare verdict again — a RECORDED \
+                 disk read reading as a live observation (980-ja2m)"
+            );
+        }
+
+        assert!(
+            line.starts_with("Guest health:"),
+            "the label is pinned by two parity tests (macos main.rs:722, \
+             windows main.rs:402); got {line}"
+        );
+        assert!(
+            line.contains("RECORDED, not observed"),
+            "missing the framing that separates a record from an observation: {line}"
+        );
+        assert!(
+            line.contains("crashloop.state"),
+            "the line must name its SOURCE: {line}"
+        );
+        // Age is present either as a rendered timestamp or as an explicit
+        // UNKNOWN. An omitted age reads as "just now", which is the failure.
+        assert!(
+            line.contains(" ago)") || line.contains("age UNKNOWN"),
+            "the line must name its AGE, or say the age is unknown — an \
+             omitted age reads as fresh: {line}"
         );
     }
 

@@ -381,7 +381,12 @@ text for the same failure class.
   post-install verify, future support dashboards) branch on these exit codes.
   Adding new values would silently break consumers.
 
-  - `0` — provisioned and healthy.
+  - `0` — the boot artifacts are on disk. NOT a health verdict (980-ja2m):
+    `provisioned` is a stat() of the image root, and nothing in the report
+    observes the VM or the guest, so `0` MUST NOT be read as "the system is
+    working". Measured on macneo 2026-09-04 across four states: provisioned
+    with a live tray and provisioned with a dead one differ in exactly one
+    field and BOTH exit 0.
   - `3` — CONVERGING: not materialized yet, and not broken (order 735-2g5i,
     matching windows-tray's 647-i98k). A converging VM and a broken VM used to
     share exit 2, so a scripted post-install check that runs `--diagnose` once
@@ -393,10 +398,17 @@ text for the same failure class.
   because it cannot reach the same one: Windows asks the guest over the control
   wire and believes the phase it names, while macOS has no AF_VSOCK — the live
   phase is readable only from inside the tray process — so `--diagnose` instead
-  establishes whether a live tray owns the VM singleton. Both are observations
-  of a live owner rather than inferences from timing, which is the property that
-  matters. With NO live owner, an unmaterialized image root stays `2`
-  deliberately: it is indistinguishable from a failed provision, and a false
+  establishes whether a tray PROCESS is running, by probing the tray's own
+  singleton lock. 980-ja2m corrected the claim this sentence used to make: the
+  lock does not establish that a live tray "owns the VM", because a wedged tray
+  with no VM holds it exactly as a healthy one does. The two probes are
+  therefore NOT equivalent — Windows asks the guest and believes the phase it
+  names, while macOS asks the host whether a process is alive — and the field is
+  now named `tray_process_running` for the fact it establishes. Both are
+  observations rather than inferences from timing, which is the property the
+  converging verdict rests on. With NO tray process running, an unmaterialized
+  image root stays `2` deliberately: it is indistinguishable from a failed
+  provision, and a false
   "converging" is worse than a false "broken" because it tells automation to
   wait for something that will never arrive.
 

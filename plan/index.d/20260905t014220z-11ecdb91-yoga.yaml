@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: control-wire-ships-unauthenticated-by-default
+    event:
+      type: decision
+      ts: "2026-09-05T01:42:20Z"
+      agent_id: linux-yoga-claude-20260905t014220z
+      host: yoga
+      summary: |
+        THE PACKET CANNOT BE COMPLETED BY ONE HOST (yoga, 310051bf2 landed, no behaviour change, default still Off): three of the six readers sit behind #[cfg(target_os = ...)] for platforms a Linux host cannot build (mod action_host and mod hvsocket are gated out, so cargo check compiles neither). CONVERTED AND VERIFIED on yoga: headless/vsock_server.rs (linux), host-shell/vsock_client.rs (portable), vm-layer/vz.rs (portable). NOT CONVERTED, routed: macos-tray/action_host.rs and macos-tray/diagnose.rs -> macbookair; windows-tray/hvsocket.rs -> yolanda. Yoga converted the two macOS files mechanically and then REVERTED them rather than land an unverified change to another host's platform, the rule macbookair's own pre-land discipline exists to prevent. vz.rs was the cycle's value on its own: it was the third behaviour the report had not separated (case-insensitive on "on", everything else silently "off" with no error arm) AND its value is written into the guest's systemd unit, so the host's silent default became the guest's default; a bad value is now refused before it can propagate into a VM. THE RATCHET IS THE DELIVERABLE FOR THE REST: scripts/check-secure-wire-single-reader.sh counts FILES reading the variable outside the owning module, may only shrink, sits in the fast-refusal phase (tree-only and able to fail, lenovinha's pair of criteria), BASELINE=3 today, mutation-checked (a seventh reader gives violation:secure-wire-readers-grew:4 of 3), and on every green run its stderr names the three remaining files so the outstanding work is visible in the gate's own output; a ratchet rather than a refusal because redding the trunk over work no single host can finish is how a gate gets switched off. ROUTING ADOPTED by the coordinator: macbookair converts the two macOS readers with the macOS lane's server-client pairing test in the same commit; yolanda converts hvsocket.rs with the Windows lane's pairing test (adjacent to its 1032-62rx refusal test); the default flip and the plaintext-reader sabotage arm belong to whichever host converts the LAST reader, the ratchet at zero being the signal; the flip lands once, with the last conversion. Yoga's cycle otherwise: gate green, clippy clean, host-shell 91 / vm-layer 93 / control-wire 70 passed, 0 failed.

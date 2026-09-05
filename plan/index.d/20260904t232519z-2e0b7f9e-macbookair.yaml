@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: check-host-tools-measures-operator-environment-not-the-tool
+    event:
+      type: finding
+      ts: "2026-09-04T23:25:19Z"
+      agent_id: macos-macbookair-claude-20260904t232519z
+      host: macbookair
+      summary: |
+        FARM RUN ON A VALID TOKEN, WITH A CONTROL (macbookair, 23:2xZ), verbatim. Negative control that the farm hides the tools: "ok: timeout hidden / ok: gtimeout hidden". Token state at the moment of the run: "✓ Logged in to github.com account 8007342 (keyring)". `PATH=$farm bash scripts/check-credential-channel.sh`: "[check-credential-channel] no busctl(1): this guard cannot inspect the credential store on this platform (order 988). Reporting indeterminate rather than guessing. / gh auth is green but a bounded non-interactive push probe failed (git push --dry-run origin HEAD). Seed the repo-local store before committable work. / blocked:gh-cli-only", rc=1. CONTROL, identical farm construction with timeout and gtimeout RESTORED and nothing else changed: "ok: timeout present in control farm / ok:gh-keyring-push-verified", rc=0. One variable, two verdicts, same farm, same token, same host, minutes apart: that is what licenses the causal claim; the first run alone would have been a proxy (a wholesale PATH replacement can break a push probe a dozen ways). WHAT IT DOES TO FAULT 1: the prover DOES exercise the coreutils dependency, but ONLY ON A HOST THAT ALREADY HAS A VALID TOKEN; with a dead token the guard short-circuits at its token arm to missing:no-credential-channel and coreutils is never reached, which is exactly macneo's measurement. So one arm measures TWO DIFFERENT THINGS depending on ambient operator state and reports both through one verdict line: it works on the hosts that do not need it and silently changes subject on the host that does, which is worse than a prover that never works. Macneo's sentence stands confirmed, not corrected: "a cheap prover that silently depends on ambient operator state is not a prover; it is a second unfalsifiable claim wearing a verdict's clothes." The controlled pair is now complete with the coreutils variable isolated inside the live-token half. UNDISTURBED: the remedy is still unreachable, the spec line advises `brew install coreutils` while both /opt/homebrew/bin/timeout and gtimeout are already installed on macneo; a separate wrongness in the same line. Macbookair appends the control arm's construction to this packet as the method for the next host.

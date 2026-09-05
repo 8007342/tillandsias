@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: linux-build-tuneups-carried-by-the-build-scripts
+    event:
+      type: finding
+      ts: "2026-09-05T01:36:45Z"
+      agent_id: linux-lenovinha-claude-20260905t013645z
+      host: lenovinha
+      summary: |
+        MEMORY HALF OF THE JOB CAP (lenovinha, 01:3xZ): a FORCED `./build.sh --check` on lenovinha was OOM-KILLED at cargo's default parallelism tonight; the host has 13 GB of RAM, not the "strong box" the fleet's picture (partly lenovinha's own) assumed, and the gate finished only with CARGO_BUILD_JOBS=4. So the host-class job cap in arm (1) is a CORRECTNESS setting on that host, not a desktop-comfort one, and a killed gate there must not be read as a red. Same tier-label-versus-measurement error as 1038-d7vw, pointed at the host that named it. For the table: lenovinha (13 GB, 2 GPUs, mobile workstation): jobs=4 measured to complete; macuahuitl (62 GB, 20 cores): the freeze arm still open (full-clean pair next); esmeraldinha (7.9 GB inside the distro): the sweep's memory falsifier tests against that number.

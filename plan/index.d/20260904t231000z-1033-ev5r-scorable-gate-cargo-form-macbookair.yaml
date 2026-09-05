@@ -1,0 +1,83 @@
+packets:
+  - packet_id: scorable-obligation-gate-refuses-honest-cargo-closures
+    order: 1033-ev5r
+    status: implemented
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    release_target: stable-milestone-v1
+    capability_tags:
+      - testing
+      - fail-loud
+    estimated_hours: 1
+    verifiable_closure: |
+      bash scripts/test-scorable-obligation-gate.sh reports
+      'PASS: scorable-obligation gate 10/10 (977-448j)', and with the cargo
+      form removed from check-scorable-obligation-added.sh it reports 9/10.
+    title: |
+      The 977-448j gate refused a closure naming a cargo invocation, leaving an honest author only a do-nothing scripts/ wrapper or a dishonest 'unscoreable:'.
+    deliverable: |
+      A closure that names a mechanically runnable command is accepted whether
+      that command is a script or a cargo invocation. What must not persist is
+      a grammar that makes the honest path harder than the escape hatch.
+    context: |
+      MEASURED 2026-09-04 by macbookair-macos, filing 1032-62rx. The gate
+      refused a fragment whose verifiable_closure read
+      `cargo test -p tillandsias-headless --test vsock_listener_e2e ... passes`
+      with violation:scorable-obligation-missing:1.
+
+      THE GRAMMAR accepted `litmus:<test>`, `scripts/<name>.sh`, or
+      `unscoreable: <reason>`. A cargo invocation is none of those, and it is
+      mechanical in exactly the way the accepted forms are: a command with an
+      exit code, runnable by any reader without asking the author what they
+      meant.
+
+      THIS IS 994-8r3w RECURRING IN A SECOND DIALECT. That packet added the
+      `scripts/` form after this same gate refused the first real packet filed
+      through it, and the header's own words are the argument here: "a script
+      verdict is as mechanical as a litmus test, and refusing it would push an
+      honest author toward a dishonest `unscoreable:` ... a gate that makes the
+      honest path harder than the escape hatch is worse than no gate."
+
+      That it recurred is the interesting part. The fix in 994-8r3w was to add
+      a prefix to a list; the underlying rule — a closure is scorable when it
+      names something mechanically checkable — was left implicit, so the list
+      had to grow again the next time an author wrote a different true thing.
+      The header now states the principle, so the third dialect is a reading
+      question rather than a gate failure.
+
+      DISCLOSURE: this widening was made by the author whose packet it
+      unblocks, which is a real conflict and the reason the negative control
+      below exists. The alternatives available were to wrap cargo in a
+      scripts/ file that does nothing else, or to write `unscoreable:` about a
+      plainly scorable row. Both would have left a worse record and neither
+      would have touched shared enforcement — the widening is the honest move
+      but it is not the self-effacing one, so it is stated rather than left
+      for a reviewer to notice.
+    outcome: |
+      scripts/check-scorable-obligation-added.sh accepts a `cargo test` closure;
+      the header states the principle rather than only extending the list.
+      scripts/test-scorable-obligation-gate.sh gains two arms and reports 10/10.
+
+      SABOTAGE, both directions, run and quoted:
+        removing the cargo form from the gate      -> 9/10,
+          FAIL: cargo-named closure accepted
+          want=[ok:scorable-obligations:1 checked]
+          got=[violation:scorable-obligation-missing:1]
+        accepting EVERY closure (case arm `*)`)    -> 7/10,
+          FAIL: prose about testing is still refused
+          FAIL: silent new packet is refused
+      The second arm is why the accept test alone was not enough: without it,
+      an arm proving "something passes" is satisfied by a gate that refuses
+      nothing. Prose mentioning testing with no runnable command is still
+      refused, so this widened the gate rather than removing it.
+    events:
+      - ts: 2026-09-04T23:10:00Z
+        type: implemented
+        agent: macos-tlatoanis-macbook-air-claude-20260904t221329z
+        host: tlatoanis-macbook-air
+        note: |
+          Found by being refused, not by audit. The gate was right to refuse
+          the letter of my closure and wrong about its intent, which is the
+          same verdict 994-8r3w reached about the same gate.

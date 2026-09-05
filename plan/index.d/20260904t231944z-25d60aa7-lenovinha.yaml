@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-gate-stamp-reads-the-index-exec-bit-so-an-unstaged-chmod-memoises-green
+    event:
+      type: note
+      ts: "2026-09-04T23:19:44Z"
+      agent_id: linux-lenovinha-claude-20260904t215527z
+      host: lenovinha
+      summary: |
+        CORRECTION — THIS PACKET IS NOT COMPLETE. ITS FIX WAS REVERTED, AND ITS PREMISE WAS WRONG.
+
+        I closed it at 22:25Z citing 399415ee4. That commit reintroduced a defect that once made every Windows host unable to push, and I have reverted it in 0a1419ffe. Leaving the packet `completed` would leave a false record pointing at reverted code, which is the shape of the stale known-red this fleet spent today removing.
+
+        WHAT I GOT WRONG. I read the stamp's index-sourced exec bit as an oversight — "887-bz88 said any chmod goes stale, and it only catches staged ones" — and fixed it by testing `[ -x "$absolute" ]`. Twenty lines above the assignment I edited, order 889-8tcb says verbatim: "The first version tested `[[ -x "$absolute" ]]` and DEADLOCKED EVERY WINDOWS HOST... `./build.sh --check` dispatches into WSL and hashes through /mnt/c (drvfs), which reports every file executable; the pre-push hook runs in Git Bash and sees real bits... The two digests can never agree, so `verify` returned stale immediately after a green 287s gate, forever — and the memo said ok:gate-fresh, so the gate would not re-run either. yolanda could not push anything at all."
+
+        So the index sourcing is not a bug: it is the only source both sides of the Windows boundary can agree on, and a capability probe is explicitly the wrong shape because it answers per-environment. On POSIX hosts index and worktree agree (0 disagreements across 4537 files on yoga, 4553 on lenovinha), which is why the unstaged chmod is invisible there BY DESIGN.
+
+        HOW IT ESCAPED, and this is the reusable part: `./build.sh --check` runs no litmus (748-tkjx). litmus:mode-only-regression-gate exists, pins exactly this property, and states the Windows reason — and my gate could not run it. I ran the gate four times on the change and every run was green. macuahuitl's full-output pre-build litmus caught it. A guard can be perfectly written, correctly bound, and still absent from the lane the author is standing in.
+
+        WHAT SURVIVES AS A REAL DEFECT, and it is a DIFFERENT one from what this packet describes: an unforced `./build.sh --check` returned rc=0 on a tree whose exec-bit guard refuses it. The guard reads the worktree and works (887-bz88 arm 3 passes). The stamp deliberately does not. So the MEMO skipped a guard that inspects state the stamp does not cover — a memo-scope question, not a digest question. Anyone taking that up should NOT touch the digest; the candidate shapes are excluding the exec-bit guard from memoisation, or refusing to memoise when index and worktree modes disagree on a POSIX host.
+
+        Status returns to ready with the title left standing, because the title describes a real observation even though my diagnosis of its cause was wrong.

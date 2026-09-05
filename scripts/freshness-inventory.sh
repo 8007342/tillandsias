@@ -213,14 +213,87 @@ fi
 # This is the same class as the generated-cheatsheets exclusion (640-iujb) but
 # stated as a property rather than a path: a prefix list only catches the
 # derived trees someone remembered to name.
-_tracked=""
-if [ -z "${FRESHNESS_FIXTURE_DIR:-}" ]; then
-    _tracked="$(git ls-files 2>/dev/null || true)"
+# MEMBERSHIP IS A HASH LOOKUP, NOT A STRING SCAN (order 1038-d7vw, measured on
+# lenovinha 2026-09-04). Both this set and the stamped set below used to be held
+# as one newline-joined STRING and tested with `case "\n$SET\n" in *"\n$x\n"*`.
+# That is O(candidates x set_bytes): for each of ~1900 candidates bash rebuilt
+# and glob-scanned the whole 297,500-byte `git ls-files` output. Measured in
+# isolation on this host it was 9.67s here and ~3.2s at the stamped-set site —
+# about 13s of the script's 16.7s of USER cpu, with sys at 1.7s.
+#
+# The split is what identified it. An overlay/container filesystem tax lands in
+# SYS; a ten-to-one user:sys ratio cannot be I/O, and pinning to a boosted core
+# (taskset) moved nothing. The cost was always userspace pattern matching.
+#
+# POSITIVE CONTROL, same 1900 lookups against the same data with identical hit
+# counts (1900/1900): 3.23s as a glob scan, 0.02s as the associative array
+# below. The cost is the SCAN, not the work — which is why replacing the
+# container and not the construct would have changed nothing.
+# BATCH THE MEMBERSHIP TEST — AND STAY BASH 3.2 (order 761-g36m keeps macOS's
+# /bin/bash on the table, so `declare -A` is not available here).
+#
+# THE OBVIOUS FIX IS THE ONE THAT IS ALREADY BANNED, and that is worth saying
+# because the first version of this fix used it and the dialect guard caught it.
+# check-bash-dialect.sh's own header records that the string sets below were
+# introduced AS the 3.2-clean replacement for two `declare -A` maps. So going
+# back to associative arrays would not be an improvement on this code — it would
+# reopen the bash-4 defect that this code was written to close, on macbookair
+# and macneo, and trade a slow script for one that does not run.
+#
+# The quadratic was collateral damage of that conversion, not the point of it.
+# `set_as_string` + `case "\n$SET\n" in *"\n$x\n"*` is O(candidates x set_bytes):
+# for each of ~1900 candidates bash rebuilt and glob-scanned the whole
+# 297,500-byte `git ls-files` output. Measured on lenovinha 2026-09-04 that was
+# 9.67s here and ~3.2s at the stamped-set site — ~13s of the script's 16.7s of
+# USER cpu, against 1.7s of sys.
+#
+# THE THIRD OPTION, which is neither: precompute membership for every candidate
+# in ONE awk pass, into a positional 0/1 marker array. awk gets the hash table
+# that bash 3.2 does not have, indexed arrays are 3.2-clean, and the loop below
+# indexes instead of scanning. One process, no per-candidate forks, no bash-4
+# construct.
+#
+# The user/sys split is what identified the cost as this and not I/O: an overlay
+# or container filesystem tax lands in SYS, and a ten-to-one user:sys ratio
+# cannot be filesystem overhead. pirria confirmed independently on identical
+# operands (98,415 set bytes, 1900 candidates, 1900/1900 hits) that the glob
+# construct alone reproduces the whole cross-host spread — 3.23s here vs 1.33s
+# there, a 2.43x that matches the 2.26x whole-script ratio within 7%.
+_TRACKED_MARK=()
+_tracked_answered=0
+if [ -z "${FRESHNESS_FIXTURE_DIR:-}" ] && [ "${#CANDIDATES[@]}" -gt 0 ]; then
+    _tracked_file="$(mktemp)"
+    git ls-files > "$_tracked_file" 2>/dev/null || true
+    # Only enforce trackedness when git actually answered; a tarball checkout
+    # with no git dir must not silently empty the inventory. `-s` is the same
+    # question the old `[ -n "$_tracked" ]` asked.
+    if [ -s "$_tracked_file" ]; then
+        _tracked_answered=1
+        _i=0
+        while IFS= read -r _m; do
+            _TRACKED_MARK[$_i]="$_m"
+            _i=$((_i + 1))
+        done < <(printf '%s\n' "${CANDIDATES[@]}" \
+            | awk 'NR==FNR { t[$0]=1; next }
+                   { k = $0; sub(/^\.\//, "", k); print (k in t) ? 1 : 0 }' \
+                  "$_tracked_file" -)
+    fi
+    rm -f "$_tracked_file"
+    # Same refusal as at the stamped-set site below, and the same reasoning: a
+    # short marker array here reads as "untracked" and would silently DROP real
+    # components from the denominator, which is the 730-j26z exclusion firing on
+    # files it was never meant to touch.
+    if [ "$_tracked_answered" -eq 1 ] && \
+       [ "${#_TRACKED_MARK[@]}" -ne "${#CANDIDATES[@]}" ]; then
+        echo "blocked:freshness-inventory:tracked-marker-desync:${#_TRACKED_MARK[@]}/${#CANDIDATES[@]}" >&2
+        exit 1
+    fi
 fi
 
 excluded=0
 if [ -z "${FRESHNESS_FIXTURE_DIR:-}" ] && [ "${#CANDIDATES[@]}" -gt 0 ]; then
     _kept=()
+    _idx=0
     for _c in ${CANDIDATES[@]+"${CANDIDATES[@]}"}; do
         _rel="${_c#./}"
         _drop=0
@@ -230,23 +303,52 @@ if [ -z "${FRESHNESS_FIXTURE_DIR:-}" ] && [ "${#CANDIDATES[@]}" -gt 0 ]; then
         done
         # Only enforce trackedness when git actually answered; a tarball
         # checkout with no git dir must not silently empty the inventory.
-        if [ "$_drop" -eq 0 ] && [ -n "$_tracked" ]; then
-            case "
-$_tracked
-" in
-                *"
-$_rel
-"*) : ;;
-                *) _drop=1 ;;
-            esac
+        if [ "$_drop" -eq 0 ] && [ "$_tracked_answered" -eq 1 ]; then
+            [ "${_TRACKED_MARK[$_idx]:-0}" = "1" ] || _drop=1
         fi
         if [ "$_drop" -eq 1 ]; then
             excluded=$((excluded + 1))
         else
             _kept+=("$_c")
         fi
+        _idx=$((_idx + 1))
     done
     CANDIDATES=(${_kept[@]+"${_kept[@]}"})
+fi
+
+# AN EMPTY INVENTORY IS A BROKEN RUN, NOT A CLEAN ONE (order 1038-d7vw).
+# Reported by esme-windows, and the reason it matters is that it fooled three
+# separate measurements in one evening — two of mine and one of esme's.
+#
+# The script derives REPO_ROOT from ${BASH_SOURCE[0]}/.., so a copy executed
+# from OUTSIDE the repo (`git show origin/linux-next:scripts/freshness-inventory.sh
+# > /tmp/fi.sh && bash /tmp/fi.sh`, the natural way to test a fix on a host you
+# cannot merge to) resolves REPO_ROOT to `/`, finds nothing, and prints:
+#
+#   freshness-inventory: 0 components, 0 stamped, 0 unstamped
+#   freshness-coverage: 0.0% (0/0 delta=unknown)
+#
+# rc=0, in 0.39s. That is indistinguishable from a fast clean walk unless you
+# read the line count, and it is how esme's Windows arm produced an apparent
+# 25s -> 0.39s "64x confirmation" of a fix that had not run at all. The old
+# script did exactly the same thing — verified by running BOTH from /tmp on
+# linux, byte-identical 4-line output — so this is not a regression from the
+# awk rewrite; it is a fails-open this script has always had, exposed because
+# the rewrite gave people a reason to run it from a temp path.
+#
+# WHY THE DESYNC GUARDS BELOW DO NOT COVER THIS, which esme diagnosed correctly
+# from the source: both are inside `[ "${#CANDIDATES[@]}" -gt 0 ]`. They protect
+# against a marker array that is SHORT; they cannot see a candidate set that is
+# EMPTY, because in that case they are never reached. This refusal sits outside
+# that block deliberately.
+#
+# Refusing costs nothing real: a checkout with zero auditable components is not
+# a state any caller wants a coverage number for.
+if [ "${#CANDIDATES[@]}" -eq 0 ]; then
+    echo "blocked:freshness-inventory:empty-inventory:root=$REPO_ROOT" >&2
+    echo "  no candidate components found. If this script was copied elsewhere," >&2
+    echo "  run it from inside the repo — REPO_ROOT comes from \${BASH_SOURCE[0]}/.." >&2
+    exit 1
 fi
 
 total=0
@@ -274,14 +376,51 @@ today="$(date -u +%Y-%m-%d)"
 # Semantics are unchanged by construction: a file absent from the list has no
 # matching line, which is precisely the old `grep -m1` empty result, and a file
 # present is parsed with the same expression and the same first-match-wins rule.
-STAMPED_SET=""
+# Held as an associative array for the same reason as _TRACKED above (1038-d7vw):
+# the single batched grep that builds it was never the cost — the per-candidate
+# glob scan of the result was.
+# Positional 0/1 markers for the same reason as _TRACKED_MARK above, and by the
+# same one-awk-pass method (1038-d7vw). The batched grep that finds the stamped
+# files was never the cost; the per-candidate glob scan of its result was.
+# Keyed on the candidate exactly as passed to xargs, which is what `grep -l`
+# echoes back — the same identity the glob scan compared, so membership is
+# unchanged. The marker is positional, so it stays aligned with CANDIDATES even
+# where two entries differ only by a `./` prefix.
+STAMPED_MARK=()
 if [ "${#CANDIDATES[@]}" -gt 0 ]; then
-    STAMPED_SET="$(printf '%s\n' "${CANDIDATES[@]}" \
+    _stamped_file="$(mktemp)"
+    printf '%s\n' "${CANDIDATES[@]}" \
         | tr '\n' '\0' \
-        | xargs -0 grep -lE "$STAMP_RE" 2>/dev/null || true)"
+        | xargs -0 grep -lE "$STAMP_RE" > "$_stamped_file" 2>/dev/null || true
+    _j=0
+    while IFS= read -r _m; do
+        STAMPED_MARK[$_j]="$_m"
+        _j=$((_j + 1))
+    done < <(printf '%s\n' "${CANDIDATES[@]}" \
+        | awk 'NR==FNR { s[$0]=1; next } { print ($0 in s) ? 1 : 0 }' \
+              "$_stamped_file" -)
+    rm -f "$_stamped_file"
+    # REFUSE RATHER THAN MISCLASSIFY. A positional marker is only correct while
+    # it is exactly as long as what it indexes, and the failure is silent: a
+    # short array reads as "unstamped" via the :-0 default, so every stamped
+    # file past the truncation point would be quietly reported as unstamped and
+    # the coverage number would fall with nothing to say why. awk emits one line
+    # per candidate, so a mismatch means the pipeline was cut off (SIGPIPE, a
+    # full disk, an awk that died mid-stream) — conditions where a wrong answer
+    # is worse than no answer.
+    if [ "${#STAMPED_MARK[@]}" -ne "${#CANDIDATES[@]}" ]; then
+        echo "blocked:freshness-inventory:marker-desync:${#STAMPED_MARK[@]}/${#CANDIDATES[@]}" >&2
+        exit 1
+    fi
 fi
 
+_fi=-1
 for f in ${CANDIDATES[@]+"${CANDIDATES[@]}"}; do
+    # ADVANCE THE INDEX BEFORE THE `continue`, not with the body. STAMPED_MARK is
+    # positional over CANDIDATES, and the skip below is the one path that would
+    # desynchronise it: increment inside the body and every candidate after the
+    # first vanished file reads its neighbour's marker.
+    _fi=$((_fi + 1))
     # Only count files that exist and are regular files.
     [ -f "$f" ] || continue
     total=$((total + 1))
@@ -289,13 +428,9 @@ for f in ${CANDIDATES[@]+"${CANDIDATES[@]}"}; do
     # Find the first freshness record in the file — but only for files the
     # single pass above already proved carry one.
     rec=""
-    case "
-$STAMPED_SET
-" in
-        *"
-$f
-"*) rec="$(grep -m1 -E "$STAMP_RE" "$f" 2>/dev/null || true)" ;;
-    esac
+    if [ "${STAMPED_MARK[$_fi]:-0}" = "1" ]; then
+        rec="$(grep -m1 -E "$STAMP_RE" "$f" 2>/dev/null || true)"
+    fi
     if [[ -n "$rec" ]]; then
         if [[ "$rec" =~ $STAMP_RE ]]; then
             auditor="${BASH_REMATCH[2]}"
@@ -400,6 +535,12 @@ done
 # it is a sample of what previous audits happened to touch. Ranking within it
 # answers "which of the 8 files we have looked at is oldest", which is not the
 # question the audit class is asking.
+# Declared so `${#UNSTAMPED_LINES[@]}` below cannot trip `set -u` on a run that
+# stamped everything. esme-windows surfaced this as `UNSTAMPED_LINES: unbound
+# variable` — incidental to the empty-inventory case it was seen in, but a real
+# latent bug in its own right: a fully-stamped tree would hit it too, and the
+# error goes to stderr while the script still exits 0.
+UNSTAMPED_LINES=(${UNSTAMPED_LINES[@]+"${UNSTAMPED_LINES[@]}"})
 FRESHNESS_SEED="${FRESHNESS_SEED:-$(date -u +%Y%m%d)}"
 next_rel=""
 next_src=""

@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-gate-stamp-reads-the-index-exec-bit-so-an-unstaged-chmod-memoises-green
+    event:
+      type: evidence
+      ts: "2026-09-04T22:25:57Z"
+      agent_id: linux-lenovinha-claude-20260904t215527z
+      host: lenovinha
+      summary: |
+        FIXED AND LANDED 399415ee4 (verified an ancestor of origin/linux-next before this event was written).
+
+        EXIT CRITERIA, both measured, pre-fix result stated first as filed:
+          1. UNFORCED `./build.sh --check` on a tree with an unstaged `chmod -x`:
+               PRE-FIX  rc=0 in 2 seconds — a GREEN on a defective tree
+               POST-FIX rc=1 in 3 seconds, violation:script-not-executable:1
+          2. `gate-stamp.sh compute` across the same unstaged chmod:
+               PRE-FIX  cce706dc...b38a884 -> cce706dc...b38a884  (byte-identical)
+               POST-FIX 30e4ce00... -> f2ab5981..., and restoring the bit returns 30e4ce00...
+
+        THE MECHANISM, and why this was 887-bz88's residual rather than its duplicate. That order added the exec-bit field precisely so "chmod moved the stamp not at all" would stop being true, and its header says "any chmod now goes stale". The field read `git ls-files -s` — THE INDEX. So a staged chmod staled the stamp and a worktree one did not. The same header records, two paragraphs earlier, that "the skill runs the gate BEFORE `git add`" — it names the index as the wrong place to look and then looks there. That is the defect in one sentence, and it is the shape this fleet found repeatedly today: a mechanism whose COMMENT describes a stronger property than its CODE implements.
+
+        THE FIX stays inside the stamp input, as the packet required: the field is now two characters, index bit and worktree bit. `[ -x ]` is a bash builtin so the loop remains zero-fork per file and 675-dkif's budget is untouched; the memo policy (765-tkq2) is not modified, because the memo is correct given a correct digest. Frame change stated as 887-bz88 stated its own: every existing stamp goes stale once, self-healing on each host's next gate.
+
+        THE RESTORE CHECK IS THE ARM THAT MATTERS, and it is not decoration. Without it the fixture would pass on a digest that merely CHANGES across a chmod — including one that drifts on every call. That version would stale the stamp constantly, make the memo useless, and get 765-tkq2 disabled by whoever noticed. So the arm requires the digest to be a pure function of the tree: differ under the chmod, and return exactly on restore.
+
+        HOW IT WAS FOUND, worth recording because nothing in the gate's output said it: while measuring 1009-gccx an unforced gate returned green in 2s on a tree carrying a planted exec-bit defect. Two seconds was too fast to be true for a check at line 3269. The implausibility surfaced it; the gate reported a clean pass and the memo said nothing about having skipped a guard.
+
+        ALSO IN THIS COMMIT, and not mine: yoga-silverblue's generalising arm, merged into scripts/test-gate-fast-refusals.sh rather than kept as a separate script at their suggestion. It refuses ANY hoisted guard that calls resolve_plan_binary, because such a guard degrades to a SKIP on a cold tree. BOTH arms are kept on yoga's own caveat — `grep resolve_plan_binary` is a SOURCE-SHAPE test that catches this family and would miss a guard degrading some other way (reading a target/ artefact, shelling out to a binary by another name), so the specific 885-92iu arm and the general one fail differently and neither subsumes the other. Control fires: pointing the loop at a binary-dependent guard turns it red.

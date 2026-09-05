@@ -23,6 +23,8 @@
 #
 # Exit codes mirror the tray's --diagnose contract:
 #   0 - image-root provisioned (rootfs.img + vmlinuz + initramfs.img all present).
+#       NOT a health verdict: this tool cannot observe the VM or the guest, and
+#       0 must not be read as "the system is working" (980-ja2m).
 #   2 - degraded (the tool ran end-to-end but at least one check failed).
 #   1 - could not locate or invoke tillandsias-tray.
 #   3 - the tray ANSWERED but no JSON processor is available, so only the
@@ -188,6 +190,13 @@ provisioned="$(echo "$json" | $TILLANDSIAS_JQ -r '.provisioned')"
 rootfs_present="$(echo "$json" | $TILLANDSIAS_JQ -r '.rootfs_present')"
 kernel_present="$(echo "$json" | $TILLANDSIAS_JQ -r '.kernel_present')"
 initrd_present="$(echo "$json" | $TILLANDSIAS_JQ -r '.initrd_present')"
+# 980-ja2m. Renamed from .vm_owner_live, which named a fact it did not measure.
+# An ABSENT field must read as unknown (an older tray emits the old key), but a
+# field that is present and FALSE must read as false. `//` cannot express that:
+# jq's alternative operator fires on false as well as null, so `// "unknown"`
+# reported a not-running tray as unknown. Measured here 2026-09-04 against a
+# tray emitting tray_process_running:false. Use has() to test presence.
+tray_process_running="$(echo "$json" | $TILLANDSIAS_JQ -r 'if has("tray_process_running") then .tray_process_running else "unknown" end')"
 
 write_check "Version" "true" "$version"
 write_check "Bundle" "$in_app" "$([[ "$in_app" == "true" ]] && echo "inside Tillandsias.app" || echo "running outside .app (dev binary)")"
@@ -200,7 +209,21 @@ write_check "Provisioned" "$provisioned"
 
 printf "\n"
 if [[ "$provisioned" == "true" ]]; then
-    printf "${GREEN}HEALTHY${RESET} — image-root provisioned, ready to boot VM.\n"
+    # 980-ja2m. This used to print "HEALTHY — image-root provisioned, ready to
+    # boot VM" on the strength of `.provisioned` alone, which is a stat() of
+    # rootfs.img. Nothing this tool can see observes the VM or the guest, so it
+    # now reports what it checked and names what it did not.
+    printf "${GREEN}BOOT ARTIFACTS PRESENT${RESET} — the image-root is provisioned.\n"
+    if [[ "$tray_process_running" == "true" ]]; then
+        printf "A tray process is running (singleton lock held).\n"
+    elif [[ "$tray_process_running" == "false" ]]; then
+        printf "No tray process is running.\n"
+    else
+        printf "Tray process state unknown (this tray predates the field).\n"
+    fi
+    printf "NOT CHECKED: whether a VM is running, or whether the guest is healthy.\n"
+    printf "This tool cannot see either — macOS has no AF_VSOCK, so the live phase is\n"
+    printf "readable only from inside the tray process. Open the menubar chip for live status.\n"
     exit 0
 else
     printf "${RED}DEGRADED${RESET} — see FAIL lines above. Launch the tray once (or \`open /Applications/Tillandsias.app\`) to materialize the rootfs on first launch.\n"

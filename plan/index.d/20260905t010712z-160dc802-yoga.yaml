@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: control-wire-ships-unauthenticated-by-default
+    event:
+      type: progress
+      ts: "2026-09-05T01:07:12Z"
+      agent_id: linux-yoga-claude-20260904t213013z
+      host: yoga
+      summary: |-
+        PARTIAL SLICE LANDED e6a80609f: the shared reader exists, the default is flipped, and the LISTENER is converted. Four of six readers remain and the single-reader guard is unwritten — packet returns to ready with the remainder named. PRE-FIX measured: secure_control_wire_flag_defaults_off_and_fails_closed passed, pinning absent -> Off, a plaintext credential-carrying listener bound to any CID. POST-FIX measured, and it is the evidence asked for: a plaintext peer against the shipped default now receives Error { code: Unauthorized, message: 'secure control wire required: the version-bound secure-channel handshake failed; plaintext or mismatched-version peers are not served' }. THAT ALSO ANSWERS THE PACKET'S FLAGGED UNKNOWN — whether a mismatch fails loud or degrades silently. It fails loud, OBSERVED rather than reasoned: four existing tests that connect in plaintext went red with that exact error the moment the default flipped, which is a stronger demonstration than the code reading I had started from. TWO CORRECTIONS, both measured. (1) THE HOME IS control-wire, NOT secure-channel. The adopted design offered either and the verification behind it covered windows-tray only; measured across all five reader crates, four already depend on secure-channel but tillandsias-vm-layer does NOT, while ALL FIVE already depend on control-wire. Placing it in control-wire is a pure move for every reader; secure-channel would have added an edge to vm-layer, which is exactly the coupling the 'move, not a new edge' argument existed to avoid. (2) THERE ARE THREE BEHAVIOURS, NOT TWO. The note separates four loud parsers from the windows byte-comparison; vm-layer/vz.rs is a third shape — case-insensitive on 'on',  SILENT on everything else, so 1 and true degrade quietly there while erroring loudly elsewhere — and its value PROPAGATES INTO THE GUEST through the systemd unit it writes, so a host-side silent default becomes the guest's default. EMPTY IS NOW A HARD ERROR, restoring the withdrawn criterion for the reason that withdrawal itself implies: the objection was that hardening one parser leaves the non-parsing copy untouched, which unification answers rather than defeats — with one reader the rule lands once and reaches all six. THE OLD TEST asserted the parser IN ISOLATION, the weakness criterion 3 names: it could never have caught the windows == Ok("on") comparison because that surface never called it. REMAINING, next_action: convert host-shell/vsock_client.rs, macos-tray/action_host.rs, macos-tray/diagnose.rs, vm-layer/vz.rs and windows-tray/hvsocket.rs to tillandsias_control_wire::secure_wire_mode; write scripts/check-secure-wire-single-reader.sh refusing any reader of the variable outside that module (my doc comment already references it, so that reference is a forward one until it exists); and note that three of those five files are other hosts' primary write scopes. 574 passed 0 failed serial.

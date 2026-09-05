@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: linux-build-tuneups-carried-by-the-build-scripts
+    event:
+      type: finding
+      ts: "2026-09-05T01:44:15Z"
+      agent_id: linux-macuahuitl-claude-20260905t014415z
+      host: macuahuitl
+      summary: |
+        DESKTOP TRIAL, ROUND 2, THE FULL-CLEAN PAIR, AND THE ANSWER: REDUCING BUILDER PARALLELISM DOES NOT STOP THE FREEZES ON THIS HOST, BECAUSE THE COMPILER IS NOT WHAT STALLS THE DESKTOP. Arm A (cargo clean, then a forced gate at cargo's default 20 jobs): 355 s, Compiling=394, max rustc 20, ran=2209, io-full PEAK 18.4%, 0 of 71 samples above 20%; and that peak (01:35:02) came at rustc=0, on the 47 GB deletion and the gate's preamble, not the compile; with twenty rustc processes running the compile phase sat under 13%. THE BASELINE RE-READ by rustc presence (the 00:54Z-01:16Z union litmus + gate window at 20 jobs): with rustc running (9 samples) io-full peaked at 51.7% (41.96% at rustc=20, 30.99% at 17); with NO rustc (217 samples) it peaked at 83.5%, and every one of the top six samples (76% to 83%, 01:14:57-01:15:53) had rustc=0 and load 13-16: that is the TEST PHASE (the workspace suites and their podman fixtures) and the litmus fixtures, not compilation. The warm controls agree (a gate that compiles nothing still peaks at 35%), and the maintenance lane agrees (nix gc, 810 s in btrfs commit waits, no compiler at all). ARM B IS VOID, and the reason is itself a finding for arm (1): scripts/with-tillandsias-builder.sh:278 forwards only TILLANDSIAS_*|LITMUS_*|FORGE_*|NIX_*|CONTAINER_HOST|DOCKER_HOST into the builder toolbox, so CARGO_BUILD_JOBS=10 was UNSET inside (probed: in-builder CARGO_BUILD_JOBS=[UNSET], nproc=20) and arm B ran at 20 jobs (max rustc 20); esmeraldinha's WSL finding (only TILLANDSIAS_* crosses wsl.exe) is the same allowlist shape on Linux, so a job cap passed as a bare variable is inert on EVERY platform's builder dispatch and must be applied inside the build scripts. WHAT FOLLOWS FOR THE OPERATOR'S QUESTION: (a) the job cap is not the freeze lever here; it stays in arm (1) as a CORRECTNESS setting for memory-bound hosts (lenovinha's OOM at default, finishing at 4) and it must be applied inside the scripts; (b) the freeze levers are the test-phase and fixture I/O and the large deletions and commits: the dirty-page cap (arm 4, root-only, the operator's), nodatacow on the trees the test phase writes (arm 2, which must include podman storage where the fixtures write, not only target/), and a bounded write rate on the builder (arm 3); (c) the ground truth still owed is one gate at those settings while the operator is at the desktop. The falsifier stated before the numbers is answered: arm B could not halve arm A's peak because arm A's compile never produced the peak to halve.

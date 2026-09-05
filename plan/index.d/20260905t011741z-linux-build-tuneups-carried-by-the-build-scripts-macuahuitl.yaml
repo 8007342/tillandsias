@@ -1,0 +1,63 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: linux-build-tuneups-carried-by-the-build-scripts
+    order: 1047-h88p
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: linux
+    capability_tags: [build, io, btrfs, cargo, podman, desktop, measurement, multi-host]
+    estimated_hours: 6
+    owned_files:
+      - build.sh
+      - scripts/local-ci.sh
+      - scripts/with-tillandsias-builder.sh
+      - scripts/with-wsl2-builder.sh
+      - scripts/check-daily-maintenance.sh
+    title: |
+      Desktop session freezes during gates are I/O stalls, not CPU or memory; the tune-ups that stop them (job cap by host class, nodatacow target trees, builder I/O and CPU limits, a dirty-page advisory) belong in the build scripts so every Linux builder picks them up transparently
+    context: |
+      MEASURED on macuahuitl 2026-09-05T00:5xZ during a gate: /proc/pressure io some avg300 = 37.7% while cpu and memory pressure were 0.00;
+      20 cores, no CARGO_BUILD_JOBS or -j anywhere in build.sh/local-ci.sh, release profile codegen-units=1, so a gate runs up to 20 rustc
+      writers; the builder container has no CPU or I/O limit (NanoCpus=0, BlkioWeight=0); / and /home are one btrfs (compress=zstd:1, ssd,
+      discard=async, default 30 s commit); NONE of target/, target-musl/, ~/.local/share/containers/storage, ~/.cargo is nodatacow, so every
+      rustc and podman write is copy-on-write plus compression; vm.dirty_ratio=20 of 62 GB lets ~12 GB of dirty pages accumulate before
+      writeback throttles, and the flush is a btrfs transaction commit the desktop's small writes wait behind (the `wait_log_commit` and
+      `handle_reserve_ticket` wchans the nix gc sat in for 810 s the same night). ionice is inert with the `none` NVMe scheduler (memory:
+      builds-throttled-on-operator-desktop). OPERATOR DIRECTION (2026-09-05): the fixes go into the build scripts, not into one host's
+      setup, so all Linux builders pick them up; reducing builder parallelism may be all that is needed (trial in progress, see the
+      first event); esmeraldinha and pirria measure where reducing parallelism also speeds builds on the floor tier (sweep packet).
+      ARMS, each landed only with a before/after pair of FORCED gates (TILLANDSIAS_FORCE_CHECK=1, ran=N recorded) and the PSI sampler
+      (io some/full avg10 every 5 s; verification.measurement_practice.forced_only_gate_timings): (1) CARGO_BUILD_JOBS default by host
+      class from the capability matrix (desktop-class: nproc/2 or the trial's winner; floor: the sweep's winner); (2) `chattr +C` on
+      target directories at creation (new files only; the existing tree is rebuilt once); (3) the builder container launched with
+      --device-write-bps and --cpus from the same table; (4) the daily maintenance gate prints an advisory (due:sysctl:dirty-bytes) when
+      vm.dirty_bytes is unset, since a script cannot set it without root; the operator sets vm.dirty_bytes=1G, dirty_background_bytes=256M.
+      NOT a filesystem change: ext4 has no global transaction but a 12 GB writeback burst stalls an ext4 desktop too; the isolating route
+      if wanted is a separate build filesystem (a nodatacow loop image or a partition) for podman storage, target trees and the nix store,
+      about 130 GB here (images 56.6 GB, volumes 20 GB, target 47 GB, nix store 20 GB), never a reinstall.
+      WINDOWS REQUIREMENT ON ARM (1), found by esmeraldinha before its sweep started: CARGO_BUILD_JOBS does NOT cross the wsl.exe
+      boundary; scripts/with-wsl2-builder.sh:247-249 forwards only `compgen -v | grep '^TILLANDSIAS_'` (889-8tcb's fix, applied to one
+      prefix rather than to the boundary), measured: `CARGO_BUILD_JOBS=2 wsl.exe -d tillandsias-build …` -> in-distro UNSET; with
+      `WSLENV=CARGO_BUILD_JOBS` -> [2] and cargo sees jobs=2. So a job cap passed as a bare environment variable is honoured on Linux and
+      inert on the Windows dispatch, and 889-8tcb's own comment names that as the worse defect. The cap must therefore be applied INSIDE
+      the build scripts from the host-class table (or the forwarding list must carry CARGO_* by design, with a test that a control
+      variable set outside the distro is visible inside). Also from esme: the distro sees 7942 MB (WSL2 default is half of physical),
+      which is the memory number the floor's falsifier tests against.
+    exit_criteria:
+      - "arm (1) landed with the trial's A/B pair on this packet: forced gates at default and at the cap, ran=N each, io-full peak and wall time each; and on a Windows host the cap is visible inside the distro without a hand-set WSLENV; pre-fix result: FAILS (no job cap exists; CARGO_BUILD_JOBS is inert across wsl.exe)"
+      - "arm (2) landed: target/ and target-musl/ are created with +C by build.sh and a fresh tree shows it under lsattr; pre-fix result: FAILS (all four trees COW)"
+      - "arm (3) landed with its own forced-gate pair; the builder's limits are read from the host-class table and printed at launch; pre-fix result: FAILS (NanoCpus=0, BlkioWeight=0)"
+      - "arm (4): check-daily-maintenance prints the dirty-bytes advisory when unset and ok when set; pre-fix result: FAILS"
+      - "the operator's ground truth: one forced gate at the landed settings while at the desktop, with their own report of whether the session stalled"
+    unscoreable: |
+      The pins are forced-gate pairs with the pressure sampler on named hosts; no
+      litmus lane covers host I/O regime yet, and the claimer names one if added.
+    events:
+      - type: note
+        ts: "2026-09-05T01:17:41Z"
+        host: macuahuitl
+        summary: |
+          FILED by the coordinator on the operator's direction (2026-09-05): the fixes go into the build scripts so every Linux builder picks them up; the desktop trial's baseline (20 jobs, forced union gate at f475e93f6): io-full peak 83.5%, 167 of 226 samples above 20%, max rustc 20; the A/B arm at 10 jobs follows in the first event.

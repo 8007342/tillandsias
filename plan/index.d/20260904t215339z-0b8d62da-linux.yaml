@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-gate-discovers-sub-second-failures-after-ten-minutes-of-work
+    field: status
+    value: completed
+    ts: "2026-09-04T21:53:39Z"
+    host: linux
+
+events:
+  - packet_id: the-gate-discovers-sub-second-failures-after-ten-minutes-of-work
+    event:
+      type: completed
+      ts: "2026-09-04T21:53:39Z"
+      host: linux
+      summary: |-
+        status 'completed' with evidence_refs: 303a16611 (verified ancestor of origin/linux-next): planted exec-bit defect refused in 222s before / 2s after, same verdict and rc, TILLANDSIAS_FORCE_CHECK=1 both runs; green forced gate 213s within the 212-284s range; ok:test-gate-fast-refusals:3 wired into local-ci.sh
+  - packet_id: the-gate-discovers-sub-second-failures-after-ten-minutes-of-work
+    event:
+      type: note
+      ts: "2026-09-04T21:53:39Z"
+      host: linux
+      summary: |-
+        five sub-second guards hoisted into a named fast-refusal phase before the first compile; LM-04 (4.1s) deliberately left in the body with the rule recorded; fixture pins the order rather than the checks

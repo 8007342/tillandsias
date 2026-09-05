@@ -7,17 +7,17 @@
 //! connection open for VM-lifecycle / cloud-refresh request frames.
 //!
 //! Phase-2 scope is the handshake + a small request/reply set
-//! (`VmStatusRequest`, `EnumerateLocalProjects`, `CloudRefreshRequest`,
-//! `VmShutdownRequest`). Full menu-state propagation lands in Phase 3+.
+//! (`VmStatusRequest`, `CloudRefreshRequest`, `VmShutdownRequest`). Full
+//! menu-state propagation lands in Phase 3+. (`EnumerateLocalProjects` was
+//! removed with the local-projects surface in 997-e4v2 step 3.)
 //!
 //! Linux-only, gated behind `feature = "listen-vsock"`.
 //!
 //! @trace spec:vsock-transport, spec:host-shell-architecture
 
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::OnceLock;
 use std::sync::RwLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -28,8 +28,8 @@ use tillandsias_control_wire::transport::{
 use tillandsias_control_wire::{
     CAP_PTY_ATTACH_V1, CAP_PTY_HEARTBEAT_V1, CAP_PTY_HEARTBEAT_V2, CloudProjectEntry,
     CloudRefreshOutcome, ContainerMetricWire, ControlEnvelope, ControlMessage, ErrorCode,
-    LocalProjectEntry, MAX_MESSAGE_BYTES, MetricsSnapshotWire, MountIoMetricWire, VmPhase,
-    WIRE_VERSION, decode, encode,
+    MAX_MESSAGE_BYTES, MetricsSnapshotWire, MountIoMetricWire, VmPhase, WIRE_VERSION, decode,
+    encode,
 };
 use tillandsias_secure_channel::{HopId, channel_psk, server_handshake_or_reclaim};
 #[cfg(test)]
@@ -67,46 +67,17 @@ fn client_supports_pty_heartbeat_v2(capabilities: &[String]) -> bool {
 #[cfg(feature = "vault")]
 static VAULT_BOOTSTRAP_DONE: AtomicBool = AtomicBool::new(false);
 
-/// Env var that overrides the default in-VM project bind-mount root.
-/// macOS hosts mount the user's `~/src` via virtio-fs into the Linux VM;
-/// Windows hosts mount via `\\wsl$`. The convention is `/home/forge/src`
-/// but operators can override with this env var.
-///
-/// @trace spec:host-shell-architecture
-const IN_VM_PROJECT_ROOT_ENV: &str = "TILLANDSIAS_IN_VM_PROJECT_ROOT";
-const IN_VM_PROJECT_ROOT_DEFAULT: &str = "/home/forge/src";
-
 /// Default in-VM podman socket path. Used by `VmStateHandle::podman_ready`
 /// to decide whether containers can actually start.
 const IN_VM_PODMAN_SOCKET_DEFAULT: &str = "/run/podman/podman.sock";
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum SecureControlWireMode {
-    Off,
-    On,
-}
-
-fn parse_secure_control_wire_mode(
-    raw: Result<String, std::env::VarError>,
-) -> Result<SecureControlWireMode, String> {
-    match raw {
-        Ok(v) if v.eq_ignore_ascii_case("on") => Ok(SecureControlWireMode::On),
-        Ok(v) if v.eq_ignore_ascii_case("off") || v.is_empty() => Ok(SecureControlWireMode::Off),
-        Ok(v) => Err(format!(
-            "TILLANDSIAS_SECURE_CONTROL_WIRE must be 'on' or 'off' (got {v:?})"
-        )),
-        Err(std::env::VarError::NotPresent) => Ok(SecureControlWireMode::Off),
-        Err(err) => Err(format!("TILLANDSIAS_SECURE_CONTROL_WIRE: {err}")),
-    }
-}
-
-fn secure_control_wire_mode() -> Result<SecureControlWireMode, String> {
-    static MODE: OnceLock<Result<SecureControlWireMode, String>> = OnceLock::new();
-    MODE.get_or_init(|| {
-        parse_secure_control_wire_mode(std::env::var("TILLANDSIAS_SECURE_CONTROL_WIRE"))
-    })
-    .clone()
-}
+// ORDER 972-umik. The mode is parsed by the ONE reader in
+// tillandsias-control-wire::secure_wire_mode, not here. This file used to
+// carry its own copy; there were six, with three different behaviours, and
+// the divergence shipped a plaintext client to anyone who capitalised a word.
+// The alias keeps this module's existing call sites reading naturally.
+use tillandsias_control_wire::secure_wire_mode::{
+    SecureWireMode as SecureControlWireMode, secure_wire_mode as secure_control_wire_mode,
+};
 
 /// Wrap `stream` per the secure-control-wire `mode`: `Off` passes the
 /// plaintext stream through, `On` runs the version-bound Noise responder
@@ -252,13 +223,6 @@ pub struct VmStateHandle {
     /// Last pushed project list, `None` until first fetched. Full-replacement
     /// compare: `set_cloud_projects` pushes only when the list differs.
     cloud_projects: Arc<RwLock<Option<Vec<CloudProjectEntry>>>>,
-    /// Broadcast fan-out for `LocalProjectsPush` (order 260). Same
-    /// subscriber semantics as `vm_status_tx`.
-    local_projects_tx: broadcast::Sender<ControlMessage>,
-    /// Last pushed VM-local project list, `None` until first scanned.
-    /// Full-replacement compare (order 260): `set_local_projects` pushes
-    /// only when the list differs.
-    local_projects: Arc<RwLock<Option<Vec<LocalProjectEntry>>>>,
     /// Monotonic counter for the `seq` field carried inside each push
     /// message (distinct from the per-request `ControlEnvelope.seq`, which
     /// pushes don't have a request to reply to). Shared across all push
@@ -296,7 +260,6 @@ const CLOUD_PROJECTS_PUSH_CAPACITY: usize = 8;
 /// Order 260: same shallow-queue rationale as CloudProjects — each push is a
 /// full replacement list, so a lagged receiver skipping to latest loses
 /// nothing durable.
-const LOCAL_PROJECTS_PUSH_CAPACITY: usize = 8;
 /// Per-connection PTY frames waiting for the wire writer. Backpressure at
 /// this boundary pauses the PTY pump instead of allowing an unbounded queue to
 /// consume guest memory when a host stops reading (order 153 bounded-channel
@@ -311,7 +274,6 @@ impl VmStateHandle {
         let (vm_status_tx, _) = broadcast::channel(VM_STATUS_PUSH_CAPACITY);
         let (login_state_tx, _) = broadcast::channel(LOGIN_STATE_PUSH_CAPACITY);
         let (cloud_projects_tx, _) = broadcast::channel(CLOUD_PROJECTS_PUSH_CAPACITY);
-        let (local_projects_tx, _) = broadcast::channel(LOCAL_PROJECTS_PUSH_CAPACITY);
         Self {
             phase: Arc::new(RwLock::new(VmPhase::Starting)),
             podman_socket: PathBuf::from(IN_VM_PODMAN_SOCKET_DEFAULT),
@@ -320,8 +282,6 @@ impl VmStateHandle {
             login_state: Arc::new(RwLock::new(None)),
             cloud_projects_tx,
             cloud_projects: Arc::new(RwLock::new(None)),
-            local_projects_tx,
-            local_projects: Arc::new(RwLock::new(None)),
             push_seq: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             last_event: Arc::new(RwLock::new(SERVER_NAME.to_string())),
             subscriber_nudge: Arc::new(tokio::sync::Notify::new()),
@@ -434,50 +394,6 @@ impl VmStateHandle {
                     "login transition: cloud fetch unconfirmed; keeping previous list"
                 );
             }
-        }
-    }
-
-    /// Subscribe to the `LocalProjects` push topic (order 260). Same
-    /// independent-receiver semantics as [`subscribe_vm_status`].
-    /// Order 690-xeda: also wakes the parked rescan loop so the first
-    /// subscriber gets a scan immediately instead of waiting out the
-    /// backstop.
-    pub fn subscribe_local_projects(&self) -> broadcast::Receiver<ControlMessage> {
-        let rx = self.local_projects_tx.subscribe();
-        self.subscriber_nudge.notify_waiters();
-        rx
-    }
-
-    /// True when at least one connection is subscribed to `LocalProjects`.
-    /// The guest-side rescan task uses this to spend zero directory scans
-    /// while nobody is listening (order 260; mirrors the login-probe gate).
-    pub fn has_local_projects_subscribers(&self) -> bool {
-        self.local_projects_tx.receiver_count() > 0
-    }
-
-    /// Record the latest VM-local project list and push `LocalProjectsPush`
-    /// (full replacement) to all `LocalProjects` subscribers IFF the list
-    /// differs from the previous one (order 260). The first scan always
-    /// pushes.
-    pub fn set_local_projects(&self, entries: Vec<LocalProjectEntry>) {
-        let changed = match self.local_projects.write() {
-            Ok(mut guard) => {
-                let changed = guard.as_ref() != Some(&entries);
-                if changed {
-                    *guard = Some(entries.clone());
-                }
-                changed
-            }
-            Err(_) => false,
-        };
-        if changed {
-            let seq = self
-                .push_seq
-                .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-                + 1;
-            let _ = self
-                .local_projects_tx
-                .send(ControlMessage::LocalProjectsPush { seq, entries });
         }
     }
 
@@ -968,7 +884,6 @@ async fn serve_ready_stream(
             wire_version: WIRE_VERSION,
             server_caps: vec![
                 "VmStatusRequest".into(),
-                "EnumerateLocalProjects".into(),
                 "CloudRefreshRequest".into(),
                 "VmShutdownRequest".into(),
                 "GithubLoginStatusRequest".into(),
@@ -1072,7 +987,6 @@ async fn serve_ready_stream(
     let mut login_state_rx: Option<broadcast::Receiver<ControlMessage>> = None;
     let mut cloud_projects_rx: Option<broadcast::Receiver<ControlMessage>> = None;
     // Order 260: LocalProjects topic, same contract.
-    let mut local_projects_rx: Option<broadcast::Receiver<ControlMessage>> = None;
 
     'connection: loop {
         tokio::select! {
@@ -1180,35 +1094,6 @@ async fn serve_ready_stream(
                     }
                     None => {
                         cloud_projects_rx = None;
-                    }
-                }
-                continue;
-            }
-            // Server-push: LocalProjectsPush (order 260). Same lag-skip
-            // contract; each frame is a full replacement so skipping to the
-            // latest loses nothing durable.
-            push = async {
-                loop {
-                    match local_projects_rx.as_mut()?.recv().await {
-                        Ok(msg) => return Some(msg),
-                        Err(broadcast::error::RecvError::Lagged(skipped)) => {
-                            warn!(spec = "vsock-transport", skipped, "LocalProjects push receiver lagged; skipping to latest");
-                            continue;
-                        }
-                        Err(broadcast::error::RecvError::Closed) => return None,
-                    }
-                }
-            }, if local_projects_rx.is_some() => {
-                match push {
-                    Some(body) => {
-                        let env = ControlEnvelope { wire_version: WIRE_VERSION, seq: 0, body };
-                        if write_envelope_with_shutdown(&mut write_half, &env, &mut shutdown).await.is_err() {
-                            debug!(spec = "vsock-transport", "vsock write failed during LocalProjectsPush; closing connection");
-                            break 'connection;
-                        }
-                    }
-                    None => {
-                        local_projects_rx = None;
                     }
                 }
                 continue;
@@ -1326,35 +1211,12 @@ async fn serve_ready_stream(
                 if topics.contains(&tillandsias_control_wire::SubscriptionTopic::CloudProjects) {
                     cloud_projects_rx = Some(state.subscribe_cloud_projects());
                 }
-                if topics.contains(&tillandsias_control_wire::SubscriptionTopic::LocalProjects) {
-                    local_projects_rx = Some(state.subscribe_local_projects());
-                }
                 let ack = ControlEnvelope {
                     wire_version: WIRE_VERSION,
                     seq: env.seq,
                     body: ControlMessage::SubscribeAck,
                 };
                 if write_envelope_with_shutdown(&mut write_half, &ack, &mut shutdown).await.is_err() {
-                    break 'connection;
-                }
-            }
-            ControlMessage::EnumerateLocalProjects { seq } => {
-                // l4: scan the bind-mount root for real project entries.
-                let entries = enumerate_local_projects();
-                // Order 260: an explicit enumeration is also a push source —
-                // fan the (possibly changed) list out to every LocalProjects
-                // subscriber on OTHER connections (change-gated inside),
-                // mirroring the order-231 CloudRefreshRequest contract.
-                state.set_local_projects(entries.clone());
-                let reply = ControlEnvelope {
-                    wire_version: WIRE_VERSION,
-                    seq: env.seq,
-                    body: ControlMessage::LocalProjectsReply {
-                        seq_in_reply_to: seq,
-                        entries,
-                    },
-                };
-                if write_envelope_with_shutdown(&mut write_half, &reply, &mut shutdown).await.is_err() {
                     break 'connection;
                 }
             }
@@ -1863,36 +1725,6 @@ where
 }
 
 /// Resolve the in-VM project bind-mount root from the environment.
-fn in_vm_project_root() -> PathBuf {
-    PathBuf::from(
-        std::env::var(IN_VM_PROJECT_ROOT_ENV)
-            .unwrap_or_else(|_| IN_VM_PROJECT_ROOT_DEFAULT.to_string()),
-    )
-}
-
-/// Enumerate the in-VM project bind-mount root. Thin wrapper around
-/// the shared `crate::local_projects::scan_project_root` so both the
-/// vsock (in-VM) and unix (Linux native) dispatchers run the same
-/// directory-walk + sort + mtime logic on different roots.
-///
-/// @trace spec:host-shell-architecture, plan/issues/multi-host-integration-loop-2026-05-24.md l4
-pub(crate) fn enumerate_local_projects() -> Vec<LocalProjectEntry> {
-    let root = in_vm_project_root();
-    enumerate_local_projects_at(&root)
-}
-
-fn enumerate_local_projects_at(root: &Path) -> Vec<LocalProjectEntry> {
-    let out = crate::local_projects::scan_project_root(root);
-    if out.is_empty() {
-        debug!(
-            spec = "host-shell-architecture",
-            root = %root.display(),
-            "EnumerateLocalProjects (in-VM): project root unreadable or empty; returning empty list"
-        );
-    }
-    out
-}
-
 /// Fetch the user's cloud (GitHub) projects from inside the VM.
 ///
 /// Uses the same containerized `gh api user/repos` path as `--list-cloud-projects`:
@@ -2033,39 +1865,46 @@ mod tests {
     // function itself. The vsock-side fetch_cloud_projects wrapper is
     // now a thin token-read shim, not worth a separate token-read target.)
 
-    /// The secure-control-wire gate must DEFAULT OFF (absent/empty/"off" =
-    /// plaintext, so the flip is opt-in and off is a no-op) and must FAIL CLOSED
-    /// on any unrecognized value — an unknown flag is an error, never a silent
-    /// downgrade to plaintext. @trace plan/issues/secure-channel-maturity-ladder-2026-07-04.md
+    /// ORDER 972-umik. THE FLIP IS NOT HERE YET, deliberately. This test used to be called
+    /// `secure_control_wire_flag_defaults_off_and_fails_closed` and asserted
+    /// that an absent variable meant PLAINTEXT — "so the flip is opt-in and
+    /// off is a no-op". That was the defect: the flip was opt-in through a
+    /// variable that nothing in the product ever set, so the shipped default
+    /// was a plaintext, credential-carrying listener bound to any CID.
+    ///
+    /// It also asserted the PARSER in isolation, which 972-umik's third exit
+    /// criterion calls out as the weaker thing: it could not have caught the
+    /// windows client's `== Ok("on")` byte comparison, because that surface
+    /// never called this parser. The parser now lives in
+    /// tillandsias-control-wire::secure_wire_mode and is exercised by that
+    /// module's own tests; what is asserted HERE is that this listener reads
+    /// it rather than carrying a seventh copy.
     #[test]
-    fn secure_control_wire_flag_defaults_off_and_fails_closed() {
+    fn secure_control_wire_reads_the_shared_reader_not_a_local_copy() {
         use std::env::VarError;
-        // default OFF paths (no behaviour change when the flag is unset/off/empty)
+        use tillandsias_control_wire::secure_wire_mode::parse_secure_wire_mode;
+        // The default is STILL plaintext: the flip is atomic across six
+        // readers and lands with the last of them, not the first (972-umik).
         assert_eq!(
-            parse_secure_control_wire_mode(Err(VarError::NotPresent)).unwrap(),
+            parse_secure_wire_mode(Err(VarError::NotPresent)).unwrap(),
+            SecureControlWireMode::Off,
+            "flipping the listener alone left every client refused (e6a80609f)"
+        );
+        // Only an explicit, exact opt-out disables it.
+        assert_eq!(
+            parse_secure_wire_mode(Ok("off".to_string())).unwrap(),
             SecureControlWireMode::Off
         );
-        assert_eq!(
-            parse_secure_control_wire_mode(Ok("off".to_string())).unwrap(),
-            SecureControlWireMode::Off
-        );
-        assert_eq!(
-            parse_secure_control_wire_mode(Ok(String::new())).unwrap(),
-            SecureControlWireMode::Off
-        );
-        // explicit ON (case-insensitive)
-        assert_eq!(
-            parse_secure_control_wire_mode(Ok("on".to_string())).unwrap(),
-            SecureControlWireMode::On
-        );
-        assert_eq!(
-            parse_secure_control_wire_mode(Ok("ON".to_string())).unwrap(),
-            SecureControlWireMode::On
-        );
-        // FAIL CLOSED: garbage is an error, NOT a silent fallback to Off/plaintext
-        assert!(parse_secure_control_wire_mode(Ok("yes".to_string())).is_err());
-        assert!(parse_secure_control_wire_mode(Ok("1".to_string())).is_err());
-        assert!(parse_secure_control_wire_mode(Ok("true".to_string())).is_err());
+        // Blank is no longer a silent Off — it is the shape an unfilled CI
+        // variable takes, and reading it as insecure was the worst guess.
+        assert!(parse_secure_wire_mode(Ok(String::new())).is_err());
+        // The values that used to diverge across surfaces are loud everywhere.
+        for v in ["1", "true", " on"] {
+            assert!(
+                parse_secure_wire_mode(Ok(v.to_string())).is_err(),
+                "{v:?} must be refused loudly, not silently downgraded"
+            );
+        }
     }
 
     /// Order 137 (vsock-exec-chain-authn-authz): a gated-ON responder that
@@ -2264,7 +2103,11 @@ mod tests {
         let state = VmStateHandle::new();
         let (mut client, server) = tokio::io::duplex(64 * 1024);
         let (_shutdown_tx, shutdown_rx) = watch::channel(false);
-        let _server_task = tokio::spawn(handle_connection(
+        let _server_task = tokio::spawn(handle_connection_with_mode(
+            // 972-umik: this test exercises the PLAINTEXT protocol path, so it
+            // asks for plaintext explicitly. The shipped default is now On, and
+            // a test that wants the insecure path must say so.
+            Ok(SecureControlWireMode::Off),
             Box::new(server),
             state.clone(),
             shutdown_rx,
@@ -2341,7 +2184,11 @@ mod tests {
     ) {
         let (mut client, server) = tokio::io::duplex(socket_capacity);
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
-        let server_task = tokio::spawn(handle_connection(
+        let server_task = tokio::spawn(handle_connection_with_mode(
+            // 972-umik: this test exercises the PLAINTEXT protocol path, so it
+            // asks for plaintext explicitly. The shipped default is now On, and
+            // a test that wants the insecure path must say so.
+            Ok(SecureControlWireMode::Off),
             Box::new(server),
             state.clone(),
             shutdown_rx,
@@ -2558,7 +2405,11 @@ mod tests {
         let state = VmStateHandle::new();
         let (mut client, server) = tokio::io::duplex(1 << 20);
         let (_shutdown_tx, shutdown_rx) = watch::channel(false);
-        let server_task = tokio::spawn(handle_connection(
+        let server_task = tokio::spawn(handle_connection_with_mode(
+            // 972-umik: this test exercises the PLAINTEXT protocol path, so it
+            // asks for plaintext explicitly. The shipped default is now On, and
+            // a test that wants the insecure path must say so.
+            Ok(SecureControlWireMode::Off),
             Box::new(server),
             state.clone(),
             shutdown_rx,
@@ -2713,34 +2564,6 @@ mod tests {
             }
             other => panic!("expected LoginStatePush, got {other:?}"),
         }
-    }
-
-    /// Order 260 exit criterion: a VM-side project list change emits
-    /// LocalProjectsPush; an identical rescan does not re-push (change gate).
-    #[tokio::test]
-    async fn set_local_projects_pushes_on_change_only() {
-        let entry = |name: &str| LocalProjectEntry {
-            label: name.to_string(),
-            guest_path: format!("/home/forge/src/{name}"),
-            last_seen_unix: 1_752_000_000,
-        };
-        let state = VmStateHandle::new();
-        let mut rx = state.subscribe_local_projects();
-        state.set_local_projects(vec![entry("tillandsias")]);
-        assert!(
-            matches!(rx.try_recv(), Ok(ControlMessage::LocalProjectsPush { entries, .. }) if entries.len() == 1),
-            "first scan must push"
-        );
-        state.set_local_projects(vec![entry("tillandsias")]);
-        assert!(
-            matches!(rx.try_recv(), Err(broadcast::error::TryRecvError::Empty)),
-            "identical list must not push"
-        );
-        state.set_local_projects(vec![entry("tillandsias"), entry("zeroclaw")]);
-        assert!(
-            matches!(rx.try_recv(), Ok(ControlMessage::LocalProjectsPush { entries, .. }) if entries.len() == 2),
-            "changed list must push"
-        );
     }
 
     /// Order 276 exit criterion: the logged-out -> logged-in transition
@@ -2900,17 +2723,16 @@ mod tests {
     #[tokio::test]
     async fn subscriber_nudge_wakes_parked_waiter_on_subscribe() {
         use std::time::Duration;
-        for topic in ["login_state", "local_projects"] {
+        // 997-e4v2 step 3: local_projects is no longer a nudging topic; the
+        // property is unchanged for the topics that remain.
+        for topic in ["login_state"] {
             let state = VmStateHandle::new();
             let nudge = state.subscriber_nudge();
             let parked = tokio::spawn(async move { nudge.notified().await });
             // Let the waiter actually park before nudging: notify_waiters
             // wakes only CURRENT waiters (no stored permit).
             tokio::time::sleep(Duration::from_millis(50)).await;
-            let _rx = match topic {
-                "login_state" => state.subscribe_login_state(),
-                _ => state.subscribe_local_projects(),
-            };
+            let _rx = state.subscribe_login_state();
             tokio::time::timeout(Duration::from_secs(2), parked)
                 .await
                 .unwrap_or_else(|_| panic!("{topic} subscribe must wake the parked waiter"))
@@ -3034,29 +2856,6 @@ mod tests {
             .watch_shutdown_and_mark_stopping(Arc::clone(&shutdown))
             .await;
         assert_eq!(state.current_phase(), VmPhase::Failed);
-    }
-
-    #[test]
-    fn enumerate_local_projects_returns_dirs_only() {
-        use std::fs;
-        let tmp = tempfile::tempdir().expect("tempdir");
-        fs::create_dir(tmp.path().join("alpha")).unwrap();
-        fs::create_dir(tmp.path().join("beta")).unwrap();
-        fs::write(tmp.path().join("loose-file"), b"not a project").unwrap();
-        fs::create_dir(tmp.path().join(".hidden")).unwrap();
-
-        let entries = enumerate_local_projects_at(tmp.path());
-
-        let labels: Vec<&str> = entries.iter().map(|e| e.label.as_str()).collect();
-        assert_eq!(labels, vec!["alpha", "beta"]);
-    }
-
-    #[test]
-    fn enumerate_local_projects_returns_empty_when_root_missing() {
-        let entries = enumerate_local_projects_at(Path::new(
-            "/this/dir/intentionally/does/not/exist/under/tillandsias",
-        ));
-        assert!(entries.is_empty());
     }
 
     /// Order 333: the sampler → wire conversion is field-for-field, and the

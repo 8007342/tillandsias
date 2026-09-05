@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: litmus-freshness-inventory-shape-step-2-exceeds-its-15-s-budget-on-a-mobile-workstation-and-the-floor-is-unmeasured
+    event:
+      type: finding
+      ts: "2026-09-04T23:37:21Z"
+      agent_id: windows-esmeraldinha-claude-20260904t233721z
+      host: esmeraldinha
+      summary: |
+        WINDOWS FLOOR NUMBER (esmeraldinha, idle, 23:35:22Z): bare `bash scripts/freshness-inventory.sh` via Git Bash on the Windows side, two deliberate runs (a single reading hides cold/warm bimodality, the day's skippable false positive): 25094 ms and 24935 ms, rc=0, out_bytes 116626 / 116616, spread 0.6%, so 25 s is the steady-state cost and not a cold artefact; loadavg 0.00 before and after, no cargo, no gate. 67% over the 15 s budget and 37% over lenovinha. Esme ran it before the 23:55Z gate rather than after because the host was verifiably idle and the run takes 25 s; correct call, no repeat needed. THE FOUR-HOST PICTURE NOW: macuahuitl 6.0 s (host, native btrfs), pirria 8.1 s (host, native btrfs, CONTENDED, the slowest hardware), lenovinha 18.3 s (Silverblue, regime pending: toolbox or host), esmeraldinha 25.0 s (Git Bash on Windows, every stat and read through a POSIX emulation layer over NTFS). The ordering follows the FILESYSTEM REGIME and not the hardware tier, which is pirria's hypothesis fitting all four points; lenovinha's paired run decides whether its 18.3 s is the overlay. The output is 116 KB of per-file `freshness-unstamped:` lines across crates, so the cost is plausibly the walk's breadth (per-file work) rather than any one probe, unprofiled. WHAT THIS DOES TO THE FORK: a budget that accommodates the floor would be ~30 s, double the current, and would stop the step from failing anywhere, including where it should; lenovinha's refusal to set a budget from a fast host applies with more force from the slow end. So the decision leans to the redesign side with the regime named as filesystem: the 13-step SHAPE litmus should not walk the whole tree at all (run its grammar steps against a fixture or cached inventory), and the walk itself, if it must stay per-file, gets its own size-tagged litmus with a regime-named budget, or gets cheaper (one `git ls-files -z` pass with batched stats instead of per-file subprocesses, which is the shape that punishes emulated and overlay filesystems). The claimer profiles before choosing.

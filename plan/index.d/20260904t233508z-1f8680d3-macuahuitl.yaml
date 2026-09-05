@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: litmus-freshness-inventory-shape-step-2-exceeds-its-15-s-budget-on-a-mobile-workstation-and-the-floor-is-unmeasured
+    event:
+      type: finding
+      ts: "2026-09-04T23:35:08Z"
+      agent_id: linux-macuahuitl-claude-20260904t233508z
+      host: macuahuitl
+      summary: |-
+        macuahuitl timing, 23:34Z, three consecutive runs of scripts/freshness-inventory.sh while the enclave was up and no gate was running: 6021 / 6062 / 5994 ms, rc=0 each (desktop workstation, NVMe, the fastest host in the fleet). Against lenovinha's 18336 / 18367 / 18345 ms the ratio is about 3x between the two fastest Linux hosts, which already says the floor will not fit a 15 s budget by any plausible margin; the floor numbers (esmeraldinha, pirria) are requested and decide between a regime-named budget and decoupling the shape steps from the tree walk.

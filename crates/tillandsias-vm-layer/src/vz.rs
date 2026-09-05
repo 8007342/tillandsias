@@ -558,10 +558,18 @@ impl VzRuntime {
         }
         std::fs::create_dir_all(&temp_dir)
             .map_err(|e| format!("failed to create cidata temp dir: {e}"))?;
-        let secure_control_wire = match std::env::var("TILLANDSIAS_SECURE_CONTROL_WIRE") {
-            Ok(value) if value.eq_ignore_ascii_case("on") => "on",
-            _ => "off",
-        };
+        // ORDER 972-umik. This was the THIRD behaviour: case-insensitive on
+        // "on" but `_ => "off"` — silent on 1, true and " on" where four other
+        // surfaces errored loudly. It is also the one that PROPAGATES: the
+        // value lands in the guest's systemd unit below, so a host-side silent
+        // default became the guest's default too. One reader now decides, and
+        // a bad value is refused here rather than written into the guest.
+        let secure_control_wire =
+            match tillandsias_control_wire::secure_wire_mode::secure_wire_mode() {
+                Ok(mode) if mode.is_secure() => "on",
+                Ok(_) => "off",
+                Err(err) => return Err(format!("[vz] {err}")),
+            };
         let guest_binary_fingerprint = guest_binary_fingerprint().unwrap_or_else(|err| {
             eprintln!("[vz] guest binary fingerprint unavailable: {err}");
             "missing".to_string()

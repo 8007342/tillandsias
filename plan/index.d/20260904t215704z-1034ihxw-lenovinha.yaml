@@ -1,0 +1,81 @@
+packets:
+  - packet_id: the-gate-stamp-reads-the-index-exec-bit-so-an-unstaged-chmod-memoises-green
+    order: 1034-ihxw
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    owner_host: any
+    depends_on: []
+    capability_tags:
+      - gate
+      - build
+      - fail-loud
+      - guard
+    estimated_hours: 2
+    owned_files:
+      - scripts/gate-stamp.sh
+      - scripts/test-gate-stamp-portable-digest.sh
+    title: |
+      the gate stamp folds in the INDEX exec bit but not the worktree one, so an unstaged chmod leaves the stamp fresh and ./build.sh --check returns green on a tree the exec-bit guard would refuse
+    context: |
+      MEASURED on lenovinha 2026-09-04 while closing 1009-gccx, and found only
+      because a number looked implausible.
+
+        chmod -x scripts/check-litmus-pin-claims.sh   # worktree only, not staged
+        ./build.sh --check                            # rc=0 in 2 seconds — GREEN
+        TILLANDSIAS_FORCE_CHECK=1 ./build.sh --check  # rc=1, violation:script-not-executable:1
+
+      Direct proof of the mechanism, independent of the gate:
+        bash scripts/gate-stamp.sh compute  -> cce706dc9203a8fe...b38a884
+        chmod -x scripts/check-litmus-pin-claims.sh
+        bash scripts/gate-stamp.sh compute  -> cce706dc9203a8fe...b38a884   (IDENTICAL)
+
+      THIS IS NOT A DUPLICATE OF 887-bz88 — IT IS ITS RESIDUAL, AND THE
+      DISTINCTION IS THE WHOLE PACKET. That order added an exec-bit field to
+      the digest precisely so "chmod moved the stamp not at all" would stop
+      being true, and its header says so at length. The field it added reads
+      `git ls-files -s`, i.e. THE INDEX. So a STAGED mode change moves the
+      stamp, and an UNSTAGED worktree chmod does not — which is the state the
+      measurement above is in.
+
+      That leaves 887-bz88's own composed failure closed (staging still stales
+      the stamp before the hook runs) while leaving the GATE ITSELF able to
+      return a false green: `./build.sh --check` says rc=0 on a worktree whose
+      only defect is one its own guard exists to catch. An operator or an
+      unattended cycle that trusts that green has been told the tree passed a
+      gate that never ran.
+
+      NOTE THE ASYMMETRY WITH THE GUARD IT DEFEATS. 887-bz88 also records that
+      check-script-exec-bits.sh was fixed to read the WORKTREE as well as the
+      index, so the guard would catch a worktree-only regression at gate time.
+      The stamp was not given the same treatment, so the memo can skip the very
+      guard that was widened to catch this.
+
+      This is the same shape this fleet has found repeatedly today and it is
+      worth naming as such: a mechanism whose COMMENT describes a stronger
+      property than its CODE implements. The header states "any chmod now goes
+      stale"; the measured behaviour is "any STAGED chmod goes stale".
+    outcome: |
+      A worktree mode change stales the stamp, so the gate cannot memoise past
+      a defect its own guard would refuse.
+    exit_criteria:
+      - 'the planted defect is refused on an UNFORCED run: `chmod -x` a script invoked by path, then `./build.sh --check` exits non-zero. PRE-FIX RESULT, measured: rc=0 in 2 seconds.'
+      - '`gate-stamp.sh compute` returns a different digest before and after an unstaged `chmod -x`. PRE-FIX RESULT, measured: byte-identical.'
+      - 'the fix stays inside the stamp INPUT. Do not widen it to re-run guards, change the memo policy, or touch 765-tkq2 — the memo is correct given a correct digest.'
+      - 'no per-file fork is introduced. 675-dkif established that a fork per file makes this a ~20-minute pre-push hook on Windows, which is how a hook gets --no-verify''d; `[ -x ]` is a bash builtin and costs nothing.'
+      - 'the frame change is stated: adding a field stales every existing stamp once, self-healing on each host''s next gate, exactly as 887-bz88 did and said.'
+    verifiable_closure: |
+      scripts/test-gate-stamp-portable-digest.sh gains an arm that computes the
+      digest, chmods a tracked file in the WORKTREE ONLY (no git add), recomputes,
+      and requires the two to differ — with the pre-fix result recorded as
+      identical so the arm is known to have had teeth.
+    notes: |
+      Found while measuring 1009-gccx: an unforced gate returned green in 2s on
+      a tree carrying a planted exec-bit defect, which was too fast to be true.
+      The implausibility is what surfaced it; nothing in the gate's own output
+      said the memo had skipped a guard.
+      Related: 887-bz88 (the index half, implemented), 675-dkif (the fork
+      budget this must respect), 765-tkq2 (the memo, which is correct given a
+      correct digest and must not be touched), 1009-gccx (where this was found).

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: forge-e2e-launch-wedges-on-same-name-container-no-replace-no-corpse-cleanup
+    field: status
+    value: in_progress
+    ts: "2026-09-05T01:17:46Z"
+    host: macuahuitl
+
+events:
+  - packet_id: forge-e2e-launch-wedges-on-same-name-container-no-replace-no-corpse-cleanup
+    event:
+      type: note
+      ts: "2026-09-05T01:17:46Z"
+      host: macuahuitl
+      summary: |-
+        claimed for cycle 2026-09-05T01:17:46Z by macos-macbookair: the landed --replace violates order 494 (pirria reproduced the running-sibling collision); ownership-safe revision covering both forge builders in progress

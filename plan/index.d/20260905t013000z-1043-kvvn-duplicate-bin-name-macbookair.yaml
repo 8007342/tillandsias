@@ -1,0 +1,111 @@
+packets:
+  - packet_id: two-crates-declare-the-same-bin-name-and-overwrite-each-other
+    order: 1043-kvvn
+    status: implemented
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    release_target: stable-milestone-v1
+    capability_tags:
+      - build
+      - fail-loud
+      - testing
+      - platform-parity
+    estimated_hours: 3
+    verifiable_closure: |
+      bash scripts/check-unique-bin-names.sh reports 'ok:unique-bin-names:7
+      checked'; restoring the duplicate name reports
+      'violation:duplicate-bin-name:1' and exits 1.
+    title: |
+      tillandsias-macos-tray and tillandsias-windows-tray both declared `[[bin]] name = "tillandsias-tray"`, so they overwrote each other in target/ and the macOS tray's tests ran the Windows stub.
+    deliverable: |
+      No two workspace crates write the same build-output path, and a guard
+      refuses it at the moment it is introduced. What must not persist is a
+      workspace where the binary a test executes depends on cargo's link order.
+    context: |
+      MEASURED 2026-09-05 on tlatoanis-macbook-air, after THREE misdiagnoses of
+      the same symptom by the same agent.
+
+      THE FAILURE, from target/test-transcript-workspace-gate.log:
+        thread 'unknown_flag_is_refused_loudly_and_names_the_flag' panicked at
+        crates/tillandsias-macos-tray/tests/cli_unknown_flags.rs:26:5:
+        assertion `left == right` failed: unknown flag must exit 2;
+        stderr: tillandsias-windows-tray runs on Windows only
+          left: Some(1)   right: Some(2)
+      A macOS-tray test executed the WINDOWS tray binary.
+
+      ROOT CAUSE:
+        crates/tillandsias-macos-tray/Cargo.toml    [[bin]] name = "tillandsias-tray"
+        crates/tillandsias-windows-tray/Cargo.toml  [[bin]] name = "tillandsias-tray"
+      Cargo writes every bin target to target/<profile>/<name>, so both wrote
+      the same file and whichever linked LAST won it.
+      `env!("CARGO_BIN_EXE_tillandsias-tray")` then resolved to whatever was
+      there. windows-tray compiles on macOS as a stub that exits 1 with that
+      message, which is exactly the observed code and stderr.
+
+      WHY IT LOOKED LIKE A FLAKE FOR THREE OCCURRENCES, which is the part worth
+      keeping. The winner depends on link order, so it is intermittent. It NEVER
+      reproduces under `cargo test -p tillandsias-macos-tray`, because the
+      sibling crate is not built then — so ISOLATION, the first instinct and the
+      thing I did three times, hides it every time and looks like exoneration.
+      And "full workspace build" co-varied with "another gate running" in all
+      three of my observations, so concurrency fitted every fact I had. I
+      reported that conclusion to the coordinator as PROVEN, on the strength of
+      a forced solo run that came back green — which was a lucky link order, not
+      a control. The routing of these tests as real defects was dropped on my
+      word and had to be reinstated.
+
+      THE METHOD ERROR IS SMALLER AND WORSE THAN THE MISDIAGNOSIS: across three
+      occurrences I compared PASS/FAIL between isolated and full-suite runs and
+      never once opened the transcript to read WHY it failed. The stderr names
+      the wrong binary in plain text. It was one `grep` away the entire time.
+    outcome: |
+      windows-tray's `[[bin]]` is renamed to `tillandsias-windows-tray`. THE
+      SHIPPED NAMES ARE UNCHANGED and are a separate contract: the release
+      packages tillandsias-tray.exe and tillandsias-tray-<version>-windows-x64.zip,
+      install-windows.ps1 and install-macos.sh place a binary called
+      tillandsias-tray, and the smoke runbook asserts `tillandsias-tray
+      --version` on both platforms. scripts/build-windows-tray.ps1 reads the new
+      build output and stages it under the shipped name, so only the
+      intermediate moved. Four build-output consumers updated: the Windows
+      crate's own CARGO_BIN_EXE test, the PS1 producer, check-tray-import-surface.sh's
+      dev-build default (an INSTALLED path passed via TILLANDSIAS_TRAY_EXE keeps
+      the shipped name), and tray-diagnose.ps1's documented dev path.
+
+      scripts/check-unique-bin-names.sh, wired into build.sh's fast refusals so
+      it fails before a compile.
+
+      SABOTAGE, all arms, real exit codes:
+        duplicate name restored -> violation:duplicate-bin-name:1, rc=1, naming
+          both manifests
+        guard inspects nothing  -> violation:duplicate-bin-name:0, rc=1
+        clean                   -> ok:unique-bin-names:7 checked, rc=0
+
+      THE ZERO-COUNT ARM EXISTS BECAUSE THE FIRST DRAFT NEEDED IT. That draft
+      printed `ok:unique-bin-names: checked` with an EMPTY count — its parsing
+      collected nothing and it reported success. A guard that inspected zero
+      manifests gave the same verdict as one that inspected all seven, inside
+      the fix for a defect that had been hiding behind exactly that shape.
+
+      PROVEN TWICE, as the coordinator required, because the defect is a race
+      and one green is not evidence: two sequential FORCED full gates on a quiet
+      machine, both ok:test-baseline:ran=2287 new-red=0 tolerated=0 stale=0,
+      exits 0 and 0.
+    notes: |
+      Scope is wider than the two tests that surfaced it: any test in either
+      tray crate using CARGO_BIN_EXE_tillandsias-tray could execute the other
+      platform's binary, and on a Linux or Windows host the collision runs the
+      other way.
+
+      Supersedes the concurrency conclusion recorded on 997-e4v2, which is
+      false and corrected there.
+    events:
+      - ts: 2026-09-05T01:30:00Z
+        type: implemented
+        agent: macos-tlatoanis-macbook-air-claude-20260905t004510z
+        host: tlatoanis-macbook-air
+        note: |
+          Found by finally reading the failure instead of comparing outcomes.
+          Filed and fixed by the agent who misdiagnosed it three times and
+          reported the wrong conclusion to the coordinator as proven.
