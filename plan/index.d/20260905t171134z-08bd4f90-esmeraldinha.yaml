@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: guest-pulls-full-multiarch-qemu-user-static
+    event:
+      type: claim
+      ts: "2026-09-05T17:11:34Z"
+      agent_id: windows-esmeraldinha-claude-20260905t171134z
+      host: esmeraldinha
+      summary: |
+        claimed by the floor. This packet's measurement came from here (170.6 MB
+        installed, 35.7 MB / 8 s of a 233.2 MB / 39 s transaction, x86_64-only would save
+        161.0 MB), and its next_action asks a question only a provisioned guest can
+        answer: whether qemu-user-static arrives as the META-package, in which case the
+        arches come in through the dependency solver and a recipe-line exclusion would
+        fight it rather than fix it.
+
+        Scope this cycle: answer that question with dnf's own repoquery on a live guest,
+        and record the answer. Deciding between an explicit x86_64 pin and a solver
+        exclusion, and re-measuring a cold provision to confirm the 36 MB / 8 s actually
+        disappears, follows from it.
