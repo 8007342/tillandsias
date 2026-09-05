@@ -68,7 +68,9 @@ fn main() {
         if !bin.exists() {
             let _ = std::fs::write(&bin, b"");
         }
-        let is_placeholder = std::fs::metadata(&bin).map(|m| m.len() == 0).unwrap_or(true);
+        let is_placeholder = std::fs::metadata(&bin)
+            .map(|m| m.len() == 0)
+            .unwrap_or(true);
         if is_placeholder {
             println!(
                 "cargo:warning=tillandsias-windows-tray: {} is 0 bytes (placeholder). \
