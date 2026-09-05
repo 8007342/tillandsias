@@ -163,9 +163,38 @@ zero_trace_check() {
     # Both remaining per-spec spawns are removed. Retired specs come from ONE
     # awk pass over every spec.md, and membership is a bash associative array.
     # 510 spawns -> 2.
+    # THE THIRD MEASUREMENT (order 734-sjb3, reopened 2026-09-05 on macbookair's
+    # 10373ms against this phase's own 2500ms budget).
+    #
+    # `grep -r` with --include still WALKS every directory; --include only
+    # decides which files it opens. So this sweep was descending the entire
+    # build output — 141,414 entries under target/ on yoga against 12,352
+    # everywhere else — to read 928 source files. Ten times the traversal for
+    # none of the answer.
+    #
+    # MEASURED HERE, GNU grep, warm cache, three runs each:
+    #   sweep as it was ......... 135 / 133 / 126 ms
+    #   with target/ .git/ cut ...  20 /  15 /  19 ms
+    # and the whole phase 176ms -> 63ms. On macOS the same traversal is what
+    # 734-sjb3 already identified as the dominant cost twice: "almost entirely
+    # SYSCALL time — process spawn plus filesystem traversal — brutal on
+    # Windows, barely noticeable on Linux". A host whose target/ is populated
+    # pays it; one that has never built does not, which is why the budget held
+    # for so long and then did not.
+    #
+    # ANSWER-PRESERVING, verified rather than assumed: the token set is
+    # IDENTICAL with and without the exclusions — 218 both ways, and the
+    # set difference is empty. A spec referenced only from build output would
+    # become a false ghost, so this was checked before it was written.
+    #
+    # NOTE the measurement trap this nearly fell into: an interactive shell here
+    # has `grep` aliased to ugrep, which reports 2-6ms for the same sweep and
+    # would have hidden the cost entirely. Every number above is /usr/bin/grep,
+    # which is what the hook gets.
     local referenced
     referenced="$(grep -rhoE 'spec:[a-zA-Z0-9._-]+' \
         --include='*.rs' --include='*.sh' --include='*.toml' --include='Containerfile*' \
+        --exclude-dir=target --exclude-dir=.git --exclude-dir=node_modules \
         "$REPO_ROOT" 2>/dev/null \
         | sed 's/^spec://' \
         | sort -u)" || true
