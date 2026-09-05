@@ -332,7 +332,21 @@ verification:
           Caught before it left the host only because the control is reflex.
           Fourth instance that week of a result that looked like data and was an
           artefact of the instrument.
-        enforced_by: "judgment — recorded so it is not re-derived; state the positive control's result beside the null one, or the null one is not reportable"
+        earned_by_second: >
+          SAME DAY, SAME HOST, INSIDE THE MESSAGE PROPOSING THIS RULE. macneo
+          reported "79e3ca876 ADDED NO STRING LITERALS" as a measured fact. The
+          probe was `grep -oE '"[a-z0-9_:.-]{12,60}"'` — lowercase only, no
+          spaces, 12 to 60 characters — and it returned 0 because it could not
+          match a literal containing a space or a capital. A broad
+          `"[^"]{4,80}"` returns 21. The operative conclusion survived only
+          because the coordinator checked WHERE the 21 live (shell scripts,
+          comments and `#[cfg(test)]` blocks, so none reaches the shipped guest
+          binary); had one been a shipped literal the claim would have been
+          wrong with no instrument to say so. THE FAILURE MODE IS NOT DISBELIEF
+          IN THE RULE — it is not noticing that a casual command IS a
+          measurement. A one-line grep quoted in a message is a probe and needs
+          the same positive control as a five-minute scan.
+        enforced_by: "judgment — recorded so it is not re-derived; state the positive control's result beside the null one, or the null one is not reportable. A grep typed into a message is a probe."
       - id: a_discriminating_probe_needs_both_controls
         kind: judgment
         rule: >
