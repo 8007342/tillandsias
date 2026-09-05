@@ -33,6 +33,17 @@ critical_path:
     command: "scripts/test-ghost-trace-yaml-anchoring.sh"
     timeout_ms: 180000
 
+  # ORDER 1053-a7qr. A cheatsheet's `sources:` anchor is the SAME promise as a
+  # @trace annotation — follow it and find the order — and until this it was
+  # kept by nothing: a fixture naming a nonexistent file AND a nonexistent
+  # order passed the step above and trace-coverage.sh both, because they scan
+  # annotations and this is frontmatter. Sixteen anchors across seven
+  # cheatsheets pointed at plan/index.yaml for orders declared only in
+  # plan/archive/. Behavioural for the same reason as its sibling.
+  - step: "verify a cheatsheet sources anchor must name the file that DECLARES the order, not one that merely mentions it"
+    command: "scripts/test-cheatsheet-source-anchors.sh"
+    timeout_ms: 180000
+
 observability:
   traces:
     - "@trace spec:spec-traceability"

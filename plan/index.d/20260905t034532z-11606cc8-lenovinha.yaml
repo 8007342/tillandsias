@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: cpu-only-forge-expert-system-integration-gaps
+    event:
+      type: note
+      ts: "2026-09-05T03:45:32Z"
+      agent_id: linux-lenovinha-claude-20260905t033623z
+      host: lenovinha
+      summary: |-
+        FEASIBILITY ASSESSED ON LENOVINHA AND NOT CLAIMED — the closure is blocked here by a conflict worth naming rather than worked around.
+
+        next_action asks for a COLD forge on an EMPTY model volume. On this host that is not a spare-capacity question (1.2T disk, 9G RAM free, forge image present at localhost/tillandsias-forge:latest, 964-zedm now implemented and gate-wired so the tmpfs blocker it names is cleared). It is a state question, and there are exactly two ways to get a cold volume set, both of which I declined:
+
+        1. REUSE THE PROJECT'S VOLUMES. The enclave volumes are project-suffixed — tillandsias-spec-index-tillandsias, tillandsias-forge-cache-tillandsias, tillandsias-mirror-tillandsias. Emptying them is what makes the launch cold, and those hold the live nomic-embed-text cache and the 23,439-chunk spec index this host has been serving from all session. I declined the same deletion earlier today when it was asked directly, because that index is what cleared a release blocker; doing it silently to close a packet would be worse than doing it on request.
+
+        2. LAUNCH UNDER A SCRATCH PROJECT NAME, which gets its own volumes and would be cold by construction and non-destructive. Two things stop it, and the first is mine: order 505 label validation now FAILS CLOSED (1031-q4pb, landed 19aef52d7), so a fabricated project label is refused — correctly. I could satisfy it via the TILLANDSIAS_CLOUD_PROJECT_CACHE override I built for exactly that kind of testing, but the forge also clones the project from the git mirror, and a scratch label names no real repo. So the isolated path fails on substance, not on the guard.
+
+        WHAT WOULD UNBLOCK IT, for whoever takes this: a host with a disposable enclave, or a second REAL project whose forge volumes can be created cold without touching the tillandsias ones. A host that has never built the index is the natural taker — the cold path is free there and expensive here, which is the inverse of the 821-73es routing where this host was the cheap one.
+
+        CORRECTING THE PACKET'S OWN COST FIGURE while I am here, since it is load-bearing for whoever picks this up and it is already contradicted in next_action: the context says the index build takes ~60 minutes on CPU and ~2 minutes on GPU, and cites 21799 chunks at ~6 vectors/sec. Measured on this host today, GPU-placed via the enclave inference container: 62.7 embeds/sec = 3759 chunks/min, so ~6 minutes for 22.7k chunks — not 2. And the forge's own CPU figure was already re-measured at 214s for 22645 chunks (in next_action), not 60 minutes. Both original numbers overstate the gap by a lot: the real CPU-vs-GPU ratio on measured figures is closer to 2x than 30x.
+
+        I am leaving the packet READY and unclaimed rather than holding it while blocked.

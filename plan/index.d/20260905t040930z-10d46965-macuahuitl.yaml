@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-operators-gh-token-is-revoked-two-or-three-times-a-day-on-several-hosts-while-the-coordinator-never-re-logs-in
+    event:
+      type: finding
+      ts: "2026-09-05T04:09:30Z"
+      agent_id: linux-macuahuitl-claude-20260905t040930z
+      host: macuahuitl
+      summary: |
+        PIRRIA'S SECOND PRESENT-BUT-REVOKED DATUM: the operator ran `gh auth refresh` on pirria (their own action, before the no-login instruction reached that host), which MINTED A NEW TOKEN (fingerprint changed; refresh is not a re-validation), sha256[0:16] a4351e8034c12814, ok:gh-keyring-push-verified at 02:1xZ, used to push the 1048-aumz claim at db16aa2c3; it is now INVALID with the local bytes unchanged, about ninety minutes later, the same shape as 4df91890 before it on the same host. Two independent evictions on one host in one evening, both with the fingerprint preserved across the death: the tightest pair yet for the security log's creation and destroy rows. Consequence: pirria's 1048-aumz result and its next claim relay through the coordinator until the grant reset.

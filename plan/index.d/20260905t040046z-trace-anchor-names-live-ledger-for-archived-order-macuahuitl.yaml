@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: trace-anchor-names-the-live-ledger-for-an-archived-order-and-the-ghost-trace-gate-does-not-notice
+    order: 1053-a7qr
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: any
+    capability_tags: [docs, gate, plan]
+    estimated_hours: 2
+    owned_files:
+      - cheatsheets/architecture/authorship-blindness.md
+      - images/default/cheatsheets/architecture/authorship-blindness.md
+      - scripts/test-ghost-trace-yaml-anchoring.sh
+    title: |
+      cheatsheets/architecture/authorship-blindness.md:8 (and its images/default copy) anchors "plan/index.yaml order:804-ckst", but 804-ckst lives only in plan/archive/packets-2026-08.yaml; the ghost-trace gate either does not follow orders across the archive boundary or does not check the file half of an anchor, so an anchor pointing at the wrong file looks resolved and resolves to nothing
+    context: |
+      FOUND by esmeraldinha while tracing why the v56.9.5.1 smoke report's 804-ckst citation could not be
+      found in the live ledger: `grep -n "order: 804-ckst" plan/index.yaml` is empty and
+      plan/archive/packets-2026-08.yaml carries it. The runbooks cite the order correctly
+      (skills/smoke-curl-install-and-test-e2e/SKILL.md:322, skills/build-install-and-smoke-test-e2e/SKILL.md:56
+      and :324); only the cheatsheet anchor names the wrong file. 867-vd4z widened ghost-trace scanning to
+      yaml and markdown; whichever half the gate skips (archive-awareness or file-half verification) is the
+      defect, and the coordinator reproduced the search failure itself by looking only in the live ledger.
+      Fix shape: the anchor names the archive file, and the gate resolves an order through the archive and
+      verifies the file half, so a wrong-file anchor fails.
+    exit_criteria:
+      - "scripts/test-ghost-trace-yaml-anchoring.sh (or the gate 867-vd4z widened) fails on an anchor whose file half does not contain the order, with the archive consulted; pre-fix result: FAILS (the authorship-blindness anchor passes today while naming plan/index.yaml for an archived order)"
+      - "both authorship-blindness.md copies anchor the archive file and the gate is green on them"
+    unscoreable: |
+      The pin is the ghost-trace gate itself once it checks the file half; the claimer adds the
+      wrong-file fixture to its test.
+    events:
+      - type: note
+        ts: "2026-09-05T04:00:46Z"
+        host: macuahuitl
+        summary: |
+          FILED by the coordinator from esmeraldinha's tracing of the 804-ckst citation, relayed because
+          that host's gate was red at the time.

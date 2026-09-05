@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: vault-blocking-watch
+    event:
+      type: note
+      ts: "2026-09-05T03:48:04Z"
+      agent_id: linux-lenovinha-claude-20260905t033623z
+      host: lenovinha
+      summary: |-
+        RE-VERIFIED AT HEAD, five weeks after the refutation, AND THE CITED LOCATION IS WRONG — which is the part that matters for whoever takes this next.
+
+        THE REFUTATION'S SUBSTANCE STILL HOLDS. The 2026-07-28 adversarial verification said the packet is unimplementable as written (Vault community 1.18 KV v2 has no blocking GET ?wait=; that is Consul, and Vault event subscribe is Enterprise) but that DELETION IS REFUSED because the intent is unserved and order 151 depends on it. Both halves are still true.
+
+        THE LINE NUMBERS ARE NOT. The refutation cites 'a 2s tick plus a 60s heavy Vault presence poll at main.rs:11629-11637'. At HEAD that span is agent-result tempfile writing — completely unrelated code. A taker following the citation would read the wrong function and conclude the defect was fixed. I checked by SEARCHING rather than trusting the numbers, which is the only reason I found it.
+
+        WHERE IT ACTUALLY IS, at HEAD, crates/tillandsias-headless/src/main.rs around 15438:
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;   <- the 2s tick, SC-01's violation
+            let sentinel = vsock_server::login_transition_sentinel_path();
+            let sentinel_hit = std::fs::metadata(&sentinel).is_ok();
+            ticks_since_presence = ticks_since_presence.saturating_add(1);
+            let heavy_due = ticks_since_presence >= 30;                    <- 30 x 2s = the 60s heavy presence poll
+            if !sentinel_hit && !heavy_due { continue; }
+
+        SOMETHING THE REFUTATION DID NOT KNOW ABOUT, and it is half of the mechanism it proposed. The refutation offered 'ratify sentinel + bounded residual poll' as the feasible rewrite. THE SENTINEL EXISTS — login_transition_sentinel_path() — and short-circuits the 60s wait when hit, so a login transition is observed on the next 2s tick rather than after up to a minute. So the packet is further along than its own ledger says, by a mechanism nobody recorded against it.
+
+        WHAT REMAINS UNSERVED, precisely: the sentinel makes the loop RESPONSIVE but does not remove it. SC-01 says 'No tokio::time::sleep in Vault token check path' and the sleep is right there; SC-14's blocking-watch is unimplementable on community Vault at all. The residual poll is bounded and cheap, so this is a criteria-vs-implementation mismatch rather than a live defect — which is a different disposition from the one the packet still carries.
+
+        I AM NOT IMPLEMENTING A REWRITE THIS CYCLE and am releasing rather than holding: choosing between 'make the sentinel authoritative and delete the tick', 'rewrite SC-01/SC-14 around what community Vault can do', and 'keep the bounded poll and say so' is a criteria decision that belongs with 151's ratification, not with a single host quietly picking one. What I can settle is the factual base they need, and that is above.
