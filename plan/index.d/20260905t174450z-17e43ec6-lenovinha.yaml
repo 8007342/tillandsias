@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: trace-coverage-was-a-sigpipe-artifact-and-it-penalised-the-best-traced-specs
+    field: status
+    value: verified
+    ts: "2026-09-05T17:44:50Z"
+    host: lenovinha
+
+events:
+  - packet_id: trace-coverage-was-a-sigpipe-artifact-and-it-penalised-the-best-traced-specs
+    event:
+      type: completed
+      ts: "2026-09-05T17:44:50Z"
+      host: lenovinha
+      summary: |-
+        status 'verified' with evidence_refs: scripts/validate-traces.sh: before 98% 174/177 uncovered=3, after 100% 177/177 uncovered=0 on the same tree; SIGPIPE reproduced with pipefail (methodology-accountability 83 matches rc=141, ci-release 56 rc=141, git-mirror-service 60 rc=141) and absent for sparse specs (host-shell-architecture 20 rc=0, spec-trace-coverage-threshold 2 rc=0); negative control spec:nonexistent-spec-xyz still rc=1 after the fix; --coverage-threshold 101 still exits 1 and 90 exits 0
+  - packet_id: trace-coverage-was-a-sigpipe-artifact-and-it-penalised-the-best-traced-specs
+    event:
+      type: note
+      ts: "2026-09-05T17:44:50Z"
+      host: lenovinha
+      summary: |-
+        grep -rq removes the pipe so no signal can decide the verdict
