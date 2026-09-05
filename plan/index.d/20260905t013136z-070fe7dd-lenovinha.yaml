@@ -1,0 +1,48 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: order-505s-project-label-validation-fails-open-when-the-local-enumeration-is-empty-and-enumerates-the-root-997-e4v2-retires
+    event:
+      type: progress
+      ts: "2026-09-05T01:31:36Z"
+      agent_id: linux-lenovinha-claude-20260905t004701z
+      host: lenovinha
+      summary: |-
+        FIXED AND LANDED (ok:land:19aef52d7). All four criteria met, each with a stated pre-fix result.
+
+        THE BYPASS, DEMONSTRATED RATHER THAN DESCRIBED. Same binary, same empty project root, only the guard's semantics differing:
+          pre-fix   $ tillandsias --service-stop '../../etc/passwd'  ->  'stopped'  rc=0
+          fixed     $ tillandsias --service-stop '../../etc/passwd'  ->  'Project ... cannot be validated: this host knows of no projects'  rc=1
+        rc=0 means the label was ACCEPTED and flowed into format!("tillandsias-{project_name}-web") and into paths, on a check whose comment says validate by EQUALITY and never sanitize.
+
+        FOUR SITES, TWO SPELLINGS OF ONE BUG, now one helper:
+          main.rs x3    if !known.is_empty() && !known.iter().any(..) { deny }
+          tray/mod.rs   let ok = known.is_empty() || known.iter().any(..)
+        The second is the MCP tool socket and is the one that matters most: the label it admitted is the lane an unattributed client gets to act as. Both spellings are gone; crate-wide grep for known_projects.is_empty() returns nothing.
+
+        CRITERION 3, AND WHY IT COULD NOT BE ANSWERED AS ASKED. The criterion says move the enumeration 'to wherever the cloud-only checkouts live'. Reading 776-jcf3: the fleet is cloud <-> ephemeral git-mirror <-> ephemeral forge and the host checkout is to be REMOVED. There is no successor DIRECTORY, so relocating the scan cannot answer it. The set is instead the names this host actually knows — local enumeration while it exists, UNION the labels of the last CONFIRMED cloud fetch — and an empty set DENIES.
+
+        THE CLOUD HALF IS A FILE, NOT A CALL, and this is a design decision worth challenging if anyone disagrees: fetch_cloud_projects shells out to gh. A network round-trip inside a fail-closed check that runs on every launch, status and stop would deny every launch whenever the network blinked — trading a security fix for an availability outage. So the tray persists labels it has already confirmed and the validation path only reads a local file.
+
+        731-eupn WAS THE SHARP CONSTRAINT. persist_cloud_labels has exactly ONE caller, placed after every error return in refresh_cloud_projects_if_stale, so only a SUCCEEDED fetch can write. Persisting the empty list of a FAILED fetch would erase the known set and deny every launch until the next success — that packet's bug with teeth.
+
+        FIVE EXISTING MCP TESTS FAILED, AND THAT WAS THE FIX WORKING. The fixture was named with_empty_project_root and its own doc said: 'An EMPTY root is the deliberate fixture: empty-scan-is-valid is the documented open-host behavior these tests had been relying on implicitly.' The bypass was recorded as a fixture in August and nobody read it as a defect, including me until it broke. It is now with_known_demo_project: root stays empty, labels come from the confirmed-cloud half, so those tests exercise the cloud-only end state rather than a checkout that will not exist. A new test pins that an unknown label is DENIED with -32000 and no result. 615 pass / 0 fail, was 609/5.
+
+        EVIDENCE.
+          cargo test -p tillandsias-headless --features tray --bins   615 passed, 0 failed
+          cargo test --workspace --no-fail-fast                       0 FAILED result lines
+          ./build.sh --check TILLANDSIAS_FORCE_CHECK=1                rc=0, 253s
+          litmus:host-browser-mcp-lane-socket-shape                   PASS (bound spec, run BEFORE the land)
+          live control, empty root:  ARM1 rc=1 (no known set, traversal label) / ARM2 rc=0 (cloud-known 'forge') / ARM3 rc=1 (fabricated, other reason)
+          mutation: restoring the pre-fix disjunction (empty-set-allows) fails EXACTLY the three empty-set tests and no others
+
+        A TRAP THAT NEARLY COST THE CONTROL, recorded because it generalises. After the gate ran, my control arms began timing out. Cause: ./build.sh --check rebuilds target/debug/tillandsias WITHOUT the tray feature, and all four order-505 sites are #[cfg(feature = "tray")] — so --service-stop was not compiled in and the binary simply ran as the app until killed. For a stretch my control was exercising a binary in which the code under test did not exist. It surfaced as a hang rather than a false pass, which is luck: had the absent path fallen through to success instead, I would have had a green arm for absent code. Anyone re-running these arms must build with --features tray first; a gate run silently replaces the binary.
+
+        Two lesser ones, both mine: an orphan from one of my own killed runs held /run/user/1000/tillandsias/launcher.lock and made the first retry look like a code hang; and a forced gate was OOM-killed on this 13GB host, resolved with CARGO_BUILD_JOBS=4 — not a failure, and worth knowing before anyone reads a killed gate as a red.
