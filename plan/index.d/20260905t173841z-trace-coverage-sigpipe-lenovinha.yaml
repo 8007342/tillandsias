@@ -1,0 +1,96 @@
+packets:
+  - packet_id: trace-coverage-was-a-sigpipe-artifact-and-it-penalised-the-best-traced-specs
+    order: 1069-c9w6
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    owner_host: any
+    capability_tags:
+      - metrics
+      - fail-loud
+      - traceability
+      - sigpipe
+    estimated_hours: 1
+    owned_files:
+      - scripts/validate-traces.sh
+    title: >-
+      spec trace coverage was computed by a pipeline that SIGPIPEs, so the
+      better-traced a spec was the more likely it was reported UNCOVERED; the
+      reported 98% was wrong and host-dependent, and the true figure is 100%
+    context: |
+      FOUND on lenovinha 2026-09-05 while adversarially re-checking a fixture
+      under 1063-nraf. Nobody was running that fixture — it was one of the 26
+      orphans — so this defect had no way to surface.
+
+      THE MECHANISM. scripts/validate-traces.sh decided "does any file trace
+      this spec?" with:
+
+          if grep -rl --include=... "spec:${spec_name}" <dirs> | grep -q . ; then
+
+      under that file's own `set -o pipefail` (line 20). `grep -q` exits on the
+      FIRST match. The upstream `grep -rl`, still traversing crates/ and
+      methodology/, takes SIGPIPE and returns 141. pipefail propagates the 141,
+      the `if` takes the else branch, and the spec is recorded UNCOVERED.
+
+      IT FAILS IN THE WORST DIRECTION, measured rather than reasoned:
+
+          spec:methodology-accountability     83 matching files  ->  rc 141  "uncovered"
+          spec:git-mirror-service             60 matching files  ->  rc 141  "uncovered"
+          spec:ci-release                     56 matching files  ->  rc 141  "uncovered"
+          spec:host-shell-architecture        20 matching files  ->  rc 0    covered
+          spec:spec-trace-coverage-threshold   2 matching files  ->  rc 0    covered
+
+      A WIDER MATCH KEEPS THE PRODUCER TRAVERSING PAST THE CONSUMER'S EXIT, so
+      the metric penalised exactly the specs that were best traced. All three
+      specs this repo reported as uncovered were false negatives.
+
+      IT WAS ALSO HOST-DEPENDENT. The winner of that race is a function of disk
+      speed, cache warmth and grep implementation, so the same tree yields
+      different coverage on different hosts and on the same host cold vs warm.
+      Any historical coverage figure in the ledger is suspect for that reason,
+      not merely low by three.
+
+      BEFORE / AFTER on this host, same tree, same command:
+          before   coverage_percentage 98,  specs_with_traces 174/177, uncovered_count 3
+          after    coverage_percentage 100, specs_with_traces 177/177, uncovered_count 0
+
+      THE FIX is `grep -rq` — the same question with NO PIPE, so nothing can be
+      signalled mid-answer. Verified in BOTH directions: the three specs above
+      return 0, and a fabricated `spec:nonexistent-spec-xyz` still returns 1, so
+      the check has not been turned into one that passes everything. The
+      threshold still bites: --coverage-threshold 101 exits 1, 90 exits 0.
+
+      SAME CLASS AS 792-ksr8, which refused a `| grep -q` I wrote hours earlier
+      in a memo guard for exactly this reason — a signal deciding a verdict.
+      That guard is diff-scoped to newly added pipelines, so it could not see
+      this one, which has been in the corpus since before it existed.
+    outcome: |
+      Trace coverage measures tracing rather than traversal timing; the reported
+      figure is stable across hosts and cache states.
+    exit_criteria:
+      - >-
+        the coverage decision contains no pipeline whose consumer can exit
+        before its producer finishes; pre-fix result: FAILS — `grep -rl | grep
+        -q .` under pipefail returned 141 for the three most-traced specs
+      - >-
+        a negative control proves the check still refuses: a spec with no
+        traces anywhere must still be reported uncovered; verified with
+        spec:nonexistent-spec-xyz returning rc 1
+      - >-
+        the threshold still fails when it should: --coverage-threshold 101
+        exits non-zero on a 100% tree
+    verifiable_closure: |
+      bash scripts/validate-traces.sh --coverage-threshold 80 reports
+      uncovered_count 0 and coverage_percentage 100 on a tree where the three
+      previously-"uncovered" specs are unchanged, and --coverage-threshold 101
+      still exits 1.
+    next_action: >-
+      OPEN, and not investigated here: how many other `| grep -q` pipelines
+      exist in the corpus under pipefail. 792-ksr8's guard is diff-scoped to
+      NEWLY ADDED pipelines by design, so every pre-existing instance is
+      invisible to it — this one had been there long enough to make a headline
+      metric wrong without anyone noticing. A corpus sweep is a different and
+      larger job than this fix.
