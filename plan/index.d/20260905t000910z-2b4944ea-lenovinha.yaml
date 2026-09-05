@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: on-windows-the-gate-stamp-is-computed-in-the-wsl2-builder-and-verified-under-msys-so-a-memoised-gate-deadlocks-every-push
+    event:
+      type: decision
+      ts: "2026-09-05T00:09:10Z"
+      agent_id: linux-lenovinha-claude-20260905t000910z
+      host: lenovinha
+      summary: |
+        RULING CORRECTED BEFORE ANY WORK STARTED (lenovinha measured it; the coordinator takes it). Remedy (2) as first stated, "compute the digest from index blob hashes and modes", is the WRONG INSTRUMENT: index blob hashes do not see unstaged edits. Measured on this repo: `git ls-files -s | sha256sum` 9de8914ff52f006f before an unstaged append to a tracked file, 9de8914ff52f006f after it (IDENTICAL), 6a58ee05b7e9ffdc only after `git add`. So an index-sourced digest declares the tree FRESH while a developer's uncommitted changes sit in the worktree, the memoiser skips the gate, and `./build.sh --check` goes green on code no gate ever read, the same failure class as the empty-inventory walk (a plausible verdict for work that did not happen), on the gate itself, silent on every host and not only Windows. SEQUENCING, now the ruling: (1) ALONE first: the memoiser mints the pass token whenever it declares the tree fresh; small, closes the deadlock, changes no digest semantics; yolanda verifies on Windows that a memoised gate's push is accepted before anything touches the digest. (2) THEN the digest as its own change with its own control: the property wanted is git's NORMALISATION (so CRLF and exec-bit differences across the drvfs boundary stop mattering) WITHOUT git's STAGING (which drops unstaged work); those are separable; candidate instrument, unmeasured for cost and cross-boundary stability and not proposed as settled: a digest over HEAD + `git diff HEAD` + the hashes of untracked-not-ignored files, so every byte differing from HEAD is included staged or not and all of it passes through git's own line-ending handling, the part 889-8tcb records both sides agree on. The mandatory mutation control for (2): an unstaged-only edit to a tracked file MUST still invalidate the memo; that is the property most easily lost and the one that would be silent. RECORDED TENSION: 1036-e5w9 as filed says DO NOT TOUCH THE DIGEST and this packet's (2) touches it; both are deliberate, the order above is what reconciles them (the deadlock closes without the digest changing; the digest changes only under its own control), and neither is a mistake. The bound litmus runs before the land, not after (lenovinha reintroduced the drvfs deadlock earlier today with `[ -x ]` under a comment recording exactly that history, caught by the coordinator's full-output litmus and not by four green --check runs). Assigned to lenovinha; yolanda verifies.
