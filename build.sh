@@ -3285,6 +3285,22 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Instrument-vs-ledger pin passed"
 
+    # Order 1059-pb2j. A litmus step whose NAME promises a MUTATION or SABOTAGE
+    # while its command performs none is asserting nothing, and a reader
+    # auditing the suite reads names. Three instances were found by three
+    # unrelated routes before this was mechanised. Sub-second; the fixture
+    # carries the real pre-fix arm from git history as its positive control.
+    _step "Checking litmus steps named MUTATION/SABOTAGE actually mutate (1059-pb2j)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-mutation-arms-mutate.sh" 2>&1; then
+        _error "a litmus step named for a mutation performs none (1059-pb2j) — rename it to what it asserts; see the verdict line above"
+        exit 1
+    fi
+    if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-mutation-arm-guard.sh" 2>&1; then
+        _error "the mutation-arm guard lost a control (1059-pb2j) — see the verdict line above"
+        exit 1
+    fi
+    _info "Mutation-arm guard and fixture passed"
+
     # Order 1056-5344. The lane now scopes PAST a mandated merge of
     # origin/linux-next, which widens the bypass further: without the ancestry
     # gate a host could park code on a side branch, merge it --no-ff, and the
