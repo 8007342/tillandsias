@@ -1,0 +1,115 @@
+packets:
+  - packet_id: yq-absent-on-a-windows-host-degrades-litmus-without-a-verdict-boundary
+    order: 1056-w2yy
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    release_target: stable-milestone-v1
+    capability_tags:
+      - windows
+      - fail-loud
+      - testing
+    estimated_hours: 3
+    verifiable_closure: |
+      bash scripts/run-litmus-test.sh <spec> with yq removed from PATH (a) still
+      reports a usable verdict for every test whose steps do not call yq, and
+      (b) marks the two tests whose steps DO call yq
+      (litmus-no-unprotected-plan-ledger-readers,
+      litmus-skills-canonical-and-mcp-first-shape) in a way that cannot be read
+      as PASS -- inside the per-test result, not only in a banner above the run.
+
+      NEGATIVE CONTROL: with yq present, the same invocation reports no degraded
+      tests. Without that arm, "no degraded tests" is indistinguishable from "the
+      degradation marking is not wired".
+    title: |
+      The runner prints warn:litmus-degraded-no-yq once at the top of a run and then reports PASS or FAIL per test with no per-test degradation marking, so the operator cannot tell which verdicts the warning actually invalidates.
+    deliverable: |
+      A degradation banner that names which tests it invalidates, and a verdict
+      that cannot read PASS for a test whose steps could not run.
+    context: |
+      MEASURED ON YOLANDA 2026-09-04.
+
+      THE EXPOSURE IS SMALLER THAN THE BANNER SUGGESTS, and that is the point.
+      Of 413 litmus files, 8 mention yq at all and only TWO invoke it in a step
+      command: litmus-no-unprotected-plan-ledger-readers.yaml
+      (`yq -o=json . plan/index.yaml`) and
+      litmus-skills-canonical-and-mcp-first-shape.yaml (`yq -e`). The other six
+      name it in prose. So the banner, which reads as though the whole run is
+      untrustworthy, actually invalidates two tests -- and because it does not
+      say which, the honest reading is that no verdict from the run can be
+      relied on. An operator then either discards good verdicts or, more likely,
+      ignores the banner. Both are worse than a per-test mark.
+
+      WHY IT MATTERS MORE AFTER 1049-s35z. That order found the runner reporting
+      PASS 100% while skipping most of its corpus, because skips are excluded
+      from coverage. The yq banner is the same failure mode one level up: a
+      degradation signalled OUT OF BAND from the verdict it degrades. The fix
+      shape is the same -- put the condition INTO the per-test result, not
+      beside it.
+
+      NOT A BLOCKER FOR THE TWO AFFECTED TESTS ON A LINUX HOST, where yq is
+      present. This is a Windows/Silverblue-lane packet.
+
+  - packet_id: core-symlinks-false-makes-the-skill-canonicalization-check-unrunnable-and-misdiagnosed
+    order: 1055-6yp8
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    release_target: stable-milestone-v1
+    capability_tags:
+      - windows
+      - fail-loud
+      - tooling
+    estimated_hours: 3
+    verifiable_closure: |
+      litmus:skills-canonical-and-mcp-first-shape gains a step that passes on a checkout with core.symlinks=false. The check must
+      distinguish "this path is not a symlink in the INDEX" (a real violation)
+      from "this path is a symlink in the index that the filesystem could not
+      materialise" (a host limitation), by reading `git ls-files -s` mode
+      120000 rather than the worktree inode. Negative control: convert one
+      entry to a genuine non-symlink IN THE INDEX and the check must still red.
+    title: |
+      scripts/check-skill-canonicalization.sh reads the worktree, so a Windows checkout with core.symlinks=false reports all 75 skill entries as violations — and calls a plain file a "real directory".
+    deliverable: |
+      A canonicalization check whose verdict depends on what is COMMITTED, not
+      on whether the host filesystem can represent it.
+    context: |
+      MEASURED ON YOLANDA 2026-09-04, found while running
+      litmus:skills-canonical-and-mcp-first-shape for an unrelated reason.
+
+      `scripts/check-skill-canonicalization.sh` prints
+      violation:harness-exclusive-skill:75 offender(s) and exits 1. The 75 are
+      5 harness directories (.claude, .opencode, .codex, .gemini, .github)
+      times 15 skills -- i.e. EVERY entry, which is the shape of an instrument
+      failure rather than a tree that drifted.
+
+      THE TREE IS CORRECT AND THE CHECK IS READING THE WRONG THING:
+
+        git ls-files -s .claude/skills/hello-world
+        120000 21e7e215d... 0    .claude/skills/hello-world     <- symlink in the index
+        ls -ld .claude/skills/hello-world
+        -rw-r--r-- ... 24 bytes                                 <- plain file in the worktree
+
+      git config core.symlinks is false on this host, so git materialises each
+      committed symlink as a small regular file containing its target text. The
+      commit is canonical; the checkout cannot represent it. A check that reads
+      the worktree therefore reds on a host limitation and would keep redding
+      no matter what anyone committed.
+
+      THE DIAGNOSTIC IS ALSO WRONG, which is the part that costs an
+      investigator time: every line says "(real directory; hand-written skills
+      belong in skills/ and are reached by symlink)". These are not
+      directories. They are 24-byte regular FILES. The message names a
+      condition the checker did not test for, and its REMEDY line
+      (`git mv <path> skills/<name> && ln -s ...`) would, if followed on this
+      host, move 75 correct entries and create link files that cannot be
+      symlinks either -- a remedy that damages a correct tree.
+
+      HONEST ABOUT WHAT THIS IS NOT: the check FAILS LOUDLY rather than
+      silently, so it is not the 1049-s35z class. It is a check that cannot run
+      on a platform the fleet targets, reported as a tree violation.
+
