@@ -942,6 +942,50 @@ fi
 EOF
 chmod 0755 /usr/local/lib/tillandsias/headless-preflight.sh
 
+# ORDER 1059-yekz. FORWARD THE JOURNAL TO THE DEVICE THE HOST ACTUALLY READS.
+#
+# Every unit below already sets StandardOutput=journal+console, and NONE of that
+# output has ever reached the host's console.log. The units are not at fault and
+# neither is the host capture; the two ends name DIFFERENT DEVICES.
+#
+# MEASURED in a running guest 2026-09-05:
+#   /proc/cmdline .... console=tty1 console=ttyAMA0,115200n8
+#   /proc/consoles ... tty1 -WU (EC p) 4:1     <- tty1 is the ONLY registration
+#   the getty ........ serial-getty@hvc0.service
+# ttyAMA0 is named on the cmdline and never registers, because VZ provides a
+# VIRTIO console (hvc0), not an ARM PL011 UART. So `console` resolves to tty1,
+# while the host captures hvc0 — which no console= argument names.
+#
+# PROVED WITH A TWO-SIDED WRITE, same guest, same instant, one variable:
+#   echo ... > /dev/console  (tty1) -> reached the host's console.log 0 times
+#   echo ... > /dev/hvc0            -> reached it 1 time
+#
+# AND THE OUTPUT EXISTED ALL ALONG — `journalctl -u tillandsias-headless-fetch`
+# carries the staged_binary line for every boot. So this was never "the unit
+# produced nothing"; it was "the unit produced it and it went somewhere no one
+# reads", which are different defects with different fixes.
+#
+# WHY journald FORWARDING RATHER THAN console=hvc0 ON THE CMDLINE. The host uses
+# VZEFIBootLoader, so the kernel command line comes from the image's GRUB and not
+# from us; changing it means editing grub in the guest and rebooting. Forwarding
+# the journal is one file, needs no reboot, and covers EVERY unit rather than the
+# two we happen to own — including systemd's own messages, which is what makes a
+# hung boot legible at all.
+#
+# MEASURED BEFORE AND AFTER on this host: console.log carried 0 systemd unit
+# lines across 98 accumulated boots (~690 bytes/boot, only the getty's OSC 3008
+# record and the login banner — statistically identical to the 653 bytes macneo
+# captured on a guest that never reached Ready). With this drop-in it carries
+# systemd[1] unit output.
+mkdir -p /etc/systemd/journald.conf.d
+cat > /etc/systemd/journald.conf.d/99-tillandsias-console.conf << 'EOF'
+[Journal]
+ForwardToConsole=yes
+TTYPath=/dev/hvc0
+MaxLevelConsole=info
+EOF
+systemctl restart systemd-journald || true
+
 # Write tillandsias-headless-fetch.service
 cat > /etc/systemd/system/tillandsias-headless-fetch.service << 'EOF'
 [Unit]
@@ -3546,6 +3590,47 @@ mod tests {
     /// never compiles. Only the gate on the merged union catches it, which is
     /// where macuahuitl found it (E0425 at vz.rs, tillandsias-vm-layer lib
     /// tests, Linux).
+    /// ORDER 1059-yekz. Provisioning must forward the journal to the device the
+    /// HOST reads, or unit output goes to a console nobody consumes.
+    ///
+    /// MEASURED before this landed: console.log carried ZERO systemd unit lines
+    /// across 98 accumulated boots on a healthy guest — ~690 bytes/boot of getty
+    /// OSC record and login banner, statistically identical to the 653 bytes
+    /// macneo captured on a guest that never reached Ready. The units already
+    /// said StandardOutput=journal+console; `console` resolves to tty1 while the
+    /// host captures hvc0.
+    ///
+    /// THE NEEDLE IS ASSEMBLED rather than written literally: a test whose
+    /// pattern also matches its own assertion proves nothing, which is the
+    /// vacuous-pin lesson from 1029-5wvd and one I re-learned today when a grep
+    /// matched the comment block above the code it was checking.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn vz_provisioning_forwards_the_journal_to_the_captured_console() {
+        let script = provision_user_data_for_test();
+        let forward = concat!("ForwardTo", "Console=yes");
+        let device = concat!("TTYPath=/dev/", "hvc0");
+        assert!(
+            script.contains(forward),
+            "provisioning must enable journal console forwarding — without it \
+             every unit's journal+console output stops at tty1"
+        );
+        assert!(
+            script.contains(device),
+            "the forward must name hvc0: that is the device the host captures. \
+             Measured two-sidedly — a write to /dev/console (tty1) reached the \
+             host 0 times, a write to /dev/hvc0 reached it 1 time"
+        );
+        // NEGATIVE HALF: naming the device is useless if the units stopped
+        // asking for console output at all, so pin that they still do.
+        let std_console = concat!("StandardOutput=journal", "+console");
+        assert!(
+            script.contains(std_console),
+            "the units must still request console output; forwarding alone \
+             carries only what something asks to send"
+        );
+    }
+
     #[cfg(target_os = "macos")]
     #[test]
     fn vz_instance_id_changes_when_the_provisioning_script_changes() {
