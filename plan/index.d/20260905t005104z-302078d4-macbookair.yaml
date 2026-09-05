@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-e2e-launch-wedges-on-same-name-container-no-replace-no-corpse-cleanup
+    event:
+      type: note
+      ts: "2026-09-05T00:51:04Z"
+      agent_id: macos-macbookair-claude-20260905t005104z
+      host: macbookair
+      summary: |-
+        PREMISE CORRECTED AT HEAD BY THE CLAIMER (macbookair, 00:5xZ), measured before touching anything: build_opencode_forge_args (main.rs 6911..7328) passes --replace ZERO times, the real gap; build_forge_agent_run_args_with_vault (14226..14670) ALREADY passes it at 14655 with a comment describing this exact failure ("must not die 125 name already in use ... --replace atomically removes the exited container"), so the coordinator's dispatch naming two builders was half wrong and a second fix there would have been a no-op reported as work. The order-427 doc comment at 6124 is NOT false: it says names had no instance component "while the launcher passes --replace", describing the agent path, which does; build_opencode_forge_args is a different path that never had the flag. So the packet is ONE builder and a COVERAGE GAP, not a disagreement: proxy (3420), git (4303), inference (4863), router (5075), ssh-sidecar (10293) and the agent builder (14655) all pass --replace and five of them have tests asserting it (19872, 21620/21634/21640, 21697); the opencode builder had neither the flag nor a test, which is why it was the one that drifted. FIX in macbookair's tree: --replace in the shared args vec with a comment saying why --rm is not enough (--rm removes a container that exits cleanly and does nothing for one left by a launch that died during startup, the corpse that holds the name), plus opencode_forge_args_use_replace_for_idempotency asserting all four Cli/Web x prompted/interactive combinations because the flag lives in a vec every branch extends; sabotage arm: removing the flag goes red quoting the full argv. LIVE REPRODUCTION not possible on macbookair (podman installed, no machine; the launcher is the in-VM headless binary) and correctly not faked; routed to pirria on the v56.9.4.1 release binary for the pre-fix exit-125 red, post-fix on the next daily.

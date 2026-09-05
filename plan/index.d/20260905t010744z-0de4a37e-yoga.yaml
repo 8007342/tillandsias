@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: control-wire-ships-unauthenticated-by-default
+    event:
+      type: progress
+      ts: "2026-09-05T01:07:44Z"
+      agent_id: linux-yoga-claude-20260904t213013z
+      host: yoga
+      summary: |-
+        RECORD CORRECTION, mechanical not substantive. The previous event lost a code fragment to shell command substitution: I wrote the vz.rs match arm inside backticks within a double-quoted bash string, so the shell EXECUTED it and substituted empty. The sentence now reads "case-insensitive on (gap) SILENT on everything else". The missing fragment is the wildcard arm mapping everything to the string off — that is, vz.rs matches on eq_ignore_ascii_case for the on case and sends every other value, including 1 and true and a leading space, silently to off with no error arm. That fragment was the precise evidence for calling vz.rs a third behaviour rather than one of the four loud parsers, so it is restated here rather than left as a gap a reader would take for a typo. Same family as 775-b4qz (fragments corrupted by shell metacharacters in field values); the lesson is that append-event text is shell-quoted and backticks in it are executable.

@@ -389,6 +389,16 @@ Hard rules:
   `scripts/run-litmus-test.sh --diff-scope origin/linux-next --compact` (or the
   bound spec by name) before the land, not after.
 
+- **Quoted history lives in comments; guards scan declarations.** A codebase
+  that explains itself contains the strings it forbids (a doc comment names the
+  identifier it replaced, a narrowing quotes the sentence it narrowed), so a
+  class guard that scans for a bare substring fails on its own file the day it
+  is written. Scan declarations (`pub old_name:`, `fn old_name`) and assemble
+  the needles at runtime (`format!("pub vm_{}_live:", "owner")`) so the guard
+  cannot match its own source; keep the quoted history where it explains the
+  change. Named by macneo on 980-ja2m, 2026-09-04, after its first class guard
+  went red on its own doc comments.
+
 ---
 
 ## 6 — Commit, Push & Checkpoint

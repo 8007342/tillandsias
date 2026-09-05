@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: check-capability-row-reports-ok-for-a-thirteen-day-old-row-because-it-tests-presence-and-never-freshness
+    order: 1046-c9it
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: any
+    capability_tags: [testing, docs, measurement, capabilities, fail-loud]
+    estimated_hours: 1
+    owned_files:
+      - scripts/check-capability-row.sh
+    title: |
+      scripts/check-capability-row.sh reports ok:capability-row-reported for a row thirteen days old; it tests presence, not freshness, so a long-lived host's stale row is blessed on every preamble
+    context: |
+      FOUND by esmeraldinha on the v56.9.4.1 floor smoke preamble (read 2026-09-05T00:45:54Z). VERBATIM:
+      scripts/check-capability-row.sh -> ok:capability-row-reported:esmeraldinha; tillandsias-plan capability-matrix
+      -> host:esmeraldinha locus:in-guest ts:2026-08-23T04:38:31Z and locus:windows-host ts:2026-08-23T04:29:22Z. The
+      row it blessed predates the release under test by twelve days and predates two WSL rebuilds, an OS-level gh
+      upgrade and the night's provisioning. The script's header says 850-bif2 exists because five of seven hosts were
+      silent in the matrix, and it does prompt a joining host to publish; it does not notice that a published row has
+      gone stale, which is the state every long-lived host converges to (grep -nE 'stale|due:|days|age|ts' finds no
+      freshness comparison). Fifth instance in one day of a check that returns a plausible verdict for work that did
+      not happen, the fourth green one (ok:gh-credentials-store on a dead token; the 804-ckst cmdkey verifier true in
+      both directions; a Monitor arm that could never fire; this). The counter-example already in the tree is
+      check-daily-maintenance.sh, which compares against today and answers due:stale:<date>.
+    exit_criteria:
+      - "the check answers due:stale:<row-ts> when the newest row for the host is older than a named freshness window (a fixture pins the window and both arms); pre-fix result: FAILS (ok for a 13-day-old row)"
+      - "the grammar matches check-daily-maintenance.sh's (ok:… | due:stale:… | due:no-marker) so callers branch the same way"
+      - "the smoke runbook's preamble refuses to proceed on due:stale until the probe re-publishes the row"
+    unscoreable: |
+      The pin is a fixture over the check with an aged row; the claimer names the
+      litmus lane if one applies.
+    events:
+      - type: note
+        ts: "2026-09-05T00:48:19Z"
+        host: macuahuitl
+        summary: |
+          FILED by the coordinator from esmeraldinha's finding 4 on the v56.9.4.1 floor
+          smoke, relayed because that host has no credential channel.

@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: smoke-finding-v56-9-4-1-ledger-row-read-from-working-branch
+    order: 1045-8yyw
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: any
+    capability_tags: [release, docs, windows, smoke]
+    estimated_hours: 1
+    owned_files:
+      - skills/smoke-curl-install-and-test-e2e/SKILL.md
+    title: |
+      The smoke's §2b reads the release's README ledger row from the working branch, so a lane whose branch has not merged the row (windows-next and main for v56.9.4.1) reports NO LEDGER ROW and would file a false finding; §2b should read the row from the release's own ref
+    context: |
+      FOUND by esmeraldinha on the v56.9.4.1 floor smoke, §0.2b. MEASURED per ref, grep -cE '^\| v56\.9\.4\.1( 
+      |\()' on README.md: HEAD (565a6524e) 0; origin/windows-next 0; origin/main 0; origin/linux-next 1; 
+      origin/osx-next 1. The runbook says a missing row is a finding, not a skip, correctly, since it cannot tell 
+      'nobody described this release' from 'my branch has not received the description'; here it is the second, and 
+      the Windows lane is the one that cannot see it. Esme read the row from origin/linux-next and proceeded. Fix: 
+      §2b reads the row from the release's own ref (git show <tag or origin/main after the release 
+      lands>:README.md, or origin/linux-next which carries it first), or the release flow propagates the row commit 
+      to every platform branch and main at cut time.
+    exit_criteria:
+      - "§2b on a Windows host whose branch lacks the row finds it from the release ref and does not file a false finding; pre-fix result: FAILS (NO LEDGER ROW on windows-next for v56.9.4.1)"
+      - "the runbook states which ref carries the row and why the working branch is not it"
+    unscoreable: |
+      The pin is the Windows smoke block run on esmeraldinha (no litmus lane covers the
+      PowerShell runbook); the claimer names one if it adds it.
+    events:
+      - type: note
+        ts: "2026-09-05T00:45:26Z"
+        host: macuahuitl
+        summary: |
+          FILED by the coordinator from esmeraldinha's v56.9.4.1 floor smoke round (1004-pg9p),
+          relayed because that host has no credential channel; the verbatim output is in the context.

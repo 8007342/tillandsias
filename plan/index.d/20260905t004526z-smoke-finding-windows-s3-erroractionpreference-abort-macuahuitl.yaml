@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: smoke-finding-v56-9-4-1-windows-s3-erroractionpreference-abort
+    order: 1043-c73v
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: any
+    capability_tags: [windows, testing, release, docs, smoke]
+    estimated_hours: 1
+    owned_files:
+      - skills/smoke-curl-install-and-test-e2e/SKILL.md
+    title: |
+      The smoke runbook's Windows §3 block sets $ErrorActionPreference = 'Stop' and captures the tray with *>&1, so the tray's benign stderr line "Failed to set locale, defaulting to C.UTF-8" becomes a terminating NativeCommandError and aborts the run mid-provision on every invocation; §1 carries the same preference and survived only because its native call printed nothing to stderr
+    context: |
+      FOUND by esmeraldinha on the v56.9.4.1 floor smoke, §3. VERBATIM: tillandsias-tray.exe : Failed to set 
+      locale, defaulting to "C.UTF-8" / At line:9 char:1 / + & $tray --provision-once *>&1 | Tee-Object 
+      target\smoke-e2e\03-provis ... / CategoryInfo : NotSpecified: (Failed to set l...ng to "C.UTF-8":String) [], 
+      RemoteException / FullyQualifiedErrorId : NativeCommandError / [exited with code 1]. The provision itself was 
+      healthy and progressing (03-provision.log ends at 'Installing systemd + podman in Fedora base...' after a 
+      complete 66 MB rootfs download); what died is the PowerShell block: with $ErrorActionPreference = 'Stop', a 
+      native command's stderr under *>&1 is wrapped as a NativeCommandError ErrorRecord and becomes terminating, so 
+      the first stderr line kills the script regardless of the tray's exit code, and the locale warning is emitted 
+      on every invocation on this host. Repro: run the §3 Windows block unchanged on esmeraldinha. Fix: drop the 
+      preference around native calls (every assertion already reads $LASTEXITCODE explicitly) or capture stderr 
+      without ErrorRecord conversion; apply to §1 as well. Esme re-ran §3 under 'Continue' to proceed.
+    exit_criteria:
+      - "the §3 and §1 Windows blocks run to completion on esmeraldinha with the tray printing its locale warning; pre-fix result: FAILS (NativeCommandError abort at line 9)"
+      - "a fixture or a negative-control note shows a native stderr line no longer terminates the block while a non-zero $LASTEXITCODE still fails the assertion"
+    unscoreable: |
+      The pin is the Windows smoke block run on esmeraldinha (no litmus lane covers the
+      PowerShell runbook); the claimer names one if it adds it.
+    events:
+      - type: note
+        ts: "2026-09-05T00:45:26Z"
+        host: macuahuitl
+        summary: |
+          FILED by the coordinator from esmeraldinha's v56.9.4.1 floor smoke round (1004-pg9p),
+          relayed because that host has no credential channel; the verbatim output is in the context.

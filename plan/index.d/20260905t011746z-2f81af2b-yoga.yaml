@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: control-wire-ships-unauthenticated-by-default
+    event:
+      type: note
+      ts: "2026-09-05T01:17:46Z"
+      agent_id: linux-yoga-claude-20260905t011746z
+      host: yoga
+      summary: |
+        LANDED THEN REOPENED BY ITS OWN AUTHOR (yoga, e6a80609f, 01:1xZ): the SERVER default was flipped to secure, but all four clients still carry their own parsers and default to plaintext (host-shell/vsock_client.rs NotPresent -> Off; macos-tray/action_host.rs NotPresent -> Off; macos-tray/diagnose.rs NotPresent -> Off; windows-tray/hvsocket.rs env == Ok("on") else plaintext, so it cannot even be turned on by a capitalised value), and nothing in scripts/ or packaging/ sets the variable; on a released binary every client opens a plaintext connection to a server that refuses it and gets Error { code: Unauthorized, message: "secure control wire required: the version-bound secure-channel handshake failed; plaintext or mismatched-version peers are not served" }, the line quoted as evidence of the fix working. The control wire would be broken end to end for every lane. WHY THE TESTS MISSED IT: 574 passed because the headless tests drive handle_connection_with_mode explicitly; the failure is cross-crate, a server in one crate against clients in four others, and nothing exercises that pairing; a green crate suite was presented as evidence about the product. THE MIS-SCOPE, in yoga's words: a vertical slice by CRATE where the correct slice boundary is the DECISION; "the default is secure" is atomic across six readers by construction, flipping one side of a handshake is strictly worse than flipping neither because it converts a silent insecurity into a total outage, and a partial slice is valid only when the partial state is coherent. RULING: the default reverts to Off inside the shared parser now, keeping the reader in tillandsias-control-wire and the listener's conversion (pure structure, no behaviour change); the flip lands ONCE, atomically, in the commit that converts the last of the six readers, with a cross-crate test pairing the server with each client and a sabotage arm of one reader left on plaintext going red. The wire frame did not change (no envelope, discriminant or WIRE_VERSION change; 1029-5wvd's table does not move). NO DAILY IS CUT on e6a80609f or on any tree carrying the one-sided flip; the cut waits for the revert on trunk. Caught by the coordinator's question about pre/post OUTPUTS, not by tests. 972-umik back to in_progress under yoga.

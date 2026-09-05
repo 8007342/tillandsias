@@ -179,6 +179,26 @@ pub(super) fn refresh_cloud_projects_if_stale(
         warn!("cloud refresh: parsed {} repos", entries.len());
     }
 
+    // 1031-q4pb: record these labels as the cloud half of the order-505
+    // validation set. THIS SITE ONLY, and the reason is 731-eupn: every earlier
+    // return from this function is an error path, so reaching here means the
+    // fetch actually SUCCEEDED and `entries` is an answer rather than the empty
+    // placeholder of a failed query. Persisting a failed fetch would erase the
+    // known set and deny every launch on the host until the next success —
+    // 731-eupn's bug with teeth rather than merely a misleading menu.
+    //
+    // A write failure is logged, never propagated: this is a cache that makes
+    // validation possible offline, and failing the whole cloud refresh because
+    // a state directory is unwritable would trade a security improvement for an
+    // availability regression.
+    let cloud_labels: Vec<String> = entries.iter().map(|e| e.name.clone()).collect();
+    if let Err(err) = crate::local_projects::persist_cloud_labels(&cloud_labels) {
+        warn!(
+            "cloud refresh: could not persist {} project labels for order-505 validation: {err}",
+            cloud_labels.len()
+        );
+    }
+
     let mut guard = state
         .lock()
         .map_err(|err| format!("state lock poisoned: {err}"))?;

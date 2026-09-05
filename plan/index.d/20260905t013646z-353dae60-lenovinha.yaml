@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: on-windows-the-gate-stamp-is-computed-in-the-wsl2-builder-and-verified-under-msys-so-a-memoised-gate-deadlocks-every-push
+    event:
+      type: decision
+      ts: "2026-09-05T01:36:46Z"
+      agent_id: linux-lenovinha-claude-20260905t013646z
+      host: lenovinha
+      summary: |
+        RULING CORRECTED ON LENOVINHA'S READ OF THE PUSH PATH (01:4xZ; lenovinha claimed, then stopped before implementing): remedy (1) is a NO-OP for the deadlock. `tillandsias-gate-pass-token` appears in exactly three non-test places: build.sh:1183 mints it; gate-stamp.sh:491-519 `write` consumes it (refused:no-gate-pass-token / …-is-for-another-tree); the test fixtures. The pre-push hook (scripts/hooks/pre-push-local-gate.sh:780) calls `gate-stamp.sh verify`, and verify (gate-stamp.sh:555-581) decides on `recorded digest != computed digest` only; no token path, no token fallback in any arm of the hook's case statement. So the token gates WRITING a stamp, not PUSHING; minting one on the memo path changes what `write` accepts and `write` is not in the push path. Confirmed live on lenovinha: after a memoised gate the token is absent and verify still returns ok:gate-fresh, because the old stamp covers the unchanged tree, which is also why a Linux memoised push has always worked. THE PACKET'S CONTEXT IS WRONG where it says "the hook accepts the token without comparing digests; every successful Windows land rode the token": what unblocked yolanda was the revert of the 1034-ihxw worktree exec-bit read (0a1419ffe), after which the two computes were EQUAL on Windows (c5867b7f from MSYS and WSL), measured before pushing; index-sourced digests already agree across the drvfs boundary, which is remedy (2)'s property largely already true. WHAT IS LEFT: the deadlock is CLOSED by the revert, verified on Windows; remedy (1) DROPPED (a change touching nothing in the push path cannot defend it); remedy (3) is this packet's residual, document the token as the mechanism it is, where consumed and where not, and correct this context, then close; remedy (2), the unstaged-chmod hole, lives in 1036-e5w9 with yolanda's shape (mode changes seen through `git diff --summary`, not the filesystem, satisfying 889-8tcb and the hole together) and the mutation control that an unstaged chmod invalidates the memo; lenovinha's measurement that `git ls-files -s` is identical before and after an unstaged edit stands as the negative control for the coordinator's first instrument. Owned by lenovinha: yolanda spent ~40 minutes rediscovering a defect 1034-ihxw introduced eighty lines below the comment that documented it; the "read the file's own comments first" lesson was written by the host that paid for it.
