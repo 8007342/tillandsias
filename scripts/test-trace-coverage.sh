@@ -24,15 +24,38 @@ if [ -f "$_td_dir/lib/tool-dispatch.sh" ]; then
     . "$_td_dir/lib/tool-dispatch.sh" 2>/dev/null || true
 fi
 if command -v resolve_tool >/dev/null 2>&1; then
+    # 1063-nraf: RESOLVED AS AN ARGV ARRAY, not a single word. resolve_tool can
+    # return a multi-word dispatch prefix — tool-dispatch.sh emits
+    # `toolbox run --container <c> <tool>` when the host lacks the tool but a
+    # toolbox has it. Every use here quoted it as "$JQ", so that five-word
+    # string became one command name and the fixture died "command not found".
+    # It works on a host with jq on PATH, which is why it was invisible here and
+    # would have red-lit a macOS host, where the base OS ships no jq at all.
     JQ="$(resolve_tool jq || printf 'jq')"
 else
     JQ="jq"   # lib unavailable: preserve the previous behaviour exactly
 fi
+# Split the (possibly multi-word) dispatch into an argv array once. `read -a`
+# is bash 3.2-safe, so this works on stock macOS /bin/bash.
+read -r -a JQ_CMD <<< "$JQ"
+
+# 1063-nraf: JQ-DEPENDENT ARMS SKIP THEMSELVES WHEN jq IS ABSENT, and say so.
+# Stock macOS ships no jq, so without this the fixture reports seven failures
+# on a Mac for a reason that has nothing to do with trace coverage. A red for a
+# missing tool is the intermittent-red shape that gets a check switched off.
+#
+# NOT A SILENT PASS. The skip prints a greppable token, and a host that only
+# ever prints it is not being covered — that is a finding to file rather than a
+# clean run, the same rule the 1036-e5w9 memo arm carries.
+JQ_AVAILABLE=0
+if printf '{}' | "${JQ_CMD[@]}" -e . >/dev/null 2>&1; then
+    JQ_AVAILABLE=1
+fi
+_skip_jq() { echo "skip:test-trace-coverage:no-jq $*"; }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-passed=0
 # 1063-nraf: `passed` was NEVER INITIALISED and both counters used `((var++))`.
 # Under this file's own `set -euo pipefail` that is two bugs in one line:
 #   * set -u kills the first _pass on the unset `passed`;
@@ -85,8 +108,14 @@ fi
 
 # Test 5: JSON output format
 echo "Test 5: JSON output format"
-output=$(bash "$SCRIPT_DIR/validate-traces.sh" --coverage-threshold 80 2>/dev/null)
-if echo "$output" | "$JQ" -e '.coverage_percentage' >/dev/null 2>&1; then
+# 1063-nraf: `|| true` on every capture. validate-traces.sh exits 1 whenever
+# coverage is below the threshold, and an unguarded assignment under this
+# file's `set -euo pipefail` ABORTS the fixture mid-run — the operator sees a
+# truncated log and no failing-test name, instead of a reported failure.
+output=$(bash "$SCRIPT_DIR/validate-traces.sh" --coverage-threshold 80 2>/dev/null || true)
+if [ "$JQ_AVAILABLE" -eq 0 ]; then
+    _skip_jq "coverage_percentage arm"
+elif printf '%s' "$output" | "${JQ_CMD[@]}" -e '.coverage_percentage' >/dev/null 2>&1; then
     _pass "JSON contains all required fields"
 else
     _fail "JSON missing required fields"
@@ -94,8 +123,11 @@ fi
 
 # Test 6: Status PASS when threshold met
 echo "Test 6: Status PASS when coverage meets threshold"
-status=$(echo "$output" | "$JQ" -r '.status')
-if [[ "$status" == "PASS" ]]; then
+status=""
+[ "$JQ_AVAILABLE" -eq 1 ] && status=$(printf '%s' "$output" | "${JQ_CMD[@]}" -r '.status' 2>/dev/null || true)
+if [ "$JQ_AVAILABLE" -eq 0 ]; then
+    _skip_jq "status arm"
+elif [[ "$status" == "PASS" ]]; then
     _pass "Correctly reports PASS status"
 else
     _fail "Should report PASS when threshold met (got: $status)"
@@ -103,9 +135,12 @@ fi
 
 # Test 7: Default threshold 90
 echo "Test 7: Default threshold is 90"
-output=$(bash "$SCRIPT_DIR/validate-traces.sh" --coverage-threshold 2>/dev/null)
-threshold=$(echo "$output" | "$JQ" -r '.threshold')
-if [[ "$threshold" == "90" ]]; then
+output=$(bash "$SCRIPT_DIR/validate-traces.sh" --coverage-threshold 2>/dev/null || true)
+threshold=""
+[ "$JQ_AVAILABLE" -eq 1 ] && threshold=$(printf '%s' "$output" | "${JQ_CMD[@]}" -r '.threshold' 2>/dev/null || true)
+if [ "$JQ_AVAILABLE" -eq 0 ]; then
+    _skip_jq "default-threshold arm"
+elif [[ "$threshold" == "90" ]]; then
     _pass "Default threshold is 90"
 else
     _fail "Default threshold should be 90 (got: $threshold)"
