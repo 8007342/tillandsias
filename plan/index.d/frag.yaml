@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: jq-crlf-on-windows-turns-shell-reads-into-silent-wrong-answers
+    event:
+      type: progress
+      ts: "2026-09-05T13:36:54Z"
+      agent_id: windows-yolanda-opus5-20260905t133654z
+      host: yolanda
+      summary: |
+        THE SKIP-IS-THE-MECHANISM HALF IS BUILT AND GATE-BLOCKED, NOT LANDED. Committed locally at 62646e487; it is NOT on any remote yet and nothing here should be read as landed. This host cannot gate: scripts/test-cycle-preflight-cargo-resolution.sh is gate-bound at build.sh:3226 and reads 16 of 19 with three identity arms failing blocked:not-a-git-repo, which is esmeraldinha's finding and not mine to fix while she holds it.
+
+        WHAT THE CHANGE IS. A litmus name bound in openspec/litmus-bindings.yaml whose file is absent now FAILS instead of being logged SKIP. Skips are EXCLUDED FROM COVERAGE, which is how the CR defect became a green: two of three bound tests unfindable and the run still printed Total: 3 (executed: 1, skipped: 2), Pass Rate: 100%, Status: PASS. The CR was one cause; this is the mechanism that hid it, and it would have hidden the next cause too.
+
+        SAFE TO FAIL CLOSED, MEASURED BEFORE CHANGING IT rather than after: all 476 names bound in litmus-bindings.yaml resolve to a file on disk, so the new refusal rejects nothing that currently exists. A litmus file is tracked in the repo, so absence means bindings and corpus disagree, which is what a human needs told on any platform. Confirmed against the corpus too: a broad pre-build/instant sweep produced zero "Test file not found".
+
+        TWO METHOD FAULTS OF MINE, BOTH CAUGHT BY CHECKING RATHER THAN BY REASONING.
+
+        First, my second sabotage reported NO CHANGE and I nearly recorded the arm as toothless. The mutation had not applied. I only learned the difference by asserting the occurrence count went 1 -> 0 -> 1 around the run. A mutation that fails to apply is indistinguishable from an arm with no teeth, which is lenovinha's note on 759-vceg reaching a third host.
+
+        Second, an earlier draft of arm 1 asserted on a source WINDOW and opened it at the first occurrence of the lookup expression in the file -- a DIFFERENT branch 460 lines above the one under test. It answered "unrecognised" while the change was correct. A window anchored on a non-unique line is not a window. The arm now asserts on the not-found log lines with a scope control requiring the FAIL line to name the bindings file.
+
+        AND A THIRD, AGAINST MY OWN INSTRUMENT, worth recording because it is this packet's own defect turned on me. I armed a watcher for esmeraldinha's fix using git log <base>..<ref> -- <path>, which matches MERGE commits that merely CARRY a path. It fired on a merge and I was one step from reporting the fix landed. Checked the content first: the hardcoded scratch PATH was still there and the fixture still read 16 of 19. An observable that matches the NAME of a thing rather than the thing is exactly what 1049-s35z is about; I built one while fixing one.
+
+        REMAINING AND DELIBERATELY UNSWEPT: the other 25 scripts that pipe jq -r into shell values. A sweep with no per-site control is how a real fix becomes a claim, and this packet exists because a claim of that shape held for an unknown length of time.
