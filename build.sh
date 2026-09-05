@@ -3503,6 +3503,26 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Freshness regime-budget fixture passed"
 
+    # 1063-nraf / 1041-up99: this fixture was ORPHANED — invoked by no script,
+    # no litmus binding and no skill — while plan/index.yaml stated, of it, "THE
+    # NEGATIVE CONTROL, pinned by scripts/test-expert-accuracy-record-shape.sh,
+    # 6/6". The ledger recorded an enforcement that did not run. That is worse
+    # than recording none: a later reader has no reason to doubt it, and the
+    # control it names is the one that keeps a never-called expert from being
+    # reported as 100% accurate rather than as null.
+    #
+    # Wired here rather than left to a human's memory, which is the whole of
+    # 1063-nraf: a fixture pinning a verdict that can delete a host's cycle runs
+    # only when someone remembers to run it. Verified green before wiring
+    # (ok:test-expert-accuracy-record-shape:6-passed) — wiring a red fixture
+    # would trade a silent gap for a broken gate.
+    _step "Checking the expert-accuracy record shape (917-6iwv)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-expert-accuracy-record-shape.sh" 2>&1; then
+        _error "the expert-accuracy record shape regressed (917-6iwv) — a never-called expert must record rate=null, never 0 and never 100, and a partial run must carry its denominator"
+        exit 1
+    fi
+    _info "Expert-accuracy record fixture passed"
+
     _step "Checking litmus steps can actually fail (972-cvdg)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-steps-can-fail.sh" 2>&1; then
         _error "a litmus step prints the same token on success and failure (972-cvdg) — see the verdict line above"
