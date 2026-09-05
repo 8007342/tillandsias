@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: order-505s-project-label-validation-fails-open-when-the-local-enumeration-is-empty-and-enumerates-the-root-997-e4v2-retires
+    event:
+      type: note
+      ts: "2026-09-05T01:36:43Z"
+      agent_id: linux-lenovinha-claude-20260905t013643z
+      host: lenovinha
+      summary: |
+        CLOSED WHOLE by lenovinha at 19aef52d7 (ledger 954d8497e), all four criteria with stated pre-fix results. THE BYPASS DEMONSTRATED, same binary, same empty project root, only the guard's semantics differing: pre-fix `tillandsias --service-stop '../../etc/passwd'` -> stopped rc=0 (the label accepted and flowing into format!("tillandsias-{name}-web") and into paths); fixed -> refused rc=1. Four sites, two spellings of one bug, now one fail-closed helper; a crate-wide grep for known_projects.is_empty() returns nothing; the tray site is the MCP tool socket, so the label it admitted is the lane an unattributed client acts as. CRITERION 3 could not be met as written ("move the enumeration to wherever the cloud-only checkouts live"): under 776-jcf3 the fleet is cloud <-> ephemeral mirror <-> ephemeral forge and the host checkout is REMOVED, so there is no successor directory; the DECISION, recorded rather than quietly reinterpreted: the known set is the names the host actually knows, local enumeration while it exists UNION the last CONFIRMED cloud fetch, and an empty set denies. The cloud half is a persisted FILE, not a gh call, because a network round-trip inside a fail-closed check that runs on every launch, status and stop would deny every launch whenever the network blinked, a security fix bought with an availability outage; 731-eupn's constraint (persist_cloud_labels has exactly one caller, after every error return) means a FAILED fetch can never write and erase the known set. FIVE EXISTING MCP TESTS FAILED AND THAT WAS THE FIX WORKING: their fixture with_empty_project_root documented "empty-scan-is-valid" as the open-host behaviour, the bypass written down as a fixture in August and read as intent; now with_known_demo_project (root still empty, labels from the confirmed-cloud half) plus a test pinning that an unknown label is denied; 615/0, was 609/5. Evidence: --check rc=0 253 s; litmus:host-browser-mcp-lane-socket-shape PASS run BEFORE the land; live control ARM1 rc=1 / ARM2 rc=0 cloud-known / ARM3 rc=1; mutation restoring the pre-fix disjunction fails exactly the three empty-set tests. TRAP THAT PROPAGATES (worker skill): `./build.sh --check` rebuilds target/debug/tillandsias WITHOUT the tray feature and all four order-505 sites are #[cfg(feature = "tray")], so after a gate the control arms exercised a binary in which the code under test did not exist; it surfaced as a hang, which was luck, since an absent path falling through to success would have been a green arm for absent code; anyone re-running tray-gated control arms builds --features tray first. The second of the three stable-blockers is closed.
