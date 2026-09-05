@@ -13,7 +13,7 @@ packets:
       - testing
     estimated_hours: 3
     verifiable_closure: |
-      SCORABLE PIN: litmus:litmus-runner-degradation-is-scoped-to-the-steps-that-need-it
+      litmus:litmus-runner-degradation-is-scoped-to-the-steps-that-need-it
       -- with yq removed from PATH, the runner must (a) still report a usable
       verdict for every test whose steps do not call yq, and (b) mark the tests
       whose steps DO call yq as degraded in a way that is excluded from a PASS,
@@ -62,8 +62,7 @@ packets:
       - tooling
     estimated_hours: 3
     verifiable_closure: |
-      SCORABLE PIN: litmus:skills-canonical-and-mcp-first-shape gains a step
-      that passes on a checkout with core.symlinks=false. The check must
+      litmus:skills-canonical-and-mcp-first-shape gains a step that passes on a checkout with core.symlinks=false. The check must
       distinguish "this path is not a symlink in the INDEX" (a real violation)
       from "this path is a symlink in the index that the filesystem could not
       materialise" (a host limitation), by reading `git ls-files -s` mode
@@ -110,18 +109,3 @@ packets:
       silently, so it is not the 1049-s35z class. It is a check that cannot run
       on a platform the fleet targets, reported as a tree violation.
 
-events:
-  - packet_id: yq-absent-on-a-windows-host-degrades-litmus-without-a-verdict-boundary
-    event:
-      type: note
-      ts: "2026-09-05T04:38:20Z"
-      host: yolanda
-      summary: |-
-        Filed from yolanda. Measured rather than taken from the banner: only 2 of 413 litmus files invoke yq in a step command, so the warning over-scopes itself into uselessness. Same failure shape as 1049-s35z one level up -- a degradation signalled beside the verdict instead of inside it.
-  - packet_id: core-symlinks-false-makes-the-skill-canonicalization-check-unrunnable-and-misdiagnosed
-    event:
-      type: note
-      ts: "2026-09-05T04:38:20Z"
-      host: yolanda
-      summary: |-
-        Filed from yolanda. All 75 entries flagged, index mode is 120000, worktree is a 24-byte regular file, core.symlinks=false. The check reds on a host limitation, calls a file a directory, and its REMEDY would damage a correct tree if followed here.

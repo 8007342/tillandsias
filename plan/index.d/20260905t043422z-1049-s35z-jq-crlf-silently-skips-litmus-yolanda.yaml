@@ -14,8 +14,8 @@ packets:
       - tooling
     estimated_hours: 5
     verifiable_closure: |
-      SCORABLE PIN: litmus:litmus-runner-reds-on-a-missing-bound-test -- a new
-      litmus test that binds a name with no file on disk and requires the
+      litmus:litmus-runner-reds-on-a-missing-bound-test -- a new litmus test
+      that binds a name with no file on disk and requires the
       runner to exit NON-ZERO. It must carry its own negative control: with the
       file present the same step goes green, so the test distinguishes "the
       runner reds on a missing test" from "the runner reds at all".
@@ -98,11 +98,3 @@ packets:
       macOS jq writes LF. It should be verified on yolanda, esme or pirria,
       and the litmus SKIP-vs-FAIL half is platform-independent.
 
-events:
-  - packet_id: jq-crlf-on-windows-turns-shell-reads-into-silent-wrong-answers
-    event:
-      type: note
-      ts: "2026-09-05T04:34:22Z"
-      host: yolanda
-      summary: |-
-        Filed from yolanda while verifying 972-umik commit B. One site fixed in df5708607 with the before/after measured (executed 1 skipped 2 -> executed 3 skipped 0); the remaining 25 jq call sites and the SKIP-should-be-FAIL half are this packet.
