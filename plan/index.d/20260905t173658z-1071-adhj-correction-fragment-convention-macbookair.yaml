@@ -1,0 +1,105 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-fragment-repair-must-be-a-correction-fragment-and-the-scorable-guard-must-fold-before-it-can-be
+    order: 1071-adhj
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [plan, crdt, multi-host, gate, fail-loud, convention]
+    estimated_hours: 3
+    owned_files:
+      - scripts/check-scorable-obligation-added.sh
+      - plan/index.d/README.md
+      - methodology/distributed-work.yaml
+    unscoreable: |
+      THE TEST IS THE FIX, and saying so here is also a worked example of the
+      packet: this block sits in the DECLARING fragment because the guard as
+      written can only see that fragment's bytes. Once criterion 1 lands, a block
+      like this may arrive in a correction fragment instead — which is the whole
+      point. Criterion 4 is the scoreable arm the claimer adds to
+      scripts/test-scorable-obligation-gate.sh.
+    title: |
+      Two hosts amending the same append-only fragment broke it; the fix is a correction fragment, but check-scorable-obligation-added.sh reads one fragment's bytes and so FORCES the in-place edit the convention forbids
+    context: |
+      MEASURED 2026-09-05, and the collision is the evidence. The coordinator
+      amended 1067-24q6 and 1068-cxmf on trunk to add missing scorable blocks;
+      this host amended the same two files locally, having checked
+      origin/linux-next and found the repair absent. The next merge combined both
+      edits additively and each file ended with TWO "unscoreable:" keys — a
+      duplicate mapping key, so the fragments stopped parsing:
+
+        blocked:all-fragments-intact:2 damaged
+        blocked:fragment-events-land:3 event(s) attached to no packet
+
+      The second was a CONSEQUENCE of the first: an unparseable fragment
+      contributes no packet, so its own events orphan. Resolved toward trunk —
+      the coordinator's blocks are shared reality — leaving both files
+      byte-identical to origin/linux-next.
+
+      NEITHER SIDE WAS CARELESS, WHICH IS WHY IT NEEDS A RULE. Each host checked
+      before editing. The safeguard is what failed: BOTH consulted trunk to see
+      whether the other's repair had landed, and trunk is exactly the view
+      1034-whsp measured as HOURS stale for a platform host (relay gaps 19m to
+      2h02m; two of this host's claims unseen for 1h55m and 2h11m). A check that
+      cannot see in-flight work is not a check, so an in-place amendment by a
+      SECOND party is a race neither party can observe.
+
+      THE CONVENTION: a fragment repair is a CORRECTION FRAGMENT, never an
+      in-place edit. Corrections compose under the CRDT — that is what the ledger
+      is for — where two in-place amendments of an append-only file cannot. The
+      coordinator adopted this on 2026-09-05, citing the three fragments amended
+      that night as the evidence; check-all-fragments-intact already says it in
+      its own refusal: "damage here is not a merge to resolve but a file to
+      restore from its authoring commit".
+
+      AND THE CONVENTION IS IMPOSSIBLE UNTIL THE GUARD FOLDS. Verified in the
+      source, not assumed: check-scorable-obligation-added.sh selects fragments
+      matching the packets key and awk-parses THAT FILE'S TEXT; it contains zero
+      references to the plan binary or to a fold. So a scorable block arriving
+      later in its own correction fragment is INVISIBLE to it, the guard still
+      refuses, and the author is pushed back into the in-place edit the
+      convention forbids. The two rules contradict each other until this is
+      fixed.
+
+      THE FIX IS NOT SIMPLY "READ THE FOLD", and the claimer must not take that
+      shortcut without reading the guard's own stated reason for the design:
+      "awk rather than a YAML round-trip: this runs in the gate and must not need
+      the plan binary". It is a sub-second fast refusal. Folding needs the
+      binary, and a fast refusal that cannot run without a built artifact either
+      BLOCKS — stopping every host that has not built — or PASSES SILENTLY. A
+      silent pass here is 1024-c3h3 exactly, where a checker's could-not-run
+      branch printed an ok: verdict and a negative control then agreed for the
+      wrong reason.
+
+      CHEAPER INTERMEDIATE, offered so it is considered rather than discovered
+      later: scan all fragments ADDED BY THE SAME PUSH together, so a correction
+      fragment travelling with its declaration satisfies the guard with no fold
+      at all. That covers the common case at zero dependency cost and leaves only
+      the later-push correction needing a fold.
+    exit_criteria:
+      - "a packet whose scorable obligation arrives in a LATER correction fragment satisfies the guard — the question asked is whether the packet AS FOLDED carries one, not whether one fragment's bytes do"
+      - "the guard's no-binary behaviour is stated and tested: if the chosen design needs the plan binary it must BLOCK with a named verdict when it is absent, never pass — an ok: verdict from a check that could not run is the defect this project has spent 1024-c3h3 and 1066-dkkb on"
+      - "the in-place-amendment ban is written where a repairer will meet it (plan/index.d/README.md and methodology/distributed-work.yaml), naming the correction fragment as the repair and the 2026-09-05 collision as the evidence"
+      - "scripts/test-scorable-obligation-gate.sh gains a two-sided arm: a declaration plus a later correction fragment PASSES, and a declaration with no correction anywhere still FAILS — the second half is what stops the fix from simply disabling the guard"
+    events:
+      - type: filed
+        ts: "2026-09-05T17:40:00Z"
+        agent_id: "macos-tlatoanis-macbook-air-claude-20260905t144547z"
+        host: tlatoanis-macbook-air
+        summary: |
+          Filed at the coordinator's request after they adopted the convention
+          and identified the contradiction. The fold requirement is theirs; the
+          plan-binary tension and the same-push intermediate are added here from
+          reading the guard's source, because "evaluate the fold" taken literally
+          would put a built-artifact dependency inside a fast refusal that
+          deliberately has none.
+
+          NOTE ON THIS FILE: its first write used an UNQUOTED heredoc, so the
+          backticks in its own prose ran as command substitution and silently ate
+          the quoted terms ("So an  arriving later"). The shell said "command not
+          found: unscoreable" and the ledger check still passed, because damaged
+          prose is valid YAML. Rewritten with a quoted heredoc. Recorded because
+          it is this packet's own subject one layer down: a check that validates
+          structure cannot see content that was silently removed.

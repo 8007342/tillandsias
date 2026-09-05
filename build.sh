@@ -3278,6 +3278,19 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Missing-bound-test check passed"
 
+    # 1064-r8fv: the landing tool must merge TRUNK on a platform branch, must
+    # not manufacture an empty merge on trunk itself, and must refuse — naming
+    # the relay lane rather than taking it — when a push is refused server-side
+    # rather than lost to a race. Both defects were invisible on linux-next,
+    # where the branch and trunk are the same ref, which is why the tool worked
+    # exactly where it was not needed.
+    _step "Checking the landing tool merges trunk and refuses honestly (1064-r8fv)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-land-merges-trunk.sh" 2>&1; then
+        _error "land-on-platform-branch.sh does not merge trunk on a platform branch, or retries a server-side refusal (1064-r8fv) — see the verdict line above"
+        exit 1
+    fi
+    _info "Landing tool trunk-merge check passed"
+
     # 891-5shq: the TILLANDSIAS_* namespace forward has ONE implementation and
     # both dispatch boundaries use it. The toolbox boundary was fixed and the
     # reasoning written down; the WSL boundary then received its own separate
@@ -3292,19 +3305,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Env-forward sharing check passed"
-
-    # 1064-r8fv: the landing tool must merge TRUNK on a platform branch, must
-    # not manufacture an empty merge on trunk itself, and must refuse — naming
-    # the relay lane rather than taking it — when a push is refused server-side
-    # rather than lost to a race. Both defects were invisible on linux-next,
-    # where the branch and trunk are the same ref, which is why the tool worked
-    # exactly where it was not needed.
-    _step "Checking the landing tool merges trunk and refuses honestly (1064-r8fv)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-land-merges-trunk.sh" 2>&1; then
-        _error "land-on-platform-branch.sh does not merge trunk on a platform branch, or retries a server-side refusal (1064-r8fv) — see the verdict line above"
-        exit 1
-    fi
-    _info "Landing tool trunk-merge check passed"
 
     # 965-sxec: a missing or unusable ruby must read as COULD-NOT-RUN (exit 3),
     # never as a claim about the ready set. Inside a forge `command -v ruby`
@@ -3457,6 +3457,19 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Hook phase-instrumentation pin passed"
 
+    # Order 1034-whsp. A claim lands on the claimant's PLATFORM branch and only
+    # reaches a trunk host when the coordinator relays it — measured gaps of 19
+    # minutes to 2h02m — so a selector reading its own branch alone hands out
+    # work another host is doing. The third arm is the one that matters: a
+    # checker that cannot fold the siblings must leave the batch ALONE and say
+    # so, or a network blip stops every host.
+    _step "Checking the selector drops packets held on a sibling branch (1034-whsp)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-selector-drops-cross-branch-claims.sh" 2>&1; then
+        _error "the selector's cross-branch claim filter changed (1034-whsp) — see the verdict line above"
+        exit 1
+    fi
+    _info "Selector cross-branch filter pin passed"
+
     # Order 1056-5344. The lane now scopes PAST a mandated merge of
     # origin/linux-next, which widens the bypass further: without the ancestry
     # gate a host could park code on a side branch, merge it --no-ff, and the
@@ -3583,6 +3596,89 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Expert-accuracy record fixture passed"
+
+    # ── 1063-nraf: TEN ORPHANED FIXTURES BOUND ─────────────────────────────
+    #
+    # These ran only when a human remembered to run them. Each was triaged
+    # individually (what it pins, whether its exit code is environmental or a
+    # defect, what would break on a host unlike this one) and then ADVERSARIALLY
+    # REFUTED by a second reader whose job was to find a reason NOT to wire it.
+    # Only these ten survived both passes.
+    #
+    # THE REFUTATION PASS IS WHY THIS LIST IS TEN AND NOT THIRTEEN. Three more
+    # were proposed for wiring on the first pass and refuted: check-carry-forward,
+    # skills-single-source and secrets. All three PASS on this host and are still
+    # unsafe to bind — which is the finding, not the exception. A green exit code
+    # was never evidence that a fixture belongs in the gate; eleven of the
+    # twenty-six pass here and are recorded as FIX_FIRST on the packet with the
+    # reason each one would red a host that is not this one.
+    #
+    # COST, measured rather than assumed, so the fleet's slowest gate does not
+    # grow silently: 1.39s total for all ten (scorable-obligation-gate 580ms,
+    # forge-findings-persisted 283ms, check-engine-cpu-dispatch 206ms,
+    # podman-sync-budgets 116ms, guest-unit-hardening 62ms, plan-binary-probe
+    # 45ms, litmus-steps-can-fail 38ms, git-credential-helper 28ms,
+    # build-sh-forge-check-only 18ms, subdomain-routing 14ms) against a ~332s
+    # gate — 0.4%. None touches podman, the network, or the working tree.
+    # LITERAL NAMES, NOT A LOOP, AND THAT IS THE POINT. The first version of
+    # this block wired all ten through `for _orphan in ...; do _run bash
+    # "$SCRIPT_DIR/scripts/test-${_orphan}.sh"`. It worked — every fixture ran —
+    # and it left the orphan count UNCHANGED at 26, because no name-based scan
+    # can see a reference assembled from a variable. That includes the
+    # bound-or-retired guard this packet exists to build, and it includes a
+    # human grepping for the fixture name. A binding nobody can find is the
+    # defect this packet is about, so the compact form was the wrong form.
+    _step "Checking test-build-sh-forge-check-only (1063-nraf; 18ms)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-build-sh-forge-check-only.sh" 2>&1; then
+        _error "scripts/test-build-sh-forge-check-only.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
+        exit 1
+    fi
+    _step "Checking test-check-engine-cpu-dispatch (1063-nraf; 206ms)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-check-engine-cpu-dispatch.sh" 2>&1; then
+        _error "scripts/test-check-engine-cpu-dispatch.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
+        exit 1
+    fi
+    _step "Checking test-forge-findings-persisted (1063-nraf; 283ms)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-forge-findings-persisted.sh" 2>&1; then
+        _error "scripts/test-forge-findings-persisted.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
+        exit 1
+    fi
+    _step "Checking test-git-credential-helper (1063-nraf; 28ms)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-git-credential-helper.sh" 2>&1; then
+        _error "scripts/test-git-credential-helper.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
+        exit 1
+    fi
+    _step "Checking test-guest-unit-hardening (1063-nraf; 62ms)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-guest-unit-hardening.sh" 2>&1; then
+        _error "scripts/test-guest-unit-hardening.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
+        exit 1
+    fi
+    _step "Checking test-litmus-steps-can-fail (1063-nraf; 38ms)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-steps-can-fail.sh" 2>&1; then
+        _error "scripts/test-litmus-steps-can-fail.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
+        exit 1
+    fi
+    _step "Checking test-plan-binary-probe (1063-nraf; 45ms)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-plan-binary-probe.sh" 2>&1; then
+        _error "scripts/test-plan-binary-probe.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
+        exit 1
+    fi
+    _step "Checking test-podman-sync-budgets (1063-nraf; 116ms)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-podman-sync-budgets.sh" 2>&1; then
+        _error "scripts/test-podman-sync-budgets.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
+        exit 1
+    fi
+    _step "Checking test-scorable-obligation-gate (1063-nraf; 580ms)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-scorable-obligation-gate.sh" 2>&1; then
+        _error "scripts/test-scorable-obligation-gate.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
+        exit 1
+    fi
+    _step "Checking test-subdomain-routing (1063-nraf; 14ms)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-subdomain-routing.sh" 2>&1; then
+        _error "scripts/test-subdomain-routing.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
+        exit 1
+    fi
+    _info "Ten formerly-orphaned fixtures passed (1063-nraf)"
 
     _step "Checking litmus steps can actually fail (972-cvdg)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-steps-can-fail.sh" 2>&1; then

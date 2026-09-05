@@ -1,0 +1,102 @@
+packets:
+  - packet_id: the-sigpipe-verdict-guard-cannot-see-recursive-grep-or-any-pre-existing-pipeline
+    order: 1070-a4gc
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    owner_host: any
+    capability_tags:
+      - guard
+      - sigpipe
+      - fail-loud
+      - corpus
+    estimated_hours: 4
+    owned_files:
+      - scripts/check-sigpipe-verdict-pipelines-added.sh
+    title: >-
+      the SIGPIPE-verdict guard has two independent blind spots — it is
+      diff-scoped so it cannot see any pre-existing pipeline, and its
+      unbounded-producer list omits recursive grep, so it would not flag even a
+      NEWLY ADDED instance of the defect that just made trace coverage wrong
+    context: |
+      FOUND on lenovinha 2026-09-05, immediately after fixing 1069-c9w6, where
+      `grep -rl ... | grep -q .` under pipefail reported the three BEST-traced
+      specs as uncovered and made the fleet's coverage figure wrong and
+      host-dependent.
+
+      BLIND SPOT 1 — DIFF SCOPE, which is by design and stated in the file:
+      scripts/check-sigpipe-verdict-pipelines-added.sh:78 reads
+      `base_ref="${TILLANDSIAS_SIGPIPE_BASE:-origin/linux-next}"` and line 140
+      prints "This check is diff-scoped — it flags ONLY pipelines added in this
+      change, never the existing corpus." So every instance that predates the
+      guard is invisible to it. 1069-c9w6 was exactly such an instance.
+
+      BLIND SPOT 2 — AND THIS ONE IS NOT BY DESIGN. Its UNBOUNDED_PRODUCER_RE
+      (line 89) lists cat, find, journalctl, coredumpctl, cargo, podman and
+      `git (log|diff|show|ls-files|ls-tree|grep)` — it recognises GIT grep and
+      NOT plain recursive grep. Tested directly against the guard's own regex:
+
+          git grep -l foo .            matched   (would be flagged)
+          find . -name x              matched   (would be flagged)
+          cat f                       matched   (would be flagged)
+          /usr/bin/grep -rl foo .     NOT matched  (invisible)
+          grep -r foo .               NOT matched  (invisible)
+
+      So a NEWLY ADDED copy of the 1069-c9w6 defect would pass this guard
+      today. The guard for the pattern was live while the pattern made a
+      headline metric wrong, and fixing the diff-scoping alone would not have
+      caught it either.
+
+      SIZING, and the honest part is that my own method cannot see the shape
+      that bit us. Counting single lines:
+          scripts setting pipefail                                      224
+          pipelines pairing an early-exit consumer with a verdict context 173
+          of those with a recursive-grep producer                          0
+      That zero is NOT good news. The 1069-c9w6 pipeline spans FOUR LINES (an
+      `if grep -rl ... \` continued across three continuations before the
+      `| grep -q`), and a line-oriented count cannot see a multi-line pipeline.
+      So 173 is a floor over single-line instances only, the true corpus count
+      is unknown, and the one CONFIRMED instance is of the kind my sizing
+      cannot count. A claimer must not treat 173 as the number.
+
+      WHY THIS IS NOT JUST "SWEEP THE CORPUS": the sweep is the smaller half.
+      The guard needs to be able to SEE the shape before a sweep means
+      anything, or the corpus is cleaned once and the next instance lands
+      unflagged.
+    exit_criteria:
+      - >-
+        the guard flags a recursive-grep producer; pre-fix result: FAILS —
+        `/usr/bin/grep -rl foo .` and `grep -r foo .` both fail to match
+        UNBOUNDED_PRODUCER_RE at line 89 today
+      - >-
+        the guard can see a MULTI-LINE pipeline; pre-fix result: FAILS — the
+        confirmed 1069-c9w6 instance spanned four lines and no line-oriented
+        matcher can see it, which is also why the corpus count is unknown
+        rather than 173
+      - >-
+        a corpus mode exists and its FIRST run is recorded as a count rather
+        than as a red, so the size is known before anything is tightened
+        (the 1060-428m and 1063-nraf sizing lesson)
+      - >-
+        a negative control proves the widened guard still passes clean
+        pipelines — a bounded producer into an early-exit consumer must not be
+        flagged, or the guard becomes noise and gets switched off
+    verifiable_closure: |
+      scripts/check-sigpipe-verdict-pipelines-added.sh flags a recursive-grep
+      producer: with a fixture file containing an `if /usr/bin/grep -rl PATTERN
+      DIR | /usr/bin/grep -q .; then` added against the base ref, the guard
+      exits non-zero and names it. Pre-fix result: PASSES (exit 0, unflagged) —
+      verified today by testing the literal against UNBOUNDED_PRODUCER_RE, which
+      matches `git grep` and neither `grep -r` nor `/usr/bin/grep -rl`. The
+      negative control is a bounded producer into the same consumer, which must
+      remain unflagged.
+    next_action: >-
+      widen UNBOUNDED_PRODUCER_RE to recursive grep FIRST and re-run the
+      diff-scoped guard against recent history to see whether anything newly
+      added was missed; then make the matcher multi-line-aware, since the only
+      confirmed instance is multi-line and the current count of 173 excludes
+      that entire shape; only then size and sweep the corpus. Do not tighten
+      before the count is known.

@@ -1,0 +1,82 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-guest-built-from-nothing-reaches-a-working-harness-set-on-its-first-launch
+    order: 1070-qi2e
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [images, harnesses, e2e, macos, first-boot]
+    estimated_hours: 4
+    depends_on: []
+    unscoreable: |
+      The pin is a first-launch e2e on a freshly provisioned guest; no litmus
+      lane covers image-as-shipped first-boot behaviour, and the claimer names
+      one if it adds it. Deliberately NOT pinned to
+      litmus:brew-ondemand-tools-shape — that lane covers the shim's policy
+      line, which is a different claim from "the shipped image works on first
+      launch".
+    title: |
+      Split from 317: the claim that a guest built from nothing reaches a working harness set on its FIRST launch, which is the only part of criterion 2 that genuinely needs a pristine guest
+    context: |
+      SPLIT FROM 317 on 2026-09-05 at the coordinator's instruction, after a
+      re-read of what that packet's "pristine" requirement actually buys.
+
+      ONE WORD WAS CARRYING TWO REQUIREMENTS, and only one of them was
+      expensive. 317's exit criterion 2 reads "aarch64 guest: every inventoried
+      harness installs via its designated channel with visible progress, or
+      fails with one actionable line (no silent 127s)". The word "pristine"
+      appears nowhere in it — only in
+      plan/issues/brew-aarch64-harness-strategy-2026-07-12.md:42 and :91, and in
+      the 2026-08-23 next_action that inherited that phrasing. The expensive
+      reading survived three cycles on the strength of that one word.
+
+      WHAT 317's CRITERION NEEDS is a COLD HARNESS CACHE, so the install is
+      OBSERVABLE. lib-common.sh:2674-2677: "a bounded, version-matched
+      currentness record lets a recent warm launch perform ZERO NETWORK WORK".
+      On a warm cache the install is a no-op and a verifier watches nothing
+      happen and records a pass — the memoised-gate false green in a new
+      costume. The caches are all container-side:
+        /home/forge/.cache/tillandsias-project/npm          (lib-common.sh:2038)
+        /home/forge/.cache/tillandsias-project/npm/global   (:2039)
+        /home/forge/.cache/tillandsias-project/harness-curl (:2757)
+        /home/forge/.cache/tillandsias-harness              (:2493)
+      Clearing those reproduces first-install conditions without destroying
+      anything. That half stays on 317.
+
+      WHAT IS GENUINELY PRISTINE-ONLY, AND IS THIS PACKET: the claim about the
+      IMAGE AS SHIPPED — that a guest provisioned from nothing reaches a working
+      harness set on its FIRST launch, with no cache, no prior forge, and no
+      operator intervention. A cleared cache in an established guest cannot
+      answer that: the guest still carries whatever earlier provisioning left
+      behind, and the thing under test is the provisioning itself.
+
+      A DISCARDED HYPOTHESIS, CARRIED OVER SO IT IS NOT RE-RUN: the
+      harness-update-stamp at lib-common.sh:2670 is NOT a gate. The code says so
+      outright — "Keep a diagnostic timestamp, but do not use it as a gate: the
+      launch contract is that every ephemeral forge launch attempts to refresh
+      all harnesses." A reader who stops at the variable name files a second
+      memoisation finding that does not exist.
+
+      COST, STATED PLAINLY BECAUSE IT IS THE REASON THIS IS SEPARATE: this
+      packet needs the destructive macOS e2e — deleting
+      ~/Library/Application Support/tillandsias, the image root — and therefore
+      the OPERATOR'S authorisation, which no agent and no coordinator may grant
+      by proxy. 317 no longer needs it.
+    exit_criteria:
+      - "a guest provisioned from nothing, with no pre-existing image root, reaches phase Ready and launches a forge without operator intervention"
+      - "on that first launch every inventoried harness installs via its designated channel with visible progress, or fails with ONE actionable line; nothing exits 127 silently"
+      - "the evidence records that the guest was genuinely first-boot — no prior forge container, no populated harness cache — so 'first launch' is a measured fact and not an assumption about what the host happened to hold"
+      - "the operator's authorisation for the destructive step is recorded on this packet before it is run, naming who granted it and when"
+    events:
+      - type: filed
+        ts: "2026-09-05T17:35:57Z"
+        agent_id: "macos-tlatoanis-macbook-air-claude-20260905t144547z"
+        host: tlatoanis-macbook-air
+        summary: |
+          Split from 317 so that one word stops carrying two requirements. The
+          cheap half (cold cache, container-side, non-destructive) stays on 317
+          and is runnable on an ordinary guest; the expensive half (image as
+          shipped, first launch, destructive re-provision) is this packet and
+          keeps the operator gate.

@@ -1079,6 +1079,54 @@ if [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ] && [ -n "${TILLANDSIAS_AGENT:-}" ]
     esac
 fi
 
+# ── ORDER 1034-whsp: DO NOT OFFER A PACKET A SIBLING BRANCH ALREADY HOLDS ───
+#
+# A claim lands on the claimant's PLATFORM branch and reaches a trunk host only
+# when the coordinator relays that branch. macbookair measured the relay gaps at
+# 19 minutes to 2h02m, with 6h28m since the last one — so a selector that reads
+# only its own branch offers work another host is actively doing, and 814-iyu7's
+# duplication follows. It is not hypothetical here: when this was written,
+# `--batch` reported order 147 held on BOTH windows-next and osx-next while this
+# host had just worked it, and 317 held on osx-next while this selector was
+# offering it.
+#
+# THE BATCH, NOT THE FRONTIER, and that is a measured scope rather than a
+# shortcut. check-claims-across-branches.sh --batch costs ~3.0s for 4 ids but
+# ~19.4s for 40, because `status` answers one id per invocation and re-folds the
+# ledger each time; vetting every candidate would put twenty seconds on the step
+# that runs most often. Vetting what is about to be OFFERED gets the same
+# outcome — a held packet is never handed out — for the cost of the batch.
+#
+# FAIL OPEN, LOUDLY. If the siblings cannot be folded (no plan binary, no fetch,
+# no branches) the checker exits 2 and this prints the reason and offers the
+# batch unchanged. A selector that refuses to emit because it could not reach a
+# sibling would stop the fleet on a network blip; a selector that silently drops
+# candidates would be worse. Neither is a claim that nothing is held.
+# The checker is overridable ONLY so a fixture can drive the three outcomes
+# (held / clean / could-not-fold) without a live sibling branch in a known
+# state. Nothing in the loop sets it; an unset variable takes the real checker.
+_xb="${TILLANDSIAS_XBRANCH_CHECK:-$ROOT/scripts/check-claims-across-branches.sh}"
+if [ -n "$batch" ]; then
+    _ids="$(printf '%s\n' "$batch" | awk -F'\t' 'NF>=3 && $3 != "" {print $3}' | tr '\n' ' ')"
+    if [ -n "${_ids// /}" ] && [ -x "$_xb" ]; then
+        _xb_out="$(bash "$_xb" --batch $_ids 2>/dev/null)"; _xb_rc=$?
+        case "$_xb_rc" in
+            1)
+                _held="$(printf '%s\n' "$_xb_out" | sed -n 's/^claimed-elsewhere:\([^:]*\):.*/\1/p' | sort -u)"
+                for _h in $_held; do
+                    printf 'cross-branch: %s is claimed on a sibling branch — dropped from this batch (1034-whsp)\n' "$_h" >&2
+                done
+                batch="$(printf '%s\n' "$batch" | awk -F'\t' -v held="$_held" '
+                    BEGIN { n = split(held, a, /[ \n]+/); for (i = 1; i <= n; i++) if (a[i] != "") h[a[i]] = 1 }
+                    NF < 3 || !($3 in h)')"
+                ;;
+            2)
+                printf 'cross-branch: could not fold sibling branches — this says NOTHING about who holds these packets (1034-whsp)\n' >&2
+                ;;
+        esac
+    fi
+fi
+
 size="$(printf '%s\n' "$batch" | grep -c .)"
 
 printf 'batch: epic=%s role=%s release=%s size=%s budget=%s score=%s seed=%s pick=%s/%s%s%s%s\n' \
