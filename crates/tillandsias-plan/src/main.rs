@@ -6789,6 +6789,24 @@ fn main() {
                     emit(&format!(
                         "unclaimed-in-progress\t{order}\t{pid}\t-\t-\t{last}"
                     ));
+                    // ORDER 1065-4t7t: SAY WHICH KIND OF UNCLAIMED THIS IS.
+                    // A row whose in_progress came from the BASE index has no
+                    // claimant to name and never will: compaction folds the
+                    // status entry into plan/index.yaml and the (host, ts) that
+                    // set it is not carried forward, so this sweep will report
+                    // it unclaimed forever. That is not a stranded claim and
+                    // chasing it as one wastes the reader's time — the place to
+                    // look is compaction, not the sweep. A row that simply has
+                    // no lease yet reads identically without this line, which
+                    // is exactly the confusion worth removing at the point of
+                    // output rather than in a packet nobody re-reads.
+                    if ledger.status_lease_of(pid).is_none() {
+                        emit(
+                            "  (no claimant recorded: its in_progress status is in the base index, \
+                             where compaction did not carry the claiming host and ts forward — \
+                             this row cannot become attributed, see 1065-4t7t)",
+                        );
+                    }
                     unclaimed += 1;
                 }
                 // THE PARTITION, STATED SO IT CAN BE FALSIFIED. Every in_progress
