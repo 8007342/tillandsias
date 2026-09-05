@@ -3341,6 +3341,17 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Zero-trace scan scope pin passed"
 
+    # Order 1024-c3h3. An evidence SHA captured before land-on-platform-branch
+    # rewrites the commit names a ref that never reaches origin, and a reader
+    # cannot tell that from "the code never landed" — opposite diagnoses. The
+    # fixture reproduces the rewrite and pins that the two stay separable.
+    _step "Checking a rewritten evidence SHA is named with its landed replacement (1024-c3h3)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-closure-evidence-survives-landing.sh" 2>&1; then
+        _error "the closure-evidence check no longer separates a rewritten ref from work that never landed (1024-c3h3) — see the verdict line above"
+        exit 1
+    fi
+    _info "Closure-evidence landing pin passed"
+
     # Order 1056-5344. The lane now scopes PAST a mandated merge of
     # origin/linux-next, which widens the bypass further: without the ancestry
     # gate a host could park code on a side branch, merge it --no-ff, and the
