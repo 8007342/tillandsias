@@ -48,6 +48,88 @@ CANONICAL="skills"
 HARNESSES=(.claude .opencode .codex .gemini .github)
 GENERATED_PREFIX="openspec-"
 
+# THE INDEX IS THE AUTHORITY, NOT THE WORKTREE (order 1055-6yp8).
+#
+# This check used to decide with `[ -L "$d" ]` alone. On a checkout with
+# core.symlinks=false -- every Windows host without Developer Mode, and any host
+# that cloned before enabling it -- git materialises a committed symlink as a
+# small REGULAR FILE holding its target text. Measured on yolanda 2026-09-04:
+# all 75 entries reported as violations against a CORRECT tree, which is the
+# shape of an instrument failure rather than a tree that drifted.
+#
+# `git ls-files -s` reports mode 120000 for a path committed as a symlink no
+# matter what the filesystem could do with it, and the target is the blob's
+# content. So the question "is this a symlink into skills/" is answered from
+# what is COMMITTED, and the worktree readlink is used only as the fallback for
+# a path git does not track.
+# ONE git INVOCATION, NOT TWO PER ENTRY (order 1055-6yp8). The first version of
+# this read called `git ls-files -s` and `git cat-file blob` once per skill:
+# 119 entries, 238 process spawns, 18s wall on yolanda, and the litmus step that
+# runs this check has a 10s budget -- so the fix for a false positive arrived as
+# a TIMEOUT, which is the same red by another route. Process spawn is the cost
+# that matters on Windows, so the index is read once and the symlink blobs are
+# streamed through a single `git cat-file --batch`.
+#
+# BASH 3.2 CLEAN, deliberately (761-g36m). The obvious shape here is an
+# associative array, and that is what I wrote first — the dialect gate refused
+# it, correctly: macOS ships bash 3.2 and this check runs on every host. Paths
+# and targets are therefore held in two INDEXED arrays and paired POSITIONALLY,
+# because `git cat-file --batch` answers in the order it is asked. The lookup
+# below is a linear scan over ~120 entries in-process, which costs nothing
+# measurable next to a single process spawn.
+IDX_PATHS=()
+IDX_TARGETS=()
+_load_index() {
+    local skill_dirs=()
+    local h
+    for h in "${HARNESSES[@]}"; do skill_dirs+=("$h/skills"); done
+
+    local mode sha stage path
+    local shas=()
+    while IFS=$' \t' read -r mode sha stage path; do
+        [ -n "${path:-}" ] || continue
+        [ "$mode" = "120000" ] || continue
+        IDX_PATHS+=("$path")
+        shas+=("$sha")
+    done < <(git ls-files -s -- "${skill_dirs[@]}" 2>/dev/null)
+
+    [ "${#shas[@]}" -gt 0 ] || return 0
+
+    # "<sha> blob <size>\n<content>\n" per request, in request order. Read
+    # exactly <size> bytes so a target containing spaces survives intact.
+    local osha otype osize content discard
+    while read -r osha otype osize; do
+        [ -n "${osize:-}" ] || continue
+        content=""
+        [ "$osize" -gt 0 ] && IFS= read -r -N "$osize" content
+        read -r discard || true
+        IDX_TARGETS+=("$content")
+    done < <(printf '%s\n' "${shas[@]}" | git cat-file --batch 2>/dev/null)
+}
+_load_index
+
+# Committed symlink target for a path, or empty. Empty means "not a symlink in
+# the index" — which is NOT the same as "not a symlink", and the difference is
+# the whole defect this order fixed.
+#
+# ANSWERS IN A GLOBAL, NOT ON STDOUT, and that is not style. Called as
+# `target="$(_index_target "$d")"` this forks a SUBSHELL per entry, which is the
+# same per-path process cost that made the first version time out, reintroduced
+# by the shape of the CALL rather than by the work it does.
+INDEX_TARGET=""
+_index_target() {
+    local i=0
+    INDEX_TARGET=""
+    while [ "$i" -lt "${#IDX_PATHS[@]}" ]; do
+        if [ "${IDX_PATHS[$i]}" = "$1" ]; then
+            INDEX_TARGET="${IDX_TARGETS[$i]:-}"
+            return 0
+        fi
+        i=$((i + 1))
+    done
+    return 1
+}
+
 violations=""
 checked=0
 
@@ -59,9 +141,15 @@ for h in "${HARNESSES[@]}"; do
         checked=$((checked + 1))
 
         # A symlink is correct by construction — but it must point INTO the
-        # canonical tree, not at some other harness's copy.
-        if [ -L "$d" ]; then
+        # canonical tree, not at some other harness's copy. Ask the index first;
+        # fall back to the worktree for an untracked path.
+        target=""
+        if _index_target "$d" && [ -n "$INDEX_TARGET" ]; then
+            target="$INDEX_TARGET"
+        elif [ -L "$d" ]; then
             target="$(readlink "$d")"
+        fi
+        if [ -n "$target" ]; then
             case "$target" in
                 *"/${CANONICAL}/${name}"|"../../${CANONICAL}/${name}") ;;
                 *) violations="${violations}${d} -> ${target} (symlink does not point into ${CANONICAL}/)"$'\n' ;;
@@ -78,14 +166,32 @@ for h in "${HARNESSES[@]}"; do
             continue
         fi
 
-        violations="${violations}${d} (real directory; hand-written skills belong in ${CANONICAL}/ and are reached by symlink)"$'\n'
+        # Name what is ACTUALLY there. Calling a regular file a "real directory"
+        # sends an investigator looking for something that is not present, which
+        # is how the misreport above cost time before it was understood.
+        if [ -d "$d" ]; then kind="real directory"; else kind="regular file, not a symlink in the index"; fi
+        violations="${violations}${d} (${kind}; hand-written skills belong in ${CANONICAL}/ and are reached by symlink)"$'\n'
     done
 done
 
 if [ -n "$violations" ]; then
     echo "violation:harness-exclusive-skill:$(printf '%s' "$violations" | grep -c .) offender(s)"
     printf '%s' "$violations" | sed 's/^/  /'
-    echo "  REMEDY: git mv <path> skills/<name> && ln -s ../../skills/<name> <path>"
+    # THE REMEDY IS GUARDED, because the unguarded one was destructive and
+    # SILENT. `git mv <path> skills/<name>` when skills/<name> already exists as
+    # a directory does not collide — git moves the source INSIDE it, exit 0, no
+    # output: the harness entry is deleted and a stray appears in the canonical
+    # skill. Measured verbatim (1055-6yp8).
+    echo "  REMEDY: only when skills/<name> does NOT already exist —"
+    echo "    git mv <path> skills/<name>"
+    echo "  then, in every case, replace the harness path with a symlink:"
+    echo "    rm -rf <path> && ln -s ../../skills/<name> <path>"
+    echo "  If skills/<name> DOES exist, the harness copy is redundant: delete it"
+    echo "  and symlink. Never 'git mv' onto an existing directory — it moves the"
+    echo "  source into it and reports success."
+    echo "  On a checkout without symlink support (core.symlinks=false), make the"
+    echo "  change on a host that has them; this check reads the index, so it will"
+    echo "  agree once the symlink is committed."
     exit 1
 fi
 
