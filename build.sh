@@ -3272,6 +3272,19 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Expert-refresh runnability pin passed"
 
+    # Order 1060-6fx7. The lane set have_plan from "the probe returned a path",
+    # and the probe honours an explicit override without executing it — so a
+    # binary that could not link became a validator and its failures were
+    # reported as faults in the pushed LEDGER. Both controls matter: a real
+    # malformed fragment must still be refused, and a real ledger fault must not
+    # be blamed on the instrument.
+    _step "Checking the lane blames the instrument, not the ledger, when the binary cannot run (1060-6fx7)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-lane-instrument-vs-ledger.sh" 2>&1; then
+        _error "the plan-only lane misattributes an instrument failure to the ledger (1060-6fx7) — see the verdict line above"
+        exit 1
+    fi
+    _info "Instrument-vs-ledger pin passed"
+
     # Order 1056-5344. The lane now scopes PAST a mandated merge of
     # origin/linux-next, which widens the bypass further: without the ancestry
     # gate a host could park code on a side branch, merge it --no-ff, and the

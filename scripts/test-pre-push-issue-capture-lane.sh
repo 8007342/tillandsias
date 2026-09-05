@@ -158,6 +158,15 @@ else
         break
     done
 fi
+if [ -z "$_probe_bin" ] && ! command -v yq >/dev/null 2>&1; then
+    # NO VALIDATOR AT ALL. The lane must fail closed here (correctly), so every
+    # arm below that expects ACCEPTANCE would fail on host tooling rather than on
+    # lane behaviour — which is exactly how a sibling fixture took macOS out of
+    # the landing path (1056-5344). Skip the whole file with a name.
+    echo "skip:issue-capture-lane:no-validator — ${_probe_why:-no runnable tillandsias-plan} and no yq, so the lane cannot validate fragments here; the acceptance arms would fail on tooling, not behaviour" >&2
+    echo "issue-capture-lane: 0 passed, 0 failed (skipped)"
+    exit 0
+fi
 if [ -z "$_probe_bin" ]; then
     # NAMED, never silent: a skip that does not say why is indistinguishable
     # from a check that passed.
@@ -283,7 +292,13 @@ reset_to_remote
 # Point the lane's validator at this checkout's real plan binary; the scratch
 # tree has no target/. Without it the control arm would fail on a missing tool
 # rather than on the behaviour it exists to protect.
-export TILLANDSIAS_PLAN_BIN="${TILLANDSIAS_PLAN_BIN:-$ROOT/target/release/tillandsias-plan}"
+# ORDER 1060-6fx7: hand over a binary that RUNS, or none at all. This used to
+# export $ROOT/target/release/tillandsias-plan unconditionally, and the probe
+# honours an explicit override on existence alone — so on a host where that file
+# exists and cannot link, the lane took it as a validator and reported the
+# LEDGER refused. $_probe_bin above is resolved AND executed, so exporting it is
+# a claim the fixture has evidence for.
+[ -n "$_probe_bin" ] && export TILLANDSIAS_PLAN_BIN="$_probe_bin"
 printf 'packets: []\n' > plan/index.d/20260101t000000z-control.yaml
 G add -A >/dev/null; G commit -q -m "a plain fragment"
 out="$(run_guard)"

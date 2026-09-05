@@ -81,8 +81,16 @@ if command -v tillandsias-plan >/dev/null 2>&1 \
 fi
 
 # ── 1. It SKIPS, and says why ──────────────────────────────────────────────
+# EITHER named skip satisfies this, and the reason both exist is the point.
+# When a validator is absent ENTIRELY the fixture skips as a whole
+# (skip:issue-capture-lane:no-validator, 1060-6fx7) because its acceptance arms
+# would fail on tooling; when only the precondition's binary is unusable it
+# skips just that (skip:plan-binary-not-runnable-here). This arm pins the
+# PROPERTY — an unrunnable binary produces a named skip, never a precondition
+# failure — not which of the two spellings the environment happens to reach.
 case "$out" in
-    *"skip:plan-binary-not-runnable-here"*) ok "an unlinkable binary produces a NAMED skip" ;;
+    *"skip:plan-binary-not-runnable-here"*|*"skip:issue-capture-lane:no-validator"*)
+        ok "an unlinkable binary produces a NAMED skip" ;;
     *) bad "no named skip for an unlinkable binary"; printf '%s\n' "$out" | tail -20 | sed 's/^/      /' >&2 ;;
 esac
 
@@ -100,13 +108,18 @@ case "$out" in
     *) ok "the precondition does not fail on an unlinkable binary" ;;
 esac
 
-# ── 3. The lane arms still ran and passed ──────────────────────────────────
-# A skip that also abandoned the behavioural arms would be a green that
-# measured nothing — the failure mode this whole family keeps producing.
+# ── 3. It does not go RED for host tooling ─────────────────────────────────
+# NARROWED DELIBERATELY (1060-6fx7). This arm used to claim "and the ledger arms
+# were exercised", which was never something this environment could deliver: the
+# scratch checkout has no runnable binary and no yq, so the lane MUST fail
+# closed and every acceptance arm with it. The claim happened to hold only while
+# the lane accepted an unrunnable binary as a validator — i.e. only while the
+# defect 1060-6fx7 fixes was present. Arm 4 below is where "the arms really run"
+# is proven, with a real binary, which is the only place it can be.
 if [ "$rc" -eq 0 ]; then
-    ok "the fixture still returns success with the ledger arms exercised"
+    ok "an unrunnable binary does not turn the fixture red"
 else
-    bad "the fixture failed overall (rc=$rc) despite skipping the precondition"
+    bad "the fixture failed overall (rc=$rc) on a host-tooling condition"
     printf '%s\n' "$out" | grep -E '^FAIL' | head -5 | sed 's/^/      /' >&2
 fi
 
