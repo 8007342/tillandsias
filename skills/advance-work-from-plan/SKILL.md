@@ -563,10 +563,36 @@ status `ready`. The packet closes only when every agent named in
 1.  **Full Verification**: Run the full validation litmus on your platform to confirm zero-drift compliance.
 2.  **Close the packet — BOTH the event and the status transition.**
 
+    **LAND THE CODE FIRST, then close with the SHA the landing printed.**
+    `scripts/land-on-platform-branch.sh` fetches, integrates onto origin and
+    REWRITES your commit, so a SHA captured before it is the pre-rebase local
+    one and never exists upstream. `ok:land:<sha>` is the only SHA that exists.
+
     ```bash
+    landed="$(scripts/land-on-platform-branch.sh | sed -n 's/^ok:land:\([0-9a-f]*\):.*/\1/p')"
     tillandsias-plan set-field <packet-id> status completed \
-      --reason "<what shipped, commit SHAs, validation log paths>"
+      --evidence "$landed" \
+      --reason "<what shipped, validation log paths>"
     ```
+
+    Then commit and push the ledger fragment (step 3), which takes the
+    plan-only lane. **This inverts the old step 2/step 4 order for the CODE
+    commit only** — every other ledger write keeps the 3c ordering.
+
+    ORDER 1024-c3h3. This step used to run before the landing, and the evidence
+    refs were systematically wrong for every host that followed it: lenovinha
+    measured four of four closures citing ghosts on 2026-09-04 (5326cb97d,
+    d2ce890b2, 89f6960d2, 4aaa24ba2, while the code landed as dcc50ff27,
+    a20540d33, 42930b71c, 00549903c), and yoga's 1011-d578 cited 677c30527 the
+    same way. A reader running the obvious check
+    (`git merge-base --is-ancestor <sha> origin/<branch>`) gets NO and **cannot
+    tell "the code never landed" from "the ref was captured too early"** — two
+    conditions needing opposite responses. That is 881-29me's shape with a SHA
+    instead of a line number: cite what survives the operation.
+
+    If you cannot capture the landed SHA, cite by content the rebase preserves
+    (the commit subject, a test name, a verdict line) and say that is what you
+    did. A wrong SHA is worse than no SHA, because it looks checkable.
 
     An event alone does **not** close a packet. This step used to read *"append
     a `completed` event … or by writing an append-only fragment file setting
