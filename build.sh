@@ -3317,6 +3317,17 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Mutation-arm guard and fixture passed"
 
+    # Order 734-sjb3. The pre-commit spec sweep now excludes build output, which
+    # is only safe if it does not change the ANSWER — a spec referenced solely
+    # from target/ would otherwise be reported as a zero-trace spec that is not
+    # one, a false accusation produced by an optimisation.
+    _step "Checking the pre-commit spec sweep's exclusions are answer-preserving (734-sjb3)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-precommit-zero-trace-scan-scope.sh" 2>&1; then
+        _error "excluding build output changed the referenced-spec set (734-sjb3) — see the verdict line above"
+        exit 1
+    fi
+    _info "Zero-trace scan scope pin passed"
+
     # Order 1056-5344. The lane now scopes PAST a mandated merge of
     # origin/linux-next, which widens the bypass further: without the ancestry
     # gate a host could park code on a side branch, merge it --no-ff, and the

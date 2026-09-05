@@ -90,7 +90,28 @@ while IFS= read -r f; do
     fi
 
     checked=$((checked + 1))
-    if ! grep -q "$PROBE_REL" "$f"; then
+    # COMPLIANCE IS TESTED ON THE SAME BYTES ELIGIBILITY WAS (order 1060-428m).
+    # This read used to be `grep -q "$PROBE_REL" "$f"` — the RAW file, comments
+    # included — while eligibility above is computed on comment-STRIPPED $code.
+    # The asymmetry made a file compliant if the probe's FILENAME appeared
+    # anywhere in it: a comment explaining the rule, or a `for f in
+    # plan-binary-probe.sh gate-stamp.sh` copy loop. yoga measured the cost:
+    # test-pre-push-issue-capture-lane.sh named the probe twice, never sourced
+    # it, hand-rolled `[ -x target/release/tillandsias-plan ]`, and the guard
+    # reported ok:24 — which is how 1058-fenk was possible at all.
+    #
+    # It also tests USE rather than MENTION: sourcing the probe or calling its
+    # resolver. A filename is a proxy for the property; the property is that the
+    # binary is resolved through the probe. Testing the proxy is the same
+    # substitution this guard exists to catch, one level up — and the same shape
+    # as the `[ -x ]` check it replaced: a cheap signal standing in for the
+    # expensive question.
+    # A BARE FILENAME IS NOT USE, and that is the last form of this defect.
+    # `cp scripts/plan-binary-probe.sh "$T/"` and `for f in plan-binary-probe.sh
+    # gate-stamp.sh` both name the probe without ever sourcing it — the exact
+    # shape yoga measured on test-pre-push-issue-capture-lane.sh. So the test is
+    # a SOURCE of the probe (`.` or `source`) or a call to its resolver.
+    if ! grep -qE '(^|[;&|[:space:]])(\.|source)[[:space:]]+[^;&|]*'"$PROBE_REL"'|resolve_plan_binary|mf_plan_binary' <<<"$code"; then # sigpipe-ok: safe pipeline
         violations+=("$f")
     fi
 done < <(find "$SCAN_DIR" -name '*.sh' -type f 2>/dev/null | sort)
@@ -115,13 +136,48 @@ if [ -d "$LITMUS_DIR" ]; then
         [ -n "$cmds" ] || continue
         # The CHECKOUT-relative path only: `$F/target/release/...` is a binary
         # the step built for itself and must not be redirected to the probe.
+        # PER-COMMAND, NOT PER-FILE (1060-428m, second correction). Testing the
+        # whole command BLOCK let one compliant step cover a hand-rolled one:
+        # litmus-fragment-status-loss-attribution-shape.yaml has five steps that
+        # source the probe and at least one that runs
+        # `./target/release/tillandsias-plan` directly, and a file-level test
+        # calls that compliant. That is the mention-confers-compliance defect
+        # this packet exists to remove, reproduced at a smaller scope — I wrote
+        # it here and found it only by checking a prediction the guard had just
+        # turned green.
         hardcoded=0
-        printf '%s' "$cmds" \
-            | grep -qE '(^|[^/$[:alnum:]_])\.?/?target/(release|debug)/tillandsias-plan' \
-            && hardcoded=1
+        bad_cmd=0
+        while IFS= read -r _cmd; do
+            [ -n "$_cmd" ] || continue
+            printf '%s' "$_cmd" \
+                | grep -qE '(^|[^/$[:alnum:]_])\.?/?target/(release|debug)/tillandsias-plan' \
+                || continue   # sigpipe-ok: safe pipeline
+            hardcoded=1
+            # mf_plan_binary ONLY on this surface. The header above states it is
+            # the compliant form here (the bash -c child has already sourced
+            # litmus-stdlib.sh), and accepting a probe FILENAME instead let a
+            # `cp scripts/plan-binary-probe.sh` inside a fixture-building command
+            # confer compliance on the step that hardcoded the path beside it.
+            printf '%s' "$_cmd" | grep -q 'mf_plan_binary' || bad_cmd=1  # sigpipe-ok: safe pipeline
+        done <<< "$cmds"
+        # SAME CORRECTION ON THIS SURFACE (1060-428m). `grep -q "$PROBE_REL" "$f"`
+        # read the whole YAML, so a probe mention in a description, a comment or
+        # a precondition conferred compliance on a file whose command: lines
+        # resolved the binary by hand. Only command: lines execute, so only
+        # command: lines can establish compliance.
+        #
+        # MEASURED before the change: of 19 counted litmus files, 7 were
+        # compliant ONLY via a raw-file mention. Six of those hardcode nothing
+        # and simply leave the count — they were never eligible, and counting
+        # them inflated the surface total. That inflation matters here for the
+        # reason this file already argues below: a total that does not track the
+        # real population is how a surface hides.
         compliant=0
-        printf '%s' "$cmds" | grep -q 'mf_plan_binary' && compliant=1
-        grep -q "$PROBE_REL" "$f" && compliant=1
+        if [ "$hardcoded" -eq 0 ]; then
+            printf '%s' "$cmds" | grep -q 'mf_plan_binary' && compliant=1
+        elif [ "$bad_cmd" -eq 0 ]; then
+            compliant=1
+        fi
         # Count every file that USES the plan binary, not only the ones still
         # naming the path. Counting eligibility as "still broken" would make the
         # surface total FALL as the sweep fixed files, so a fully-converted

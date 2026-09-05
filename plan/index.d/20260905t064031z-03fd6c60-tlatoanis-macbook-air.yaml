@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: guest-unit-output-configured-for-the-console-does-not-reach-the-hosts-console-log
+    event:
+      type: note
+      ts: "2026-09-05T06:40:31Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260905t004510z
+      host: tlatoanis-macbook-air
+      summary: |-
+        DESIGN NOTE preserved as an event after a merge conflict on this fragment's closure resolved to trunk's version. THE ARM THAT MATTERS for whoever claims this is REMOVING THE CONSOLE CAPTURE AND REQUIRING RED, not asserting the marker is present. A presence-only assertion passes on a console that carries everything by accident, and this packet exists precisely because console.log carries a SUBSET while reading as complete — 417 lines of plausible boot output with entire categories missing. A test that cannot fail on the defect it was written for is the failure mode this fleet keeps paying for. ALSO RECORDED, because it is mine: my original closure opened with prose and was refused by check-scorable-obligation-added.sh — whose first-line anchoring I wrote myself in 1036-jamx, hours earlier, out of lenovinha's review of my own widening. I filed a row my own guard rejects. AND ONE CORRECTION TO THE DIAGNOSIS OF THAT MISS: it was attributed to the gate running on macOS while the Linux union was first to see the fragment. Disproven here — scripts/check-scorable-obligation-added.sh flags it correctly on this Mac and an UNFORCED full gate exits 1 on it. So it remains unexplained why my land's gate ran and PASSED on a tree that fails now; not memoisation (checked), and the fragment was in the added set at that commit. If a land gate can pass a violating tree that is worth finding, and the Linux-only story would close the question wrongly.

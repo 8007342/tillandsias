@@ -1,0 +1,92 @@
+packets:
+  - packet_id: a-fixture-or-gate-step-that-writes-into-the-real-checkout-corrupts-the-instruments-the-gate-depends-on
+    order: 1063-363b
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    owner_host: any
+    capability_tags:
+      - litmus
+      - gate
+      - fail-loud
+      - integrity
+    estimated_hours: 3
+    owned_files:
+      - openspec/litmus-tests/
+      - scripts/
+    title: >-
+      Something wrote scripts/check-fragment-status-loss.sh's contents over
+      scripts/plan-binary-probe.sh in a live checkout: a fixture that escapes
+      its temp dir corrupts the instruments the gate depends on, and every
+      measurement taken afterwards, invisibly until something reads the file
+    context: |
+      OBSERVED on lenovinha 2026-09-05. Stated as what was measured, with the
+      writer NOT identified — naming a mechanism I have not proven is the
+      failure this packet is about.
+
+      WHAT WAS FOUND
+        scripts/plan-binary-probe.sh in the WORKING TREE contained the contents
+        of scripts/check-fragment-status-loss.sh.
+        mtime 2026-09-05 01:35:03 -0700, during that host's 1036-e5w9 gate and
+        litmus runs.
+        Found incidentally by `git status` while staging an unrelated closure —
+        not by any check.
+
+      WHAT IS NOT AFFECTED, verified before anything was touched
+        TRUNK IS INTACT: origin/linux-next's copy is the real probe.
+        NO COMMIT of the finding host's touched that path; the only commit
+        against it in eight hours is 181bb4246 (order 1056-5344), another
+        host's.
+        The worktree copy was restored from HEAD and is clean.
+
+      THE OBVIOUS SUSPECT IS EXCLUDED, and how it was excluded is the reusable
+      part. litmus-fragment-status-loss-attribution-shape.yaml line 126 contains
+      the literal string `cp scripts/check-fragment-status-loss.sh
+      scripts/plan-binary-probe.sh` — the exact two filenames, in a file being
+      edited that same session. It fits the story perfectly and it is NOT the
+      cause: read whole, the command is THREE-argument —
+      `cp <a> <b> "$T/scripts/"` — which copies both sources into the temp dir
+      and overwrites nothing. A substring matched the hypothesis; the line
+      refuted it.
+
+      WHY THIS IS WORTH A PACKET RATHER THAN A RESTORE. plan-binary-probe.sh is
+      the shared resolver every gate script sources to find a runnable
+      tillandsias-plan (704-zcgi). A corrupted copy does not announce itself: it
+      is a valid shell script that answers a different question, so the next
+      script to source it gets a wrong answer with no error. Any gate, guard or
+      measurement run between the corruption and its discovery is untrustworthy
+      and nothing records that it was. On this host that window was several
+      hours and included gate runs whose results were reported to the fleet.
+
+      NOT INVESTIGATED, so nobody assumes it was: which process wrote the file,
+      whether it was a litmus fixture at all, whether it is reproducible, and
+      whether other files were touched in the same window. Only this one path
+      was noticed, and only because git happened to show it.
+    exit_criteria:
+      - >-
+        the writer is identified, or the class is closed by proving no fixture
+        in the instant corpus writes outside its temp dir; pre-fix result:
+        FAILS — one corruption observed on lenovinha at 01:35:03 with no
+        attribution
+      - >-
+        a probe exists that would have caught it: run the instant litmus corpus
+        against a PRISTINE clone and diff the tree afterwards, so any fixture
+        escaping its temp dir is named rather than discovered by accident
+      - >-
+        the probe runs somewhere repeatable rather than once — a fixture that
+        escapes only under a condition nobody reproduces is the same defect
+        with a longer fuse
+      - >-
+        if a writer is found, the fix makes the escape impossible rather than
+        correcting the one instance: the corpus has already shown that fixing
+        instances is not enough (704-zcgi, and 1060-428m two days later)
+    next_action: >-
+      run the instant litmus corpus against a pristine clone and diff the tree
+      afterwards; this is a litmus pass plus a diff, no compilation, so it
+      belongs on a fast host rather than a single-job one. If the diff is empty,
+      the class is not closed — it means the escape needs a condition this run
+      did not have, and the next question is what was different about
+      lenovinha at 01:35:03
