@@ -12,6 +12,12 @@ packets:
       - fail-loud
       - diagnostics
     estimated_hours: 3
+    unscoreable: |
+      The pin is a live macOS VZ boot asserting a known marker from a
+      StandardOutput=journal+console unit reaches the host's console.log;
+      no litmus or cargo test exists for it yet, and the claimer names one
+      if it adds it. (Added on trunk by the coordinator: the closure's first
+      line is prose and check-scorable-obligation-added.sh anchors on it.)
     verifiable_closure: |
       A boot whose guest emits a known marker to a unit with
       StandardOutput=journal+console leaves that marker in the host's
