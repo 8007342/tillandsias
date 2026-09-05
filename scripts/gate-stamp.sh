@@ -96,6 +96,51 @@
 #             Every condition below must hold, or the answer is stale:
 #               v2 stamp, digest matches, scope is full, toolchain matches,
 #               recorded dispatch equals <dispatch>, stamped timestamp present.
+#
+# THE PASS TOKEN: WHAT IT GATES, AND WHAT IT DOES NOT (order 1039-b64k)
+# --------------------------------------------------------------------
+# `<git-dir>/tillandsias-gate-pass-token` is a MECHANISM, not a workaround, and
+# it is narrower than its name suggests. Writing this down because the 1039-b64k
+# packet was filed on the belief that the pre-push hook consults it — it does
+# not, and a remedy was ruled on that belief before the code was read.
+#
+# WHAT IT GATES: `write`, and only `write`. build.sh mints the token after every
+# check has passed (build.sh, in the stamp-writing function), and `write`
+# consumes it below — refusing `refused:no-gate-pass-token` without one and
+# `refused:gate-pass-token-is-for-another-tree` when its digest names a
+# different tree. That makes an UNEARNED STAMP impossible by accident (940-f77j:
+# `./build.sh --check; scripts/gate-stamp.sh write; git push` with semicolons
+# rather than `&&` stamped a red gate on 2026-08-29). The token is consumed on
+# use, so one green run authorises exactly one stamp.
+#
+# WHAT IT DOES NOT GATE: the push. scripts/hooks/pre-push-local-gate.sh calls
+# `verify`, and `verify` compares the RECORDED digest against `compute()` for
+# the current tree — that is its entire decision. No branch of the hook reads
+# the token, including the stale: arms and the unknown-verdict arm. So:
+#
+#   * a push does not need a token; it needs a stamp whose digest matches the
+#     tree being pushed;
+#   * a MEMOISED gate mints no token and writes no stamp, and pushes fine
+#     anyway, because the EXISTING stamp still covers an unchanged tree.
+#     Verified 2026-09-05 on linux: after `ok:gate-fresh` the token file is
+#     ABSENT and `verify` returns ok:gate-fresh;
+#   * therefore minting a token on the memo path would defend nothing. That was
+#     1039-b64k's remedy (1); it was dropped once the push path was read, on the
+#     grounds that a change touching nothing in the push path cannot defend it.
+#
+# WHEN THE HOOK FALLS BACK. `verify` returning stale does not always refuse: a
+# fragments-only push takes the plan-only lane (668-2xeh) which never consults
+# the stamp's scope, a `stale:legacy-stamp-format` re-runs the gate once, and an
+# UNRECOGNISED verdict warns without blocking — a stamp bug must not strand a
+# push. Only `stale:never-run` / `stale:tree-changed-since-gate` on a
+# non-plan-only push actually refuse.
+#
+# THE WINDOWS DEADLOCK THIS SECTION IS NAMED AFTER was never the token's doing.
+# It was writer/verifier digest disagreement across the drvfs boundary, caused
+# by a worktree exec-bit read added at 1034-ihxw against the standing warning in
+# `compute` below, and closed by reverting it (0a1419ffe). yolanda confirmed on
+# Windows with two equal computes, MSYS and WSL, on one tree at one moment.
+# Index-sourced digests agree across that boundary; worktree-sourced ones cannot.
 
 set -uo pipefail
 
