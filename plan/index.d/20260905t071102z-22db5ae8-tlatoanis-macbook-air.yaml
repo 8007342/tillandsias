@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: brew-aarch64-harness-strategy
+    event:
+      type: note
+      ts: "2026-09-05T07:11:02Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260905t004510z
+      host: tlatoanis-macbook-air
+      summary: |-
+        NEXT_ACTION IS STALE AS OF 2026-09-05 and its constraint has lifted. It reads: 'On a cycle running the macOS local-build e2e (/build-install-and-smoke-test-e2e, pristine aarch64 guest): verify each harness in the 2026-08-23 inventory installs via its designated channel...'. That was unrunnable on tlatoanis-macbook-air for most of tonight because the guest never reached phase Ready — measured repeatedly as 'wait_phase_ready: timeout after 300s'. THE CAUSE IS NOW KNOWN AND FIXED (1055-e8ie): the cloud-init user script aborted at its 'systemctl start' of the headless units and the readiness-service start on the very next line never ran, so the guest booted, networked and installed its binary while being unable to report Ready. The abort is intermittent; the start is now guarded so a redundant start no longer kills provisioning. MEASURED SINCE: --exec-guest reaches Ready and runs commands in the guest reliably, and a post-fix boot showed tillandsias-headless-ready.service ACTIVE. SO 317 IS RUNNABLE ON THIS HOST NOW, which it was not when the next_action was written. TWO THINGS THE CLAIMER SHOULD KNOW BEFORE STARTING. (1) The e2e in that skill is DESTRUCTIVE — it deletes ~/Library/Application Support/tillandsias, the 250 GB image root, and re-provisions. That is the point of the pristine-guest requirement, but it is a real irreversible step on the operator's machine and should be taken deliberately rather than as a side effect of running the skill. (2) Read /var/log/tillandsias-provision-marker in the guest FIRST if anything hangs: it now records whether provisioning completed, the exact line it died on, and systemd's state at that moment. That file did not exist when this packet was written and it replaces the four-hypothesis investigation the same symptom cost tonight.

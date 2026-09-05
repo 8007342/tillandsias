@@ -2069,10 +2069,21 @@ mod tests {
     /// non-mechanical effect and it is asserted rather than left to be noticed.
     #[test]
     fn shared_reader_owns_the_default_and_refuses_blank() {
+        // 972-umik FLIPPED, and this pin is what noticed. It asserted
+        // absent -> Off "until the last reader is converted"; yolanda converted
+        // the last one (hvsocket.rs) and landed the flip, the ratchet now reads
+        // ok:secure-wire-single-reader:0 of 0, and this test went red on the
+        // merge — which is the pin doing its job, not a regression.
+        //
+        // ABSENT NOW MEANS SECURE. That is the direction a default should move
+        // and the reason the flip waited for every reader: a host that reads
+        // the variable itself could otherwise disagree with the shared reader
+        // about what "unset" means, and one of them would be running plaintext
+        // while believing otherwise.
         assert_eq!(
             parse_secure_wire_mode(Err(std::env::VarError::NotPresent)),
-            Ok(SecureWireMode::Off),
-            "absent must still mean Off until the last reader is converted"
+            Ok(SecureWireMode::On),
+            "absent must mean On now that every reader is converted (972-umik)"
         );
         assert!(
             parse_secure_wire_mode(Ok(String::new())).is_err(),

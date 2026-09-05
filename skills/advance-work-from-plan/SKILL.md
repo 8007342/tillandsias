@@ -481,6 +481,8 @@ Hard rules:
 
 - **Under the relay protocol, `git pull --rebase` on linux-next fuses the two lanes.** A slow-gate host pushes gated code to `work/<order>` for the coordinator to relay-land and pushes ledger fragments directly through the plan-only lane. If both commits exist on the same local linux-next, a rebase carries the code into the "plan-only" push and the hook refuses it (`plan-only lane: not applicable — … outside plan/index.d/`), which is correct; the refusal's output offers `git push --no-verify`, which would push the violation through. Never use it. After a `work/` push, reset local linux-next to `origin/linux-next` before starting plan-only work, so the lanes never share a branch; if they already do, reset to trunk and cherry-pick the fragment commit alone after confirming the `work/` ref is safe on origin (lenovinha, 2026-09-05, 1059-pb2j).
 
+- **Relay-lane order is fetch, rebase, gate, push; and never sequence a destructive git command after a push in the same block.** Gating before the rebase invalidates the stamp and the hook refuses correctly (lenovinha, 2026-09-05). And `git push && …` is not enough when the push is refused by a hook that exits non-zero only sometimes: a `git reset --hard` placed after a push in one block ran on a refused push and discarded a commit that existed nowhere else, recovered from the reflog. Under the relay protocol a `work/` push is followed by a reset to keep the lanes apart, which makes this likelier: read the push's verdict line, then reset in a separate command.
+
 ---
 
 ## 6 — Commit, Push & Checkpoint
