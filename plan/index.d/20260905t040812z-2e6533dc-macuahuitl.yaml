@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: diagnose-reports-healthy-during-a-total-outage
+    event:
+      type: progress
+      ts: "2026-09-05T04:08:12Z"
+      agent_id: linux-macuahuitl-claude-20260905t040812z
+      host: macuahuitl
+      summary: |
+        SLICE (b) BUILT, TESTED AND COMMITTED LOCALLY (macneo, 2e9beb837, unpushed, credential-blocked by the 989-ykks arm alone): P = 30 s, T = 3P = 90 s stated in the spec as a new invariant (macos-native-tray.invariant.heartbeat-freshness-bound) so tuning and semantics are distinguishable; the tray writes heartbeat.state on a TIMER independent of pushes; --diagnose reports the recorded status only inside T, UNKNOWN past it with the phase WITHHELD, and absence is UNKNOWN, never healthy; written_at goes inside both heartbeat.state and crashloop.state, one TimestampSource serves both readers, prefers content, falls back to mtime only for older records and prints the word mtime when it does, closing the divergence slice (a) opened. LIVE EVIDENCE, both directions: ~300 s uptime with ONE vm-status push in the whole log reported 'Guest state: Ready, Routing Proxy, as the live tray reported it (heartbeat 10 s old, bound 90 s)'; tray killed, +95 s: 'UNKNOWN, the last heartbeat is 1m old, past the 90 s bound; the phase it names is NOT reported'; Guest health printed its age with no mtime disclosure. 124 tests pass. TWO THINGS THE LIVE ARM CAUGHT THAT REASONING DID NOT, both fixed before commit and neither catchable by the unit tests written: (1) the writer was first spawned inside spawn_vm_status_poller, which runs only when auto-boot succeeded, so a live tray whose VM failed to start wrote no heartbeat and --diagnose said 'no heartbeat file' in exactly the case an operator is most likely to be looking; moved outside that gate, only a GONE tray is silent now. (2) the status was first mapped to a hand-written slug vocabulary and wrote 'phase unknown' for a whole session while the tray showed a good status, because the real chip strings are emoji-prefixed human text; it now records the chip text VERBATIM, since a lossy map between two things that drift independently is a second source of truth with a silent failure mode. This is the packet's argument for requiring live arms. Landing waits on the operator's credential reset; nothing is blocked on it; reproduction by macbookair is the fallback if something becomes blocked (three crates, larger than slice (a)).

@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: guest-login-prerequisite-message-names-a-tool-the-guest-does-not-have
+    order: 1052-984i
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: any
+    capability_tags: [windows, guest, credentials, docs]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+    title: |
+      The guest's non-interactive GitHub login refuses with "requires an existing git user.name; configure it before using --with-token", but git is absent in the guest for root and forge; the code reads ~/.gitconfig, not the binary, so the remedy the message implies cannot be followed and the one that works is not stated
+    context: |
+      FOUND by esmeraldinha on the v56.9.5.1 Windows floor smoke round (1004-pg9p), report
+      plan/issues/smoke-e2e-findings-v56.9.5.1-2026-09-05-esmeraldinha.md. In the freshly provisioned
+      guest `command -v git` returns nothing for root and forge and there is no /root/.gitconfig. Writing
+      ~/.gitconfig by hand, 82 bytes of [user] name and email, satisfies the check and the login then
+      succeeds, so the prerequisite is the FILE. Two fixes exist and they are not interchangeable: restate
+      the remedy in terms of the file (write ~/.gitconfig with a [user] name), or install git in the guest
+      if the login genuinely needs it later. The message currently implies the second while the code needs
+      only the first. The sibling readiness race (error fires while the image's git ensure is still running)
+      is its own packet, filed beside this one.
+    exit_criteria:
+      - "the refusal names the remedy that works, writing ~/.gitconfig with a [user] name, or the guest carries git so the stated remedy is runnable; pre-fix result: FAILS (message says configure git user.name, git absent in the guest, esmeraldinha 2026-09-05)"
+      - "a fresh guest with no ~/.gitconfig reaches a successful non-interactive login by following the message alone, on the Windows floor smoke"
+    unscoreable: |
+      The pin is the Windows smoke block on esmeraldinha; a unit test on the prerequisite decision
+      (file present vs binary present) if the claimer adds one.
+    events:
+      - type: note
+        ts: "2026-09-05T03:59:23Z"
+        host: macuahuitl
+        summary: |
+          FILED by the coordinator from esmeraldinha's v56.9.5.1 floor round, relayed because that
+          host's gate was red at report time; the verbatim finding is in the report file.

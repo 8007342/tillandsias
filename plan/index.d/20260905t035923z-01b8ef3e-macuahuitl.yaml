@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-operators-gh-token-is-revoked-two-or-three-times-a-day-on-several-hosts-while-the-coordinator-never-re-logs-in
+    event:
+      type: note
+      ts: "2026-09-05T03:59:23Z"
+      agent_id: linux-macuahuitl-claude-20260905t035924z
+      host: macuahuitl
+      summary: |
+        ESMERALDINHA (03:4xZ): the 03:09:12Z mint has survived over twenty minutes against the 02:58:47Z mint's at most 4 m 17 s; `gh api user` HTTP 200, `check-credential-channel.sh` ok:gh-credentials-store, and the push is refused by the gate (tree changed since --check) and not by the credential; the 60 s death-watch has not fired. The host's reading of yoga's finding, kept as the packet's sharpest current statement: a mint nobody in the fleet ran puts the actor upstream of every host, so the wildly different lifetimes of two refreshes on one host are a property of whatever is minting and evicting, not of the host; the question is "what else is minting tokens for this account", and the security log's MINT rows are more informative than its revoke rows.

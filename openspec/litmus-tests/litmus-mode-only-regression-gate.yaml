@@ -58,6 +58,48 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "ok: 100755"
 
+  # 1036-e5w9: THE MEMO MUST NOT SKIP THE GUARD THAT CATCHES THIS.
+  #
+  # The digest sources exec bits from the INDEX (889-8tcb, non-negotiable — the
+  # worktree read deadlocked every Windows host). So a worktree-only `chmod -x`
+  # leaves the digest identical and the memo returned ok:gate-fresh, skipping the
+  # entire gate INCLUDING check-script-exec-bits, the guard that refuses exactly
+  # that defect. Both components were correct; the gap was the memo's.
+  #
+  # PRE-FIX RESULT, measured on lenovinha 2026-09-04 and recorded so this arm is
+  # known to have had teeth: an unforced ./build.sh --check returned rc=0 in 2s
+  # with ok:gate-fresh on a tree carrying the planted chmod. POST-FIX: rc=1 in
+  # 3360ms with violation:script-not-executable:1.
+  #
+  # This arm drives memo-check DIRECTLY rather than the whole gate: the verdict
+  # is the memo's, and a full unforced gate here would cost minutes to assert a
+  # decision made in one line. The end-to-end number above is the evidence that
+  # the verdict propagates.
+  - step: "1036-e5w9: a worktree-only mode change makes the memo refuse, so the exec-bit guard still runs"
+    # SELF-GATING, and the first draft was not — it is why this comment exists.
+    # The memo verdict is only meaningful against a WARM stamp, and any edit to
+    # the tree (including editing this file) makes memo-check answer
+    # stale:tree-changed-since-gate for an unrelated reason. A draft that
+    # demanded stale:worktree-mode-drift unconditionally therefore went RED
+    # during ordinary development rather than skipping — the intermittent-red
+    # shape that gets a check ignored instead of fixed.
+    #
+    # So the arm asks the clean question FIRST and skips honestly when there is
+    # no warm stamp to test against. The DIGEST half needs no warm stamp and is
+    # asserted unconditionally: if a future edit "fixes" this by moving the
+    # digest, that is the 889-8tcb rule breaking and it fails here regardless.
+    command: "set -e; v=scripts/check-litmus-pin-claims.sh; test -x \"$v\"; before=$(bash scripts/gate-stamp.sh compute); chmod -x \"$v\"; after=$(bash scripts/gate-stamp.sh compute); chmod +x \"$v\"; test \"$before\" = \"$after\" || { echo \"FAIL: the chmod moved the digest ($before -> $after) — 889-8tcb's index-sourced rule is broken\"; exit 1; }; clean=$(bash scripts/gate-stamp.sh memo-check check 2>&1 || true); case \"$clean\" in ok:gate-fresh*) : ;; *) echo \"skip: no warm stamp (memo says '$clean') — digest-invariance verified, memo arm not exercised\"; exit 0 ;; esac; chmod -x \"$v\"; out=$(bash scripts/gate-stamp.sh memo-check check 2>&1 || true); chmod +x \"$v\"; case \"$out\" in stale:worktree-mode-drift*) echo 'ok: memo refuses on worktree mode drift, digest unchanged' ;; *) echo \"FAIL: memo said '$out' for a worktree-only chmod\"; exit 1 ;; esac"
+    timeout_ms: 30000
+    expected_behavior: "ok: memo refuses on worktree mode drift, digest unchanged"
+
+  # THE CONTROL FOR THE ARM ABOVE, and it is the one that matters: a fix that
+  # made the memo refuse ALWAYS would satisfy that arm perfectly while destroying
+  # 765-tkq2. A clean tree must still memoise.
+  - step: "1036-e5w9 control: a clean tree still memoises (the memo is scoped, not destroyed)"
+    command: "out=$(bash scripts/gate-stamp.sh memo-check check 2>&1 || true); case \"$out\" in ok:gate-fresh*) echo 'ok: clean tree still memoises' ;; stale:worktree-mode-drift*) echo \"FAIL: clean tree reports mode drift — the check is firing on an unmodified tree\"; exit 1 ;; *) echo \"skip: no warm stamp (memo says '$out') — control not exercised\"; exit 0 ;; esac"
+    timeout_ms: 20000
+    expected_behavior: "ok: clean tree still memoises"
+
 evidence:
   artifact: "scripts/gate-stamp.sh + scripts/check-script-exec-bits.sh + scripts/test-mode-only-regression-887-bz88.sh"
   measured_on: >

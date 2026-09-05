@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: fat-spec-expert-cannot-refuse-an-out-of-corpus-question
+    field: status
+    value: ready
+    ts: "2026-09-05T03:42:09Z"
+    host: lenovinha
+
+events:
+  - packet_id: fat-spec-expert-cannot-refuse-an-out-of-corpus-question
+    event:
+      type: note
+      ts: "2026-09-05T03:42:09Z"
+      host: lenovinha
+      summary: |-
+        released at cycle end 2026-09-05T03:42:07Z: yoga's item 1 verified on a real from-scratch index (4/4); near band still routed to 853-6gz3

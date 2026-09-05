@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: linux-build-tuneups-carried-by-the-build-scripts
+    event:
+      type: finding
+      ts: "2026-09-05T03:39:52Z"
+      agent_id: linux-macuahuitl-claude-20260905t033952z
+      host: macuahuitl
+      summary: |
+        LENOVINHA CAP ROW, corrected by the host (03:3xZ), one observation per cell: `./build.sh --check` alone: OK at jobs=4, OK at jobs=2. land (gate + push via scripts/land-on-platform-branch.sh): OOM-killed at 4, OOM-killed at 2, COMPLETED at 1; three OOM kills tonight, all during a land. RULING for this packet: lenovinha's cap is 1; the earlier 4 and 2 were each generalised from a single success and are withdrawn by the host. Regime: 13 GB RAM silverblue host. Why it is correctness and not comfort: a killed land is indistinguishable at a glance from a refused one, nothing pushed, commit intact and rebased, and the host nearly debugged its own change over it. The cap must be applied INSIDE the build scripts per this packet's premise, keyed by host memory, since CARGO_BUILD_JOBS is not forwarded through with-tillandsias-builder.sh. OPEN, and the row is n=1 per cell: the --check/land asymmetry is unexplained; the land adds the push and the pre-push hook's ledger check to the same gate, and one observation per cell cannot separate the cap from time-of-night co-tenancy; a second land at 1 that completes, or one at 2 that completes, moves the row.

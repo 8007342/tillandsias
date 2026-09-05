@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: guest-login-prerequisite-error-fires-while-git-ensure-is-still-running
+    order: 1052-gw8w
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: any
+    capability_tags: [windows, guest, credentials, readiness]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+    title: |
+      The non-interactive login's user.name prerequisite error fires while the same command prints "image git ensure still running in its detached helper", and a retry 40 s later succeeds unchanged: a not-ready condition is reported as an operator configuration fault
+    context: |
+      FOUND by esmeraldinha on the v56.9.5.1 Windows floor smoke round (1004-pg9p), report
+      plan/issues/smoke-e2e-findings-v56.9.5.1-2026-09-05-esmeraldinha.md. First attempt: the prerequisite
+      refusal, with the git-ensure helper still running per the same output; second attempt 40 s later,
+      identical command, success. The prerequisite check therefore runs before the guest's git provisioning
+      has settled and its failure text blames the operator's configuration for a readiness state. Fix shape:
+      the login waits for, or reports, the helper's completion before evaluating prerequisites, and a
+      not-ready state is named as such. The message-remedy mismatch (git absent, file is the real
+      prerequisite) is the sibling packet filed beside this one.
+    exit_criteria:
+      - "with the git-ensure helper deliberately still running, the login reports not-ready or waits, and never the user.name refusal; pre-fix result: FAILS (esmeraldinha 2026-09-05: refusal on attempt one with the helper running, success on attempt two 40 s later)"
+      - "the no-git-installed and the helper-running cases produce different messages"
+    unscoreable: |
+      The pin is the Windows smoke block on esmeraldinha; a unit test with a stubbed helper state if
+      the claimer adds one.
+    events:
+      - type: note
+        ts: "2026-09-05T03:59:23Z"
+        host: macuahuitl
+        summary: |
+          FILED by the coordinator from esmeraldinha's v56.9.5.1 floor round, relayed because that
+          host's gate was red at report time; the race is documented in the report file.
