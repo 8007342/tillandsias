@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: control-wire-ships-unauthenticated-by-default
+    event:
+      type: progress
+      ts: "2026-09-05T04:33:34Z"
+      agent_id: windows-yolanda-opus5-20260905t043334z
+      host: yolanda
+      summary: |-
+        COMMIT B LANDED: THE CONTROL WIRE IS ENCRYPTED BY DEFAULT (79e3ca876, on windows-next). The condition was the trunk's ratchet and not a message: I fetched and confirmed 7623213e2 is an ancestor of origin/linux-next (merged at f22d05c78) with my own merge-base before touching the default. Gate green on yolanda, ./build.sh --check exit 0, 2199 passing across targets.
+
+        THE FLIP IS PROVEN BY THREE REDS, EACH VERIFIED TO DISCRIMINATE, because a green proves only that nothing was measured.
+
+        1. THE SABOTAGE ARM. hvsocket.rs a_plaintext_peer_is_refused_by_the_now_secure_default: a peer that writes application bytes with no handshake, exactly as an unconverted reader behaves, must be refused. NEGATIVE CONTROL RUN RATHER THAN ASSUMED: I gave that same peer a real client_handshake and watched the test go red at hvsocket.rs:529, so the is_err() is not vacuously true. Restored afterwards.
+
+        2. THE RATCHET WAS A HOLE AND THE CONTROL FOUND IT. Before changing anything I ran macuahuitl's own sabotage: flip the default to On, revert the hvsocket converter by hand, re-read the ratchet. The count went 0 -> 1 AND THE SCRIPT STILL EXITED 0, because BASELINE was 3 and the test is count > baseline. So the exact regression 972-umik exists to prevent -- one end defaulting to plaintext against an end that refuses it, the e6a80609f outage -- passed the gate silently. Baseline lowered 3 -> 0 in the same commit; the identical sabotage now prints violation:secure-wire-readers-grew:1 of 0 and exits 1. The tolerance was justified by three readers behind cfgs a Linux host cannot compile; that reason was spent the moment macbookair and I converted them, and a tolerance kept past its justification is not caution.
+
+        3. THE LITMUS THAT WAS SUPPOSED TO PIN THIS WAS GREEN OVER AN ABSENCE. Its step grepped for secure_control_wire_flag_defaults_off_and_fails_closed, a test deleted earlier in this order; the name survived only inside the doc comment explaining the deletion, so grep -qF matched PROSE and the step passed over a test that did not exist. Re-anchored on the live test name and the asserted mode, with a negative control that mutates a copy back to Off and requires the grep to red. That control is real, not the marker phrase the 634-39ik checker looks for -- the checker exempts a file containing the words "negative control", which is a check anyone can satisfy by typing them.
+
+        THE FIXTURES MOVED RATHER THAN OPTING OUT. Three host-shell tests went red the moment the default flipped and that was the correct signal, not an inconvenience: a plaintext fixture behind a secure client is the e6a80609f shape in miniature. They now speak Noise, and from_stream_handshake_drives_pre_opened_stream is handshaked before from_stream as the macOS VZ path actually does. Setting off in those tests would have kept the suite green while testing a path production no longer takes, leaving the flip pinned by nothing but a parser test. The provisioning responder keeps its unbounded hand-rolled framing (828-r2ek) -- encrypting a transport does not make it a bounded peer.
+
+        THE cfg(unix) TESTS ARE INVISIBLE ON THIS HOST AND I ONLY SAW THE REDS BECAUSE THE GATE RE-EXECS. cargo test on Windows reported 7 passed for vsock_client while three tests in that same module were broken by my change; they are cfg(all(test, unix)). Ran them under WSL: 92/92 green. A Windows-native cargo run is not evidence about that module and I should not have treated it as one.
