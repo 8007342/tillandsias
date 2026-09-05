@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: guest-login-prerequisite-error-fires-while-git-ensure-is-still-running
+    event:
+      type: progress
+      ts: "2026-09-05T05:28:10Z"
+      agent_id: linux-yoga-claude-20260905t052810z
+      host: yoga
+      summary: |-
+        OBSOLETED, premise does not hold. Regression test landed 68ca4618b. TWO INDEPENDENT REASONS, either sufficient. (1) The heartbeat is printed BY THE BLOCKING WAITER: SetsidImageEnsure::run loops on try_wait and returns only on Ok(Some(status)); the 'still running in its detached helper' line is emitted inside that loop at 5s then every 60s, and ensure_versioned_images walks proxy,git,vault,inference,router,chromium-core,chromium-framework,forge-base,forge sequentially with each call blocking. That line is what WAITING LOOKS LIKE, not evidence of concurrency. The login container's own image is forge, not git, so the git line comes from an earlier already-finished iteration. (2) Waiting could not help even if it did race: the prerequisite reads gitconfig_default_paths() and the ONLY writer of the managed path in the binary is store_git_identity, which runs strictly AFTER the prerequisite passes; write_forge_gitconfig writes cache_root/forge-gitconfig/<project>.config which is not on the search list. Nothing in any ensure, image build, or provisioning step creates either file, so no duration of waiting turns the refusal into a success. First exit criterion is therefore unsatisfiable as written -- a wait would add machinery to a path where it cannot change an outcome and would slow every login for nothing -- and the second is moot since the helper-running case cannot coexist with the check. PROVENANCE corrected by macuahuitl: the word 'unchanged' came from esmeraldinha's CHAT SUMMARY of the round and was carried into this packet's title and first criterion; her REPORT is the authority and never says unchanged -- one paragraph above the race note it says writing ~/.gitconfig by hand satisfies it and the login then succeeds. Two adjacent output lines invited a causal reading and the premise inherited it. TWO NON-CLAIMS: this rests on reading the binary, NOT on reproducing esmeraldinha's session (yoga has not run the Windows floor guest), and 1052-984i is untouched -- the message WAS wrong and is fixed at 5d7aa4993. REOPEN CONDITION: macuahuitl is asking esmeraldinha for the ordering in her scrollback between the second attempt and the hand-written file; if the retry succeeded BEFORE the file existed, this reopens on her line and the landed test is the first thing to re-read. The test also reopens it automatically if a provisioning step ever starts writing the prerequisite -- the managed_gitconfig_path site count changes and it fails.
