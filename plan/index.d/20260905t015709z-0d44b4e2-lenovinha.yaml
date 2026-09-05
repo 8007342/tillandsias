@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: on-windows-the-gate-stamp-is-computed-in-the-wsl2-builder-and-verified-under-msys-so-a-memoised-gate-deadlocks-every-push
+    event:
+      type: progress
+      ts: "2026-09-05T01:57:09Z"
+      agent_id: linux-lenovinha-claude-20260905t013332z
+      host: lenovinha
+      summary: |-
+        REMEDY (3) LANDED (ok:land:5597c890d). The packet closes on the documentation, remedy (1) dropped, the deadlock closed by the revert.
+
+        WHAT IS NOW WRITTEN DOWN, in gate-stamp.sh's header and in the worker skill:
+          the token gates 'write' and only 'write' — it makes an unearned stamp impossible BY ACCIDENT (940-f77j), and it is consumed on use so one green run authorises one stamp;
+          it does NOT gate the push — the hook calls verify, whose entire decision is recorded-digest vs compute();
+          a memoised gate mints no token and writes no stamp and pushes fine anyway, because the existing stamp still covers the unchanged tree;
+          the fallback conditions, which criterion 4 asked for: a fragments-only push takes the plan-only lane (668-2xeh) and never consults scope, stale:legacy-stamp-format re-runs the gate once, an UNRECOGNISED verdict warns without blocking, and only stale:never-run / stale:tree-changed-since-gate on a non-plan-only push actually refuse.
+
+        765-tkq2 PRESERVED, checked rather than asserted: memo-check went stale correctly the moment I edited the tree, and all four gate-stamp fixtures pass (test-gate-stamp, -memoization, -must-be-earned, -scope). litmus:mode-only-regression-gate PASS 4.5s via the ci-release spec, run BEFORE the land — that is the guard that caught my last change to this file, and running it first is the rule I adopted after it did.
+
+        The worker skill also gained two entries this packet paid for: rebuild with --features after a gate before exercising a feature-gated path (1031-q4pb), and yolanda's 'read a file's own comments before concluding a failure is novel', written as ONE event with the 1034-ihxw regression that occasioned it rather than as two lessons.
+
+        MACBOOKAIR'S 'FLAKE' HAS NO ESTABLISHED CAUSE, and I reproduced it here. The packet attributes it to the memoised-gate/token mechanism ('the retry ran a NON-memoised gate that minted a fresh token'). That attribution cannot be right, because the hook never reads the token. Then this land did exactly the reported shape on linux:
+          land attempt -> refused:land:gate-failed
+          ./build.sh --check on the IDENTICAL tree, forced -> rc=0, 245s
+          land retry -> ok:land:5597c890d:attempt-1
+        Same tree, three consecutive commands. So the pattern is real, is not Windows-specific, and its stated cause is now known to be wrong.
+
+        I am NOT naming a mechanism. My candidate is that the land script's own plan_tmp/ and plan_tmp_bak/ working directories exist as untracked paths while its gate runs, and the stamp covers 'ls-files --cached --others' — I observed those directories in git status immediately after the failed attempt and gone moments later. That is a coincidence in time, not a measurement, and tonight has produced six environment traps that each began as a plausible mechanism stated confidently. Someone should measure it: run the land with the gate's output captured, and check whether the untracked working dirs are present during the gate that refuses.
+
+        A SECOND-ORDER HAZARD worth stating: a refused land looks identical to a failed change. I nearly debugged my own doc edit before checking that the gate passed on the same tree. Anyone hitting refused:land:gate-failed should re-run the gate directly BEFORE assuming their change is at fault — the land does not propagate the gate's reason into its log, which is why this took three runs to characterise.
+
+        HOST NOTE, correcting my own earlier figure: CARGO_BUILD_JOBS=4 is enough for a bare --check on this 13GB host but NOT for a land, which was OOM-killed at 4 and completed at 2. A killed land looks like a failed land — nothing pushed, commit intact, rebased — so the job cap here is a correctness setting, not comfort.
