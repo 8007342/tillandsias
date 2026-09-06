@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Correction fragment per convention 1071-adhj: 1101-b5rc's declaring row
+# understated the defect. The declaration stands; this sharpens it.
+events:
+  - packet_id: a-staged-but-uncommitted-fragment-is-invisible-to-the-added-fragment-guards
+    event:
+      type: note
+      ts: "2026-09-06T06:49:19Z"
+      host: macuahuitl
+      summary: |-
+        CORRECTION — the failure is WORSE than the declaring row states, and the
+        difference matters for priority. I wrote it as `skip:no-new-packets`,
+        i.e. a guard that visibly declines. Measured again with a cleaner arm: it
+        does not decline, it AFFIRMS.
+
+        With five rows already committed and one VIOLATING row staged — a packet
+        carrying no verifiable_closure, no unscoreable and no exit_criteria at
+        all, which the guard must refuse — the verdict was:
+
+          ok:scorable-obligations:6 checked
+
+        Not `skip:`. A confident green, with a plausible count, on a tree
+        containing a row the guard exists to reject. The count is real: it is the
+        committed rows. The staged violation is simply not in the candidate set,
+        and nothing in the output distinguishes "6 checked and all clean" from
+        "6 checked and 1 unexamined".
+
+        `skip:no-new-packets` appears only when there is nothing else new — the
+        least dangerous case, and the one I happened to measure first. The
+        dangerous case is the ordinary one: a host staging a row alongside
+        others already committed gets an affirmative pass.
+
+        THIS IS THE NIGHT'S RECURRING SHAPE ONE MORE TIME, in the guard layer:
+        an instrument that cannot say what it did not look at. Same family as
+        `agreement_at_zero_is_not_a_remedy`, 1096-p3tn (a partition of the
+        timing log presenting as a total), and the agent-shell grep zero. In all
+        four the output is a LEGITIMATE VALUE for its field, which is precisely
+        why nothing catches it.
+
+        Priority should be read as p2-with-a-p1-shape: the land gate still
+        re-checks committed state so nothing reaches origin, but the verdict an
+        author consults before landing is affirmatively wrong rather than merely
+        unhelpful. The next_action is unchanged — add --cached as a third source
+        and pin all three states — but the fixture must assert the VIOLATING
+        staged row is refused, not merely that the row is counted.
