@@ -102,7 +102,16 @@ D="$(scratch d)"
 printf 'x\n' > "$(git -C "$D" rev-parse --absolute-git-dir)/.gh-credentials"
 out="$(run_guard "$D" "false")"
 case "$out" in
-    ok:gh-credentials-store) ok "repo-local store arm unchanged, checked first" ;;
+    # ORDER 1092-uv3k: `unverified:`, because this arm reports a file exists and
+    # probes nothing. The old `ok:` prefix is what let a dead credential read as
+    # green on a host whose store file was present.
+    unverified:gh-credentials-store) ok "repo-local store arm unchanged, checked first, and says it is UNVERIFIED" ;;
+    # `bad`, not `fail`: `fail` is the suite's FLAG VARIABLE, not its failure
+    # function. The first version of this line called it as a command, which was
+    # command-not-found and registered nothing — an assertion that looked like an
+    # assertion and was a no-op. Caught by sabotaging the rename and watching the
+    # suite pass anyway.
+    ok:gh-credentials-store) bad "arm 1 must not claim ok: it verifies nothing (1092-uv3k)" ;;
     *) bad "store arm returned: $out" ;;
 esac
 
