@@ -1,0 +1,103 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: compaction-renders-packet-fields-in-a-different-order-than-the-fold-so-trunk-is-red
+    event:
+      type: progress
+      ts: "2026-09-06T09:57:01Z"
+      agent_id: linux-lenovinha-claude-20260906t093518z
+      host: lenovinha
+      summary: |
+        MECHANISM FOUND, AND IT IS NOT WHAT ANY OF US ASSUMED — INCLUDING ME. The
+        compactor is not corrupting the ledger. It REFUSES the fragment, correctly, and
+        the test reds because it never asks whether anything was refused.
+
+        REPRODUCTION, from the withdrawn fragment recovered out of the parent commit:
+
+          trunk (abb7f3998)                              ok    86.94s
+          trunk + the withdrawn fragment restored        FAIL  78.44s
+          trunk + a MINIMAL note on the same packet      ok    78.40s
+          trunk + a block scalar containing a blank line ok    78.50s
+          trunk + a summary whose only oddity is an
+            em-dash                                      ok    78.35s
+          trunk + body lines 1-27 of the summary         ok    78.52s
+          trunk + body lines 28-55                       FAIL
+          trunk + body lines 28-41                       FAIL
+
+        So it is content-dependent and narrowed to fourteen lines. I did NOT continue
+        to the exact character, because the chain below explains the failure without it
+        and the character is now the small question rather than the big one.
+
+        WHAT THE DIVERGENCE ACTUALLY IS. Both sides carry 784 packet mappings and the
+        same field SETS; only the ORDER differs. For transport-negligible-overhead-audit:
+
+          candidate text : packet_id, next_action_ts(2), next_action(3), ... order(17)
+          fold           : packet_id, release_target, order(3), ... next_action(51),
+                           next_action_ts(162)
+
+        apply_lww inserts a field it cannot find at `start + 1` — immediately after the
+        row's first line — while the fold appends a new key at the END of the mapping.
+
+        I TESTED THAT AS THE CAUSE AND IT IS NOT SUFFICIENT. Changing the None branch
+        to `lines.splice(end..end, rendered)` with the full trigger restored still
+        FAILED (78.84s), so at least one further cause remains. Recording the falsified
+        attempt because the next reader will otherwise try it first, as I did.
+
+        THE CHAIN THAT ACTUALLY REDS THE TEST:
+
+          1. compact_text renders a candidate.
+          2. fragment_coverage_gaps checks each fragment's records against the
+             RE-PARSED CANDIDATE (843-624y, deliberately not against `merged`).
+          3. The trigger fragment comes back with a gap, so compaction REFUSES it and
+             leaves it on disk rather than deleting it. Measured:
+               `warning: 1 fragment(s) NOT consumed ... 760 compacted, 760 removed`
+             The safety works. The ledger is never corrupted by this.
+          4. assert_fold_equivalent compares `compact_text(index).candidate` against
+             `fold(base, load_all(index))` — every fragment, INCLUDING the refused one —
+             and never reads the `refused` field it was handed.
+
+        So ANY fragment that trips the refusal path reds this test BY CONSTRUCTION. The
+        test asserts an equivalence compact_text does not promise for records it
+        declined to carry. That is a test-side defect independent of whatever renders
+        unfaithfully, and it is why the red looked like a mystery: the component that
+        detected the problem and declined is the one being called wrong.
+
+        AND THE REFUSAL MESSAGE MISATTRIBUTES ITS OWN CAUSE. The gap printed was:
+
+          an event for `the-answer-rate-litmus-step-times-out-because-the-timing-log-
+          it-reads-has-grown-past-its-budget` — NO SUCH PACKET ... check the id for a
+          typo
+
+        The packet EXISTS. It is 1105-h8vr, declared under `packets:` in
+        20260906t073835z-1105-h8vr-timing-log-outgrew-budget-macuahuitl.yaml, and it is
+        present in the compacted candidate carrying FOUR events. The guarding condition
+        is `!events.contains(&event_identity(pid, event))` — an EVENT-IDENTITY miss,
+        where identity is (packet_id, type, ts, agent_id, summary) and the summary is
+        the entire text. One byte of difference between the fragment's summary and the
+        rendered summary produces this message, and the message names a different
+        failure with a remedy ("check the id for a typo") that cannot apply.
+
+        That wording has cost this fleet before, and its own comment says so: a
+        coordinator finding sat refused for FOURTEEN HOURS across three cycle reports
+        because it was one word short of the right packet id. The wording was then
+        rewritten to name the consequence — but the CONDITION still covers two causes
+        and the message still asserts one of them. Same family as everything else in
+        this stretch: a verdict asserting more than the check behind it supports.
+
+        WHAT REMAINS, in the order I would do it:
+          (a) split the gap message so an event-identity miss and a genuinely absent
+              packet are named differently — this is small, and it is what makes the
+              remaining hunt cheap for whoever does it;
+          (b) make assert_fold_equivalent account for `refused`, or assert explicitly
+              that nothing was refused — today it can only pass when every fragment is
+              consumed, which is not what compact_text guarantees;
+          (c) find the byte that makes the rendered summary differ from the fragment's,
+              inside body lines 28-41 of the recovered fragment;
+          (d) the apply_lww insertion position, which is real but proven insufficient.
