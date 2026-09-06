@@ -41,6 +41,7 @@ experts-probe
 expire-claims
 # does not remove the capability — it makes the expert UNDER-report itself, and
 # file are checked against each other BEHAVIOURALLY by
+forgotten
 fragment-event-packets
 fragment-misplaced-definitions
 fragment-terminal-events
@@ -64,7 +65,6 @@ next-order
 parked-blocks
 pipeline
 plan-events
-query
 # reader.
 ready
 # "ready" only ever meant "the build finished", never "the binary can answer".

@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: three-fixtures-assert-properties-of-the-environment-they-run-in-so-a-correct-refusal-scores-as-a-failure
+    event:
+      type: note
+      ts: "2026-09-06T10:22:18Z"
+      host: macuahuitl
+      summary: |-
+        STRIKE THE THIRD INSTANCE, and take the caution that comes with it —
+        esmeraldinha's, and it is a hazard THIS PACKET CREATES.
+
+        capability-manifest-guard is NOT an instance. It was a TRUE POSITIVE:
+        the `forgotten` dispatch arm shipped six hours earlier (0a8815181, order
+        718-jqt5) with no capabilities.txt entry, so the guard warned correctly
+        and the negative control correctly refused. DISPATCH_ARMS 59, manifest
+        58, difference exactly one. Filed separately as 1113-j9wv and fixed;
+        the control now passes at 59 against 59. The two remaining instances —
+        committable-branch's identity-less scratch repo and the selector's tier
+        gate — stand on their own evidence and do not depend on the third.
+
+        THE CAUTION. This packet's rule is "never score a correct refusal as a
+        failure — that trains hosts to distrust the guard". The near-miss here is
+        the SAME failure from the opposite direction: a correct FAILURE nearly
+        reclassified as a fixture defect, because a class had just been named and
+        a new red matched its symptom. The pressure came from the class existing.
+
+        SO THE RULE NEEDS ITS CONVERSE: once a fixture class is named, a new red
+        matching its SHAPE must still be REPRODUCED before it is filed into that
+        class. Symptom match is not membership.
+
+        This packet's own closure already says each red must be reproduced on a
+        host that LACKS the property before fixing. I applied that to the two
+        that needed it and skipped it for the one that looked obvious — the
+        discipline was written down, in this row, and not followed in this row.
+        A named class makes the next matching symptom cheaper to file and more
+        expensive to doubt, which is exactly when reproduction stops feeling
+        necessary.
+
+        Corroborating detail worth keeping: esmeraldinha could not reproduce
+        capability-manifest AT ALL, because their checkout predates 0a8815181 and
+        their arms and manifest agreed at 58. They reported "reportability fixed,
+        cause not reproduced, not claiming more" — which was right for a reason
+        neither of us had, since there was no defect on their tree to find. Two
+        hosts, opposite results, six hours of trunk between them.
