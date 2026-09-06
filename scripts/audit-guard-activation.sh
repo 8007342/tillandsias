@@ -83,6 +83,28 @@ surfaces=(
   # live production caller this list could not see, reported orphan=1 and
   # failing --ci-full on 2026-08-25. Same class as archive-plan-packets above.
   scripts/bench-inference-floor.sh
+  # ORDER 1049-s35z / 823-u5zf, measured 2026-09-06. Two more of the same class,
+  # and they were reported as orphans for a full day while ACTIVELY GUARDING THE
+  # TREE. Each is invoked by a fixture that is itself bound as a gate step:
+  #   check-jq-multiline-capture-strips-cr.sh
+  #     <- scripts/test-jq-multiline-capture.sh:130  (arm 7, `bash "$CHECK" scripts`)
+  #     <- scripts/gate-steps.d/035-1049-s35z-jq.step
+  #   check-wt-reparse-workarounds-deleted.sh
+  #     <- scripts/test-wt-reparse-scan.sh:106       (arm 4, `_verdict "crates"`)
+  #     <- scripts/gate-steps.d/020-823-u5zf.step
+  # Both fixtures END with a real-tree arm, so the guards run against the actual
+  # workspace on every gate — not only against scratch corpora. The auditor
+  # could not see it because a `.step` binding names the FIXTURE and the fixture
+  # names the check, which is one hop further than the surface list reaches.
+  #
+  # WHY THIS PAIR WAS EXPENSIVE. The 2026-09-05 release gate reported them among
+  # four orphans; the natural remedy is to wire them as new `.step` files, which
+  # would have DOUBLE-RUN two already-active guards and quietly ratified a false
+  # accusation as a fix. The 1072-b7eq step migration makes this class more
+  # likely, not less: eleven bindings moved out of build.sh into .step files, so
+  # the fixture is now one indirection further from every name-based scan.
+  scripts/test-jq-multiline-capture.sh
+  scripts/test-wt-reparse-scan.sh
 )
 
 # Self-reference guard: don't count a script referencing its OWN name, and don't
