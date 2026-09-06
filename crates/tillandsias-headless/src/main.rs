@@ -9556,22 +9556,68 @@ fn github_owner_repo_from_origin(origin: &str) -> Option<String> {
     Some(format!("{owner}/{repo}"))
 }
 
-/// ORDER 759-vceg. The in-container push-authorization probe.
+/// ORDER 759-vceg, CORRECTED BY 1106-k2df. The in-container push-authorization
+/// probe.
 ///
 /// Runs INSIDE the ephemeral login container, exactly where `gh auth status`
 /// already runs, so the token never reaches host disk, argv, or env — the
-/// property the whole login lane is built around. `.permissions.push` is
-/// reported for BOTH classic and fine-grained tokens, which is why it is the
-/// chosen signal.
+/// property the whole login lane is built around. That property is why this is
+/// a container `exec` and not a host-side `git push`, and it is not negotiable:
+/// the token is handed to git by `gh auth git-credential` over git's credential
+/// protocol, in-container, and is never interpolated into this argv.
+///
+/// WHAT 1106-k2df CORRECTED. The original probe read `.permissions.push` from
+/// `GET /repos/{owner}/{repo}`. That field reports the AUTHENTICATED USER'S
+/// ROLE on the repository — it is not a property of the token. A repository
+/// owner holding a fine-grained PAT with no Contents:write is still an admin of
+/// their own repository, so the field answers `true` and the lane seeds a
+/// credential that is denied at push time. The value is true about the artefact
+/// (this user may push) and false about the property it was read as (this token
+/// may push), so no reinterpretation of it helps; the signal had to be
+/// replaced.
+///
+/// The replacement is the negotiation the token itself must survive:
+/// `git push --dry-run`. Dry-run does the full connect, authenticate, and
+/// receive-pack advertisement, and then sends no pack and applies no ref
+/// update, so it answers the authorization question without writing anything.
+/// A token that cannot push is refused by GitHub at the
+/// `?service=git-receive-pack` step, which is precisely the hours-downstream
+/// failure order 759-vceg was filed against, moved to login time.
+///
+/// The script always exits 0 and reports its outcome on stdout, so a denied
+/// push arrives at [`github_push_authorization_verdict`] as a value to
+/// classify rather than as a command failure indistinguishable from podman
+/// being unable to run at all.
 fn github_push_authorization_probe_args(container: &str, owner_repo: &str) -> Vec<String> {
+    let script = format!(
+        r#"set -u
+command -v git >/dev/null 2>&1 || {{ printf 'push-probe: unavailable no-git
+'; exit 0; }}
+d=$(mktemp -d) || {{ printf 'push-probe: unavailable no-tmpdir
+'; exit 0; }}
+cd "$d" || {{ printf 'push-probe: unavailable no-tmpdir
+'; exit 0; }}
+git init -q . >/dev/null 2>&1
+git -c user.email=probe@localhost -c user.name=probe     commit -q --allow-empty -m push-probe >/dev/null 2>&1
+out=$(git -c credential.helper= -c 'credential.helper=!gh auth git-credential'     push --dry-run "https://github.com/{owner_repo}.git"     HEAD:refs/heads/tillandsias-push-authorization-probe 2>&1)
+rc=$?
+cd / && rm -rf "$d"
+if [ "$rc" -eq 0 ]; then
+    printf 'push-probe: allowed
+'
+else
+    printf 'push-probe: denied rc=%s
+%s
+' "$rc" "$out"
+fi
+"#
+    );
     vec![
         "exec".to_string(),
         container.to_string(),
-        "gh".to_string(),
-        "api".to_string(),
-        format!("repos/{owner_repo}"),
-        "--jq".to_string(),
-        ".permissions.push".to_string(),
+        "/bin/bash".to_string(),
+        "-c".to_string(),
+        script,
     ]
 }
 
@@ -9587,63 +9633,137 @@ fn github_push_authorization_probe_args(container: &str, owner_repo: &str) -> Ve
 /// An UNPARSEABLE answer is refused, not waved through. "I could not tell"
 /// resolving to "seed it anyway" is how the original defect reads to an
 /// operator: a credential accepted with no evidence it works.
+///
+/// ORDER 1106-k2df. The input is now the outcome of an in-container
+/// `git push --dry-run` rather than `.permissions.push`. See
+/// [`github_push_authorization_probe_args`] for why that field had to be
+/// retired; the consequence here is that the ONLY accepting arm is a push
+/// negotiation the server completed.
 fn github_push_authorization_verdict(owner_repo: &str, probe_stdout: &str) -> Result<(), String> {
-    match probe_stdout.trim() {
-        "true" => Ok(()),
-        "false" => Err(format!(
-            "the pasted token authenticates, but it CANNOT PUSH to {owner_repo}.\n\
-             \n\
-             Missing permission: Contents - Read and write.\n\
-             \n\
-             Nothing was written to Vault; the previous credential (if any) is untouched.\n\
-             \n\
-             Fix the token at https://github.com/settings/personal-access-tokens :\n\
-               - Repository access must INCLUDE {owner_repo}\n\
-               - Contents  - Read and write  (clone, fetch, push)\n\
-               - Metadata  - Read-only       (required by GitHub)\n\
-             \n\
-             Then run the login again. Seeding a token that cannot push moves this\n\
-             failure hours downstream, into the middle of a work cycle (order 759-vceg)."
-        )),
-        // ORDER 759-vceg. A REVOKED CREDENTIAL IS NOT A SCOPE PROBLEM, and the
-        // generic remedy below sent operators to edit permissions that were
-        // never the cause. esmeraldinha measured the three shapes this probe
-        // actually produces, using a revoked credential — the one input a
-        // healthy host cannot manufacture:
-        //
-        //   401 revoked   raw JSON error body on stdout; --jq does NOT filter it
-        //   200 no key    public-repo read omits `permissions` -> jq prints `null`
-        //   404           error body, same unfiltered shape as the 401
-        //
-        // All three correctly fall through to a refusal, which is the property
-        // this packet exists to guarantee, and it holds. What was wrong is the
-        // ADVICE: "repository access must include <repo>, Metadata read-only"
-        // is right for 404 and useless for 401, where no scope edit helps and
-        // only a re-login does. Three hosts hit the 401 shape on 2026-09-06.
-        //
-        // Discriminated AHEAD of the generic arm rather than replacing it,
-        // because 404 and 200-without-permissions still want the scope advice.
-        other if other.contains("Bad credentials") || other.contains("401") => Err(format!(
-            "the GitHub credential is REVOKED or invalid: the push-permission probe on \
-             {owner_repo} answered {other:?}.\n\
-             \n\
-             Nothing was written to Vault. This is NOT a repository-scope problem, and \
-             editing repository permissions will not fix it — the token itself is no \
-             longer accepted. Mint a new one with `gh auth login`, then run this login \
-             again (order 759-vceg)."
-        )),
-        other => Err(format!(
-            "could not determine push permission on {owner_repo}: the probe answered {other:?} \
-             rather than true/false.\n\
+    let answer = probe_stdout.trim();
+    // ORDER 1106-k2df. Only a completed push negotiation seeds. `true` — the
+    // old user-role answer — deliberately falls through to a refusal rather
+    // than being kept as a second accepting arm: a lane that still accepts the
+    // signal that could not discriminate has not stopped accepting it.
+    if answer.starts_with("push-probe: allowed") {
+        return Ok(());
+    }
+    if let Some(rest) = answer.strip_prefix("push-probe: unavailable") {
+        return Err(format!(
+            "could not check push permission on {owner_repo}: the login container could not \
+             run the probe ({}).\n\
              \n\
              Nothing was written to Vault. This is refused rather than assumed, because a \
-             credential seeded on an unreadable answer is exactly the state order 759-vceg \
-             exists to prevent — it looks seeded and fails at push time.\n\
-             \n\
-             Check that the token can read the repository at all (repository access must \
-             include {owner_repo}, Metadata read-only), then run the login again."
-        )),
+             credential seeded on a check that did not run is the state order 759-vceg exists \
+             to prevent (order 1106-k2df).",
+            rest.trim()
+        ));
     }
+    // A revoked credential is classified BEFORE the push-probe framing is
+    // examined, because the REST shapes below reach this function from a
+    // container still running the pre-1106 probe, and those carry no
+    // `push-probe:` prefix to be found under.
+    //
+    // ORDER 1106-k2df. MEASURED, not guessed. The strings below are what
+    // `git push --dry-run` actually prints, captured on this host on
+    // 2026-09-06 against github.com with an invalid token in the URL:
+    //
+    //   remote: Invalid username or token. Password authentication is not
+    //           supported for Git operations.
+    //   fatal: Authentication failed for 'https://github.com/o/r.git/'
+    //
+    // Note what is ABSENT: no "Bad credentials", no "401". Those are the
+    // REST API's words, and carrying the old `gh api` discriminator over
+    // unchanged would have sent every revoked credential to the generic
+    // scope advice — re-opening exactly the defect esmeraldinha closed,
+    // through the door of a probe rewrite.
+    if answer.contains("Invalid username or token")
+        || answer.contains("Authentication failed")
+        || answer.contains("Bad credentials")
+        || answer.contains(" 401")
+    {
+        return Err(github_push_authorization_revoked_message(
+            owner_repo, answer,
+        ));
+    }
+    if answer.starts_with("push-probe: denied") {
+        if answer.contains("denied to")
+            || answer.contains("Permission to")
+            || answer.contains(" 403")
+            || answer.contains("read-only")
+        {
+            return Err(github_push_authorization_cannot_push_message(owner_repo));
+        }
+        return Err(format!(
+            "could not determine push permission on {owner_repo}: the push negotiation failed \
+             for a reason that is neither an authorization refusal nor a revoked \
+             credential.\n\
+             \n\
+             {answer}\n\
+             \n\
+             Nothing was written to Vault. A network or DNS failure inside the login container \
+             reads exactly like a denied push if it is waved through, so it is refused instead \
+             (order 1106-k2df)."
+        ));
+    }
+    // ORDER 1106-k2df. Everything else — including `true`/`false`, the values
+    // the pre-1106 `.permissions.push` probe produced — is refused. `true`
+    // arriving here means the running binary and the probe script disagree
+    // about which question was asked, and that is exactly the condition under
+    // which a credential must NOT be seeded.
+    Err(format!(
+        "could not determine push permission on {owner_repo}: the push probe answered \
+         {answer:?}, which is not an outcome of a push negotiation.\n\
+         \n\
+         Nothing was written to Vault. This is refused rather than assumed, because a \
+         credential seeded on an unreadable answer is exactly the state order 759-vceg \
+         exists to prevent — it looks seeded and fails at push time.\n\
+         \n\
+         Check that the token can read the repository at all (repository access must \
+         include {owner_repo}, Metadata read-only), then run the login again.\n\
+         \n\
+         If the answer above is \"true\" or \"false\", the probe is reporting the repository \
+         role of the signed-in USER rather than the grants of the TOKEN; that signal was \
+         retired by order 1106-k2df and must not be trusted."
+    ))
+}
+
+/// ORDER 759-vceg, message retained by 1106-k2df. A token that authenticates
+/// and is refused by `git-receive-pack`.
+fn github_push_authorization_cannot_push_message(owner_repo: &str) -> String {
+    format!(
+        "the pasted token authenticates, but it CANNOT PUSH to {owner_repo}.\n\
+         \n\
+         Missing permission: Contents - Read and write.\n\
+         \n\
+         Nothing was written to Vault; the previous credential (if any) is untouched.\n\
+         \n\
+         Fix the token at https://github.com/settings/personal-access-tokens :\n\
+           - Repository access must INCLUDE {owner_repo}\n\
+           - Contents  - Read and write  (clone, fetch, push)\n\
+           - Metadata  - Read-only       (required by GitHub)\n\
+         \n\
+         Then run the login again. Seeding a token that cannot push moves this\n\
+         failure hours downstream, into the middle of a work cycle (order 759-vceg)."
+    )
+}
+
+/// ORDER 759-vceg. A REVOKED CREDENTIAL IS NOT A SCOPE PROBLEM, and the generic
+/// remedy sent operators to edit permissions that were never the cause.
+/// esmeraldinha measured this shape with a revoked credential — the one input a
+/// healthy host cannot manufacture — and three hosts hit it on 2026-09-06. No
+/// scope edit helps; only a re-login does. Discriminated ahead of the generic
+/// refusal, which still owns the cases where the scope advice IS right.
+fn github_push_authorization_revoked_message(owner_repo: &str, answer: &str) -> String {
+    format!(
+        "the GitHub credential is REVOKED or invalid: the push-permission probe on \
+         {owner_repo} answered {answer:?}.\n\
+         \n\
+         Nothing was written to Vault. This is NOT a repository-scope problem, and \
+         editing repository permissions will not fix it — the token itself is no \
+         longer accepted. Mint a new one with `gh auth login`, then run this login \
+         again (order 759-vceg)."
+    )
 }
 fn provider_login_exec_args(
     container: &str,
@@ -9927,9 +10047,10 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
             let probe_out = podman_command_output(probe, debug).map_err(|e| {
                 format!(
                     "could not check push permission on {owner_repo}: {e}\n\n\
-                         Nothing was written to Vault. The token may be unable to READ the \
-                         repository at all — repository access must include {owner_repo} with \
-                         Metadata read-only (order 759-vceg)."
+                         Nothing was written to Vault. The probe script reports its own \
+                         outcome on stdout and exits 0 even when the push is denied \
+                         (order 1106-k2df), so reaching here means the login container \
+                         could not be run at all — not that the token was refused."
                 )
             })?;
             github_push_authorization_verdict(&owner_repo, &probe_out)?;
@@ -24202,11 +24323,23 @@ esac
     /// ORDER 759-vceg. The incident shape: a fine-grained PAT that
     /// AUTHENTICATES as the repo owner and cannot push. Every check the login
     /// flow had — non-emptiness, `gh auth status`, a Vault round-trip — passes
-    /// for this token. Only `.permissions.push` distinguishes it.
+    /// for this token.
+    ///
+    /// ORDER 1106-k2df: the input is now the MEASURED output of an in-container
+    /// `git push --dry-run` against a repository this host cannot push to,
+    /// captured on 2026-09-06. `.permissions.push` used to stand here and did
+    /// not in fact distinguish this token — that is why the probe changed.
     #[test]
     fn a_token_without_push_permission_is_refused_with_the_missing_permission_named() {
-        let err = github_push_authorization_verdict("8007342/tillandsias", "false\n")
-            .expect_err("push=false must refuse");
+        let err = github_push_authorization_verdict(
+            "8007342/tillandsias",
+            "push-probe: denied rc=128\n\
+             remote: Permission to 8007342/tillandsias.git denied to 8007342.\n\
+             fatal: unable to access \
+             'https://github.com/8007342/tillandsias.git/': The requested URL returned \
+             error: 403\n",
+        )
+        .expect_err("a denied push must refuse");
         assert!(
             err.contains("CANNOT PUSH"),
             "refusal must say what is wrong, got: {err}"
@@ -24227,14 +24360,19 @@ esac
 
     /// POSITIVE CONTROL. Without it, every arm above is satisfied by a verdict
     /// function that refuses unconditionally — which would break every login.
+    ///
+    /// ORDER 1106-k2df repointed the accepting value from `true` to the
+    /// outcome of a completed push negotiation. `true` is now asserted to
+    /// REFUSE, in `only_a_completed_push_negotiation_seeds_the_credential`.
     #[test]
     fn a_push_capable_token_seeds_exactly_as_before() {
         assert!(
-            github_push_authorization_verdict("8007342/tillandsias", "true\n").is_ok(),
-            "push=true must seed"
+            github_push_authorization_verdict("8007342/tillandsias", "push-probe: allowed\n")
+                .is_ok(),
+            "a push negotiation the server completed must seed"
         );
         assert!(
-            github_push_authorization_verdict("o/r", "true").is_ok(),
+            github_push_authorization_verdict("o/r", "push-probe: allowed").is_ok(),
             "a probe answer without a trailing newline must still seed"
         );
     }
@@ -24261,18 +24399,33 @@ esac
     /// itself is no longer accepted and only a re-login helps. Three hosts hit
     /// the 401 shape on 2026-09-06 and the advice pointed at the wrong thing.
     ///
-    /// The bodies below are the REAL shapes esmeraldinha measured with a
-    /// revoked credential, which is the one input a healthy host cannot
-    /// manufacture: `gh api ... --jq .permissions.push` does NOT filter an
-    /// error body, so the raw JSON reaches this function.
+    /// ORDER 1106-k2df CARRIED THIS PROPERTY ACROSS THE PROBE REWRITE, AND THE
+    /// STRINGS DID NOT CARRY WITH IT. `git push` does not speak the REST API's
+    /// words: measured on this host on 2026-09-06 against github.com with an
+    /// invalid token, the whole of what it prints is
     ///
-    /// ARM 2 IS THE CONTROL AND IT IS WHAT STOPS THIS BEING A WIDENING. A 404
+    ///   remote: Invalid username or token. Password authentication is not
+    ///           supported for Git operations.
+    ///   fatal: Authentication failed for 'https://github.com/o/r.git/'
+    ///
+    /// — no "Bad credentials", no "401". Keeping only esmeraldinha's original
+    /// discriminator would have left every revoked credential falling through
+    /// to the scope advice again, with all its tests still green, because the
+    /// tests carried the OLD probe's inputs. So arm 1 below is the git shape
+    /// and arm 2 keeps the REST shapes, which still reach here from a stale
+    /// container.
+    ///
+    /// ARM 3 IS THE CONTROL AND IT IS WHAT STOPS THIS BEING A WIDENING. A 404
     /// and a permissions-less 200 must KEEP the scope advice — a discriminator
     /// that sent every unparseable answer to `gh auth login` would be the same
     /// defect pointing the other way.
     #[test]
     fn a_revoked_credential_is_told_to_re_login_not_to_edit_scopes() {
         for body in [
+            "push-probe: denied rc=128\n\
+             remote: Invalid username or token. Password authentication is not supported \
+             for Git operations.\n\
+             fatal: Authentication failed for 'https://github.com/o/r.git/'\n",
             r#"{"message":"Bad credentials","documentation_url":"https://docs.github.com/rest","status":"401"}"#,
             "gh: Bad credentials (HTTP 401)",
         ] {
@@ -24346,10 +24499,76 @@ esac
         }
     }
 
-    /// The probe must run in the SAME container as the login, and ask for the
-    /// permission field that covers BOTH classic and fine-grained tokens.
+    /// ORDER 1106-k2df, RED ARM, WRITTEN BEFORE THE FIX.
+    ///
+    /// `GET /repos/{owner}/{repo}` reports `permissions` for the AUTHENTICATED
+    /// USER'S ROLE on the repository. It is not a property of the token. A
+    /// repository owner holding a fine-grained PAT with no Contents:write is
+    /// still an admin of their own repository, so `.permissions.push` answers
+    /// `true` and the lane seeds a credential that is denied at push time —
+    /// the exact 2026-08-15 failure order 759-vceg was filed to stop.
+    ///
+    /// So `true` from that endpoint is a value that is TRUE about the artefact
+    /// (the user may push) and FALSE about the property it was read as (this
+    /// token may push). The signal has to be replaced, not reinterpreted, and
+    /// the only thing that answers the actual question is a push negotiation
+    /// carried out with the token itself.
     #[test]
-    fn the_probe_runs_in_container_and_asks_for_the_push_permission() {
+    fn the_probe_does_not_rest_on_the_user_role_permissions_field() {
+        let args = github_push_authorization_probe_args("tillandsias-git-login", "o/r");
+        let joined = args.join(" ");
+        assert!(
+            !joined.contains(".permissions"),
+            "the probe must not read `permissions` from the repos endpoint — that field \
+             describes the USER'S ROLE, not the TOKEN'S grants, and answers `true` for a \
+             repo owner whose fine-grained PAT cannot push: {args:?}"
+        );
+        assert!(
+            joined.contains("push") && joined.contains("--dry-run"),
+            "the probe must attempt an actual push negotiation, which is the only check \
+             the token itself has to satisfy: {args:?}"
+        );
+    }
+
+    /// ORDER 1106-k2df, RED ARM. The seeding decision must be made from the
+    /// push negotiation's own answer, and `true` — the old signal — must no
+    /// longer be enough to seed.
+    #[test]
+    fn only_a_completed_push_negotiation_seeds_the_credential() {
+        assert!(
+            github_push_authorization_verdict("o/r", "push-probe: allowed").is_ok(),
+            "a dry-run push that the server accepted must seed"
+        );
+        assert!(
+            github_push_authorization_verdict("o/r", "true").is_err(),
+            "`true` was the user-role answer; it must no longer seed a credential"
+        );
+        let denied = github_push_authorization_verdict(
+            "o/r",
+            "push-probe: denied rc=128\n             remote: Permission to o/r.git denied to someone.\n             fatal: unable to access 'https://github.com/o/r.git/': The requested URL \
+             returned error: 403",
+        )
+        .expect_err("a denied push must refuse");
+        assert!(
+            denied.contains("CANNOT PUSH"),
+            "the refusal must name the authorization failure: {denied}"
+        );
+    }
+
+    /// The probe must run in the SAME container as the login — the token
+    /// isolation property the lane exists for — and must negotiate against the
+    /// repository this installation actually pushes to.
+    ///
+    /// ORDER 1106-k2df REPOINTED THIS TEST. It previously asserted the probe
+    /// asked for `.permissions.push`, described as "the field reported for
+    /// classic AND fine-grained tokens". That was false, and the test pinned
+    /// the false claim in place: the field reports the signed-in USER'S role,
+    /// so a repo owner's fine-grained PAT without Contents:write answers
+    /// `true`. What survives is the container requirement and the repo
+    /// targeting; what replaced the field is asserted in
+    /// `the_probe_does_not_rest_on_the_user_role_permissions_field`.
+    #[test]
+    fn the_probe_runs_in_container_and_negotiates_against_the_repo() {
         let args = github_push_authorization_probe_args("tillandsias-git-login", "o/r");
         assert_eq!(args.first().map(String::as_str), Some("exec"));
         assert!(
@@ -24357,11 +24576,19 @@ esac
             "probe must run inside the ephemeral login container so the token never \
              reaches host disk: {args:?}"
         );
-        assert!(args.iter().any(|a| a == "repos/o/r"), "{args:?}");
+        let script = args.last().expect("probe must carry a script");
         assert!(
-            args.iter().any(|a| a == ".permissions.push"),
-            "must ask for .permissions.push — the field reported for classic AND \
-             fine-grained tokens: {args:?}"
+            script.contains("https://github.com/o/r.git"),
+            "the negotiation must target the installation's own repository: {script}"
+        );
+        assert!(
+            !script.contains("$TOKEN") && !script.contains("x-access-token:"),
+            "the token must reach git through `gh auth git-credential`, never through \
+             this argv: {script}"
+        );
+        assert!(
+            script.contains("gh auth git-credential"),
+            "the credential must come from the container's own gh session: {script}"
         );
     }
 
