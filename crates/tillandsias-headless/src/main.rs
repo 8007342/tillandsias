@@ -25770,6 +25770,95 @@ esac
         assert!(source.contains("ensure_image_decision(&identity, &observation)"));
     }
 
+    /// ORDER 834-r6vn. THE GUARD IS WIRED, AND NOTHING SAID SO.
+    ///
+    /// `tillandsias_core::version_guard` already carries eleven tests and they
+    /// cover every case this packet's closure names: refuse on a newer image,
+    /// proceed at equal versions, proceed for a newer app, and the override
+    /// converting a refusal into a forced proceed. Restating them here would
+    /// duplicate green tests. What none of them can see is whether
+    /// `ensure_image_exists` CALLS the guard: delete the call and all eleven
+    /// stay green while every launch silently rolls the enclave back.
+    ///
+    /// THE ORDERING IS THE LOAD-BEARING HALF AND IT HAS A STATED REASON. The
+    /// refusal must be raised BEFORE the detach, because the helper runs in its
+    /// own session with no controlling tty — a refusal raised in there reaches
+    /// the operator as a bare non-zero exit. A guard that refuses correctly in
+    /// the wrong process is a guard whose message never reaches a human.
+    ///
+    /// Asserted on the function's own body, the same way
+    /// `on_demand_image_build_decides_on_content_identity_not_the_version_tag`
+    /// above asserts its architectural invariant.
+    #[test]
+    fn the_downgrade_guard_is_called_and_refuses_before_the_detach() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let body = source_window(source, "pub(crate) fn ensure_image_exists(");
+
+        // SCOPE CONTROL: the window really is ensure_image_exists. Without this
+        // the ordering assertion below could be measuring some other function
+        // that happens to contain both markers.
+        assert!(
+            body.contains("resource_lock::acquire"),
+            "the window is not ensure_image_exists; nothing below would prove              anything about it: {body}"
+        );
+
+        let guard = body.find("downgrade_refusal()").expect(
+            "ensure_image_exists must CALL the downgrade guard. Without this call              an older app rebuilds a newer enclave backwards and nothing reports              that anything moved (order 834-r6vn)",
+        );
+        assert!(
+            body[guard..].contains("return Err(refusal)"),
+            "the guard's verdict must STOP the launch. Computing a refusal and              continuing is the fall-through shape 759-vceg fixed one function              over: {body}"
+        );
+
+        let detach = body
+            .find("image_build_detach_decision(")
+            .expect("ensure_image_exists must still contain the detach decision");
+        assert!(
+            guard < detach,
+            "the downgrade refusal must be raised BEFORE the detach. The helper              has no controlling tty, so a refusal raised inside it reaches the              operator as a bare non-zero exit — the guard would be correct and              silent (order 834-r6vn)"
+        );
+
+        // THERE ARE TWO CALL SITES AND THE PIN COVERS BOTH. `run_init` reaches
+        // image building by its own route and calls the guard separately;
+        // pinning only the chokepoint would leave `--init` able to roll an
+        // enclave back with nothing red. This repo has already paid for that
+        // exact shape once — 803-49re, "Part A was fixed once, and there were
+        // two purge paths", where the fix landed on one installer and the
+        // developer-facing one still reproduced the incident.
+        let init = source_window(source, "fn run_init(debug: bool, force: bool)");
+        assert!(
+            init.contains("downgrade_refusal()") && init.contains("return Err(refusal)"),
+            "run_init must refuse a downgrade too: it builds images by its own              route, so the chokepoint guard does not cover it (order 834-r6vn)"
+        );
+    }
+
+    /// ORDER 834-r6vn, THE OPERATOR'S ESCAPE HATCH. `--force-downgrade` reaches
+    /// the guard through the ENVIRONMENT, not as a parameter, because the guard
+    /// fires at a chokepoint every mode reaches by a different route. That seam
+    /// is invisible to the core crate's tests: they take `force` as a bool, so
+    /// they would all still pass if the flag stopped setting the variable and
+    /// the documented escape hatch silently became a no-op.
+    #[test]
+    fn the_force_downgrade_flag_sets_the_variable_the_guard_reads() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+
+        assert_eq!(
+            FORCE_DOWNGRADE_ENV, "TILLANDSIAS_FORCE_DOWNGRADE",
+            "the guard reads this name; changing it silently disarms the flag"
+        );
+        let flag = source
+            .find(r#"a == "--force-downgrade""#)
+            .expect("--force-downgrade must be parsed");
+        assert!(
+            source[flag..flag + 400].contains("set_var(FORCE_DOWNGRADE_ENV"),
+            "parsing --force-downgrade must SET the variable the guard reads, or              the flag is accepted and does nothing (order 834-r6vn)"
+        );
+        assert!(
+            source.contains(r#""--force-downgrade","#),
+            "the flag must stay in known_flags, or it is rejected as unknown              before it can be honoured"
+        );
+    }
+
     fn fixture_image_identity(source_digest: &str) -> ImageBuildIdentity {
         ImageBuildIdentity {
             source_digest: source_digest.to_string(),
