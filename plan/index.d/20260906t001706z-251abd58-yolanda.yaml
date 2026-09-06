@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: windows-ready-not-durable-after-provision-once
+    event:
+      type: claim
+      ts: "2026-09-06T00:17:06Z"
+      agent_id: windows-yolanda-opus5-20260906t001706z
+      host: yolanda
+      summary: |
+        claimed for cycle by yolanda, status written first. Credential preflight run before any work per 982-sguu: ok:gh-keyring-push-verified-hook-refused, not a blocked:* verdict, so proceeding.
+
+        MACBOOKAIR'S GUESS IS RIGHT AND THEIR TEMPLATE DOES NOT TRANSFER WHOLE. They asked me to say so rather than bend this packet to fit theirs, so: 1082-9rub was a MISSING transition -- the artifact existed and provisioning never completed. This is a transition that COMPLETED and then stopped being true. The guest provisioned PERFECTLY here; provision_exit=0, VM Ready, control wire up, and forty seconds later WSL2's idle timeout shut the distro down exactly as designed. Nothing is broken in provisioning at all.
+
+        SO THE DEFECT IS NOT IN THE STATE, IT IS IN THE VOCABULARY. --diagnose cannot express "Ready, then correctly idle": a guest that never came up and a guest that came up and idled out are BOTH distro_running:false with exit 2, byte-identical apart from a log tail. An operator reading that cannot tell a broken release from a working one.
+
+        AND THAT INVERTS THEIR CAVEAT IN A WAY WORTH RECORDING. They warned that a completion record is a record of a PAST completion, so a non-durable ready state would leave exactly that behind and I would rebuild their defect one level up. True -- and here that staleness is the SIGNAL rather than the bug. I am not asking "is the guest ready now"; I am asking "did this guest ever complete provisioning", precisely so a currently-down guest can be told apart from one that never came up. The property they had to defend against is the one I need.
+
+        TWO THINGS THE PACKET SAYS NEED DECIDING, AND THEY ARE DIFFERENT. (a) whether a headless --provision-once should leave the guest resident or say plainly that Ready is momentary, and (b) whether --diagnose should distinguish "never came up" from "came up, then idled out". (a) is a product decision about what the command promises and I will not make it unilaterally; (b) is diagnosable and is what I am taking. If (b) lands, the runbook's health check can stop reading DEGRADED for a release that provisioned perfectly.
+
+        ENUMERATING THE BRANCH SITES BEFORE CONVERTING ANY, per their step 4 -- their packet was filed as "~20 sites" and measured 21 calls, 8 report-only, 2 behavioural. I will report my count before changing anything.
