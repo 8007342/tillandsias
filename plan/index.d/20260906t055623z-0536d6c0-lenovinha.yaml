@@ -1,0 +1,75 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: nix-toolbox-rung-is-unreachable-because-nothing-provisions-it
+    event:
+      type: progress
+      ts: "2026-09-06T05:56:23Z"
+      agent_id: linux-lenovinha-claude-20260906t053519z
+      host: lenovinha
+      summary: |
+        CRITERION 1: lenovinha's row, measured 2026-09-06. AND THE PACKET'S BLOCKING
+        PREMISE DOES NOT HOLD HERE — the toolbox rung resolves on this host, so "can
+        never resolve" is false as written. Option A is not merely possible, it has
+        already happened.
+
+        THE ROW (Fedora Silverblue 44, immutable, overlayfs root):
+          host nix                       ABSENT (command -v nix)
+          /nix                           ABSENT
+          systemctl is-active nix-daemon.socket   inactive
+          nix-toolbox.sh capability      ok:nix-capability:toolbox   rc=0
+          nix-toolbox.sh nix-args        --store /var/home/lenovinha/.local/share/tillandsias/nix-store   rc=0
+          nix-toolbox.sh store-status    ok:nix-store:populated:paths=5716:size=8G:pinned=1
+          toolbox tillandsias-nix        /usr/bin/nix, nix (Nix) 2.34.8,
+                                         rpm -qf -> nix-core-2.34.8-1.fc44.x86_64
+
+        So on a host with NO host-nix the ladder returns FLAGS, not `blocked:`. That is
+        criterion 2's exact wording, satisfied on this host kind. The base image
+        (registry.fedoraproject.org/fedora-toolbox:44) does not ship nix, and the RPM
+        is present, so it was installed INTO the toolbox — which is what
+        ensure_toolbox_nix (917-zkge follow-on, nix-toolbox.sh:265) does with
+        `sudo dnf install -y nix`. Option A, implemented.
+
+        THE PROBE THAT DECLARED IT IMPOSSIBLE IS NOT THE OPERATION IT RULED ON, and
+        this is the part worth carrying to the other hosts. The packet says: "there is
+        no passwordless root inside the toolbox on this host (`sudo -n true` fails), so
+        it cannot run unattended." Both halves are measurable here and they DISAGREE:
+
+          toolbox run -c tillandsias-nix sudo -n true   -> rc=1, "sudo: a password is required"
+          toolbox run -c tillandsias-nix sudo true      -> rc=0
+          toolbox run -c tillandsias-nix sudo id -u     -> 0        (genuinely root)
+          same three in tillandsias-builder             -> same, sudo id -u -> 0
+
+        `sudo -n` refuses while plain `sudo` escalates to uid 0 unattended, with no
+        prompt and no hang. ensure_toolbox_nix uses plain `sudo`, which is why it
+        worked. A conclusion about `sudo dnf install` drawn from `sudo -n true` is a
+        conclusion about a different command. RECOMMEND yoga re-measure with plain
+        `sudo id -u` before treating the toolbox rung as unprovisionable there; if it
+        returns 0, that host's blocker is gone too and this packet reduces to
+        criteria 1 and 3.
+
+        WHAT I ALMOST FILED, recorded because the error is reusable. I first probed
+        `tillandsias-builder` and found /usr/local/bin/nix to be a 934-7jd4
+        host-escape shim that flatpak-spawns the HOST's nix — which does not exist
+        here — so `nix --version` fails rc=1 inside it. I was one step from reporting
+        "the rung reports ok while nix cannot run", a false green of exactly the kind
+        this session has been finding elsewhere. It was wrong because TOOLBOX_NAME is
+        `tillandsias-nix` (nix-toolbox.sh:110), a different container, and the real
+        one has a working nix. I found that by reading the variable rather than
+        assuming the builder toolbox was the toolbox. The builder's broken shim is a
+        true observation and is NOT this rung; whether a shim that can never resolve
+        should fail loudly at creation is a separate question, not filed here.
+
+        Also note a smaller trap in the same area: NIX_FEATURES is ONE argument
+        containing a space (`--extra-experimental-features "nix-command flakes"`).
+        Retyping it as two flags produces a different command line that fails, so
+        reproduce toolbox_nix_works by calling it, not by retyping it.
+
+        CRITERION 3 (606-um5s's precondition note) NOT ADDRESSED this cycle.
