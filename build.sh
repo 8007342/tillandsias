@@ -2084,6 +2084,21 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "expire-claims --list-live rows fixture passed"
 
+    # `expire-claims` must not mutate unless asked (1067-24q6). It defaulted to
+    # write mode, so asking what it would do RELEASED another host's claim —
+    # three independent hosts did it in one day, each catching it only by
+    # reading `git status` afterwards. The victim is by construction a host that
+    # is not present to object. Both directions are pinned: bare invocation
+    # leaves the ledger byte-identical, and --write still expires a genuinely
+    # stale claim, because "writes nothing" is trivially satisfied by breaking
+    # the reaper and would silently delete 641-e2qa criterion 2.
+    _step "Checking expire-claims writes only when asked (1067-24q6)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-expire-claims-write-is-opt-in.sh" 2>&1; then
+        _error "expire-claims mutates without an explicit --write, or --write no longer expires — a read probe can release another host's lease"
+        exit 1
+    fi
+    _info "expire-claims write-is-opt-in fixture passed"
+
     _step "Checking the release runbook's tag/back-merge order (898-zhf3)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-release-runbook-tag-order.sh" 2>&1; then
         _error "the release runbook prescribes an order the pre-push hook refuses — the next cut deadlocks at the tag push"

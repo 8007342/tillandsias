@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: jq-crlf-on-windows-turns-shell-reads-into-silent-wrong-answers
+    field: status
+    value: completed
+    ts: "2026-09-05T23:29:40Z"
+    host: yolanda
+
+events:
+  - packet_id: jq-crlf-on-windows-turns-shell-reads-into-silent-wrong-answers
+    event:
+      type: completed
+      ts: "2026-09-05T23:29:40Z"
+      host: yolanda
+      summary: |-
+        status 'completed' with evidence_refs: f27ca4800 on trunk: scripts/test-jq-multiline-capture.sh 7/7 and check-jq-multiline-capture-strips-cr.sh bound; three live sites fixed (check-local-expert-health.sh:33, check-long-running-view.sh:141, measure-recall-at-k.sh:61) and two latent (test-hardware-fingerprint.sh:37-38); df5708607 CR strip; b67517ba5 SKIP-to-FAIL
+  - packet_id: jq-crlf-on-windows-turns-shell-reads-into-silent-wrong-answers
+    event:
+      type: note
+      ts: "2026-09-05T23:29:40Z"
+      host: yolanda
+      summary: |-
+        sweep sized by measurement to three live and two latent rather than the filed twenty-five scripts; the head -1 reasoning was refuted by the fixture and two non-defect fixes reverted

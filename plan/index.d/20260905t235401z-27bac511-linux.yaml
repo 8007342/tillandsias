@@ -1,0 +1,75 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-fragment-repair-must-be-a-correction-fragment-and-the-scorable-guard-must-fold-before-it-can-be
+    event:
+      type: progress
+      ts: "2026-09-05T23:54:01Z"
+      agent_id: linux-lenovinha-claude-20260905t233514z
+      host: linux
+      summary: |
+        All four exit criteria met, gated green, and pushed to work/1071-adhj at
+        e3742f507ef41158d253f8997ad4b03c9e010dda awaiting relay. Evidence per criterion:
+
+        1. THE FOLDED PACKET. check-scorable-obligation-added.sh defers any packet with
+           no obligation in its own bytes, then answers from a union scan over every
+           fragment plus the base. Verified in a synthetic repo: declaration plus
+           correction in the same push -> ok:scorable-obligations:2 checked, with
+           note:scorable-obligation-by-correction:1 naming what happened.
+
+        2. NO PLAN BINARY, AND NO BLOCKING BRANCH TO GET WRONG. The packet's concern was
+           that folding would drag a built artifact into a sub-second refusal, which then
+           either blocks unbuilt hosts or passes silently (1024-c3h3). Neither applies: a
+           scorable obligation is MONOTONE under the G-Set union, so the fold for this
+           predicate is a union scan rather than a ledger reconstruction. Measured before
+           the design was chosen: 36ms for one awk pass over 585 fragments plus the
+           63,445-line base, and pass 2 runs only when pass 1 left a question open.
+           Pinned by a fixture arm scanning the guard's CODE (comments stripped, because
+           the header discusses the plan binary to explain why it is not used).
+
+        3. THE BAN IS WRITTEN WHERE A REPAIRER MEETS IT. plan/index.d/README.md gains
+           "Repairing a fragment: write a correction, never edit it" with the recipe and
+           the 2026-09-05 collision; methodology gains
+           ...append_only_history.implementation.fragment_repair_is_a_correction_fragment,
+           a sibling of concurrency_block — which forbade editing the BASE and never the
+           FRAGMENT, which is the gap that bit.
+
+        4. FOUR ARMS, NOT TWO. A correction satisfies; the same declaration with no
+           correction anywhere is still refused; a SILENT correction repairs nothing; a
+           PROSE correction is refused exactly as it would be inline. The last two exist
+           so the fix cannot be "the guard now accepts a second file".
+
+        DISCRIMINATION, four mutations, each restored:
+           disable the fold        -> ONLY the correction arm reds  (21/22)
+           everything scorable     -> the refusal arms red
+           loosen pass 2's grammar -> the prose arms red
+           reach for the binary    -> ONLY the no-binary arm reds   (21/22)
+
+        THE INTERMEDIATE THE PACKET OFFERED WAS NOT TAKEN, deliberately: scanning only
+        same-push fragments covers the common case, but the union scan covers that AND
+        the later-push case for the same 36ms, so the narrower design bought nothing.
+
+        A DEFECT I INTRODUCED AND CAUGHT BEFORE IT SHIPPED, recorded because it is this
+        packet's own subject: my first fold passed `plan/index.d/*.yaml plan/index.yaml`
+        to awk under 2>/dev/null. awk treats a missing operand as FATAL and emits NOTHING
+        AT ALL, not even from files already read — measured, rc 2 and zero output. On any
+        tree without a base index the guard would have fallen back silently to
+        per-fragment judgement and refused packets a correction had repaired, telling the
+        author to edit an append-only fragment in place. The harm this packet exists to
+        stop, reintroduced by its own fix and hidden by a stderr redirect. Found by
+        asking what the fixture's synthetic repo actually contains rather than assuming
+        it matched the real tree; it has no base index, so it now exercises the
+        defensive path on every run.
+
+        AND ONE INVALID CONTROL, kept in the fixture as a comment. My first no-binary arm
+        ran the guard with PATH=/nonexistent and returned an empty verdict, which I could
+        have written up as "refuses cleanly without a binary". It measured nothing: it
+        had removed git, awk, grep and mktemp, which the guard legitimately needs. A
+        control that breaks the subject along with the variable measures nothing.

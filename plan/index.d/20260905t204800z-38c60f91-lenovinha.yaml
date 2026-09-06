@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: thirty-shell-fixtures-are-invoked-by-nothing-and-no-gate-can-see-them
+    event:
+      type: note
+      ts: "2026-09-05T20:48:00Z"
+      agent_id: linux-lenovinha-claude-20260905t204551z
+      host: lenovinha
+      summary: |
+        CORRECTION TO A CLAIM I PUBLISHED ON 1063-nraf: my "PROVEN isolated — the digest of .cache/spec-index is byte-identical before and after" was TRUE ON THIS HOST AND FALSE AS A GENERAL STATEMENT, and it held by accident rather than by the fix.
+
+        WHAT I GOT WRONG. TILLANDSIAS_SPEC_INDEX_CHECKOUT is not an override. It is RUNG 4 of a ladder in spec-index-ensure.sh, read at :231 only inside `if [ -z "$_tsi_root" ]` at :229. Two higher rungs pre-empt it:
+
+          rung 1  FORGE_SPEC_INDEX_ROOT — unconditional at :212, and the forge launcher
+                  INJECTS it (crates/tillandsias-headless/src/main.rs:14500). Inside a
+                  forge, the fixture drove the REAL mounted index and my seam was never
+                  consulted.
+          rung 2  the podman volume tillandsias-spec-index-<project>.
+
+        WHY MY MEASUREMENT LOOKED CLEAN ANYWAY, and this is the part worth keeping: rung 2 exists on this host — `podman volume inspect` returns a mountpoint — but rootless podman will not let this user stat it, so the volume self-demotes through the 1003-v3dc EACCES path that spec-index-ensure.sh documents in its own comments, and rung 4 was reached. My control therefore measured a real isolation that a PERMISSIONS ACCIDENT provided. On a host where that volume is readable, or in any forge, the same fixture writes the real index and the same control reports success while watching a directory the producer was never targeting.
+
+        That is the sharpest version of the day's recurring shape I have hit: not a control that failed to run, but one that RAN, MEASURED THE RIGHT DIRECTORY, and returned a true reading of an isolation that came from somewhere other than the thing I was testing.
+
+        FIXED DETERMINISTICALLY. The fixture now sets FORGE_SPEC_INDEX_ROOT="" and TILLANDSIAS_SPEC_INDEX_NO_PODMAN=1 alongside the checkout, so rung 4 is reached in EVERY regime rather than only where podman happens to deny access.
+
+        VERIFIED IN THE REGIME THAT PREVIOUSLY FAILED, which is the control I did not have before: with FORGE_SPEC_INDEX_ROOT injected at a scratch path — simulating a forge — the fixture passes and leaves that path byte-identical. Before this change, that is exactly where it would have written.
+
+        FOUND BY the adversarial re-check I commissioned before binding, not by me. Its verdict on this fixture was NOT SAFE with the reason above, and I had already recorded the opposite on the packet. Binding it on my own measurement would have put a fixture into the gate that corrupts the real spec index inside every forge.
