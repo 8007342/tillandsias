@@ -72,15 +72,40 @@ resolve_plan_binary() {
     if [ -n "$ctd" ] && [ "${ctd#/}" = "$ctd" ]; then
         ctd="./$ctd"
     fi
+    # ORDER 1030-i2p8 — LOCUS-NATIVE ARTEFACT FIRST, WITHIN EACH GROUP.
+    #
+    # These used to try `.exe` before the ELF. Inside the tillandsias-build WSL2
+    # distro on a SHARED Windows/WSL checkout both artefacts sit side by side,
+    # and with WSL interop enabled the .exe RUNS there — so this probe resolved
+    # the .exe while ensure_fresh_plan_binary rebuilt and touched the ELF. The
+    # thing touched was not the thing resolved, the .exe stayed stale forever,
+    # and every floor gate refused at `blocked:fragment-events-land:no-fresh-
+    # plan-binary` without ever completing. Measured on esmeraldinha 2026-09-04:
+    # gate6 exit=1 at 7m58s, after a `git pull` bumped two plan-crate source
+    # mtimes past the .exe.
+    #
+    # REORDERING IS SAFE BECAUSE THIS IS A RUN-DON'T-STAT PROBE: it returns a
+    # candidate only when that candidate's `capabilities` actually succeeds.
+    # Inside a Linux distro the ELF runs and the .exe is skipped; on the Windows
+    # side the ELF cannot execute and is skipped, leaving the .exe. Each locus
+    # gets its native artefact without either having to know which locus it is
+    # in, and no caller has to pass a flag saying so.
+    #
+    # The premise is currently MASKED on esmeraldinha, not absent: interop is
+    # disabled in that distro today (a .exe there exits 126, `Exec format
+    # error`), so the probe already falls through to the ELF. Interop is a
+    # per-distro setting that can be turned back on without anyone touching this
+    # repository, which is why this is fixed by ordering rather than left to the
+    # environment.
     for candidate in \
-        ${ctd:+"$ctd/release/tillandsias-plan.exe"} \
-        ${ctd:+"$ctd/debug/tillandsias-plan.exe"} \
         ${ctd:+"$ctd/release/tillandsias-plan"} \
         ${ctd:+"$ctd/debug/tillandsias-plan"} \
-        ./target/release/tillandsias-plan.exe \
-        ./target/debug/tillandsias-plan.exe \
+        ${ctd:+"$ctd/release/tillandsias-plan.exe"} \
+        ${ctd:+"$ctd/debug/tillandsias-plan.exe"} \
         ./target/release/tillandsias-plan \
         ./target/debug/tillandsias-plan \
+        ./target/release/tillandsias-plan.exe \
+        ./target/debug/tillandsias-plan.exe \
         "$(command -v tillandsias-plan 2>/dev/null)"; do
         [ -n "$candidate" ] || continue
         [ -f "$candidate" ] || continue
@@ -231,8 +256,34 @@ ensure_fresh_plan_binary() {
         # stale-plan-binary). Record cargo's verdict in the mtime domain for
         # the artifact THIS build governs; a PATH-installed binary the build
         # does not produce is deliberately not touched.
-        touch "${CARGO_TARGET_DIR:-target}/release/tillandsias-plan" 2>/dev/null || true
-        bin="$(resolve_plan_binary)" || return 1
+        # ORDER 1030-i2p8 — TOUCH AND SELECT THE ARTEFACT CARGO ACTUALLY
+        # PRODUCED, under whichever name exists in this locus.
+        #
+        # This used to `touch` a path CONSTRUCTED independently of resolution
+        # and then re-resolve, so on a shared checkout the touched file and the
+        # resolved file could be different artefacts and the resolved one stayed
+        # stale forever. The ordering fix above makes that agree in the normal
+        # case; this makes it agree BY CONSTRUCTION even when it does not.
+        #
+        # The ELF name is tried first and the .exe second for the same
+        # locus-native reason, and each candidate must still RUN before it is
+        # touched — touching an artefact this cargo run did not build would
+        # bless a stale binary as fresh, which is the failure this whole packet
+        # is about, inverted.
+        _pbp_built=""
+        for _pbp_c in "${CARGO_TARGET_DIR:-target}/release/tillandsias-plan" \
+                      "${CARGO_TARGET_DIR:-target}/release/tillandsias-plan.exe"; do
+            [ -f "$_pbp_c" ] || continue
+            "$_pbp_c" capabilities >/dev/null 2>&1 || continue
+            touch "$_pbp_c" 2>/dev/null || true
+            _pbp_built="$_pbp_c"
+            break
+        done
+        if [ -n "$_pbp_built" ]; then
+            bin="$_pbp_built"
+        else
+            bin="$(resolve_plan_binary)" || return 1
+        fi
         if ! plan_binary_is_stale "$bin"; then
             printf '%s\n' "$bin"
             return 0
