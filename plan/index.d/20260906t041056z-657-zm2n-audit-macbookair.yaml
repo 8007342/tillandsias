@@ -1,0 +1,68 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  657-zm2n:
+    - type: progress
+      ts: "2026-09-06T04:10:56Z"
+      agent_id: "macos-tlatoanis-macbook-air-claude-20260905t144547z"
+      host: tlatoanis-macbook-air
+      summary: |
+        AUDIT, NOT IMPLEMENTATION. This packet is offered as ready and cannot be
+        completed by any host today, and half its premise is already fixed.
+        Measured before writing any code.
+
+        1. TWO OF THREE DEPENDENCIES ARE UNMET, AND NOTHING FLAGS IT.
+             accel-capability-probe .......... completed
+             host-native-sidecar-endpoints ... ready
+             macos-metal-sidecar-bringup ..... ready
+           The deliverable is "EngineRecord entries that appear and disappear
+           with the leased registration" and "usable=true only while a live
+           sidecar registration exists". Both need a sidecar lane that has not
+           been built.
+           `tillandsias-plan blocked-by 657-zm2n` returns NOTHING, no
+           parked-block row mentions it, and `ready` offers it. The parked-block
+           mechanism flags dependencies at `implemented` and `blocked` — never
+           at `ready` — so a dependency whose work has simply not STARTED does
+           not register as a block, and the dependent is offered as claimable.
+           This is 1080-4deb's family with the reader and the writer swapped: not
+           a write nothing consults, but a DECLARED EDGE the consulting tool does
+           not treat as an edge.
+
+        2. STRUCTURAL FICTION (2) IS ALREADY FIXED, AND THE PACKET DOES NOT KNOW.
+           It says `enumerate_engines()` "hardcodes exactly one ollama/
+           llama-server EngineRecord (accel_probe.rs:468-474)". Measured at HEAD:
+           `enumerate_engines()` (now :3143) delegates to
+           `enumerate_engines_with(is_binary_available, inference_image_present)`
+           and discovers dynamically. Fixed by 803-825k
+           (accel-probe-engines-field-is-a-hardcoded-literal, status
+           `implemented`), which this packet does not reference.
+           WHAT SURVIVES OF IT: the dynamic path is SIDECAR-BLIND — grep for
+           `HostNativeSidecar` in accel_probe.rs returns nothing, while
+           engine_slots.rs:20 already defines the kind. So the residue is "the
+           discovery does not know about the sidecar engine", which is a
+           narrower and different claim from "the field is a hardcoded literal".
+
+        3. STRUCTURAL FICTION (1) STANDS. main.rs:4431 still carries
+           `#[cfg(target_os = "macos")] "metal"` inside the tier detection, and
+           headless is cross-compiled to linux-aarch64 and runs inside the VZ
+           guest, so that arm cannot execute in production and the guest reports
+           `cpu`. Unchanged and correctly described.
+
+        4. EVERY LINE SPAN IN THE PACKET IS STALE. Cited :3041-3069, :468-474,
+           :272-291, :915-936, :544-603, :60-70. The two I checked have moved
+           (enumerate_engines is at :3143; the metal arm at :4431). A reader
+           following them lands in unrelated code — and the packet's own value is
+           that it cites evidence, so stale spans cost it exactly what it was
+           filed for.
+
+        DISPOSITION I AM NOT TAKING UNILATERALLY: this wants either `pending`
+        with the two dependencies named in a field the selector reads, or a
+        split — fiction 1 (the dead metal arm) is independently actionable TODAY
+        and needs no sidecar, while everything sidecar-shaped waits. I have not
+        re-statused it beyond releasing my claim, because choosing between those
+        is a routing decision and the coordinator owns routing.
+
+        WHAT A CLAIMER SHOULD DO FIRST, if it is split: fiction 1 is the whole
+        of the independently-doable part, and its exit criterion is not in the
+        current list — every one of the four criteria is sidecar-conditioned.
+        So a split needs a new criterion written for it rather than an existing
+        one inherited.
