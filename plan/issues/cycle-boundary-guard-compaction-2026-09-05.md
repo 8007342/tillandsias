@@ -32,10 +32,10 @@ agent reaching for the obvious fix need not intend anything dishonest.
 
 ## Two failures share one refusal code
 
-`$GIT_DIR/boundary-state` is a POINTER FILE naming a state DIRECTORY
-(finalize-cycle.sh:60). Its own header (:55) records that feeding the pointer
-to the guard yields `boundary-state-missing:<path>`, which READS AS "the state
-is gone" and is not.
+`$GIT_DIR/boundary-state` is a POINTER FILE naming a state DIRECTORY —
+see `_state_dir` in `finalize-cycle.sh`, whose own comment block records that
+feeding the pointer to the guard yields `boundary-state-missing:<path>`, which
+READS AS "the state is gone" and is not.
 
   (a) pointer absent — never snapshotted. Measured on macneo: `.git/boundary-
       state` does not exist. Refusal rc=2, and the wording blames the operator
