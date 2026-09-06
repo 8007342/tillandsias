@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: the-push-authorization-probe-reads-the-users-repo-access-not-the-tokens-grant-so-it-greens-a-token-that-cannot-push
+    event:
+      type: note
+      ts: "2026-09-06T07:47:46Z"
+      host: macuahuitl
+      summary: |-
+        STRONGER STATEMENT OF THE DEFECT, measured by esmeraldinha after the
+        operator granted Contents: Read-and-write on the same PAT.
+
+        `.permissions.push` returns TRUE after the change — exactly as it
+        returned true BEFORE the change, when the push was denied 403. The
+        field's value is INVARIANT ACROSS THE EXACT TRANSITION IT CLAIMS TO
+        DETECT.
+
+        That is a cleaner falsification than the original failure. A signal that
+        is wrong on one token invites "which token, what scopes, is it a fluke".
+        A signal that does not move when the underlying permission moves cannot
+        be a measurement of that permission at all, whatever value it happens to
+        show. No sampling of tokens can rescue it.
+
+        The push itself is confirmed working: `* [new branch] HEAD ->
+        work/cred-verify-probe`, rc=0, pre-push gate green
+        (ok:linux-next-merged:0, preflight clean). It was a --dry-run and
+        esmeraldinha verified the remote carries no stray ref afterwards — the
+        control that keeps a verification from leaving debris.
+
+        So the four measured shapes stand and the accept is now falsified twice
+        over: once by a token that reads true and cannot push, and once by the
+        value failing to change when the capability does.

@@ -1,0 +1,59 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-lock-held-by-another-users-live-process-reads-as-dead-and-is-stolen
+    order: 1102-e4tk
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [runtime, testing, fail-loud, multi-host]
+    estimated_hours: 1
+    owned_files:
+      - scripts/cycle-checkout-lock.sh
+    verifiable_closure: |
+      bash scripts/test-cycle-lock-attested-release.sh with a new arm that plants
+      a live holder owned by ANOTHER uid and asserts the lock is NOT reclaimed.
+      RED ON TODAY'S CODE: `kill -0` returns EPERM for a foreign-uid process and
+      the arm currently sees the lock stolen. The arm must also pass under a fix
+      that reads EPERM as ALIVE.
+    title: |
+      MEASURED by pirria on trunk: dir_lock_live() decides holder liveness with `kill -0`, which returns EPERM for another user's process — so a live foreign-uid holder is classified DEAD and a second lane takes a checkout that is genuinely in use
+    context: |
+      FOUND by pirria 2026-09-06 while building a POSITIVE CONTROL for
+      1098-q7bk, and found only because the control behaved wrongly and they
+      checked the INSTRUMENT rather than the arm. Their PID-1 mutant left the arm
+      red; the arm was right and `kill -0` was lying.
+
+      THE THEFT, reproduced end to end on trunk dffb6146f — not inferred:
+
+        root-owned holder  pid=2 kthreadd, /proc/2 exists, genuinely ALIVE
+        kill -0 says       DEAD (EPERM)
+        status          -> ok:checkout-lock:free
+        acquire         -> ok:checkout-lock:acquired:thief:2656302
+
+      WHY THE GUARD CANNOT NOTICE. `kill -0` conflates THREE outcomes into one
+      non-zero: no such process, no permission, and invalid pid. Only the first
+      means dead. The current test takes all three as dead, which is the most
+      destructive of the three readings, and nothing in the output distinguishes
+      them.
+
+      REGIME, stated narrowly by its finder. Same-uid holders — the
+      overwhelmingly common case — are unaffected. It needs a shared checkout
+      with mixed uids: a root-run cron or systemd unit beside a user agent, or a
+      container/toolbox writing as a different uid into a bind-mounted checkout.
+      That last one is not hypothetical on this fleet — the timing log already
+      carries records written as `toolbx` and as `pirria` against one repo.
+
+      WHERE IT SITS, and this is the sharpest part. One block ABOVE, the file
+      already warns: "An env var inherited into an unrelated context would anchor
+      the lock to a live process with nothing to do with this cycle — presence
+      used as proof." The liveness test one block BELOW is ABSENCE used as proof,
+      with a failure mode the author of that comment would have recognised.
+    next_action: |
+      Distinguish EPERM from ESRCH. /proc/<pid> existence is the direct test on
+      Linux and needs no permission; `kill -0` can stay as the portable arm with
+      EPERM read as ALIVE rather than dead — err toward keeping a lock we may not
+      own, since a false hold blocks one cycle while a false steal corrupts a
+      running one. macOS has no /proc, so the portable path needs `ps -p` or an
+      errno-aware probe; do not assume /proc.

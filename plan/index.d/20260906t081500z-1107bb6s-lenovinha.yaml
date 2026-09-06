@@ -1,0 +1,102 @@
+packets:
+  - packet_id: compaction-renders-packet-fields-in-a-different-order-than-the-fold-so-trunk-is-red
+    order: 1107-bb6s
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: bug
+    pickup_role: any
+    depends_on: []
+    capability_tags:
+      - plan
+      - rust
+      - ledger
+      - trunk-red
+    estimated_hours: 3
+    title: >
+      origin/linux-next is RED and the failure is not in test-known-red.txt:
+      compaction_on_the_real_ledger_preserves_every_comment_and_item fails
+      because compaction renders a packet's fields in a different ORDER than
+      the Value-domain fold produces them.
+    context: |
+      TRUNK IS RED AND NOBODY OWNS IT. Every host's `land-on-platform-branch.sh`
+      runs the full gate, so this blocks landing for the whole fleet, not just
+      the host that noticed.
+
+      REPRODUCED ON CLEAN TRUNK, which is the fact that matters. lenovinha hit
+      it landing an unrelated SHELL-ONLY change and did not assume it was
+      theirs:
+
+        git worktree add --detach <tmp> origin/linux-next    # 0fda3ff49
+        cd <tmp>
+        cargo test -p tillandsias-plan --lib \
+          compaction_on_the_real_ledger_preserves_every_comment_and_item
+        -> FAILED. 0 passed; 1 failed  (86.58s)
+
+      No commit of the reporting host is present in that worktree. The change
+      being landed touched only scripts/check-scorable-obligation-added.sh and
+      scripts/test-scorable-obligation-gate.sh — no Rust, no ledger content —
+      so it cannot be the cause, and the clean-trunk run proves it directly
+      rather than by that argument.
+
+      WHAT ACTUALLY DIFFERS, read from the assertion rather than guessed. The
+      test compares the packets parsed from the compacted TEXT against the
+      packets from the Value-domain fold, at fragments.rs assert_fold_equivalent:
+
+        both sides carry 819 `packet_id` occurrences  -> nothing lost or added
+        both sides begin with the same packet          -> not a global reordering
+        782 packet mappings a side, and NINE differ
+        the differing mappings are byte-for-byte the SAME LENGTH (11760 vs
+        11760 on the first) -- so the content is identical and the FIELD ORDER
+        is not
+
+      In the first differing packet the `next_action_ts` and `next_action`
+      keys sit at position 2 on one side and elsewhere on the other. The nine:
+
+        fat-spec-expert-cannot-refuse-an-out-of-corpus-question
+        host-preamble-does-not-check-git-identity-or-name-its-cargo-assumptions
+        linux-native-stream-audit
+        on-a-floor-host-the-smokes-own-wrapper-cannot-survive-its-forge-lane-so-the-largest-floor-timing-is-the-one-never-captured
+        precommit-openspec-scan-exceeds-ten-minutes-on-large-files
+        the-answer-rate-litmus-step-times-out-because-the-timing-log-it-reads-has-grown-past-its-budget
+        the-push-authorization-probe-reads-the-users-repo-access-not-the-tokens-grant-so-it-greens-a-token-that-cannot-push
+        transport-negligible-overhead-audit
+        vault-blocking-watch
+
+      All nine carry a `next_action` set by `tillandsias-plan set-field`, which
+      is the shared factor worth checking first: whether set-field's LWW write
+      places `next_action_ts`/`next_action` at a position the compactor then
+      renders differently.
+
+      NOT A CONTENT DEFECT, AND THAT IS WHY IT IS EASY TO MISREAD. Every shape
+      gate calls this ledger clean — `tillandsias-plan check` reports
+      "799 packets, ids unique, live references sound". The build's own message
+      beside the failure already says it: "a ledger change every shape gate
+      calls clean can still break what the expert system can ANSWER."
+    exit_criteria:
+      - |
+          compaction_on_the_real_ledger_preserves_every_comment_and_item passes
+          on origin/linux-next, and the fix addresses the ordering divergence
+          rather than relaxing the assertion or adding the test to
+          scripts/test-known-red.txt — masking a fold-equivalence failure
+          removes the only check that compaction does not change state.
+      - |
+          The mechanism is named: which writer emits the field order the other
+          side does not expect, set-field or compact_text, and why the nine
+          packets diverge while the other 773 do not.
+      - |
+          A fixture arm reproduces the divergence from a synthetic ledger — a
+          packet written by set-field with a next_action, then compacted —
+          and REDS before the fix, so the real-ledger test is not the only
+          thing standing between this and a silent recurrence.
+    unscoreable: |
+      No litmus can be named yet. The pin belongs with the fix: criterion 3
+      creates the fixture arm that would score this, and naming a test that
+      does not exist is what 885-92iu refuses. Replace this with a
+      verifiable_closure naming that arm once it lands.
+    notes: |
+      Filed by lenovinha while holding 1093-hzhi and 1101-b5rc, whose fix is
+      gated green locally and cannot land until this clears. Not adopted here
+      because it is a different subsystem (Rust fold/compaction, not the shell
+      guards) and because a p1 trunk red should be visible to the fleet rather
+      than absorbed into someone else's in-flight cycle.
