@@ -50,6 +50,17 @@ cd "$ROOT"
 # Activation surfaces (files/globs). Missing ones are skipped, not fatal.
 surfaces=(
   "build.sh"
+  # ORDER 1072-b7eq MADE THIS SURFACE NECESSARY, and its absence made the
+  # migration's own note come true. Eleven gate steps moved out of build.sh
+  # into scripts/gate-steps.d/*.step, each naming its script in a literal
+  # STEP_SCRIPT. Those bindings are real activation, and the migration comment
+  # twenty lines below already predicts this exact failure — "the fixture is
+  # now one indirection further from every name-based scan" — but the surface
+  # list was never extended to follow it. The population here is check-*.sh,
+  # and the eleven migrated bindings are all test-*.sh, so nothing reded until
+  # the first check-*.sh was bound this way (check-plan-binary-current.sh,
+  # 2026-09-06) and was reported an orphan while wired and running.
+  scripts/gate-steps.d
   scripts/local-ci.sh
   scripts/run-litmus-test.sh
   scripts/mo-full-attest.sh
