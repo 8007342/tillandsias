@@ -1,0 +1,74 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-verdict-producing-check-cannot-say-which-machine-it-measured-so-a-quiet-box-result-and-a-gate-result-are-indistinguishable
+    order: 1085-rn8u
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [gate, verification, fail-loud, instrumentation]
+    estimated_hours: 2
+    owned_files:
+      - build.sh
+      - scripts/check-sigpipe-verdict-measured.sh
+      - scripts/test-sigpipe-verdict-measured.sh
+    exit_criteria:
+      - "build.sh exports an explicit in-gate marker on the --check path only, and a check invoked by the gate can read it; pre-fix result: FAILS, no variable in this tree names that condition — the nearest, TILLANDSIAS_NO_SINGLETON at build.sh:26, is exported unconditionally and means something else"
+      - "a verdict produced inside the gate is distinguishable in its OWN TEXT from one produced by a standalone sweep, so the distinction survives being pasted into a packet by someone who was not there; pre-fix result: FAILS, both print the same string"
+      - "a fixture asserts the export is still present in build.sh AS A LITERAL, and reds if it is removed; pre-fix result: FAILS, nothing reads it because nothing writes it. THIS IS THE CRITERION THAT MAKES THE OTHER TWO REAL — without it the two halves drift silently and every in-gate run starts emitting the SAFE-looking value with nothing complaining"
+    title: |
+      a verdict-producing check cannot name the conditions it measured under, so `measured-clean` from an idle box and from inside a live gate are the same string — and on current evidence they are not the same claim
+    context: |
+      MEASURED 2026-09-05/06 across esmeraldinha (WSL/drvfs) and macuahuitl
+      (Fedora/btrfs-on-NVMe), out of 1076-kft9.
+
+      THE OBSERVATION THAT FORCED IT. macuahuitl's copy of
+      test-sigpipe-verdict-measured.sh failed twice inside `./build.sh --check`
+      and never once outside it: 2 gate-time failures against 104 clean
+      standalone runs, the clean runs including 40 idle and 40 under synthesised
+      CPU load. Neither of us is nominating gate load as the mechanism — six runs
+      is a rate, and two byte models died on 2026-09-05 by treating a rate as one
+      — but the only variable that distinguishes the two sets is whether a gate
+      was running.
+
+      WHY THAT IS A DEFECT IN THE CHECK RATHER THAN A CURIOSITY. The check
+      reports `measured-clean` from an execution AT THE MOMENT IT RUNS. If the
+      conditions of the run are part of the answer, then a verdict that does not
+      name them is not reusable: esmeraldinha swept ten verdict-position
+      candidates and reported nine safe, every one measured standalone on an idle
+      box, and those nine are `clean-at-idle` results being read as a corpus
+      count. The count was published to the fleet before anyone noticed the
+      difference.
+
+      THE DISTINCTION MUST BE MECHANICAL, NOT PROSE, AND THAT IS THE WHOLE
+      PACKET. If `clean-at-idle` is emitted because whoever writes up a sweep
+      remembers to say so, then every standalone run still prints
+      `measured-clean`, the two are identical in a packet, and this re-derives
+      801-qasc — a marker nothing wrote and nothing read, which made "did today's
+      gate run" a question with no answer for four days, and whose cheapest
+      satisfaction was to skip it. An unobservable distinction is
+      indistinguishable from one that was never made.
+
+      THE THREE PIECES, and the third is the load-bearing one:
+        1. build.sh exports the marker on the --check path
+        2. the check stamps the verdict from it: present -> clean,
+           absent -> clean-at-idle
+        3. THE FIXTURE ASSERTS THE EXPORT IS STILL IN build.sh AS A LITERAL
+      Pieces 1 and 2 alone are two halves that drift apart silently — a refactor
+      drops the export, every in-gate run begins emitting the safe-looking
+      value, nothing complains. Piece 3 makes the half that READS the half that
+      CHECKS, which is the same contract as STEP_SCRIPT's greppable literal path
+      (1063-nraf, 1072-b7eq) and for the same reason.
+
+      SCOPE NOTE, deliberate: this is a GATE CONTRACT about how a check learns
+      its own conditions, and it is filed separately from 1076-kft9 on
+      macuahuitl's ruling. A reader looking for a SIGPIPE finding will not expect
+      to find this, and it applies to any verdict-producing check, not only that
+      one.
+
+      DO NOT REUSE AN EXISTING VARIABLE. TILLANDSIAS_NO_SINGLETON is exported
+      unconditionally at build.sh:26 and means something else; reading its
+      presence as though it meant "in a gate" is 1085-8n7f — an instrument
+      reporting on a subject it does not actually name — arriving inside the fix
+      for the previous instance of it.
