@@ -473,6 +473,26 @@ fi
 # right now" is the question asked most often, and it should not cost a repo
 # scan.
 EXPERTS_ONLY=false
+# ORDER 1105-h8vr — THE SAME EARLY EXIT UNDER A NAME THAT DESCRIBES THE
+# GUARANTEE RATHER THAN THE AUDIENCE.
+#
+# `--experts-only` stops at the same place, but its contract as written above is
+# "prints just the expert blocks", which does not mention the `timing:` line —
+# and `timing:` is in fact printed before that exit. A caller that wants the
+# timing line cheaply would therefore be depending on undocumented incidental
+# behaviour, and the next person to take that sentence literally could move the
+# exit above `timing:` and break them with a confusing "no timing line".
+#
+# THE CONTRACT, stated so it can be relied on: everything up to and INCLUDING
+# the `timing:` line is printed; the repeat/recur/skippable, plan, repo and
+# verdict work is skipped. That work is what shells out to `tillandsias-plan
+# check` and `trace-coverage.sh --gate` — real scans over the whole repo.
+#
+# MEASURED on lenovinha 2026-09-06, one invocation over a three-row synthetic
+# timing log: 17,901 ms full, 7,095 ms with the scans skipped. The plan section
+# alone is 9,979 ms of it (`tillandsias-plan check` 9,147 + `ready` 832) over
+# 834 packets, and it grows with the ledger.
+NO_REPO_SCAN=false
 SINCE_REF=""
 # Order 1001-q3zf: the repeat:/recur:/skippable: knobs. Each flag has an env
 # fallback so a host that exports its Start-Of-Cycle once need not thread it
@@ -484,6 +504,7 @@ SKIP_FLOOR_MS="${TILLANDSIAS_SKIP_FLOOR_MS:-2000}"
 while [ $# -gt 0 ]; do
     case "$1" in
         --experts-only) EXPERTS_ONLY=true ;;
+        --no-repo-scan) NO_REPO_SCAN=true ;;
         --cycle-start) if [ $# -gt 1 ]; then shift; CYCLE_START_TS="$1"; fi ;;
         --cycle-start=*) CYCLE_START_TS="${1#--cycle-start=}" ;;
         --recur-window-days) if [ $# -gt 1 ]; then shift; RECUR_WINDOW_DAYS="$1"; fi ;;
@@ -899,7 +920,7 @@ printf 'timing: steps=%s build_check_ms_avg=%s%s litmus_ms_avg=%s slowest=%s sou
     "${timing_steps:-0}" "${timing_build_check_avg:--}" "$timing_mix" "${timing_litmus_avg:--}" \
     "${timing_slowest:--:-}" "$timing_source"
 
-if [ "$EXPERTS_ONLY" = true ]; then
+if [ "$EXPERTS_ONLY" = true ] || [ "$NO_REPO_SCAN" = true ]; then
     exit 0
 fi
 
