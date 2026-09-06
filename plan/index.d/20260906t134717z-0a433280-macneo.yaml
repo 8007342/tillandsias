@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: exec-bit-guard-cannot-see-an-invocation-written-in-prose-so-the-scripts-the-skills-name-are-unprotected
+    field: status
+    value: completed
+    ts: "2026-09-06T13:47:17Z"
+    host: macneo
+
+events:
+  - packet_id: exec-bit-guard-cannot-see-an-invocation-written-in-prose-so-the-scripts-the-skills-name-are-unprotected
+    event:
+      type: completed
+      ts: "2026-09-06T13:47:17Z"
+      host: macneo
+      summary: |-
+        status 'completed' with evidence_refs: 7993c0a4e
+  - packet_id: exec-bit-guard-cannot-see-an-invocation-written-in-prose-so-the-scripts-the-skills-name-are-unprotected
+    event:
+      type: note
+      ts: "2026-09-06T13:47:17Z"
+      host: macneo
+      summary: |-
+        guard unchanged and correct; false clause in exec-bits-filter.awk corrected, three pricings recorded, contract stated, end-to-end arm landed. lenovinha owns the filing and may reopen if the close is not what they wanted.
