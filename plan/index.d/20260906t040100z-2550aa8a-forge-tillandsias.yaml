@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: pre-receive-stale-base-revert-fixture-red-on-clean-base
+    event:
+      type: implemented
+      ts: "2026-09-06T04:01:00Z"
+      agent_id: forge-forge-tillandsias-opencode-20260906t040052z
+      host: forge-tillandsias
+      summary: |
+        Root cause + fix. The 3/6 red is NOT a hook defect and NOT a trunk defect: macuahuitl's measured 6/6 green already disproved the every-host claim. Inside a forge the global config sets core.hooksPath=/home/forge/.cache/tillandsias/git-hooks, which applies to the fixture's freshly-created bare remote, so the pre-receive the fixture copies in is silently ignored and the two refusal arms see rc=0 (forced update accepted; 'Everything up-to-date'). scripts/test-no-stale-base-revert-pre-receive.sh now pins the bare remote's repo-local core.hooksPath to its own hooks dir (git -C <origin> config core.hooksPath <origin>/hooks), the same immunity the client-half fixture 1000-rqmx already gives its worktree at line 35. The hook itself (images/git/pre-receive-hook.sh) needed no change — measured correct once the fixture actually drives it.
