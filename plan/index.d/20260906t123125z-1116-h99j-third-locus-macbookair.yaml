@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# ADDITION to 1116-h99j: a third locus, and the control that makes the
+# archiver reading safe. The packet's filing fragment is landed and is not
+# edited (convention 1071-adhj).
+events:
+  1116-h99j:
+    - type: evidence
+      ts: "2026-09-06T12:31:25Z"
+      agent_id: "macos-tlatoanis-macbook-air-claude-20260905t144547z"
+      host: tlatoanis-macbook-air
+      summary: |
+        THIRD LOCUS, and it supplies the CONTROL rather than just a third data
+        point. Relayed from yoga via macuahuitl:
+
+          yoga        terminology 98.6%   archiver 6.2%
+
+        Full set now, three hosts, three regimes:
+
+          host          terminology   archiver
+          macbookair        98.0%       11.1%
+          macuahuitl       100.0% (1d)   8.6% (1d)
+          yoga              98.6%        6.2%
+
+        WHY THE TERMINOLOGY COLUMN IS THE LOAD-BEARING ONE HERE. It would be
+        easy to read this packet as "memoisation does not work for the archiver"
+        and start doubting the memo. The terminology column rules that out: the
+        SAME machinery, on all three hosts, hits 98-100%. So the archiver's 6-11%
+        is not a broken memo, a bad digest, or a host artefact — it is the one
+        difference between the two, which is that the archiver's digest covers
+        files the cycle itself writes before the gate and the terminology memo's
+        does not.
+
+        That is what makes the archiver reading safe to act on, and it is
+        macuahuitl's framing rather than mine: a low number with no control
+        beside it cannot distinguish "this mechanism does not work" from "this
+        mechanism is not being given a chance to work", and those have opposite
+        fixes. Whoever takes this packet should not begin by auditing
+        archiver-check-memo.sh for defects. It does not have one.
