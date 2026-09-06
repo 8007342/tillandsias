@@ -1,0 +1,63 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-ledger-has-more-than-one-place-to-look-and-every-reader-looks-in-one-so-five-writes-landed-somewhere-nothing-consults
+    event:
+      type: progress
+      ts: "2026-09-06T10:24:17Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260906t091532z
+      host: macneo
+      summary: |
+        SLICE LANDED: the negative control, its vacuity arm, a denominator refusal,
+        and ARM 3 (ready-but-landed) in both directions. 5 assertions green, sabotage
+        red with the mutation verified applied. scripts/test-ledger-write-reaches-its-reader.sh.
+
+        Landed as 67ac302f2 (macneo, osx-next). The packet's next_action ordered the
+        negative control first and that ordering paid immediately: the control's
+        VACUITY arm caught that my checker could not fire at all.
+
+        TWO DEFECTS IN MY OWN CHECKER, both this packet's class, both caught by
+        controls rather than review:
+
+        1. select-rows field 1 is a RANK, not the order. The checker matched "2"
+           against order tokens and reported nothing on a fixture that plainly had a
+           hit. A checker that cannot fire is indistinguishable from a clean tree.
+
+        2. select-rows --status ready HAS A SMALL SILENT DEFAULT LIMIT. Measured
+           2026-09-06: bare, 8 rows; --limit 2000, 363; query --status ready
+           --limit 2000, 473. My first real scan covered 8 OF 473 and reported
+           "0 hits" as a scan — 1.7%, the same fault macuahuitl's own measurement
+           note records catching three times by positive control. Reproduced an hour
+           after reading their description of it. The checker now passes an explicit
+           limit and REFUSES if it cannot see its whole denominator.
+
+        3. The land gate refused the first attempt with
+           violation:plan-binary-probe-usage:1 — my [ -x ./target/debug/tillandsias-plan ].
+           The guard's header is this packet's thesis: "an executable BIT is a claim;
+           RUNNING the binary is evidence", because a WSL build leaves a Linux ELF
+           beside the runnable .exe and [ -x ] is true for both. Committed inside the
+           file written to detect that class. Now uses resolve_plan_binary.
+
+        REAL-LEDGER MEASUREMENT, DELIBERATELY NOT LANDED AS A DEFECT COUNT: 214 of 473
+        ready packets have their order named in a landed commit subject. That is an
+        UPPER BOUND with a large false-positive rate, not 214 defects — claim(...),
+        progress(...), partial slices and findings all name an order in a subject, and
+        this cycle's own claim commit matches. Narrowing to subjects that indicate
+        COMPLETION is the next slice. Reporting 214 as the population would be a
+        confident, alarming, wrong number, which is this packet's whole subject.
+        Positive control: 1055-e8ie is in landed subjects and NOT in the ready set.
+
+        NEXT ACTION for whoever takes it: arms 1, 2, 4 and the sixth/seventh/eighth
+        added by yolanda and macuahuitl remain. Arm 3's narrowing above is the
+        highest-value next step because macuahuitl measured the self-declaring
+        population at 1 of 458 and stated the silent population is unmeasured and
+        unreachable by text scan.
+
+        RELEASED back to ready: this is a partial slice, not the packet.
