@@ -1,0 +1,108 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: github-login-validates-push-authorization
+    event:
+      type: completed
+      ts: "2026-09-06T05:35:54Z"
+      agent_id: windows-yolanda-opus5-20260906t043712z
+      host: windows
+      summary: |
+        COMPLETED on yolanda (Windows), tests run in the tillandsias-build WSL2 distro.
+
+        TWO DEFECTS, BOTH VERIFIED ON MY OWN TREE BEFORE CLAIMING rather than taken on
+        esmeraldinha's report.
+
+        DEFECT 1 — THE VERDICT WAS SAFE, THE ADVICE WAS NOT. esmeraldinha measured the
+        three shapes `gh api repos/<o>/<r> --jq .permissions.push` really produces,
+        including the one a healthy host cannot manufacture: a 401 from a revoked
+        credential emits the raw JSON error body on stdout, because --jq does not filter
+        it. All three shapes (401 body, `null` from a permissions-less public 200, 404
+        body) miss true/false and fall to the `other` arm, and all three REFUSE. That
+        positive result stands and the packet had been carrying it as an open risk.
+
+        What was wrong is the remedy text: "repository access must include <repo>,
+        Metadata read-only" is right for 404 and useless for 401, where no scope edit
+        helps and only `gh auth login` does. Three hosts hit the 401 shape tonight. The
+        401 arm is now discriminated AHEAD of the generic one rather than replacing it,
+        because 404 and a permissions-less 200 still want the scope advice.
+
+        DEFECT 2 — THE None ARM FELL THROUGH. It printed a NOTE with eprintln! and
+        continued to the Vault write: no return, no refusal. The asymmetry is the
+        defect. `Some(owner_repo)` probes and propagates a refusal with `?`; `None` —
+        STRICTLY LESS INFORMED, because no repository was probed at all — was waved
+        through, and the printed NOTE made the state look handled. Measured, not
+        hypothetical: the operator ran --github-login as root from /root on
+        esmeraldinha, saw the NOTE, the login reported success, the token was seeded
+        unverified, and the push stayed 403.
+
+        It REFUSES rather than falling back to an account-scopes probe. The deliverable
+        allowed either; refusing cannot be wrong in the dangerous direction, and running
+        the login from a checkout that has an upstream is a smaller ask than a second
+        probe path whose failure modes nobody has measured.
+
+        BOTH TESTS SABOTAGED, and both carry controls:
+          - removing the 401 arm reds the first; its CONTROL asserts 404 / null / empty
+            KEEP the scope advice and are NOT told to re-login, so a discriminator that
+            sent every unparseable answer to `gh auth login` — the same defect pointing
+            the other way — cannot pass.
+          - restoring the eprintln fall-through reds the second; its SCOPE CONTROL
+            checks the source window really is the no-upstream arm before asserting
+            anything about it.
+
+        ESMERALDINHA'S CAVEAT IS CARRIED, NOT FOLDED AWAY. They said the credential
+        check "has zero predictive value". That is true of its store-file arm and NOT of
+        this in-container probe, which asks about PUSH rather than authentication and
+        refuses on ambiguity. Different mechanisms; the caveat stays open against the
+        store-file arm.
+
+        ROLE MISMATCH, RESTATED AT CLOSE: this row is pickup_role linux / owner_host
+        linux and I am a Windows host, taken on the coordinator's explicit routing
+        because both defects live in one file that esmeraldinha cannot push. The
+        consequence is recorded in the claim and held: the crate is unix-only, so a
+        native cargo run here reports a filtered-out count and says nothing about these
+        arms. Everything was run in WSL2.
+
+        TWO THINGS THE GATE TAUGHT, both recorded rather than smoothed over:
+          1. My new test landed BETWEEN an existing doc comment and the function it
+             documents, orphaning 17 lines of rustdoc and reding the crate on
+             clippy::empty_line_after_doc_comments. The lint pointed at MY function, so
+             the obvious fix — reword my comment — would have deleted someone else's.
+             The block was MOVED and its own test run as the control. Fixed in 58e922c77.
+          2. Both of my claim ledger writes were still UNTRACKED when the work finished:
+             written at 04:37:12Z, never pushed. The row would have read `ready` to the
+             fleet for the whole cycle. Landed in a31621d32 with the fix.
+
+        NOT MINE, ATTRIBUTED RATHER THAN DISMISSED: the full suite reds on
+        tests::delegated_result_fake_podman_covers_fresh_status_and_exact_timeout_reap
+        (main.rs:23428). It passes 3/3 in isolation, is absent from
+        scripts/test-known-red.txt, was introduced by 541737e6f (2026-07-23, six weeks
+        before this work), and my diff touches zero podman/timeout_reap lines. That is
+        git-log attribution on the introducing commit, not a passing re-run — a passing
+        re-run cannot prove a failure is not yours. It reds only under full-suite load,
+        which reads as a timing/reap flake and is worth its own packet.
+
+        LANDED 48716d81e on windows-next, verified with merge-base against the REMOTE
+        rather than against a local ref.
+
+        THE LAND TOOK FOUR ATTEMPTS AND ONLY ONE WAS A GATE VERDICT. Attempt 1 was a
+        real refusal (the orphaned doc comment). Attempts 2 and 3 were KILLED FOR HOST
+        MEMORY mid-gate, which reads almost exactly like a gate failure in the task
+        notification and is not one: `vmmemWSL` had ballooned to 7.3 GB of this host's
+        15.5 GB across tonight's builds and does not return it without `wsl
+        --shutdown`. Dropping the distro's page cache recovered 2.6 GB and attempt 4
+        passed with CARGO_BUILD_JOBS=2.
+
+        Recorded because the misreading is cheap and the consequence is expensive: a
+        killed gate says nothing about the code, and treating it as a red would have
+        sent me hunting a defect that the clean clippy run and three green tests had
+        already ruled out. The durable fix is a memory cap in .wslconfig or a periodic
+        `wsl --shutdown`, and BOTH ARE OPERATOR ACTIONS ON THE OPERATOR'S MACHINE — not
+        taken, surfaced.

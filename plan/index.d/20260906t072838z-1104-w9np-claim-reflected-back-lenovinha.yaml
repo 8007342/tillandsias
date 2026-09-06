@@ -1,0 +1,71 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-cross-branch-claim-check-reflects-a-hosts-own-claim-back-at-it-as-a-siblings
+    order: 1104-w9np
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [multi-host, claims, coordination, fail-loud]
+    estimated_hours: 2
+    owned_files:
+      - scripts/check-claims-across-branches.sh
+      - scripts/test-claims-across-branches.sh
+    verifiable_closure: |
+      bash scripts/test-claims-across-branches.sh with an arm where the ONLY
+      cross-branch holder of a claim is the reading host itself, reached via a
+      sibling that merged the reader's own branch. It must report the claim as
+      the reader's OWN, not as a sibling's. RED ON TODAY'S CODE: the check
+      currently returns "NOT yours to implement" for that input.
+    title: |
+      MEASURED on lenovinha: their own in_progress claim, merged into osx-next and windows-next by routine integration, was reported back to them as "a sibling branch holds this packet — it is NOT yours to implement", and finished work sat stranded for a day
+    context: |
+      FOUND by lenovinha 2026-09-06 while resolving whether they held 1071-adhj.
+      The verdict they received, verbatim:
+
+        "A sibling branch holds this packet in_progress and your fold has not
+         seen it yet. It is NOT yours to implement."
+
+      about a claim THEY had written. The siblings had merged linux-next, so the
+      claim was reflected back from osx-next and windows-next, and the check
+      cannot subtract the reader's own authorship from the set of branches
+      carrying it.
+
+      THE ADVICE IS CONFIDENTLY WRONG IN THE MOST EXPENSIVE DIRECTION. It tells a
+      host to keep its hands off its own finished work. 1071-adhj sat
+      in_progress for a day — hidden from ready and from burndown — with all four
+      criteria met and the work relayed at e3742f507. lenovinha then repeated the
+      verdict to the coordinator as fact, which is correct behaviour: the tool is
+      authoritative on exactly this question.
+
+      IT GETS WORSE AS COORDINATION WORKS BETTER. Every sibling merge the
+      coordinator performs increases the number of branches reflecting a claim
+      back at its author. This cycle merged windows-next and osx-next, so the
+      condition is now more reachable than it was an hour ago, not less. A defect
+      that intensifies when the fleet functions correctly will not be found by
+      waiting.
+
+      DISTINCT FROM 1034-whsp, and lenovinha drew the line: there the information
+      has not arrived. Here it ARRIVED and was misattributed on the way back.
+
+      A SECOND CAUSE IS STACKED ON IT (1012-hu7d). The claim fragment is filed
+      under host `lenovinha`; the two later fragments carrying next_action and
+      completion are under the `linux` BUCKET, because set-field without --host
+      falls back to TILLANDSIAS_HOST_KIND. So no query keyed on either label
+      returns both halves, and a host cannot reconstruct its own work. That alone
+      would have left lenovinha merely unable to FIND the record; the branch
+      check is what actively told them to leave it alone.
+
+      FAMILY. Sibling of 1095-vk8r (a claim that never entered git, invisible to
+      every reader) and 1101-b5rc (a staged row invisible to the guard). All
+      three are one question — who can see a claim, and in which state — and all
+      three answer it with something that looks like data. This one is the worst
+      of the three because its wrong answer is an INSTRUCTION.
+    next_action: |
+      Subtract the reader's own authorship: a claim whose only cross-branch
+      holders carry the reading host's own host field is the reader's OWN claim,
+      not a sibling's, and the verdict must say so and offer to resume. Add the
+      fixture arm first and confirm it REDS. While in the file, check whether the
+      same reflection affects any other cross-branch verdict — the fix belongs
+      wherever branches are enumerated without excluding self.

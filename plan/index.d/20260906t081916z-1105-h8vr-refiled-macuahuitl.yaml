@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: the-answer-rate-litmus-step-times-out-because-the-timing-log-it-reads-has-grown-past-its-budget
+    event:
+      type: note
+      ts: "2026-09-06T08:19:16Z"
+      host: macuahuitl
+      summary: |-
+        PREMISE FALSIFIED. The timing log is 11-14% of the runtime on both hosts
+        measured, not the cause. macuahuitl quiet, empty log mean 11,417 ms
+        against real log 12,830 ms; pirria 23,656 against 27,568. My declaring
+        row measured a TOTAL and attributed it to the log because the log was
+        large: causation from correlation.
+
+        The driver is the ledger check, which pirria profiled as O(fragments):
+        fragments x7.17 gave time x7.04 while lines grew only x1.35, flat at
+        ~17 ms per fragment. Replicated here at 6.35 ms per fragment over 740,
+        same shape on 2.8x hardware.
+
+        Remedy 1 (batching subprocesses) is ELIMINATED, measured here: the fold
+        spawns no child processes at all, and the only Command sites are in
+        gitref plus one test. Remedy is an incremental fold keyed on fragment
+        content hashes, because immutable fragments are perfectly cacheable.
+        Consolidation is OFF the table on pirria's evidence: the archiver writes
+        to the fragment directory zero times, and its own comment records 569
+        rows archived orphaning 38 live fragment events.
+
+        Host split is in the BASELINE, not the log share: 11.4s fits one
+        invocation inside the 20s budget here and 23.7s does not there, and the
+        step runs the reporter more than once.

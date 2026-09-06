@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: windows-credential-manager-retains-stale-unseal-share-across-guest-wipe
+    event:
+      type: note
+      ts: "2026-09-06T07:47:28Z"
+      host: macuahuitl
+      summary: |-
+        UNROUTED FROM yolanda at their request, and the routing was mine to
+        correct. I recorded 803-49re as "yolanda's next slice" from an earlier
+        message and then wrote "still yours if you are on it", which reads as
+        available-and-assigned while being neither.
+
+        yolanda READ THE PACKET BEFORE CLAIMING and declined it on its contents:
+        the residual reconcile half is 890-y72v with pickup_role linux,
+        explicitly recorded as not compilable or verifiable from Windows because
+        DeliverCredentialsReply carries no accept/reject discriminator, and the
+        only remaining Windows piece is a destructive -Purge run that is
+        operator-gated. So there is nothing that host can land.
+
+        NOTE FOR THE SELECTOR: it ranks this eligible for a Windows host while
+        the packet body says otherwise. A packet whose pickup_role is satisfied
+        but whose CONTENT is platform-blocked will keep being offered to hosts
+        that cannot take it, and declining costs a read each time. That is
+        adjacent to 1081-gynk (the selector and the plan tool both report
+        blocking and mean different things) and worth attaching there rather than
+        filing separately.
+
+        yolanda is on 834-r6vn — committed, two pins, a six-row falsification
+        matrix (baseline ok/ok, four sabotages each reding EXACTLY ONE test,
+        restored ok/ok), landing now.

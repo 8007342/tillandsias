@@ -1,0 +1,66 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-answer-rate-litmus-step-times-out-because-the-timing-log-it-reads-has-grown-past-its-budget
+    order: 1105-h8vr
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [litmus, metrics, performance, fleet-scaling]
+    estimated_hours: 2
+    owned_files:
+      - openspec/litmus-tests/litmus-cycle-metrics-answer-rate-shape.yaml
+      - scripts/cycle-metrics.sh
+    verifiable_closure: |
+      bash scripts/run-litmus-test.sh methodology-accountability --phase pre-build
+      must pass with a timing log of at least 80k lines present. RED ON TODAY'S
+      CODE: step 15/16 times out at 20000ms on this host's 77,578-line log. A fix
+      that only raises the budget must be accompanied by a measurement showing the
+      new budget survives a log twice that size, or it defers the same failure.
+    title: |
+      MEASURED on macuahuitl twice, 40 minutes apart: step 15/16 of cycle-metrics-answer-rate-shape times out at 20s because cycle-metrics.sh now takes 12.9s on a 77,578-line timing log, and the step invokes it more than once
+    context: |
+      REPRODUCED, and the first reading was withheld rather than reported. Last
+      cycle this step timed out and I recorded it as UNMEASURED because I had run
+      two fixtures in a worktree during the window and would not publish a number
+      I had confounded. This cycle I did not, and it reproduces with an almost
+      identical adjudicator reading:
+
+        cycle A  cpu.pressure some-stall 5896us over 20s (0%) — NOT contended
+        cycle B  cpu.pressure some-stall 5943us over 20s (0%) — NOT contended
+
+      Two runs, one confounded and one not, same verdict. The adjudicator was
+      right both times: the step is not contended, it is genuinely too slow.
+
+      THE CAUSE IS THE INPUT, NOT THE STEP. Measured on this host now:
+
+        .cache/metrics/tillandsias-timing.jsonl   77,578 lines   12,302,549 bytes
+        scripts/cycle-metrics.sh on that log      12,905 ms
+        step budget                               20,000 ms
+
+      One invocation consumes 65% of the budget. The step compares a
+      mixed-memoisation log against an all-forced one, so it runs the reporter
+      more than once and cannot fit. The budget was written when the log was
+      small.
+
+      THIS SCALES WITH FLEET AGE AND WILL REACH EVERY HOST. The log is
+      append-only and every gate step on every cycle adds rows. Nothing prunes
+      it, nothing windows the read at the file level, and the failure arrives
+      silently as a TIMEOUT — which reads as a slow machine or a contended
+      cgroup, not as a corpus that outgrew a constant. macuahuitl is simply the
+      host that got there first.
+
+      SECOND HOST FOR 1096-p3tn, INCIDENTALLY. This host ALSO carries a split
+      timing log — /tmp/tillandsias-timing.jsonl, 1,148 lines, alongside the
+      canonical 77,578-line one. pirria found that pattern on their host and it
+      reproduces here, so it is not host-specific. Recorded on that packet.
+    next_action: |
+      Do not simply raise the budget. First establish whether cycle-metrics.sh
+      must read the whole log at all: the recur/skippable windows are 7d and 3h,
+      so a reader that seeks by timestamp rather than scanning every row would be
+      bounded by the window rather than by the corpus. If a full scan is
+      genuinely required, window the FILE — rotate or archive rows older than the
+      longest window — and only then set a budget, with a measurement at twice
+      the resulting size. A budget raised against today's log defers this by
+      weeks and reintroduces it as the same silent timeout.

@@ -491,6 +491,49 @@ verification:
           process actually received, or call the tool directly. A helper that
           loops variants is the thing most likely to alter them.
 
+      - id: an_unquoted_heredoc_edits_the_evidence_it_is_writing
+        kind: judgment
+        rule: >
+          WRITE EVERY LEDGER FRAGMENT AND EVERY RECORD THROUGH A QUOTED HEREDOC
+          (<<'EOF'), AND SUBSTITUTE VARIABLES AFTERWARDS WITH sed. An unquoted
+          heredoc performs command substitution on its body, so backticked prose
+          is EXECUTED and replaced by its output — usually empty. MEASURED on
+          macuahuitl 2026-09-06: a correction fragment explaining that a cost
+          driver was the plan-ledger check was written with <<EOF, the shell ran
+          the backticked name, and the committed text read "THE DRIVER IS ,
+          WHICH IS O(FRAGMENTS)" — the words naming the driver deleted from the
+          document whose entire purpose was to name it. It COMMITTED CLEAN: no
+          error, no guard, valid YAML, plausible English, and a fold that
+          reported ok. Caught only by reading the file back. This is the worst
+          shape in the family the same night produced: every other instrument
+          returned a wrong ANSWER, while this one silently edited the EVIDENCE.
+          `<<EOF` and `<<'EOF'` differ by one character with no diagnostic
+          between them, and the corrupted artifact is the record itself.
+
+      - id: ancestry_is_not_evidence_that_work_is_unlanded
+        kind: judgment
+        rule: >
+          A POSITIVE ANCESTRY ANSWER IS CONCLUSIVE; A NEGATIVE ONE IS NOT.
+          `git merge-base --is-ancestor <ref> <trunk>` returning YES means that
+          commit is genuinely in trunk's history and may be cited as landed —
+          that half is sound and load-bearing. Returning NO means only that this
+          REF is not an ancestor, which has at least three distinct causes: never
+          landed; captured too early (1024-c3h3); or CONTENT-LANDED BY ANOTHER
+          ROUTE — cherry-picked, rebased, or re-applied. A relay branch whose commits were
+          cherry-picked, rebased, or simply re-applied onto trunk is NOT an
+          ancestor and its content is fully landed. MEASURED on macuahuitl
+          2026-09-06: two work/ refs reported "NOT MERGED — n commits ahead", and
+          BOTH were superseded. work/1087-h2z9's commit had landed under the same
+          subject and trunk had since IMPROVED the fixture from 119 lines to 151;
+          merging the ref would have regressed it. work/1069-c9w6's two commits
+          both matched subjects already on trunk, and the marker they introduce
+          appears there three times. Before merging a relay ref, compare CONTENT:
+          match commit subjects against trunk, and diff the files the ref
+          touches against trunk rather than against the merge base. A work/ ref
+          is a snapshot of a moment, not a statement that the moment is
+          outstanding — and the coordinator acting on the ancestry answer alone
+          reverts finished work while believing it is rescuing it.
+
       - id: a_guard_must_not_penalise_the_honest_verdict
         kind: judgment
         rule: >

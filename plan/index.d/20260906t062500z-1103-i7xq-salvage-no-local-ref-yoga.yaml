@@ -1,0 +1,75 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: salvage-dirty-worktree-leaves-no-local-ref-so-a-host-that-cannot-push-gets-no-copy
+    order: 1103-i7xq
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [salvage, data-loss, git, credentials]
+    estimated_hours: 2
+    owned_files:
+      - scripts/salvage-dirty-worktree.sh
+    title: |
+      salvage-dirty-worktree.sh writes its salvage ref only to origin, so on a host that cannot push it fails with no local copy — the data-loss remedy is unavailable in exactly the situation where work is most likely to be stranded
+    context: |
+      FOUND on yoga 2026-09-06 while writing the worker-skill salvage section
+      (1102-93ng), by exercising the script rather than describing it.
+
+      MEASURED, scratch repo with a bare origin, one untracked file:
+
+        ok:salvaged:refs/heads/salvage/yoga/20260906-probe-slug:388fc566...
+        local refs:   refs/heads/master
+                      refs/remotes/origin/salvage/yoga/20260906-probe-slug
+        origin refs:  refs/heads/salvage/yoga/20260906-probe-slug
+        salvaged tree contains precious.txt   (the untracked file: recoverable)
+
+      The success path works and the untracked file really is preserved. But
+      the only local ref is the REMOTE-TRACKING one. There is no
+      `refs/heads/salvage/...` in the working repository.
+
+      AND WITH NO REACHABLE ORIGIN:
+
+        fail:salvage:push:fatal : 'origin' does not appear to be a git repository
+        local refs:   refs/heads/master        <- nothing else
+
+      So a failed push leaves NO COPY. The commit object may exist unreferenced
+      and unreachable, which is not a record anyone can find.
+
+      WHY THIS IS THE WRONG WAY ROUND. The salvage exists because refusing to
+      touch dirt protects it from the agent and not from a fresh clone
+      (872-c9nd: four hours of work, the untracked file's name in no commit on
+      any branch). The hosts most likely to strand work are the ones having a
+      bad time — credential-blocked, offline, mid-incident. macneo could not
+      push for a full day on 2026-09-05 (1025-a896); esmeraldinha's token went
+      401 mid-session. On any of those hosts this remedy produces nothing, and
+      the verdict grammar means a host that does not read `fail:` carefully
+      will believe it salvaged.
+
+      THE FIX IS SMALL AND THE ORDERING IS THE WHOLE POINT: write the local
+      ref FIRST, then push, then report. A local ref costs nothing, survives a
+      dead credential, and turns "no copy" into "a copy that has not left the
+      host yet" — which a later cycle, or an operator, can push. The verdict
+      should distinguish the three states rather than two: salvaged-and-pushed,
+      salvaged-locally-only (push failed), and not salvaged.
+    exit_criteria:
+      - "a salvage with an unreachable or unauthorised origin still leaves a local ref containing the dirt, and says so with a distinct verdict (e.g. ok:salvaged-local:<ref>:<sha> plus the push failure); pre-fix result: FAILS (fail:salvage:push and no local salvage ref)"
+      - "the pushed path is unchanged for hosts that can push, and still reports ok:salvaged:<ref>:<sha>; pre-fix result: passes and must keep passing"
+      - "a fixture proves BOTH: a bare-origin repo salvages and pushes, and a repo whose origin is unreachable salvages locally and reports the push failure — the second arm is the packet"
+      - "NEGATIVE CONTROL: the worktree is byte-identical after every arm, including the failing one. Verified pre-fix on yoga by checksumming every non-.git file before and after; a fix that reaches for the worktree to recover from a push failure would trade data loss for corruption"
+    unscoreable: |
+      The pin is the two-arm fixture above. The failing-push arm is the one
+      that does not exist today and is the reason for the packet.
+    events:
+      - type: filed
+        ts: "2026-09-06T06:25:00Z"
+        agent_id: "linux-yoga-claude-20260906t072942z"
+        host: yoga
+        summary: |
+          Filed by yoga from exercising the script while documenting it for
+          1102-93ng. The worktree-immutability claim the skills make about this
+          script is TRUE and was verified in the same run (byte-identical
+          before and after, including on the failing arm); the push dependency
+          is what nobody had measured.
