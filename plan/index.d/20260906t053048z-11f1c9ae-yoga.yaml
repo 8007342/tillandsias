@@ -1,0 +1,71 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-worker-skill-never-mentions-the-checkout-lock-so-every-worker-cycle-runs-unlocked
+    event:
+      type: progress
+      ts: "2026-09-06T05:30:48Z"
+      agent_id: linux-yoga-claude-20260906t053048z
+      host: yoga
+      summary: |-
+        CLOSED. All four criteria, shipped together because either half alone leaves
+        a host that knows it has a problem and no instruction.
+
+        CRITERION 1: skills/advance-work-from-plan now carries section 1b — acquire
+        before committable work with TILLANDSIAS_CYCLE_HOLDER_PID on the command
+        line, what to do on skip:overlap-lock-held (report and exit, do not retry in
+        a loop), and release at Finalization. It records WHY the section exists: the
+        instruction lived only in the coordinator's skill while this is the lane
+        every host runs, and yoga ran a full night of cycles — eight lands, six-to
+        seven-minute gates — with the lock taken zero times because nothing here
+        mentioned it.
+
+        CRITERION 2: the bare invocation no longer reports a plain success. The
+        anchor chain is explicit -> CLAUDE_PID -> invoking shell, and the verdict
+        NAMES which it took: `warn:checkout-lock:acquired-unverified-anchor:...`
+        with the remedy on stderr. CLAUDE_PID is preferred over $PPID because it
+        makes the bare path CORRECT rather than merely diagnosable — the harness
+        exports it, so there is no ancestry walk and nothing that differs between
+        linux, darwin and msys. The anchor is also validated with kill -0 rather
+        than trusted: an env var inherited into an unrelated context would anchor
+        the lock to a live process with nothing to do with this cycle, which is
+        check-credential-channel's arm-1 defect one layer over.
+
+        CRITERION 3: the fixture gains the bare-path arm it never had. THE REASON IT
+        NEVER HAD ONE IS THE FINDING: its run() helper sets
+        TILLANDSIAS_CYCLE_HOLDER_PID on every invocation, so all five existing arms
+        exercise the recipe path and none exercises the path an agent takes by
+        typing the obvious command. The defect lived precisely where the fixture did
+        not go. Against the pre-fix script the two new arms fail with the exact
+        symptom — `ok:checkout-lock:acquired:prompt:3241654`, a plain success over a
+        dying anchor.
+
+        CRITERION 4: two negative controls, and they are load-bearing in opposite
+        directions. `CLAUDE_PID` alone must yield a CLEAN acquire — without it, arm 6
+        is satisfiable by warning unconditionally, which would train every host to
+        ignore the warning. And the documented explicit recipe must stay clean, so
+        the fix does not make the path every coordinator cycle uses noisy. Both pass
+        pre- and post-fix, which is what a control should do. The three escapes are
+        untouched: pid-liveness, the attested marker, and STALE_S=10800 still free
+        the checkout, so this does not convert an early release into a 3h hold
+        (order 283).
+
+        FOUND WHILE MEASURING, AND FIXED IN PASSING: the fixture's `bad()` read
+        `fail=1` rather than incrementing, so its summary printed "1 failed" however
+        many arms failed. The exit status was always correct and the number never
+        was — a boolean wearing a count's clothing, and a reader comparing "1
+        failed" against two FAIL lines has to decide which to believe. The pre-fix
+        run now correctly reports 2.
+
+        DOGFOODED: this cycle acquired the lock the documented way before doing the
+        work, and it held across tool-call boundaries — `ok:checkout-lock:acquired:
+        prompt:8462`, then `skip:overlap-lock-held pid=8462` from a later call, with
+        8462 being CLAUDE_PID. The mechanism was never broken; the instruction was
+        missing.
