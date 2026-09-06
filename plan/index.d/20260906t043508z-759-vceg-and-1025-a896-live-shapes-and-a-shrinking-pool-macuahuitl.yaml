@@ -1,0 +1,104 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  759-vceg:
+    - type: note
+      ts: "2026-09-06T04:35:08Z"
+      agent_id: "linux-macuahuitl-claude-20260906t043508z"
+      host: macuahuitl
+      summary: |
+        THE UNVERIFIED-ANYWHERE GAP IS CLOSED, BY THE ONE HOST THAT COULD CLOSE
+        IT. This packet recorded that "no live GitHub call has been made from any
+        host, so the probe's real stdout has never been compared against the
+        shapes the verdict expects". esmeraldinha measured it with a REVOKED
+        credential — the one input a healthy host cannot produce, which makes it
+        floor-host work in the literal sense.
+
+        THREE REAL SHAPES of `gh api repos/<owner>/<repo> --jq .permissions.push`:
+          401 revoked  stdout is the RAW JSON ERROR BODY; `--jq` does NOT filter
+                       it, gh bypasses the jq path on errors. 112 bytes,
+                       rc=1, stderr `gh: Bad credentials (HTTP 401)`.
+          200 no key   an unauthenticated read of a public repo omits
+                       `permissions` ENTIRELY (absent, not false) -> jq yields
+                       the literal `null`.
+          404          error body on stdout, same unfiltered shape as the 401.
+
+        THE VERDICT IS SAFE ON ALL THREE and this is a POSITIVE result the
+        packet has been carrying as an open risk: `probe_stdout.trim()` matches
+        neither "true" nor "false", so every shape falls to `other =>` and
+        REFUSES. First live confirmation that "an unparseable answer refuses
+        rather than assuming permission" holds against real gh output rather
+        than against imagined shapes.
+
+        ONE REAL DEFECT, AND IT IS THIS PACKET'S OWN SUBJECT. The `other` remedy
+        is written for the 404/scope case — "repository access must include
+        {owner_repo}, Metadata read-only, then run the login again" — which is
+        CORRECT for 404 and WRONG for 401. A revoked token needs `gh auth
+        login`; no scope edit fixes it. The raw JSON is embedded via `{other:?}`
+        so "Bad credentials" and "401" do appear escaped inline, but the
+        ACTIONABLE guidance sends the operator to the token-permissions page. On
+        a packet whose release_target is `fail-loud-diagnosis-milestone`, for
+        the exact shape that hit three hosts tonight, that is the wrong remedy
+        at the moment it matters most. Fix: discriminate `"status": "401"` /
+        `Bad credentials` ahead of the generic arm and name re-login.
+
+        THE None-ARM DEFECT IS STILL LIVE ON TRUNK. VERIFIED HERE against
+        origin/linux-next rather than a local HEAD: main.rs:9885, the
+        no-upstream arm prints its NOTE and falls straight through to the Vault
+        write — no return, no refusal. `git rev-list --count` over main.rs since
+        4ecc9325b is ZERO across 39 commits, so nothing has moved it. The
+        asymmetry stands: `Some(owner_repo)` probes and refuses on an
+        unparseable answer; `None`, which is STRICTLY LESS INFORMED because no
+        repo was probed at all, is waved through.
+
+        esmeraldinha wrote neither fix and did not claim the row, because push
+        is dead there and anything written would strand on that box — and
+        claiming requires pushing a claim event. Measurement relayed instead.
+        Both fixes are in main.rs and should go to ONE host.
+
+        THEIR OWN CORRECTION, worth keeping: they earlier said the credential
+        check "has zero predictive value". True of the STORE arm; NOT true of
+        this packet's in-container probe, which asks about PUSH rather than
+        authentication and refuses on ambiguity. The two are different
+        mechanisms and must not be carried to the operator as one.
+  1025-a896:
+    - type: note
+      ts: "2026-09-06T04:35:08Z"
+      agent_id: "linux-macuahuitl-claude-20260906t043508z"
+      host: macuahuitl
+      summary: |
+        THE FIX SHRINKS THE POOL AND RAISES THE PRESSURE ON WHOEVER IS LEFT —
+        macneo's consequence, and nobody had priced it.
+
+        macneo's ~00:2xZ OAuth login produced a `gho_` token that DIED ALMOST AT
+        ONCE, the third hour-scale death that host has seen. The operator then
+        logged out again and authenticated with a FINE-GRAINED PAT, so macneo is
+        now on `github_pat_…` rather than `gho_…`.
+
+        THAT PUTS THEM OUTSIDE THE MECHANISM. The ten-per-user cap and
+        oldest-evicted behaviour are properties of OAUTH APP tokens; a
+        fine-grained PAT is issued and revoked independently and is not in that
+        pool. So pirria's 04:08:17Z login cannot have evicted macneo's, and they
+        are not the oldest live OAuth mint — they are not an OAuth mint at all.
+        They state it as a PREDICTION not a result: ~4h old, survived pirria's
+        login by 15 minutes, consistent with immunity AND with an eviction not
+        yet noticed.
+
+        THE COST: IF HOSTS ARE CONVERTED ONE AT A TIME, THE OAUTH POOL SHRINKS
+        AND THE EVICTION PRESSURE ON THE REMAINDER INCREASES. Each conversion
+        removes a token from the pool and makes the next eviction land sooner on
+        whoever is still in it. macuahuitl checked its own class and is
+        `gho_` — IN the pool. So the coordinator is now a candidate for the next
+        eviction, and is also the host that can still supply the latency
+        measurement macneo can no longer give: the interval from another host's
+        login to a first 401, from a known class.
+
+        A FOURTH REFUSAL SHAPE, macneo's, and their discriminator is better than
+        the one I recorded. Adding to the three already logged:
+          4. `! [rejected] osx-next -> osx-next (fetch first)`, with
+             `✓ local gate: preflight clean` printed immediately above it.
+             Credential fine, gate fine, the remote simply moved.
+        THE DISCRIMINATOR IS NOT THE EXIT CODE AND NOT THE TOKEN ALONE: READ THE
+        LINE ABOVE THE REFUSAL. The credential checker prints a verdict token,
+        the pre-push hook prints its own reason, and git prints
+        `[rejected] … (fetch first)`. THREE DIFFERENT AUTHORS, ONE EXIT CODE —
+        and only one of the three emits a token at all.
