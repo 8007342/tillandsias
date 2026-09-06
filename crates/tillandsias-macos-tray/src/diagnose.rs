@@ -173,9 +173,7 @@ pub(crate) fn provision_record_from(text: &str) -> ProvisionRecord {
             (Some("headless_exec_main_start_timestamp"), Some(v)) => {
                 headless_start_timestamp = Some(v.trim().to_string())
             }
-            (Some("headless_result"), Some(v)) => {
-                headless_result = Some(v.trim().to_string())
-            }
+            (Some("headless_result"), Some(v)) => headless_result = Some(v.trim().to_string()),
             _ => {}
         }
     }
