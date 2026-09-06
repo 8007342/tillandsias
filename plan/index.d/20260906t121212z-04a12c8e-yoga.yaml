@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-claim-without-status-row-repeats-on-a-packet-whose-host-already-declined-it
+    field: status
+    value: completed
+    ts: "2026-09-06T12:12:12Z"
+    host: yoga
+
+events:
+  - packet_id: the-claim-without-status-row-repeats-on-a-packet-whose-host-already-declined-it
+    event:
+      type: completed
+      ts: "2026-09-06T12:12:12Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: 84293fe48; all three exit criteria verified on a scratch ledger — typed release excluded, prose-only note still reported, bare claim still reported; live 823-u5zf produces no row
+  - packet_id: the-claim-without-status-row-repeats-on-a-packet-whose-host-already-declined-it
+    event:
+      type: note
+      ts: "2026-09-06T12:12:12Z"
+      host: yoga
+      summary: |-
+        closed: a claim is answered by a TYPE; verified against all three criteria
