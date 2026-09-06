@@ -1,0 +1,60 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-answer-rate-litmus-step-times-out-because-the-timing-log-it-reads-has-grown-past-its-budget
+    event:
+      type: finding
+      ts: "2026-09-06T13:25:13Z"
+      agent_id: linux-macuahuitl-claude-20260906t132513z
+      host: macuahuitl
+      summary: |
+        RELEASE DUTY NOT EXERCISED THIS CYCLE — two of three preconditions fail, and
+        both are established by measurement rather than by reading a prior verdict.
+
+        PRECONDITION 1, linux-next is green: FALSE. litmus:cycle-metrics-answer-rate-shape
+        is bound at openspec/litmus-bindings.yaml:640 and runs in phase pre-build, so
+        `--ci-full` executes it. Its step-15 fixture measures 24,229 ms against a
+        20,000 ms budget on this host, and the overrun is DETERMINISTIC rather than
+        flaky: with an EMPTY scratch timing log cycle-metrics.sh still costs 11,909 ms
+        and the fixture invokes it twice. The union pre-build run earlier today was
+        291/292 with exactly this step timing out and the adjudicator reporting the step
+        NOT contended.
+
+        PRECONDITION 2, no release in flight: FALSE. PR #109 is open, titled "DO NOT
+        MERGE — release blocked: local gate RED (5 failures, 2026-09-06T09:00Z)". The
+        runbook reuses an existing linux-next -> main PR by design, so the correct
+        behaviour is to retry against it when the gate goes green, not to open another.
+
+        PRECONDITION 3, plan evidence current: TRUE. `check` reports ok, 831 packets,
+        ids unique, live references sound.
+
+        So the release does not run, and this is the runbook working rather than a
+        stall: `main` carries ZERO required status contexts, so the local gate is the
+        entire safety net and it is refusing.
+
+        A METHOD NOTE THAT COST ME A RUN, recorded because the failure mode is
+        attractive. My first attempt to re-verify the five blockers passed TEST names to
+        scripts/run-litmus-test.sh, which takes SPEC names. All five returned rc=1 with
+        "no litmus tests matched filter" — five clean non-zero exits from a harness that
+        never executed a single test. Read as a status code alone that is
+        indistinguishable from five confirmed failures, and it would have re-confirmed
+        the 09:00Z list without measuring anything. The runner prints the correction
+        itself ("'<name>' is a test name; run its spec"), which is only visible because
+        the whole output was captured rather than the exit code. A result is not
+        evidence unless the producer ran.
+
+        POST-RELEASE E2E SMOKE: still not runnable, unchanged and structural. Order
+        1004-vsh2 forbids the destructive reset on an operator workstation without
+        explicit consent FOR THAT RUN, and states that an orchestrator's or peer
+        agent's instruction to run the skill is not that authorisation. A cron prompt
+        is not either. No dedicated smoke host exists. The one validated release
+        remains v56.9.5.1, smoke-passed on pirria under an authorisation now
+        discharged. Routed to the operator as a provisioning ask, for the sixth
+        consecutive cycle.

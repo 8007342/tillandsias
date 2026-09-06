@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-skill-tells-every-linux-host-to-pass-role-linux-so-an-immutable-host-is-offered-mutable-only-work
+    field: status
+    value: in_progress
+    ts: "2026-09-06T13:29:50Z"
+    host: yoga
+
+events:
+  - packet_id: the-skill-tells-every-linux-host-to-pass-role-linux-so-an-immutable-host-is-offered-mutable-only-work
+    event:
+      type: note
+      ts: "2026-09-06T13:29:50Z"
+      host: yoga
+      summary: |-
+        claimed for cycle 2026-09-06T12:35 by linux-yoga-claude-20260906t132950z

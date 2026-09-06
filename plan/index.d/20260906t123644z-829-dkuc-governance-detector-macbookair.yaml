@@ -1,0 +1,103 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  829-dkuc:
+    - type: progress
+      ts: "2026-09-06T12:37:37Z"
+      agent_id: "macos-tlatoanis-macbook-air-claude-20260905t144547z"
+      host: tlatoanis-macbook-air
+      summary: |
+        SLICE: the sweep's own ritual detector, criteria 4+ MINUS the run.
+        scripts/check-deslop-sweep-health.sh (new, --self-test, 15 arms).
+
+        WHY THIS SLICE AND NOT THE SWEEP. This packet's next_action reserves the
+        remaining half for "sweep-budget headroom or an OPERATOR-PAIRED SESSION".
+        lenovinha declined it on exactly that ground on three consecutive cycles
+        (2026-08-26, "PRIORITY IS NOT PERMISSION"), and my own previous cycle left it
+        the same way. I was not willing to be the fourth decline that adds nothing, and
+        not willing to run an unattended sweep whose defining act is deleting code and
+        retracting rows. The four governance rules are the part that does NEITHER: pure
+        functions of the recorded stamps, deleting nothing, and the packet says of them
+        "each is computable from the stamp record". Governance can be built without the
+        deletion; the deletion should not be run without the governance.
+
+        IMPLEMENTED, all four, over plan/deslop-sweeps.d/*.md:
+          KILL RULE       two consecutive sweeps that EXAMINED rows and confirmed
+                          nothing -> red:two-sweeps-zero-confirmed. Sweeps with
+                          examined=0 are SKIPPED, not counted as zeros, per the
+                          2026-08-20 sizing note; without that, a sweep that correctly
+                          finds a quiet tree retires the packet for behaving properly.
+          NET-NEGATIVE    net_lines >= 0 -> red:net-positive-diff
+          FILING CAP      filed > 5 -> red; filed > retracted -> red:filed-exceeds-retracted
+          REFUTATION BAND 4 trailing sweeps, 0% -> red:refutation-rate-degenerate:0
+
+        THE FIRST FINDING IS ABOUT THIS PACKET'S OWN GOVERNANCE. On the real ledger:
+
+          unknown:deslop-health:sweeps=1 unscoreable:kill-rule(needs-2-scoring-sweeps-have-1),
+          refutation-band(needs-4-with-findings-have-0),net-negative(no-record-carries-net_lines),
+          filing-cap(no-record-carries-filed) - no rule fired, but these could not be
+          evaluated; that is not a pass
+
+        NONE of the four rules can score. The single record is the hand-seeded pre-clock
+        one and carries neither findings= nor filed= nor net_lines=. So 829-dkuc's
+        governance is currently unenforced in full, and the next sweep must record all
+        four fields or it stays that way.
+
+        "CANNOT TELL" IS NOT "HEALTHY" AND THEY GET DIFFERENT EXIT CODES. That is the
+        design constraint, and it is 1106-k2df one packet over: a detector returning ok:
+        while silently scoring nothing is a green earned by absent data - a value true
+        about the artefact (no rule fired) read as the property it names (the sweep is
+        healthy). Unscoreable rules are named individually and the run exits 2.
+
+        SECOND FINDING, ABOUT THE RULE SET ITSELF, surfaced by its own detector:
+        red:refutation-rate-degenerate:100 IS UNREACHABLE. Four sweeps that confirmed
+        nothing while examining rows trip the KILL RULE at sweep two, and
+        check-deslop-due.sh REFUSES a record without --examined, so the examined=0
+        escape cannot occur either. The 100% end of the band is dead against the kill
+        rule. Left in place, pinned by a self-test arm asserting the PRECEDENCE rather
+        than accepting either verdict, and reported up: dropping it or giving it a
+        reachable meaning is an operator call, alongside the still-open D4.
+
+        A BUG IN MY OWN SCRIPT, CAUGHT BY ITS OWN ARMS BEFORE ANYTHING LANDED. The
+        parser emits `REC <ts> <order> ...` and every rule then indexed as though REC
+        were not field 1, so all four read the wrong column. First self-test run was
+        3 passed / 8 failed and named which rules were wrong. An unplanned sabotage of
+        the whole rule set, and the strongest evidence here that the arms have teeth.
+
+        SABOTAGE, three targeted mutations, each verified APPLIED, each redding the arm
+        it should by name:
+          M1 kill rule counts examined=0 sweeps too
+             -> "a sweep that examined NOTHING was counted as a zero-confirmed"
+          M2 unscoreable rules hidden inside a pass
+             -> "a lone unscoreable record returned ok: - the green-earned-by-absent-
+                 data shape"
+          M3 net-diff sign inverted -> three arms, including the positive control
+        M2 is the one that matters: it proves the honest-unknown path is load bearing.
+
+        AND I ALMOST SHIPPED THIS RECORD EMPTY. My first attempt wrote this fragment
+        with a shell heredoc; zsh failed to parse it, the file was created at ZERO
+        BYTES, and `tillandsias-plan validate-yaml` answered `ok:yaml-loads` on it. The
+        status flip to ready had already succeeded, so the cycle was one commit from a
+        released claim with no evidence behind it and a green validator line saying the
+        evidence was fine. An empty file is valid YAML; it is not a valid fragment.
+        Caught by reading the file back rather than trusting the ok:. Filed as
+        1117-66qv, because a validator that greens an empty evidence file turns
+        every heredoc failure into a silent evidence loss, and the status flip
+        that precedes the evidence commit is exactly when that happens.
+
+        NOT WIRED INTO ./build.sh, deliberately and consistently with its two siblings:
+        check-deslop-due.sh states it "is NOT a build gate", and check-dead-env-
+        branches.sh was held out while its backlog is nonzero (the 660-ryhn blind-
+        binding lesson). A detector whose subject has no scoreable history would gate
+        on noise.
+
+        STALE BLOCKER CLEARED, incidentally: this packet's 2026-08-21 note says "DO NOT
+        RUN tillandsias-plan compact until 843-624y lands". 843-624y is completed and
+        ARCHIVED. That suspension no longer applies. I did not run compact regardless;
+        it is not part of this slice.
+
+        STILL NOT DONE, carried forward unchanged: the supervised sweep run itself, the
+        (mutation, predicted-observable) pairs over the check-dead-env-branches.sh
+        worklist (now dead=29), a real sweep's stamp, operator decision D4, and the
+        41-vs-51 discrepancy in the seeded record. The detector makes the paired
+        session cheap: the governance is now executable, so the run can be judged
+        rather than trusted.

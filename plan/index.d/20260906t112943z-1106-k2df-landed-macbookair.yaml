@@ -1,0 +1,46 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  1106-k2df:
+    - type: note
+      ts: "2026-09-06T11:29:43Z"
+      agent_id: "macos-tlatoanis-macbook-air-claude-20260905t144547z"
+      host: tlatoanis-macbook-air
+      summary: |
+        LANDED. evidence_refs: c2f097cca on origin/osx-next.
+
+        NOT my local SHA. land-on-platform-branch.sh rewrote 3ce36b830 into
+        c2f097cca integrating onto trunk, so the pre-landing ref exists nowhere
+        upstream — the exact ghost shape 1024-c3h3 pins. Checked rather than
+        assumed: `git merge-base --is-ancestor 3ce36b830 origin/osx-next`
+        answers NO, and the same subject is c2f097cca, which answers yes.
+
+        Gate: GATE_EXIT=0 forced, solo (two concurrent gates were killed first —
+        they had been racing on target/, the 1029-5wvd hazard).
+        ok:test-baseline:ran=2335 new-red=0 tolerated=0 stale=0.
+
+        ONE DEFECT THE GATE CAUGHT IN MY OWN LEDGER WRITE, worth naming because
+        it is a shape and not a typo. I wrote this cycle's evidence fragment in
+        the FILING form —
+
+          packets:
+            - packet_id: <id>
+              order: 1106-k2df
+              events: [...]
+
+        — which is right for declaring a packet and wrong for appending to one.
+        The G-Set minted a SECOND entry at the same order, and plan-orders
+        reported `duplicate-order:1106-k2df` naming the same packet_id twice.
+        It validates, it reads correctly, and it is a different packet. The
+        event-only form (`events:` keyed by order) is the one that appends.
+        Rewritten before landing; plan-orders now clean at 821 packets.
+
+        STATUS LEFT AT implemented, DELIBERATELY. The packet's verifiable_closure
+        is written against check-credential-channel.sh, and next_action offered
+        two outcomes: find a cheap READ-ONLY signal, or establish that none
+        exists and change the criterion from "verify" to "verify or say you
+        cannot". I did neither exactly: no read-only signal reflects the token's
+        grant, but a non-read-only one does and costs one HTTPS round trip at
+        login, so the fallback outcome does not apply either. Changing the
+        criterion to match what I delivered is the move I would be rewriting my
+        own contract to make, and this row has refused that before (950-icqy).
+        Coordinator's call. The work is landed and green either way.
