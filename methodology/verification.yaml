@@ -494,8 +494,13 @@ verification:
       - id: ancestry_is_not_evidence_that_work_is_unlanded
         kind: judgment
         rule: >
-          `git merge-base --is-ancestor <relay-ref> <trunk>` ANSWERS A QUESTION
-          ABOUT ANCESTRY, NOT ABOUT CONTENT. A relay branch whose commits were
+          A POSITIVE ANCESTRY ANSWER IS CONCLUSIVE; A NEGATIVE ONE IS NOT.
+          `git merge-base --is-ancestor <ref> <trunk>` returning YES means that
+          commit is genuinely in trunk's history and may be cited as landed —
+          that half is sound and load-bearing. Returning NO means only that this
+          REF is not an ancestor, which has at least three distinct causes: never
+          landed; captured too early (1024-c3h3); or CONTENT-LANDED BY ANOTHER
+          ROUTE — cherry-picked, rebased, or re-applied. A relay branch whose commits were
           cherry-picked, rebased, or simply re-applied onto trunk is NOT an
           ancestor and its content is fully landed. MEASURED on macuahuitl
           2026-09-06: two work/ refs reported "NOT MERGED — n commits ahead", and
