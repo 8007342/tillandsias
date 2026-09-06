@@ -1,0 +1,48 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: the-checkout-locks-bare-invocation-is-the-line-agents-type-and-no-fixture-can-make-it-red
+    field: status
+    value: in_progress
+    ts: "2026-09-06T06:55:32Z"
+    host: pirria
+
+events:
+  - packet_id: the-checkout-locks-bare-invocation-is-the-line-agents-type-and-no-fixture-can-make-it-red
+    event:
+      type: note
+      ts: "2026-09-06T06:55:32Z"
+      host: pirria
+      summary: |-
+        Claimed by pirria, relayed by macuahuitl because pirria cannot push
+        (credential.helper unset in all three scopes). Claimed by provenance:
+        pirria filed the finding.
+
+        DEVIATION STATED PLAINLY RATHER THAN GLOSSED, at pirria's insistence.
+        §3 requires the claim to be pushed BEFORE the work; pirria cannot push,
+        so work began before this landed. Their reasoning, recorded as theirs:
+        the packet was offered directly by the coordinator through the same
+        channel that carries every claim on this host, so the separation that
+        matters — another host independently picking it up — is achieved by the
+        offer plus the acceptance, and a ledger flip nobody reads is weaker
+        separation than a coordinator saying "this one is yours". It is still a
+        deviation. If any host claimed 1098-q7bk before this landed, they win
+        and pirria drops it.
+
+        SCOPE, fixed before starting rather than argued after. IN: a fixture arm
+        in scripts/test-cycle-checkout-lock.sh invoking cycle-checkout-lock.sh
+        acquire with NO TILLANDSIAS_CYCLE_HOLDER_PID, asserting the lock
+        survives a simulated tool-call boundary. THE ARM MUST RED ON TODAY'S
+        CODE — pirria's own acceptance criterion, held to explicitly: an arm
+        that passes against the shipped script documents the bug instead of
+        catching it, which is this packet's own subject matter committed by its
+        author. They will report the arm red on shipped code and green after the
+        minimal fix, OR report that they could not make it red and why, and have
+        stated in advance that the second is a real result they will not dress
+        as the first.
+
+        EXPLICITLY OUT OF SCOPE: moving the anchor. dir_lock_live()'s line-160
+        measurement makes that dangerous — on a session harness the pid-liveness
+        escape can never fire, so correctness falls entirely to `attested` and
+        the 3h stale bound, and the record-skipped path is the common one. That
+        decision belongs in its own packet, made with a test that can red. This
+        packet buys the fixture that would catch either direction.

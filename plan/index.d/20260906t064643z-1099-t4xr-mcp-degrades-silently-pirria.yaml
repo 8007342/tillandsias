@@ -1,0 +1,58 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-mcp-first-read-path-degrades-silently-and-the-filesystem-fallback-is-what-carries-the-loop
+    order: 1099-t4xr
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [mcp, bootstrap, fail-loud, floor-tier]
+    estimated_hours: 2
+    owned_files:
+      - methodology/distributed-work.yaml
+    verifiable_closure: |
+      bash scripts/test-mcp-expert-health-probe.sh plus a new arm calling
+      plan_status with a well-formed id and asserting the tool RECEIVES the
+      argument — the current failure returns `no packet matches 'null'` for every
+      parameter form, so the arm must red on today's code. Named as a script
+      because the litmus for it does not exist yet.
+    title: |
+      MEASURED on pirria: plan_status errored `no packet matches 'null'` on BOTH parameter forms, so it never received the argument at all — and with tillandsias-plan absent for glibc skew, both documented paths to packet status were closed while the bootstrap still says ask-don't-read
+    context: |
+      REPORTED by pirria 2026-09-06, third fallback of the night on one host.
+
+      THE FAILURE. `plan_status` errored `no packet matches 'null'` on BOTH forms
+      — {id: "1004-pg9p"} and {query: "floor-tier-release-smoke-and-metrics"}. The
+      literal `null` in the error says the tool never received the argument, so
+      this is NOT a lookup miss: the tool cannot be called successfully by a
+      caller following the bootstrap guidance. pirria fell back to reading the
+      fragment and named the reason (unavailable), which is exactly what
+      CLAUDE.md's three-reasons rule prescribes.
+
+      COMPOUNDED: `tillandsias-plan` is also still absent on that host (glibc
+      skew, 889-twhe). So both documented paths to packet status were closed and
+      only the raw file worked.
+
+      WHY ONE PACKET RATHER THAN THREE LINES. pirria's framing, and it is the
+      right one: the pattern is that the MCP path DEGRADES SILENTLY while the
+      filesystem path is the one actually carrying the loop. The bootstrap tells
+      every host to ask rather than read, and records three sanctioned reasons to
+      fall back — but nothing counts how often the fallback fires. Three in one
+      night on one host is either a floor-tier-specific defect or a fleet-wide
+      one nobody is measuring, and those two have very different remedies.
+
+      CLASS. Same family as the split timing log (1096-p3tn) and the agent-shell
+      grep zero: an instrument whose failure is indistinguishable from a
+      legitimate answer. `no packet matches` is a VALID response to a real query;
+      it is only the literal `null` that reveals the argument never arrived, and
+      a caller who did not read the error text closely would record "no such
+      packet" as a fact about the ledger.
+    next_action: |
+      First establish whether plan_status is broken for every caller or only on
+      the floor tier — call it from a fat host with a known-good packet id and
+      compare. If it is universal, the argument is being dropped between the
+      client and the server and the fix is there. Either way, add a counter or a
+      named verdict so a silent MCP degradation is visible rather than absorbed
+      by each host's fallback, and record the fallback COUNT in the cycle handoff
+      the way guard verdicts already are.

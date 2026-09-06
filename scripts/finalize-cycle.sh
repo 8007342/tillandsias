@@ -97,7 +97,19 @@ scripts/meta-orchestration-worktree-guard.sh verify "$SD" || {
 _step "record the attestation (attests the now-landed WORK head)"
 rec="$(scripts/mo-full-attest.sh record 2>&1)"; rc=$?
 printf '%s\n' "$rec"
-[ "$rc" -eq 0 ] && printf '%s' "$rec" | grep -q '^MO-FULL: COMPLETE' || {
+# ACCEPT BOTH DISPOSITIONS. This tested `^MO-FULL: COMPLETE` only, so a BLOCKED
+# cycle — a documented, first-class terminal disposition (meta-orchestration
+# SKILL.md:115, and mo-full-attest.sh:258 validates it explicitly) — was reported
+# as `record-failed` AFTER `record` had already appended a perfectly good ledger
+# line. MEASURED on macuahuitl 2026-09-06T06:44:49Z: rc=0, the line written, and
+# finalize refused anyway, leaving the ledger DIRTY with an unrecorded
+# attestation. The operator's next move is to re-run `record` by hand, which
+# appends a DUPLICATE line for the same head — which is exactly what happened.
+#
+# So a blocked cycle could never complete its exit contract through this script,
+# and the failure mode punished the honest disposition: a cycle willing to say it
+# was blocked could not attest, while a cycle claiming COMPLETE sailed through.
+[ "$rc" -eq 0 ] && printf '%s' "$rec" | grep -qE '^MO-FULL: (COMPLETE|BLOCKED)' || {
     echo "refused:finalize:record-failed — the ledger line was not written; do NOT emit a marker." >&2
     exit 4
 }

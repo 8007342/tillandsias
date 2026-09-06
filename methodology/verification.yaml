@@ -470,6 +470,83 @@ verification:
           instrument cannot answer the question; skew neither eliminated nor
           established.
         enforced_by: "judgment — report the positive and negative control results beside the count, or the count is not evidence of a difference"
+      - id: a_probe_whose_pattern_the_shell_rewrites_is_not_testing_what_it_names
+        kind: judgment
+        rule: >
+          A REPORTED ROW MUST CARRY THE ARGUMENT AS THE PROCESS RECEIVED IT, not
+          as it was typed into the source. MEASURED three times in one
+          investigation, 2026-09-06, three hosts, three different mechanisms, one
+          shape: a matrix that generalised past a row it already held; a probe
+          written inside a double-quoted echo, so the tool received an escaped
+          literal while the report named the unescaped form; and an eval-based
+          loop that re-quoted the patterns it passed, inverting a result its own
+          author had measured correctly an hour earlier. A fourth, in the same
+          session: a display prefix added by the reader's own sed was read as
+          file content, and an anchor built from it matched nothing. Every one was
+          caught by CONTRADICTION WITH A PRIOR MEASUREMENT and never by inspecting
+          the harness, which is luck and only works while a prior measurement
+          exists. The numbers were REAL in every case; only the label was wrong,
+          which is why review does not catch it — a reader checking the work reads
+          the pattern as written, exactly as the author did. Print what the
+          process actually received, or call the tool directly. A helper that
+          loops variants is the thing most likely to alter them.
+
+      - id: a_guard_must_not_penalise_the_honest_verdict
+        kind: judgment
+        rule: >
+          A GUARD THAT MAKES THE TRUTHFUL ANSWER MORE EXPENSIVE THAN THE
+          FLATTERING ONE WILL BE ANSWERED FLATTERINGLY, and no amount of care in
+          the answering agent fixes that. Distinct from an instrument that cannot
+          report its own failure: this is an instrument that PENALISES the
+          report. MEASURED twice in one night, 2026-09-06, in two unrelated
+          guards. scripts/finalize-cycle.sh matched only `^MO-FULL: COMPLETE`, so
+          a cycle declaring the documented BLOCKED disposition was refused AFTER
+          its ledger line had been written — a cycle willing to say it was
+          blocked could not attest, while one claiming COMPLETE passed, and the
+          obvious recovery appended a duplicate line. The startup-boundary guard
+          accepts a snapshot taken at the END of a cycle, so an agent whose
+          finalize refuses can make it green by snapshotting late, manufacturing
+          the very artefact the guard exists to verify; the honest path — refuse,
+          report, explain — costs the marker. Neither required intent to
+          deceive: in both, the cheap path is the dishonest one and it is the
+          path a competent agent reaches for first. When designing a check, ask
+          what the agent does when it FAILS, and make the honest disposition a
+          first-class accepted outcome rather than an error state.
+
+      - id: agreement_at_zero_is_not_a_remedy
+        kind: judgment
+        rule: >
+          WHEN COMPARING A SUSPECT TOOL AGAINST A REFERENCE, A ROW WHERE BOTH
+          RETURN ZERO IS NOT EVIDENCE THE DISCREPANCY IS FIXED. It is evidence
+          that neither could answer. MEASURED 2026-09-06: grep -E on a pattern
+          with a mid-string dollar returns 0 from both the suspect and the
+          reference, because in ERE the dollar anchors and the pattern cannot
+          match at all. In a mitigation table that row sits beside escaping and
+          -F, which return the TRUE count from both, so -E reads as a third fix
+          while actually converting a wrong answer into a confident silence —
+          which is the failure the table was built to escape. A remedy must
+          RECOVER THE KNOWN-CORRECT VALUE, not merely make two readings agree:
+          establish the true answer independently first, then require a candidate
+          remedy to reproduce it. Same shape as a green gate that ran no tests,
+          and as a partition of a log presenting as a total.
+
+      - id: state_an_instrument_finding_as_rows_not_as_a_sentence
+        kind: judgment
+        rule: >
+          PUBLISH THE MATRIX, NOT THE MECHANISM. MEASURED 2026-09-06: five
+          successive prose formulations of ONE instrument behaviour, from three
+          hosts, every one wrong at least once, while the measured rows never
+          moved. The failure mode is specific and it is not carelessness — each
+          wrong sentence was produced while CORRECTING someone else's narrower
+          one, because a correction feels like a simplification and the qualifier
+          looks like clutter. Over-broadening a true narrow statement is the same
+          move as over-withdrawing a true finding on a confounded control, and one
+          fleet did both within four hours, each caught only by the peer who had
+          been right first. A row is a claim about what happened; a sentence is a
+          claim about the mechanism, and the mechanism is the part nobody has yet.
+          Rows also survive being wrong about the mechanism, which sentences do
+          not.
+
       - id: an_artefact_scan_cannot_date_a_change_that_ships_no_string
         kind: judgment
         rule: >
