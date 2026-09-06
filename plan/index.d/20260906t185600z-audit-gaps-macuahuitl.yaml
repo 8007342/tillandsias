@@ -1,0 +1,244 @@
+packets:
+  - packet_id: ghost-trace-ephemeral-guarantee-spec-and-litmus-closure
+    order: 1118-i6nf
+    status: ready
+    kind: spec
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    release_target: stable-milestone-v1
+    capability_tags:
+      - spec
+      - litmus
+      - trace
+      - ephemerality
+    verifiable_closure: scripts/trace-coverage.sh --ghosts
+    title: |
+      Formalize spec:ephemeral-guarantee and close the lone ghost-trace ratchet baseline debt
+    deliverable: |
+      Specification openspec/specs/ephemeral-guarantee/spec.md formalizes ephemeral
+      expert state on tmpfs, persistent cache volume disjointness, and teardown
+      verification, satisfying three litmus tests and reducing ghost trace count to zero.
+    context: |
+      litmus-forge-experts-ephemerality-shape, litmus-forge-experts-teardown-ephemeral,
+      and litmus-init-log-cleanup referenced spec:ephemeral-guarantee, which was tracked
+      in openspec/ghost-trace-baseline.txt as an unwritten spec file debt.
+    exit_criteria:
+      - 'openspec/specs/ephemeral-guarantee/spec.md defines required RFC 2119 clauses for ephemeral expert lifecycle'
+      - 'scripts/trace-coverage.sh --ghosts passes with ok: no ghost traces'
+    events:
+      - ts: "2026-09-06T18:56:00Z"
+        type: filed
+        agent: linux-macuahuitl-gemini-20260906t184820z
+        host: macuahuitl
+        note: |
+          Filed from tillandsias audit of ghost traces and litmus obligations.
+
+  - packet_id: enclave-network-internal-enforcement-and-guard-discovery
+    order: 1118-zvai
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    release_target: stable-milestone-v1
+    capability_tags:
+      - podman
+      - security
+      - network
+      - guard
+    verifiable_closure: scripts/check-enclave-network-internal.sh
+    title: |
+      Enforce --internal on all enclave network creation sites and broaden guard discovery
+    deliverable: |
+      Add --internal to scripts/run-forge-project.sh and scripts/diagnose-proxy.sh.
+      Replace hardcoded file list in scripts/check-enclave-network-internal.sh with
+      repository-wide search.
+    context: |
+      run-forge-project.sh#L118 and diagnose-proxy.sh#L92 create tillandsias-enclave without
+      --internal, providing unrestricted NAT egress. check-enclave-network-internal.sh
+      checked only 3 files and missed both.
+    exit_criteria:
+      - 'All podman network create invocations for tillandsias-enclave supply --internal'
+      - 'scripts/check-enclave-network-internal.sh discovers create sites repo-wide'
+    events:
+      - ts: "2026-09-06T18:56:00Z"
+        type: filed
+        agent: linux-macuahuitl-gemini-20260906t184820z
+        host: macuahuitl
+        note: |
+          Relayed from tillandsias.org finding 9f823c95.
+
+  - packet_id: squid-permissive-port-and-git-credential-origin-confinement
+    order: 1118-bscs
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    release_target: stable-milestone-v1
+    capability_tags:
+      - proxy
+      - git
+      - security
+      - isolation
+    verifiable_closure: scripts/check-proxy-permissive-port-routing.sh
+    title: |
+      Confine squid build port 3129 to loopback and restrict credential helper to github.com
+    deliverable: |
+      Bind squid port 3129 to 127.0.0.1:3129 in images/proxy/squid.conf. Restrict
+      images/git/relay-refs.sh and git-credential-tillandsias.sh to authorized GitHub
+      hosts, preventing token exfiltration.
+    context: |
+      squid.conf binds port 3129 to 0.0.0.0 without source ACLs, allowing enclave
+      containers to bypass domain filtering. git-credential-tillandsias.sh unconditionally
+      supplies GitHub tokens for any https:// upstream.
+    exit_criteria:
+      - 'squid.conf restricts port 3129 from arbitrary enclave container access'
+      - 'git-credential-tillandsias.sh validates host=github.com before returning credentials'
+    events:
+      - ts: "2026-09-06T18:56:00Z"
+        type: filed
+        agent: linux-macuahuitl-gemini-20260906t184820z
+        host: macuahuitl
+        note: |
+          Relayed from tillandsias.org findings 6cd2f616 and 6e61831e.
+
+  - packet_id: container-launch-argv-hardening-envelope-coverage
+    order: 1118-zzs4
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: rust
+    release_target: stable-milestone-v1
+    capability_tags:
+      - podman
+      - security
+      - hardening
+      - rust
+    verifiable_closure: cargo test -p tillandsias-podman validate_launch_argv
+    title: |
+      Route all production container launches through ContainerSpec::build_run_argv()
+    deliverable: |
+      Migrate unvalidated launches in crates/tillandsias-headless/src/main.rs (proxy,
+      git, observatorium, browser, forge agent) to build_run_argv(), and add mandatory
+      --security-opt=label=disable to run_provider_login.
+    context: |
+      Documentation claimed all production launches pass validate_launch_argv, but five
+      key launches bypassed it or built raw argvs, allowing unhardened launches to occur.
+    exit_criteria:
+      - 'All container creation sites in tillandsias-headless pass validate_launch_argv'
+      - 'run_provider_login includes mandatory security options'
+    events:
+      - ts: "2026-09-06T18:56:00Z"
+        type: filed
+        agent: linux-macuahuitl-gemini-20260906t184820z
+        host: macuahuitl
+        note: |
+          Relayed from tillandsias.org finding da34e5ee and GAP-16 audit.
+
+  - packet_id: vault-unseal-share-ephemerality-and-reset-hygiene
+    order: 1118-fqfk
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: rust
+    release_target: stable-milestone-v1
+    capability_tags:
+      - vault
+      - secrets
+      - ephemerality
+      - rust
+    verifiable_closure: cargo test -p tillandsias-headless vault_bootstrap
+    title: |
+      Confine fallback Vault unseal share to tmpfs and wipe on --reset-guest
+    deliverable: |
+      Store fallback unseal shares under $XDG_RUNTIME_DIR on tmpfs, add fallback paths
+      to reset_guest_wipe_paths in crates/tillandsias-headless/src/main.rs, and ensure
+      --reset-guest clears all persistent credential artifacts.
+    context: |
+      vault_bootstrap.rs writes plaintext Shamir shares and root tokens to durable disk
+      in ~/.cache/tillandsias/, and --reset-guest fails to wipe them, allowing unseal
+      recovery across supposedly clean resets.
+    exit_criteria:
+      - 'Unseal shares are never persisted to non-tmpfs disk paths'
+      - '--reset-guest removes all fallback credential cache files'
+    events:
+      - ts: "2026-09-06T18:56:00Z"
+        type: filed
+        agent: linux-macuahuitl-gemini-20260906t184820z
+        host: macuahuitl
+        note: |
+          Relayed from tillandsias.org finding b28aba62 and GAP-07 audit.
+
+  - packet_id: safe-browser-enclave-confinement-and-dot-label-allowlist
+    order: 1118-dwgx
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    release_target: stable-milestone-v1
+    capability_tags:
+      - browser
+      - mcp
+      - security
+      - network
+    verifiable_closure: cargo test -p tillandsias-browser-mcp allowlist
+    title: |
+      Default safe browser to tillandsias-enclave and normalize dot project labels in allowlist
+    deliverable: |
+      Update scripts/launch-chromium.sh to default to tillandsias-enclave network.
+      Update crates/tillandsias-browser-mcp/src/allowlist.rs to support project directory
+      names with dots (e.g. tillandsias.org).
+    context: |
+      launch-chromium.sh defaulted to --network=host, giving Chromium direct host network
+      access without proxy filtering. allowlist.rs required exactly 3 labels ending in
+      .localhost, rejecting web.<project>.localhost whenever <project> contains dots.
+    exit_criteria:
+      - 'Safe browser launcher defaults to enclave network'
+      - 'browser.open succeeds for project directory names containing dots'
+    events:
+      - ts: "2026-09-06T18:56:00Z"
+        type: filed
+        agent: linux-macuahuitl-gemini-20260906t184820z
+        host: macuahuitl
+        note: |
+          Relayed from tillandsias.org findings 572f7388, 0fdb0cb3 and GAP-04/05 audit.
+
+  - packet_id: inference-container-pinned-integrity-and-npu-alignment
+    order: 1118-d3b6
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    release_target: stable-milestone-v1
+    capability_tags:
+      - inference
+      - integrity
+      - spec
+      - telemetry
+    verifiable_closure: cargo test -p tillandsias-headless inference
+    title: |
+      Pin Ollama engine download with SHA-256 digest validation and reconcile NPU spec telemetry
+    deliverable: |
+      Pin Ollama download URL and verify SHA-256 checksum before execution in
+      images/inference/entrypoint.sh. Implement or defer NPU device passthrough and
+      entrypoint npu= logging specified in openspec/specs/inference-container/spec.md.
+    context: |
+      images/inference/entrypoint.sh downloads an unpinned latest release tarball from
+      GitHub without checksum verification and executes it inside the enclave. Specs claim
+      NPU telemetry rows that do not exist in runtime scripts.
+    exit_criteria:
+      - 'Ollama engine download validates against a pinned SHA-256 digest'
+      - 'Inference entrypoint telemetry accurately reflects NPU device availability'
+    events:
+      - ts: "2026-09-06T18:56:00Z"
+        type: filed
+        agent: linux-macuahuitl-gemini-20260906t184820z
+        host: macuahuitl
+        note: |
+          Relayed from tillandsias.org findings 56435d54, 572f7388 and GAP-17/19 audit.
