@@ -1,0 +1,95 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: older-app-silently-downgrades-a-newer-enclave
+    event:
+      type: completed
+      ts: "2026-09-06T08:15:36Z"
+      agent_id: windows-yolanda-opus5-20260906t062434z
+      host: windows
+      summary: |
+        COMPLETED on yolanda. Tests run in the tillandsias-build WSL2 distro: this crate
+        is unix-only and a native run on this Windows host reports a filtered-out count
+        that says nothing about these arms.
+
+        VERIFYING BEFORE CLAIMING CHANGED THE SLICE, AND THAT IS THE MAIN RESULT. The
+        packet's next_action reads as though the downgrade guard needs building. It does
+        not exist to be built. downgrade_refusal() is implemented (main.rs:2648),
+        --force-downgrade and TILLANDSIAS_FORCE_DOWNGRADE are parsed and honoured, the
+        warned-proceed path prints its rollback warning un-debug-gated, and
+        tillandsias_core::version_guard already carries ELEVEN tests covering all four
+        cases this packet's verifiable_closure names: refuse on a newer image, proceed
+        at equal versions, proceed for a newer app, and the override converting a
+        refusal into a forced proceed.
+
+        Writing those four again in tillandsias-headless would have duplicated green
+        tests and closed this packet on work somebody else had already done. I did not,
+        and I am naming the omission rather than leaving it to be discovered: THE
+        DECISION FUNCTION IS NOT RE-TESTED HERE, deliberately.
+
+        WHAT WAS ACTUALLY MISSING IS THE WIRING. Nothing asserted that
+        ensure_image_exists CALLS the guard, and nothing asserted it calls it BEFORE THE
+        DETACH. Delete the call and all eleven version_guard tests stay green while
+        every launch silently rolls the enclave back. Three tests already open a source
+        window on ensure_image_exists and none of them mentions the guard.
+
+        The ordering is a real property with a stated reason, not a style preference:
+        the helper runs in its own session with no controlling tty, so a refusal raised
+        inside it reaches the operator as a bare non-zero exit. A guard that refuses
+        correctly in the wrong process is a guard whose message never reaches a human —
+        the same fail-loud family as 759-vceg, which I closed earlier this cycle.
+
+        TWO CALL SITES, AND I FOUND THE SECOND ONLY BECAUSE A SABOTAGE REFUSED TO APPLY.
+        The delete asserted its target appeared exactly once. It appeared TWICE:
+        ensure_image_exists (the chokepoint) and run_init, which reaches image building
+        by its own route. My first pin covered only the chokepoint, so removing the
+        guard from run_init would have left `--init` rolling enclaves back with nothing
+        red. Without that assertion the sabotage would have silently no-opped, both
+        tests would have "passed under sabotage", and I would have reported a verified
+        pin that was decoration.
+
+        A NO-OP SABOTAGE IS INDISTINGUISHABLE FROM A PASSING TEST. That is the
+        transferable lesson and it belongs to the same family as this packet: an absent
+        answer read as a positive one. This repo has already paid for the two-call-sites
+        shape once — 803-49re, "Part A was fixed once, and there were two purge paths",
+        where the fix landed on one installer and the developer-facing one still
+        reproduced the incident. A wiring pin should ENUMERATE call sites rather than
+        trust the one the packet names.
+
+        FALSIFICATION MATRIX. Each sabotage reds EXACTLY ONE test and the other stays
+        green — the discrimination control, because a pin that reds on everything is not
+        measuring what it names:
+
+          baseline                          ok / ok
+          A guard call deleted            FAILED / ok
+          B guard moved after the detach  FAILED / ok
+          C flag stops setting the var        ok / FAILED
+          D run_init loses its guard      FAILED / ok
+          restored                          ok / ok
+
+        C is the seam invisible to the core crate: its tests take `force` as a bool, so
+        every one of them would still pass if --force-downgrade stopped setting the
+        variable and the documented escape hatch became a silent no-op.
+
+        LANDED 731312086 on windows-next, verified with merge-base against the REMOTE.
+
+        THE GATE COULD NOT COMPLETE ON THIS HOST AND MY FIRST DIAGNOSIS WAS WRONG.
+        Five attempts died mid-gate and I read them as the host running out of memory.
+        The operator authorised `wsl --shutdown`; the distro came back with 6.9 GB free
+        AND THE NEXT ATTEMPT DIED ANYWAY. That falsified the memory-exhaustion story:
+        the mechanism is that the gate's own rustc makes Windows' free memory dip, and
+        the agent harness then reaps MY BACKGROUND TASK. Running the identical gate
+        DETACHED from the harness completed on the first try. Nothing was bypassed and
+        --no-verify was never used, though the failing push suggested it.
+
+        Recorded because the misreading is cheap and expensive: a reaped task presents
+        almost exactly like a gate refusal, and one of tonight's failures WAS a real
+        refusal (an orphaned doc comment) sitting in the middle of four that were not.
+        Reading "which failure" before "why" is what separated them.
