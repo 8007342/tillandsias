@@ -144,5 +144,27 @@ done
     && ok "every .step declares all four fields non-empty — a truncated resolution cannot pass" \
     || bad "a .step is missing or has an empty field:$incomplete"
 
+# ── 7. NO TWO .step FILES SHARE A NUMERIC PREFIX. This is the blind spot the
+#      migration itself created, and it was found the only way it can be: two
+#      hosts picked 090 on the same day and nothing complained. 1072-b7eq made
+#      file-level conflicts IMPOSSIBLE — two hosts adding steps touch two
+#      different files and git merges them silently — so a collision that would
+#      once have been a loud conflict in build.sh is now a silent ordering
+#      decision, resolved by whatever the rest of the filename sorts as, which
+#      neither author chose.
+#
+#      Nothing breaks when it happens: both files exist and both steps run. What
+#      is lost is the property the ten-spacing exists for — that a later step can
+#      land BETWEEN two without renaming either. A doubly-occupied 090 with 095
+#      already taken leaves no gap at all, and the next author discovers that at
+#      the moment they need it.
+dupnum="$(for f in "$ROOT"/scripts/gate-steps.d/*.step; do
+              [ -e "$f" ] || continue
+              b="${f##*/}"; printf '%s\n' "${b%%-*}"
+          done | sort | uniq -d)"
+[ -z "$dupnum" ] \
+    && ok "no two .step files share a numeric prefix — the ordering gap survives" \
+    || bad "two .step files share a numeric prefix, so their order is decided by the rest of the filename and no gap remains between them:$(printf ' %s' $dupnum)"
+
 echo "gate-step-append-no-conflict: $pass passed, $fail failed"
 [ "$fail" = 0 ] || exit 1

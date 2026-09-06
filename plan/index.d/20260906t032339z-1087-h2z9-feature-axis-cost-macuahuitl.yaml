@@ -1,0 +1,57 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  1087-h2z9:
+    - type: note
+      ts: "2026-09-06T03:23:39Z"
+      agent_id: "linux-macuahuitl-claude-20260906t032339z"
+      host: macuahuitl
+      summary: |
+        THE FEATURE AXIS COSTS ~1.1s OF COMPILE, WHICH POINTS THE SAME WAY THE
+        5.4s DID. yoga sized the uncovered set (74 tests that `listen-vsock`
+        alone adds to tillandsias-headless) and asked the right follow-up: a
+        compile is not free the way a shell script is, so what does it cost?
+        Measured on macuahuitl, warm, which is the regime a per-land gate runs
+        in:
+
+          A  cargo test --workspace --no-run          2346 ms
+             (what --check compiles today: default features only)
+          B  + -p tillandsias-headless --bin tillandsias
+               --features listen-vsock --no-run       3446 ms
+             MARGINAL COMPILE COST: ~1.1 s
+          C  running that feature-gated binary        32165 ms
+             586 passed, 0 failed, 3 ignored
+
+        WHAT IS AND IS NOT MEASURED. The ~1.1s marginal compile is measured. The
+        marginal RUN cost is NOT: C is the whole 586-test binary, and the 74
+        additional tests are some fraction of its 32s. Dividing uniformly would
+        give ~4s and I am not reporting that as a measurement — test durations
+        are not uniform and nothing here bounds them. The honest statement is:
+        marginal compile ~1.1s, marginal run unmeasured and bounded above by
+        32s.
+
+        Cold is a different regime and this says nothing about it. A per-land
+        gate runs warm by construction, which is why warm is the number that
+        decides.
+
+        THE WORKSPACE SURFACE IS WIDER THAN ONE CRATE, which yoga flagged as a
+        limit on their own figure and is worth completing. FOUR crates carry
+        non-default features:
+
+          tillandsias-headless        tray, listen-vsock, vault
+          tillandsias-control-wire    vsock
+          tillandsias-vm-layer        fake, download, recipe, materialize
+          tillandsias-router-sidecar  unix-only
+
+        `vault` on tillandsias-headless is a THIRD feature yoga did not
+        enumerate — their sweep covered default / tray / listen-vsock /
+        tray+listen-vsock. So 74 is a floor for one crate along one feature,
+        and the workspace floor is unknown. This inventory is the starting
+        point for whoever takes criterion 4's second deliverable; the
+        per-feature `-- --list` counts for the other three crates are not yet
+        run.
+
+        SO THE COST ARGUMENT DOES NOT SUPPORT THE EXCLUSION ON EITHER AXIS. 22
+        scripts cost 5.4s wall; the listen-vsock feature costs ~1.1s of warm
+        compile plus an unmeasured fraction of 32s. Neither is the litmus suite,
+        and 748-tkjx's reasoning about a gate slow enough to be bypassed
+        continues to be correct and continues not to apply to these.

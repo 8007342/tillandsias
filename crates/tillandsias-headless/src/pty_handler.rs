@@ -1917,9 +1917,25 @@ mod tests {
     }
 
     /// Empty env still yields a usable PATH + proxy-exemption vars.
+    ///
+    /// INJECTED HOME, like every other arm in this group, and the exact-count
+    /// assertion is why it has to be. This test called the impure `child_env`
+    /// and asserted `out.len() == 3`, which made it the ONE assertion in the
+    /// file sensitive to the host's /etc/passwd: `default_child_home()` looks
+    /// up the running uid, so on any host with a passwd entry for itself the
+    /// vector is 4 (PATH, HOME, no_proxy, NO_PROXY) and the test fails.
+    ///
+    /// MEASURED 2026-09-06 on yoga: `left: 4, right: 3`, deterministic, every
+    /// run. It passed on the macOS host that added the HOME seed (1072-qk43)
+    /// because macOS keeps regular users in Directory Services rather than
+    /// /etc/passwd, so the lookup returns None there — the same vacuity the
+    /// `child_env_with_home` split was introduced to remove, surviving in the
+    /// one arm that was not converted. It is a HOST-DEPENDENT failure, not a
+    /// flaky one; nothing here touches time, and the `#[ignore]` flakiness
+    /// notes further down belong to the PTY tests, not to this group.
     #[test]
     fn child_env_empty_input_gets_path_and_proxy_exemption() {
-        let out = child_env(&[]);
+        let out = child_env_with_home(&[], None);
         let path = out
             .iter()
             .find(|(k, _)| k == "PATH")
@@ -1927,7 +1943,23 @@ mod tests {
         assert_eq!(path, Some(DEFAULT_CHILD_PATH));
         assert!(out.iter().any(|(k, _)| k == "no_proxy"));
         assert!(out.iter().any(|(k, _)| k == "NO_PROXY"));
-        assert_eq!(out.len(), 3);
+        assert_eq!(out.len(), 3, "PATH + no_proxy + NO_PROXY, and no HOME");
+    }
+
+    /// The paired arm, and the reason the fix is not merely "drop the count".
+    /// With a home resolvable the empty-input case must yield FOUR — the count
+    /// is the only assertion that would catch a second HOME being appended, and
+    /// deleting it to make the host-dependence go away would delete that too.
+    #[test]
+    fn child_env_empty_input_with_a_home_seeds_exactly_one() {
+        let out = child_env_with_home(&[], Some("/root".to_string()));
+        let homes: Vec<&str> = out
+            .iter()
+            .filter(|(k, _)| k == "HOME")
+            .map(|(_, v)| v.as_str())
+            .collect();
+        assert_eq!(homes, vec!["/root"]);
+        assert_eq!(out.len(), 4, "PATH + HOME + no_proxy + NO_PROXY");
     }
 
     /// End-to-end smoke: open a PTY for `echo hi`, observe the `hi\r\n`
