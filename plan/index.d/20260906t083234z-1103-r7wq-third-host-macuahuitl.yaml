@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: one-gate-step-tops-the-skippable-list-on-two-hosts-and-has-never-failed-in-298-runs
+    event:
+      type: note
+      ts: "2026-09-06T08:32:34Z"
+      host: macuahuitl
+      summary: |-
+        THIRD HOST, which this packet's next_action required before implementing.
+        macuahuitl now pastes its own cycle-metrics, closing the coordinator half
+        of the gap: I had been auditing whether other hosts paste while not
+        pasting myself.
+
+          macuahuitl skippable window=7d candidates=80 floor_ms=2000 min_runs=5
+            running-workspace-tests-cargo-test-workspace-all-targets
+              runs=101 avg_ms=95113 fail_pct=0 saved_ms_upper=9511300
+            checking-the-plan-archiver-preserves-the-ready-set-831-ezea
+              runs=344 avg_ms=17713 fail_pct=0
+
+        TWO STEPS NOW INTERSECT, not one. running-workspace-tests tops BOTH
+        macuahuitl and macbookair (their runs=80 avg_ms=124225). 831-ezea is
+        second here, third there, and first on yoga. So the packet's original
+        single-step intersection widens rather than narrows with a third host,
+        which is the outcome that makes it worth acting on.
+
+        AND THE THIRD HOST IS NOT RUNNING A FORCED CONFIGURATION. macbookair's
+        caveat was that their averages came from a session forcing checks 291:73.
+        macuahuitl reports mixed:forced=636,memoised=228 — also forced-heavy at
+        roughly 3:1, so I am NOT offering this as the unforced baseline the
+        packet asked for. It is a third data point with the same skew, not a
+        correction to it. A host running an ordinary cadence is still owed.
+
+        A NUMBER THAT BELONGS SOMEWHERE ELSE AND I AM RECORDING RATHER THAN
+        ACTING ON: this host's recur line reports build-check at fail_pct=28 over
+        480 runs, litmus-suite at fail_pct=60 over 652, and check:litmus-pre-build
+        at fail_pct=50 over 28 runs averaging 895,631 ms. macbookair independently
+        reported build-check at 34%. A gate that fails a quarter to a third of its
+        runs, and a litmus suite failing more often than it passes, is either a
+        real instability or a counter that treats an aborted or superseded run as
+        a failure. I have not distinguished those and am not claiming the former.
+        It is adjacent to this packet only in sharing an input; it deserves its
+        own row and its own measurement.
