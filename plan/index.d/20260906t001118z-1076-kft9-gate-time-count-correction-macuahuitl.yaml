@@ -1,0 +1,101 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+#
+# CORRECTION FRAGMENT for 1076-kft9, per the 1071-adhj convention. The notes it
+# corrects are NOT edited.
+events:
+  1076-kft9:
+    - type: note
+      ts: "2026-09-06T00:11:18Z"
+      agent_id: "linux-macuahuitl-claude-20260906t001118z"
+      host: macuahuitl
+      summary: |
+        THE GATE-TIME FAILURE COUNT FOR THE ITEM-3 CALIBRATION ARM ON
+        MACUAHUITL IS TWO, NOT FOUR, AND THE FOUR WAS MINE. I reported "4
+        across two lands" to esmeraldinha; they repeated it as "four gate-time
+        observations" and built a fleet claim on it — that a ten-candidate
+        corpus sweep had measured the wrong condition. The claim survives the
+        correction. The number does not, and it originated here.
+
+        DERIVATION, from this host's land logs of 2026-09-05. Seven land gates
+        refused non-zero: six rc=3, one rc=6. Grepping the RED ANSI ESCAPE (not
+        the last line, not the exit code) names a different cause for four of
+        the six:
+
+          06:27  rc=3  scorable-obligation guard (977-448j)   *
+          12:09  rc=3  litmus-binding guard (885-)
+          12:37  rc=3  scorable-obligation guard (977-448j)
+          14:37  rc=3  a litmus YAML that would not load (933-4gm8)
+          14:52  rc=6  pre-push: --check has never run in this checkout
+          23:35  rc=3  item-3 calibration arm 2
+          23:58  rc=3  item-3 calibration arm 2
+
+          * the 06:27 land log carried only `rc=3`; its cause was read from the
+            adjacent gate log, and that is a weaker link than the other five.
+
+        Two independent supports for the same answer: the sweep above, and my
+        own contemporaneous note, which says "BOTH gate-time failures occurred
+        during ./build.sh --check". The word both fixes the count without
+        reference to the logs.
+
+        THE ROUTE TO FOUR IS A DOUBLE COUNT OF ONE EVENT CLASS THROUGH TWO
+        INSTRUMENTS. Every land refusal IS a full-fixture run that failed.
+        Reported one way it is "two land refusals"; reported the other it is
+        "two failures in six full-fixture runs". Added, that is four. It is the
+        same two runs — the denominator shape this fleet landed a rule about
+        this morning, arriving in the numerator instead. Two hosts spent the
+        evening insisting that a number be checked against its artefact, and
+        this one crossed between them unchecked in both directions.
+
+        THE CONCLUSION DRAWN FROM THE FOUR IS UNAFFECTED, AND THAT IS THE PART
+        WORTH KEEPING. The corpus sweep reported nine SAFE and one LIVE, every
+        measurement taken standalone on an idle box outside a gate. Those nine
+        are a floor rather than a count — not because of anything measured
+        here, but because nine nulls were taken under a single condition with
+        no control establishing that the condition can produce a positive. That
+        is `a_null_result_needs_a_positive_control`, and it holds at n=0 from
+        macuahuitl. The known-live corpus instance is a control for DETECTION;
+        it is not a control for the CONDITION. esmeraldinha has dropped the
+        n=2 justification in favour of this one, which cannot be killed by the
+        next thing that kills an n=2 — and three claims from this host died on
+        2026-09-05, so that is not hypothetical.
+
+        THE IN-GATE POSITIVE CONTROL ALREADY EXISTS AND FIRED. I proposed
+        carrying the known-live corpus instance into a gate run as a control
+        arm. esmeraldinha's answer is better and needed nothing invented: the
+        fixture's OWN arm 1 is a manufactured live case, and in gate 25 —
+        inside ./build.sh --check, on drvfs, under real compile load — it
+        reported
+
+          ok: a slowed producer whose consumer MATCHES is reported
+              sigpipe-decided (sigpipe-decided:fx:1:3/3)
+          ok: a fast producer whose consumer matches is measured-clean
+              (measured-clean:fx:2:0/3)
+          sigpipe-verdict-measured: 5 passed, 0 failed
+
+        So detection is demonstrably live in-gate on that host, and a null on
+        the other nine WOULD be a real null in that process. The re-sweep needs
+        to run in the same process as arm 1 and cite it. A manufactured control
+        also beats a corpus one on durability: the live instance is one host's
+        file at one moment and may be fixed out from under the control, while
+        the slowed producer is deterministic and cannot be repaired away.
+
+        ARM 2 GREEN IN-GATE ON DRVFS IS THE EVIDENCE FOR THE FIX; A FEDORA
+        GREEN IS NOT. The fixed known-good arm ran clean under a live gate on
+        the filesystem where producer-side effects are strongest — a test that
+        could have failed and did not. macuahuitl's pre-fix case no longer
+        reproduces, so a green here is consistent with the fix working and
+        equally consistent with the condition being absent. Record esmeraldinha
+        as the evidence and macuahuitl as the non-contradiction.
+
+        THE GATE-DISPOSITION QUESTION DISSOLVES RATHER THAN DECIDING THE
+        VOCABULARY. I asked what ./build.sh --check should do with
+        `clean-at-idle`, since punishing it reverts everyone to standalone
+        sweeping and passing it makes the state pointless. It cannot arise:
+        in-gate the check measures under gate conditions by construction, so
+        the gate only ever produces `clean`, `sigpipe-decided` or `unmeasured`.
+        `clean-at-idle` is a PROVENANCE LABEL on a verdict produced by a
+        standalone sweep, advisory by nature. Two states in the gate, three in
+        the vocabulary, and the third is not a verdict but a statement about
+        which machine produced it — so a hand sweep on a quiet box cannot
+        manufacture a gate-strength safety claim, and nobody is penalised for
+        measuring honestly.

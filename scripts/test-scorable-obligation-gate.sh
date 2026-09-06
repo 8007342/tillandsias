@@ -40,6 +40,30 @@ run_in_fixture() { # <fragment-body> -> prints verdict
     rm -rf "$d"
 }
 
+run_pair_in_fixture() { # <declaring-body> <correction-body> [env-prefix...]
+    # 1071-adhj. The existing harness writes ONE fragment, which cannot express
+    # the case this packet is about: a declaration and its correction arriving
+    # in the SAME push. Note the synthetic repo has NO plan/index.yaml, so these
+    # arms also exercise the guard's defensive file list — awk treats a missing
+    # operand as fatal and emits nothing at all, which would silently return the
+    # guard to its per-fragment behaviour.
+    local decl="$1" corr="$2"; shift 2
+    local d; d="$(mktemp -d "${TMPDIR:-/tmp}/scorable-fx.XXXXXX")"
+    (
+        cd "$d" || exit 2
+        git init -q . && git config user.email t@t && git config user.name t
+        mkdir -p plan/index.d scripts
+        cp "$GATE" scripts/
+        git add -A && git commit -qm base
+        git branch -q base-ref
+        printf '%s' "$decl" > plan/index.d/20260101t000000z-declaration.yaml
+        [ -n "$corr" ] && printf '%s' "$corr" > plan/index.d/20260101t000001z-correction.yaml
+        git add -A && git commit -qm new
+        env "$@" bash scripts/check-scorable-obligation-added.sh base-ref 2>&1
+    )
+    rm -rf "$d"
+}
+
 check() { # name expected actual
     # Compare the VERDICT line only. The gate prints its machine-readable line
     # on stdout and its human detail on stderr, and both are captured — so an
@@ -357,6 +381,92 @@ else
     echo "FAIL: the plan-only lane does not invoke the scorable guard (1069-5sp4)"
     echo "  A plan-only push is the ONLY kind this guard is about, and the gate"
     echo "  stamp ignores plan/index.d/, so build.sh --check cannot reach it."
+fi
+
+# ── 1071-adhj: THE QUESTION IS ABOUT THE FOLDED PACKET ─────────────────────
+# The guard used to judge each fragment's bytes alone, which FORCED the repair
+# the ledger convention forbids: an author whose declaration was refused could
+# only satisfy it by amending the append-only fragment in place, and two hosts
+# doing that to the same file produced duplicate keys and unparseable fragments.
+#
+# TWO-SIDED ON PURPOSE. The first arm is the fix; the second is what stops the
+# fix from being "disable the guard". Neither is meaningful without the other.
+
+_DECL_NO_OBLIGATION='packets:
+  - packet_id: repaired-row
+    order: 999-adhj
+    status: ready
+    title: a row whose obligation arrives in a correction fragment
+'
+_CORRECTION='packets:
+  - packet_id: repaired-row
+    order: 999-adhj
+    unscoreable: |
+      Stated in a CORRECTION fragment rather than by amending the declaration.
+'
+
+check "obligation in a correction fragment satisfies the FOLDED packet" \
+  "ok:scorable-obligations:2 checked" \
+  "$(run_pair_in_fixture "$_DECL_NO_OBLIGATION" "$_CORRECTION")"
+
+check "the same declaration with NO correction anywhere is still refused" \
+  "violation:scorable-obligation-missing:1" \
+  "$(run_pair_in_fixture "$_DECL_NO_OBLIGATION" "")"
+
+# A correction that is itself silent must not launder the declaration. Without
+# this, "a second fragment exists" would be mistaken for "an obligation exists".
+check "a silent correction fragment repairs nothing" \
+  "violation:scorable-obligation-missing:2" \
+  "$(run_pair_in_fixture "$_DECL_NO_OBLIGATION" 'packets:
+  - packet_id: repaired-row
+    order: 999-adhj
+    status: ready
+    title: a correction that states nothing
+')"
+
+# The fold must use the SAME grammar as the declaration. A closure that would be
+# refused in the declaring fragment must not be accepted from a correction —
+# otherwise the correction path is a looser gate than the direct one.
+# Expected 2, not 1: the correction fragment DECLARES the packet too, so the
+# guard checks two blocks and neither carries an obligation. I first wrote 1
+# here and the arm caught me — the count is per declaring block, not per packet.
+check "a correction with a PROSE closure does not satisfy the guard" \
+  "violation:scorable-obligation-missing:2" \
+  "$(run_pair_in_fixture "$_DECL_NO_OBLIGATION" 'packets:
+  - packet_id: repaired-row
+    order: 999-adhj
+    verifiable_closure: |
+      Someone will look at it and decide whether it seems right.
+')"
+
+# ── 1071-adhj criterion 2: the no-plan-binary behaviour, TESTED not asserted ──
+# The packet's stated fear was that folding would drag the plan binary into a
+# sub-second refusal, which then either BLOCKS every host that has not built or
+# passes silently when it could not run (1024-c3h3). The chosen design needs no
+# binary at all: a scorable obligation is monotone under the G-Set union, so the
+# fold for this predicate is a union scan over fragments.
+#
+# THIS ARM SCANS THE CODE, NOT THE PROSE. The guard's header discusses the plan
+# binary at length to explain why it does NOT use one, so a whole-file grep
+# would red on the explanation — the 1055-6yp8 shape, and one I walked into
+# twice in a single file earlier today. Comments are stripped first.
+#
+# MY FIRST VERSION OF THIS ARM RAN THE GUARD WITH PATH=/nonexistent AND IS
+# RECORDED HERE BECAUSE IT WAS WRONG IN AN INSTRUCTIVE WAY: it returned an empty
+# verdict, which I could have read as "the guard refused without a binary".
+# It was not measuring the plan binary at all — it had removed git, awk, grep
+# and mktemp, which the guard legitimately needs. A control that breaks the
+# subject along with the variable measures nothing.
+_guard_code="$(sed '/^[[:space:]]*#/d' "$GATE")"
+if grep -qE 'tillandsias-plan|resolve_plan_binary|plan-binary-probe|target/release' <<<"$_guard_code"; then
+    fail=$((fail+1))
+    echo "FAIL: the scorable guard now reaches for the plan binary (1071-adhj)"
+    echo "  This is a sub-second fast refusal in the plan-only lane. A built"
+    echo "  artifact in its path either blocks every host that has not built or"
+    echo "  passes silently when it cannot run (1024-c3h3). The fold is a union"
+    echo "  scan precisely so it needs nothing built."
+else
+    pass=$((pass+1))
 fi
 
 total=$((pass+fail))

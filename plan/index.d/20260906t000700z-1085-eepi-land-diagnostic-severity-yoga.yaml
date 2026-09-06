@@ -1,0 +1,73 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-land-diagnostic-names-an-advisory-warning-as-the-cause-because-severity-lives-in-the-escape-it-strips
+    order: 1085-eepi
+    status: in_progress
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [tooling, land, diagnostics, fail-loud]
+    estimated_hours: 1
+    parent: land-on-platform-branch-discards-the-gates-output-so-a-refusal-can-never-name-its-step
+    owned_files:
+      - scripts/land-on-platform-branch.sh
+      - scripts/test-land-gate-refusal-names-its-step.sh
+    title: |
+      the land tool's gate diagnostic names `[build] standing declared-closure debt: violation:...` — a _warn that refuses nothing — as the first failing line, because the matcher strips ANSI before reading it and severity lived in the escape
+    context: |
+      SECOND REAL INSTANCE of 1033-iycs, found by macuahuitl 2026-09-05 on a
+      real land refusal. Filed as a CHILD rather than a reopen: reopening a
+      terminally-closed packet currently reds ./build.sh --check
+      (violation:fragment-status-loss:1), which is 1085-g52w. The parent's
+      original closure is not in dispute — its fix is strictly better than the
+      four words it replaced, and it saved a reader from 4000 lines even while
+      pointing sixty lines short.
+
+      WHAT IT NAMED:
+        refused:land:gate-failed
+          first failing line: [build] standing declared-closure debt:
+                              violation:declared-closure-unresolvable:4
+
+      That is a `_warn`, advisory by design under 885-92iu; the four
+      unresolvable closures are pre-existing 795-* debt that reds nothing, and
+      the comment above it says so. The real failure was ~60 lines further
+      down: `FAIL: expected measured-clean, got: sigpipe-decided:fx:2:2/3`.
+      macuahuitl nearly spent a cycle on standing debts and found the real
+      cause only because the advisory's own comment said it was advisory —
+      the fix was in the code being blamed, which is luck, not method.
+
+      THE ROOT CAUSE IS ONE DELETION, NOT A LIST OF CLASSES, which is why the
+      parent's fix did not hold. The matcher strips ANSI so `^` means the start
+      of the text — AND SEVERITY WAS IN THE ESCAPE. build.sh's `_error` is RED
+      (0;31), `_warn` is YELLOW (0;33); the log already says which lines are
+      failures. Anchoring and the `ok`-row exclusion were both attempts to
+      rebuild, by pattern, information deleted one line earlier. Both instances
+      are symptoms: a passing arm quoting the token, then a warning quoting it.
+      The advisory clears both earlier defences — anchored at column zero once
+      ANSI is stripped, not an `ok` row — and holds `violation:` because it is
+      CORRECTLY REPORTING A VIOLATION COUNT THAT IS NOT A GATE FAILURE.
+
+      SAME FAMILY AS macuahuitl's OWN `pkill` SELF-MATCH the same hour (a
+      pattern that killed the shell running it, then a verification grep that
+      matched itself and reported two survivors that did not exist): a pattern
+      applied to a set that contains the thing applying it. Two independent
+      instances in one hour suggests the category deserves a checker.
+    exit_criteria:
+      - "an advisory _warn line quoting a violation count is never named as the cause, and the real failure further down is; pre-fix result: FAILS (names the advisory, verbatim, in arm 4c)"
+      - "a red _error line is still named when it IS the first real failure — the severity rule must not make [build] lines invisible, only advisory ones; pre-fix result: passes and must keep passing"
+      - "a log carrying no colour at all (piped, TERM=dumb, NO_COLOR, CI stripping) falls back to the text heuristic and SAYS SO in the refusal, rather than silently answering a weaker question (1024-c3h3 shape); pre-fix result: FAILS (no fallback exists to announce)"
+    unscoreable: |
+      Pinned by four new arms in scripts/test-land-gate-refusal-names-its-step.sh
+      (4c/4d/4e), which reproduce the real log's bytes AND the sixty-line
+      distance, so the cause must be found past the advisory rather than at it.
+    events:
+      - type: filed
+        ts: "2026-09-06T00:07:00Z"
+        agent_id: "linux-yoga-claude-20260906t000700z"
+        host: yoga
+        summary: |
+          Filed by yoga from macuahuitl's measurement, as a child of 1033-iycs
+          rather than a reopen of it, because the reopen is not gate-passable
+          until 1085-g52w. Fix and arms implemented in the same commit.

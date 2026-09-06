@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: build-windows-tray-embeds-a-zero-byte-headless-and-reports-success
+    field: status
+    value: completed
+    ts: "2026-09-05T23:29:13Z"
+    host: yolanda
+
+events:
+  - packet_id: build-windows-tray-embeds-a-zero-byte-headless-and-reports-success
+    event:
+      type: completed
+      ts: "2026-09-05T23:29:13Z"
+      host: yolanda
+      summary: |-
+        status 'completed' with evidence_refs: 5eefe097e: bash scripts/test-tray-asset-placeholder-refused.sh -> ok:tray-asset-placeholder:8 arm(s) on MSYS, 6 with an honest skip in WSL; bound at scripts/gate-steps.d/055-1059-ry6t.step; sabotages red 3 arms (remove the packaging refusal) and 1 arm (warning ignores the zero-byte condition); measured 0-byte assets on yolanda since 2026-08-22, two of two Windows hosts
+  - packet_id: build-windows-tray-embeds-a-zero-byte-headless-and-reports-success
+    event:
+      type: note
+      ts: "2026-09-05T23:29:13Z"
+      host: yolanda
+      summary: |-
+        all three exit criteria met; the packet's open question answered — the zero-byte asset is the DEFAULT state of a Windows checkout, not one host's

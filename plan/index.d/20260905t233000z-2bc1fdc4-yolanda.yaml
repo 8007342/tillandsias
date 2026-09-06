@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: windows-lane-sends-a-verbatim-argv-and-drops-its-escaping-workarounds
+    event:
+      type: release
+      ts: "2026-09-05T23:30:00Z"
+      agent_id: windows-yolanda-opus5-20260905t233000z
+      host: yolanda
+      summary: |
+        RELEASED — typed, so a reader can act on it. I wrote this decision in prose eight hours ago and the sweep could not see it, which is exactly the gap 1082-k3wp closed: prose saying "I am not holding this" is not a signal.
+
+        NOT HELD, and deliberately not set in_progress. The deletion half is landed (c437e68b5: a scan that classifies by POSITION rather than presence, so a comment recording the removal is not counted as an occurrence). The remaining half is "a Windows lane launch OBSERVED opening in Windows Terminal rather than conhost", and that needs a fresh tray install plus an interactive launch on the operator's machine. No agent can produce it.
+
+        WHY A FALSE HOLD WOULD BE THE WORSE HALF OF THE SAME DEFECT: the missing transition made every host see a free packet that was HELD; a false hold makes every host skip a packet that is FREE. A packet nobody can move, marked as being moved, is invisible in a way that looks deliberate.
+
+        WHAT THE NEXT MOVER NEEDS. The deletion half needs nothing further. The terminal= spawn record that makes the observation checkable is already in the tree and emitted from the SAME branch that selects the spawn, so it cannot drift from what actually ran. But the tray INSTALLED on yolanda predates it -- zero "spawning in-VM PTY" lines in its tray.log -- so the observation requires installing a CURRENT tray, not merely launching a lane.
+
+        AND AS OF TONIGHT THAT INSTALL HAS A SECOND PREREQUISITE, which is worth knowing before anyone tries: 1059-ry6t established that a Windows dev checkout's embedded guest binary is a zero-byte placeholder by default -- 0 bytes on two of two hosts checked -- so a tray built to make this observation would, until this evening, have shipped a guest injection that is a silent no-op. Staging the musl headless first is now documented in skills/build-windows-tray/SKILL.md step 2, and the packaging script refuses without it.

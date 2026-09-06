@@ -262,6 +262,32 @@ impl VzRuntime {
         self.rootfs_image_path().exists()
     }
 
+    /// Did the guest's provisioning script record its own COMPLETION?
+    ///
+    /// ORDER 1082-9rub. `is_provisioned()` above is a stat() of rootfs.img and
+    /// answers "the image was fetched and converted". Two branch sites read it
+    /// as "the guest is provisioned", and the gap between those two facts is a
+    /// real, reachable state: a guest that booted, created its rootfs, and then
+    /// ABORTED during cloud-init. rootfs.img is present; nothing was provisioned.
+    ///
+    /// This asks the question those sites meant to ask. The record is written by
+    /// the provisioning script itself (1055-e8ie) with `phase complete` as its
+    /// LAST statement, so a start with no completion is a positive signal of an
+    /// abort rather than an absence of information.
+    ///
+    /// RETURNS FALSE WHEN THE FILE IS ABSENT OR UNREADABLE, deliberately. The
+    /// callers use this to decide whether to trust an existing image, and "I
+    /// could not tell" must not read as "yes" — that is the whole defect this
+    /// packet is about, one layer down. A guest provisioned before this record
+    /// existed will therefore report false and be treated as unverified, which
+    /// is the correct conservative answer for a signal that cannot be
+    /// reconstructed after the fact.
+    pub fn provisioning_completed(&self) -> bool {
+        std::fs::read_to_string(self.provision_state_path())
+            .map(|t| t.lines().any(|l| l.trim() == "phase complete"))
+            .unwrap_or(false)
+    }
+
     /// Host-side directory shared into the guest so the provisioning script can
     /// report its own outcome where the host can read it (order 1055-e8ie).
     ///
@@ -941,6 +967,50 @@ else
 fi
 EOF
 chmod 0755 /usr/local/lib/tillandsias/headless-preflight.sh
+
+# ORDER 1059-yekz. FORWARD THE JOURNAL TO THE DEVICE THE HOST ACTUALLY READS.
+#
+# Every unit below already sets StandardOutput=journal+console, and NONE of that
+# output has ever reached the host's console.log. The units are not at fault and
+# neither is the host capture; the two ends name DIFFERENT DEVICES.
+#
+# MEASURED in a running guest 2026-09-05:
+#   /proc/cmdline .... console=tty1 console=ttyAMA0,115200n8
+#   /proc/consoles ... tty1 -WU (EC p) 4:1     <- tty1 is the ONLY registration
+#   the getty ........ serial-getty@hvc0.service
+# ttyAMA0 is named on the cmdline and never registers, because VZ provides a
+# VIRTIO console (hvc0), not an ARM PL011 UART. So `console` resolves to tty1,
+# while the host captures hvc0 — which no console= argument names.
+#
+# PROVED WITH A TWO-SIDED WRITE, same guest, same instant, one variable:
+#   echo ... > /dev/console  (tty1) -> reached the host's console.log 0 times
+#   echo ... > /dev/hvc0            -> reached it 1 time
+#
+# AND THE OUTPUT EXISTED ALL ALONG — `journalctl -u tillandsias-headless-fetch`
+# carries the staged_binary line for every boot. So this was never "the unit
+# produced nothing"; it was "the unit produced it and it went somewhere no one
+# reads", which are different defects with different fixes.
+#
+# WHY journald FORWARDING RATHER THAN console=hvc0 ON THE CMDLINE. The host uses
+# VZEFIBootLoader, so the kernel command line comes from the image's GRUB and not
+# from us; changing it means editing grub in the guest and rebooting. Forwarding
+# the journal is one file, needs no reboot, and covers EVERY unit rather than the
+# two we happen to own — including systemd's own messages, which is what makes a
+# hung boot legible at all.
+#
+# MEASURED BEFORE AND AFTER on this host: console.log carried 0 systemd unit
+# lines across 98 accumulated boots (~690 bytes/boot, only the getty's OSC 3008
+# record and the login banner — statistically identical to the 653 bytes macneo
+# captured on a guest that never reached Ready). With this drop-in it carries
+# systemd[1] unit output.
+mkdir -p /etc/systemd/journald.conf.d
+cat > /etc/systemd/journald.conf.d/99-tillandsias-console.conf << 'EOF'
+[Journal]
+ForwardToConsole=yes
+TTYPath=/dev/hvc0
+MaxLevelConsole=info
+EOF
+systemctl restart systemd-journald || true
 
 # Write tillandsias-headless-fetch.service
 cat > /etc/systemd/system/tillandsias-headless-fetch.service << 'EOF'
@@ -1943,7 +2013,13 @@ impl VmRuntime for VzRuntime {
     async fn provision(&self, _manifest: &ProvisionManifest) -> Result<(), VmError> {
         // Idempotency short-circuit per
         // vm-provisioning-lifecycle.provision.idempotency@v1.
-        if self.is_provisioned() {
+        //
+        // ORDER 1082-9rub: idempotency means "this already SUCCEEDED", not "a
+        // file from a previous attempt is lying around". is_provisioned() is a
+        // stat() of rootfs.img, so on its own it returns Ok(()) — reporting
+        // provisioning success — for a guest whose image was created and whose
+        // cloud-init then aborted. Require the guest's own completion record.
+        if self.is_provisioned() && self.provisioning_completed() {
             return Ok(());
         }
         // The legacy tarball import path never existed on macOS: this trait
@@ -2988,6 +3064,81 @@ mod tests {
     /// branches are a separate packet. What must not silently return is a
     /// function whose name implies completion and whose doc does not say it
     /// measures a file.
+    /// ORDER 1082-9rub. The predicate must distinguish the three states the
+    /// guest can actually be in, and must not treat "I could not tell" as yes.
+    ///
+    /// These use a temp image root rather than the real one: a test that reads
+    /// this host's actual provision record would pass or fail according to what
+    /// the machine happens to hold, which is the shape that made three of my
+    /// test attempts vacuous earlier today on a different packet.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn provisioning_completed_distinguishes_complete_from_aborted_and_absent() {
+        let tmp =
+            std::env::temp_dir().join(format!("tillandsias-1082-9rub-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let rt = VzRuntime::new(3, tmp.clone());
+
+        // ABSENT: no record at all. Must be false — an unreadable signal is not
+        // a completed provision, and reading it as one is this packet's defect.
+        assert!(
+            !rt.provisioning_completed(),
+            "no record must not read as completed"
+        );
+
+        std::fs::create_dir_all(rt.provision_state_dir()).unwrap();
+
+        // ABORTED: the script started and never reached its last statement.
+        // This is the state a present rootfs.img hides.
+        std::fs::write(
+            rt.provision_state_path(),
+            "tillandsias-provision-state v1\nwritten_at 1\nphase start\n",
+        )
+        .unwrap();
+        assert!(
+            !rt.provisioning_completed(),
+            "a start with no completion is an ABORT, not a success"
+        );
+
+        // FAILED: the ERR trap fired.
+        std::fs::write(
+            rt.provision_state_path(),
+            "tillandsias-provision-state v1\nwritten_at 2\nphase failed\nrc 1\n",
+        )
+        .unwrap();
+        assert!(
+            !rt.provisioning_completed(),
+            "a failure must not read as completed"
+        );
+
+        // COMPLETE: the positive half. Without this the predicate could simply
+        // return false always and every arm above would still pass.
+        std::fs::write(
+            rt.provision_state_path(),
+            "tillandsias-provision-state v1\nwritten_at 3\nphase complete\n",
+        )
+        .unwrap();
+        assert!(
+            rt.provisioning_completed(),
+            "the script's own completion record must be believed"
+        );
+
+        // A record that MENTIONS completion in another field must not count —
+        // the guard scans the phase line, not the text (the quoted-history
+        // lesson: prose about a thing is not the thing).
+        std::fs::write(
+            rt.provision_state_path(),
+            "tillandsias-provision-state v1\nphase start\ncmd echo phase complete\n",
+        )
+        .unwrap();
+        assert!(
+            !rt.provisioning_completed(),
+            "a completion string inside another field is not a completion record"
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
     #[test]
     fn is_provisioned_documents_that_it_only_stats_a_file() {
         let source = include_str!("vz.rs");
@@ -3572,6 +3723,47 @@ mod tests {
     /// never compiles. Only the gate on the merged union catches it, which is
     /// where macuahuitl found it (E0425 at vz.rs, tillandsias-vm-layer lib
     /// tests, Linux).
+    /// ORDER 1059-yekz. Provisioning must forward the journal to the device the
+    /// HOST reads, or unit output goes to a console nobody consumes.
+    ///
+    /// MEASURED before this landed: console.log carried ZERO systemd unit lines
+    /// across 98 accumulated boots on a healthy guest — ~690 bytes/boot of getty
+    /// OSC record and login banner, statistically identical to the 653 bytes
+    /// macneo captured on a guest that never reached Ready. The units already
+    /// said StandardOutput=journal+console; `console` resolves to tty1 while the
+    /// host captures hvc0.
+    ///
+    /// THE NEEDLE IS ASSEMBLED rather than written literally: a test whose
+    /// pattern also matches its own assertion proves nothing, which is the
+    /// vacuous-pin lesson from 1029-5wvd and one I re-learned today when a grep
+    /// matched the comment block above the code it was checking.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn vz_provisioning_forwards_the_journal_to_the_captured_console() {
+        let script = provision_user_data_for_test();
+        let forward = concat!("ForwardTo", "Console=yes");
+        let device = concat!("TTYPath=/dev/", "hvc0");
+        assert!(
+            script.contains(forward),
+            "provisioning must enable journal console forwarding — without it \
+             every unit's journal+console output stops at tty1"
+        );
+        assert!(
+            script.contains(device),
+            "the forward must name hvc0: that is the device the host captures. \
+             Measured two-sidedly — a write to /dev/console (tty1) reached the \
+             host 0 times, a write to /dev/hvc0 reached it 1 time"
+        );
+        // NEGATIVE HALF: naming the device is useless if the units stopped
+        // asking for console output at all, so pin that they still do.
+        let std_console = concat!("StandardOutput=journal", "+console");
+        assert!(
+            script.contains(std_console),
+            "the units must still request console output; forwarding alone \
+             carries only what something asks to send"
+        );
+    }
+
     #[cfg(target_os = "macos")]
     #[test]
     fn vz_instance_id_changes_when_the_provisioning_script_changes() {

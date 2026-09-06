@@ -418,6 +418,57 @@ verification:
           instrument cannot answer the question; skew neither eliminated nor
           established.
         enforced_by: "judgment — report the positive and negative control results beside the count, or the count is not evidence of a difference"
+      - id: an_artefact_scan_cannot_date_a_change_that_ships_no_string
+        kind: judgment
+        rule: >
+          A CHANGE THAT ALTERS BEHAVIOUR WITHOUT ALTERING A SHIPPED STRING
+          CANNOT BE DETECTED BY SCANNING A BUILT ARTEFACT. Flipping a default,
+          changing a constant, reordering a branch — none need add a literal
+          that survives into the binary, so a string scan can neither confirm
+          nor refute that the change is present. Before scanning an artefact to
+          answer "does this build contain commit X", check whether X adds a
+          string that reaches the artefact AT ALL; if it does not, the scan is
+          blind by construction and no cleverness in the pattern fixes it.
+          Version strings and long-lived markers are the WORST candidates,
+          because both sides of the comparison usually carry them. The remedy is
+          a CONTENT-DERIVED id baked at build time, read from the RUNNING
+          artefact and never from the calling shell's checkout — a stamp taken
+          from the shell reports the tree you are standing in rather than the
+          code that produced your result, which is always current and never
+          true. THREE INDEPENDENT AXES, and passing two proves nothing about
+          the third:
+            build-id == source-revision   the COMPILED tool matches ONE CRATE
+                                          (fix: install)
+            checkout base vs trunk        the checkout matches the fleet
+                                          (fix: fetch) — the ONLY axis covering
+                                          shell tooling, which is never compiled
+            ledger status vs what LANDED  the ledger matches the world
+                                          (fix: neither)
+        earned_by: >
+          2026-09-05, macneo, after the scanning approach in
+          `a_discriminating_probe_needs_both_controls` closed: 79e3ca876 flipped
+          the control wire to encrypted-by-default and added NO string literal
+          reaching the shipped guest binary, so no probe of the raw image could
+          date it. The guest was made to hash its own binary instead and report
+          over the provision-state share — guest d677e5f5843d against staged
+          d677e5f5843d on a cold provision — refuting version skew by
+          measurement rather than weakening it by argument.
+        earned_by_second: >
+          2026-09-06, macuahuitl, yoga and macneo, the same problem in the
+          positive form and the source of the three axes. A stranded-claim sweep
+          reported a pre-fix row that was routed to two hosts as a live defect;
+          `strings` answered nothing and mtime only happened to work.
+          `tillandsias-plan build-id` against `source-revision` settled it: the
+          artefact had been BUILT correctly at 15:32 and never installed, while
+          `~/.local/bin` held the 13:36 copy first on PATH — a state no mtime of
+          the build tree can see. THE CAVEAT IS MEASURED, not inferred (yoga,
+          same checkout, three readings): editing `scripts/` leaves the id
+          UNCHANGED, editing `crates/tillandsias-plan` moves it, so axis 1 is a
+          clean bill for one crate and not for the toolchain. Axis 3 is
+          1080-4deb: two commits of 1055-e8ie were on trunk while the packet
+          read `ready` and a host was routed work already done, with axes 1 and
+          2 both passing on that host at that moment.
+        enforced_by: "judgment — before scanning an artefact, name the string the change adds; if it adds none, say the probe is blind by construction rather than reporting its count"
       - id: state_the_asymmetry_before_the_result
         kind: judgment
         rule: >
@@ -461,6 +512,25 @@ verification:
           alone pass on a file with the field deleted, a different defect
           wearing the fixed state's clothes), and builds its needles by
           concatenation.
+        earned_by_fourfold: >
+          THE SAME FILE DEMONSTRATED IT FOUR TIMES IN ONE DAY, twice inside the
+          text explaining it. lenovinha, 2026-09-05, on
+          scripts/test-trace-coverage.sh: the ghost-trace ratchet flagged (1) a
+          synthetic trace marker written literally in the fixture, then (2) the
+          COMMENT explaining that hazard, which spelled the marker out — the
+          warning reproducing the defect it warned about. A repair the same day
+          added (3) a third instance in an assertion that grepped for the literal
+          marker to check the validator's trailer, and (4) a fourth in the first
+          draft of the comment explaining that the third had just happened. The
+          fourth was caught only by grepping their own fix before re-gating,
+          rather than by trusting a lesson they were in the middle of writing
+          down.
+        rule_general_form: >
+          A FILE THAT CONTAINS THE STRING IT REASONS ABOUT IS A FALSE POSITIVE
+          FOR EVERY SCANNER KEYED ON THAT STRING, AND PROSE IS NOT EXEMPT. The
+          scanner cannot distinguish an assertion from a mention and should not
+          have to; the discipline belongs on the author. Assemble the needle at
+          runtime — in fixtures, in assertions, and in the comments about both.
       - id: an_explanation_offered_before_the_evidence_disarms_the_detector
         kind: judgment
         rule: >

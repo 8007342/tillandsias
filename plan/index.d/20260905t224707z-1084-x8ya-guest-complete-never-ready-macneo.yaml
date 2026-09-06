@@ -1,0 +1,126 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-guest-whose-provisioning-completed-never-reaches-ready-and-the-host-has-no-way-to-ask-why
+    order: 1084-x8ya
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: macos
+    owner_host: any
+    release_target: stable-milestone-v1
+    capability_tags:
+      - macos
+      - vm-layer
+      - control-wire
+      - fail-loud
+      - guest-rootfs
+    estimated_hours: 5
+    owned_files:
+      - crates/tillandsias-vm-layer/src/vz.rs
+      - crates/tillandsias-control-wire/src/lib.rs
+    unscoreable: |
+      NO LITMUS LANE CAN COVER THIS AND SAYING SO IS THE HONEST ANSWER. The
+      decisive measurement is a cross-host forensic read — mounting a preserved
+      guest image on a Linux host and hashing one file inside it — and the
+      reproduction needs a macOS host with a live VM. Neither is runnable in any
+      gate: the gate has no guest, and the Linux host that can mount the image
+      cannot reproduce the failure.
+
+      WHAT WOULD MAKE IT SCORABLE, named so a claimer can pin it if they choose:
+      once criterion 1 identifies the running guest's binary, the SKEW check
+      itself — staged sha256 versus running sha256 — is mechanical and could be
+      a fixture. Filing that pin now would presume the cause is skew, which is
+      the leading hypothesis and explicitly unproven, so it is named as the
+      candidate rather than claimed as the closure.
+    verifiable_closure: |
+      A macOS host reproduces the handshake failure, names the cause with the
+      discriminating measurement, and a fixture distinguishes it from a slow
+      boot. macneo holds TWO checksum-verified guest images — one that never
+      reached Ready with history, one cold-provisioned and never Ready — and
+      either answers the hash question on a LINUX host with one mount.
+
+      PRE-FIX RESULT: FAILS. No host can currently identify the running guest's
+      binary at all, which is criterion 1.
+    title: |
+      A guest whose provisioning COMPLETED never reaches Ready: the secure control wire handshake fails with `noise: input error` on every poll, and the host has no way to ask why
+    context: |
+      MEASURED on macneo (8 GB) 2026-09-05, repeatedly, on cold provisions from
+      a destroyed substrate:
+
+        [tillandsias-tray] Auto-boot: VM is running
+        [tillandsias-tray] vm-status poll: secure control wire handshake failed: noise: input error
+
+      every poll, indefinitely. `phase=Ready` count 0. crashloop.state never
+      written on the first such guest — it had NEVER been ready.
+      `--exec-guest` returns wait_phase_ready timeout after 300s.
+
+      WHAT 1055-e8ie ESTABLISHED, AND WHY THIS IS A SEPARATE QUESTION RATHER
+      THAN A SYMPTOM OF THAT ONE: the provisioning script COMPLETES.
+
+        Provisioning: COMPLETE — the guest script recorded its own completion at 2026-09-05T20:44:44Z
+        Guest state:  🔵 Connecting… — as the live tray reported it
+
+      Before criterion 2 those two states were ONE PICTURE. The fault is
+      positively downstream of provisioning rather than in it, and that
+      diagnosis was impossible to make eight hours earlier.
+
+      LEADING HYPOTHESIS, EXPLICITLY UNPROVEN. 79e3ca876 made the control wire
+      encrypted BY DEFAULT (2026-09-05T04:32:55Z, a breaking change). A host
+      speaking Noise to a guest that does not expect it presents exactly as
+      `noise: input error`. The STAGED guest binary is post-79e3ca876
+      (sha256 d677e5f5…, git_sha 50e54682e) — but a staged binary only takes
+      effect at the NEXT provision, and what the RUNNING guest carries is
+      undecidable from this host.
+
+      AND IT CANNOT BE SETTLED BY SCANNING THE IMAGE, which macneo established
+      rather than assumed. Version strings do not discriminate: the NEW binary
+      itself contains five copies of the OLD version string.
+      `tillandsias-control-channel` does not either: it predates 79e3ca876 by
+      two orders. 79e3ca876 ADDS NO STRING LITERAL THAT REACHES THE SHIPPED
+      GUEST BINARY — its additions are shell script, comments and
+      `#[cfg(test)]` blocks, verified independently on macuahuitl — so it flips
+      a default without changing any shipped string and NO string scan of that
+      artefact can date it. That is a property of the change, not of the probes.
+
+      THE HOST CANNOT ASK. Order 272 makes the control wire the ONLY
+      host<->guest channel and masks every sshd surface; `--exec-guest` rides
+      the wire that is down; macOS cannot mount the guest's ext4; and
+      console.log carries only getty banners — 1059-yekz, which macbookair
+      measured at ~650 bytes per boot across 98 HEALTHY boots, so that silence
+      is total rather than a property of a broken guest. The one question that
+      settles it — does the guest's /usr/local/bin/tillandsias-headless match
+      the staged sha256 — CANNOT BE ASKED FROM macOS AT ALL.
+    exit_criteria:
+      - "the running guest's tillandsias-headless is identified by hash or version, FROM THE GUEST rather than by inference from what was staged; pre-fix result: FAILS, no host can do this today"
+      - "the handshake failure is attributed to a NAMED cause — version skew, a PSK/version-binding mismatch, or something else — with the measurement that distinguishes them"
+      - "a host whose guest fails this way learns WHY from the host, not from a raw-image grep; if that requires a channel that survives a dead wire, that channel is named"
+      - "NEGATIVE CONTROL: a guest that is merely slow to reach Ready is NOT reported as this defect"
+    next_action: |
+      TWO SCOPE FACTS THE CLAIMER MUST HAVE BEFORE STARTING, both volunteered by
+      the finder rather than discovered at criterion 1.
+
+      1. macneo CAN REPRODUCE IT ON DEMAND AND CANNOT CLOSE IT. The decisive
+         measurement needs either a Linux mount of one of their two preserved
+         images or a guest they can reach, and they have neither. They are
+         still the right claimant — nobody else has the failing state — but THE
+         CLOSING EVIDENCE MUST COME FROM ANOTHER HOST, and that is visible here
+         rather than surfacing halfway through. The operator ask for a Linux
+         mount of those images is already queued.
+
+      2. IT MAY NOT BE A DEFECT IN THE SENSE THE TITLE IMPLIES. If the running
+         guest is simply an old binary that a re-provision replaces, the fix
+         might belong in 701-kgvk's staging guard rather than in the wire.
+         Nobody has established that either. The title states the SYMPTOM,
+         which is what was measured; the criteria ask for the cause rather than
+         assuming it.
+
+      START WITH CRITERION 1. Everything else is unanswerable until the running
+      guest's binary can be identified, and the two preserved images make that a
+      one-mount question for whichever Linux host takes it.
+    provenance: |
+      Found by macneo-macos 2026-09-05 while closing 1055-e8ie; the completion
+      record that separated it from a provisioning abort is that packet's
+      criterion 2. Packet text drafted by macneo, including both scope caveats,
+      and filed through macuahuitl-fedora because macneo cannot push
+      (1025-a896).

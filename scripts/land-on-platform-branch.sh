@@ -170,14 +170,62 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
         # refusal this fix caught named
         # `ok   no evidence at all -> refused:no-evidence:...`, a passing arm,
         # as the cause. A marker inside an `ok` row is a fixture quoting the
-        # verdict it asserts, not a failure. Strip ANSI first so `^` means the
-        # start of the text and not the start of a colour escape.
-        _first_fail="$(sed 's/\x1b\[[0-9;]*m//g' "$_gate_log" 2>/dev/null \
-            | grep -m1 -E '^(FAIL[: ]|violation:|refused:|\[build\] .*(refused|failed|violation))' \
-            | cut -c1-200)"
+        # verdict it asserts, not a failure.
+        #
+        # SEVERITY COMES FROM THE COLOUR, AND STRIPPING IT FIRST THREW THAT
+        # AWAY. Second instance, macuahuitl 2026-09-05: this named
+        # `[build] standing declared-closure debt: violation:...` — a `_warn`,
+        # advisory by design under 885-92iu, whose own comment says it refuses
+        # nothing. The real failure was ~60 lines further down (a fixture's
+        # `FAIL: expected measured-clean`). The advisory clears both earlier
+        # defences: it is anchored at column zero once ANSI is stripped, and it
+        # is not an `ok` row. It contains `violation:` because it is CORRECTLY
+        # REPORTING A VIOLATION COUNT THAT IS NOT A GATE FAILURE.
+        #
+        # Anchoring and the `ok` exclusion were both attempts to rebuild, by
+        # pattern, information deleted one line earlier: build.sh's `_error` is
+        # RED (0;31) and `_warn` is YELLOW (0;33), so the log already says which
+        # lines are failures. Match `[build]` lines on SEVERITY and the whole
+        # class disappears rather than being enumerated.
+        #
+        # Fixture output (`FAIL:`, bare `violation:`) is NOT coloured by
+        # build.sh — it is the fixture's own stdout — so the text heuristic
+        # still owns those lines. Two rules for two sources, not one rule
+        # stretched over both.
+        _fallback_note=""
+        if grep -qa "$(printf '\033\[')" "$_gate_log" 2>/dev/null; then
+            _first_fail="$(awk '
+                # A [build] line is a failure only if _error painted it red.
+                # Strip the escapes for DISPLAY once severity has been read off
+                # them — the reader wants the sentence, not the colour bytes.
+                /^\033\[0;31m\[build\]/ {
+                    line = $0
+                    gsub(/\033\[[0-9;]*m/, "", line)
+                    print line
+                    exit
+                }
+                /^\033\[0;3[23]m\[build\]/ { next }   # _warn / _info: advisory
+                {
+                    line = $0
+                    gsub(/\033\[[0-9;]*m/, "", line)
+                    if (line ~ /^ok[: \t]/) next
+                    if (line ~ /^(FAIL[: ]|violation:|refused:)/) { print line; exit }
+                }
+            ' "$_gate_log" 2>/dev/null | cut -c1-200)"
+        else
+            # NO COLOUR IN THE LOG (piped through a stripper, TERM=dumb, NO_COLOR,
+            # a CI that filters escapes). Severity is genuinely unavailable, so
+            # fall back to the text heuristic — and SAY SO, because an unnamed
+            # fallback that silently answers a weaker question is the
+            # could-not-run-reported-as-clean shape of 1024-c3h3.
+            _fallback_note="  (log carries no colour, so severity was unavailable; matched by text — an advisory line quoting a violation count can appear here)"
+            _first_fail="$(grep -m1 -E '^(FAIL[: ]|violation:|refused:|\[build\] .*(refused|failed|violation))' \
+                "$_gate_log" 2>/dev/null | cut -c1-200)"
+        fi
         echo "refused:land:gate-failed — the gate refused; its output is at $_gate_log" >&2
         if [ -n "$_first_fail" ]; then
             echo "  first failing line: $_first_fail" >&2
+            [ -n "$_fallback_note" ] && echo "$_fallback_note" >&2
         else
             echo "  (no violation/refusal line matched; read the log — the gate may have died rather than refused)" >&2
         fi
