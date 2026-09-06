@@ -154,6 +154,107 @@ pub fn read_guest_wiring_record() -> Option<GuestWiringRecord> {
     serde_json::from_slice(&bytes).ok()
 }
 
+/// A host-side record that the guest was OBSERVED READY at least once for this
+/// installation (order 1004-5f7p).
+///
+/// WHY THIS EXISTS. `--provision-once` is documented to provision and exit, so
+/// nothing holds the utility VM open; WSL2's idle timeout then shuts the distro
+/// down within about a minute and the vsock control wire dies with it. Measured
+/// on esmeraldinha during the v56.9.2.1 floor smoke: provision_exit=0 and "VM
+/// Ready — control wire up", then t+8s reachable=true, t+48s reachable=false.
+/// That is CORRECT BEHAVIOUR and the release was perfect.
+///
+/// The defect was in the VOCABULARY, not the state: `--diagnose` could not tell
+/// "never came up" from "came up, then correctly idled out". Both are
+/// `distro_running: false` with exit 2, byte-identical apart from a log tail, so
+/// the smoke runbook's mandatory final health check read DEGRADED for a release
+/// that provisioned perfectly.
+///
+/// NOT THE SAME SHAPE AS 1082-9rub, and the difference is why this is a record
+/// of the PAST rather than a check of the present. There, an artifact's
+/// existence was standing in for a transition that had never completed, and
+/// macbookair had to defend against a stale record describing an old attempt.
+/// Here the transition DID complete and then stopped being true, so a record of
+/// a past completion is exactly the signal wanted: the question is not "is the
+/// guest ready now" — `distro_running` already answers that — but "did this
+/// guest ever reach ready", which is what separates a broken provision from an
+/// idle one.
+///
+/// IT HAS TO BE A FILE, for the same reason `guest-wiring.json` does:
+/// `--diagnose` runs as its own short-lived process and never provisions, so an
+/// in-memory flag would be empty in exactly the invocation that wants to report
+/// it.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct GuestReadyRecord {
+    /// UTC RFC3339 timestamp at which Ready was observed.
+    pub ts: String,
+    /// The installation this observation belongs to. A `--reset-guest` or an
+    /// `wsl --unregister` mints a new installation uuid, so a record left by a
+    /// PREVIOUS guest must not vouch for the current one — that would rebuild
+    /// 1082-9rub's defect one level up, which macbookair flagged before I
+    /// started.
+    pub installation_uuid: String,
+    /// `WORKSPACE_VERSION` of the tray that observed it.
+    pub tray_version: String,
+}
+
+/// Where the ready observation is recorded:
+/// `%LOCALAPPDATA%\tillandsias\state\guest-ready.json`.
+pub fn guest_ready_record_path() -> PathBuf {
+    let base = std::env::var_os("LOCALAPPDATA")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("C:\\Users\\Public\\AppData\\Local"));
+    base.join("tillandsias")
+        .join("state")
+        .join("guest-ready.json")
+}
+
+/// Record that the guest reached Ready. Best-effort: a failure here must not
+/// fail a provision that actually succeeded.
+pub fn write_guest_ready_record(installation_uuid: &str) {
+    let record = GuestReadyRecord {
+        ts: now_rfc3339_utc(),
+        installation_uuid: installation_uuid.to_string(),
+        tray_version: env!("WORKSPACE_VERSION").to_string(),
+    };
+    let path = guest_ready_record_path();
+    if let Some(dir) = path.parent()
+        && let Err(e) = std::fs::create_dir_all(dir)
+    {
+        tracing::debug!(%e, "could not create guest ready state dir");
+        return;
+    }
+    match serde_json::to_vec_pretty(&record) {
+        Ok(bytes) => {
+            if let Err(e) = std::fs::write(&path, bytes) {
+                tracing::debug!(%e, "could not write guest ready record");
+            }
+        }
+        Err(e) => tracing::debug!(%e, "could not serialize guest ready record"),
+    }
+}
+
+/// Whether this installation has EVER been observed ready.
+///
+/// Returns false when the record is absent, unreadable, or belongs to a
+/// different installation. "I could not tell" must not read as "yes" — that is
+/// the inversion that let a stat() mean provisioning finished in 1082-9rub, and
+/// the failing direction is the right one to be wrong in here too: it costs a
+/// re-verification, where the other direction tells an operator a guest that
+/// never came up merely went idle.
+pub fn guest_was_observed_ready(current_installation_uuid: Option<&str>) -> bool {
+    let Some(current) = current_installation_uuid else {
+        return false;
+    };
+    let Ok(bytes) = std::fs::read(guest_ready_record_path()) else {
+        return false;
+    };
+    let Ok(record) = serde_json::from_slice::<GuestReadyRecord>(&bytes) else {
+        return false;
+    };
+    record.installation_uuid == current
+}
+
 /// Committed per-release pins (rootfs + headless binary URLs and checksums).
 /// Embedded so an installed, checkout-free tray still provisions correctly.
 ///
@@ -2172,6 +2273,82 @@ fn parse_headless_version(stdout: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+
+    /// ORDER 1004-5f7p: the ready record must separate "came up, then idled"
+    /// from "never came up", and must answer NO when it cannot tell.
+    ///
+    /// OVER A TEMP STATE ROOT, deliberately. A test that read this host's real
+    /// `%LOCALAPPDATA%` record would pass or fail by what the machine happens
+    /// to hold — macbookair had three test attempts go vacuous that way on
+    /// 1072-qk43 the same day. LOCALAPPDATA is redirected so every arm below
+    /// describes the file it wrote and nothing else.
+    ///
+    /// THE ARMS THAT MATTER ARE THE NEGATIVE ONES. A predicate that answered
+    /// "ready" unconditionally would satisfy the happy path and reintroduce the
+    /// defect: an operator would be told a guest that never came up had merely
+    /// gone idle. Absent, corrupt, and wrong-installation must all read as
+    /// never-observed.
+    ///
+    /// @trace order:1004-5f7p
+    #[test]
+    fn guest_ready_record_separates_idled_out_from_never_ready() {
+        let tmp = std::env::temp_dir().join(format!(
+            "tillandsias-ready-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        std::fs::create_dir_all(&tmp).expect("temp state root");
+        // SAFETY: single-threaded test process scope; restored below.
+        let prev = std::env::var_os("LOCALAPPDATA");
+        unsafe { std::env::set_var("LOCALAPPDATA", &tmp) };
+
+        let uuid_a = "11111111-1111-1111-1111-111111111111";
+        let uuid_b = "22222222-2222-2222-2222-222222222222";
+
+        // ABSENT: nothing has ever been recorded.
+        assert!(
+            !guest_was_observed_ready(Some(uuid_a)),
+            "an absent record must read as never-observed, not as ready"
+        );
+
+        // OBSERVED: the happy path this record exists to preserve.
+        write_guest_ready_record(uuid_a);
+        assert!(
+            guest_was_observed_ready(Some(uuid_a)),
+            "a record for THIS installation must read as observed-ready"
+        );
+
+        // WRONG INSTALLATION: a --reset-guest or wsl --unregister mints a new
+        // uuid, and the previous guest's record must not vouch for it. Without
+        // this the record becomes the stale-artifact problem one level up,
+        // which is 1082-9rub's defect rebuilt in a new place.
+        assert!(
+            !guest_was_observed_ready(Some(uuid_b)),
+            "a record from a DIFFERENT installation must not vouch for this one"
+        );
+
+        // UNKNOWN INSTALLATION: we could not read our own uuid.
+        assert!(
+            !guest_was_observed_ready(None),
+            "an unknown installation must read as never-observed"
+        );
+
+        // CORRUPT: unreadable content must not be generous.
+        std::fs::write(guest_ready_record_path(), b"{not json").expect("write corrupt");
+        assert!(
+            !guest_was_observed_ready(Some(uuid_a)),
+            "a corrupt record must read as never-observed"
+        );
+
+        match prev {
+            Some(v) => unsafe { std::env::set_var("LOCALAPPDATA", v) },
+            None => unsafe { std::env::remove_var("LOCALAPPDATA") },
+        }
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
     use super::*;
 
     /// ORDER 997-e4v2, slice 2. The host `~/src` drvfs mount is GONE from

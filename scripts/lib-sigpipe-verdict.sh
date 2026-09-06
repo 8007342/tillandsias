@@ -49,6 +49,19 @@
 #   unmeasured:<file>:<line>:<reason>          not decidable without running the system
 set -uo pipefail
 
+# REFUSE TO BE EXECUTED. This file is a LIBRARY: sourced it defines the
+# verdict functions, executed it did nothing and exited 0 — and under its
+# original `check-` prefix that was indistinguishable from passing. A
+# zero-byte, zero-exit `check-*.sh` is the strongest possible green and
+# the weakest possible evidence; macuahuitl's --ci-full orphan sweep
+# found it. Renamed out of the check- namespace (lib-, per lib-ca-path.sh
+# and lib-cargo-sites.sh), AND made to refuse, because a rename stops it
+# being wired by mistake while the refusal stops it passing if it is.
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+    echo "refused:not-a-check:lib-sigpipe-verdict.sh is a library, not a guard — source it, or run scripts/test-sigpipe-verdict-measured.sh" >&2
+    exit 2
+fi
+
 REPS="${SIGPIPE_REPS:-10}"
 
 # A slowed producer, for calibration only. Reading a file a line at a time is

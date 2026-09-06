@@ -52,7 +52,17 @@
 #   verdict: <ok|attention>:<reason>
 #   repeat:    window=<since=<utc>|3h> steps=<n> top3=<entries|-> source=<path|absent>
 #   recur:     window=<n>d runs=<n> steps=<n> top3=<entries|-> source=<path|absent>
-#   skippable: candidates=<n> floor_ms=<f> min_runs=<m> top3=<entries|-> source=<path|absent>
+#   skippable: window=<n>d candidates=<n> floor_ms=<f> min_runs=<m> top3=<entries|-> source=<path|absent>
+#
+# ORDER 1074-96z9: `skippable:` states its window, as `recur:` already did.
+# The value is windowed by --recur-window-days exactly like `recur:`, but the
+# line printed no window at all, while `repeat:` printed 3h and `recur:` 7d —
+# three lines from the same jq program and the same flag, disagreeing three
+# ways about what period they describe. The audit rule instructs a coordinator
+# to compare `runs=` across hosts, and `skippable:` is the line it is compared
+# ON, so a reader could not tell whether those were seven-day counts or
+# all-time counts without opening this file. Two readers on two hosts both had
+# to.
 #
 # THE repeat:/recur:/skippable: LINES (order 1001-q3zf). The operator
 # asked, 2026-09-03, for "metrics to each host's iterations to detect repeated
@@ -1032,7 +1042,11 @@ fi
 printf 'repeat: %s source=%s\n' "$repeat_line" "$recur_source"
 printf 'recur: %s source=%s\n' \
     "${recur_line:-window=${RECUR_WINDOW_DAYS}d runs=0 steps=0 top3=-}" "$recur_source"
-printf 'skippable: %s source=%s\n' \
+# 1074-96z9: the window token is prefixed HERE rather than inside the jq
+# program so both the computed line and the fallback carry it and cannot drift
+# apart — the same reason `recur:` renders its default inline below its own
+# computed value.
+printf 'skippable: window=%sd %s source=%s\n' "$RECUR_WINDOW_DAYS" \
     "${skip_line:-candidates=0 floor_ms=${SKIP_FLOOR_MS} min_runs=${SKIP_MIN_RUNS} top3=-}" "$recur_source"
 
 # ── plan ────────────────────────────────────────────────────────────────────
