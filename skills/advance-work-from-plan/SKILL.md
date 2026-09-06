@@ -856,14 +856,17 @@ A successful invocation MUST NOT exit with local-only work:
   Quote the `ok:salvaged:<ref>:<sha>` verdict in your cycle report — that ref
   is the only durable record that the work existed.
 
-  **CHECK THE VERDICT. THE SALVAGE PUSHES, AND A PUSH CAN FAIL.** Measured on
-  yoga 2026-09-06: the success path writes the ref to ORIGIN
-  (`ok:salvaged:refs/heads/salvage/<host>/<date>-<slug>:<sha>`, and the
-  untracked file is in that tree), but a failed push prints
-  `fail:salvage:push:...` and leaves **no local salvage ref at all** — so a
-  host that cannot push has no copy, which is exactly the situation this
-  guards against. If you see `fail:salvage:`, say so in the cycle report and
-  treat the dirt as unprotected: do not report a salvage you did not get.
+  **CHECK THE VERDICT — THERE ARE THREE, NOT TWO** (order 1103-i7xq):
+
+  | verdict | what you have |
+  |---|---|
+  | `ok:salvaged:<ref>:<sha>` | the copy is on origin; it survives a re-clone |
+  | `ok:salvaged-local:<ref>:<sha>` | the copy is in THIS repo only — the push failed. It survives a re-clone **only if someone pushes that ref**. Say so in your report and push it when the credential works: `git push origin <ref>` |
+  | `fail:salvage:<reason>` | there is **no copy**. Do not proceed to a refusal on the strength of one |
+
+  The middle row exists because the salvage used to push the commit straight
+  to origin and create no local ref, so a failed push left nothing at all — on
+  exactly the hosts most likely to strand work, the ones that cannot push.
 
   **It cannot touch the worktree.** The script works through a temporary index
   and git plumbing only, so it is safe to run on dirt you have just been
