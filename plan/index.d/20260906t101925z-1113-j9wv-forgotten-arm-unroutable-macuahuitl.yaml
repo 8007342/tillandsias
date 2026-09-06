@@ -1,0 +1,69 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-forgotten-subcommand-ships-but-is-not-in-the-capability-manifest-so-the-mcp-wrapper-cannot-route-to-it
+    order: 1113-j9wv
+    status: implemented
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [mcp, capabilities, release-gate, forge]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-plan/capabilities.txt
+    unscoreable: |
+      Fixed in the commit that files it, and the pin already exists: the
+      capability-manifest-guard negative control is what caught it and now passes
+      (rc=0, stderr empty, 59 tokens against a 59-token manifest, query present).
+      No new fixture is needed — the guard was working; nothing had read it.
+    title: |
+      MEASURED on the 09:00Z release gate and named here: the capability-manifest negative control was a TRUE POSITIVE — the forgotten dispatch arm shipped 6 hours ago without a manifest entry, so the MCP wrapper could not route to it
+    context: |
+      TRACED from the daily release gate's five failures. capability-manifest-guard
+      step 4/4, the NEGATIVE CONTROL "the SAME source restored clean warns about
+      NOTHING", expected ok:clean-tree-silent and produced EMPTY output.
+
+      IT WAS NOT A BROKEN FIXTURE. The step is a four-link && chain and the
+      failing link is the second, stderr-must-be-empty:
+
+        warning: dispatch arm 'forgotten' is not listed in capabilities.txt —
+        the MCP wrapper cannot route to it. Declare it in capabilities.txt or
+        justify its absence (order 583-dv9n).
+
+      The guard said exactly what was wrong, in the right place, with the remedy
+      and the order number. Nothing read it, because the litmus arm collapses
+      four conditions into one empty string and the release-gate summary reports
+      only the test name.
+
+      THE DRIFT IS REAL AND IS EXACTLY ONE. DISPATCH_ARMS carries 59 entries,
+      capabilities.txt carried 58, and the difference is `forgotten` — a genuine
+      subcommand with a handler at main.rs:5448 and usage text at :318, added by
+      0a8815181 six hours ago for 718-jqt5's deterministic projection, with no
+      manifest entry. The fixture's own drift injection removes `query`, not
+      `forgotten`, so this was never fixture residue.
+
+      CONSEQUENCE: a shipped subcommand is unreachable through the expert
+      interface. lib-expert-capability.sh reports blocked_capabilities from this
+      manifest, so a forge asking for `forgotten` is refused for a capability
+      the binary has.
+
+      WHY IT SURVIVED SIX HOURS. ./build.sh --check does not run this litmus
+      (1087-h2z9), so no land could see it; the release gate runs once a day and
+      reported it as a failing test NAME. esmeraldinha, working the same failure
+      from 1109-t8kw, could not reproduce it at all — their checkout predates
+      0a8815181, so their manifest and arms agreed at 58. Two hosts, opposite
+      results, and the difference was six hours of trunk.
+
+      SO IT IS NOT AN INSTANCE OF 1109-t8kw AFTER ALL, and I filed it as one.
+      1109 is about fixtures asserting properties of their ENVIRONMENT. This
+      fixture asserts a property of the TREE and was correct to. The other two
+      instances in that packet stand; this one should be struck from it.
+    next_action: |
+      Fixed by adding forgotten to capabilities.txt; the negative control now
+      passes. The remaining question is why a new dispatch arm can land without
+      its manifest entry when a guard exists that detects it: the guard warns on
+      stderr and exits 0 by design (fail-safe under-report, order 583-dv9n), so
+      nothing in the land path fails. Either --check should run this litmus, or
+      the arm-vs-manifest comparison should be a gate step of its own. That is
+      1087-h2z9's territory and should be decided there rather than by widening
+      this guard's exit code, which would break its fail-safe property.

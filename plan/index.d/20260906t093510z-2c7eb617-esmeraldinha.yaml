@@ -1,0 +1,66 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-claim-is-invisible-to-every-other-host-for-as-long-as-its-push-takes-and-the-push-takes-longest-when-the-trunk-is-busiest
+    event:
+      type: note
+      ts: "2026-09-06T09:35:10Z"
+      agent_id: windows-esmeraldinha-claude-20260906t093510z
+      host: esmeraldinha
+      summary: |-
+        A FIXTURE THAT ASSERTS A PROPERTY OF THE ENVIRONMENT, AND THE SECOND TIME THIS
+        ONE HAS DONE IT. test-selector-drops-cross-branch-claims.sh was red on trunk and
+        on osx-next at 3 passed / 3 failed, absent from test-known-red.txt, and INVISIBLE
+        to every host that is not low-end. The selector was never broken. It was
+        correctly refusing under the 847-wgy4 tier gate:
+
+            refused:no-tier-work: this is a low-end host (tier gate, 847-wgy4) and no
+            ready packet tagged [low-end] is claimable by role linux — the mandate
+            forbids the general queue
+
+        The baseline arm read that legitimate refusal as an empty batch, and the two
+        arms after it cascaded off a vacuous precondition. Measured both ways on
+        ESMERALDINHA: 3/6 with the tier as probed, 6/6 with TILLANDSIAS_HOST_TIER pinned
+        through the documented seam in select-work-batch.sh. The arms are sound; only
+        the precondition was environment-dependent.
+
+        THE PART WORTH MORE THAN THE FIX: THE QUESTION IS WHICH LAYER, NOT WHETHER.
+        This fixture had ALREADY been bitten by a live-state dependency and had already
+        been fixed for it. Its own comment records stubbing the CROSS-BRANCH CHECKER
+        after it "passed when I wrote it and refused a real land hours later, having
+        tested nothing but the fleet's claim state." That fix was correct and it was not
+        enough: THE TIER GATE SITS UPSTREAM OF THAT STUB AND WAS NEVER COVERED. One stub,
+        one uncovered layer above it, and the fixture went back to testing the
+        environment through the layer nobody had stubbed. Anyone stubbing a dependency
+        to make a fixture hermetic should enumerate what still sits ABOVE the stub, not
+        conclude the dependency is gone because the one they noticed is.
+
+        AND A REFUSAL MUST CARRY THE REASON IT WAS HANDED. The selector printed its
+        exact cause one line above; the arm's message said "the selector emitted no
+        packets" — the symptom. That gap cost an hour of bisecting detached worktrees
+        for a cause the output was already carrying. The arm now appends the selector's
+        own refusal string. It remains a FAIL and did NOT become a skip: a step that
+        cannot run must refuse, not pass. But discarding the reason is the same defect
+        one layer up from the one being tested.
+
+        CORRECTION TO MY OWN FIRST REPORT, kept because a reader will hit it. I called
+        this "confirmed on clean trunk" after reproducing it in detached worktrees at
+        origin/linux-next and origin/osx-next. Those worktrees have no target/ and
+        therefore no plan binary at all, so I had not ruled out measuring a different
+        configuration — the conclusion held but the evidence did not yet support it.
+        What actually resolved it was reading what the selector PRINTED rather than only
+        whether it failed. THE DISCRIMINATOR IS THE HOST TIER, NOT THE TREE: anyone
+        reproducing this on a general-tier host will watch it pass and conclude it is
+        fixed or was never real.
+
+        COST NOTE, since it lands on the floor host hardest: with the tier pinned the
+        fixture now performs the fold it always should have, at 116 s on ESMERALDINHA,
+        where before it failed instantly. That is the price of the test actually running
+        here; hosts above the tier gate were already paying it.

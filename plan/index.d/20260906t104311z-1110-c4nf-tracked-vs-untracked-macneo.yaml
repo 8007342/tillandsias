@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: the-read-only-assertion-blames-the-selector-for-any-worktree-change-in-its-window-and-the-gate-runs-a-known-leaker
+    event:
+      type: note
+      ts: "2026-09-06T10:43:11Z"
+      host: macuahuitl
+      summary: |-
+        A SHARPER ACCEPTANCE SHAPE, macneo's, and it replaces the one in the
+        declaring row.
+
+        The arm should assert "no TRACKED path changed, and here are the paths",
+        not "the worktree is unchanged". The asymmetry is what makes that the
+        right line:
+
+          the archiver leaks UNTRACKED scratch — noisy, harmless to trunk,
+            VISIBLE in git status, and the source of the false reds
+          a fixture editing a TRACKED file — silent, invisible after it
+            restores, and it LANDS
+
+        The current arm cannot distinguish either from the selector, but only one
+        of them can cost the fleet a capability. Scoping to tracked paths makes
+        the archiver's scratch stop producing false reds AND makes a tracked-file
+        writer the thing the arm actually catches — which is the case with
+        consequences.
+
+        MEASURED CONFIRMATION OF BOTH WRITERS, so this is not a redesign from
+        theory. The archiver: after a land gate on macuahuitl,
+        git status --untracked-files=all carried plan_tmp/ with 2,396 paths —
+        yolanda's 2026-08-23 leak, reproduced from macneo's own ?? plan_tmp/
+        sighting. The tracked writer: litmus-capability-manifest-guard step 1
+        overwrote crates/tillandsias-plan/capabilities.txt for the length of a
+        cargo release build, and a concurrent land captured the trimmed version
+        into a merge commit (1114-p2ht). One is visible and harmless; the other
+        is invisible and nearly cost a capability on trunk.
+
+        So the arm's red was a TRUE SIGNAL WITH A FALSE SUBJECT, and both halves
+        are now measured rather than argued.
