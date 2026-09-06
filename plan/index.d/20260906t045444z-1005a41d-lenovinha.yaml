@@ -1,0 +1,50 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: retire-host-src-checkout-behind-proven-transparent-push
+    event:
+      type: note
+      ts: "2026-09-06T04:54:44Z"
+      agent_id: linux-lenovinha-claude-20260906t033530z
+      host: lenovinha
+      summary: |
+        LINUX SUBSTRATE STATE MEASURED 2026-09-06T03:4xZ on lenovinha, so the next host
+        does not re-derive it. Selector offered this packet as the p1 top pick; I did
+        not claim it, and this is what I found before deciding.
+
+        The blocker is NOT the credential any more, and that is the useful half:
+          scripts/check-credential-channel.sh -> ok:gh-keyring-push-verified (rc=0)
+          gh auth status -> logged in, 8007342, keyring, scopes gist/read:org/repo/workflow
+          a real push to origin/linux-next SUCCEEDED at 03:38Z (commit 6f8f63dbb)
+        So the 403 that halted 770-dyqr / 771-wwzi at gate 1 is not reproducible from
+        this host today, host-side. Criterion 1 needs an IN-FORGE push through the
+        MIRROR, which is a different path, and that path has no substrate here:
+
+          podman ps -a          -> tillandsias-builder, tillandsias-nix,
+                                   tillandsias-dev-inference, tillandsias-nix-cache,
+                                   tillandsias-vault (Stopping)
+          no git-mirror container, no proxy container, no forge
+          podman images | grep mirror -> NO tillandsias-git image on this host at all
+          cycle-preflight       -> services-down1-absent1 (vault stopping, proxy absent)
+
+        AND --ensure-enclave DOES NOT COVER THE MIRROR. Its own help text scopes it to
+        "network, Vault, egress proxy". The mirror comes up with a LANE launch, so
+        criterion 1 on linux needs an image build plus a forge launch, not a service
+        restart — which is the destructive build-install-smoke-e2e shape, not an
+        advance-work cycle. That is why I left it, and it is a different reason from
+        Antigravity's 2026-08-26 note (which said the unattended lane lacks
+        credentials). Both notes are now on the packet; the credential half of theirs
+        appears to have been fixed out from under it, and the substrate half is mine.
+
+        VERDICT FOR WHOEVER TAKES IT: this is not a cycle-sized packet on linux while
+        the mirror image is absent. It wants a host that is already running a forge, or
+        a deliberate build-install-smoke-e2e run that ends with the scratch-branch push
+        proof (the 349 pattern) rather than an advance-work slice that tries to build
+        an enclave first. Nothing here contradicts the macOS and windows PROVEN rows.

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: per-phase-accelerator-routing-policy
+    field: next_action
+    value: 'TWO ITEMS LEFT, and the routing blocker is NOT one of them any more. Locus-aware routing landed 2026-09-06: route_phase and phase_device_usable take a RoutingLocus (Container | HostNative), the ENGINE is lane-checked as well as the device (a container-only ollama no longer qualifies a device for the host-native lane), every Placement reason names the lane it was decided in, and decode_crossover_b no longer pairs a CPU row with a GPU row from a different MeasurementRecord.locus. accel_envelope is unchanged in grammar and now passes Container explicitly. Evidence: 679 passed / 0 failed under --features tray,listen-vsock; accel_probe module 86 passed; litmus accel-capability-probe 2/2 and inference-policy-router 1/1 executed, both PASS; every new test individually observed RED against the pre-fix logic before being kept. REMAINING (a) EXIT CRITERION 1 IS STILL FALSIFIED AS WRITTEN and still needs its author, not a measuring host: "a 0.5B-class model''s decode is NOT sent to the iGPU on a unified-memory host" costs 21% of decode throughput on the fleet''s only unified-memory host, and must be rewritten as a consequence of the per-host measurement rather than a fixed rule. REMAINING (b) route_phase is still not wired into the inference call path; only the envelope renderer calls it. That is now unblocked and is the next slice: the locus fix was its precondition, because wiring before it would have hard-wired the container answer into every call site on every host whose accelerator is host-native only, shipping the measured regression instead of merely computing it. A caller must pass its OWN locus; there is deliberately no default.'
+    ts: "2026-09-06T04:54:24Z"
+    host: linux
+
+events:
+  - packet_id: per-phase-accelerator-routing-policy
+    event:
+      type: note
+      ts: "2026-09-06T04:54:24Z"
+      host: linux
+      summary: |-
+        locus-aware routing landed 68552584e
