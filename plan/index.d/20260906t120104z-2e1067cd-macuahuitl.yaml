@@ -1,0 +1,150 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: binding-an-orphaned-fixture-imports-its-whole-legacy-body-into-the-gate-past-every-diff-scoped-guard
+    event:
+      type: finding
+      ts: "2026-09-06T12:01:04Z"
+      agent_id: linux-macuahuitl-claude-20260906t120104z
+      host: macuahuitl
+      summary: |
+        CORRECTION to the finding event filed earlier today at 2026-09-06T11:51:27Z on
+        this packet. Two things in it must not be read as filed: one attribution I
+        recorded as OPEN is now closed the other way, and one fact I did not have
+        changes how the whole event should be weighted. Filed as a correction rather
+        than an amendment, per 1071-adhj; the earlier event stands as written.
+
+        CORRECTION 1 — THE ATTRIBUTION IS CLOSED, AND MY FIRST READING WAS WRONG.
+        That event offered two readings of esme and yolanda both naming their locus
+        `tillandsias-build`, and said nothing downstream should treat their rows as
+        independent loci until answered. yolanda answered with an identity probe:
+
+          uname -n / /etc/hostname / $HOSTNAME   Yolanda   (three sources agreeing)
+          windows host via interop               YOLANDA   (a fourth, independent)
+          kernel        6.18.33.2-microsoft-standard-WSL2
+          os            Fedora Linux 44 (Container Image)
+          nproc 16      MemTotal ~7,696,028 kB       toolbox no   container no
+          wsl -l -v     * tillandsias-build Running 2
+
+        `tillandsias-build` is a WSL2 DISTRO NAME, not a machine, and every Windows
+        host in the fleet has one of its own. So esme's 0.75 and yolanda's 0.095 are
+        DIFFERENT MACHINES on different silicon. The 8x same-host disagreement I
+        floated is ruled out; the four-locus table stands as four loci; neither peer's
+        number needs reconciling and yolanda's 3.7x instability finding is not
+        inflated by esme's row.
+
+          Also recorded because it nearly misled the probe itself: `hostname` and
+          /etc/machine-id return EMPTY on that image while the other four sources
+          agree. Anyone scripting a host label off `hostname` specifically gets an
+          empty string and, if they interpolate it, a row labelled by nothing.
+
+        THE RESIDUAL DEFECT IS THE LABEL, AND IT IS WIDER THAN THIS PACKET. Any
+        cross-host row ever reported as `tillandsias-build` — timing, rate, gate
+        result, capability entry — is underspecified by construction, because the
+        label does not identify a machine. yolanda found it, proposed
+        `<windows-host>/tillandsias-build` with uname -n supplying the host half at no
+        new plumbing cost, and is taking it as its own item with the convention and a
+        scan for rows already carrying the bare label. Not filed here to avoid
+        double-filing.
+
+        CORRECTION 2 — I CLAIMED THE APPARATUS WAS WIRED INTO NOTHING. THAT WAS
+        WRONG, AND BOTH PEERS CORRECTED ME WITHIN MINUTES FROM OPPOSITE EVIDENCE.
+        esme read scripts/gate-steps.d/070-1076-kft9.step; yolanda read their own gate
+        log, where that step had refused their land two hours earlier. Verified here
+        rather than taken on report:
+
+          scripts/gate-steps.d/070-1076-kft9.step
+              STEP_SCRIPT="scripts/test-sigpipe-verdict-measured.sh"   (a literal path)
+          build.sh:3383
+              for _step_file in "$SCRIPT_DIR"/scripts/gate-steps.d/*.step; do
+
+        The chain is complete: build.sh globs the step files, 070 names the fixture,
+        the fixture sources the lib. So the step is live, the racy detector is in the
+        gate path, and there is no decide-before-wiring window.
+
+        MY SCAN WAS NOT WRONG ABOUT WHAT IT MEASURED; it answered "does build.sh
+        mention this name", which stopped being the same question as "does the gate
+        run this" when order 1072-b7eq moved the bindings into data. Quantified: of
+        the 17 gate steps bound as .step files, the number visible to a build.sh name
+        grep is ZERO. Not a partial gap — the entire migrated set. The honest check is
+        `grep -rl "$script" scripts/gate-steps.d/ build.sh scripts/local-ci.sh`.
+
+        THE HAZARD IS ALREADY GUARDED, WHICH MAKES MY ERROR A DIFFERENT ONE THAN IT
+        LOOKS. scripts/audit-guard-activation.sh carries scripts/gate-steps.d in its
+        activation-surface list, and its header already records the omission biting
+        check-plan-binary-current.sh on 2026-09-06 — "reported an orphan while wired
+        and running". Run here: population=121 total=121 active=121 orphan=0 verdict=ok.
+        So a tool existed that answers the question correctly and I hand-rolled a worse
+        scan instead of asking it. No new packet is needed for the hazard; writing it
+        up again would be documentation debt on top of a working guard.
+
+        THE RESIDUAL GAP IS NARROWER AND IS THIS PACKET'S OWN SUBJECT ONE LEVEL UP:
+        the auditor's population is check-*.sh, while sixteen of the seventeen migrated
+        bindings are test-*.sh. A test fixture that LOSES its binding is therefore
+        invisible to the orphan audit — an orphaned fixture being exactly what this
+        packet exists to prevent. Applying the auditor's surface list to the test-*.sh
+        population gives 239 scanned and 13 unmatched. Those are CANDIDATES and are
+        deliberately not filed as a defect count: the predicate is cruder than the
+        auditor's and some will be invoked in ways it does not model. Adjudicating them
+        needs the auditor's own predicate, not mine.
+
+        WHAT THE LIVE HARM ACTUALLY IS, in yolanda's scoping, which is more accurate
+        than either position esme and I were arguing between: what is live is the
+        FIXTURE, which guards the lib. The lib itself may still have no production
+        consumer, the NAME-based guard at build.sh:2855 being the real one. So the harm
+        today is not a false-clean verdict in a product path — it is a nondeterministic
+        gate step refusing lands on hosts sitting near their step, measured at ~32% on
+        yolanda's. That is why 45509fff5 has been committed-and-unpushed there: not
+        waiting on anyone's work, being refused by a coin flip.
+
+        ONE CONSTRUCTION RECORDED SO IT IS NOT RE-DERIVED. esme's argument for
+        deleting `measured-clean:` outright rests on needing a known-bad reference at
+        the site's own producer size and consumer, which would be the site itself. A
+        strictly MORE DANGEROUS variant is constructible instead: keep the site's own
+        producer and size, replace only the consumer with a minimum-appetite one.
+        EPIPE happens iff the consumer exits before the producer finishes writing, so
+        the earliest-exiting consumer is the worst case for any site. Measured here at
+        72,894 B: the site's own grep gives 17/40 where head -c 1 and dd bs=1 give
+        40/40 — the amplifier turns a p of 0.43 into 1.00.
+
+        This does NOT rescue a clean verdict and is not filed as an argument for one.
+        It maximises p; it does not show p is zero, so 0/REPS stays not-observed
+        rather than cannot-happen. esme's MSYS rows show the amplifier saturating at
+        0/40 there, so its sensitivity is platform-dependent too and a clean from MSYS
+        still would not port to Linux where the same site reads 40/40. Recorded only
+        because it is the sole construction that could ever support a clean verdict,
+        so a future reader starts there rather than re-deriving a calibration the
+        fleet has now falsified three times.
+
+        MY OWN HYPOTHESIS IS DEAD, by the test I specified, and the disproof is worth
+        more than the story was. I proposed that the cross-host variable is the
+        CONSUMER's buffering, and named the kill condition: MSYS still reading ~0 with
+        a one-byte consumer. esme ran it — 108,894 B gives 0/40 for grep, head -c 1
+        and dd bs=1 alike, and at 168,894 B all three flip together. Condition met,
+        hypothesis refuted. The sharper result is the contrast: on Linux the
+        consumer's appetite is a live variable (17/40 vs 40/40 at one size), on MSYS
+        it is irrelevant (every consumer flips at the same place, far above the 65,536
+        capacity all three hosts share). That is positive evidence for TWO mechanisms
+        rather than one at different offsets, and unlike the story it rests on a
+        measured difference rather than an inferred cause.
+
+        CLOSED EMPIRICALLY ON MY OWN GATE LOG, which is the check I should have run
+        first and which both peers ran instead of a scan. This host's land gate,
+        attempt 2, lines 4861 and 4870:
+
+          Checking the SIGPIPE verdict check measures rather than pattern-matches (1076-kft9)...
+          SIGPIPE verdict measurement check passed
+
+        The step runs here and passes here. One incidental finding worth recording
+        alongside it: attempt 1's gate log is ten lines and reports
+        `ok:gate-fresh (stamped 2026-09-06T11:31:31Z) ... nothing re-run`. A cached
+        gate runs NO steps, so a green attempt is not evidence any particular step
+        executed — only a re-run attempt is. Anyone reading a land log for proof that
+        a step ran must check which of the two they are looking at.

@@ -1,0 +1,72 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: nothing-in-a-cycles-exit-path-asks-what-the-host-is-still-holding
+    event:
+      type: completed
+      ts: "2026-09-06T12:06:28Z"
+      agent_id: linux-lenovinha-claude-20260906t113558z
+      host: lenovinha
+      summary: |
+        LANDED a21093125, verified an ancestor of origin/linux-next before being cited.
+        Gate green with the new fixture running inside it: PASS: cycle-claims-report
+        5/5 (1115-srfr).
+
+        CRITERION 1 — scripts/report-held-claims.sh reports, host-scoped and with NO
+        aging, every packet this host still holds in_progress, naming each and the
+        exact release command. Zero held prints an AFFIRMATIVE line
+        (`ok:cycle-claims-released:0 held by <host>`), never silence, because silence
+        is indistinguishable from the check not running. finalize-cycle.sh calls it
+        before deriving the marker.
+
+        DEMONSTRATED ON ITSELF, which is the evidence I would want as a reader. Run
+        against this cycle while this very packet was still claimed:
+
+          warn:cycle-claims-held:1 by lenovinha — a cycle-scoped claim held at
+          finalization is unreleased; finish it or release it:
+            1115-srfr  nothing-in-a-cycles-exit-path-asks-what-the-host-is-still-holding
+              tillandsias-plan set-field 1115-srfr status ready --reason "..."
+
+        CRITERION 2 — degrades honestly. The binary is resolved through the shared
+        probe (721-nyev), and an absent binary or absent host identity produces a NAMED
+        skip (`skip:cycle-claims:no-plan-binary`) rather than a quiet zero, per
+        965-sxec. Exit 0 in every reachable state; it never blocks attestation on its
+        own inability to run.
+
+        CRITERION 3 — the decision is RECORDED, and it is: advisory for now. This
+        script runs on every host, and turning it into a refusal is a fleet decision
+        rather than this order's to take. The escalation condition is written down
+        rather than left to judgement: if a host strands a claim WITH this report in
+        place, that is the evidence, and the escalation should be a refusal naming the
+        release command, since releasing at that point is always correct and costs
+        seconds.
+
+        WHY NOT check-stranded-in-progress.sh, measured rather than assumed. That sweep
+        defaults to STRANDED_HOURS=8 and carries no host filter at all (zero
+        occurrences of `hostname`). Both instances that produced this packet — 1071-adhj
+        ~24h and 1063-nraf ~20h, same host, one day — would have surfaced eight hours
+        after the cycle that stranded them, on a coordinator's screen, needing the human
+        judgement that sweep correctly demands. The exiting host could have resolved
+        either in one command with none. Its advisory-never-a-gate discipline is right
+        for the question it answers; this is a different question.
+
+        The guard is also never invoked by a cycle: build.sh gates the FIXTURE
+        (test-check-stranded-in-progress.sh) while the guard's only caller is
+        reclaim-stranded-claims.sh, which the worker skill records as having no caller
+        outside its own source and fixture. That asymmetry is 1009-gccx's shape one
+        level up and is why this landed as a call site, not only a script.
+
+        FIXTURE ARMS, each observed RED against the failure it names before being kept:
+          silencing the affirmative line          -> arm 1 red (4/5)
+          dropping the host filter                -> arm 1 red (4/5)
+          silencing the no-binary skip            -> arm 3 red (4/5)
+        Restored: 5/5. Wired into build.sh with a LITERAL path so the bound-or-retired
+        scan can find it — 1063-nraf's own lesson, that a binding assembled from a
+        variable is invisible to every name-based scan.
