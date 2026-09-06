@@ -67,7 +67,7 @@ critical_path:
     timeout_ms: 3000
 
   - step: "tray-diagnose.ps1 consumer script surfaces the 16-key JSON + both binary + script verdicts"
-    command: "grep -F 'cmd.exe /c' scripts/tray-diagnose.ps1 && grep -Fe '--diagnose --json' scripts/tray-diagnose.ps1 && grep -F 'build_commit' scripts/tray-diagnose.ps1 && grep -F 'recent_log_tail' scripts/tray-diagnose.ps1 && grep -F 'log_size_bytes' scripts/tray-diagnose.ps1 && grep -F 'os_version' scripts/tray-diagnose.ps1 && grep -F 'wsl_version' scripts/tray-diagnose.ps1 && grep -F 'distro_running' scripts/tray-diagnose.ps1 && grep -F 'Binary --diagnose exit' scripts/tray-diagnose.ps1 && grep -F 'Script verdict' scripts/tray-diagnose.ps1"
+    command: "grep -F 'cmd.exe /c' scripts/tray-diagnose.ps1 && grep -Fe '--diagnose --json' scripts/tray-diagnose.ps1 && grep -F 'build_commit' scripts/tray-diagnose.ps1 && grep -F 'recent_log_tail' scripts/tray-diagnose.ps1 && grep -F 'log_size_bytes' scripts/tray-diagnose.ps1 && grep -F 'os_version' scripts/tray-diagnose.ps1 && grep -F 'wsl_version' scripts/tray-diagnose.ps1 && grep -F 'distro_running' scripts/tray-diagnose.ps1 && grep -F 'ready_history' scripts/tray-diagnose.ps1 && grep -F 'Binary --diagnose exit' scripts/tray-diagnose.ps1 && grep -F 'Script verdict' scripts/tray-diagnose.ps1"
     expected_behavior: "grep succeeds"
     timeout_ms: 3000
 
