@@ -37,11 +37,18 @@
 # precisely so a half-edited tree can be pushed. It existed and nothing used it.
 #
 # Verdict, one line on stdout:
-#   ok:salvaged:<ref>:<sha>      content is on origin
-#   ok:salvage-not-needed        the worktree is clean; nothing to preserve
-#   fail:salvage:<reason>        exit 1 — do NOT proceed to a refusal that
-#                                discards the tree on the strength of a copy
-#                                that does not exist
+#   ok:salvaged:<ref>:<sha>       content is on origin
+#   ok:salvaged-local:<ref>:<sha> content is in THIS repo and NOT on origin
+#                                 (order 1103-i7xq — the push failed; the copy
+#                                 exists and survives a re-clone only if
+#                                 somebody pushes that ref). Exit 0: a local
+#                                 copy is a real copy, and treating it as a
+#                                 failure is how a host abandons the one thing
+#                                 standing between it and 872-c9nd.
+#   ok:salvage-not-needed         the worktree is clean; nothing to preserve
+#   fail:salvage:<reason>         exit 1 — do NOT proceed to a refusal that
+#                                 discards the tree on the strength of a copy
+#                                 that does not exist
 set -uo pipefail
 
 # TILLANDSIAS_SALVAGE_ROOT: test seam (874-w2gc) so the fixture can salvage a
@@ -120,9 +127,43 @@ fi
 commit="$(printf '%s' "$msg" | git commit-tree "$tree" -p "$head_sha" 2>"$tmp/cterr")" \
     || { echo "fail:salvage:commit-tree:$(head -1 "$tmp/cterr" 2>/dev/null | tr -d '\n' | cut -c1-80)"; exit 1; }
 
-if ! git push --quiet origin "${commit}:${REF}" 2>"$tmp/perr"; then
-    echo "fail:salvage:push:$(head -1 "$tmp/perr" 2>/dev/null | tr -d '\n' | cut -c1-80)"
+# ORDER 1103-i7xq: WRITE THE LOCAL REF FIRST. Until this line the commit went
+# straight to origin and the only local ref was the remote-tracking one, so a
+# failed push left NO COPY — the object existed unreferenced and unreachable,
+# which is not a record anyone can find.
+#
+# That is the wrong way round for this script's whole purpose. It exists
+# because refusing to touch dirt protects it from the agent and not from a
+# fresh clone (872-c9nd: four hours of work, the untracked file's name in no
+# commit on any branch). The hosts most likely to strand work are the ones
+# having a bad time — macbookneo could not push for a full day (1025-a896),
+# esmeraldinha's token went 401 mid-session — and on exactly those hosts the
+# remedy produced nothing.
+#
+# A local ref costs one plumbing call, survives a dead credential, and turns
+# "no copy" into "a copy that has not left the host yet", which a later cycle
+# or an operator can push. It does not touch the worktree: update-ref writes
+# refs, not files.
+if ! git update-ref "$REF" "$commit" 2>"$tmp/urerr"; then
+    echo "fail:salvage:update-ref:$(head -1 "$tmp/urerr" 2>/dev/null | tr -d '\n' | cut -c1-80)"
     exit 1
+fi
+
+# THREE STATES, NOT TWO. `fail:salvage:push` used to mean "nothing was saved";
+# it now means "saved here, not yet elsewhere", and those need different words
+# or a reader treats a local copy as no copy and gives up on it.
+if ! git push --quiet origin "${commit}:${REF}" 2>"$tmp/perr"; then
+    echo "ok:salvaged-local:${REF}:${commit}"
+    {
+        echo "  The dirt IS saved, in this repository, at ${REF}."
+        echo "  It has NOT reached origin:"
+        echo "    $(head -1 "$tmp/perr" 2>/dev/null | tr -d '\n' | cut -c1-120)"
+        echo "  It survives a re-clone ONLY if someone pushes it. When the"
+        echo "  credential is working again:"
+        echo "    git push origin ${REF}"
+        echo "  Report this verdict rather than a plain salvage (1103-i7xq)."
+    } >&2
+    exit 0
 fi
 
 echo "ok:salvaged:${REF}:${commit}"

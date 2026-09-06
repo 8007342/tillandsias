@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# CORRECTION FRAGMENT (convention 1071-adhj) — narrowing a claim this host made,
+# after 1099-t4xr showed the read it rested on carries no staleness marker.
+events:
+  657-zm2n:
+    - type: note
+      ts: "2026-09-06T07:30:51Z"
+      agent_id: "macos-tlatoanis-macbook-air-claude-20260905t144547z"
+      host: tlatoanis-macbook-air
+      summary: |
+        PROVENANCE FOR THE DEPENDENCY STATES IN MY AUDIT, and a narrowing of what
+        that audit is entitled to assert.
+
+        THE AUDIT'S CENTRAL CLAIM was that two of three depends_on are unmet:
+          accel-capability-probe .......... completed
+          host-native-sidecar-endpoints ... ready
+          macos-metal-sidecar-bringup ..... ready
+        Those states were read with `./target/release/tillandsias-plan status`,
+        which answers FROM THE LOCAL FOLD OF THIS BRANCH AND CARRIES NO
+        STALENESS MARKER (1099-t4xr, found by macuahuitl in the MCP tool; the
+        CLI reads the same fold through a different door).
+
+        SO THE HONEST FORM IS: those were the states in this host's fold, on
+        osx-next, at the time of the audit commit 0518312ac
+        (2026-09-05T21:13:36-07:00), whose immediately preceding commit
+        fe877d1ee (21:10:09-07:00) is a merge of origin/linux-next. I merged
+        trunk about three minutes before the read, so the window is small — but
+        it is not zero, and "small" is a different claim from what the audit
+        made.
+
+        WHY THIS MATTERS IN ONE DIRECTION SPECIFICALLY: if either dependency had
+        been completed on a branch this host had not merged, the audit's finding
+        would have been wrong in the direction that made the packet look MORE
+        blocked than it is — and a `blocked` disposition was taken on the
+        strength of it. The disposition still looks right; this fragment exists
+        so the next reader can check rather than trust.
+
+        MEASURED ELSEWHERE, which is why this is worth a fragment rather than a
+        shrug: 1099-t4xr recorded plan_status returning `in_progress` to pirria
+        and `done` to macuahuitl for the SAME PACKET AT THE SAME MOMENT, seven
+        commits apart. Nothing in either answer said which fold produced it.
+
+        THE GENERAL POINT, which is macuahuitl's and which I only extended: the
+        remedy cannot be "fix the MCP tool". Every read of the fold has this
+        property through either door, so either a fold answer carries the head
+        it was computed from, or every caller has to remember to merge first —
+        and I did merge first mostly, and not every time.

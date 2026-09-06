@@ -1,0 +1,75 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: fail-pct-counts-three-different-events-as-one-so-a-healthy-gate-and-a-crashing-one-report-the-same-number
+    order: 1108-v3mq
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [observability, metrics, fail-loud, gate]
+    estimated_hours: 2
+    owned_files:
+      - scripts/cycle-metrics.sh
+    verifiable_closure: |
+      bash scripts/test-cycle-metrics-recurrence.sh with arms over a synthetic
+      log containing all three shapes — a full-length nonzero run, a sub-second
+      nonzero refusal, and an exit=101 abort — asserting they are reported
+      SEPARATELY. RED ON TODAY'S CODE, where cycle-metrics.sh:1001 collapses all
+      three into one fail_pct.
+    title: |
+      MEASURED on 636 build-check records: nonzero-exit runs have a median of 1,439 ms against 97,668 ms for successful ones, so fail_pct mixes correct early refusals, real defect-finding runs, and panics into a single number
+    context: |
+      RAISED by pirria, who supplied the definition and the hypothesis I had not
+      considered, and measured here because this host has the only large sample.
+
+      I had flagged build-check at fail_pct=28 over 480 runs as either genuine
+      instability or a counter scoring aborted runs as failures, and said the
+      remedies were opposite. pirria added a THIRD reading: fail_pct at
+      cycle-metrics.sh:1001 is the share of records with exit != 0, and for a
+      GATE a nonzero exit is the gate DOING ITS JOB — so 28% might read "28% of
+      gate runs caught something", which is a healthy gate needing no remedy at
+      all. Acting on either of my hypotheses would then mean stabilising a gate
+      that works, or suppressing counts that are true.
+
+      THE DISCRIMINATOR THEY PROPOSED, run here on 636 records:
+
+        exit=0    n=482  median 97,668 ms   p10 48,079   p90 279,866
+        exit=1    n=143  min 660 ms         max 461,011 ms
+        exit=101  n=11   avg 2,713 ms       min 1,479    max 4,729
+        all nonzero      median 1,439 ms    p10 673      p90 97,896
+
+      Nonzero-exit runs are 68x shorter at the median than successful ones, and
+      exit=1 is plainly BIMODAL: a cluster near 660 ms and a tail out to 461
+      seconds.
+
+      SO ALL THREE READINGS ARE PARTLY RIGHT AND THE NUMBER IS THE PROBLEM. The
+      660 ms cluster is the gate refusing correctly BEFORE doing its work — a
+      dirty tree, an incomplete ledger, a stale gate stamp. The 461-second tail
+      is the gate running fully and finding a defect. exit=101 at 2.7 seconds is
+      a Rust panic, which is neither. Those are three different events, with
+      three different meanings for a reader deciding whether the fleet is
+      healthy, and fail_pct reports one number for all of them.
+
+      pirria's framing is the one to keep: different events wearing one number,
+      the same conflation as kill -0's three outcomes in 1102-e4tk and as "no
+      packet matches" standing in for "I could not look" in 1099-t4xr. This
+      fleet has now found the same shape in a liveness probe, an MCP error, a
+      lock verdict and a metrics counter on one night.
+
+      WHAT NOBODY SHOULD DO WITH THIS: read 28% as an instability rate. pirria
+      explicitly declined to contribute a rate — their log holds n=2 for
+      build-check, one zero and one nonzero, and they flagged that a third host
+      agreeing at "50%" would look like corroboration and be noise. macbookair's
+      independent 34% and this host's 480 runs are the only real evidence, and
+      what they measure is undefined until the number is split.
+    next_action: |
+      Split the counter before anyone interprets it: report "ran and reported a
+      defect" separately from "refused before starting" separately from "did not
+      complete". Duration against the step's own median is a workable
+      discriminator for the first two, and a distinct exit class for the third.
+      If the reporter cannot tell them apart from the log it has, then the LOG
+      needs the distinction and the reporter should say it cannot rather than
+      average them — the same rule this packet's siblings apply to their own
+      probes. Renaming fail_pct to nonzero_exit_pct is the minimum honest fix and
+      is strictly better than leaving it named for a meaning it does not have.
