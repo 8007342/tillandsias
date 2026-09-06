@@ -1,0 +1,67 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  1087-h2z9:
+    - type: note
+      ts: "2026-09-06T03:08:04Z"
+      agent_id: "linux-macuahuitl-claude-20260906t030804z"
+      host: macuahuitl
+      summary: |
+        TRIAGE OF THE 22 UNTRIAGED, run as a measurement rather than a reading.
+        Every entry executed on this host with a 45s timeout: duration, exit
+        code, verdict line. TOTAL RUNTIME FOR ALL 22: 5.4 SECONDS.
+
+        THE COST ARGUMENT FOR EXCLUDING THEM DOES NOT SURVIVE THAT NUMBER.
+        Nineteen are green and cost milliseconds — the whole set adds about
+        four seconds to a gate that takes minutes. 748-tkjx's reasoning (a gate
+        slow enough to be bypassed is worse than a narrow one) is correct and
+        does not apply here: these are not the litmus suite, they are cheap
+        greps and parses that were excluded by nobody's decision.
+
+        DISPOSITION, 19 / 2 / 1:
+
+        WIRE (19, all green, all sub-second except two):
+          validate-traces.sh 1675ms · audit-guard-activation.sh 525ms ·
+          validate-spec-cheatsheet-binding-fast.sh 528ms ·
+          check-no-python-scripts 232ms · check-cheatsheet-frontmatter 228ms ·
+          check-no-tracked-binaries 189ms · check-tray-string-corpus-drift
+          177ms · test-litmus-grep-escapes 91ms · check-cheatsheet-tiers 82ms ·
+          check-markdown-distillation 70ms · check-enclave-expect-none 46ms ·
+          check-spec-index-resolution-agreement 39ms · check-container-bases
+          37ms · check-no-base64-script-injection 31ms ·
+          test-spec-index-durable-tier-demotion 28ms ·
+          test-spec-index-repo-relative-rung 26ms · test-gate-fast-refusals
+          15ms · verify-version-monotonic 10ms ·
+          check-dev-embed-model-agreement 5ms
+
+        FIX FIRST — RED ON CURRENT TRUNK, so wiring them today reds every land.
+        These are the triage's real yield: two conditions broken right now that
+        no landing host can see.
+          check-cheatsheet-refs.sh    rc=1, 3 broken refs of 577 checked
+            hashicorp-vault-tillandsias.md:390 -> docs/cheatsheets/tillandsias-secrets-architecture.md
+            windows-tray-diagnostics.md:240 -> windows-installer-prereqs.md
+            windows-tray-diagnostics.md:241 -> windows-native-dev-build.md
+          check-dead-env-branches.sh  rc=1, dead=29 unassigned=190 of 491
+            a larger surface, not a quick fix; needs its own slice
+
+        FALSE ENTRY (1): `scripts/check-version-monotonicity.sh` is declared and
+        DOES NOT EXIST. Not a defect in local-ci: line 1088 guards on and runs
+        `verify-version-monotonic.sh`, which exists and is separately declared.
+        The missing name appears ONLY at line 1098, inside the
+        `log_fail_missing_guard` ERROR MESSAGE. So the declaration harvested a
+        script name from a diagnostic string rather than from an invocation —
+        a name-based scan matching text that DESCRIBES rather than text that
+        ACTS, which is the night's recurring shape arriving inside the artefact
+        built to measure it. The untriaged baseline is therefore 21, not 22.
+
+        AND THE RATCHET DOES NOT CATCH IT: the check returns
+        `ok:gate-divergence-declared:32` with a declared entry naming a file
+        that does not exist. Its fourth mutation covers a declaration that is
+        no longer a difference; it does not cover a declaration that never
+        named a real file. One `[ -f ]` per declared path closes it.
+
+        MEASURING THIS TOOK TWO ATTEMPTS. The first loop processed 3 of 22 and
+        stopped: a script inside the `while read` body consumed the loop's
+        stdin. It reported "under 1s: 3" and looked like a completed scan.
+        Fixed with `read -r f <&3` and `</dev/null` on the inner call. Third
+        vacuous enumeration this host has produced today, all three caught only
+        by asking whether the count could be right.

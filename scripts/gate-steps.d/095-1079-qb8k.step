@@ -1,0 +1,28 @@
+# Gate step 1079-qb8k — data, not code (order 1072-b7eq).
+#
+# THE LAST ORPHAN, AND IT WAS MINE. audit-guard-activation reported four
+# orphaned guards on 2026-09-06; two were never orphans (the auditor could not
+# see one hop past its surface list, fixed by yoga at dcf772b2e), one was a
+# library esmeraldinha renamed to lib-sigpipe-verdict.sh, and this was the
+# fourth. It stayed unwired for a day after I wrote it — a script nobody calls
+# is not a mechanism.
+#
+# WIRING IT WAS BLOCKED ON THE GUARD BEING WRONG, not on scheduling. The first
+# version probed ONE commit and printed a verdict naming the general property,
+# so it would have passed the very binaries that were stale in the way that
+# mattered — a green to cite while being wrong. It now delegates to the
+# two-sided fixture and reports an arm count.
+#
+# SAFE TO BLOCK A LAND ONLY BECAUSE OF THE unmeasured: PATH. On a Windows host
+# --check re-execs into WSL, which cannot execute a .exe; without the
+# executability probe that scores 5/16 and refuses the land for a healthy
+# binary. `cannot execute` is unmeasured, never stale.
+#
+# Sequenced after a fleet-wide notice and remediation: all eight hosts measured
+# 16/16 before this was wired, so it reds nobody on arrival.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking this host's plan binary refuses to write when asked to read (1079-qb8k)"
+STEP_SCRIPT="scripts/check-plan-binary-current.sh"
+STEP_ERROR="this host's plan binary WRITES on a read-only invocation — see the remedy above (1079-qb8k)"
+STEP_OK="Plan-binary write-is-opt-in check passed"

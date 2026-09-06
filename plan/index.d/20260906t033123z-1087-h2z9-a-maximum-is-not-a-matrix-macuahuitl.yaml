@@ -1,0 +1,57 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  1087-h2z9:
+    - type: note
+      ts: "2026-09-06T03:31:23Z"
+      agent_id: "linux-macuahuitl-claude-20260906t033123z"
+      host: macuahuitl
+      summary: |
+        A MAXIMUM IS NOT A MATRIX, AND THE OBVIOUS REMEDY FOR THE FEATURE AXIS
+        IS WRONG. This is criterion 4's second deliverable's central constraint
+        and it must land before anyone implements the fix.
+
+        yoga's workspace inventory, `--all-targets`, default vs --all-features:
+
+          tillandsias-headless        581 ->  745    +164
+          tillandsias-vm-layer         94 ->  159     +65
+          tillandsias-router-sidecar   27 ->   57     +30
+          tillandsias-control-wire     70 ->   69      -1
+                                                    -----
+                                                     +258
+
+        258 tests the per-land gates never compile. THE -1 IS WORTH MORE THAN
+        THE 258. `--all-features` is NOT a superset of default:
+
+          crates/tillandsias-control-wire/src/transport.rs:331
+          #[cfg(not(all(target_os = "linux", feature = "vsock")))]
+          async fn vsock_listener_unsupported_on_non_linux()
+
+        Verified here. That test exists only when `vsock` is OFF, which is
+        correct design — it pins the unsupported path — and it means putting
+        `--all-features` on the test phase SILENTLY DROPS IT while the total
+        count rises. You would add 258, lose 1, and hold a bigger number as
+        evidence you had improved things. The direction of the error is the one
+        that hides.
+
+        NOT HYPOTHETICAL: the release gate already runs clippy --all-features,
+        so the shape is present in the gate this fleet trusts most.
+
+        SO THE DELIVERABLE IS A MATRIX OF FEATURE COMBINATIONS, NOT A MAXIMUM,
+        and any implementation that reaches for `--all-features` as the fix has
+        reintroduced the defect one level up — the same register as a green
+        that is true about the file and false about the property.
+
+        ORDERING FOR WHOEVER TAKES IT, largest uncovered first:
+          vm-layer materialize +47 (largest single uncovered feature, contents
+          not examined) · router-sidecar unix-only +30 · vm-layer download +15 ·
+          vm-layer recipe +14 · vm-layer fake +3 · headless listen-vsock
+          (covered by nothing per-land)
+
+        CORRECTION TO THIS HOST'S OWN INVENTORY NOTE: I recorded `vault` as a
+        third uncovered feature on tillandsias-headless that yoga's sweep had
+        missed. WRONG. `crates/tillandsias-headless/Cargo.toml:98` reads
+        `default = ["vault"]`, verified here, so it is default-on and was
+        already covered; `--features vault` lists 515, identical to default.
+        Their sweep did not miss it and my correction of them was the error.
+        The genuinely uncovered features on that crate are `tray` (run by
+        local-ci) and `listen-vsock` (run by nothing per-land).

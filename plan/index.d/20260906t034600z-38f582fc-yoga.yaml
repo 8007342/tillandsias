@@ -1,0 +1,82 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: build-image-reports-success-for-an-image-whose-layers-are-missing-so-three-green-signals-cover-an-unrunnable-artifact
+    event:
+      type: progress
+      ts: "2026-09-06T03:46:00Z"
+      agent_id: linux-yoga-claude-20260906t034600z
+      host: yoga
+      summary: |-
+        CLOSED. A build no longer reports success over an image that cannot be
+        inspected.
+
+        THE SCRIPT ALREADY HAD THE SIGNAL AND DISCARDED IT, which is the sharpest
+        thing found here. build-image.sh's summary block ran
+        `podman image inspect "$IMAGE_TAG" --format '{{.Size}}' 2>/dev/null || echo ""`
+        — the one command that reaches the layers, its exit code thrown away into a
+        cosmetic size field. The fix is a check, not a new capability.
+
+        REPRODUCED HERMETICALLY, since the original evidence was destroyed by the
+        --no-cache rebuild that cleared it. Isolated `--root`, `FROM scratch` plus a
+        COPY (no registry, works offline), then the image's own overlay directory
+        removed. That yields the discriminating table this work is built on:
+
+          signal            intact   layer dir removed
+          image exists         0            0     <- what the script trusted
+          images (size)      shows        shows   <- what the operator reads
+          image tree           0            0     <- also fooled
+          image inspect        0          125     <- CATCHES IT
+          run                  0          125     <- catches it, costs a container
+
+        `image tree` being fooled is worth naming: it LOOKS like the layer-aware
+        choice and is not. `image inspect` is the cheapest signal that touches the
+        layers, so that is the one used.
+
+        THE REMOVAL HAS TO GO THROUGH `podman unshare`, and this is the trap in the
+        reproduction. Rootless overlay content is owned by a subuid, so a plain
+        `rm -rf` fails EPERM partway and leaves the layer PARTIALLY present —
+        against which `image inspect` still returns 0 and only `run` fails. A
+        fixture that skipped unshare would construct a weaker, different defect and
+        then prove the check misses it. The fixture SKIPs with a named reason if the
+        removal is incomplete rather than asserting against that state.
+
+        CRITERION 1: build-image.sh refuses when the built image does not inspect.
+        CRITERION 2: the refusal names the artifact, quotes podman's own error
+        (which carries the missing path), and prints the
+        TILLANDSIAS_BUILD_NO_CACHE=1 remedy. Pinned by an arm.
+        CRITERION 3: scripts/test-image-usability-check.sh, 7 arms, wired as
+        gate-steps.d/105-1073-dqtx.step. Both directions: an intact image passes
+        (arm 1, first, because a check that refuses everything would score arm 3)
+        and a broken one is refused. Two arms pin the PREMISE — that `image exists`
+        and `image tree` still report 0 over the broken image — so if podman ever
+        starts catching this, the fixture says the premise moved rather than
+        silently protecting a defect that no longer exists.
+        CRITERION 4: swept. 31 `image exists` call sites; most are skip-or-build
+        guards (`if ! exists, then skip/build`), which assert nothing about
+        usability and are correctly untouched. build-image.sh's other sites are
+        tag-RESOLUTION loops choosing among existing tags, not verdicts on a build
+        output. One genuine second caller: with-nix-builder.sh's
+        `_nix_builder_ensure_image` returned 0 on existence alone and then used the
+        image; it now inherits verify-image-usable.sh and force-rebuilds on refusal.
+        The Rust path (tillandsias-core/src/image_builder.rs:607) is a SKETCH — its
+        `image_exists` returns a hardcoded false with a comment saying "in real
+        code, this would call podman" — so it asserts nothing about any real image
+        and needs no change here.
+
+        ONE IMPLEMENTATION, NOT THREE: the check lives in
+        scripts/verify-image-usable.sh, and build-image.sh, with-nix-builder.sh and
+        the fixture all call it. A copy in the fixture would have been a second
+        reader of the same question, which is the 1081-gynk shape.
+
+        SAFETY, because the manipulation deletes container storage: everything runs
+        against a scratch `--root` under mktemp. Nothing in this work touches the
+        host's real store, which on a workstation holds the toolbox the fleet
+        compiles in.

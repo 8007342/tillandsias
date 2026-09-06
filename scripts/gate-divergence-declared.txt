@@ -1,0 +1,74 @@
+# WHAT ./build.sh --ci-full RUNS THAT ./build.sh --check DOES NOT.   ORDER 1087-h2z9
+#
+# Every host lands through --check. --ci-full runs about once a day. So a check
+# that lives only in the second is one a landing host cannot see, and a day of
+# green landings accumulates whatever it would have caught. On 2026-09-06 that
+# was NINE reds on a trunk where --check was green on all nine.
+#
+# This file is the list that did not exist. It is DATA, read by
+# scripts/test-gate-divergence-is-declared.sh, which fails when a difference
+# appears that is not listed here. Adding a line is how you declare one.
+#
+# FORMAT:  <path>  <class>  <reason>
+#
+# CLASSES:
+#   infra      not a check — a library, builder, runner or reporter. Its absence
+#              from --check is not a coverage gap.
+#   excluded   deliberately absent, WITH the reason. The worked example is the
+#              litmus suite (build.sh:2252, order 748-tkjx): minutes long, and a
+#              gate that slow gets bypassed with --no-verify. That reasoning is
+#              sound and is not to be reversed.
+#   untriaged  present in --ci-full, absent from --check, and NOBODY DECIDED.
+#              This is the debt. The fixture ratchets it: the count may fall,
+#              never rise. Do not clear one by inventing a reason — either wire
+#              it into --check or write down why it stays out.
+#
+# WHY A RATCHET RATHER THAN A HARD RED: 22 untriaged entries on the day this was
+# written. A gate that reds trunk on day one gets switched off, which is the
+# failure the scorable-obligation guard's own header names. The ratchet makes the
+# debt visible and bounded without making the gate unsatisfiable.
+
+scripts/local-ci.sh                            infra      the instrument itself
+scripts/common.sh                              infra      sourced library
+scripts/timing-log.sh                          infra      sourced library
+scripts/build-sidecar.sh                       infra      builder, not a check
+scripts/run-litmus-test.sh                     infra      the litmus runner; see the litmus note below
+scripts/update-convergence-dashboard.sh        infra      reporter, writes a dashboard
+scripts/freshness-inventory.sh                 infra      advisory report, already non-blocking
+scripts/hooks/pre-commit-openspec.sh           infra      a commit hook; runs earlier, not a gate step
+
+# The litmus suite. DELIBERATE, and the one exclusion with its reasoning already
+# written down. build.sh:2252 records the cost argument and, in the same comment,
+# the failure it creates: "a green gate plus the spec you happened to run can
+# both pass over another spec's broken pin. Measured twice." The mitigation it
+# shipped, scripts/litmus-covering-specs.sh, is a reverse map an editor may
+# consult — and nothing makes anyone consult it. That gap is 1087-h2z9's fourth
+# exit criterion, not a reason to reverse the exclusion.
+scripts/test-litmus-runner-reports-rc.sh       excluded   litmus-suite adjacent; the suite is out of --check by 748-tkjx
+scripts/check-litmus-dead-inputs.sh            excluded   scans the litmus corpus; same cost argument as 748-tkjx
+
+# UNTRIAGED. Each of these is a check that exists, runs in --ci-full, and no
+# landing host executes. Nobody wrote down why. check-no-python-scripts.sh is the
+# reason macuahuitl's python3 red was invisible to every host that landed today.
+scripts/audit-guard-activation.sh              untriaged  nobody decided
+scripts/check-cheatsheet-frontmatter.sh        untriaged  nobody decided
+scripts/check-cheatsheet-refs.sh               untriaged  nobody decided
+scripts/check-cheatsheet-tiers.sh              untriaged  nobody decided
+scripts/check-container-bases.sh               untriaged  nobody decided
+scripts/check-dead-env-branches.sh             untriaged  nobody decided
+scripts/check-dev-embed-model-agreement.sh     untriaged  nobody decided
+scripts/check-enclave-expect-none-is-fixture-only.sh untriaged nobody decided
+scripts/check-markdown-distillation.sh         untriaged  nobody decided
+scripts/check-no-base64-script-injection.sh    untriaged  nobody decided
+scripts/check-no-python-scripts.sh             untriaged  nobody decided
+scripts/check-no-tracked-binaries.sh           untriaged  nobody decided
+scripts/check-spec-index-resolution-agreement.sh untriaged nobody decided
+scripts/check-tray-string-corpus-drift.sh      untriaged  nobody decided
+scripts/check-version-monotonicity.sh          untriaged  nobody decided
+scripts/verify-version-monotonic.sh            untriaged  nobody decided
+scripts/test-gate-fast-refusals.sh             untriaged  nobody decided
+scripts/test-litmus-grep-escapes.sh            untriaged  nobody decided
+scripts/test-spec-index-durable-tier-demotion.sh untriaged nobody decided
+scripts/test-spec-index-repo-relative-rung.sh  untriaged  nobody decided
+scripts/validate-spec-cheatsheet-binding-fast.sh untriaged nobody decided
+scripts/validate-traces.sh                     untriaged  reached indirectly via test-trace-coverage.sh, but not run directly
