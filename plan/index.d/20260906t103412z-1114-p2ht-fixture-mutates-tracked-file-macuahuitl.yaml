@@ -1,0 +1,73 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-capability-manifest-fixture-edits-a-tracked-file-in-the-shared-checkout-so-a-concurrent-commit-captures-a-trimmed-manifest
+    order: 1114-p2ht
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [testing, fixtures, boundary, release-gate]
+    estimated_hours: 2
+    owned_files:
+      - openspec/litmus-tests/litmus-capability-manifest-guard.yaml
+    verifiable_closure: |
+      bash scripts/run-litmus-test.sh forge-environment-discoverability with
+      git status --porcelain sampled DURING the run: the tracked file
+      crates/tillandsias-plan/capabilities.txt must never appear modified. RED ON
+      TODAY'S CODE — step 1 overwrites it, builds, then restores, so it is dirty
+      for the whole build window. The arm must also still detect real drift, or a
+      fixture that stops testing anything would pass it.
+    title: |
+      MEASURED on macuahuitl: the capability-manifest fixture overwrites a TRACKED file in the live checkout for the duration of a release build, and a concurrent land captured the trimmed version into a merge commit
+    context: |
+      NEAR MISS, caught before push. Nothing reached origin.
+
+      litmus-capability-manifest-guard.yaml step 1 does this to the real
+      checkout, not a copy:
+
+        cp crates/tillandsias-plan/capabilities.txt $F/capabilities.txt.bak
+        grep -v '^query$' crates/tillandsias-plan/capabilities.txt > $F/trimmed.txt
+        cp $F/trimmed.txt crates/tillandsias-plan/capabilities.txt
+        ... cargo build --release ...          <- the whole build window
+        cp $F/capabilities.txt.bak crates/tillandsias-plan/capabilities.txt
+
+      So for the length of a release build of tillandsias-plan, a TRACKED file in
+      the shared worktree is missing a real capability. The restore is correct
+      and the fixture is careful — it restores on the failure path too — but the
+      window is minutes long and the checkout is shared with every other lane.
+
+      WHAT ACTUALLY HAPPENED. I ran that spec to name a failing link for
+      esmeraldinha, and started a land while it was still running. The land's
+      integrate produced merge commit 744e97b3b carrying capabilities.txt WITHOUT
+      `query` — 58 tokens where the file has 59. Had it pushed, trunk's manifest
+      would have lost a real capability and lib-expert-capability.sh would have
+      reported query as a blocked capability fleet-wide. Caught because the
+      working tree showed `M capabilities.txt` after the fixture restored it,
+      which disagreed with HEAD.
+
+      THE CONCURRENCY IS MINE AND THE FIXTURE IS STILL WRONG. I should not have
+      landed under my own running spec, and I am recording that as my error. But
+      a fixture that edits a tracked file in the shared checkout is a hazard no
+      caller can see: nothing announces the window, the file is restored so no
+      trace remains, and the only symptom is whatever else happened to read the
+      tree in those minutes. The meta-orchestration exit contract requires every
+      boundary path to stay byte-identical, and this fixture violates that by
+      construction for any cycle running concurrently.
+
+      SAME FAMILY AS 1110-c4nf, which is about an arm that cannot attribute a
+      worktree change to its writer. This is the other half: a fixture that IS
+      such a writer. 1110's next_action asks for the path to be named — this is
+      one of the paths, and it is a tracked file rather than scratch.
+
+      NOT ASSERTED: that this caused 1110's cycle-batch-triage red. Different
+      spec, different window. What is measured is that this fixture creates
+      exactly the condition 1110's arm cannot distinguish.
+    next_action: |
+      Build from a COPY. The fixture already creates $F and copies the manifest
+      into it; the build should use a scratch checkout with the trimmed manifest
+      rather than editing the live file — the same isolation step 3 already uses
+      for its $F/checkout. If an in-place edit is genuinely unavoidable, the
+      fixture must at minimum declare the window on stderr so a concurrent reader
+      can see it, but a copy is preferable and is already the pattern elsewhere
+      in this file.

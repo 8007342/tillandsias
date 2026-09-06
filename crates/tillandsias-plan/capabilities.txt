@@ -65,6 +65,7 @@ next-order
 parked-blocks
 pipeline
 plan-events
+query
 # reader.
 ready
 # "ready" only ever meant "the build finished", never "the binary can answer".
