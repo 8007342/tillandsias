@@ -1,0 +1,80 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: emit-flow-has-no-caller-so-overhead-ratio-has-never-been-computable
+    event:
+      type: progress
+      ts: "2026-09-06T02:00:02Z"
+      agent_id: linux-yoga-claude-20260906t020002z
+      host: yoga
+      summary: |-
+        CLOSED — and the filed measurement needed correcting first, in the
+        direction that makes the packet less alarming and the defect no less real.
+
+        THE PREMISE "overhead_ratio HAS NEVER ONCE BEEN COMPUTABLE" IS FALSE TODAY.
+        Measured on yoga 2026-09-06: the log holds 20 records, not 7; `completed`
+        is 1 in eleven of them and 2 in one, not 0 in all; and cycle-metrics prints
+        `flow: cycles=20 avg_completed_per_cycle=0.65 avg_commits_per_cycle=2.25
+        overhead_ratio=3.46`. The number exists. Between 2026-09-02T21:56Z and
+        2026-09-04T05:20Z records appeared every ~2h and then stopped dead.
+
+        WHAT THAT CHANGES, AND WHAT IT DOES NOT. There is no cron and no timer;
+        the log is gitignored and host-local. The 20 records came from THIS host's
+        own sessions — the ones that happened to run skills/meta-orchestration,
+        which carries the emit block. Sessions running skills/advance-work-from-plan
+        emitted nothing, because that skill had no such block. So the packet's
+        diagnosis is confirmed exactly: the emitter shipped, its fixture proves it,
+        and the CALL was wired into the coordinator's skill instead of the worker's.
+        The filed numbers were a snapshot of a fleet where the coordinator had run
+        less recently, not a different defect.
+
+        CRITERION 1: skills/advance-work-from-plan section 7.0b now carries the
+        emit, so every host emits every cycle rather than only the host that runs
+        the coordinator skill. This cycle emitted its own record as the first
+        instance (cycle=yoga-20260906T014628Z).
+
+        CRITERION 2, the load-bearing half: scripts/check-cycle-flow-log-fresh.sh
+        refuses a STALE log, and the horizon is ACTIVITY rather than a clock. An
+        absolute "older than N hours" rule is wrong in both directions — it accuses
+        a legitimately idle host and excuses one that ran fifty cycles inside the
+        window. The rule is: settled commits newer than the newest record are
+        cycles that ran without emitting. Pointed at the log as it stood:
+
+          violation:cycle-flow-log-stale:newest=2026-09-04T05:20:23Z:commits_since=953
+
+        A 48h clock horizon called that same log FRESH at 44h, which is why the
+        first draft was rewritten. After this cycle emitted, the same guard prints
+        ok — the refusal and the acceptance both demonstrated on the live host, not
+        only in a fixture.
+
+        CRITERION 3: the fix is in the shared worker protocol, not one host's
+        habit.
+
+        PINNED by three arms on litmus:cycle-flow-telemetry-shape, two of which are
+        mutation controls: a log fed after the last commit must be ACCEPTED (without
+        it, a guard that refuses everything scores the staleness arm), and a repo
+        with no settled commits must SKIP with a named reason rather than accuse
+        (1024-c3h3). The existing arms are untouched — they were always correct
+        about the emitter, and could never fail for the reason the log was dead,
+        because they invoke --emit-flow themselves before asserting.
+
+        CAUGHT BY THE DIALECT GUARD, worth recording because it is this packet's own
+        subject: the first guard used the GNU `-d` flag to build an epoch. BSD date
+        SUCCEEDS WITH GARBAGE on that flag, so the `|| echo ""` fallback could never
+        fire and the check would have compared a nonsense number on every macOS
+        host while looking healthy. All shell date arithmetic is gone; git parses
+        both ISO-8601 and relative dates portably, and ISO-8601 UTC sorts
+        lexicographically.
+
+        NOT WIRED INTO ./build.sh --check, deliberately: every host's log is stale
+        today, so a blocking step would refuse the whole fleet's landings at once on
+        hosts that are mid-cycle. It is bound to the litmus (an activation surface,
+        so it is not an orphan). Promotion sequence: worker protocol emits, hosts
+        accumulate records, then the gate.

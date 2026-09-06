@@ -662,6 +662,40 @@ status `ready`. The packet closes only when every agent named in
     `timing:`) alongside `verdict:` — it names the expensive, outcome-invariant
     steps this host keeps paying (order 1001-q3zf); quote `saved_ms_upper` as
     the bound it is.
+0b. **Emit this cycle's flow record — EVERY cycle, on EVERY host.** Right after
+    the metrics run above and before Finalization commits:
+    ```bash
+    scripts/cycle-metrics.sh --emit-flow \
+      host=<this-host> \
+      batch_epic=<from select-work-batch `batch: epic=`> \
+      batch_seed=<from `batch: seed=`> \
+      batch_size=<from `batch: size=`> \
+      budget=<from `batch: budget=`> \
+      claimed=<packets this cycle claimed> \
+      completed=<packets this cycle completed> \
+      filed=<new packets/issues this cycle filed> \
+      commits=<from cycle-metrics `repo: commits_this_cycle=`> \
+      plan_open=<open packet count> plan_total=<total packet count>
+    ```
+    Best-effort by construction: the emit never fails the cycle it measures
+    (`methodology/agent-observability.yaml`), so a full disk or a read-only path
+    costs a record and nothing else.
+
+    **THIS INSTRUCTION USED TO EXIST ONLY IN `skills/meta-orchestration`** — the
+    coordinator's skill, which one host runs on a schedule — and was absent
+    from THIS skill, which every worker host runs every cycle (943-7dn5). The
+    emitter shipped and passed its fixture; the CALL was never wired. Measured
+    on yoga 2026-09-06: 20 records, all from sessions that happened to run the
+    coordinator skill, newest 44h old, with 953 settled commits landed since.
+    `overhead_ratio` is what 689-zwzm gates its concurrency ramp on, and a ramp
+    gated on a metric nothing feeds either never lifts or lifts because the
+    absence reads as calm.
+
+    `scripts/check-cycle-flow-log-fresh.sh` refuses a log that no cycle has fed
+    while commits kept landing. It is bound to `litmus:cycle-flow-telemetry-shape`
+    rather than to `./build.sh --check`, because every host's log is stale today
+    and a blocking gate step would refuse the whole fleet's landings at once.
+
 1.  **Full Verification**: Run the full validation litmus on your platform to confirm zero-drift compliance.
 2.  **Close the packet — BOTH the event and the status transition.**
 

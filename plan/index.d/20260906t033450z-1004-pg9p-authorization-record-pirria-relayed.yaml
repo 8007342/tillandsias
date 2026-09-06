@@ -1,0 +1,67 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+#
+# RELAYED VERBATIM. The summary below is pirria's own text, supplied for this
+# purpose and reproduced without edit. pirria cannot write it themselves: with
+# no credential the fragment would sit unpushed on their host, which is the
+# opposite of a durable record. macuahuitl is the transport and NOT the author,
+# and has NOT independently verified the operator interaction it describes —
+# that limitation is named inside the record itself.
+events:
+  - packet_id: floor-tier-release-smoke-and-metrics
+    event:
+      type: note
+      ts: "2026-09-06T03:34:50Z"
+      host: pirria
+      summary: |
+        AUTHORISATION FOR THE DESTRUCTIVE STEP, recorded BEFORE the fact per the
+        standard lenovinha set on 1086-btjb.
+
+        WHO AND HOW. The operator authorised this run directly in pirria's own
+        session, in response to a question I put to them, not via any host
+        relaying on their behalf. The coordinator's claim of this packet is NOT
+        the authorisation and does not purport to be: order 1004-vsh2 stops
+        macuahuitl running this smoke and equally stops it authorising one here.
+
+        WHAT WAS ASKED. I put the two-consequence ask — that one authorised run
+        closes 1004-pg9p AND discharges the criterion-3 field observation
+        1026-ps4n still owes — and offered three options: (1) the full smoke,
+        (2) not now, host stays idle by construction, (3) authorise but SKIP THE
+        FORGE LANE, with the note that option 3 closes less because 1026-ps4n's
+        observation specifically requires a live forge lane.
+
+        WHAT WAS CHOSEN. The operator chose (1), the FULL smoke. So the forge
+        lane is EXPLICITLY IN SCOPE, chosen over a stated alternative that
+        excluded it, rather than assumed by me from a general yes.
+
+        WHAT IT COVERS: one run of skills/smoke-curl-install-and-test-e2e on
+        pirria — curl-install of the published release, `podman system reset
+        --force` (destroying this host's entire container store: enclave images,
+        volumes, the vault data volume, project mirrors), `tillandsias --debug
+        --init` from pristine, the forge lane, the §4b egress assertion taken
+        while the lane is up, and the §4c health check last after every mutating
+        step.
+
+        WHAT IT DOES NOT COVER: any second or repeat destructive run; a reset on
+        any other host; installing a toolchain or otherwise mutating host
+        configuration beyond what the runbook performs; and any push (this host
+        has no credential — every artefact from this run reaches the ledger by
+        relay).
+
+        PROVENANCE NOTE: the coordinator acted on my report of the operator's
+        authorisation and is surfacing that to the operator so they can correct
+        it if I have represented it wrongly. That check is the one neither host
+        can perform, and it is named here rather than assumed.
+
+        TWO COMMITMENTS I HOLD MYSELF TO.
+
+        1. I will not fabricate the lane record. If the wrapper is killed and
+        `timing_reap` does not produce `smoke-forge-lane-supervisor-lost`, I
+        will report the SILENCE as a defect in my own fix rather than produce a
+        plausible number. 1026-ps4n exists because a gap was silent; closing it
+        with an invented record would be committing the defect by its author.
+
+        2. I will report whichever outcome occurs without preferring one. The
+        coordinator said they would rather I got a third supervisor kill than a
+        clean run, and I agree the kill is the more informative result — but I
+        am not going to arrange for one, and if the run is clean I will say so
+        plainly rather than dress a clean record as a weaker result.

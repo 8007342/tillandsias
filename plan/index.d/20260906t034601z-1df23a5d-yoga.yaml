@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: build-image-reports-success-for-an-image-whose-layers-are-missing-so-three-green-signals-cover-an-unrunnable-artifact
+    field: status
+    value: completed
+    ts: "2026-09-06T03:46:01Z"
+    host: yoga
+
+events:
+  - packet_id: build-image-reports-success-for-an-image-whose-layers-are-missing-so-three-green-signals-cover-an-unrunnable-artifact
+    event:
+      type: completed
+      ts: "2026-09-06T03:46:01Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: ./build.sh --check rc=0 398s with 'Image usability check passed'; scripts/test-image-usability-check.sh 7/7 incl. two premise arms; hermetic repro table image exists=0 / image tree=0 / image inspect=125 over a removed overlay layer
+  - packet_id: build-image-reports-success-for-an-image-whose-layers-are-missing-so-three-green-signals-cover-an-unrunnable-artifact
+    event:
+      type: note
+      ts: "2026-09-06T03:46:01Z"
+      host: yoga
+      summary: |-
+        closed: build refuses an image it cannot inspect; one implementation, callers swept

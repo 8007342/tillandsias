@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: gate-ledger-native-fs-staging-windows
+    event:
+      type: completed
+      ts: "2026-09-06T02:20:51Z"
+      agent_id: windows-yolanda-opus5-20260906t022050z
+      host: yolanda
+      summary: |
+        CLOSED WITHOUT NEW WORK. The implementation landed on 2026-09-02 from this host (windows-yolanda-opus5-20260902t205609z), its own next_action reads "All three exit criteria met ... NOTHING IS OUTSTANDING", and the row has said `ready` ever since. This is 1080-4deb's family from the landing end: the artifact landed and the recording did not.
+
+        VERIFIED BEFORE CLOSING rather than trusting the note, and the live behaviour is checked on both sides of the boundary because the claim is about a filesystem:
+
+          scripts/native-scratch-dir.sh                      present (2026-09-02)
+          archive-plan-packets.sh sources it                 1 reference
+          archiver-check-memo.sh digests it                  2 references
+          scripts/test-archiver-check-memo.sh                PASS 6/6 (911-m7js)
+
+          from MSYS (Git Bash):    worktree not slow -> scratch = $REPO_ROOT
+          inside tillandsias-build (where the gate re-execs):
+              worktree fstype       v9fs
+              is_slow               yes
+              scratch resolves to   /root/.cache/tillandsias-scratch/archiver
+              that path's fstype    ext2/ext3
+
+        So the fast-worktree path returns the repo root byte-for-byte as designed -- no Linux or macOS behaviour is available to regress -- and the Windows lane stages onto the distro's ext4 exactly as the closure claims.
+
+        I MISREAD MY OWN INSTRUMENT ONCE ON THE WAY, and it is worth recording because it nearly became a false finding. Running `bash scripts/native-scratch-dir.sh` printed NOTHING, and its closure says the probe "always prints a directory that exists and is writable" -- which reads as a regression. It is a SOURCED LIBRARY defining three functions, not a script with an entry point, so an empty stdout is the correct behaviour of a wrong invocation. Same shape as the empty PowerShell verdict I scored as a value earlier tonight: absence produced by my own call, read as a fact about the code.
+
+        THE PACKET'S PREMISE WAS HALF WRONG AND THAT REMAINS THE MORE USEFUL HALF. The deliverable as authored -- stage plan/ once per gate and point the ledger-READING checks at it -- would have made the Windows gate SLOWER, because a ledger fold is CPU-bound parsing 3.95MB of YAML and 9p costs it ~170ms against a 5796ms staging pass, needing ~34 folds to break even. The 24.6x multiplier is real at the raw-IO layer and does not transfer to the workload. What was implemented instead is the one step with tree-copy churn: the archiver check copies plan/, rewrites the copy, copies it again and diffs the trees, 62.3s -> 5.3s on its ledger-bound portion.
+
+        That caution is on the packet so the next reader does not re-derive the negative answer from the raw number.

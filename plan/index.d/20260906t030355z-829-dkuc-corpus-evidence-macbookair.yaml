@@ -1,0 +1,65 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  829-dkuc:
+    - type: progress
+      ts: "2026-09-06T03:03:55Z"
+      agent_id: "macos-tlatoanis-macbook-air-claude-20260905t144547z"
+      host: tlatoanis-macbook-air
+      summary: |
+        SLICE: the sweep's first corpus now cites the right lines. The protocol
+        half is NOT started and I say why below.
+
+        I CLAIMED THIS ON A PREMISE THAT WAS WRONG, and the correction is the
+        useful part. Reading check-dead-env-branches.sh's worklist — named in
+        this packet's next_action as the sweep's natural first corpus — I saw
+        TILLANDSIAS_PROJECT_ENGINE reported dead with only
+        `..._SRC_REL=` and `..._DEFAULT=` lines beneath it, and concluded the
+        corpus was full of prefix false positives. IT IS NOT. The checker is
+        correct: `${TILLANDSIAS_PROJECT_ENGINE:-}` at lib-common.sh:1386 is
+        exactly the shape its header names — a bare/empty-default read that
+        nothing assigns — and TILLANDSIAS_STATUS_CHECK is called out in that
+        same header as the archetype of the class.
+
+        THE REAL DEFECT IS NARROWER AND WORSE. The per-row EVIDENCE was built by
+        `grep -rn "$v" | head -2` — unanchored substring. For a name that is a
+        prefix of others, the first two hits are OTHER VARIABLES and the reads
+        that made this row a candidate never appear:
+          displayed:  lib-project-engine-capability.sh:89  ..._SRC_REL="…"
+                      lib-project-engine-capability.sh:92  ..._DEFAULT="…"
+          omitted:    lib-common.sh:1386  "${TILLANDSIAS_PROJECT_ENGINE:-}"
+        THE FINDING WAS CORRECT AND ITS EVIDENCE POINTED ELSEWHERE. That is the
+        combination that makes an auditor dismiss a true row, and I did exactly
+        that on this row before reading the source.
+
+        WHY IT MATTERS TO THIS PACKET SPECIFICALLY: the protocol makes every
+        finding a (mutation, predicted-observable) pair. A pair built from
+        another variable's lines predicts an observable that CANNOT APPEAR, so
+        the finding would be dropped as unrunnable — the sweep would discard
+        true findings and record itself as having examined them.
+
+        FIX: the evidence grep is anchored on a trailing non-name character or
+        end-of-line. A leading boundary is deliberately not required — `${VAR`,
+        `"$VAR` and `--env VAR=` vary in what precedes the name, and every name
+        here already carries the TILLANDSIAS_ prefix the extractor matched.
+        AFTER: the same row cites lib-common.sh:1386 and :4279, its own reads.
+
+        GUARD: a self-test arm plants `_PFX` (dead, bare read) alongside
+        `_PFX_SUFFIX` (assigned, live) with the assignment EARLIER in the file,
+        so an unanchored head -2 reports the wrong one. It asserts the row cites
+        its own gating read and does NOT cite the sibling.
+        SABOTAGE: restoring the unanchored grep reproduces the original defect
+        exactly — "evidence omits its own gating read", showing two _PFX_SUFFIX
+        lines. Restored byte-identical.
+
+        A COUNT CHANGE THAT WAS NOT MINE, verified rather than assumed: `dead`
+        moved 28 -> 29 during this cycle. With my change stashed it reads 29,
+        and with it 29. The merge of origin/linux-next during my claim brought
+        new code; my edit is display-only.
+
+        WHAT I DID NOT DO, and why. The remaining half is the sweep PROTOCOL —
+        kill rule, net-negative diff, filing cap, refutation band, and a first
+        supervised run. The packet's own next_action says it wants sweep-budget
+        headroom or an OPERATOR-PAIRED SESSION. A sweep whose defining act is
+        deleting code and retracting findings is not something to run
+        unattended, and running it badly once would poison the corpus it
+        records as examined. Left for a paired cycle.

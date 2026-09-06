@@ -52,6 +52,13 @@ if [ "${1:-}" = "--self-test" ]; then
         printf '# %s_DOC_VAR is a documented fixture seam.\n' "$P"
         printf 'if [ -n "${%s_DOC_VAR:-}" ]; then\n    echo documented\nfi\n' "$P"
         printf 'tune="${%s_TUNE_VAR:-fallback}"\necho "$tune"\n' "$P"
+        # ORDER 829-dkuc. A dead name that is a PREFIX of a live one, so the
+        # evidence lines can be checked for pointing at the RIGHT variable.
+        # `_PFX` is dead (bare read, never assigned); `_PFX_SUFFIX` is assigned
+        # and therefore live, and its assignment sits EARLIER in the file so an
+        # unanchored `grep | head -2` reports it in place of the real read.
+        printf '%s_PFX_SUFFIX=1\necho "$%s_PFX_SUFFIX"\n' "$P" "$P"
+        printf 'if [ -n "${%s_PFX:-}" ]; then\n    echo prefixdead\nfi\n' "$P"
     } > "$t/scripts/fixture.sh"
     out="$(DEAD_ENV_ROOT="$t" bash "${BASH_SOURCE[0]}" 2>&1)"
     rc=$?
@@ -64,9 +71,27 @@ if [ "${1:-}" = "--self-test" ]; then
         && { echo "SELF-TEST FAIL: documented var wrongly reported: $out"; exit 1; }
     printf '%s\n' "$out" | grep -q 'TILLANDSIAS_SELFTEST_TUNE_VAR' \
         && { echo "SELF-TEST FAIL: nonempty-default tunable wrongly reported: $out"; exit 1; }
-    printf '%s\n' "$out" | grep -q 'dead=1 verdict=dead-branches-found' \
+    # ORDER 829-dkuc. THE EVIDENCE MUST BE FOR THE VARIABLE IT IS FILED UNDER.
+    #
+    # The display used an UNANCHORED `grep -rn "$v" | head -2`, so a name that
+    # is a prefix of others showed THEIR lines and omitted its own. Measured on
+    # the real tree: TILLANDSIAS_PROJECT_ENGINE displayed two _SRC_REL/_DEFAULT
+    # assignment lines — different variables — while its actual gating read at
+    # lib-common.sh:1386 never appeared. The finding was CORRECT and its
+    # evidence pointed elsewhere, which is the combination that makes an auditor
+    # dismiss a true row; I did exactly that before reading the source.
+    #
+    # This arm pins it in the direction that matters: the _PFX row must cite the
+    # line that made it a candidate, not the earlier _PFX_SUFFIX assignment.
+    _pfx_ev="$(printf '%s\n' "$out" | grep -A2 "^  ${P}_PFX$" | tail -n +2)"
+    printf '%s\n' "$_pfx_ev" | grep -q "${P}_PFX:-" \
+        || { echo "SELF-TEST FAIL: prefix-dead var's evidence omits its own gating read: $_pfx_ev"; exit 1; }
+    printf '%s\n' "$_pfx_ev" | grep -q "${P}_PFX_SUFFIX=" \
+        && { echo "SELF-TEST FAIL: evidence cites a DIFFERENT variable's line: $_pfx_ev"; exit 1; }
+
+    printf '%s\n' "$out" | grep -q 'dead=2 verdict=dead-branches-found' \
         || { echo "SELF-TEST FAIL: wrong verdict line: $out"; exit 1; }
-    echo "SELF-TEST PASS: dead named, assigned and documented spared"
+    echo "SELF-TEST PASS: dead named, assigned and documented spared, evidence anchored"
     exit 0
 fi
 
@@ -155,7 +180,37 @@ if [ "$dead" -gt 0 ]; then
         printf '%s' "$dead_list" | while IFS= read -r v; do
             [ -n "$v" ] || continue
             echo "  $v"
-            grep -rn "$v" "${scan_dirs[@]}" 2>/dev/null | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' | head -2 | sed 's/^/    /'
+            # ORDER 829-dkuc. THE EVIDENCE MUST BE FOR THIS VARIABLE.
+            #
+            # This was `grep -rn "$v"` — an UNANCHORED substring match, then
+            # head -2. For a name that is a PREFIX of other names the first two
+            # hits are other variables entirely, and the reads that made this a
+            # candidate never appear.
+            #
+            # MEASURED before the fix: TILLANDSIAS_PROJECT_ENGINE displayed
+            #   lib-project-engine-capability.sh:89  ..._SRC_REL=...
+            #   lib-project-engine-capability.sh:92  ..._DEFAULT=...
+            # — two DIFFERENT variables — while its actual gating read,
+            # `${TILLANDSIAS_PROJECT_ENGINE:-}` at lib-common.sh:1386, was not
+            # shown at all. The same for TILLANDSIAS_STATUS_CHECK, whose only
+            # displayed line was TILLANDSIAS_STATUS_CHECK_BIN.
+            #
+            # THE FINDING WAS CORRECT AND ITS EVIDENCE POINTED ELSEWHERE, which
+            # is the worst combination for the sweep this list feeds: 829-dkuc's
+            # protocol makes every finding a (mutation, predicted-observable)
+            # pair, and a pair built from another variable's lines predicts an
+            # observable that cannot appear. I dismissed two correct rows as
+            # prefix artifacts on exactly this display before checking the
+            # source — the audit step the sweep depends on is the step this
+            # misleads.
+            #
+            # Anchored on a trailing non-name character or end-of-line. A
+            # LEADING boundary is deliberately not required: `${VAR`, `"$VAR`
+            # and `--env VAR=` all precede the name with characters that vary,
+            # and every name here already starts with the TILLANDSIAS_ prefix
+            # the extractor matched.
+            grep -rnE "${v}([^A-Z0-9_]|\$)" "${scan_dirs[@]}" 2>/dev/null \
+                | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' | head -2 | sed 's/^/    /'
         done
     } >&2
     echo "dead-env-branches: total=$total unassigned=$unassigned dead=$dead verdict=dead-branches-found"
