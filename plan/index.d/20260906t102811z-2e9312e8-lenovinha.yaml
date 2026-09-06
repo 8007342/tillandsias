@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: thirty-shell-fixtures-are-invoked-by-nothing-and-no-gate-can-see-them
+    event:
+      type: progress
+      ts: "2026-09-06T10:28:11Z"
+      agent_id: linux-lenovinha-claude-20260906t093518z
+      host: lenovinha
+      summary: |
+        RELEASED FROM A STRANDED CLAIM OF THIS HOST'S OWN, ~20 hours after the cycle
+        that took it exited without releasing. Found by reading
+        `expire-claims --list-live` at the end of an unrelated cycle and seeing
+        lenovinha still holding it from 2026-09-05T13:35:46Z.
+
+        NOT CLOSED, DELIBERATELY. The last event on this packet (2026-09-05T20:48:00Z)
+        is a CORRECTION withdrawing a claim its own author had published — that the
+        fixture's isolation was proven, when in fact TILLANDSIAS_SPEC_INDEX_CHECKOUT is
+        rung 4 of a ladder that two higher rungs pre-empt, and the clean measurement
+        came from a rootless-podman permissions accident rather than from the fix. A
+        packet whose most recent record retracts its own evidence is not one to mark
+        done from the outside. Closing it would require checking its exit criteria
+        against the tree, and guessing marks unfinished work complete, which is
+        strictly worse than leaving it stranded.
+
+        So the status goes back to `ready` with its progress intact, and whoever takes
+        it inherits the correction rather than the retracted claim.
+
+        THIS IS THE SECOND STRANDED CLAIM OF THIS HOST'S FOUND TODAY. The first was
+        1071-adhj, finished and unreleased for a day, which a peer had to point out
+        after this host told them the packet was not its own. Two in one day from the
+        same host is a pattern, not an accident: both cycles ended without running the
+        release step, and neither noticed because nothing in the cycle's own exit path
+        looks at what the host is still holding. `expire-claims --list-live` answers it
+        in one command and has no caller in any cycle script — the reaper's own
+        documentation says the 24h TTL is a backstop for a dead host, not a return
+        path, and it is right. The return path is the exiting cycle, and on this host
+        it has now failed twice.

@@ -1,0 +1,99 @@
+packets:
+  - packet_id: attestation-requires-the-remote-head-to-EQUAL-my-commit-so-any-concurrent-push-denies-a-marker
+    order: 1110-4v4h
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    pickup_role: any
+    depends_on: []
+    capability_tags:
+      - attestation
+      - meta-orchestration
+      - bash
+      - fleet
+    estimated_hours: 2
+    title: >
+      mo-full-attest's durability probe tests remote-head EQUALITY, not
+      ancestry, so a cycle whose work IS durably on origin is denied its
+      MO-FULL marker whenever another host pushes inside the 120s window.
+    context: |
+      MEASURED ON lenovinha, 2026-09-06T10:0xZ, on a cycle that had landed
+      everything it produced.
+
+        finalize-cycle.sh -> FINALIZE_EXIT=4
+        ok:land:01bc637a6:attempt-1
+        ok: startup worktree boundary preserved      (twice)
+        MO-FULL: FAIL local HEAD 01bc637a6 is not durably on origin/linux-next
+                 (observed 26659af85) after 120s — commit unpushed or relay
+                 lost; do NOT emit a marker
+
+      THE VERDICT IS FALSE. Checked immediately afterwards:
+
+        git merge-base --is-ancestor 01bc637a6 origin/linux-next  -> YES
+        git merge-base --is-ancestor 405cae043 origin/linux-next  -> YES
+
+      Both of that cycle's commits are on origin. `26659af85` is simply a
+      LATER commit from another host that descends from mine. The work was
+      durable the whole time; the probe could not see it.
+
+      CAUSE, read from the source rather than inferred —
+      `converge_remote` in scripts/mo-full-attest.sh:
+
+        actual="$(remote_head "$branch" ...)"
+        if [ "$actual" = "$want" ]; then ... return 0
+
+      String EQUALITY between the remote head and local HEAD. The question the
+      attestation actually needs answered is CONTAINMENT: is my commit on the
+      remote. Equality answers that only while nobody else pushes, so the probe
+      is reliable exactly when the trunk is idle and unreliable exactly when it
+      is busy — which is when cycles are landing.
+
+      THIS IS THE ANCESTRY-VS-EQUALITY CONFUSION FROM THE OTHER DIRECTION, and
+      the fleet has now paid for both halves in one night. macuahuitl found two
+      relay refs reported "NOT MERGED — n commits ahead" by
+      `merge-base --is-ancestor` that were CONTENT-landed, and drew the rule
+      that ancestry answers a question about ancestry, not about content. Here
+      the opposite: equality is demanded where ancestry is the correct and
+      sufficient test. Both are the same underlying error — asking a question
+      whose answer does not decide the thing being decided.
+
+      WHY IT MATTERS BEYOND ONE MARKER. The fleet heartbeat reads a host that
+      commits without attesting as WEDGED. So a host that did everything right,
+      on a busy trunk, is reported as wedged because a peer pushed during its
+      120s window. The busier the fleet, the more often its healthiest hosts
+      look broken.
+
+      NOT A LICENCE TO WEAKEN THE CHECK. The refusal exists because a typed
+      marker must never outrun a durable push (974-uk95), and that property is
+      preserved exactly by containment: if HEAD is an ancestor of the remote
+      head, the push IS durable. Nothing about the guarantee needs relaxing —
+      only the predicate corrected.
+    exit_criteria:
+      - |
+          The durability probe accepts a remote head that CONTAINS local HEAD,
+          not only one equal to it — e.g. fetch and then
+          `git merge-base --is-ancestor <local> origin/<branch>` — and the
+          typed `MO-FULL: FAIL` still fires when HEAD is genuinely absent from
+          the remote.
+      - |
+          A fixture proves both directions and REDS before the fix: an arm
+          where the remote head is a DESCENDANT of local HEAD must attest
+          (fails today), and an arm where the remote lacks the commit entirely
+          must still refuse (passes today, and must keep passing so the fix is
+          not a widening).
+      - |
+          The failure text distinguishes "the remote does not contain your
+          commit" from "the remote has moved past it", since those need
+          opposite responses and today both print "commit unpushed or relay
+          lost".
+    unscoreable: |
+      No litmus can be named yet: the pin is the two-armed fixture that
+      criterion 2 creates, so the test cannot precede the work. Naming a test
+      that does not exist is what 885-92iu refuses. Replace this with a
+      verifiable_closure naming that fixture once it lands.
+    notes: |
+      Found because the cycle that filed 1107-bb6s and 1109-veaf was denied its
+      marker while every one of its commits sat on origin. The attestation
+      discipline is right and the cycle honoured it — no marker was typed. The
+      probe is what needs correcting.
