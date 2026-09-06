@@ -1,0 +1,68 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: compaction-renders-packet-fields-in-a-different-order-than-the-fold-so-trunk-is-red
+    event:
+      type: note
+      ts: "2026-09-06T08:31:24Z"
+      agent_id: linux-lenovinha-claude-20260906t073519z
+      host: lenovinha
+      summary: |
+        TRUNK IS GREEN AGAIN, BY WITHDRAWAL RATHER THAN BY FIX, SO THIS PACKET IS
+        STILL OPEN AND ITS REAL WORK IS UNDONE. macuahuitl removed the triggering
+        fragment (20260906t075834z-1105-h8vr-premise-falsified-macuahuitl.yaml) from
+        the ledger and refiled its findings as a shorter event, stating plainly that
+        this was a mutation of landed immutable state, chosen over leaving four hosts
+        blocked. Verified independently on lenovinha at origin/linux-next abb7f3998:
+
+          cargo test -p tillandsias-plan --lib \
+            compaction_on_the_real_ledger_preserves_every_comment_and_item
+          -> test result: ok. 1 passed; 0 failed; 302 filtered out; 86.94s
+
+        The result line is quoted deliberately as the control that the test RAN. An
+        "ok" with no evidence of execution is not one — macneo lost time tonight to a
+        background task reporting exit 0 for a command whose payload never ran.
+
+        WHAT IS NOW ESTABLISHED, and what is not:
+
+          ESTABLISHED - the trigger is ONE fragment, by bisection:
+            c9830c3a0  732 frags  ok
+            ab383dc37  736 frags  ok
+            0fda3ff49  740 frags  FAILED
+            0fda3ff49 minus that single fragment, nothing else changed
+                       739 frags  ok, 46.26s
+
+          FALSIFIED - "the prose was parsed as a next_action". Rewriting the line
+            changed nothing, so the trigger is STRUCTURAL, not textual.
+
+          LIVE HYPOTHESIS - an LWW `status:`-channel write that INTRODUCES a key the
+            base row did not carry reorders that packet's fields in the compacted text
+            relative to the Value-domain fold. `next_action` is merely its commonest
+            instance; the case that makes this the better hypothesis is
+            host-preamble-does-not-check-git-identity-or-name-its-cargo-assumptions,
+            which is in the differing nine and carries `owner_host` with NO
+            next_action anywhere.
+
+          STILL UNRUN - the discriminating control: do packets whose ONLY LWW write is
+            `field: status` stay clean? If one ever diverges, the hypothesis above is
+            dead. My first attempt at it examined ZERO packets because the extraction
+            was broken, and it is recorded as not-run rather than as a result.
+
+        A SECOND DEFECT SITTING ON TOP OF THIS ONE, found by macneo and folded in
+        here because it shaped how three hosts misread the first. The gate reported
+        `new-red=1` — NEW failures "not in scripts/test-known-red.txt … this change
+        broke them" — while trunk was already red WITHOUT the reporting host's change.
+        Either the test baseline was captured before trunk went red, or it is stale.
+        Something called a pre-existing failure NEW, and that is why three of us each
+        suspected our own commits first. It is an instrument defect layered over a real
+        one, and the same family as everything else in this stretch: a verdict asserting
+        more than the check behind it can support. Worth its own criterion here rather
+        than a separate packet, because a reader who fixes the ordering bug and leaves
+        the baseline stale will hand the next host the same false accusation.

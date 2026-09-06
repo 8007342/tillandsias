@@ -469,6 +469,97 @@ else
     pass=$((pass+1))
 fi
 
+# ── 1101-b5rc + 1093-hzhi: THE THREE GIT STATES, AND THE TWO CHANNELS ────────
+#
+# A fragment passes through untracked -> staged -> committed, and the guard
+# enumerated only the first and third. The dangerous verdict was never `skip:`:
+# with rows already committed, a STAGED violating row produced
+# `ok:scorable-obligations:N checked` — an affirmative pass with a real count,
+# on a tree holding exactly the row the gate exists to reject. The
+# discriminator was `git add` and nothing else.
+#
+# The staged arm below MUST red on pre-1101-b5rc code. An arm exercising only
+# untracked and committed passes on the old guard and asserts nothing.
+
+run_staged_in_fixture() { # <fragment-body...> -> verdict, fragments left STAGED
+    local d; d="$(mktemp -d "${TMPDIR:-/tmp}/scorable-fx.XXXXXX")"
+    (
+        cd "$d" || exit 2
+        git init -q . && git config user.email t@t && git config user.name t
+        mkdir -p plan/index.d scripts
+        cp "$GATE" scripts/
+        git add -A && git commit -qm base
+        git branch -q base-ref
+        local i=0
+        for body in "$@"; do
+            printf "%s" "$body" > "plan/index.d/2026010${i}t00000${i}z-staged.yaml"
+            i=$((i+1))
+        done
+        git add plan/index.d/            # STAGED, deliberately not committed
+        bash scripts/check-scorable-obligation-added.sh base-ref 2>&1
+    )
+    rm -rf "$d"
+}
+
+_unscorable_row="packets:
+  - packet_id: staged-row-with-no-obligation
+    order: 1101-aaaa
+    status: ready
+    title: nothing says how this could be scored
+"
+_scorable_row="packets:
+  - packet_id: staged-row-that-is-scorable
+    order: 1101-bbbb
+    status: ready
+    title: a row that states its refusal
+    unscoreable: |
+      fixture row
+"
+_mixed_row="$_scorable_row
+events:
+  - packet_id: some-other-packet-that-already-exists
+    event:
+      type: note
+      ts: \"2026-01-01T00:00:00Z\"
+      host: fixture
+      summary: an events entry is not a packet row
+"
+
+check "1101-b5rc: a STAGED row with no obligation is refused, not skipped" \
+    "violation:scorable-obligation-missing:1" \
+    "$(run_staged_in_fixture "$_unscorable_row")"
+
+check "1101-b5rc: a STAGED scorable row passes and is COUNTED" \
+    "ok:scorable-obligations:1 checked" \
+    "$(run_staged_in_fixture "$_scorable_row")"
+
+check "1093-hzhi: an events entry beside a packet row is NOT a second row" \
+    "ok:scorable-obligations:1 checked" \
+    "$(run_in_fixture "$_mixed_row")"
+
+# THE INTERSECTION ARM. A fix for either defect alone still fails this:
+# the staged fix alone counts the events entry and refuses; the channel fix
+# alone never sees the file. It is the whole argument for one pass.
+check "1101-b5rc + 1093-hzhi: a STAGED mixed fragment counts exactly one row" \
+    "ok:scorable-obligations:1 checked" \
+    "$(run_staged_in_fixture "$_mixed_row")"
+
+# NEGATIVE CONTROL: the pair must not have simply widened the gate.
+# A staged mixed fragment whose PACKET row is unscorable is still refused,
+# and names exactly one row — not two, which is 1093-hzhi returning.
+_mixed_unscorable="$_unscorable_row
+events:
+  - packet_id: some-other-packet-that-already-exists
+    event:
+      type: note
+      ts: \"2026-01-01T00:00:00Z\"
+      host: fixture
+      summary: still not a packet row
+"
+check "negative control: a STAGED mixed fragment with an unscorable row is refused, once" \
+    "violation:scorable-obligation-missing:1" \
+    "$(run_staged_in_fixture "$_mixed_unscorable")"
+
 total=$((pass+fail))
 if [ "$fail" -eq 0 ]; then
     echo "PASS: scorable-obligation gate $pass/$total (977-448j)"
