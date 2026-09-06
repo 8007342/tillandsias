@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: compaction-renders-packet-fields-in-a-different-order-than-the-fold-so-trunk-is-red
+    field: next_action
+    value: 'MECHANISM ESTABLISHED — see the 2026-09-06T09:57Z progress event for the full chain and every measurement. Short version, in the order the work should now be done. (a) SPLIT THE GAP MESSAGE, smallest and highest leverage: fragment_coverage_gaps guards on `!events.contains(&event_identity(pid, event))`, an EVENT-IDENTITY miss, but prints "NO SUCH PACKET ... check the id for a typo". On the trigger fragment the packet EXISTS (1105-h8vr, declared under packets:, present in the candidate with four events), so the message names a failure that is not the one that happened and offers a remedy that cannot apply. Its own comment records a coordinator finding sitting refused for fourteen hours across three cycle reports because of earlier bad wording here. Naming the two causes apart makes (c) cheap. (b) assert_fold_equivalent never reads the `refused` field compact_text hands it, so it compares a candidate that legitimately excludes declined records against a fold that includes them — ANY refused fragment reds this test by construction. Either account for refusals or assert explicitly that none occurred; today the test can only pass when every fragment is consumed, which is not what compact_text guarantees. (c) find the byte that makes the rendered summary differ from the fragment''s, inside body lines 28-41 of the fragment recovered from 5e1ae08e8^ — bisected there across seven runs; a minimal note, a blank line, and an em-dash each PASS, so it is neither length nor non-ASCII. (d) apply_lww inserts an unfound field at `start + 1` while the fold appends at the end; REAL but PROVEN INSUFFICIENT — splicing at `end..end` with the full trigger restored still failed, so do not start there. THE COMPACTOR IS NOT CORRUPTING THE LEDGER: it detects the gap and refuses the fragment (843-624y), leaving it on disk. The component that caught the problem is the one the red points at. NOTE for whoever investigates: inspecting the compaction candidate currently requires running `compact`, which rewrites the ledger and deletes every consumed fragment — filed as 1109-veaf after I did exactly that to my own checkout by mistake.'
+    ts: "2026-09-06T09:57:54Z"
+    host: linux
+
+events:
+  - packet_id: compaction-renders-packet-fields-in-a-different-order-than-the-fold-so-trunk-is-red
+    event:
+      type: note
+      ts: "2026-09-06T09:57:54Z"
+      host: linux
+      summary: |-
+        mechanism established; four ordered next steps, one falsified

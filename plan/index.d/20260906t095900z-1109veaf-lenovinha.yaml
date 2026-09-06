@@ -1,0 +1,86 @@
+packets:
+  - packet_id: compact-rewrites-the-ledger-and-deletes-every-fragment-with-no-confirmation-and-no-dry-run
+    order: 1109-veaf
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    pickup_role: any
+    depends_on: []
+    capability_tags:
+      - plan
+      - ledger
+      - safety
+      - cli
+    estimated_hours: 2
+    title: >
+      `tillandsias-plan compact` rewrites plan/index.yaml and DELETES every
+      consumed fragment on a bare invocation — no confirmation, no --dry-run,
+      no way to see the candidate first — so a single mistyped working
+      directory destroys 760 files.
+    context: |
+      I DID THIS TO MY OWN CHECKOUT WHILE INVESTIGATING 1107-bb6s, 2026-09-06,
+      and it is filed because the next host will do it too.
+
+      I intended to run `compact` inside a scratch git worktree. My previous
+      command had ended with `cd "$wt" && cargo test ...`, and the harness had
+      already told me in plain text that the working directory does not
+      persist: "Session cwd remains /var/home/lenovinha/claudia/tillandsias".
+      I then ran a bare `tillandsias-plan compact` in a new command and it
+      executed against the REAL repository:
+
+        ok: compacted 760 fragment(s) into plan/index.yaml (760 removed)
+
+      762 files changed in one keystroke, with no prompt. Recovered fully with
+      `git checkout -- plan/index.yaml plan/index.d/` because nothing had been
+      committed — verified byte-identical to HEAD by md5sum, 760 fragments
+      restored, `tillandsias-plan check` back to "821 packets, ids unique,
+      live references sound". No push, so no other host ever saw it.
+
+      THE OPERATOR ERROR IS MINE AND IS NOT THE POINT. What makes it worth a
+      packet is the blast radius of a bare invocation. `compact` is the single
+      most destructive subcommand in this tool — it rewrites the base ledger
+      AND unlinks every fragment it consumed — and it is spelled exactly like
+      the read-only subcommands beside it (`check`, `status`, `drift`). There
+      is a `drift` reporter that says whether compaction is ELIGIBLE, but
+      nothing that shows what compaction WOULD do, so the only way to find out
+      is to do it.
+
+      Compare the care taken elsewhere in this same tool: `set-field` refuses
+      an unknown reference rather than writing a no-op; `append-event` refuses
+      a packet it cannot see; the pre-push hook prints a verdict and makes you
+      ask twice. Compaction, which is the one operation that deletes files, is
+      the one with no gate.
+
+      NOT ARGUING IT SHOULD BE HARD TO RUN. The meta-orchestration loop calls
+      it deliberately and should keep being able to. The asymmetry is that an
+      automated caller can pass a flag and a human at a prompt cannot un-delete
+      760 files.
+    exit_criteria:
+      - |
+          `tillandsias-plan compact` with no flags does not delete anything: it
+          either refuses without an explicit affirmative flag, or prints what it
+          would consume and refuse and exits without writing. The existing
+          callers are updated to pass whichever flag it becomes, so the
+          orchestration loop is unaffected.
+      - |
+          A `--dry-run` (or equivalent) emits the candidate and the
+          consumed/refused split WITHOUT touching plan/index.yaml or unlinking
+          any fragment — which is also what an investigator of 1107-bb6s needs,
+          since inspecting the candidate is currently only possible by
+          destroying the ledger to produce it.
+      - |
+          The refusal or summary names the repository root it is about to act
+          on, so a wrong-directory invocation is visible BEFORE the write rather
+          than after.
+    unscoreable: |
+      No litmus can be named yet: the pin is a fixture asserting that a bare
+      invocation leaves the ledger untouched, and that fixture is created by
+      criterion 1. Naming a test that does not exist is what 885-92iu refuses.
+      Replace this with a verifiable_closure naming that arm once it lands.
+    notes: |
+      Recovery worked only because nothing was committed. A host that ran this,
+      committed, and pushed before noticing would have handed the fleet a
+      compaction nobody reviewed — and compaction is the one operation whose
+      output no other host can independently re-derive, because the fragments
+      it consumed are gone.
