@@ -114,7 +114,28 @@ printf '%s\n' "$rec"
     exit 4
 }
 
-if ! git diff --quiet -- plan/mo-full-attestations.d 2>/dev/null; then
+# `git diff` CANNOT SEE AN UNTRACKED FILE, and a host's FIRST attestation is
+# always untracked. MEASURED on macneo 2026-09-06, its first ever MO-FULL:
+#
+#   git ls-files --error-unmatch <this host>.md  ->  1 (not tracked)
+#   git diff --name-only -- plan/mo-full-attestations.d  ->  0 lines, BLIND
+#   git status --porcelain -- plan/mo-full-attestations.d ->  1 line, sees it
+#   lenovinha.md, tracked, positive control              ->  0 (tracked)
+#
+# So the record was WRITTEN, `git diff --quiet` reported nothing to commit, the
+# commit was skipped, and this script's own post-record boundary verify then
+# refused on the file this script had just written:
+#   cmp: EOF on <boundary>/startup/status.z
+#   refused:finalize:boundary-verify-failed-post-record
+#
+# Every EXISTING host is invisible to this — their file is already tracked, so
+# `git diff` sees the append and commits it. Only a host attesting for the
+# FIRST time is affected, which is why it survived this long. It is order
+# 1080-4deb's shape exactly: the write landed in a real place, the reader
+# consulted a different place, and the answer looked correct.
+#
+# `git status --porcelain` sees tracked modifications AND untracked files.
+if [ -n "$(git status --porcelain -- plan/mo-full-attestations.d 2>/dev/null)" ]; then
     _step "commit the ledger record"
     if [ -n "${2:-}" ] && [ -r "${2}" ]; then
         git add plan/mo-full-attestations.d && git commit -q -F "$2" || {

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-ledger-has-more-than-one-place-to-look-and-every-reader-looks-in-one-so-five-writes-landed-somewhere-nothing-consults
+    field: status
+    value: ready
+    ts: "2026-09-06T10:24:23Z"
+    host: macneo
+
+events:
+  - packet_id: the-ledger-has-more-than-one-place-to-look-and-every-reader-looks-in-one-so-five-writes-landed-somewhere-nothing-consults
+    event:
+      type: note
+      ts: "2026-09-06T10:24:23Z"
+      host: macneo
+      summary: |-
+        released after a partial slice: negative control + vacuity arm + denominator refusal + arm 3 landed as 67ac302f2; arms 1,2,4 and the sixth/seventh/eighth remain
