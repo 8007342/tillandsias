@@ -23,7 +23,27 @@
 #     scripts/gate-divergence-declared.txt. A new one reds this.
 #   * a declaration for something no longer in the gap also reds, so the file
 #     cannot rot into a list of things that used to be true.
-#   * the `untriaged` count RATCHETS: it may fall, never rise.
+#   * the `untriaged` count RATCHETS IN BOTH DIRECTIONS. Above the baseline is a
+#     regression: somebody parked a new difference. BELOW it is a STALE
+#     BASELINE, and it also reds, with the new number in the remedy.
+#
+# WHY BOTH DIRECTIONS, which is the whole ratchet (macuahuitl's ruling, 1087-h2z9):
+# a ratchet with no downward pressure is only a slower ceiling. The obvious fix
+# is a schedule — lower it by N every week — and that is the wrong instrument,
+# because a date is a commitment somebody has to REMEMBER, and this project has
+# spent its evening establishing that remembering is not a mechanism. So the
+# baseline tightens as a SIDE EFFECT OF THE WORK: triage anything, the measured
+# count falls below the baseline, this reds, and the same commit that did the
+# triage lowers the number. No calendar, nobody to remind, and a count that stops
+# falling shows up as a flat baseline rather than as a missed date — which is a
+# better signal, because a missed date is an argument and a flat baseline is a
+# measurement.
+#
+# The gate never writes the number itself. A gate step that edited the tree it is
+# checking would trip check-tracked-files-unwritten, and more to the point a
+# ratchet that tightens itself silently records no decision. Lowering it is an
+# edit somebody makes, in the commit that earned it. This is the same shape as
+# the ghost-trace ratchet, which refuses a stale baseline in the same words.
 #
 # WHY A RATCHET AND NOT A HARD RED ON UNTRIAGED: there were 22 on the day this
 # was written. A gate that reds trunk on day one gets switched off — the failure
@@ -111,6 +131,18 @@ if [ "$untriaged" -gt "$BASELINE_UNTRIAGED" ]; then
     echo "violation:gate-divergence-ratchet:$untriaged"
     echo "  untriaged is $untriaged, baseline $BASELINE_UNTRIAGED — the ratchet only turns one way." >&2
     echo "  A new difference must be wired into --check or given a reason, not parked as untriaged." >&2
+    exit 1
+fi
+if [ "$untriaged" -lt "$BASELINE_UNTRIAGED" ]; then
+    # NOT A CONGRATULATION. The count fell, so the baseline is now stale, and a
+    # stale baseline leaves room for a future difference to be parked in the gap
+    # between the old number and the real one — silently, because nothing would
+    # red until it exceeded the OLD count. Tighten it in the commit that earned
+    # it. This is the only downward pressure in the design and it needs no date.
+    echo "violation:gate-divergence-ratchet:$untriaged"
+    echo "  untriaged is $untriaged and the baseline still says $BASELINE_UNTRIAGED — the baseline is STALE." >&2
+    echo "  Lower BASELINE_UNTRIAGED to $untriaged in $0, in this same commit." >&2
+    echo "  Left at $BASELINE_UNTRIAGED, $((BASELINE_UNTRIAGED - untriaged)) new difference(s) could be parked as untriaged without redding anything." >&2
     exit 1
 fi
 
