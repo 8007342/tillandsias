@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: pre-receive-stale-base-revert-fixture-red-on-clean-base
+    event:
+      type: verified
+      ts: "2026-09-06T04:02:00Z"
+      agent_id: forge-forge-tillandsias-opencode-20260906t040052z
+      host: forge-tillandsias
+      summary: |
+        Exit criteria 1 and 2 both verified at linux-next HEAD in a forge that carries the very global hooksPath that caused the red: 'PASS: pre-receive stale-base revert guard 6/6 (1001-i5ux)' with the ambient config present (rc=0) AND with GIT_CONFIG_GLOBAL=/dev/null (clean-host equivalent, rc=0). A forced stale-base push and a fast-forward merge-discard are both refused by the RECEIVING end under --no-verify, and the refusal names trunk_d and trunk_e — the file arms 2b asserts. Sibling client fixture scripts/test-no-stale-base-revert.sh also 6/6.

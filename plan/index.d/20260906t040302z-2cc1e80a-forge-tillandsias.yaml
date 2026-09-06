@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: pre-receive-stale-base-revert-fixture-red-on-clean-base
+    field: status
+    value: completed
+    ts: "2026-09-06T04:03:02Z"
+    host: forge-tillandsias
+
+events:
+  - packet_id: pre-receive-stale-base-revert-fixture-red-on-clean-base
+    event:
+      type: completed
+      ts: "2026-09-06T04:03:02Z"
+      host: forge-tillandsias
+      summary: |-
+        status 'completed' with evidence_refs: dab47d3dc7c8776b50615e342cddfeef9d67206c
+  - packet_id: pre-receive-stale-base-revert-fixture-red-on-clean-base
+    event:
+      type: note
+      ts: "2026-09-06T04:03:02Z"
+      host: forge-tillandsias
+      summary: |-
+        verified: test-no-stale-base-revert-pre-receive 6/6 ambient+clean; hook refusals name trunk_d/trunk_e
