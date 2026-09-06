@@ -1,0 +1,59 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: the-answer-rate-litmus-step-times-out-because-the-timing-log-it-reads-has-grown-past-its-budget
+    event:
+      type: note
+      ts: "2026-09-06T08:02:40Z"
+      host: macuahuitl
+      summary: |-
+        REMEDY (1) IS ELIMINATED BY MEASUREMENT: the fold does not fork, so there
+        is nothing to batch. pirria ranked "make the check cheaper per fragment —
+        if it shells out per fragment, batching is a pure win" first and marked it
+        unmeasured. Measured here on a quiet host, three ways:
+
+          crates/tillandsias-plan/src/fragments.rs  Command occurrences: 0
+          Command::new in the whole crate: 4 — three in gitref.rs (run,
+            is_ancestor, repo) and one inside a TEST function
+            (freshness_for_a_checkout_root_is_that_checkouts_head)
+          child processes observed across a full check run: 0
+
+        So the per-fragment cost is IN-PROCESS: open, read, parse and fold-merge
+        of a roughly 125-line YAML file. Not process overhead. A batching change
+        would have been a no-op and the packet would have absorbed a cycle
+        proving it.
+
+        THE PER-FRAGMENT CONSTANT REPLICATES INDEPENDENTLY, which confirms
+        pirria's shape on 2.8x hardware:
+
+          macuahuitl  100 frags   682 ms   6.82 ms/frag
+                      300 frags  1667 ms   5.55 ms/frag
+                      740 frags  4700 ms   6.35 ms/frag
+          pirria      100/300/717        17.97 / 15.95 / 17.65 ms/frag
+
+        Flat across a 7x range on both hosts, at different absolute costs. Two
+        independent replications of O(fragments).
+
+        SO THE REMEDY IS pirria's (2), AND THEIR OWN ARGUMENT IS THE STRONGEST
+        ONE FOR IT: an incremental fold keyed on fragment content hashes, because
+        FRAGMENTS ARE IMMUTABLE AND THEREFORE PERFECTLY CACHEABLE. The invariant
+        that BLOCKS consolidation is the same invariant that makes caching sound.
+        Lead the packet with that.
+
+        AND CONSOLIDATION IS OFF THE TABLE, on pirria's evidence rather than
+        anyone's judgement — I had put it in the next_action and was wrong.
+        scripts/archive-plan-packets.sh archives rows from the BASE INDEX and
+        writes to plan/index.d zero times; it only READS fragments, to verify an
+        invariant. Its own comment records the incident: the first real sweep
+        passed its ready-set assertion and still broke the build — 569 rows
+        archived, 38 live fragment events orphaned — because "archiving a row
+        silently drops every plan/index.d event still aimed at it. Fragments are
+        immutable, so those events cannot be relocated — they just stop being
+        read." Verified in the file. So the consolidation precedent I pointed at
+        is real for the index and absent for fragments, which is the thing this
+        packet is about.
+
+        ORDER NOW: (1) incremental hash-keyed fold — the immutability that blocks
+        consolidation enables it; (2) consolidation LAST, and only with the
+        orphan invariant extended to prove no event loses its addressee, which
+        needs the fold owner. The subprocess-batching option is deleted, not
+        deferred.
