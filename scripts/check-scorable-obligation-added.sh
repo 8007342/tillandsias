@@ -105,9 +105,33 @@ BASE="${1:-origin/linux-next}"
 # shared gate that used it would refuse to run on one host and pass vacuously
 # there — a gate that cannot execute is indistinguishable from one that found
 # nothing.
+# THREE SOURCES, AND THE THIRD IS NOT OPTIONAL (order 1101-b5rc). A fragment
+# passes through three git states on its way to a push — untracked, staged,
+# committed — and the first two sources cover only the first and third.
+# `--diff-filter=A BASE...HEAD` is committed-only, and `ls-files --others`
+# excludes the index by definition, so a STAGED path was in neither set and
+# this gate could not see it.
+#
+# THE DANGEROUS VERDICT WAS NOT `skip:`. `skip:no-new-packets` appears only
+# when nothing else is new. MEASURED on lenovinha 2026-09-06 with one
+# committed valid row and one staged row carrying no obligation at all:
+#
+#   untracked                          -> refused, correctly
+#   staged, same bytes                 -> skip:no-new-packets
+#   committed-valid + staged-violating -> ok:scorable-obligations:1 checked
+#
+# An affirmative pass with a real count, on a tree holding exactly the row this
+# gate exists to reject. The discriminator was `git add` and nothing else.
+#
+# The four sibling guards that share this enumeration
+# (check-added-fragments-parse, check-arrival-routing,
+# check-declared-closures-added, check-fragment-closure-evidence-added)
+# ALREADY carry the --cached source and were measured seeing the staged row;
+# this gate was the only one blind. Keep the three sources together.
 changed=""
 _collect="$(
     { git diff --name-only --diff-filter=A "$BASE"...HEAD -- plan/index.d/ 2>/dev/null || true
+      git diff --name-only --cached --diff-filter=A -- plan/index.d/ 2>/dev/null || true
       git ls-files --others --exclude-standard -- plan/index.d/ 2>/dev/null || true
     } | sort -u
 )"
@@ -132,12 +156,70 @@ detail=""
 # ONE block-splitter, used for the declaring fragment AND for the fold. Two
 # copies would drift, and a correction could then satisfy the gate with a
 # closure the declaration was refused for.
+#
+# IT IS CHANNEL-AWARE, and that is order 1093-hzhi. A `- packet_id:` line is
+# written at the SAME indent under `packets:` and under `events:`, so splitting
+# on the indent alone counted an events entry as a packet row. A fragment
+# carrying a new packet AND a note about an existing one — the two-channel
+# shape plan/index.d/README.md documents — was therefore refused with a
+# violation naming a packet that is not declared in the file. That false
+# refusal was not merely noise: its obvious remedy is to add `unscoreable:` to
+# the named packet, an in-place edit of a LANDED fragment, which is the exact
+# operation the 2026-09-05 collision forbids. It steered authors toward the one
+# repair the tree has already learned is destructive, and macuahuitl hit it the
+# same night and split a closure fragment instead — which then tripped
+# check-fragment-closure-evidence-added, because that guard wants the rung and
+# its evidence in ONE file. The workaround for this guard is a violation of
+# that one.
+#
+# THE DECLARING CHANNELS ARE AN ALLOWLIST, and it has two members for a
+# reason. Fragments declare under `packets:`; the base index declares under
+# `plan_index:` and has NO top-level `packets:` key at all. An allowlist of
+# `packets` alone would silently find zero rows in plan/index.yaml and break
+# PASS 2 — the monotone fold 1071-adhj added — reintroducing the false refusal
+# that packet exists to prevent. An unknown channel is SKIPPED rather than
+# assumed to declare: both passes then under-count, and under-counting here
+# produces a loud refusal, never a silent pass.
+#
+# `channel` and `indecl` reset per FILE. awk carries variables across operands,
+# and the fold scans every fragment plus the base in one invocation, so without
+# the FNR reset a fragment with no top-level key would inherit the previous
+# file'"'"'s channel.
 _BLOCK_AWK='
         function flush() {
             if (pid != "") printf "%s\x1f%s\x1f%s\x1f%s\n", pid, unscoreable, first, buf
         }
-        /^  - packet_id:|^    - packet_id:/ {
-            flush(); pid = $NF; first = ""; buf = ""; unscoreable = "no"; inclosure = 0; next
+        FNR == 1 { flush(); pid = ""; channel = ""; indecl = 0 }
+        /^[A-Za-z_][A-Za-z0-9_]*:[ \t]*$/ {
+            flush(); pid = ""
+            channel = $0; sub(/:[ \t]*$/, "", channel)
+            indecl = (channel == "packets" || channel == "plan_index")
+            next
+        }
+        indecl != 1 { next }
+        # A ROW STARTS AT THE LIST MARKER, NOT AT `packet_id:`, and that is
+        # field-order independence rather than tidiness. Splitting on
+        # `- packet_id:` assumes packet_id is the FIRST key of the row. It is
+        # in every fragment, and it is NOT in plan/index.yaml, where rows are
+        # written `- order: 873-vgyg` with `packet_id:` a line below. Those
+        # rows were invisible to the splitter, and the ids only ever appeared
+        # because their EVENTS entries elsewhere happened to be counted —
+        # which is the very miscount 1093-hzhi removes. Fixing one without the
+        # other would take two real packets out of the fold.
+        #
+        # Packet rows sit at 2 spaces (fragments) or 4 (the base index).
+        # Everything nested inside a row — its events, its exit_criteria — is
+        # deeper, so anchoring to those two depths keeps the block boundary
+        # exactly at the row.
+        /^  - |^    - / {
+            flush(); pid = ""; first = ""; buf = ""; unscoreable = "no"; inclosure = 0
+        }
+        # Then take the id from wherever in the row it appears — ON the marker
+        # line (`- packet_id: x`, every fragment and most base rows) or on a
+        # later line of the same row (`- order: ...` then `packet_id: x`).
+        # The optional dash is what makes the two forms one case.
+        /^[ \t]*-?[ \t]*packet_id:[ \t]*[^ \t]/ {
+            if (pid == "") { pid = $NF }
         }
         pid == "" { next }
         { buf = buf " " $0 }
