@@ -1,0 +1,85 @@
+packets:
+  - packet_id: scorable-obligation-guard-misreads-an-events-entry-as-a-packet-row
+    order: 1093-hzhi
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    pickup_role: any
+    depends_on: []
+    capability_tags:
+      - plan
+      - guards
+      - ledger
+      - bash
+    estimated_hours: 1
+    title: >
+      check-scorable-obligation-added refuses the fragment shape its own README
+      documents: a file carrying both `packets:` and `events:` has each events
+      entry counted as an unscored packet row.
+    context: |
+      HIT WHILE FILING 1092-xwxv, 2026-09-06, lenovinha. The fragment carried
+      one new packet under `packets:` and one note under `events:` aimed at an
+      existing packet — the exact two-channel shape plan/index.d/README.md
+      shows at lines 27 and 33. The pre-push plan-only lane refused it:
+
+        violation:scorable-obligation-missing:2
+          ...: packet 'inference-routing-policy-has-no-consumer-at-any-layer'
+               carries no scorable obligation
+          ...: packet 'per-phase-accelerator-routing-policy'
+               carries no scorable obligation
+
+      The SECOND name is not a packet in that file. It is the `packet_id:` of
+      the events entry, and per-phase-accelerator-routing-policy is an existing
+      packet the fragment only annotates.
+
+      CAUSE, read from the guard rather than inferred —
+      scripts/check-scorable-obligation-added.sh:139:
+
+        /^  - packet_id:|^    - packet_id:/ { ... }
+
+      An events entry is written `  - packet_id: <id>` at exactly two spaces,
+      which is the same shape as a packet row, so the awk row-splitter cannot
+      tell them apart. The guard DOES already know the distinction matters —
+      line 184 skips a fragment with no `^packets:` line at all, with the
+      comment "Only fragments that DEFINE packets. An events-only fragment adds
+      no ..." — but that test is per-FILE, so a MIXED fragment passes the file
+      check and then has its events misread inside.
+
+      WHY IT MATTERS RATHER THAN BEING A CURIOSITY. The refusal names a real
+      packet id and says it "carries no scorable obligation", which reads as a
+      true statement about an existing row. The obvious response is to go and
+      add `unscoreable:` to that packet — an in-place edit to a LANDED
+      fragment, which is exactly the operation the 2026-09-05 incident forbids
+      (two hosts amended the same three landed fragments, git combined both
+      additively, and the fragments stopped parsing). So this guard's false
+      positive points its reader at the one remedy the tree has already learned
+      is destructive.
+
+      WORKAROUND USED, and it is not the fix: split into a packet-only fragment
+      and an events-only fragment. That works today and is arguably tidier, but
+      it is not what the README tells people to write, and nothing warns the
+      next author.
+    exit_criteria:
+      - |
+          A fragment carrying both `packets:` and `events:` is accepted when
+          its packet rows are scorable, and its events entries are not counted
+          as rows — demonstrated by the 1092-xwxv fragment shape passing.
+      - |
+          The row-splitter distinguishes the two channels structurally rather
+          than by indent, so an events entry cannot be read as a packet under
+          any spacing.
+      - |
+          A negative control: a mixed fragment whose PACKET row genuinely lacks
+          a scorable obligation is still refused, and the refusal names only
+          that row.
+    verifiable_closure: |
+      bash scripts/check-scorable-obligation-added.sh over a fixture pair — one
+      mixed fragment with a scorable packet plus an event (must pass), one with
+      an unscored packet plus an event (must refuse, naming one row only) — and
+      the guard goes RED on the first fixture when the fix is reverted.
+    notes: |
+      Guard verdict grammar is pinned, so the fix must keep emitting
+      ok:scorable-obligations:<n> / violation:scorable-obligation-missing:<n> /
+      skip:no-new-packets. Note the count in the verdict is also affected: this
+      run reported 2 where the tree contained 1 new packet.
