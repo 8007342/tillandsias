@@ -1,0 +1,129 @@
+packets:
+  - packet_id: inference-routing-policy-has-no-consumer-at-any-layer
+    order: 1092-xwxv
+    status: ready
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    priority: p2
+    kind: bug
+    pickup_role: any
+    depends_on: []
+    capability_tags:
+      - accel
+      - inference
+      - routing
+      - architecture
+      - rust
+    estimated_hours: 6
+    title: >
+      Three layers of inference placement policy are specified, tested and
+      unwired, and the one mechanism that IS wired cannot express any of them —
+      so 793-qc6q's exit criteria are unreachable without building the missing
+      layer, which nothing records as a dependency.
+    context: |
+      FOUND while taking 793-qc6q's own next_action, which said the remaining
+      work was to "wire route_phase() into the inference call path". That
+      sentence assumes a call path exists to wire into. It does not, and the
+      author of that next_action was me, one cycle earlier, having not checked.
+
+      EVERY LINE BELOW IS A COMMAND, so this is checkable rather than argued.
+      Measured on lenovinha at linux-next e712512cf, 2026-09-06.
+
+        # 1. route_phase's only production caller is the envelope renderer.
+        #    accel_probe.rs:3986, inside routing_summary(). Everything else is
+        #    in the test module.
+        awk 'NR<6300 && /route_phase\(/' crates/tillandsias-headless/src/accel_probe.rs
+        -> the definition at :3884 and ONE call at :3986
+
+        # 2. policy_router::route_request has NO caller at all. The greps that
+        #    appear to find one are metrics_server.rs's route_request_LINE,
+        #    an unrelated HTTP function that shares a prefix.
+        grep -rn 'route_request *(' --include=*.rs crates/ \
+          | grep -v policy_router.rs | grep -v route_request_line | wc -l
+        -> 0
+
+        # 3. EngineSlotDescriptor is never constructed. Declared, serde-derived,
+        #    never built by anything.
+        grep -rn 'EngineSlotDescriptor *{' --include=*.rs crates/ \
+          | grep -v 'pub struct' | wc -l
+        -> 0
+
+        # 4. Nothing in the workspace depends on tillandsias-headless. It is a
+        #    leaf binary crate, so all three policies above are structurally
+        #    invisible to any other crate.
+        grep -l 'tillandsias-headless' crates/*/Cargo.toml \
+          | grep -v 'tillandsias-headless/Cargo.toml' | wc -l
+        -> 0
+
+        # 5. The code that actually SPEAKS to an inference server lives in
+        #    tillandsias-plan (semantic_expert.rs, expert_serve.rs, pipeline.rs),
+        #    whose deps are tillandsias-podman, mlua, tokio, chrono, serde.
+        #    It cannot see tillandsias-headless, by 4.
+        grep -rln parse_inference_endpoint --include=*.rs crates/
+
+      THE ONE WIRED MECHANISM, and why it cannot carry per-phase routing.
+      engine_slots::pin_backend_environment IS called, at main.rs:4966, and it
+      is the only placement decision that reaches a running engine. It appends
+      `--env OLLAMA_VULKAN=..` / `--env OLLAMA_LLM_LIBRARY=..` to a podman
+      launch, keyed on `effective_inference_tier()` — a per-HOST string. One
+      container, one server process, one backend library.
+
+      A per-PHASE policy has nowhere to land in that shape. Prefill and decode
+      are served by the same process, and it holds one library pin, so
+      "prefill to the GPU, decode to the CPU" is not expressible however good
+      the measurement behind it is. That is not a wiring oversight; it is an
+      impedance mismatch between a per-phase policy and a per-server mechanism.
+
+      WHAT THAT IMPLIES FOR 793-qc6q, and this is the part nobody has recorded:
+      its exit criteria cannot be met end to end until something can bind two
+      phases to two devices. The layer specified to do exactly that is
+      inference-engine-slots — multiple EngineSlotDescriptors, each with a
+      bound_device_class and a lane — and it is item 3 above, never built. So
+      793-qc6q silently DEPENDS on inference-engine-slots being implemented,
+      and no depends_on edge says so. A host taking 793-qc6q's "wire it up"
+      next_action will discover this the way I did.
+
+      NOT A CRITICISM OF THE SPECS. Each layer is coherent, tested and
+      documented on its own; 793-qc6q's own measurements are sound and its
+      locus fix landed at 68552584e. The defect is that three correct policies
+      were built bottom-up with no consumer, and the tree's tests cannot detect
+      that, because a pure function with good unit tests looks identical
+      whether or not anything calls it. That is the same shape as 1009-gccx
+      ("wired in name only") one level up: there, guards existed and no suite
+      ran them; here, policies exist and no path consults them.
+    exit_criteria:
+      - |
+          An explicit decision is recorded on WHERE the routing policy lives,
+          given that tillandsias-headless is a leaf crate the inference client
+          cannot see: move the policy into a shared crate, publish it as data
+          the client reads (the capabilities.json/envelope path that already
+          exists), or move the client. Whichever wins, the reason is written
+          down against the crate topology above, not assumed.
+      - |
+          793-qc6q carries a depends_on edge to inference-engine-slots, or a
+          recorded ruling that its exit criteria are to be narrowed to what a
+          single-slot engine can honour. Its next_action no longer claims the
+          wiring is unblocked.
+      - |
+          At least one of the three policies has a production caller, and a
+          test or guard fails if that caller is removed — so "specified and
+          unconsumed" cannot recur silently for the layer that gets wired.
+    verifiable_closure: |
+      A guard that names each specified routing policy and asserts it has a
+      non-test caller goes RED when that caller is deleted, and is bound by a
+      spec so it actually runs. Demonstrated by deleting the caller in a
+      scratch commit and observing the red, then restoring it.
+    notes: |
+      Filed by lenovinha while holding 793-qc6q. I did not implement a bridge
+      (RoutingLocus::from_lane and friends) precisely because adding more
+      unconsumed surface is the defect being reported, and building it would
+      have made the packet harder to see rather than easier.
+
+    unscoreable: |
+      No litmus can be NAMED yet, and naming one that does not exist is the
+      dishonesty 885-92iu refuses. The pin this packet wants is exactly its own
+      third exit criterion — a guard asserting each specified routing policy has
+      a non-test caller — so the test cannot precede the work that creates it.
+      The first criterion is a DECISION about where the policy lives, which no
+      litmus can score at all. When criterion 3 lands, its guard becomes the
+      pin and this field should be replaced by a verifiable_closure naming it.

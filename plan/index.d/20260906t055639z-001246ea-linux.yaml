@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: nix-toolbox-rung-is-unreachable-because-nothing-provisions-it
+    field: next_action
+    value: 'RE-SCOPE BEFORE IMPLEMENTING — the premise is stale on at least one host. On lenovinha (Fedora Silverblue 44, no host nix, no /nix, daemon inactive) the toolbox rung RESOLVES: capability -> ok:nix-capability:toolbox rc=0, nix-args -> `--store <path>` rc=0, and tillandsias-nix carries /usr/bin/nix 2.34.8 as nix-core-2.34.8-1.fc44.x86_64 while the base fedora-toolbox:44 image ships none. That is criterion 2''s wording already satisfied on this host kind, by Option A, implemented as ensure_toolbox_nix (917-zkge follow-on, nix-toolbox.sh:265). THE PACKET''S BLOCKER RESTED ON THE WRONG PROBE: it reasoned from `sudo -n true` failing to `sudo dnf install` being impossible, and on this host those disagree — `sudo -n true` rc=1 "a password is required", `sudo true` rc=0, `sudo id -u` -> 0, genuinely root and unattended, in BOTH toolboxes. ensure_toolbox_nix uses plain sudo, which is why it worked. NEXT ACTIONS, in order: (1) yoga re-measures `toolbox run -c tillandsias-nix sudo id -u` — if it prints 0, that host''s blocker is gone too and this packet reduces to criteria 1 and 3; (2) collect the remaining host rows (windows, macOS, forge) for criterion 1, noting that the forge row in the 2026-09-03 event stands and is a genuinely different case (no toolbox, no podman, no sudo, no systemd, no /nix, and egress only via http://proxy:3128); (3) criterion 3 is untouched — 606-um5s''s precondition note still needs correcting to name the working invocation. Do NOT implement a new provisioning mechanism until (1) settles: the fleet may already have the one it needs.'
+    ts: "2026-09-06T05:56:39Z"
+    host: linux
+
+events:
+  - packet_id: nix-toolbox-rung-is-unreachable-because-nothing-provisions-it
+    event:
+      type: note
+      ts: "2026-09-06T05:56:39Z"
+      host: linux
+      summary: |-
+        lenovinha row measured; toolbox rung resolves here

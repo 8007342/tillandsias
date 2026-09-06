@@ -3621,10 +3621,56 @@ pub enum DecodeCrossover {
 /// The returned threshold is a MEASURED SIZE, never an interpolation between
 /// two. Interpolating would manufacture a precision the three-point sample
 /// cannot support, and the routing decision only ever compares against it.
+///
+/// A CPU ROW AND A GPU ROW ARE COMPARABLE ONLY WITHIN ONE
+/// [`MeasurementRecord::locus`] (order 793-qc6q, closing a hole this function
+/// shipped with). The crossover is the point where two curves cross, so every
+/// verdict it returns rests on a SUBTRACTION between a CPU number and a GPU
+/// number — and that subtraction is meaningless across a boundary that costs
+/// 5-10% by itself. That figure is not hypothetical: `MeasurementRecord::locus`
+/// exists because this fleet measured the same suite at two loci and the hop
+/// INVERTED a reported conclusion, two errors having cancelled. Pairing across
+/// loci here would have reproduced that inversion inside a routing threshold,
+/// where nothing downstream could see it.
+///
+/// So rows are grouped by locus and paired only within a group. An
+/// unattributed row (`locus: None`) forms its own group rather than joining
+/// any other: absent is not a value, and treating it as one would silently
+/// pair the very rows whose side nobody recorded.
+///
+/// WHEN TWO LOCI DISAGREE the most conservative verdict wins — `CpuWins`
+/// over a threshold, and a higher threshold over a lower one. That is the
+/// standing tie-break of this whole packet rather than a new rule: the CPU is
+/// the floor (620-ca7g), and the failure being prevented is a silent 1.23x
+/// regression from routing to the GPU too eagerly. Erring toward the CPU costs
+/// a measured fraction; erring the other way is the defect.
+// @trace order:793-qc6q, spec:accel-capability-probe
+/// Decode throughput at ONE model size, in ONE locus.
+///
+/// The locus is part of the KEY, not metadata hanging off the row: two rows
+/// that differ only in locus describe different measurements and must never
+/// merge into one. Naming the fields rather than carrying a tuple is what
+/// makes that readable at the use site — `row.locus` beside `row.params_b`
+/// says the pairing rule out loud, where `.0` beside `.1` did not.
+struct DecodeSizeRow<'a> {
+    locus: Option<&'a str>,
+    params_b: f64,
+    cpu_tps: Option<f64>,
+    gpu_tps: Option<f64>,
+}
+
+/// The same row once BOTH devices have reported at that size and locus — the
+/// only shape a crossover can be read from.
+struct PairedSize<'a> {
+    locus: Option<&'a str>,
+    params_b: f64,
+    cpu_tps: f64,
+    gpu_tps: f64,
+}
+
 // @trace order:793-qc6q, spec:accel-capability-probe
 pub fn decode_crossover_b(doc: &CapabilityDocument) -> DecodeCrossover {
-    // (params, cpu_tps, gpu_tps) for every size measured on BOTH devices.
-    let mut sizes: Vec<(f64, Option<f64>, Option<f64>)> = Vec::new();
+    let mut sizes: Vec<DecodeSizeRow<'_>> = Vec::new();
     for m in &doc.measurements {
         let (Some(p), Some(tps)) = (m.model_params_b, m.decode_tps) else {
             continue;
@@ -3636,34 +3682,75 @@ pub fn decode_crossover_b(doc: &CapabilityDocument) -> DecodeCrossover {
             continue;
         }
         let dev = m.device.to_ascii_lowercase();
-        let slot = sizes.iter_mut().find(|(sp, _, _)| (*sp - p).abs() < 1e-9);
+        let locus = m.locus.as_deref();
+        let slot = sizes
+            .iter_mut()
+            .find(|r| r.locus == locus && (r.params_b - p).abs() < 1e-9);
         let entry = match slot {
             Some(e) => e,
             None => {
-                sizes.push((p, None, None));
+                sizes.push(DecodeSizeRow {
+                    locus,
+                    params_b: p,
+                    cpu_tps: None,
+                    gpu_tps: None,
+                });
                 sizes.last_mut().expect("just pushed")
             }
         };
         if dev.starts_with("cpu") {
-            entry.1 = Some(entry.1.map_or(tps, |v: f64| v.max(tps)));
+            entry.cpu_tps = Some(entry.cpu_tps.map_or(tps, |v: f64| v.max(tps)));
         } else if dev.starts_with("gpu") {
-            entry.2 = Some(entry.2.map_or(tps, |v: f64| v.max(tps)));
+            entry.gpu_tps = Some(entry.gpu_tps.map_or(tps, |v: f64| v.max(tps)));
         }
     }
 
-    let mut paired: Vec<(f64, f64, f64)> = sizes
+    // Only sizes measured on BOTH devices, and both at the SAME locus, survive.
+    let mut paired: Vec<PairedSize<'_>> = sizes
         .into_iter()
-        .filter_map(|(p, c, g)| Some((p, c?, g?)))
+        .filter_map(|r| {
+            Some(PairedSize {
+                locus: r.locus,
+                params_b: r.params_b,
+                cpu_tps: r.cpu_tps?,
+                gpu_tps: r.gpu_tps?,
+            })
+        })
         .collect();
     if paired.is_empty() {
         return DecodeCrossover::Unmeasured;
     }
-    paired.sort_by(|a, b| a.0.partial_cmp(&b.0).expect("finite sizes"));
+    paired.sort_by(|a, b| a.params_b.partial_cmp(&b.params_b).expect("finite sizes"));
 
-    match paired.iter().find(|(_, cpu, gpu)| gpu >= cpu) {
-        Some((p, _, _)) => DecodeCrossover::AtOrAbove(*p),
-        None => DecodeCrossover::CpuWinsThroughout,
+    let mut loci: Vec<Option<&str>> = paired.iter().map(|r| r.locus).collect();
+    loci.sort_unstable();
+    loci.dedup();
+
+    let mut verdict: Option<DecodeCrossover> = None;
+    for locus in loci {
+        // `paired` is sorted by size, so the FIRST size at which the GPU draws
+        // level within this locus is the crossover for it.
+        let this = match paired
+            .iter()
+            .filter(|r| r.locus == locus)
+            .find(|r| r.gpu_tps >= r.cpu_tps)
+        {
+            Some(r) => DecodeCrossover::AtOrAbove(r.params_b),
+            None => DecodeCrossover::CpuWinsThroughout,
+        };
+        // Most conservative wins: the CPU floor beats any threshold, and
+        // between two thresholds the HIGHER one sends less work to the GPU.
+        verdict = Some(match (verdict, this) {
+            (None, v) => v,
+            (Some(DecodeCrossover::CpuWinsThroughout), _)
+            | (_, DecodeCrossover::CpuWinsThroughout) => DecodeCrossover::CpuWinsThroughout,
+            (Some(DecodeCrossover::AtOrAbove(a)), DecodeCrossover::AtOrAbove(b)) => {
+                DecodeCrossover::AtOrAbove(a.max(b))
+            }
+            (Some(prev), _) => prev,
+        });
     }
+    verdict.unwrap_or(DecodeCrossover::Unmeasured)
 }
 
 /// A phase of inference work. The UNIT OF ROUTING (order 793-qc6q).
@@ -3684,6 +3771,51 @@ pub enum Phase {
     Rerank,
 }
 
+/// WHICH LANE the routing question is being asked about (order 793-qc6q).
+///
+/// THE SECOND HALF OF "PER PHASE, NOT PER HOST", and it was missing. A device
+/// is not usable or unusable in the abstract: it is deliverable to a container
+/// or it is not, and those are different questions with different answers on
+/// the same machine at the same moment. [`accel_envelope`] asks the container
+/// question and is right to — it renders for an agent inside a forge — but
+/// [`route_phase`] inherited that hard-coded `container` and could therefore
+/// only ever answer for one lane.
+///
+/// MEASURED CONSEQUENCE (2026-09-03, the fleet's only unified-memory host):
+/// macOS Metal reads `present-unusable` because a forge container cannot reach
+/// it, which is CORRECT for the container lane and wrong for host-native
+/// inference — and routing believed it, sending both phases to the CPU on a
+/// host where the GPU wins decode by 1.27-1.64x and prefill by 3.2-3.8x. The
+/// device state was accurate; the question was under-specified.
+///
+/// The tokens are the ones `DeviceRecord::lanes` and `EngineRecord::lanes` are
+/// already spelled with, so this selects among existing evidence rather than
+/// introducing a parallel vocabulary. NOT to be confused with
+/// [`MeasurementRecord::locus`], which says where a BENCHMARK ran
+/// (`in-guest`, `host-side-via-mirror`) — a different axis with a different
+/// vocabulary, related only in that both exist because "here" was ambiguous.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+// @trace order:793-qc6q, spec:accel-capability-probe
+pub enum RoutingLocus {
+    /// Work that will run inside a container — the forge lane, and the
+    /// question [`accel_envelope`] renders for.
+    Container,
+    /// Work that will run directly on the host: the macOS Metal case, and any
+    /// host-side inference server the enclave does not own.
+    HostNative,
+}
+
+impl RoutingLocus {
+    /// The `lanes` token this locus is spelled with in a capability document.
+    // @trace order:793-qc6q, spec:accel-capability-probe
+    pub fn lane(self) -> &'static str {
+        match self {
+            RoutingLocus::Container => "container",
+            RoutingLocus::HostNative => "host-native",
+        }
+    }
+}
+
 /// Where a phase runs, and WHY it is not running somewhere better.
 #[derive(Debug, Clone, PartialEq, Eq)]
 // @trace order:793-qc6q, spec:accel-capability-probe
@@ -3700,7 +3832,8 @@ pub struct Placement {
     pub reason: String,
 }
 
-/// Whether a device class can actually be driven here: a lane AND an engine.
+/// Whether a device class can actually be driven IN THIS LOCUS: a lane AND an
+/// engine, both on the side the work will run.
 ///
 /// BOTH HALVES, and this is the engine-qualification 793-qr4t adds being
 /// consumed rather than merely published. macuahuitl reported a container-lane
@@ -3708,38 +3841,63 @@ pub struct Placement {
 /// correctly, since a device nothing can drive is not a target. Routing that
 /// reads only the lane would send work to it and land on the same
 /// `library=cpu` silence.
+///
+/// THE ENGINE IS CHECKED AGAINST THE LOCUS TOO, which it was not before. An
+/// engine's `lanes` is `None` for a host-PATH binary (every lane) and
+/// `Some(["container"])` for the fleet's containerized ollama. Asking the
+/// host-native question while counting a container-only engine as an answer
+/// reproduces the exact defect this locus parameter exists to fix, one field
+/// further in: a device that is genuinely reachable host-native, credited to an
+/// engine that is not.
 // @trace order:793-qc6q, spec:accel-capability-probe
-fn phase_device_usable(doc: &CapabilityDocument, class: &str) -> bool {
+fn phase_device_usable(doc: &CapabilityDocument, class: &str, locus: RoutingLocus) -> bool {
+    let lane = locus.lane();
     let lane_ok = doc.devices.iter().any(|d| {
-        d.device_class == class
-            && d.lanes.iter().any(|l| l == "container")
-            && d.unusable_reason.is_none()
+        d.device_class == class && d.lanes.iter().any(|l| l == lane) && d.unusable_reason.is_none()
     });
-    let engine_ok = doc
-        .engines
-        .iter()
-        .any(|e| e.supported_device_classes.iter().any(|c| c == class));
+    let engine_ok = doc.engines.iter().any(|e| {
+        e.supported_device_classes.iter().any(|c| c == class)
+            // `None` means every lane — the pre-existing semantics for a host
+            // PATH binary, preserved literally so no document filed before
+            // 850-bif2 changes meaning under this read.
+            && e.lanes.as_ref().is_none_or(|ls| ls.iter().any(|l| l == lane))
+    });
     lane_ok && engine_ok
 }
 
-/// Route one phase, given the model's size in billions of parameters where the
-/// caller knows it (order 793-qc6q).
+/// Route one phase in one locus, given the model's size in billions of
+/// parameters where the caller knows it (order 793-qc6q).
 ///
 /// THE CPU IS THE FLOOR AND EVERY ARM ENDS THERE. 620-ca7g is preserved
 /// literally: there is no input to this function that yields a device the host
 /// cannot run on, and no configuration that makes an accelerator a hard
 /// requirement — the worst case is `cpu` with a reason naming what was missing.
+///
+/// `locus` SAYS WHICH SIDE THE WORK WILL RUN ON, and is not a hint. The same
+/// document answers differently for [`RoutingLocus::Container`] and
+/// [`RoutingLocus::HostNative`] on any host whose accelerator does not cross
+/// the boundary — which is every macOS host in the fleet, and the reason this
+/// function reported `cpu` for both phases on a machine whose GPU wins both.
+/// A caller that does not know its own side is asking a question that has no
+/// answer; there is deliberately no default.
 // @trace order:793-qc6q, spec:accel-capability-probe
 pub fn route_phase(
     doc: &CapabilityDocument,
     phase: Phase,
     model_params_b: Option<f64>,
+    locus: RoutingLocus,
 ) -> Placement {
-    let npu = phase_device_usable(doc, "npu");
-    let gpu = phase_device_usable(doc, "gpu");
+    let npu = phase_device_usable(doc, "npu", locus);
+    let gpu = phase_device_usable(doc, "gpu", locus);
+    let lane = locus.lane();
+    // EXIT CRITERION 3, sharpened by the locus. "no-usable-gpu-for-decode" was
+    // true and unactionable: it did not say IN WHICH LANE the GPU was not
+    // usable, so a macOS reader could not tell a host with no GPU from a host
+    // whose GPU simply does not cross into a container. Every fallback reason
+    // below therefore names the lane it was decided in.
     let cpu = |reason: &str| Placement {
         device: "cpu",
-        reason: reason.to_string(),
+        reason: format!("{reason}-in-{lane}"),
     };
 
     match phase {
@@ -3749,12 +3907,12 @@ pub fn route_phase(
             if npu {
                 Placement {
                     device: "npu",
-                    reason: "npu-usable-prefill-is-compute-bound".to_string(),
+                    reason: format!("npu-usable-prefill-is-compute-bound-in-{lane}"),
                 }
             } else if gpu {
                 Placement {
                     device: "gpu",
-                    reason: "no-usable-npu-gpu-wins-compute-bound-prefill".to_string(),
+                    reason: format!("no-usable-npu-gpu-wins-compute-bound-prefill-in-{lane}"),
                 }
             } else {
                 cpu("no-usable-accelerator-for-prefill")
@@ -3773,7 +3931,7 @@ pub fn route_phase(
                     None => cpu("model-size-unknown-cannot-apply-measured-crossover"),
                     Some(p) if p >= t => Placement {
                         device: "gpu",
-                        reason: format!("model-{p}b-at-or-above-measured-crossover-{t}b"),
+                        reason: format!("model-{p}b-at-or-above-measured-crossover-{t}b-in-{lane}"),
                     },
                     Some(p) => cpu(&format!("model-{p}b-below-measured-crossover-{t}b")),
                 },
@@ -3789,7 +3947,7 @@ pub fn route_phase(
             if npu {
                 Placement {
                     device: "npu",
-                    reason: "npu-embedding-engine-usable".to_string(),
+                    reason: format!("npu-embedding-engine-usable-in-{lane}"),
                 }
             } else {
                 cpu("embed-never-routed-to-gpu-measured-slower-than-cpu")
@@ -3817,10 +3975,18 @@ struct RoutingSummary {
 /// [`route_phase`] would. Folding the threshold into the device value would
 /// force a size the renderer does not have.
 fn routing_summary(doc: &CapabilityDocument) -> RoutingSummary {
-    let prefill = route_phase(doc, Phase::Prefill, None).device;
+    // THE ENVELOPE ASKS THE CONTAINER QUESTION, and passing the locus
+    // explicitly is how that stays a decision rather than an inherited
+    // default. Its whole audience is an agent inside a forge — the doc comment
+    // on `accel_envelope` says so — so `Container` is right here and the
+    // pinned `accel_*` grammar is unchanged by 793-qc6q's locus work. A
+    // host-native consumer must call `route_phase` with its own locus instead
+    // of reading these keys, which describe a lane it is not in.
+    let locus = RoutingLocus::Container;
+    let prefill = route_phase(doc, Phase::Prefill, None, locus).device;
     let crossover = decode_crossover_b(doc);
     let decode = match crossover {
-        DecodeCrossover::AtOrAbove(_) if phase_device_usable(doc, "gpu") => "gpu",
+        DecodeCrossover::AtOrAbove(_) if phase_device_usable(doc, "gpu", locus) => "gpu",
         _ => "cpu",
     };
     let crossover = match crossover {
@@ -6380,16 +6546,19 @@ mod tests {
         ];
         assert_eq!(decode_crossover_b(&d), DecodeCrossover::AtOrAbove(3.0));
 
-        let small = route_phase(&d, Phase::Decode, Some(0.5));
+        let small = route_phase(&d, Phase::Decode, Some(0.5), RoutingLocus::Container);
         assert_eq!(small.device, "cpu", "{}", small.reason);
-        let large = route_phase(&d, Phase::Decode, Some(3.0));
+        let large = route_phase(&d, Phase::Decode, Some(3.0), RoutingLocus::Container);
         assert_eq!(large.device, "gpu", "{}", large.reason);
 
         // Prefill is compute-bound and goes to the accelerator at BOTH sizes —
         // which is the point of routing per phase rather than per host: the
         // same host and the same 0.5B model want different devices for the two
         // phases.
-        assert_eq!(route_phase(&d, Phase::Prefill, Some(0.5)).device, "gpu");
+        assert_eq!(
+            route_phase(&d, Phase::Prefill, Some(0.5), RoutingLocus::Container).device,
+            "gpu"
+        );
     }
 
     #[test]
@@ -6407,7 +6576,10 @@ mod tests {
             decode_row("gpu", 1.0, 55.0),
         ];
         assert_eq!(decode_crossover_b(&d), DecodeCrossover::AtOrAbove(1.0));
-        assert_eq!(route_phase(&d, Phase::Decode, Some(1.0)).device, "gpu");
+        assert_eq!(
+            route_phase(&d, Phase::Decode, Some(1.0), RoutingLocus::Container).device,
+            "gpu"
+        );
 
         // A machine where the CPU wins at every size measured. Distinct from
         // never having looked, and it must not become a licence to guess.
@@ -6418,15 +6590,26 @@ mod tests {
             decode_row("gpu", 3.0, 15.0),
         ];
         assert_eq!(decode_crossover_b(&d), DecodeCrossover::CpuWinsThroughout);
-        assert_eq!(route_phase(&d, Phase::Decode, Some(70.0)).device, "cpu");
+        assert_eq!(
+            route_phase(&d, Phase::Decode, Some(70.0), RoutingLocus::Container).device,
+            "cpu"
+        );
 
         // An unmeasured host: the GPU is usable and decode still goes to the
         // CPU, because the only threshold available would be a constant.
         let unmeasured = schedulable_gpu_doc();
         assert_eq!(decode_crossover_b(&unmeasured), DecodeCrossover::Unmeasured);
-        let p = route_phase(&unmeasured, Phase::Decode, Some(3.0));
+        let p = route_phase(
+            &unmeasured,
+            Phase::Decode,
+            Some(3.0),
+            RoutingLocus::Container,
+        );
         assert_eq!(p.device, "cpu");
-        assert_eq!(p.reason, "decode-crossover-unmeasured-on-this-host");
+        assert_eq!(
+            p.reason,
+            "decode-crossover-unmeasured-on-this-host-in-container"
+        );
 
         // A degraded run is evidence the run went wrong, not evidence about
         // the device; folding it in would move a threshold on a failure.
@@ -6452,7 +6635,7 @@ mod tests {
             vec![device("cpu", "cpu", &["container"], None)],
         );
         for phase in [Phase::Prefill, Phase::Decode, Phase::Embed, Phase::Rerank] {
-            let p = route_phase(&bare, phase, Some(70.0));
+            let p = route_phase(&bare, phase, Some(70.0), RoutingLocus::Container);
             assert_eq!(p.device, "cpu", "{phase:?} must fall to the floor");
             assert!(
                 !p.reason.is_empty() && p.reason != "-",
@@ -6474,10 +6657,13 @@ mod tests {
         let mut d = schedulable_gpu_doc();
         d.engines.clear();
         d.measurements = vec![decode_row("cpu", 3.0, 19.64), decode_row("gpu", 3.0, 26.96)];
-        let p = route_phase(&d, Phase::Decode, Some(3.0));
+        let p = route_phase(&d, Phase::Decode, Some(3.0), RoutingLocus::Container);
         assert_eq!(p.device, "cpu", "{}", p.reason);
-        assert_eq!(p.reason, "no-usable-gpu-for-decode");
-        assert_eq!(route_phase(&d, Phase::Prefill, None).device, "cpu");
+        assert_eq!(p.reason, "no-usable-gpu-for-decode-in-container");
+        assert_eq!(
+            route_phase(&d, Phase::Prefill, None, RoutingLocus::Container).device,
+            "cpu"
+        );
     }
 
     #[test]
@@ -6496,8 +6682,223 @@ mod tests {
             field(&accel_envelope(&d), "accel_mem_model"),
             "unobservable-from-this-side"
         );
-        let p = route_phase(&d, Phase::Embed, Some(0.5));
+        let p = route_phase(&d, Phase::Embed, Some(0.5), RoutingLocus::Container);
         assert_eq!(p.device, "cpu", "{}", p.reason);
+    }
+
+    /// A row measured somewhere other than [`decode_row`]'s `in-guest`.
+    fn decode_row_at(locus: &str, device: &str, params_b: f64, tps: f64) -> MeasurementRecord {
+        let mut m = decode_row(device, params_b, tps);
+        m.locus = Some(locus.to_string());
+        m
+    }
+
+    #[test]
+    // @trace order:793-qc6q, spec:accel-capability-probe
+    /// THE macOS CASE, and the defect this locus parameter was added for.
+    ///
+    /// Metal is real, driveable and wins both phases — host-native. A forge
+    /// container cannot reach it, so the document says so, and that record is
+    /// CORRECT. What was wrong was the question: routing hard-coded the
+    /// container lane, believed the accurate container-lane answer, and sent
+    /// both phases to the CPU on a host whose GPU wins decode 1.27-1.64x and
+    /// prefill 3.2-3.8x (measured 2026-09-03, the fleet's only unified-memory
+    /// host). The same document must now answer both questions differently.
+    fn a_host_native_accelerator_is_invisible_to_the_container_question_and_not_to_its_own() {
+        let mut d = doc_on_side(
+            "native-macos",
+            vec![
+                device("cpu", "Apple M-series", &["container", "host-native"], None),
+                // Present and perfectly usable — on the host side only.
+                device("gpu", "Apple M-series GPU", &["host-native"], None),
+            ],
+        );
+        d.engines.push(EngineRecord {
+            name: "ollama".to_string(),
+            backend: "metal".to_string(),
+            supported_device_classes: vec!["gpu".to_string()],
+            lanes: Some(vec!["host-native".to_string()]),
+        });
+        d.measurements = vec![
+            decode_row("cpu", 0.5, 60.0),
+            decode_row("gpu", 0.5, 76.2), // 1.27x, and it holds at 0.5B here
+        ];
+
+        // The container question. `cpu` is the RIGHT answer for a forge, and
+        // the reason must say which lane decided it — otherwise this is
+        // indistinguishable from a host with no GPU at all, which is exactly
+        // how the defect stayed invisible.
+        let in_container = route_phase(&d, Phase::Decode, Some(0.5), RoutingLocus::Container);
+        assert_eq!(in_container.device, "cpu", "{}", in_container.reason);
+        assert_eq!(in_container.reason, "no-usable-gpu-for-decode-in-container");
+        assert_eq!(
+            route_phase(&d, Phase::Prefill, None, RoutingLocus::Container).device,
+            "cpu"
+        );
+
+        // The host-native question, same document, same instant.
+        let host_native = route_phase(&d, Phase::Decode, Some(0.5), RoutingLocus::HostNative);
+        assert_eq!(host_native.device, "gpu", "{}", host_native.reason);
+        assert!(
+            host_native.reason.ends_with("-in-host-native"),
+            "the lane belongs in the reason: {:?}",
+            host_native.reason
+        );
+        assert_eq!(
+            route_phase(&d, Phase::Prefill, None, RoutingLocus::HostNative).device,
+            "gpu"
+        );
+    }
+
+    #[test]
+    // @trace order:793-qc6q, spec:accel-capability-probe
+    /// AN ENGINE IS LANE-BOUND TOO, and checking only the device would move
+    /// the defect one field along instead of fixing it.
+    ///
+    /// Here the GPU genuinely reaches both lanes, and the only engine that can
+    /// drive it lives in a container. The host-native question therefore has
+    /// no answer but the floor — a device with nothing to drive it is not a
+    /// target, which is 793-qr4t's rule applied per lane.
+    fn a_container_only_engine_does_not_qualify_a_device_for_the_host_native_lane() {
+        let mut d = doc_on_side(
+            "native-linux",
+            vec![
+                device("cpu", "cpu", &["container", "host-native"], None),
+                device("gpu", "RTX 3070", &["container", "host-native"], None),
+            ],
+        );
+        d.engines.push(EngineRecord {
+            name: "ollama".to_string(),
+            backend: "cuda".to_string(),
+            supported_device_classes: vec!["gpu".to_string()],
+            lanes: Some(vec!["container".to_string()]),
+        });
+        d.measurements = vec![decode_row("cpu", 3.0, 19.64), decode_row("gpu", 3.0, 26.96)];
+
+        assert_eq!(
+            route_phase(&d, Phase::Decode, Some(3.0), RoutingLocus::Container).device,
+            "gpu"
+        );
+        let host_native = route_phase(&d, Phase::Decode, Some(3.0), RoutingLocus::HostNative);
+        assert_eq!(host_native.device, "cpu", "{}", host_native.reason);
+        assert_eq!(
+            host_native.reason, "no-usable-gpu-for-decode-in-host-native",
+            "EXIT CRITERION 3: the fallback names the lane it was decided in"
+        );
+
+        // An engine with no `lanes` at all means EVERY lane — the pre-existing
+        // semantics for a host PATH binary. A document filed before 850-bif2
+        // must not change meaning under the locus read.
+        d.engines[0].lanes = None;
+        assert_eq!(
+            route_phase(&d, Phase::Decode, Some(3.0), RoutingLocus::HostNative).device,
+            "gpu"
+        );
+    }
+
+    #[test]
+    // @trace order:793-qc6q, spec:accel-capability-probe
+    /// A CPU ROW AND A GPU ROW FROM DIFFERENT LOCI ARE NOT A PAIR.
+    ///
+    /// The crossover is a subtraction between two curves, and the hop between
+    /// loci costs 5-10% by itself — enough, on this fleet, to have inverted a
+    /// reported conclusion once already. Rows here cross at 0.5B if the locus
+    /// is ignored and are unpaired the moment it is not, so this test fails
+    /// against the pre-793-qc6q derivation and passes against the fixed one.
+    fn the_crossover_never_pairs_a_cpu_row_with_a_gpu_row_from_another_locus() {
+        let mut d = schedulable_gpu_doc();
+        d.measurements = vec![
+            decode_row_at("in-guest", "cpu", 0.5, 60.0),
+            decode_row_at("host-side-via-mirror", "gpu", 0.5, 76.0),
+        ];
+        assert_eq!(
+            decode_crossover_b(&d),
+            DecodeCrossover::Unmeasured,
+            "two rows that never met must not become a threshold"
+        );
+        assert_eq!(
+            route_phase(&d, Phase::Decode, Some(0.5), RoutingLocus::Container).device,
+            "cpu"
+        );
+
+        // Complete the pair WITHIN one locus and the same host is measured.
+        d.measurements
+            .push(decode_row_at("in-guest", "gpu", 0.5, 76.0));
+        assert_eq!(decode_crossover_b(&d), DecodeCrossover::AtOrAbove(0.5));
+
+        // An unattributed row forms its own group rather than joining one:
+        // absent is not a value, and pairing it would silently reintroduce the
+        // cross-boundary subtraction for exactly the rows nobody labelled.
+        let mut unattributed = schedulable_gpu_doc();
+        unattributed.measurements = vec![
+            {
+                let mut m = decode_row("cpu", 0.5, 60.0);
+                m.locus = None;
+                m
+            },
+            decode_row_at("in-guest", "gpu", 0.5, 76.0),
+        ];
+        assert_eq!(
+            decode_crossover_b(&unattributed),
+            DecodeCrossover::Unmeasured
+        );
+    }
+
+    #[test]
+    // @trace order:793-qc6q, spec:accel-capability-probe
+    /// WHEN TWO LOCI DISAGREE, the answer that sends less work to the GPU
+    /// wins. 620-ca7g's floor is the standing tie-break: erring toward the CPU
+    /// costs a measured fraction, and erring the other way is the silent 1.23x
+    /// regression this packet exists to prevent.
+    fn disagreeing_loci_resolve_to_the_most_conservative_threshold() {
+        let mut d = schedulable_gpu_doc();
+        d.measurements = vec![
+            // in-guest: the GPU takes the lead at 0.5B.
+            decode_row_at("in-guest", "cpu", 0.5, 60.0),
+            decode_row_at("in-guest", "gpu", 0.5, 76.0),
+            // host-side: it does not lead until 3B.
+            decode_row_at("host-side", "cpu", 0.5, 80.0),
+            decode_row_at("host-side", "gpu", 0.5, 63.0),
+            decode_row_at("host-side", "cpu", 3.0, 19.6),
+            decode_row_at("host-side", "gpu", 3.0, 27.0),
+        ];
+        assert_eq!(decode_crossover_b(&d), DecodeCrossover::AtOrAbove(3.0));
+
+        // And a locus where the CPU wins throughout beats every threshold,
+        // because "measured, and the answer is no" is the strongest evidence
+        // against routing decode away from the floor.
+        d.measurements
+            .push(decode_row_at("third-locus", "cpu", 7.0, 10.0));
+        d.measurements
+            .push(decode_row_at("third-locus", "gpu", 7.0, 8.0));
+        assert_eq!(decode_crossover_b(&d), DecodeCrossover::CpuWinsThroughout);
+    }
+
+    #[test]
+    // @trace order:793-qc6q, spec:accel-capability-probe
+    /// The CPU floor survives the locus parameter. 620-ca7g must hold for
+    /// EVERY (phase, locus) pair, not just the container lane it was first
+    /// tested in — a host-native caller must be no more able to demand an
+    /// accelerator than a containerized one.
+    fn the_cpu_floor_holds_in_every_locus_and_every_reason_names_its_lane() {
+        let bare = doc_on_side(
+            "native-linux",
+            vec![device("cpu", "cpu", &["container", "host-native"], None)],
+        );
+        for locus in [RoutingLocus::Container, RoutingLocus::HostNative] {
+            for phase in [Phase::Prefill, Phase::Decode, Phase::Embed, Phase::Rerank] {
+                let p = route_phase(&bare, phase, Some(70.0), locus);
+                assert_eq!(
+                    p.device, "cpu",
+                    "{phase:?}/{locus:?} must fall to the floor"
+                );
+                assert!(
+                    p.reason.ends_with(&format!("-in-{}", locus.lane())),
+                    "EXIT CRITERION 3: {phase:?}/{locus:?} said {:?}, which does not name its lane",
+                    p.reason
+                );
+            }
+        }
     }
 
     #[test]

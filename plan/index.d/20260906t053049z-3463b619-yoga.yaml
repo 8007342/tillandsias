@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-worker-skill-never-mentions-the-checkout-lock-so-every-worker-cycle-runs-unlocked
+    field: status
+    value: completed
+    ts: "2026-09-06T05:30:49Z"
+    host: yoga
+
+events:
+  - packet_id: the-worker-skill-never-mentions-the-checkout-lock-so-every-worker-cycle-runs-unlocked
+    event:
+      type: completed
+      ts: "2026-09-06T05:30:49Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: ./build.sh --check rc=0 419s; scripts/test-cycle-lock-attested-release.sh 10/10, 8/10 against the pre-fix script with the two new arms failing on 'ok:checkout-lock:acquired' over a dying anchor; worker skill checkout-lock mentions 0 -> 3; lock dogfooded this cycle, held by 8462 across tool calls
+  - packet_id: the-worker-skill-never-mentions-the-checkout-lock-so-every-worker-cycle-runs-unlocked
+    event:
+      type: note
+      ts: "2026-09-06T05:30:49Z"
+      host: yoga
+      summary: |-
+        closed: worker skill has the section, bare path warns and names its anchor, fixture has the missing arm

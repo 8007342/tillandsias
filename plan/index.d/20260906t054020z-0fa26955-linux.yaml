@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: per-phase-accelerator-routing-policy
+    field: next_action
+    value: 'DO NOT PICK THIS UP AS "WIRE IT UP" — that instruction was mine, from 2026-09-06, and it was wrong. See 1092-xwxv, filed with every claim as a runnable command. TWO ITEMS REMAIN and both are now blocked on decisions rather than on effort. (a) EXIT CRITERION 1 IS FALSIFIED AS WRITTEN and needs its author, not a measuring host: "a 0.5B-class model''s decode is NOT sent to the iGPU on a unified-memory host" costs 21% of decode throughput on the fleet''s only unified-memory host, and must become a consequence of the per-host measurement rather than a fixed rule. (b) THE WIRING IS NOT UNBLOCKED, which is the correction. There is no inference call path in this crate to wire into: route_phase''s only production caller is the envelope renderer at accel_probe.rs:3986, the code that actually speaks to an inference server lives in tillandsias-plan, and nothing in the workspace depends on tillandsias-headless, so the policy is structurally invisible to the client. Worse for THIS packet''s criteria: the only placement mechanism that reaches a running engine is pin_backend_environment at main.rs:4966, which appends OLLAMA_LLM_LIBRARY to a podman launch keyed on a per-HOST tier — one server, one library pin — so "prefill to the GPU, decode to the CPU" is not expressible through it however sound the measurement behind it is. Per-phase criteria therefore cannot be met until something can bind two phases to two devices, and the layer specified to do that (inference-engine-slots, EngineSlotDescriptor) is never constructed anywhere in the tree. This packet silently depends on that layer and carries no depends_on edge saying so; 1092-xwxv''s criterion 2 is where that edge or a narrowing ruling should land. LANDED AND NOT AT ISSUE: the locus fix, 68552584e — route_phase and phase_device_usable take a RoutingLocus (Container | HostNative), the engine is lane-checked as well as the device, every Placement reason names its lane, and decode_crossover_b no longer pairs a CPU row with a GPU row across MeasurementRecord.locus. 679 passed / 0 failed under --features tray,listen-vsock; accel_probe 86 passed; bound litmus green twice; every new test individually observed RED against the pre-fix logic before being kept.'
+    ts: "2026-09-06T05:40:20Z"
+    host: linux
+
+events:
+  - packet_id: per-phase-accelerator-routing-policy
+    event:
+      type: note
+      ts: "2026-09-06T05:40:20Z"
+      host: linux
+      summary: |-
+        correcting a false next_action I wrote last cycle; see 1092-xwxv
