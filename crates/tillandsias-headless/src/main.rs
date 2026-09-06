@@ -4428,11 +4428,21 @@ fn build_git_run_args(
 /// with no AMD GPU, so each probe must observe actual hardware
 /// (nvidia-smi -L must list a device; rocminfo must report a gfx agent).
 fn detect_inference_tier() -> &'static str {
-    #[cfg(target_os = "macos")]
-    {
-        "metal"
-    }
-    #[cfg(not(target_os = "macos"))]
+    // ORDER 1090-8nh4. NO ARM OF THIS FUNCTION MAY DERIVE A TIER FROM
+    // `cfg!(target_os)`. A cfg records where the binary was COMPILED; this
+    // function names what the RUNNING machine can do, and those are different
+    // facts that happen to coincide on a developer's laptop.
+    //
+    // What was here:
+    //     #[cfg(target_os = "macos")] { "metal" }
+    // It observed nothing. And in production it could not even be wrong in a
+    // useful way: headless is cross-compiled to linux-aarch64 and runs inside
+    // the VZ guest, so the arm is compiled OUT exactly where the answer matters,
+    // while on a macOS host the binary carrying it is not the binary that
+    // answers for the guest.
+    //
+    // The other arm was always honest — it runs nvidia-smi and rocminfo and
+    // falls back to a MEASURED floor. This makes the whole function that shape.
     {
         let nvidia = std::process::Command::new("nvidia-smi")
             .arg("-L")
@@ -4452,6 +4462,28 @@ fn detect_inference_tier() -> &'static str {
             .unwrap_or(false);
         if rocm {
             return "gpu-rocm";
+        }
+        // NOTHING ACCELERATED WAS OBSERVED. Before answering "cpu", separate the
+        // two things that answer would conflate: "this machine has no
+        // accelerator" and "this binary has no probe for the accelerator this
+        // machine has". Apple silicon is the live case — Metal is real and
+        // nothing here can measure it.
+        //
+        // OBSERVED, not assumed: ask the machine for its CPU brand. On the
+        // linux-aarch64 guest this key does not exist and the probe is false, so
+        // the guest still answers from measurement rather than from a cfg.
+        let apple_silicon = std::process::Command::new("sysctl")
+            .args(["-n", "machdep.cpu.brand_string"])
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).contains("Apple"))
+            .unwrap_or(false);
+        if apple_silicon {
+            // "unmeasured", not "metal": the accelerator is probably there and
+            // this code did not measure it. Reporting `metal` here would be the
+            // same guess the cfg made, relocated (1090-8nh4).
+            return "unmeasured";
         }
         "cpu"
     }
@@ -17942,9 +17974,43 @@ mod tests {
         // exported to the container and the forge env so agents and the
         // startup context report it without probing hardware.
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+
+        // ORDER 1090-8nh4. A TIER MUST NOT BE DERIVED FROM THE BUILD TARGET.
+        //
+        // detect_inference_tier() had two arms and only one of them looked at
+        // the machine:
+        //     #[cfg(target_os = "macos")]      { "metal" }
+        //     #[cfg(not(target_os = "macos"))] { nvidia-smi; rocminfo; ...; "cpu" }
+        // The second OBSERVES and falls back to a measured floor. The first
+        // asserts a runtime accelerator from a COMPILE-TIME fact, so it says
+        // where the code was built rather than what the machine can do.
+        //
+        // In production that arm is worse than merely wrong: headless is
+        // cross-compiled to linux-aarch64 and runs inside the VZ guest, so on
+        // macOS hosts the binary carrying the claim is never the binary that
+        // answers for the guest — and the arm cannot execute at all where it
+        // would matter.
+        //
+        // THIS ASSERTION IS ON THE SOURCE, not on the return value, and that is
+        // deliberate. The return value cannot distinguish "observed metal" from
+        // "guessed metal from cfg" — both are the string "metal" — so a test
+        // that only inspected the output would pass identically before and
+        // after the fix and prove nothing. Criterion 2 requires an arm that
+        // REDS on the unfixed function; only the source can carry that.
+        let cfg_derived_tier = source.contains(concat!(
+            "#[cfg(target_os = \"macos\")]\n    {\n        \"met",
+            "al\"\n    }"
+        ));
+        assert!(
+            !cfg_derived_tier,
+            "detect_inference_tier() still returns a tier from a target_os cfg. \
+             A cfg states where this binary was COMPILED; the tier names what the \
+             RUNNING machine can do. Observe it, or report it unmeasured (1090-8nh4)."
+        );
+
         let tier = detect_inference_tier();
         assert!(
-            ["gpu-cuda", "gpu-rocm", "metal", "cpu"].contains(&tier),
+            ["gpu-cuda", "gpu-rocm", "metal", "unmeasured", "cpu"].contains(&tier),
             "tier grammar violated: {tier}"
         );
         // Order 392: the EFFECTIVE tier is what agents/startup-context are
@@ -17966,7 +18032,7 @@ mod tests {
         // launch a cpu-only "GPU tier".
         let effective = effective_inference_tier();
         assert!(
-            ["gpu-cuda", "gpu-rocm", "metal", "cpu"].contains(&effective),
+            ["gpu-cuda", "gpu-rocm", "metal", "unmeasured", "cpu"].contains(&effective),
             "effective tier grammar violated: {effective}"
         );
         if tier == "gpu-cuda" && !nvidia_cdi_available() {
