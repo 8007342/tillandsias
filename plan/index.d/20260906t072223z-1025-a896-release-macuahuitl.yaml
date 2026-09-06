@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: the-operators-gh-token-is-revoked-two-or-three-times-a-day-on-several-hosts-while-the-coordinator-never-re-logs-in
+    field: status
+    value: ready
+    ts: "2026-09-06T07:22:23Z"
+    host: macuahuitl
+
+events:
+  - packet_id: the-operators-gh-token-is-revoked-two-or-three-times-a-day-on-several-hosts-while-the-coordinator-never-re-logs-in
+    event:
+      type: note
+      ts: "2026-09-06T07:22:23Z"
+      host: macuahuitl
+      summary: |-
+        RELEASED by its own claimant, not expired by the sweep. I have held this
+        past its 24h TTL across two cycles while it was blocked on an operator
+        decision that is not mine to make: whether to convert the OAuth pool to
+        fine-grained PATs, which per 1025-a896's own finding must be all-or-none
+        because each OAuth mint evicts the oldest of ten.
+
+        Holding a claim against an operator decision reads as work-in-progress to
+        every other host and to the selector, so the packet was invisible to
+        anyone who could have advanced its non-blocked parts. Returning it to
+        ready is the honest state: the work is available, the DECISION is queued
+        to the operator, and those are different things that a live claim
+        conflates.
