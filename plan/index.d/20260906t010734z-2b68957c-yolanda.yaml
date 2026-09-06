@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: windows-ready-not-durable-after-provision-once
+    event:
+      type: completed
+      ts: "2026-09-06T01:07:34Z"
+      agent_id: windows-yolanda-opus5-20260906t010734z
+      host: yolanda
+      summary: |
+        CLOSED at 5ea174d10 (fix a8fb991ab). --diagnose can now tell "came up, then correctly idled out" from "never came up".
+
+        THE SHAPE IS NOT 1082-9rub's, AND MACBOOKAIR GUESSED THAT BEFORE I STARTED. Theirs was a MISSING transition: an artifact existed and provisioning never completed. This is a transition that COMPLETED and then stopped being true. The guest provisions perfectly -- provision_exit=0, "VM Ready, control wire up" -- and about forty seconds later WSL2's idle timeout shuts the distro down exactly as designed. Nothing in provisioning is broken. I told them the template did not transfer whole rather than bending this packet to fit theirs, which is what they asked for.
+
+        THE DEFECT WAS IN THE VOCABULARY, NOT THE STATE. A guest that never came up and a guest that idled out were BOTH distro_running:false with exit 2, byte-identical apart from a log tail. So the smoke runbook's mandatory final health check read DEGRADED for a release that had provisioned perfectly, and scripts/tray-diagnose.ps1 printed "no (idled -- normal)" for a FAILED provision. That line asserted the benign reading rather than knowing it, which is the same family as everything else this fleet filed tonight.
+
+        THEIR CAVEAT INVERTS HERE, AND THAT IS THE INTERESTING PART. They warned that a completion record is a record of a PAST completion, so a non-durable ready state leaves exactly that behind and I would rebuild their defect one level up. True in their shape -- and here the staleness IS the signal. The question is not "is the guest ready now", which distro_running already answers, but "did this installation ever reach Ready", which is precisely what separates a broken provision from an idle one. The property they had to defend against is the one I needed.
+
+        FAILS CLOSED, which is their step 3 and the step that inverts if you write the convenient spelling: absent, unreadable, or belonging to a DIFFERENT installation all read never-observed-ready. "I could not tell" must not read as "it was fine". The failing direction costs a re-verification; the other tells an operator that a guest which never came up merely went idle. Installation identity is checked because --reset-guest and wsl --unregister mint a new uuid, and a previous guest's record must not vouch for the current one.
+
+        TEST OVER A TEMP STATE ROOT, because one reading this host's real %LOCALAPPDATA% would pass or fail by what the machine happens to hold -- macbookair had three attempts go vacuous that way the same day. Five arms: absent, observed, wrong-installation, unknown-installation, corrupt. BOTH INVERSIONS SABOTAGED AND BOTH CAUGHT: making absent/corrupt read as ready FAILS, and ignoring installation identity FAILS.
+
+        FIVE-TOUCHPOINT DISCIPLINE HONOURED IN LOCKSTEP per the exact-count test's own instruction: key count 21 -> 22, the pinned-keys list, the human --diagnose line, scripts/tray-diagnose.ps1, and the cheatsheet schema block.
+
+        AND I TRIED TO MAKE THE SIXTH TOUCHPOINT A GREP, WHICH THE GATE REFUSED. The litmus CLI-surface step pins each field by grepping tray-diagnose.ps1 for its name, and I extended it. That is a source-expression pin with no negative control (634-39ik): it passes while the script merely MENTIONS the field. Removed rather than defended -- a pin that cannot fail is not a touchpoint, it is a decoration on one. The pre-existing fields carry that shape too, which is a separate row and not mine to widen here.
+
+        WHAT I DID NOT DECIDE, and the packet names them as two different questions. (b) whether --diagnose should distinguish the states is what this does. (a) whether a headless --provision-once should leave the guest RESIDENT, or say plainly that Ready is momentary, is a product decision about what the command promises. Exit codes are unchanged deliberately: turning the idle case into exit 0 would mask a real outage for any caller that needs the guest up, and that trade belongs to (a). The runbook can now read ready_history and stop calling a good release DEGRADED without anyone changing what the exit code means.
