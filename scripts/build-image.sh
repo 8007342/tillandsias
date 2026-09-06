@@ -648,6 +648,31 @@ _remove_stale_image_tags
         exit 1
     fi
 
+    # ORDER 1073-dqtx: EXISTENCE IS NOT USABILITY, and this script already had
+    # the signal that says so — it threw it away.
+    #
+    # MEASURED on tlatoanis-macbook-air 2026-09-05: a forge build returned 0,
+    # `podman image exists` returned 0, and `podman images` listed the tag at a
+    # plausible 3.03 GB, while `podman inspect` and `podman run` both died with
+    # `faccessat .../overlay/1854a58890...: no such file or directory`. Three
+    # green signals over an artifact that could not start. It cleared under
+    # --no-cache two minutes later with the same Containerfile, so the cause is
+    # layer REUSE against a backing directory absent from storage.
+    #
+    # The summary block below ALREADY ran `image inspect` — for the size, under
+    # `2>/dev/null || echo ""` — so the one command that would have caught this
+    # was being discarded into a cosmetic field. Delegated to
+    # verify-image-usable.sh so build-image, its fixture and any other caller
+    # read the same implementation rather than three drifting copies.
+    # Exit captured into a variable rather than tested with `if !` (795-imz3).
+    "$SCRIPT_DIR/verify-image-usable.sh" "$IMAGE_TAG" >/dev/null
+    _usable_rc=$?
+    if [[ $_usable_rc -ne 0 ]]; then
+        _error "Image ${IMAGE_TAG} was built and EXISTS, but is not usable (1073-dqtx)."
+        _error "  REMEDY: TILLANDSIAS_BUILD_NO_CACHE=1 $0 ${IMAGE_NAME:-<image>} --force"
+        exit 1
+    fi
+
     _remove_stale_image_tags
     "$PODMAN" image prune -f 2>/dev/null || true
 

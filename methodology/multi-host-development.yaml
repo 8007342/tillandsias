@@ -635,6 +635,27 @@ multi_host_development:
       (Earlier guidance said "rebase, not merge, for cross-branch"; that was
       backwards and self-defeating — corrected 2026-06-30, see
       plan/issues/methodology-integration-strategy-contradiction-2026-06-30.md.)
+    land_batching: >
+      A RELAY LANDS IMMEDIATELY; YOUR OWN RECORDS ACCUMULATE TO ONE LAND PER
+      PASS. These pull in opposite directions and conflating them into "batch
+      everything" moves the delay onto whoever is least able to see it.
+      A relay — another host's patch, a sibling merge, a work/<order> ref —
+      lands as soon as it is verified, because a host is blocked on it and
+      batching it trades your churn for their block. A host's OWN cycle
+      records, ledger notes and fixes accumulate and land together at the end
+      of the pass; four separate coordination records inside one session is
+      not relaying anyone, it is churn.
+      MEASURED 2026-09-06T02:4xZ, and the coordinator was the offender: of 19
+      first-parent landings on trunk in two hours, 15 were macuahuitl's — 6
+      relays and 9 of its own records, each a separate gate-and-push. yoga's
+      land on a 470s gate exhausted all four attempts against a median
+      inter-landing gap of 367s. Nothing was wrong with the slower host; the
+      fleet starves whoever gates slowest, and the dominant term was one
+      host's push pattern rather than the design. The first remedy therefore
+      cost nothing and needed no packet.
+      COROLLARY: offer a trunk quiesce PROACTIVELY when a slow host reports it
+      is gating, rather than after it loses four attempts and reports
+      `refused:land:attempts-exhausted`.
     conflict_policy:
       - "Spec, methodology, and plan conflicts block until explicitly reconciled."
       - "Platform crate conflicts stay on the owning platform branch unless a shared API contract changed."
