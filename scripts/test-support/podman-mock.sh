@@ -188,7 +188,37 @@ case "$subcommand" in
                 # (The `if [[ "${3:-}" == "--format" ]]` that used to sit here
                 # was dead: the loop above already matches --format in any
                 # position, including position 3.)
-                mock_refuse "image inspect form" "no --format in argv"
+                # No --format anywhere in argv. TWO DIFFERENT QUESTIONS share
+                # this verb and only one of them wants a payload:
+                #
+                #   `image inspect <tag> --format X`  asks for a FIELD. Replayed
+                #     above. The mock has no real payload, so it answers the one
+                #     field shape callers use and nothing else.
+                #
+                #   `image inspect <tag>` with stdout DISCARDED asks whether the
+                #     layers can be touched at all. verify-image-usable.sh:62
+                #     (order 1073-dqtx) uses exactly this form on purpose: every
+                #     metadata-only query — `image exists`, a size in `images`,
+                #     `image tree` — returns success over an image whose overlay
+                #     layer is missing. Only inspect and run reach the truth, and
+                #     the caller throws stdout away and reads the RC.
+                #
+                # Refusing outright left the mock unable to answer the second
+                # question at all — and it is the question a fail-closed mock
+                # SHOULD answer, because the honest answer is a status code the
+                # mock already knows from its own image state. So answer with an
+                # rc and emit NO payload: 0 when the image is there, 125 — the
+                # code real podman returns for an image it cannot inspect — when
+                # it is not.
+                #
+                # This is deliberately NOT a permissive tail. An unknown image
+                # subcommand still refuses below, and a caller that needs the
+                # bare form's JSON PAYLOAD must add its own arm rather than read
+                # meaning into the empty stdout this arm produces.
+                if stateful_images_enabled; then
+                    [[ -f "$(image_path "${3:-}")" ]] || exit 125
+                fi
+                exit 0
                 ;;
             prune)
                 exit 0

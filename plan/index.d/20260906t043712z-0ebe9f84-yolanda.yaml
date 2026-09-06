@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: github-login-validates-push-authorization
+    event:
+      type: claim
+      ts: "2026-09-06T04:37:12Z"
+      agent_id: windows-yolanda-opus5-20260906t043712z
+      host: yolanda
+      summary: |
+        claimed for cycle by yolanda, status written first. Credential preflight run and THE ARM NAMED, per the new instruction: ok:gh-keyring-push-verified — and the shadow probe reads reaches-arm-4 (no store file, no GH_TOKEN, no GITHUB_TOKEN), so a real push probe answered rather than a file-existence arm.
+
+        ROLE MISMATCH, STATED RATHER THAN IGNORED: this row is pickup_role linux / owner_host linux, and I am a Windows host taking it on the coordinator's explicit routing. I earlier DECLINED this same packet in this session for exactly that reason. Taking it now because the coordinator routed it deliberately and named why (both defects live in one file, and esmeraldinha measured them but cannot push). The practical consequence is real and worth recording: crates/tillandsias-headless is unix-only and does not compile natively here, so every test in this packet runs inside the tillandsias-build WSL2 distro. A native cargo run on this host would report a filtered-out count and say nothing about these arms — the cfg(all(test, unix)) trap I hit earlier tonight on vsock_client.
+
+        BOTH DEFECTS VERIFIED ON MY OWN TREE BEFORE CLAIMING, not taken on report:
+
+        DEFECT 1, main.rs:9576-9586. The `other =>` arm's remedy reads "Check that the token can read the repository at all (repository access must include {owner_repo}, Metadata read-only), then run the login again." Correct for 404. WRONG for 401, where the credential is revoked and no scope edit helps — only `gh auth login` does. esmeraldinha established the verdict is SAFE on all three shapes (401, 200-without-permissions, 404) because none matches true/false and all fall to `other`, which refuses. So the refusal is right and the REMEDY is wrong for the shape that hit three hosts tonight.
+
+        DEFECT 2, main.rs:9886-9891. The None arm prints its NOTE with eprintln! and FALLS THROUGH — no return, no Err — straight to the Vault write. Confirmed by reading the arm on my tree: the Some(owner_repo) branch probes and propagates a refusal with `?`, while None, which is STRICTLY LESS INFORMED because no repository was probed at all, is waved through.
+
+        CARRYING esmeraldinha's CAVEAT VERBATIM so it is not folded away: they said the credential check "has zero predictive value". That is true of the store-file arm and NOT true of this packet's in-container probe, which asks about PUSH rather than authentication and refuses on ambiguity. Different mechanisms, different verdicts, and conflating them would discard a working guard on the strength of a broken one.
