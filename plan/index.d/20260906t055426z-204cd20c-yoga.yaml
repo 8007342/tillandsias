@@ -1,0 +1,86 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-feature-gated-test-pass-runs-under-build-test-but-not-under-build-check-which-is-the-gate-that-guards-landing
+    event:
+      type: progress
+      ts: "2026-09-06T05:54:26Z"
+      agent_id: linux-yoga-claude-20260906t055426z
+      host: yoga
+      summary: |-
+        CLOSED. `./build.sh --check` now runs the tray/listen-vsock pass, and the
+        verdict states how many tests it executed.
+
+        CRITERION 1: the pass moved into the --check dispatch, beside the
+        --workspace pass. It names its feature set explicitly rather than reaching
+        for --all-features, and the reason is measured: --all-features is NOT a
+        superset of default. `transport::tests::vsock_listener_unsupported_on_non_linux`
+        exists only when `vsock` is OFF — correctly, it tests the unsupported path —
+        so a gate reaching for the maximum would add 258 tests and silently drop 1,
+        holding the larger number as evidence it had improved. A maximum is not a
+        matrix.
+
+        CRITERION 2: the verdict is `Feature-gated tests passed: 679 test(s)
+        executed under tray,listen-vsock`, and a pass that executes ZERO tests is a
+        hard refusal. "Ran 0 because the feature was off" is exactly the failure
+        this packet exists to close, and it has precedent — two bound tests once
+        reported "0 passed; 383 filtered out", indistinguishable from a filter typo.
+
+        CRITERION 3, the red half, done literally rather than by proxy: a
+        deliberately failing test was added behind listen-vsock. `cargo test
+        --workspace` could not see it at all (0 matches — it does not compile that
+        module), and `./build.sh --check` went RED naming it:
+
+          test pty_handler::tests::tmp_1074_probe_must_make_the_gate_red ... FAILED
+          [build] the tray/listen-vsock test set failed (cargo rc=101)
+
+        The first attempt at this proved nothing and is worth recording: the gate
+        went red at the FORMATTING step before reaching any test, because the probe
+        was not rustfmt-clean. A red for the wrong reason is not evidence, and the
+        run had to be repeated after `cargo fmt`.
+
+        THE PROBE FOUND SOMETHING I WAS NOT LOOKING FOR, and it changed the fix.
+        That run reported TWO failures: the probe, and
+        `tray::tests::mcp_connection_is_denied_when_the_host_knows_no_projects`.
+        With the probe removed, that test passes 3/3. So ADDING ONE UNRELATED TEST
+        RED-ED A DIFFERENT ONE — the feature-gated set shares process-global state,
+        exactly like the workspace set whose pass already runs `--test-threads=1`
+        for this reason ("a ratchet compares FAILURE SETS, so it needs the set to be
+        a function of the tree and nothing else").
+
+        So the pass ships SERIAL. Measured: parallel with the probe = 2 failures;
+        serial with the probe = 1 failure, the probe alone; serial without it = 679
+        passed, 0 failed. Had this shipped parallel, the fleet would have got a gate
+        whose red set moves when someone adds an unrelated test — which teaches
+        people to re-run until green, and is worse than the gap it closes.
+
+        CRITERION 4, cost, measured on this host rather than cited:
+          compile, first run for this feature set   13.7s   (one-time per tree)
+          compile, steady state                      0.16s
+          run, parallel                             33.9s
+          run, SERIAL (what ships)                  46.1s
+        Recurring marginal cost ~46s on a ~420s gate, about 11%. Full gate with the
+        step: 445s, rc=0.
+
+        A ~1.1s marginal compile I had been given for this was a WARM measurement of
+        an already-built feature set; cold on this host it is 13.7s. Re-measured
+        rather than repeated, and both numbers are in the comment so the next reader
+        does not have to guess which regime they are in.
+
+        ALSO MEASURED: the two feature sets do not thrash each other. `cargo test
+        --workspace --no-run` immediately after the feature-gated build takes 247ms,
+        so cargo keeps both artifact sets and neither pass rebuilds the other.
+        Alternating them every gate costs nothing beyond the first build — which was
+        the obvious objection to putting this in --check and it does not hold.
+
+        SCOPE, stated so nobody reads this as more than it is: this closes the
+        tillandsias-headless half. The workspace-wide gap measured on yoga is 258
+        tests across four crates — vm-layer +65, router-sidecar +30,
+        control-wire -1 — and the other three remain uncovered by any per-land gate.
