@@ -18,13 +18,15 @@
 # fail closed: a committable cycle needs a branch it can push.
 #
 # Emits exactly one line on stdout matching the falsifiable grammar
-#   ^(ok:branch-[A-Za-z0-9._/-]+|blocked:(committable-cycle-on-main|detached-head|not-a-git-repo))$
+#   ^(ok:branch-[A-Za-z0-9._/-]+|blocked:(committable-cycle-on-main|detached-head|not-a-git-repo|no-git-identity))$
 # and exits 0 (committable branch) or 1 (blocked).
 #
 #   ok:branch-<name>                   HEAD is on branch <name> (not main)
 #   blocked:committable-cycle-on-main  HEAD is on main — commit/push forbidden
 #   blocked:detached-head              detached HEAD — no branch to push (fail closed)
 #   blocked:not-a-git-repo             cwd is not inside a git worktree (fail closed)
+#   blocked:no-git-identity            `git var GIT_AUTHOR_IDENT` fails — this
+#                                      host cannot author a commit (fail closed)
 #
 # NOTE: this guard gates COMMITTABLE cycles only. Read-only/inspection cycles
 # on a `main` checkout remain allowed — callers consult the verdict before
