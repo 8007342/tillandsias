@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: github-login-validates-push-authorization
+    field: status
+    value: completed
+    ts: "2026-09-06T05:35:55Z"
+    host: windows
+
+events:
+  - packet_id: github-login-validates-push-authorization
+    event:
+      type: completed
+      ts: "2026-09-06T05:35:55Z"
+      host: windows
+      summary: |-
+        status 'completed' with evidence_refs: landed 48716d81e on windows-next, verified against origin with merge-base; clippy -D warnings clean and both new tests plus the doc-comment block's own test green in the tillandsias-build WSL2 distro; both fixes sabotage-verified
