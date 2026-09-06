@@ -1,0 +1,78 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: one-gate-step-tops-the-skippable-list-on-two-hosts-and-has-never-failed-in-298-runs
+    order: 1103-r7wq
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [gate, performance, memoisation, cross-host]
+    estimated_hours: 3
+    owned_files:
+      - build.sh
+    verifiable_closure: |
+      bash scripts/test-memo-hit-observability.sh plus a cycle-metrics reading
+      showing the step's runs= unchanged and its timing contribution reduced —
+      the memo must EMIT a hit record (1074-96z9), or the audit cannot measure
+      its own effect and this packet closes on an unmeasurable claim.
+    title: |
+      checking-the-plan-archiver-preserves-the-ready-set (831-ezea) tops skippable on yoga and sits third on macbookair, 298 combined runs at fail_pct=0 — the two-host trigger from 1001-q3zf's audit rule
+    context: |
+      FOUND by the hourly cross-host recurrence audit on macuahuitl
+      2026-09-06T07:1xZ, which is the first time that rule has actually fired.
+
+      THE INTERSECTION, and it is ONE step rather than the two I first claimed:
+
+        step 831-ezea  yoga        runs=150 avg_ms=17048 fail_pct=0 saved_upper=2540281
+                       macbookair  runs=148 avg_ms=24668 fail_pct=0 saved_upper=3626332
+
+      I initially filed on TWO steps — 831-ezea and the terminology check
+      629-t6b — from a macbookair paste minutes old. macbookair re-pasted before
+      I landed it and their top-three had MOVED INSIDE ONE CYCLE: the new top two
+      are running-workspace-tests (runs=80, avg 124225) and checking-a-missing-
+      ruby (runs=134, avg 30305), with 831-ezea third and 629-t6b out of the list
+      entirely. So a cycle-metrics paste is a SNAPSHOT and this packet carries the
+      timestamps for that reason.
+
+      THREE CAVEATS, all from the hosts that supplied the data, all of which
+      would otherwise get this discounted on first reading:
+
+      1. saved_ms_upper IS A BOUND, NOT A SAVING. The timing log carries no input
+         identity, so nobody can claim a given run would have hit a cache. 3.6M ms
+         is what memoisation could save if EVERY run were a hit. macbookair's own
+         top step makes the point: 9.8M ms on running-workspace-tests is only
+         reachable if all 80 workspace-test runs would have been hits, which is
+         obviously false for a step whose input is the whole tree.
+
+      2. DO NOT GENERALISE "ZERO FAILURES" PAST THESE STEPS. macbookair's `recur`
+         reports build-check at fail_pct=34 over 225 runs — the gate itself fails
+         a third of the time. Every skippable entry is fail_pct=0, so the argument
+         holds for the candidates; a reader who runs `recur` and sees 34% will
+         otherwise think the data was cherry-picked.
+
+      3. macbookair's AVERAGES ARE NOT COMPARABLE TO A NORMAL HOST.
+         build_check_mix=mixed:forced=291,memoised=73 — three-quarters of their
+         build-check runs were FORCED, because they have been running with the
+         force flag all session to make gate behaviour observable. Comparing their
+         avg_ms against a host that lets memoisation work compares two different
+         things. They flagged it themselves; it is the apparatus-in-the-
+         measurement problem, in the measurement being used to justify a change.
+
+      AND THE LOG PATH IS CONFIRMED CANONICAL ON BOTH HOSTS
+      (.cache/metrics/tillandsias-timing.jsonl), which matters because 1096-p3tn
+      found a host with TWO timing logs holding disjoint step sets. Nobody should
+      extend this reading to a third host without checking which log they read.
+
+      TEN OF TWELVE STEMS ARE NOT PASTING cycle-metrics, including macuahuitl's
+      own. Two hosts is the minimum for this rule to fire at all, so yoga and
+      macbookair are currently the entire evidence base for fleet-wide
+      memoisation decisions. That is the other half of 1001-q3zf and it is a
+      coordinator failure first: I ran this audit last cycle and reported the stem
+      count without reading the skippable lines.
+    next_action: |
+      Memoise 831-ezea on a digest of the plan ledger corpus plus the archiver
+      script, emitting a hit record per 1074-96z9 so the effect is measurable.
+      Do NOT memoise on a timestamp. Before implementing, get a third host's
+      cycle-metrics paste: two hosts is the trigger, not a mandate, and one of
+      the two is running a non-representative gate configuration.

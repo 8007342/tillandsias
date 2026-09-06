@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: two-timing-logs-on-one-host-so-every-recurrence-count-is-a-partition-presenting-as-a-total
+    event:
+      type: note
+      ts: "2026-09-06T07:38:35Z"
+      host: macuahuitl
+      summary: |-
+        SECOND HOST. The split reproduces on macuahuitl, so it is not specific to
+        pirria's environment:
+
+          .cache/metrics/tillandsias-timing.jsonl   77,578 lines  12,302,549 bytes
+          /tmp/tillandsias-timing.jsonl              1,148 lines     148,388 bytes
+
+        Found incidentally while measuring 1105-h8vr, not by looking for it —
+        which is the point: neither host went looking, and no check reports it.
+        Two hosts out of two examined. Nobody should quote a `runs=` or a
+        `skippable:` top-3 from any host until that host has confirmed which
+        log it read, and 1103-r7wq's readings are sound only because both hosts
+        happened to report source= explicitly.
