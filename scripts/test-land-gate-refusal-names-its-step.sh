@@ -130,6 +130,73 @@ else
     bad "the diagnostic named a passing arm: $(printf '%s' "$out3" | grep -m1 'first failing')"
 fi
 
+# ── 4c. AN ADVISORY _warn QUOTING A VIOLATION COUNT IS NOT THE CAUSE ──────
+# SECOND REAL INSTANCE, macuahuitl 2026-09-05. The diagnostic named
+# `[build] standing declared-closure debt: violation:declared-closure-unresolvable:4`
+# — a `_warn`, advisory by design under 885-92iu, whose own comment says it
+# refuses nothing. The real failure was ~60 lines further down. That line clears
+# both earlier defences: anchored at column zero once ANSI is stripped, and not
+# an `ok` row. It holds `violation:` because it is CORRECTLY REPORTING A
+# VIOLATION COUNT THAT IS NOT A GATE FAILURE.
+#
+# The discriminator is the colour the stripper was throwing away: build.sh's
+# `_error` is RED (0;31), `_warn` is YELLOW (0;33). This arm reproduces the real
+# log's bytes, escapes included, and the distance — the cause must be found past
+# the advisory, not at it.
+cat > build.sh <<'STUB'
+#!/usr/bin/env bash
+printf '\033[0;36m[build]\033[0m Checking declared closures...\n'
+printf '\033[0;33m[build]\033[0m standing declared-closure debt: violation:declared-closure-unresolvable:4 (see '"'"'tillandsias-plan declared-closures'"'"'; not a gate)\n'
+i=0; while [ $i -lt 60 ]; do echo "  ok   some passing arm $i"; i=$((i+1)); done
+echo "FAIL: expected measured-clean, got: sigpipe-decided:fx:2:2/3"
+printf '\033[0;31m[build]\033[0m the calibration corpus refused\n'
+exit 1
+STUB
+chmod +x build.sh
+G add -A >/dev/null; G commit -q -m "a gate whose advisory warning quotes a violation count"
+out4c="$(bash scripts/land-on-platform-branch.sh linux-next 1 2>&1)"
+if printf '%s' "$out4c" | grep -q 'first failing line: FAIL: expected measured-clean'; then
+    ok "an advisory _warn quoting violation: is skipped; the real FAIL is named"
+else
+    bad "the diagnostic named the advisory: $(printf '%s' "$out4c" | grep -m1 'first failing')"
+fi
+printf '%s' "$out4c" | grep -q 'declared-closure-unresolvable' \
+    && bad "the advisory line is still being reported as the cause" \
+    || ok "the advisory line does not appear in the refusal at all"
+
+# ── 4d. A RED _error IS the cause when nothing else failed first ───────────
+# The severity rule must not make [build] lines invisible — only advisory ones.
+cat > build.sh <<'STUB'
+#!/usr/bin/env bash
+printf '\033[0;33m[build]\033[0m advisory: violation:some-standing-debt:3\n'
+printf '\033[0;31m[build]\033[0m the gate refused for a reason only _error names\n'
+exit 1
+STUB
+chmod +x build.sh
+G add -A >/dev/null; G commit -q -m "a gate whose only failure is a red _error line"
+out4d="$(bash scripts/land-on-platform-branch.sh linux-next 1 2>&1)"
+printf '%s' "$out4d" | grep -q 'first failing line: \[build\] the gate refused for a reason only _error names' \
+    && ok "a red _error line is named when it is the first real failure" \
+    || bad "the severity rule swallowed a genuine _error: $(printf '%s' "$out4d" | grep -m1 'first failing')"
+
+# ── 4e. NO COLOUR IN THE LOG: fall back, AND SAY SO ───────────────────────
+# Piped through a stripper, TERM=dumb, NO_COLOR, a CI that filters escapes.
+# Severity is genuinely unavailable there, so the text heuristic returns — and
+# an unnamed fallback silently answering a weaker question is the
+# could-not-run-reported-as-clean shape of 1024-c3h3.
+cat > build.sh <<'STUB'
+#!/usr/bin/env bash
+echo "[build] standing declared-closure debt: violation:declared-closure-unresolvable:4"
+echo "FAIL: the arm that actually failed"
+exit 1
+STUB
+chmod +x build.sh
+G add -A >/dev/null; G commit -q -m "a gate log with no colour at all"
+out4e="$(bash scripts/land-on-platform-branch.sh linux-next 1 2>&1)"
+printf '%s' "$out4e" | grep -q 'severity was unavailable' \
+    && ok "a colourless log names its fallback instead of degrading silently" \
+    || bad "the fallback did not announce itself: $(printf '%s' "$out4e" | grep -m1 'first failing')"
+
 # ── 5. NEGATIVE CONTROL: a PASSING gate says none of this ─────────────────
 # Without this, arms 1-4 are satisfied by a tool that refuses unconditionally.
 cat > build.sh <<'STUB'

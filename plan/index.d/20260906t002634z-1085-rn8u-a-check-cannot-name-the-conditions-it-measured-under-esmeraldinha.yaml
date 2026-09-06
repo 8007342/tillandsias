@@ -17,6 +17,16 @@ packets:
       - "build.sh exports an explicit in-gate marker on the --check path only, and a check invoked by the gate can read it; pre-fix result: FAILS, no variable in this tree names that condition — the nearest, TILLANDSIAS_NO_SINGLETON at build.sh:26, is exported unconditionally and means something else"
       - "a verdict produced inside the gate is distinguishable in its OWN TEXT from one produced by a standalone sweep, so the distinction survives being pasted into a packet by someone who was not there; pre-fix result: FAILS, both print the same string"
       - "a fixture asserts the export is still present in build.sh AS A LITERAL, and reds if it is removed; pre-fix result: FAILS, nothing reads it because nothing writes it. THIS IS THE CRITERION THAT MAKES THE OTHER TWO REAL — without it the two halves drift silently and every in-gate run starts emitting the SAFE-looking value with nothing complaining"
+    unscoreable: |
+      THE TEST IS THE FIX: criterion 3 IS the fixture, and a closure may
+      only pin a test that exists. No litmus covers whether a check can
+      name its own run conditions today, because no check can. The
+      claimer names one if it adds it.
+
+      Deliberately not pinned to an existing gate-contract lane: those
+      assert what the gate DOES, and this packet is about whether a
+      verdict can say which machine produced it, which is a property of
+      the verdict TEXT rather than of the gate run.
     title: |
       a verdict-producing check cannot name the conditions it measured under, so `measured-clean` from an idle box and from inside a live gate are the same string — and on current evidence they are not the same claim
     context: |
