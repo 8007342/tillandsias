@@ -24299,24 +24299,6 @@ esac
         );
     }
 
-    /// ORDER 759-vceg. THE GATE MUST SIT BETWEEN AUTHENTICATION AND
-    /// PERSISTENCE, and that is an ORDERING property no unit test on the pure
-    /// verdict can see.
-    ///
-    /// The decision functions are covered and mutation-tested elsewhere in this
-    /// file. What they cannot show is that `run_provider_login` actually calls
-    /// them, and calls them BEFORE writing the token to Vault. Move the vault
-    /// write above the probe and every one of those tests still passes while
-    /// the defect returns in full: a token that cannot push, seeded anyway.
-    ///
-    /// Asserted on the function's own body, the same way
-    /// `idiomatic_podman_launch_paths_do_not_bypass_shared_layer` asserts its
-    /// architectural invariant. This is weaker than executing the path and is
-    /// not pretending otherwise — see the packet's event for why executing it
-    /// hermetically is not cheap: the gate sits downstream of vault bootstrap
-    /// and a full container preflight, so a stubbed podman dies at vault
-    /// preflight long before reaching it.
-
     /// ORDER 759-vceg, SECOND DEFECT. THE NO-UPSTREAM ARM MUST REFUSE, NOT
     /// PRINT AND CONTINUE.
     ///
@@ -24374,6 +24356,23 @@ esac
         );
     }
 
+    /// ORDER 759-vceg. THE GATE MUST SIT BETWEEN AUTHENTICATION AND
+    /// PERSISTENCE, and that is an ORDERING property no unit test on the pure
+    /// verdict can see.
+    ///
+    /// The decision functions are covered and mutation-tested elsewhere in this
+    /// file. What they cannot show is that `run_provider_login` actually calls
+    /// them, and calls them BEFORE writing the token to Vault. Move the vault
+    /// write above the probe and every one of those tests still passes while
+    /// the defect returns in full: a token that cannot push, seeded anyway.
+    ///
+    /// Asserted on the function's own body, the same way
+    /// `idiomatic_podman_launch_paths_do_not_bypass_shared_layer` asserts its
+    /// architectural invariant. This is weaker than executing the path and is
+    /// not pretending otherwise — see the packet's event for why executing it
+    /// hermetically is not cheap: the gate sits downstream of vault bootstrap
+    /// and a full container preflight, so a stubbed podman dies at vault
+    /// preflight long before reaching it.
     #[test]
     fn the_push_authorization_gate_runs_before_the_vault_write() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
