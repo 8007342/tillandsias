@@ -1,0 +1,63 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: two-timing-logs-on-one-host-so-every-recurrence-count-is-a-partition-presenting-as-a-total
+    order: 1096-p3tn
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [observability, testing, fail-loud, metrics]
+    estimated_hours: 2
+    owned_files:
+      - scripts/cycle-metrics.sh
+      - scripts/metrics-log-path.sh
+    verifiable_closure: |
+      bash scripts/cycle-metrics.sh with metrics-log-path.sh made unsourceable —
+      it must exit non-zero with a named cause instead of writing to /tmp. RED on
+      today's code, which silently substitutes a stub returning /tmp/<name>. Plus
+      a reader-side arm that errors when a second timing log exists.
+    title: |
+      MEASURED on pirria: two live timing logs, overlapping in time, both carrying both hosts, with near-disjoint step sets — so `runs=` and `skippable:` are computed over a PARTITION while presenting as TOTALS
+    context: |
+      FOUND by pirria during the authorised v56.9.5.1 floor smoke, 2026-09-06.
+      Reported as outranking the smoke itself, correctly.
+
+        /tmp/tillandsias-timing.jsonl             99 lines  01:29:18Z..22:42:43Z
+        .cache/metrics/tillandsias-timing.jsonl  162 lines  22:15:13Z..06:31:44Z
+        steps only in /tmp: 6      steps only in .cache: 160
+        archiver-check-* in /tmp: 0     in .cache: 2
+
+      Spans OVERLAP 22:15-22:42Z and BOTH files carry both hosts (toolbx and
+      pirria), so this is neither a clean cutover nor a host split.
+
+      CAUSE, visible at scripts/cycle-metrics.sh:249-252 — metrics-log-path.sh is
+      sourced best-effort with `|| true`, and on failure a stub returns
+      /tmp/<name>. The file is present, so some invocations source it and some do
+      not. The failure is silent and the fallback is a valid-looking path.
+
+      WHY IT OUTRANKS A MISPLACED FILE. The hourly cross-host recurrence audit
+      (1001-q3zf) compares `runs=` across hosts and reads `skippable:` top-3, all
+      computed over ONE path. A reader whose sourcing fails gets /tmp and misses
+      everything after 22:42Z — including the entire smoke and, pointedly,
+      1074-96z9's OWN archiver-check-hit/miss records, which exist in exactly one
+      of the two files. A low `runs=` then reads as "this step is rare" rather
+      than "I read half the log", and the rule's output cannot distinguish them.
+
+      THE BLOCK'S OWN COMMENT IS NOW EVIDENCE RATHER THAN DOCUMENTATION: "The
+      rule itself lives in one file so a writer and a reader cannot drift apart —
+      which is the defect this fixes." Drift is occurring in both directions, on
+      one host, on one day, after that fix.
+
+      CLASS. Sibling of methodology `agreement_at_zero_is_not_a_remedy`: an
+      instrument that cannot report that it could not look. Reading /tmp yields a
+      SMALLER NUMBER, not an error — and a smaller number is a legitimate value
+      for that field, which is exactly why nothing catches it. Same shape as the
+      agent-shell grep zero and as a green gate that ran no tests.
+    next_action: |
+      Make the fallback REFUSE rather than silently choose a second path: if
+      metrics-log-path.sh cannot be sourced, exit non-zero with a named cause
+      instead of writing to /tmp. Then add a reader-side guard that errors when a
+      second timing log exists, and decide whether to merge the two files or
+      declare /tmp historical. A writer that cannot resolve the canonical path
+      must say so, not pick one.

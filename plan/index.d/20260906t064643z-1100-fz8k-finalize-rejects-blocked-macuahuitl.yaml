@@ -1,0 +1,59 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: finalize-cycle-refused-every-blocked-cycle-after-writing-its-ledger-line
+    order: 1100-fz8k
+    status: implemented
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [attestation, fail-loud, multi-host, exit-contract]
+    estimated_hours: 1
+    owned_files:
+      - scripts/finalize-cycle.sh
+    unscoreable: |
+      Fixed in the commit that files it. The matcher is one line and its control
+      is inline in the commit message; a fixture would need a full cycle with a
+      landed head to exercise finalize end to end, which is the thing 1084-style
+      packets exist for and is out of scope here.
+    title: |
+      scripts/finalize-cycle.sh:100 tested `^MO-FULL: COMPLETE` only, so a BLOCKED cycle — a documented first-class disposition — was reported as record-failed AFTER `record` had already appended a valid ledger line
+    context: |
+      MEASURED on macuahuitl 2026-09-06T06:44:49Z, hitting my own exit contract.
+
+      The sequence: land succeeded (ok:land:dffb6146f:attempt-1), boundary
+      re-verified, `record` ran with rc=0 and APPENDED a well-formed line —
+
+        MO-FULL: BLOCKED dffb6146f5ab... linux-next dffb6146f5ab...
+
+      — and finalize then printed `refused:finalize:record-failed — the ledger
+      line was not written; do NOT emit a marker` and exited 4. The line HAD been
+      written. The refusal message asserts the opposite of what happened.
+
+      BLOCKED IS NOT AN ERROR STATE. meta-orchestration SKILL.md:115 defines
+      DISPOSITION as {COMPLETE, BLOCKED}; :162 documents
+      `MO_FULL_DISPOSITION=BLOCKED` for a blocked-but-pushed cycle; and
+      mo-full-attest.sh:258 validates the value explicitly, rejecting anything
+      else. Every layer supported it except the one composing them.
+
+      TWO CONSEQUENCES, THE SECOND WORSE THAN THE FIRST.
+
+      1. A blocked cycle could never complete its exit contract through this
+         script — the one command the skill tells hosts to finish with.
+      2. The ledger line is written BEFORE the refusal, so the file is left dirty
+         holding an unrecorded attestation. The obvious next move is to re-run
+         `record` by hand, which appends a DUPLICATE line for the same head.
+         That is exactly what happened here: two identical attestations at
+         06:44:49Z and 06:45:03Z, the second created by me while diagnosing the
+         first. Removed before landing.
+
+      THE FAILURE MODE PUNISHED THE HONEST DISPOSITION. A cycle willing to say it
+      was blocked could not attest at all; a cycle claiming COMPLETE sailed
+      through. That is the same incentive inversion macneo found in the boundary
+      guard the same night — where a late snapshot manufactures a green and the
+      honest path (refuse, report, explain) is the expensive one. Two independent
+      instances in one night of a guard whose cheap path is the dishonest one.
+
+      FIX: `grep -qE '^MO-FULL: (COMPLETE|BLOCKED)'`. Control run inline — it
+      accepts both dispositions and still rejects `MO-FULL: FAIL something` and
+      arbitrary noise, so the refusal has not been weakened into a pass-through.
