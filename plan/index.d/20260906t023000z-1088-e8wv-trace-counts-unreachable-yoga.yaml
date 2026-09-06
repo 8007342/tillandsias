@@ -1,0 +1,82 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: trace-coverage-counts-annotations-on-code-production-cannot-reach
+    order: 1088-e8wv
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [traceability, guards, metrics, fail-loud]
+    estimated_hours: 4
+    owned_files:
+      - scripts/validate-traces.sh
+      - scripts/trace-coverage.sh
+    title: |
+      validate-traces reports 100% while counting `@trace spec:` annotations attached to `#[allow(dead_code)]` and test-only functions, so an unknown fraction of trace coverage is satisfied by code production cannot reach
+    context: |
+      FOUND while fixing a detached annotation in tray/mod.rs (the all-features
+      clippy red). The `@trace spec:tray-ux, spec:remote-projects` block had
+      drifted onto `cloud_overflow_row`, and the obvious repair — move it back
+      to `build_cloud_projects_submenu` — turned out to be wrong: that function
+      carries `@trace dead_code — retired by order 628-p5tj`, is
+      `#[allow(dead_code)]`, and its only callers are at :6854, :6914 and
+      :6950, all inside the `#[cfg(test)]` module that starts at :4814.
+      Production never reaches it. Moving the annotation would have bought a
+      green by relocating the false attribution rather than removing it.
+
+      That is a general question, not one function: HOW MUCH of the trace
+      ledger is satisfied by code production cannot execute? Nobody knows, and
+      the number is currently reported as 100%.
+
+      MEASURED, PARTIALLY, AND THE FAILED HALF IS THE ARGUMENT FOR THE PACKET.
+      A one-pass awk over every tracked .rs file finds 27 `@trace spec:`
+      annotations attached directly to an item carrying `#[allow(dead_code)]`.
+      That number is reliable: the attribute sits on the line after the
+      annotation and needs no parsing.
+
+      The test-versus-live split is NOT reliable and no figure is reported for
+      it here. The same pass produced `intest=423 live=354`, and the 423 is
+      wrong: it latches on the first `#[cfg(test)]` in a file and never
+      unlatches, so everything below it counts as test code. In tray/mod.rs the
+      first `#[cfg(test)]` is at :770 on a single FUNCTION (`ready_for_test`),
+      not on the test module at :4814 — so 31 live annotations in that one file
+      alone were misclassified. A grep cannot answer this question, which is
+      exactly why the deliverable is a brace-aware or syntax-aware pass rather
+      than a bigger regex.
+
+      WHY IT MATTERS. `trace-coverage.sh` and the ghost-trace gate are how this
+      project answers "is this spec implemented". If an annotation on a retired
+      function counts, the answer includes scaffolding, and a spec can be fully
+      "covered" by code no user path touches. Same shape as the week's other
+      findings — a number true about the FILE and false about the thing the
+      file describes — and worse here, because the trace ledger is what other
+      checks cite.
+
+      NOT A CLAIM THAT EVERY SUCH ANNOTATION IS WRONG. A retired function may
+      legitimately carry `@trace dead_code`; that vocabulary exists and is the
+      honest form. The defect is a `spec:` annotation — a claim of
+      implementation — on an item production cannot run, and the remedy per
+      instance is likely `dead_code` or deletion, not a move.
+    exit_criteria:
+      - "a measurement exists of how many `@trace spec:` annotations attach to items production cannot reach, split into `#[allow(dead_code)]` and test-only, produced by a pass that does not misclassify a file whose first `#[cfg(test)]` is on a function rather than a module; pre-fix result: FAILS (no such measurement; the naive pass reports intest=423 with 31 known-wrong in one file)"
+      - "trace coverage reported by validate-traces.sh/trace-coverage.sh either excludes unreachable-item annotations or states the fraction alongside the headline number, so 100% cannot be read as 100% of production; pre-fix result: FAILS (reports 100% with 27 dead_code-attached annotations counted)"
+      - "an annotation legitimately marked `@trace dead_code` is NOT counted as a defect — the negative control, without which deleting the vocabulary scores green"
+    unscoreable: |
+      The pin is a fixture over a scratch tree with four shapes: a spec
+      annotation on a live fn (counted), on an `#[allow(dead_code)]` fn (not
+      counted as coverage), inside a `#[cfg(test)]` module (not counted), and a
+      `@trace dead_code` annotation on a retired fn (accepted, the negative
+      control). The claimer adds it.
+    events:
+      - type: filed
+        ts: "2026-09-06T02:30:00Z"
+        agent_id: "linux-yoga-claude-20260906t023000z"
+        host: yoga
+        summary: |
+          Filed by yoga from the tray/mod.rs detached-annotation fix, at the
+          coordinator's request. The first deliverable is deliberately a
+          MEASUREMENT rather than an argument. My own partial attempt is
+          recorded above, including the number I could not trust and why, so
+          the claimer inherits the trap rather than rediscovering it.
