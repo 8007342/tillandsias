@@ -491,6 +491,25 @@ verification:
           process actually received, or call the tool directly. A helper that
           loops variants is the thing most likely to alter them.
 
+      - id: an_unquoted_heredoc_edits_the_evidence_it_is_writing
+        kind: judgment
+        rule: >
+          WRITE EVERY LEDGER FRAGMENT AND EVERY RECORD THROUGH A QUOTED HEREDOC
+          (<<'EOF'), AND SUBSTITUTE VARIABLES AFTERWARDS WITH sed. An unquoted
+          heredoc performs command substitution on its body, so backticked prose
+          is EXECUTED and replaced by its output — usually empty. MEASURED on
+          macuahuitl 2026-09-06: a correction fragment explaining that a cost
+          driver was the plan-ledger check was written with <<EOF, the shell ran
+          the backticked name, and the committed text read "THE DRIVER IS ,
+          WHICH IS O(FRAGMENTS)" — the words naming the driver deleted from the
+          document whose entire purpose was to name it. It COMMITTED CLEAN: no
+          error, no guard, valid YAML, plausible English, and a fold that
+          reported ok. Caught only by reading the file back. This is the worst
+          shape in the family the same night produced: every other instrument
+          returned a wrong ANSWER, while this one silently edited the EVIDENCE.
+          `<<EOF` and `<<'EOF'` differ by one character with no diagnostic
+          between them, and the corrupted artifact is the record itself.
+
       - id: ancestry_is_not_evidence_that_work_is_unlanded
         kind: judgment
         rule: >
