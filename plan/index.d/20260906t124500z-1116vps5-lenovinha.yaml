@@ -1,0 +1,97 @@
+packets:
+  - packet_id: exec-bit-guard-cannot-see-an-invocation-written-in-prose-so-the-scripts-the-skills-name-are-unprotected
+    order: 1116-vps5
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    pickup_role: any
+    depends_on: []
+    capability_tags:
+      - guards
+      - bash
+      - meta-orchestration
+      - fleet
+    estimated_hours: 2
+    title: >
+      check-script-exec-bits only sees invocations in SHELL-COMMAND POSITION, so
+      a script whose only by-path invocation is prose in a SKILL.md is
+      unprotected — and scripts/finalize-cycle.sh reached trunk as mode 100644.
+    context: |
+      MEASURED, WITH A POSITIVE CONTROL, on lenovinha 2026-09-06.
+
+      I dropped scripts/finalize-cycle.sh from 100755 to 100644 by rewriting it
+      through a temp file (`{ head; cat; tail; } > tmp && mv tmp <path>`; mv
+      installs the temp file's default permissions) and LANDED it as
+      fa7a9ce2b. Every host that follows the worker skill invokes that script
+      by path, so on trunk it failed with "Permission denied", exit 126. I
+      found it because it broke my own cycle's attestation.
+
+      THE GUARD FOR THIS EXISTS, IS GATED, AND DID NOT FIRE. My re-gate ran
+      AFTER the mv, against the 644 worktree file, and reported
+      `ok:script-exec-bits:54 checked`. check-script-exec-bits.sh was written
+      for exactly this failure — its own comment names the mechanism, "A script
+      rewritten through a temp file (mv drops the exec bit)" — and 887-bz88
+      extended it to consult the WORKTREE as well as the index precisely so the
+      regression lands at gate time rather than after staging. Both arms are
+      correct. The candidate set is correct: the file is a tracked scripts/*.sh
+      with a shebang, non-executable in the worktree, so it WAS a candidate.
+
+      THE HOLE IS THE INVOCATION SWEEP. A candidate is only condemned if some
+      tracked caller file invokes it BY PATH, and the sweep pattern requires
+      command position — start of line, after `;` `&` `|` `(`, inside `$(`, or
+      a YAML `command:` key. The worker skill invokes this script as prose:
+
+        4.  **Attest**: ... run `scripts/finalize-cycle.sh <active-branch>`
+
+      preceded by a BACKTICK, inside a sentence. The sweep cannot see it.
+
+      THE POSITIVE CONTROL IS WHAT MAKES THIS A DEFECT REPORT RATHER THAN A
+      GUESS. Both scripts appear twice in that same SKILL.md:
+
+        scripts/finalize-cycle.sh          2 occurrences, 0 match the sweep
+        scripts/land-on-platform-branch.sh 2 occurrences, 1 matches the sweep
+
+      The sibling is protected because it also appears in a fenced code block,
+      in command position. Mine appears only in prose. The guard's coverage
+      therefore depends on a PROSE STYLE CHOICE in a document, which nobody
+      writing that document knows they are making.
+
+      AND THE EXPOSURE IS BIASED TOWARD THE WORST CASES. The scripts a SKILL.md
+      names in prose are, by construction, the ones every host runs by path
+      every cycle — finalize-cycle, the credential guard, the boundary guard.
+      This guard's own history records the same class reaching origin before:
+      check-credential-channel.sh landed as 100644 on 2026-08-25, "the
+      credential guard itself, which every host invokes by path before any
+      committable work".
+
+      NOT AN ARGUMENT FOR WIDENING THE SWEEP CARELESSLY. The guard's comments
+      warn twice that a widened filter behind a narrow sweep reports a clean
+      tree it never examined, so sweep and filter must widen together. And a
+      naive widening would match every mention of a script name in prose,
+      including ones that are not invocations at all — the fix needs to decide
+      what a prose mention means, not just match more of them.
+    exit_criteria:
+      - |
+          A script whose only by-path invocation is a prose mention in a
+          tracked SKILL.md is protected: dropping its exec bit makes
+          check-script-exec-bits REFUSE. Demonstrated on
+          scripts/finalize-cycle.sh, which today passes at mode 100644.
+      - |
+          The sweep and the awk filter widen TOGETHER, per the guard's own
+          standing warning that a widened filter behind a narrow sweep reports
+          a clean tree it never examined. A fixture asserts a form the sweep
+          cannot see is never silently dropped by the filter.
+      - |
+          A negative control keeps it from becoming a name-matcher: a tracked
+          file that MENTIONS a script path without invoking it — prose about a
+          script, a path inside a comment quoting history — does not produce a
+          violation.
+    unscoreable: |
+      No litmus can be named yet: the pin is the fixture criteria 1-3 create,
+      and naming a test that does not exist is what 885-92iu refuses. Replace
+      this with a verifiable_closure naming that fixture once it lands.
+    notes: |
+      Filed by the host that caused the instance. The mode itself is restored
+      in a separate commit; this packet is about the guard being unable to see
+      the invocation, which is why the restore is not a fix.
