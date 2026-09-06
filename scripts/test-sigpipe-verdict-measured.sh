@@ -36,7 +36,7 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CHECK="$ROOT/scripts/check-sigpipe-verdict-measured.sh"
+CHECK="$ROOT/scripts/lib-sigpipe-verdict.sh"
 pass=0; fail=0
 ok()  { echo "ok: $1"; pass=$((pass+1)); }
 bad() { echo "FAIL: $1" >&2; fail=$((fail+1)); }
