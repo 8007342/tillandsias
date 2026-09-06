@@ -1,0 +1,82 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-push-authorization-probe-reads-the-users-repo-access-not-the-tokens-grant-so-it-greens-a-token-that-cannot-push
+    order: 1106-k2df
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [credentials, fail-loud, multi-host, verdict-grammar]
+    estimated_hours: 3
+    owned_files:
+      - scripts/check-credential-channel.sh
+      - scripts/test-check-credential-channel.sh
+    verifiable_closure: |
+      bash scripts/test-check-credential-channel.sh with an arm for a token that
+      AUTHENTICATES and cannot PUSH — reads succeed, `.permissions.push` is true,
+      `git push --dry-run` returns 403. The check must NOT emit an ok:/seeding
+      verdict for it. RED ON TODAY'S CODE: that input currently yields verdict Ok
+      and the channel seeds.
+    title: |
+      MEASURED live on esmeraldinha against a new fine-grained PAT: `.permissions.push` returns true while `git push` is denied 403 — the field reflects the authenticated USER's access to the repo, not the TOKEN's granted scopes, so 759-vceg's central design claim is false
+    context: |
+      FOUND by esmeraldinha 2026-09-06, minutes after the operator restored their
+      credential, on the operator's brand-new fine-grained PAT.
+
+      759-vceg states that `gh api repos/{owner}/{repo} --jq .permissions.push`
+      "covers classic and fine-grained tokens, which is why it is the signal".
+      Measured:
+
+        gh api repos/8007342/tillandsias --jq .permissions.push  -> true   rc=0
+        git push --dry-run                                       -> 403
+          remote: Permission to 8007342/tillandsias.git denied to 8007342.
+
+      THE PROBE SAYS THE TOKEN MAY PUSH. THE PUSH IS DENIED. That is exactly the
+      state the packet exists to prevent, produced by the packet's own
+      instrument, on a host running the guard, with the guard reporting green.
+
+      STRUCTURAL, NOT A FLUKE. The full object is
+      {"admin":true,"maintain":true,"pull":true,"push":true,"triage":true} — the
+      complete OWNER permission set. It describes the authenticated USER's access
+      to the repository, not the token's grants. 8007342 owns the repo, so it
+      reads push:true regardless of what the fine-grained token was granted.
+      Corroborated: contents READ works on this token (README.md and
+      refs/heads/main both resolve), so the repo IS inside the token's
+      repository-access list and only the write half is missing. Read yes, push
+      no, .permissions.push true.
+
+      AND THE FAILURE TEXT IS VERBATIM THE ONE IN
+      github_push_authorization_verdict's OWN DOC COMMENT — "Permission to
+      8007342/tillandsias.git denied to 8007342", the 2026-08-15 incident the
+      packet was written for. It has recurred, with the guard green.
+
+      ALL FOUR SHAPES ARE NOW MEASURED LIVE and only the accept is unsound:
+        true                  -> Ok    -> SEEDS   <- push still denied
+        401 JSON error body   -> other -> refuses
+        404 JSON error body   -> other -> refuses
+        null (no permissions) -> other -> refuses
+      Refusing correctly on garbage never mattered if `true` is not proof.
+
+      A SECOND, NARROWER CORRECTION FROM THE SAME RUN, and it closes the last
+      escape: a 403 does NOT erase git's credential store; a 401 does. The store
+      held at 121 bytes across this rejected push, where it went to 0 on the
+      revoked token. So "the store self-erases on a rejected push" was too broad
+      — it erases on failed AUTHENTICATION, not on failed AUTHORIZATION. Which
+      means `missing:no-credential-channel` cannot even be REACHED by the exact
+      class of token this packet targets: a token that authenticates and cannot
+      push leaves the store intact and the check green indefinitely.
+
+      esmeraldinha explicitly did NOT propose a replacement signal, which is the
+      right call — it is design work for the row and guessing would repeat the
+      error. What they did state is the requirement: any replacement must
+      distinguish the TOKEN's grant from the USER's access, and
+      repos/{owner}/{repo}.permissions provably cannot.
+    next_action: |
+      Find a read-only signal that reflects the TOKEN's grant rather than the
+      user's access, or establish that none exists for fine-grained PATs. A
+      `git push --dry-run` to a throwaway ref is ground truth but side-effecting
+      and expensive. IF NO CHEAP READ-ONLY SIGNAL EXISTS, THAT IS THE FINDING and
+      the criterion changes from "verify" to "verify or say you cannot" — this
+      packet's own principle applied to itself. Do not ship a replacement without
+      the red arm above: a token that authenticates and cannot push.

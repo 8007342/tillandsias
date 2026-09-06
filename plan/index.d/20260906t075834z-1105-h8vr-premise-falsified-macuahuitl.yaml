@@ -1,0 +1,64 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Correction fragment per 1071-adhj. The declaring row's CAUSE is wrong.
+events:
+  - packet_id: the-answer-rate-litmus-step-times-out-because-the-timing-log-it-reads-has-grown-past-its-budget
+    event:
+      type: note
+      ts: "2026-09-06T07:59:14Z"
+      host: macuahuitl
+      summary: |-
+        THE PREMISE IS FALSIFIED ON BOTH HOSTS, INCLUDING THE ONE THAT FILED IT.
+        pirria ran the control I never ran — varying the log against a fixed
+        ledger — and I have now repeated it on a QUIET macuahuitl (land finished,
+        zero gate processes):
+
+          macuahuitl  empty log  11,602 / 11,409 / 11,240 ms   mean 11,417
+                      real log   12,887 / 12,772 ms            mean 12,830
+                      log share  ~1,413 ms = 11%
+          pirria      empty log  mean 23,656 ms   real 27,568   log share 14.2%
+
+        The timing log is ~11-14% of the runtime on both. IT IS NOT THE CAUSE.
+        My declaring row measured a TOTAL of 12,905ms on a 77,578-line log and
+        attributed it to the log because the log was conspicuously large. That is
+        causation asserted from a correlation, in a packet whose own next_action
+        warns against fixing the wrong input.
+
+        THE DRIVER IS THE PLAN-LEDGER CHECK, WHICH IS O(FRAGMENTS), NOT O(BYTES).
+        pirria's profile, varying fragment count against a fixed binary:
+          100 frags / 66,622 lines ->  1,797 ms   17.97 ms/frag
+          300 frags / 72,276 lines ->  4,786 ms   15.95 ms/frag
+          717 frags / 90,066 lines -> 12,655 ms   17.65 ms/frag
+        Fragments x7.17 -> time x7.04, while lines grew only x1.35. Flat
+        per-fragment cost across a 7x range: per-file open/parse/fold overhead,
+        essentially independent of content. Measured here: 4,698 ms over 739
+        fragments = 6.4 ms/frag — same shape, faster hardware.
+
+        A REAL HOST-PROFILE SPLIT, and it is in the BASELINE, not the log share.
+        macuahuitl's 11.4s empty-log baseline fits inside the 20s budget for ONE
+        invocation; pirria's 23.7s does not. The step runs the reporter more than
+        once, which is what puts macuahuitl over. So one defect presents as "over
+        budget immediately" on the floor host and "over on the second
+        invocation" here. yolanda's Windows host is over with NO log at all, by
+        per-process overhead. Three hosts, three profiles, one cause.
+
+        THE ACCRUAL RATE IS THE ALARMING PART, pirria's: 2026-09-04 added 70
+        fragments, 2026-09-05 added 528, 2026-09-06 119 so far. At ~17 ms each,
+        yesterday alone added ~9 SECONDS to every future ledger check on every
+        host, permanently, until something consolidates them. The fleet's most
+        productive night is its largest permanent tax, and this correction is
+        itself another fragment.
+
+        NEXT ACTION REPLACED: consolidate folded fragments (plan/archive/ already
+        holds packets-2026-08.yaml, so the direction exists) — but whether that
+        is safe against the CRDT fold, and whether the checker must see history
+        at all to validate live references, are open questions for someone who
+        knows the fold. NOT to be answered from a profile. The timing-log window
+        remains worth doing on its own merits — only 3% of the 77k rows fall
+        inside the 7d window, so 97% is parsed to answer a bounded question — but
+        as a separate efficiency packet, not as this timeout's fix.
+
+        METHOD NOTE: this fragment's first version was written through an
+        UNQUOTED heredoc and the shell EXECUTED the backticked prose inside it,
+        deleting the very words naming the driver — "THE DRIVER IS , WHICH IS
+        O(FRAGMENTS)". Caught by reading the file back rather than by the commit
+        succeeding, which it did. Quoted heredoc, placeholder substituted after.
