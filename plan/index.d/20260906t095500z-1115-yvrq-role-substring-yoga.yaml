@@ -1,0 +1,77 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-skill-tells-every-linux-host-to-pass-role-linux-so-an-immutable-host-is-offered-mutable-only-work
+    order: 1115-yvrq
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [selector, plan, multi-host, coordination]
+    estimated_hours: 3
+    owned_files:
+      - scripts/select-work-batch.sh
+      - skills/advance-work-from-plan/SKILL.md
+    title: |
+      pickup_role is matched as a case-insensitive SUBSTRING and the worker skill's host table tells every Linux host to pass `linux`, so `linux` matches `linux-mutable` and an immutable host is offered work that requires a mutable one
+    context: |
+      FOUND on yoga 2026-09-06 when the selector offered 1025-a896
+      (`pickup_role: linux-mutable`, the operator's gh-token investigation
+      assigned to macuahuitl) to yoga, which is Fedora Silverblue with a
+      read-only /usr.
+
+      MEASURED, same ledger, same moment:
+
+        --claimable-by linux             rows=302   includes 1025-a896
+        --claimable-by linux-mutable     rows=173   includes 1025-a896
+        --claimable-by linux-immutable   rows=172   EXCLUDES it
+        --claimable-by linux_immutable   rows=172   EXCLUDES it
+
+      TWO THINGS COMBINE, and neither is wrong alone. `pickup_role` is matched
+      as a case-insensitive SUBSTRING (main.rs:1386), so "linux" is inside
+      "linux-mutable". And the worker skill's Host Detection Table maps every
+      Linux host to the platform name `linux`, which is what a cycle passes to
+      select-work-batch.sh. A coarse role plus substring matching means the
+      immutable hosts see the mutable hosts' queue.
+
+      A THIRD VOCABULARY MAKES IT HARDER TO FIX BY HAND: the host probe emits
+      `linux_immutable` / `linux_mutable` with UNDERSCORES
+      (scripts/host-capability-probe.sh:25,129) while packets use hyphens.
+      Both spellings happen to exclude the mutable packet here, but a fix that
+      threads the probe's value through without reconciling the separator is
+      relying on a coincidence of substring matching.
+
+      WHAT IT COSTS, and it is not only a wasted cycle: a host that claims a
+      mutable-only packet may get some distance in before discovering it
+      cannot do the work, and the claim removes the packet from the queue of
+      the host that could. On this occasion the packet was also somebody's
+      operator-assigned investigation, so the claim would have been a
+      collision rather than merely a mistake.
+
+      NOT FIXED HERE, DELIBERATELY. Narrowing the selector from 302 to 172
+      eligible rows is a fleet-wide behaviour change and it may be wrong:
+      `linux-mutable` on a packet might mean "requires a mutable host" or
+      merely "authored on one", and those need different remedies. Deciding
+      which is a coordinator call with the numbers in front of them, which is
+      why this is filed with the measurement rather than patched.
+    exit_criteria:
+      - "an immutable Linux host's cycle is not offered packets whose pickup_role requires a mutable host, OR the packets are re-tagged so the distinction is not carried by a substring; pre-fix result: FAILS (1025-a896 offered to yoga)"
+      - "the role vocabulary is reconciled across the three places that spell it — packet pickup_role (hyphen), host-capability-probe (underscore), and the skill's host table (bare platform) — or the mismatch is named where a reader will meet it; pre-fix result: FAILS (three spellings, agreement by coincidence)"
+      - "whichever way it is decided, the reasoning is recorded: does `linux-mutable` on a packet mean REQUIRES mutable, or AUTHORED on mutable? The remedies differ and the ledger does not currently say"
+      - "NEGATIVE CONTROL: a host must not lose access to work it can genuinely do. Narrowing to 172 rows on this host is only correct if the 130 excluded rows really do require a mutable host; sample and check some before shipping the narrowing"
+    unscoreable: |
+      The pin is a fixture asserting that a packet tagged for a mutable host is
+      absent from an immutable host's batch, plus the negative control that a
+      genuinely portable packet is still offered. The claimer adds it once the
+      REQUIRES-vs-AUTHORED question above is answered, since the fixture's
+      expectations depend on that answer.
+    events:
+      - type: filed
+        ts: "2026-09-06T09:55:00Z"
+        agent_id: "linux-yoga-claude-20260906t095500z"
+        host: yoga
+        summary: |
+          Filed by yoga after declining 1025-a896: the selector offered it, the
+          packet needs a mutable host, and yoga's /usr is read-only. Declined
+          rather than claimed, and the mechanism measured rather than assumed.

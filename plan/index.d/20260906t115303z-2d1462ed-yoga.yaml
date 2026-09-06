@@ -1,0 +1,72 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: litmus-podman-idiomatic-fails-on-any-host-without-a-staged-sidecar
+    event:
+      type: progress
+      ts: "2026-09-06T11:53:03Z"
+      agent_id: linux-yoga-claude-20260906t115303z
+      host: yoga
+      summary: |-
+        CLOSED. The litmus runner stages the router sidecar before any step compiles
+        Rust, so 29 litmus files stop failing for a reason none of them tests.
+
+        REPRODUCED FIRST, by moving the artifact aside rather than reasoning from
+        the packet:
+
+          images/router/tillandsias-router-sidecar moved away
+          cargo test -p tillandsias-headless ... -> panicked at
+              crates/tillandsias-headless/build.rs:139:17
+              "required runtime asset missing"
+
+        Then, with the artifact still absent, through the fixed runner:
+
+          i Staging router sidecar (build artifact, absent — 871-wrmv)...
+          i Router sidecar staged
+          [STEP 1/1] run the headless anti-bypass source audit ... [OK]
+          Status: [PASS]
+
+        So the step now measures what it claims to, from the state that used to fail
+        it.
+
+        CRITERION 3 CHANGED THE SHAPE OF THE FIX. The audit asked whether any other
+        litmus step has the same latent dependency: 29 litmus files invoke cargo
+        against tillandsias-headless. Patching the one step named in the packet would
+        have left 28, and patching 29 would leave the 30th. The packet's own second
+        criterion offers the alternative — "the runner grows a preflight that names
+        the missing artifact once for the whole run" — and with that count in hand it
+        is plainly the right one.
+
+        THE RUNNER IS THE SOLE EXECUTOR, verified rather than assumed, because the
+        preflight is only sufficient if nothing else runs step commands: build.sh
+        (:1146) and scripts/local-ci.sh (:488) both invoke run-litmus-test.sh;
+        check-litmus-dead-inputs.sh parses without executing; test-litmus-diff-scope.sh
+        awk-extracts runner FUNCTIONS and evals those, never a step command. No other
+        path reaches a litmus step.
+
+        NON-FATAL ON PURPOSE, and this is the judgement worth recording. A host with
+        no rust toolchain cannot stage the sidecar, and must still run the many
+        litmus specs that never touch cargo. So a staging failure is NAMED and the
+        run continues; the affected steps then fail with build.rs's own diagnostic,
+        which already tells the reader exactly what to do (it is quoted in this
+        packet's context and is why the gap was diagnosable at all). Refusing the
+        whole run would trade 29 confusing failures for a total outage on hosts with
+        no stake in them.
+
+        Costs one `[[ -f ]]` when the artifact is present, which is every run after
+        the first on any host that has built once.
+
+        WHY IT MATTERS BEYOND ONE RED TEST, restating the packet's own point because
+        this cycle is a second instance of it: 865-n8vq's ledger of seven release
+        blockers is only as trustworthy as its causes, and at least one entry was an
+        unstaged artifact on the running host rather than a trunk defect. A gate that
+        reports environmental failures as code failures makes every entry in its own
+        list less believable — which is the same reason macuahuitl left tonight's
+        seven unattributed rather than guessing.
