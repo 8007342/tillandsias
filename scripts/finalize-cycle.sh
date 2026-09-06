@@ -166,5 +166,34 @@ scripts/meta-orchestration-worktree-guard.sh verify "$SD" || {
         cycle="$(date -u +%Y-%m-%dT%H:%MZ)" transcript="$_t"
 } >/dev/null 2>&1 || true
 
+# ── ORDER 1115-srfr: WHAT IS THIS HOST STILL HOLDING? ───────────────────────
+#
+# Claims are cycle-scoped — a host claims one session's slice, not the packet —
+# so a claim still held by THIS host at ITS OWN finalization is unreleased by
+# definition. There is nothing to adjudicate: the host either finishes it or
+# releases it, and it is the only party that knows which.
+#
+# WHY THE EXISTING SWEEP DOES NOT COVER IT. check-stranded-in-progress.sh is a
+# FLEET sweep for a COORDINATOR: `STRANDED_HOURS` defaults to 8 and it carries
+# no host filter at all. Its advisory-never-a-gate discipline is right for what
+# it does, because a packet legitimately in flight is indistinguishable from
+# one abandoned an hour ago. This question is different and needs no judgement,
+# and the aging is what makes the sweep unable to serve as the fix: both
+# instances that produced this check (1071-adhj ~24h, 1063-nraf ~20h, the same
+# host, one day) would have surfaced eight hours later on someone else's
+# screen, when the exiting host could have resolved either in one command.
+#
+# ADVISORY ON PURPOSE, FOR NOW. This script runs on every host, and turning it
+# into a new refusal is a fleet decision rather than this order's to take
+# (1115-srfr criterion 3). If a host strands a claim again WITH this report in
+# place, that is the evidence for escalating — and the escalation is a refusal
+# naming the release command, since releasing at that point is always correct.
+#
+# ZERO HELD CLAIMS PRINTS AN AFFIRMATIVE LINE, never silence: silence is
+# indistinguishable from the check not running, which is the failure mode this
+# whole stretch of orders keeps meeting.
+_step "report claims this host still holds"
+scripts/report-held-claims.sh || true
+
 _step "derive the terminal marker"
 exec scripts/mo-full-attest.sh self
