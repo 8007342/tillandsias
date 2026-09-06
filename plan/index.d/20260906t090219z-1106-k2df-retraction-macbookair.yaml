@@ -1,0 +1,65 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# CORRECTION FRAGMENT (convention 1071-adhj) retracting this host's own premise
+# audit. The earlier fragment is left standing and is WRONG; this says so.
+events:
+  1106-k2df:
+    - type: note
+      ts: "2026-09-06T09:02:19Z"
+      agent_id: "macos-tlatoanis-macbook-air-claude-20260905t144547z"
+      host: tlatoanis-macbook-air
+      summary: |
+        RETRACTING MY PREMISE AUDIT. I reported "the probe this packet describes
+        does not exist in this tree". IT DOES. The packet's premise holds and my
+        audit was a FALSE NEGATIVE reported as a finding.
+
+        VERIFIED, all three sites, after the coordinator pointed at them:
+          main.rs:9566  github_push_authorization_probe_args ->
+              ["exec", container, "gh", "api", "repos/{owner_repo}",
+               "--jq", ".permissions.push"]
+          main.rs:9562  doc comment, VERBATIM: "`.permissions.push` is reported
+              for BOTH classic and fine-grained tokens, which is why it is the
+              chosen signal."  <- the exact claim esmeraldinha falsified
+          main.rs:9590  github_push_authorization_verdict: "true" => Ok(())
+              which SEEDS the credential
+          main.rs:24362 a test pinning the falsified claim
+        So it is deliberate, load-bearing and guarded.
+
+        WHY THE SEARCH MISSED IT, which is the transferable part. I searched
+        .sh/.rs/.md/.yaml for `permissions`, saw only filesystem
+        `permissions().mode()` hits, and concluded absence. The probe is
+        `".permissions.push".to_string()` inside an argv vector — a jq argument
+        built as a Rust string literal. It is not a call to anything named
+        `permissions` and does not read as a probe at the grep level.
+
+        A SEARCH THAT FINDS NOTHING IS NOT PROOF OF ABSENCE. This host has spent
+        the session filing that class — a skipped gate printing ok:, a verdict
+        that could not tell unclaimed from nonexistent, a fixture whose stub
+        asserted existence for every name — and then committed it, with MORE
+        confidence than any of those, because "I searched everything".
+
+        AND THE TRUE OBSERVATIONS MADE IT WORSE. The `git push --dry-run`
+        citations in my audit are all CORRECT: check-credential-channel.sh arm
+        4, probe-upstream-auth.sh:212 and forge-validate.sh:71 do negotiate a
+        real push. Three true findings assembled into a false conclusion about
+        the tree — evidence offered in support of something it does not reach.
+
+        THE CORRECT FRAMING IS THE COORDINATOR'S: there are TWO push-
+        authorization mechanisms. The SHELL GUARDS negotiate (860-g798, ground
+        truth). The LOGIN LANE asks the API a question the API answers about the
+        USER. The fleet got it right in one place and not the other — the same
+        shape as 1074-w7qv, where one gate compiles what another never executes.
+
+        WHAT SURVIVES FROM THE AUDIT, unchanged and still useful:
+          X-Accepted-Oauth-Scopes: repo                    <- endpoint requirement
+          X-Oauth-Scopes: gist, read:org, repo, workflow   <- TOKEN grant
+        X-Oauth-Scopes is a property of the TOKEN, so the pair is a read-only
+        discriminator FOR CLASSIC TOKENS, and absent for fine-grained — the
+        class that broke. And `.permissions` returning all-true on this host,
+        because 8007342 owns the repo, is confirmed.
+
+        RE-CLAIMING. Constraint I am carrying in: the probe runs INSIDE the
+        ephemeral login container by design, so the token never reaches host
+        disk, argv or env. "Negotiate, do not ask" must not be bought by
+        weakening that isolation, and if a real dry-run is not possible there,
+        the honest outcome is to REFUSE TO SEED on a signal that cannot
+        discriminate rather than substitute a different inert check.

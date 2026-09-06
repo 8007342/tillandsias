@@ -268,9 +268,25 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
         # of this file warns about — matching a substring that appears in the
         # rejection line too — one layer down.
         #
-        # A lost race says so specifically: non-fast-forward, fetch first, or
-        # stale info. Nothing else is retryable.
-        if ! grep -qiE "non-fast-forward|fetch first|stale info" "$_plog"; then # sigpipe-ok: safe pipeline
+        # A lost race says so specifically: non-fast-forward, fetch first,
+        # stale info, or CANNOT LOCK REF.
+        #
+        # THE FOURTH PHRASING WAS MISSING AND IT IS THE ONE A BUSY TRUNK
+        # PRODUCES. Measured on macuahuitl 2026-09-06, twice consecutively:
+        #   ! [remote rejected] linux-next -> linux-next (cannot lock ref
+        #     'refs/heads/linux-next': is at 405cae043 but expected 82cef6251)
+        # That is a lost race stated as precisely as any of the three above —
+        # the remote moved between the negotiation and the ref update — and
+        # retrying is exactly what fixes it. Instead the loop refused as
+        # non-retryable and told a coordinator to relay its own trunk work to a
+        # work/ ref, which needs a trunk host to merge: self-defeating on the
+        # one host that IS the trunk host.
+        #
+        # 1064-r8fv correctly NARROWED a bare `rejected` that also matched
+        # pre-receive refusals, and then enumerated three race phrasings as
+        # though they were all of them. Narrowing a pattern is not the same as
+        # enumerating what it must still cover.
+        if ! grep -qiE "non-fast-forward|fetch first|stale info|cannot lock ref" "$_plog"; then # sigpipe-ok: safe pipeline
             echo "refused:land:push-failed — not a lost race, so retrying cannot help:" >&2
             sed -n '1,6p' "$_plog" >&2
             # ORDER 1064-r8fv. NAME THE LANE, DO NOT TAKE IT. A refusal that
