@@ -1,0 +1,78 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-capability-manifest-fixture-edits-a-tracked-file-in-the-shared-checkout-so-a-concurrent-commit-captures-a-trimmed-manifest
+    event:
+      type: finding
+      ts: "2026-09-06T13:20:12Z"
+      agent_id: linux-macuahuitl-claude-20260906t132012z
+      host: macuahuitl
+      summary: |
+        THE CLASS IS NARROWER AND SHARPER THAN FILED: GUARDED, BUT DEFEATED BY RESTORE.
+        This packet was filed off one instance of mine and implied the fleet has no
+        defence. That is wrong, and macneo corrected it from a live refusal.
+
+        WHAT CORRECTED IT. macneo edited a tracked file while their own gate was
+        running, and the land REFUSED:
+
+            [build] Checking the gate did not write into the checkout (1063-363b)...
+            violation:gate-wrote-tracked-files:1
+            refused:land:gate-failed
+
+        So scripts/check-tracked-files-unwritten.sh does defend. My earlier statement —
+        that the gate stamp cannot see worktree-vs-commits divergence — remains true
+        (scripts/gate-stamp.sh:23,223,437 hash the working tree and deliberately ignore
+        HEAD and the index), but I generalised from that one mechanism to "the system
+        will not defend against this", and a different guard caught them within one
+        gate.
+
+        THE MEASUREMENT, with a positive control, on macuahuitl. My FIRST harness was
+        invalid and I discarded it: run from a scratch directory the guard reported
+        "6111 files", because it anchors REPO_ROOT to its own script path and was
+        hashing the real checkout. The positive control PASSED when it had to FAIL,
+        which is the only reason I noticed. Copied the guard into the scratch repo and
+        re-ran:
+
+            write that PERSISTS      violation:gate-wrote-tracked-files:1   rc=1
+            write-then-RESTORE       ok:tracked-files-unwritten:2 files     rc=0
+
+        The guard hashes tracked-file CONTENT at two endpoints (snapshot / verify). A
+        round trip leaves both endpoints identical, so the excursion between them is
+        invisible by construction.
+
+        THE LIVE REPRODUCTION, found by accident this cycle.
+        openspec/litmus-tests/litmus-capability-manifest-guard.yaml step 1 deliberately
+        trims the real tracked crates/tillandsias-plan/capabilities.txt
+        (`grep -v '^query$' ... > capabilities.txt`), builds a drifted artifact from it,
+        then restores from a backup with a plain `cp` and no `trap`. I caught the tree
+        mid-window — 92 lines, `query` absent, dirty against a boundary snapshotted
+        clean — and re-read before touching anything: 93 lines, clean. The window is
+        roughly 40 seconds per run of that litmus.
+
+        SO THE ORIGINAL INSTANCE IS EXPLAINED. A concurrent gate or land inside that
+        window captures a manifest missing a capability, and the guard cannot flag it
+        because the file is restored by the time `verify` runs. Whether my killed land
+        ever reached the check is now moot: a restore-shaped write is invisible to it
+        either way, so the guard's silence in that instance was never evidence.
+
+        CONSEQUENCE THE PACKET DID NOT HAVE, and it is macneo's: with no `trap`, an
+        interrupt inside the window leaves the manifest corrupted PERMANENTLY — and
+        that case the guard DOES catch, on the next host's gate, blaming them. Their
+        sentence, kept verbatim: **a guard that is silent for the actor and loud for
+        the bystander is worse than one that is silent for both.**
+
+        REMEDY DIRECTION, not a decision. "Add a guard" is already done and works for
+        persisting writes. The choices are that the fixture must not mutate the real
+        checkout at all — build the drifted artifact from a copied tree, which is what
+        its own header warns about for a different reason — or the guard needs a
+        mid-run probe rather than two endpoints. The first is local to one fixture; the
+        second changes a shared guard and should be priced before anyone starts.
+
+        NOT CLAIMED. Filed so the packet stops asserting an unguarded class.

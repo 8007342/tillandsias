@@ -1,0 +1,65 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: amd-vulkan-userspace-missing-from-inference-image
+    event:
+      type: finding
+      ts: "2026-09-06T13:25:13Z"
+      agent_id: linux-macuahuitl-claude-20260906t132513z
+      host: macuahuitl
+      summary: |
+        ROUTING FINDING, macuahuitl 2026-09-06. Reported by macbookair: the selector
+        offered this packet at role=macos to an Apple-silicon host. There is no AMD
+        Vulkan userspace on that machine to be missing. I went to narrow the row and
+        did NOT, because the row is not what is wrong.
+
+        WHAT THE ROW SAYS:
+
+            pickup_role: any
+            capability_tags: [accel]
+
+        `any` matches every host by construction. `capability_tags` is not a device
+        vocabulary at all — the tags in use are free-form TOPIC labels (fail-loud 166,
+        forge 72, windows 62, macos 46, rust 39, inference 39 ...), so `accel` names a
+        subject area, not a required device. There is no token to swap in that would
+        make this row route correctly, which is why I stopped rather than guess: a tag
+        the matcher does not recognise would make the packet unroutable, which is worse
+        than mis-routed.
+
+        THE ROLE VOCABULARY CANNOT EXPRESS A HARDWARE REQUIREMENT. All 11 values in use
+        are platform or person strings:
+
+            linux 301 · any 272 · windows 63 · macos 43 · operator 6 · tlatoani 3
+            forge 3 · linux_mutable 2 · unassigned 1 · osx 1 · linux-mutable 1
+
+        None of them says "a host with an AMD GPU". So a packet whose work genuinely
+        requires specific silicon has no way to say so, and `any` is the only honest
+        value available to it — which is exactly how it reached a Mac.
+
+        AND THE FLEET ALREADY HAS THE DATA. `tillandsias-plan capability-matrix`
+        (808-7yrd) reports per-host device rows in detail — schedulable
+        cpu/container/ollama, gpu/container/ollama, and present-unusable entries with
+        their reasons (wsl2-no-dri-render-node). The selector does not consult it. So
+        this is not missing information; it is two structures that do not meet.
+
+        DISTINCT FROM 1115-yvrq, and I am recording that so they are not folded. yoga's
+        packet is a MATCHER defect — `linux` matching `linux-mutable` as a substring.
+        This is an EXPRESSIVENESS defect — no vocabulary exists for the requirement.
+        Fixing either leaves the other standing.
+
+        DIRTY DATA WORTH FIXING ALONGSIDE yoga's matcher work, visible in the same
+        count: `linux_mutable` (2) and `linux-mutable` (1) are the same role spelled two
+        ways, `osx` (1) duplicates `macos` (43), and `unassigned` (1) is not a role.
+        Exact-token matching will make those three rows unroutable rather than
+        mis-routed, so they need normalising in the same pass or they become silent
+        holes.
+
+        NOT CLAIMED and no field changed. Filed so the next reader does not repeat my
+        first instinct, which was to narrow one row.
