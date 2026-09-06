@@ -99,6 +99,13 @@ pub(crate) enum ProvisionRecord {
     Complete {
         written_at: Option<u64>,
         guest_binary_sha256: Option<String>,
+        /// The literal `systemctl is-active` word for the headless daemon at
+        /// the instant provisioning finished (order 1084-x8ya criterion 3).
+        ///
+        /// VERBATIM, NEVER NORMALISED. `inactive` is NOT `failed`, and the
+        /// two must not collapse: conflating them is the loss that cost this
+        /// packet eight hours on the wrong hypothesis.
+        headless_service_state: Option<String>,
     },
     /// The ERR trap fired and named the failing line.
     Failed {
@@ -135,6 +142,7 @@ pub(crate) fn provision_record_from(text: &str) -> ProvisionRecord {
     let mut written_at = None;
     let (mut line, mut rc, mut cmd) = (None, None, None);
     let mut guest_binary_sha256 = None;
+    let mut headless_service_state = None;
     for l in text.lines() {
         let mut parts = l.splitn(2, ' ');
         match (parts.next(), parts.next()) {
@@ -146,6 +154,9 @@ pub(crate) fn provision_record_from(text: &str) -> ProvisionRecord {
             (Some("guest_binary_sha256"), Some(v)) => {
                 guest_binary_sha256 = Some(v.trim().to_string())
             }
+            (Some("headless_service_state"), Some(v)) => {
+                headless_service_state = Some(v.trim().to_string())
+            }
             _ => {}
         }
     }
@@ -153,6 +164,7 @@ pub(crate) fn provision_record_from(text: &str) -> ProvisionRecord {
         Some("complete") => ProvisionRecord::Complete {
             written_at,
             guest_binary_sha256,
+            headless_service_state,
         },
         Some("failed") => ProvisionRecord::Failed {
             written_at,
@@ -219,18 +231,55 @@ pub fn provision_state_path() -> std::path::PathBuf {
 }
 
 /// The `Provisioning` line of the report.
+/// Report the daemon's state as the guest recorded it (1084-x8ya criterion 3).
+///
+/// THE WORD IS PASSED THROUGH, NOT INTERPRETED. `inactive` is reported as
+/// inactive and never as failed — the record is written moments after
+/// `systemctl start`, and a unit that has not finished coming up at that
+/// instant is expected rather than broken. Saying "failed" there would invent
+/// a fault, which is the mirror of the silence this packet exists to remove.
+///
+/// WHY IT IS WORTH RECORDING AT ALL: the handshake dies with `noise: input
+/// error`, which is snow's SIZE error rather than its crypto error, and a
+/// response too short to hold the ephemeral key is what an absent or closed
+/// listener produces. "Is anything listening" is therefore the live question,
+/// and order 272 leaves the host no way to ask it once the wire is down.
+pub(crate) fn headless_service_line(state: Option<&str>) -> String {
+    match state {
+        Some("active") => {
+            "Headless daemon: active when provisioning finished — the listener was up at \
+             that instant, so a later handshake failure is not explained by the unit \
+             never having started."
+                .to_string()
+        }
+        Some("failed") => "Headless daemon: FAILED when provisioning finished — the unit \
+             gave up. This is a listener fault, not a crypto one."
+            .to_string(),
+        Some(other) => format!(
+            "Headless daemon: {other} when provisioning finished. NOT a failure by itself — \
+             the record is written moments after `systemctl start`, so a unit still coming \
+             up is expected here."
+        ),
+        None => "Headless daemon: not recorded — this guest was provisioned before the state \
+             was captured. Absent, not inactive."
+            .to_string(),
+    }
+}
+
 pub(crate) fn provision_report_line() -> String {
     let text = std::fs::read_to_string(provision_state_path()).unwrap_or_default();
     match provision_record_from(&text) {
         ProvisionRecord::Complete {
             written_at,
             guest_binary_sha256,
+            headless_service_state,
         } => format!(
-            "Provisioning: COMPLETE — the guest script recorded its own completion{}\n{}",
+            "Provisioning: COMPLETE — the guest script recorded its own completion{}\n{}\n{}",
             written_at
                 .map(|t| format!(" at {}", format_utc(t)))
                 .unwrap_or_default(),
-            guest_binary_skew_line(guest_binary_sha256.as_deref())
+            guest_binary_skew_line(guest_binary_sha256.as_deref()),
+            headless_service_line(headless_service_state.as_deref())
         ),
         ProvisionRecord::Failed {
             written_at,
@@ -3204,6 +3253,7 @@ mod tests {
             super::ProvisionRecord::Complete {
                 written_at: Some(1_800_000_000),
                 guest_binary_sha256: None,
+                headless_service_state: None,
             }
         );
 
@@ -3255,7 +3305,8 @@ mod tests {
             super::provision_record_from(no_ts),
             super::ProvisionRecord::Complete {
                 written_at: None,
-                guest_binary_sha256: None
+                guest_binary_sha256: None,
+                headless_service_state: None,
             },
             "a record without a content timestamp reports None rather than \
              borrowing the filesystem's"
@@ -3280,9 +3331,46 @@ mod tests {
             super::ProvisionRecord::Complete {
                 written_at: Some(1_800_000_000),
                 guest_binary_sha256: Some("d677e5f5843d".into()),
+                headless_service_state: None,
             },
             "the guest's hash must reach the host; it is the only way to ask what \
              the guest is running"
+        );
+
+        // 1084-x8ya CRITERION 3. INACTIVE IS NOT FAILED.
+        //
+        // The record is written moments after `systemctl start`, so a unit
+        // still coming up at that instant is EXPECTED. Reporting it as failed
+        // would invent a fault — the mirror of the silence this packet exists
+        // to remove — so the systemctl word is passed through verbatim and the
+        // report says NOT a failure by itself.
+        let inactive = "tillandsias-provision-state v1\nphase complete\n\
+                        headless_service_state inactive\n";
+        match super::provision_record_from(inactive) {
+            super::ProvisionRecord::Complete {
+                headless_service_state,
+                ..
+            } => {
+                assert_eq!(headless_service_state.as_deref(), Some("inactive"));
+                let line = super::headless_service_line(Some("inactive"));
+                assert!(
+                    line.contains("NOT a failure by itself"),
+                    "inactive must not be reported as failed: {line}"
+                );
+                assert!(
+                    !line.to_ascii_lowercase().contains("failed"),
+                    "the word failed must not appear for an inactive unit: {line}"
+                );
+            }
+            other => panic!("expected Complete, got {other:?}"),
+        }
+
+        // A unit that really did fail must say so, or the guard above would be
+        // satisfied by a reporter that never says "failed" at all.
+        let failed_line = super::headless_service_line(Some("failed"));
+        assert!(
+            failed_line.contains("FAILED"),
+            "a failed unit must be reported as failed: {failed_line}"
         );
 
         // ABSENT is an ANSWER, not a missing field. A provision that completed
