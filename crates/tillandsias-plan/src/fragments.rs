@@ -1604,25 +1604,14 @@ fn is_yaml11_timestamp(s: &str) -> bool {
         && b[7] == b'-'
         && digit(8)
         && digit(9)
-        // ORDER 1107-bb6s: THE SEPARATOR IS NOT ENOUGH - WHAT FOLLOWS IT MUST
-        // LOOK LIKE A TIME. This accepted any string whose first ten bytes are
-        // a date and whose eleventh is `T` or a space, ignoring the rest, so
-        // ordinary prose qualified:
-        //
-        //     "2026-09-04 added 70"   -> was TRUE
-        //
-        // Harmless where the whole value is quoted; NOT harmless in
-        // `quote_timestamp_line`, which splits a rendered line on its first
-        // ": " and re-wraps the tail. Applied to a line inside a LITERAL BLOCK
-        // SCALAR it rewrote a peer's prose. Measured on the real ledger:
-        // "pirria's: 2026-09-04 added 70" came back with the tail quoted,
-        // exactly two characters longer, and trunk was red fleet-wide on it.
-        // Compaction rewrites plan/index.yaml, so this was silently editing the
-        // system of record whenever a line held ": " before a date-like token.
-        //
-        // A YAML-1.1 timestamp is a date alone, or a date + separator + time.
-        // Requiring HH:MM keeps every real timestamp quoted, so the 729-biik
-        // Psych hazard is untouched.
+        // ORDER 1107-bb6s. A YAML-1.1 timestamp is a date ALONE, or a date plus a
+        // separator plus at least HH:MM. The old form accepted ten date bytes and
+        // a separator and IGNORED THE REST, so ordinary prose qualified:
+        // "2026-09-04 added 70" -> true. quote_timestamp_line then split that on
+        // its first ": " and re-wrapped the tail, which for a line inside a
+        // LITERAL BLOCK SCALAR silently rewrote a peer's prose in the system of
+        // record. Found by yolanda by walking compaction's first divergence
+        // position; the fix is the predicate, not the caller.
         && match b.len() {
             10 => true,
             n if n >= 16 && (b[10] == b'T' || b[10] == b' ') => {
@@ -3716,6 +3705,39 @@ packets:
 
 #[cfg(test)]
 mod compaction_text_tests {
+    /// ORDER 1107-bb6s. The predicate must reject date-led PROSE and still accept
+    /// every real timestamp shape. The negative controls are the load-bearing
+    /// half: a predicate that merely answers `false` more often would pass every
+    /// prose case while silently UN-quoting real timestamps and reopening
+    /// 729-biik. Reds in 0.01s where the whole-ledger fold takes ~70.
+    #[test]
+    fn is_yaml11_timestamp_rejects_prose_and_keeps_real_timestamps() {
+        for prose in [
+            "2026-09-04 added 70",
+            "2026-09-04 x",
+            "2026-09-04T",
+            "2026-09-04 ",
+            "2026-09-04 11",
+        ] {
+            assert!(
+                !is_yaml11_timestamp(prose),
+                "date-led prose must NOT be quoted as a timestamp: {prose:?}"
+            );
+        }
+        for real in [
+            "2026-09-04",
+            "2026-09-04 11:00:00",
+            "2026-09-04T11:00:00Z",
+            "2026-09-04T11:00:00+02:00",
+            "2026-09-04 11:00",
+        ] {
+            assert!(
+                is_yaml11_timestamp(real),
+                "a real YAML-1.1 timestamp must still be quoted: {real:?}"
+            );
+        }
+    }
+
     use super::*;
 
     const COMMITTED: &str = "\

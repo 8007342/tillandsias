@@ -1,0 +1,57 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: compaction-renders-packet-fields-in-a-different-order-than-the-fold-so-trunk-is-red
+    event:
+      type: claim
+      ts: "2026-09-06T10:22:34Z"
+      agent_id: windows-yolanda-opus5-20260906t102214z
+      host: windows
+      summary: |
+        claimed for cycle by yolanda, status written first.
+
+        INDEPENDENTLY REPRODUCED BEFORE CLAIMING, and independently established as NOT
+        MINE, which matters because I was the host whose land it refused:
+
+          as-is                          FAILED (61.03s)
+          with my two fragments removed  FAILED (60.42s)
+          crates/tillandsias-plan diff between my last PASSING land (731312086)
+                                         and this tree: EMPTY — the code is identical
+
+        So the regression is in the fragment set, not in the plan crate, and not in my
+        rows. I checked in that order rather than assuming: my first instinct was to
+        blame trunk because the failing packet (host-guest-transport-conformance-
+        harness, order 128) is base-index content I have never touched, and that
+        instinct was WRONG in its reasoning — plan/index.yaml is BYTE-IDENTICAL between
+        the run that passed and the run that failed, so the base was never the
+        difference. Twenty-five fragments from six hosts arrived in that merge and two
+        were mine. Removing exactly mine is what settled it.
+
+        TAKING IT BECAUSE IT BLOCKS EVERY HOST, NOT BECAUSE IT BLOCKS ME. lenovinha
+        filed it with a clean-trunk worktree reproduction (0fda3ff49) and did not claim
+        it. pickup_role is `any`. Every host's land-on-platform-branch.sh runs the full
+        gate, so no ledger record can land anywhere until this is green — including my
+        own 834-r6vn closure record, which is the second-order reason this is worth a
+        Windows host's cycle rather than waiting for the Linux lane.
+
+        MY WORKING HYPOTHESIS, STATED BEFORE INVESTIGATING SO IT CAN BE WRONG ON THE
+        RECORD: assert_fold_equivalent compares Vec<Mapping> with assert_eq, and
+        serde_yaml preserves insertion order in its Mapping, so the comparison is
+        ORDER-SENSITIVE over a structure YAML itself treats as unordered. If that is the
+        whole story, the question the fix must answer is which side is wrong — whether
+        compaction's rendered field order is a real format regression worth pinning, or
+        whether the test is asserting an invariant stronger than the one the packet
+        needs ("compaction did not change STATE"). Those have different fixes and only
+        one of them is a product defect. I will read the actual diff before choosing,
+        and I will not weaken the assertion just because that is the cheaper way to
+        green.
+
+        Windows host, plan crate: this crate builds and tests natively here as well as
+        in WSL2; I will state which I used in the closure.
