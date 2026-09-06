@@ -9573,6 +9573,33 @@ fn github_push_authorization_verdict(owner_repo: &str, probe_stdout: &str) -> Re
              Then run the login again. Seeding a token that cannot push moves this\n\
              failure hours downstream, into the middle of a work cycle (order 759-vceg)."
         )),
+        // ORDER 759-vceg. A REVOKED CREDENTIAL IS NOT A SCOPE PROBLEM, and the
+        // generic remedy below sent operators to edit permissions that were
+        // never the cause. esmeraldinha measured the three shapes this probe
+        // actually produces, using a revoked credential — the one input a
+        // healthy host cannot manufacture:
+        //
+        //   401 revoked   raw JSON error body on stdout; --jq does NOT filter it
+        //   200 no key    public-repo read omits `permissions` -> jq prints `null`
+        //   404           error body, same unfiltered shape as the 401
+        //
+        // All three correctly fall through to a refusal, which is the property
+        // this packet exists to guarantee, and it holds. What was wrong is the
+        // ADVICE: "repository access must include <repo>, Metadata read-only"
+        // is right for 404 and useless for 401, where no scope edit helps and
+        // only a re-login does. Three hosts hit the 401 shape on 2026-09-06.
+        //
+        // Discriminated AHEAD of the generic arm rather than replacing it,
+        // because 404 and 200-without-permissions still want the scope advice.
+        other if other.contains("Bad credentials") || other.contains("401") => Err(format!(
+            "the GitHub credential is REVOKED or invalid: the push-permission probe on \
+             {owner_repo} answered {other:?}.\n\
+             \n\
+             Nothing was written to Vault. This is NOT a repository-scope problem, and \
+             editing repository permissions will not fix it — the token itself is no \
+             longer accepted. Mint a new one with `gh auth login`, then run this login \
+             again (order 759-vceg)."
+        )),
         other => Err(format!(
             "could not determine push permission on {owner_repo}: the probe answered {other:?} \
              rather than true/false.\n\
@@ -9882,12 +9909,42 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
                 "token has push permission on {owner_repo}; proceeding to Vault write"
             );
         }
+        // ORDER 759-vceg, SECOND DEFECT. This arm printed the NOTE below and
+        // FELL THROUGH to the Vault write — no return, no refusal. The
+        // asymmetry is the defect: Some(owner_repo) probes and refuses on an
+        // answer it cannot parse, while None — STRICTLY LESS INFORMED, because
+        // no repository was probed at all — was waved through.
+        //
+        // That inverted the function's own principle. The verdict's doc states
+        // that "I could not tell" resolving to "seed it anyway" reproduces the
+        // original defect: a credential accepted with no evidence it works. The
+        // Some path honours it; the None path contradicted it, and the printed
+        // NOTE made the state look handled.
+        //
+        // MEASURED CONSEQUENCE, on the operator's own machine: they ran
+        // --github-login as root from /root on esmeraldinha, saw this NOTE, and
+        // the login reported success. The token was seeded unverified and the
+        // push stayed 403.
+        //
+        // REFUSES rather than probing the account's scopes, deliberately. The
+        // packet's deliverable offers either; refusing is the one that cannot
+        // be wrong in the dangerous direction, and running the login from a
+        // checkout with an upstream is a smaller ask than a second probe path
+        // whose own failure modes nobody has measured.
         None => {
-            eprintln!(
-                "NOTE: no GitHub upstream is configured for this checkout, so push \
-                     permission could NOT be verified against a repository. The token is \
-                     being seeded on authentication alone — if it lacks Contents:write, the \
-                     failure will appear at the first push, not here (order 759-vceg)."
+            return Err(
+                "no GitHub upstream is configured for this checkout, so push permission \
+                 cannot be verified against a repository.\n\
+                 \n\
+                 Nothing was written to Vault. Seeding on authentication alone is the \
+                 state order 759-vceg exists to prevent: the token looks accepted here \
+                 and fails at the first push, which is how a release looked healthy and \
+                 broke the operator forty minutes later (803-49re).\n\
+                 \n\
+                 Run this login from a checkout whose `origin` points at the target \
+                 repository, or set TILLANDSIAS_PROJECT_REMOTE_URL, then try again \
+                 (order 759-vceg)."
+                    .to_string(),
             );
         }
     }
@@ -24131,6 +24188,60 @@ esac
         }
     }
 
+    /// ORDER 759-vceg. A REVOKED CREDENTIAL MUST NOT BE SENT TO EDIT SCOPES.
+    ///
+    /// The generic refusal says "repository access must include <repo>,
+    /// Metadata read-only" — correct for 404, useless for 401, where the token
+    /// itself is no longer accepted and only a re-login helps. Three hosts hit
+    /// the 401 shape on 2026-09-06 and the advice pointed at the wrong thing.
+    ///
+    /// The bodies below are the REAL shapes esmeraldinha measured with a
+    /// revoked credential, which is the one input a healthy host cannot
+    /// manufacture: `gh api ... --jq .permissions.push` does NOT filter an
+    /// error body, so the raw JSON reaches this function.
+    ///
+    /// ARM 2 IS THE CONTROL AND IT IS WHAT STOPS THIS BEING A WIDENING. A 404
+    /// and a permissions-less 200 must KEEP the scope advice — a discriminator
+    /// that sent every unparseable answer to `gh auth login` would be the same
+    /// defect pointing the other way.
+    #[test]
+    fn a_revoked_credential_is_told_to_re_login_not_to_edit_scopes() {
+        for body in [
+            r#"{"message":"Bad credentials","documentation_url":"https://docs.github.com/rest","status":"401"}"#,
+            "gh: Bad credentials (HTTP 401)",
+        ] {
+            let err = github_push_authorization_verdict("o/r", body)
+                .expect_err("a revoked credential must still be refused");
+            assert!(
+                err.contains("gh auth login"),
+                "a 401 must name the re-login as the remedy: {err}"
+            );
+            assert!(
+                err.contains("NOT a repository-scope problem"),
+                "a 401 must say the scope advice does not apply: {err}"
+            );
+            assert!(
+                err.contains("Nothing was written to Vault"),
+                "every refusal must still state no credential was persisted: {err}"
+            );
+        }
+
+        // CONTROL: the shapes that are genuinely about scope keep the scope
+        // advice and must NOT be told to re-login.
+        for body in ["null", "gh: Not Found (HTTP 404)", ""] {
+            let err = github_push_authorization_verdict("o/r", body)
+                .expect_err("an unreadable answer must be refused");
+            assert!(
+                err.contains("Metadata read-only"),
+                "{body:?} is a scope-shaped failure and must keep the scope remedy: {err}"
+            );
+            assert!(
+                !err.contains("gh auth login"),
+                "{body:?} must NOT be diagnosed as a revoked credential: {err}"
+            );
+        }
+    }
+
     #[test]
     fn owner_repo_is_derived_from_every_origin_shape_an_operator_actually_has() {
         for origin in [
@@ -24205,6 +24316,64 @@ esac
     /// hermetically is not cheap: the gate sits downstream of vault bootstrap
     /// and a full container preflight, so a stubbed podman dies at vault
     /// preflight long before reaching it.
+
+    /// ORDER 759-vceg, SECOND DEFECT. THE NO-UPSTREAM ARM MUST REFUSE, NOT
+    /// PRINT AND CONTINUE.
+    ///
+    /// `Some(owner_repo)` probes and propagates its refusal with `?`. `None` —
+    /// STRICTLY LESS INFORMED, because no repository was probed at all —
+    /// printed a NOTE with `eprintln!` and fell through to the Vault write. The
+    /// stricter case was guarded and the least-informed case was not, and the
+    /// printed NOTE made the state look handled.
+    ///
+    /// MEASURED, not hypothetical: the operator ran `--github-login` as root
+    /// from /root on esmeraldinha, saw that NOTE, and the login reported
+    /// success. The token was seeded unverified and the push stayed 403.
+    ///
+    /// Asserted on the arm's own body, the same way
+    /// `the_push_authorization_gate_runs_before_the_vault_write` above asserts
+    /// its ordering property — and weaker than executing the path for the same
+    /// reason recorded there: the arm sits downstream of vault bootstrap and a
+    /// full container preflight, so a stubbed podman dies long before it.
+    ///
+    /// THE SCOPE CONTROL IS THE SECOND HALF. Finding "return Err" somewhere in
+    /// a 900-line function proves nothing, so the window is narrowed to the
+    /// None arm itself and checked to be the arm rather than its neighbours.
+    #[test]
+    fn the_no_upstream_arm_refuses_instead_of_seeding_unverified() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let body = source_window(source, "fn run_provider_login(config: &ProviderLoginConfig");
+
+        let none_at = body
+            .find("        None => {")
+            .expect("run_provider_login must still have a no-upstream arm");
+        let arm = &body[none_at..];
+        let arm_end = arm
+            .find("\n        }")
+            .expect("the None arm must be delimited");
+        let arm = &arm[..arm_end];
+
+        // SCOPE CONTROL: this really is the no-upstream arm and not some other
+        // `None =>` that drifted above it.
+        assert!(
+            arm.contains("no GitHub upstream is configured"),
+            "the window is not the no-upstream arm; the assertion below would \
+             prove nothing about it: {arm}"
+        );
+
+        assert!(
+            arm.contains("return Err("),
+            "the no-upstream arm must REFUSE. Printing a note and continuing \
+             seeds a credential with no evidence it can push — the exact state \
+             759-vceg exists to prevent, and it shipped once: {arm}"
+        );
+        assert!(
+            !arm.contains("eprintln!"),
+            "a NOTE printed beside a fall-through is what made this look \
+             handled; the refusal must be the arm's only outcome: {arm}"
+        );
+    }
+
     #[test]
     fn the_push_authorization_gate_runs_before_the_vault_write() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
