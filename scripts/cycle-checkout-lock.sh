@@ -76,7 +76,44 @@ STATE_DIR="${TILLANDSIAS_CYCLE_STATE_DIR:-$HOME/.cache/tillandsias}"
 # wrapper), dead one tool-call later. Evaluated in the CALLER's shell, $PPID
 # is the harness process (e.g. `claude`, alive for the whole session), which
 # is the identity that actually spans the cycle.
-HOLDER_PID="${TILLANDSIAS_CYCLE_HOLDER_PID:-$PPID}"
+# ORDER 1091-zh6d. THE DEFAULT IS REACHABLE BY TYPING THE OBVIOUS COMMAND, and
+# it is silently wrong. `scripts/cycle-checkout-lock.sh acquire` with no
+# variable evaluates $PPID INSIDE this script, where it is the tool shell that
+# invoked us — dead the moment that tool call returns. The lock stale-reaps at
+# once, every later lane reads `ok:checkout-lock:free`, and the verdict the
+# caller saw said `acquired`. Measured on yoga 2026-09-06, direct and via
+# `bash -c`: both anchor on the dying shell, never the harness.
+#
+# CLAUDE_PID is preferred over $PPID because it makes the BARE path correct
+# rather than merely diagnosable — the harness exports it, so no ancestry walk,
+# no hop counting, and nothing that differs between linux, darwin and msys.
+# Two Linux hosts measured the harness exactly one ppid hop up, which is the
+# kind of agreeing evidence that would justify $PPID and then break on the
+# first nested shell.
+#
+# The chain is NAMED in the verdict (see `anchor_source`) because a silent
+# fallback to the invoking shell is precisely today's defect wearing a new
+# code path. Other backends (codex, opencode, gemini) have no CLAUDE_PID and
+# must supply TILLANDSIAS_CYCLE_HOLDER_PID themselves.
+if [ -n "${TILLANDSIAS_CYCLE_HOLDER_PID:-}" ]; then
+    HOLDER_PID="$TILLANDSIAS_CYCLE_HOLDER_PID"
+    anchor_source="explicit"
+elif [ -n "${CLAUDE_PID:-}" ]; then
+    HOLDER_PID="$CLAUDE_PID"
+    anchor_source="harness-env"
+else
+    HOLDER_PID="$PPID"
+    anchor_source="invoking-shell-UNVERIFIED"
+fi
+
+# VALIDATE THE VALUE RATHER THAN TRUSTING IT. An env var inherited into an
+# unrelated context would anchor the lock to a live process with nothing to do
+# with this cycle — presence used as proof, which is the arm-1 defect of
+# check-credential-channel.sh one layer over. A dead anchor is worse still: the
+# lock would be born stale.
+if ! kill -0 "$HOLDER_PID" 2>/dev/null; then
+    anchor_source="${anchor_source}-DEAD"
+fi
 # Staleness bound: same 10800s (2x the 90m cycle cap) the driver uses.
 STALE_S=10800
 
@@ -236,7 +273,27 @@ case "$cmd" in
             echo "skip:overlap-lock-held:driver-flock"
             exit 0
         fi
-        echo "ok:checkout-lock:acquired:$lane:$HOLDER_PID"
+        # ORDER 1091-zh6d: the verdict NAMES its anchor. An `acquired` over an
+        # anchor that dies with the tool call is the defect; saying which
+        # anchor was used is what makes it visible at the moment it happens,
+        # rather than three lanes later when the lock reads free.
+        case "$anchor_source" in
+            explicit|harness-env)
+                echo "ok:checkout-lock:acquired:$lane:$HOLDER_PID"
+                ;;
+            *)
+                echo "warn:checkout-lock:acquired-unverified-anchor:$lane:$HOLDER_PID"
+                {
+                    echo "  ANCHOR: $anchor_source — this lock is anchored to the shell that"
+                    echo "  invoked the script, which dies when your tool call returns. It will"
+                    echo "  stale-reap immediately and the next lane will read"
+                    echo "  ok:checkout-lock:free while you are still working (1091-zh6d)."
+                    echo "  FIX: put the variable on the command line, in YOUR shell —"
+                    echo "    TILLANDSIAS_CYCLE_HOLDER_PID=\$PPID $0 acquire --lane <l> --source <s>"
+                    echo "  See skills/advance-work-from-plan section 1b."
+                } >&2
+                ;;
+        esac
         ;;
     release)
         # Only the holder (or a cleanup after its death) should release; a

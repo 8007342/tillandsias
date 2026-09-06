@@ -1,0 +1,89 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-worker-skill-never-mentions-the-checkout-lock-so-every-worker-cycle-runs-unlocked
+    order: 1091-zh6d
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [coordination, multi-host, skills, locking]
+    estimated_hours: 2
+    owned_files:
+      - skills/advance-work-from-plan/SKILL.md
+      - scripts/cycle-checkout-lock.sh
+      - scripts/test-cycle-lock-attested-release.sh
+    title: |
+      skills/advance-work-from-plan mentions the checkout lock ZERO times while skills/meta-orchestration mentions it three, so every worker host runs committable cycles unlocked — and the bare invocation an unguided agent types anchors the lock to a shell that dies with the tool call, silently
+    context: |
+      MEASURED on yoga 2026-09-06:
+
+        grep -c cycle-checkout-lock skills/meta-orchestration/SKILL.md      -> 3
+        grep -c checkout-lock       skills/advance-work-from-plan/SKILL.md  -> 0
+        .git/tillandsias-cycle.lock.d                                       -> ABSENT
+
+      This host ran a full night of cycles on this checkout — claimed packets,
+      ran ./build.sh --check for six to seven minutes at a stretch, landed
+      eight times — and took the checkout lock ZERO times. Not once was it
+      considered, because the skill every worker host runs to drain plan work
+      does not mention it. meta-orchestration is one host, four-hourly;
+      advance-work-from-plan is the default path for the entire fleet.
+
+      THE COLLISION IS THE POINT. macuahuitl's hourly coordinate lane fired at
+      05:05Z while their meta-orchestration lane held a release gate. It was
+      caught by a habit — checking for a running build — not by the mechanism.
+      Had that lane fired into THIS checkout mid-gate, the red would have been
+      unattributable: a gate failure with no cause, on a host that did not know
+      a lock existed.
+
+      THE MECHANISM IS NOT BROKEN AND THAT IS THE SUBTLE HALF. The lock anchors
+      on HOLDER_PID from TILLANDSIAS_CYCLE_HOLDER_PID, defaulting to $PPID
+      (line 79). meta-orchestration supplies it correctly at :672 and explains
+      at :692 that it must be evaluated in the CALLER's shell, where $PPID is
+      the agent harness that spans the cycle. Verified here: with the variable,
+      the lock is held by 8462 (comm claude, == CLAUDE_PID) and a LATER tool
+      call still sees skip:overlap-lock-held pid=8462. It works.
+
+      THE BARE INVOCATION IS THE TRAP. Run the script without the variable and
+      $PPID is evaluated INSIDE the script, where it is the tool shell that
+      called it — dead the moment the tool call returns, so the lock
+      stale-reaps immediately and every later lane reads ok:checkout-lock:free.
+      Measured both directly and via bash -c: both give the tool shell, never
+      the harness. The verdict still says acquired.
+
+      THE FIXTURE CANNOT CATCH IT. test-cycle-lock-attested-release.sh:73 wraps
+      every invocation with TILLANDSIAS_CYCLE_HOLDER_PID set, so every arm
+      supplies the variable production leaves unset. The recipe path has five
+      arms; the bare path — the one an agent types — has none. That is why five
+      escapes, a tri-state ancestry walk and a documented anchor coexist with a
+      lock that reads free in practice.
+
+      SAME CAUSE AS 943-7dn5, which is the argument for treating this as a
+      class rather than an incident: there, the --emit-flow call lived in
+      meta-orchestration and was absent from advance-work-from-plan, so the
+      telemetry log was fed only when a session happened to run the coordinator
+      skill. Two instructions, same two files, same direction. Anything the
+      worker loop must do belongs in the worker skill, and a third instance
+      should be looked for rather than waited for.
+    exit_criteria:
+      - "skills/advance-work-from-plan carries the lock section: acquire before committable work with TILLANDSIAS_CYCLE_HOLDER_PID set, release/attest at the end, and what to do on skip:overlap-lock-held; pre-fix result: FAILS (zero mentions)"
+      - "the BARE invocation refuses or warns by name rather than reporting acquired, so the silent path stops being reachable by typing the obvious command; pre-fix result: FAILS (prints ok:checkout-lock:acquired over a dying anchor)"
+      - "the fixture gains the missing arm: acquire WITHOUT the variable and assert the verdict is not a plain success; pre-fix result: FAILS (no such arm)"
+      - "NEGATIVE CONTROL: the documented invocation still acquires and still holds across a later call, and a cycle that ends without record still frees the checkout via the attested marker or STALE_S — the fix must not convert an early release into a 3h hold (order 283: late release is worse than early for a cron fleet)"
+    unscoreable: |
+      Pinned by the new bare-path arm in
+      scripts/test-cycle-lock-attested-release.sh plus the existing five, which
+      together distinguish "the lock works" from "the lock works for the caller
+      it was built for".
+    events:
+      - type: filed
+        ts: "2026-09-06T05:16:00Z"
+        agent_id: "linux-yoga-claude-20260906t051600z"
+        host: yoga
+        summary: |
+          Filed by yoga after macuahuitl withdrew a broader claim that the lock
+          was inert for prompt lanes — it is not, it is inert when invoked
+          without the documented variable. What survived the withdrawal is
+          this: the worker skill never mentions the lock at all. Filed by the
+          host that spent the night demonstrating it.
