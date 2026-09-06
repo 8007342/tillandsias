@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-feature-gated-test-pass-runs-under-build-test-but-not-under-build-check-which-is-the-gate-that-guards-landing
+    field: status
+    value: completed
+    ts: "2026-09-06T05:54:28Z"
+    host: yoga
+
+events:
+  - packet_id: the-feature-gated-test-pass-runs-under-build-test-but-not-under-build-check-which-is-the-gate-that-guards-landing
+    event:
+      type: completed
+      ts: "2026-09-06T05:54:28Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: ./build.sh --check rc=0 445s emitting 'Feature-gated tests passed: 679 test(s) executed under tray,listen-vsock'; red half verified literally — a failing test behind listen-vsock is invisible to cargo test --workspace (0 matches) and reds --check naming it; serial chosen after measuring that adding one probe red-ed an unrelated tray test under parallel (2 failures vs 1)
+  - packet_id: the-feature-gated-test-pass-runs-under-build-test-but-not-under-build-check-which-is-the-gate-that-guards-landing
+    event:
+      type: note
+      ts: "2026-09-06T05:54:28Z"
+      host: yoga
+      summary: |-
+        closed: the landing gate now compiles and runs the feature-gated set, serially, and states the count

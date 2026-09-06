@@ -2458,6 +2458,90 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "$_ws_baseline_verdict"
 
+    # ORDER 1074-w7qv. THE FEATURE-GATED PASS BELONGS IN THE GATE THAT GUARDS
+    # LANDING, and until now it ran only under `--test`.
+    #
+    # `tray` and `listen-vsock` are not default features, so the --workspace
+    # pass above compiles neither `mod tray` nor `mod vsock_server`. A test
+    # added there ran nowhere before a push and the suite still counted it as
+    # coverage. The fix for order 254 was applied to `--test`, which a human
+    # runs deliberately; `--check` is what the pre-push hook stamps and what
+    # land-on-platform-branch.sh runs before every push.
+    #
+    # MEASURED on yoga 2026-09-06, `-- --list` counts, --all-targets:
+    #   tillandsias-headless        581 -> 745 under --all-features   +164
+    #   tillandsias-vm-layer         94 -> 159                         +65
+    #   tillandsias-router-sidecar   27 ->  57                         +30
+    #   tillandsias-control-wire     70 ->  69                          -1
+    # 258 tests no per-land gate compiled. This step closes the
+    # tillandsias-headless half — the crate whose gated modules are the tray's
+    # control socket and the in-VM control wire's server.
+    #
+    # NOT `--all-features`, AND THE -1 IS WHY. --all-features is NOT a superset
+    # of default: `transport::tests::vsock_listener_unsupported_on_non_linux`
+    # exists only when `vsock` is OFF, correctly, because it tests the
+    # unsupported path. A gate that reached for the maximum would add 258 and
+    # silently drop 1, with the larger number as its evidence of improvement.
+    # A maximum is not a matrix; this names its feature set explicitly.
+    #
+    # COST, measured on yoga 2026-09-06, and the first number I was given for
+    # this was wrong so all three are stated:
+    #   compile, FIRST run for this feature set   13.7s   (one-time per tree)
+    #   compile, steady state (artifacts cached)   0.16s
+    #   running the pass, parallel                33.9s
+    #   running the pass, SERIAL (what ships)     46.1s   for 679 tests
+    # So the recurring marginal cost is ~46s on a ~420s gate, about 11%. The
+    # 12s serial premium buys a failure set that does not move between runs,
+    # which is the difference between a gate and a coin flip.
+    #
+    # THE FEATURE SETS DO NOT THRASH EACH OTHER, which is the obvious fear and
+    # is measurable rather than arguable: `cargo test --workspace --no-run`
+    # immediately after the feature-gated build takes 247ms, so cargo keeps
+    # both artifact sets and neither pass rebuilds the other. Alternating them
+    # every gate costs nothing beyond the first build.
+    #
+    # A cited ~1.1s marginal compile turned out to be a warm measurement for an
+    # already-built feature set; measured cold here it is 13.7s. Re-measured
+    # rather than repeated.
+    #
+    # Deliberately NOT routed through the baseline ratchet, matching the
+    # --test pass: no known-red entry lives here today, so strict is correct.
+    _step "Running feature-gated tests (tray, listen-vsock) — 1074-w7qv..."
+    _fg_transcript="$SCRIPT_DIR/target/test-transcript-feature-gated-gate.log"
+    mkdir -p "$(dirname "$_fg_transcript")"
+    _fg_rc=0
+    # SERIAL, for the reason the --workspace pass above is serial, and it was
+    # not a precaution — it was measured here. Adding ONE deliberately failing
+    # probe to pty_handler also failed an unrelated
+    # `tray::tests::mcp_connection_is_denied_when_the_host_knows_no_projects`,
+    # which passes 3/3 on its own. These tests share process-global state, so
+    # under threads the failure set is a function of scheduling as well as of
+    # the tree, and merely ADDING a test can red a different one. A gate whose
+    # red set moves when you add an unrelated test teaches people to re-run it
+    # until it passes.
+    _run cargo test -p tillandsias-headless --bin tillandsias \
+        --features tray,listen-vsock --no-fail-fast \
+        --manifest-path "$SCRIPT_DIR/Cargo.toml" -- --test-threads=1 2>&1 |
+        tee "$_fg_transcript" || _fg_rc="${PIPESTATUS[0]}"
+    if [[ $_fg_rc -ne 0 ]]; then
+        _error "the tray/listen-vsock test set failed (cargo rc=$_fg_rc) — transcript: $_fg_transcript"
+        _error "these tests compile only with --features tray,listen-vsock; the --workspace pass above cannot see them"
+        exit 1
+    fi
+    # CRITERION 2: state how many actually RAN, so "ran 0 because the feature
+    # was off" is distinguishable from "ran and passed". A pass that silently
+    # executes nothing is the failure this packet exists to close, and it has
+    # a precedent — two bound tests once reported "0 passed; 383 filtered out",
+    # indistinguishable from a filter typo.
+    _fg_ran="$(awk '/^test result:/ { p += $4; f += $6 } END { print p + f + 0 }' "$_fg_transcript" 2>/dev/null)"
+    case "$_fg_ran" in ''|*[!0-9]*) _fg_ran=0 ;; esac
+    if [[ "$_fg_ran" -eq 0 ]]; then
+        _error "the feature-gated pass executed ZERO tests — the features did not take effect (1074-w7qv)"
+        _error "  transcript: $_fg_transcript"
+        exit 1
+    fi
+    _info "Feature-gated tests passed: $_fg_ran test(s) executed under tray,listen-vsock"
+
     # CRITERION 3 (1003-444f) IS SATISFIED BY --workspace, NOT BY A SECOND
     # CHECK, and the check I wrote first is deleted rather than shipped.
     #
