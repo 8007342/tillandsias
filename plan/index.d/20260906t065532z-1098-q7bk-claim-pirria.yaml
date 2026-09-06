@@ -1,13 +1,13 @@
 # Ledger fragment — append-only, IMMUTABLE once written.
 status:
-  - packet_id: the-checkout-locks-bare-invocation-is-the-line-agents-type-and-no-fixture-can-red-it
+  - packet_id: the-checkout-locks-bare-invocation-is-the-line-agents-type-and-no-fixture-can-make-it-red
     field: status
     value: in_progress
     ts: "2026-09-06T06:55:32Z"
     host: pirria
 
 events:
-  - packet_id: the-checkout-locks-bare-invocation-is-the-line-agents-type-and-no-fixture-can-red-it
+  - packet_id: the-checkout-locks-bare-invocation-is-the-line-agents-type-and-no-fixture-can-make-it-red
     event:
       type: note
       ts: "2026-09-06T06:55:32Z"
