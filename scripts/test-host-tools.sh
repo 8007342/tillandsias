@@ -314,18 +314,51 @@ cat > "$tmp/rustupstub/rustup" <<'STUB'
 exit 0
 STUB
 chmod +x "$tmp/rustupstub/rustup"
+# TWO-SIDED ACROSS PLATFORMS, and the first version of this arm was NOT.
+#
+# It asserted the triple appears, unconditionally. Both rustup-target rows are
+# declared `macos` (they exist for build-macos-tray.sh:141-142), so on Linux the
+# platform filter drops them, the loop never runs, and the assertion demands a
+# string that cannot appear. GREEN ON macOS, RED ON LINUX — and invisible to the
+# author's own gate. macuahuitl's union land refused rc=3 on exactly this.
+#
+# REPRODUCED HERE before fixing, with this fixture's own stub:
+#   as macos -> 3 occurrences of `musl`
+#   --platform linux -> 0
+#
+# This is tonight's BSD `wc` red with the platforms swapped: that one was green
+# on Fedora and red on macOS because BSD `wc` pads; this is green on macOS and
+# red on Linux because a filter drops a row. Both are "correct in the regime
+# that could see it".
+#
+# So the arm now asserts the RIGHT THING ON EACH PLATFORM rather than skipping
+# on one: where the rows are in scope, a missing target must be named; where
+# they are out of scope, they must be ABSENT — which pins the filter itself and
+# would catch a row that leaked across platforms.
 out="$(PATH="$tmp/rustupstub:$PATH" "$CHECK" 2>&1)"
-if printf '%s' "$out" | grep -q 'x86_64-unknown-linux-musl'; then
-    check ok "1004-cp6p: a missing rustup target is reported, naming the triple"
+if [ "$_plat" = macos ]; then
+    if printf '%s' "$out" | grep -q 'x86_64-unknown-linux-musl'; then
+        check ok "1004-cp6p: a missing rustup target is reported, naming the triple"
+    else
+        check FAIL "1004-cp6p: a missing rustup target must name the triple" "out=[$out]"
+    fi
 else
-    check FAIL "1004-cp6p: a missing rustup target must name the triple" "out=[$out]"
+    # The mirror: the macos-scoped rows must NOT appear here. An arm that merely
+    # skipped would say nothing on this platform and let a leaked row through.
+    if printf '%s' "$out" | grep -q 'unknown-linux-musl'; then
+        check FAIL "1004-cp6p: macos-scoped rustup targets leaked onto $_plat" "out=[$out]"
+    else
+        check ok "1004-cp6p: macos-scoped rustup targets are filtered out on $_plat"
+    fi
 fi
 # NEGATIVE CONTROL: the triple that IS installed must not be reported missing,
 # or the arm above would pass by reporting everything.
-if printf '%s' "$out" | grep -q 'MISSING (tray-build): aarch64-unknown-linux-musl'; then
-    check FAIL "1004-cp6p: an installed target must not be reported missing" "out=[$out]"
-else
-    check ok "1004-cp6p: an installed rustup target is not reported missing"
+if [ "$_plat" = macos ]; then
+    if printf '%s' "$out" | grep -q 'MISSING (tray-build): aarch64-unknown-linux-musl'; then
+        check FAIL "1004-cp6p: an installed target must not be reported missing" "out=[$out]"
+    else
+        check ok "1004-cp6p: an installed rustup target is not reported missing"
+    fi
 fi
 
 # 5e. THE DECLARED SET MUST MATCH WHAT THE BUILD SCRIPT ACTUALLY INVOKES.
