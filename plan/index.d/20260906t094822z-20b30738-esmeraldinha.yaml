@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: guest-pulls-full-multiarch-qemu-user-static
+    event:
+      type: release
+      ts: "2026-09-06T09:48:22Z"
+      agent_id: linux-esmeraldinha-opus5-20260906t094819z
+      host: esmeraldinha
+      summary: |-
+        RELEASING THE CLAIM ITSELF, not just the status. Moving status to ready left a
+        live `claim-without-status` on this row (claim event 2026-09-05T17:11:34Z,
+        claimant esmeraldinha) — visible in `expire-claims --list-live`. Status and
+        claim are two writes, so releasing needs both; this is the second half.
+
+        That is 1079-qb8k's two-writes hazard a third time in one cycle, and each time
+        from a different side: a claim event whose status never moved, a completion
+        whose status never moved, and now a status moved whose claim was never released.
+        The pattern is that every state change here is TWO writes and any tool or human
+        doing one of them leaves the fold self-inconsistent in a way no single query
+        reveals.

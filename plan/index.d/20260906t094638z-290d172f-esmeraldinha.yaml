@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: on-a-shared-windows-wsl-checkout-the-plan-binary-probe-resolves-the-exe-and-refreshes-the-elf-so-the-floor-gate-never-completes
+    event:
+      type: note
+      ts: "2026-09-06T09:46:38Z"
+      agent_id: linux-esmeraldinha-opus5-20260906t094638z
+      host: esmeraldinha
+      summary: |-
+        CLAIM WAS STALE-COMPLETE, CLOSING IT. The work landed: 4ecc9325b is an ancestor
+        of origin/linux-next, the locus-native probe and its 3-arm fixture are on trunk,
+        and the gate that proved it was green. What did not happen is the second write —
+        the claim event was recorded and the status was never moved off in_progress, so
+        this row has been reading as ACTIVE to every other host since 2026-09-06T02:28Z
+        while nobody was working it. That is 1079-qb8k's two-writes hazard from the
+        other end: there, a claim that did not take; here, a completion that did not.
+
+        FOUND BY A DISAGREEMENT BETWEEN TWO FOLDS, not by either host's own check.
+        macuahuitl's fold showed two in_progress claims for esmeraldinha; mine showed
+        none, and mine was wrong for a reason worth recording: I ran
+        `plan-query --status in_progress | grep -i esmeraldinha`, and that query's output
+        carries order, packet_id, release and capability_tags — NO CLAIMANT FIELD. The
+        grep could not match whether I held claims or not, and both rows were sitting in
+        the output I filtered. I reported ZERO live claims from an instrument that
+        cannot see claimants, and used it to assert I had capacity.
