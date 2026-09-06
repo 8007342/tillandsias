@@ -1,0 +1,7 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: floor-tier-release-smoke-and-metrics
+    field: status
+    value: done
+    ts: "2026-09-06T06:48:25Z"
+    host: macuahuitl
