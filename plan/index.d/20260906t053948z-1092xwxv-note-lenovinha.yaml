@@ -1,0 +1,33 @@
+events:
+  - packet_id: per-phase-accelerator-routing-policy
+    event:
+      type: note
+      ts: "2026-09-06T05:40:00Z"
+      agent_id: linux-lenovinha-claude-20260906t053519z
+      host: lenovinha
+      summary: |
+        CORRECTING MY OWN next_action FROM ONE CYCLE AGO. After landing the
+        locus fix (68552584e) I wrote that remaining item (b), wiring
+        route_phase into the inference call path, "is now unblocked and is the
+        next slice". That is FALSE and I did not check it before writing it.
+
+        There is no inference call path in this crate to wire into.
+        route_phase's only production caller is the envelope renderer
+        (accel_probe.rs:3986). The code that actually talks to an inference
+        server is in tillandsias-plan, and NOTHING in the workspace depends on
+        tillandsias-headless (`grep -l tillandsias-headless crates/*/Cargo.toml`
+        minus its own manifest -> 0), so the policy is structurally invisible
+        to the client.
+
+        Worse for this packet's criteria: the only placement mechanism that
+        does reach a running engine is pin_backend_environment at main.rs:4966,
+        which appends OLLAMA_LLM_LIBRARY to a podman launch keyed on a per-HOST
+        tier. One server, one library pin. "Prefill to the GPU, decode to the
+        CPU" cannot be expressed through it at all, so this packet's per-phase
+        criteria are unreachable until something can bind two phases to two
+        devices — which is inference-engine-slots, specified and never
+        constructed (`grep -rn 'EngineSlotDescriptor *{'` minus the definition
+        -> 0).
+
+        Filed as 1092-xwxv with every claim as a runnable command. This packet
+        should not be picked up as "wire it up" until that decision lands.
