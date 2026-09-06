@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-push-authorization-probe-reads-the-users-repo-access-not-the-tokens-grant-so-it-greens-a-token-that-cannot-push
+    field: status
+    value: ready
+    ts: "2026-09-06T09:00:09Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: the-push-authorization-probe-reads-the-users-repo-access-not-the-tokens-grant-so-it-greens-a-token-that-cannot-push
+    event:
+      type: progress
+      ts: "2026-09-06T09:00:09Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'ready' (not terminal) with evidence_refs: e0029b622
+  - packet_id: the-push-authorization-probe-reads-the-users-repo-access-not-the-tokens-grant-so-it-greens-a-token-that-cannot-push
+    event:
+      type: note
+      ts: "2026-09-06T09:00:09Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        releasing after premise audit: no .permissions probe exists here; arm 4 already uses git push --dry-run (860-g798)

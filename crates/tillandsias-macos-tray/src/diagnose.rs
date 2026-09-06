@@ -99,6 +99,24 @@ pub(crate) enum ProvisionRecord {
     Complete {
         written_at: Option<u64>,
         guest_binary_sha256: Option<String>,
+        /// The literal `systemctl is-active` word for the headless daemon at
+        /// the instant provisioning finished (order 1084-x8ya criterion 3).
+        ///
+        /// VERBATIM, NEVER NORMALISED. `inactive` is NOT `failed`, and the
+        /// two must not collapse: conflating them is the loss that cost this
+        /// packet eight hours on the wrong hypothesis.
+        headless_service_state: Option<String>,
+        /// `ExecMainStartTimestamp`, which SURVIVES THE EXIT that `is-active`
+        /// forgets.
+        ///
+        /// `is-active` prints `inactive` both for a unit that NEVER STARTED
+        /// and for one that started, bound 42420 and DIED. Those are different
+        /// explanations of the same `Error::Input`, so the word alone cannot
+        /// answer the question this field was added for. EMPTY means never
+        /// started; non-empty means it ran, whatever it says now.
+        headless_start_timestamp: Option<String>,
+        /// systemd's own verdict — success, exit-code, signal, timeout.
+        headless_result: Option<String>,
     },
     /// The ERR trap fired and named the failing line.
     Failed {
@@ -135,6 +153,9 @@ pub(crate) fn provision_record_from(text: &str) -> ProvisionRecord {
     let mut written_at = None;
     let (mut line, mut rc, mut cmd) = (None, None, None);
     let mut guest_binary_sha256 = None;
+    let mut headless_service_state = None;
+    let mut headless_start_timestamp = None;
+    let mut headless_result = None;
     for l in text.lines() {
         let mut parts = l.splitn(2, ' ');
         match (parts.next(), parts.next()) {
@@ -146,6 +167,13 @@ pub(crate) fn provision_record_from(text: &str) -> ProvisionRecord {
             (Some("guest_binary_sha256"), Some(v)) => {
                 guest_binary_sha256 = Some(v.trim().to_string())
             }
+            (Some("headless_service_state"), Some(v)) => {
+                headless_service_state = Some(v.trim().to_string())
+            }
+            (Some("headless_exec_main_start_timestamp"), Some(v)) => {
+                headless_start_timestamp = Some(v.trim().to_string())
+            }
+            (Some("headless_result"), Some(v)) => headless_result = Some(v.trim().to_string()),
             _ => {}
         }
     }
@@ -153,6 +181,9 @@ pub(crate) fn provision_record_from(text: &str) -> ProvisionRecord {
         Some("complete") => ProvisionRecord::Complete {
             written_at,
             guest_binary_sha256,
+            headless_service_state,
+            headless_start_timestamp,
+            headless_result,
         },
         Some("failed") => ProvisionRecord::Failed {
             written_at,
@@ -219,18 +250,86 @@ pub fn provision_state_path() -> std::path::PathBuf {
 }
 
 /// The `Provisioning` line of the report.
+/// Report the daemon's state as the guest recorded it (1084-x8ya criterion 3).
+///
+/// THE WORD IS PASSED THROUGH, NOT INTERPRETED. `inactive` is reported as
+/// inactive and never as failed — the record is written moments after
+/// `systemctl start`, and a unit that has not finished coming up at that
+/// instant is expected rather than broken. Saying "failed" there would invent
+/// a fault, which is the mirror of the silence this packet exists to remove.
+///
+/// WHY IT IS WORTH RECORDING AT ALL: the handshake dies with `noise: input
+/// error`, which is snow's SIZE error rather than its crypto error, and a
+/// response too short to hold the ephemeral key is what an absent or closed
+/// listener produces. "Is anything listening" is therefore the live question,
+/// and order 272 leaves the host no way to ask it once the wire is down.
+pub(crate) fn headless_service_line(
+    state: Option<&str>,
+    start_timestamp: Option<&str>,
+    result: Option<&str>,
+) -> String {
+    // `inactive` IS TWO STATES. A unit that never started and one that started,
+    // bound 42420 and died both print `inactive`, and they are DIFFERENT
+    // explanations of the same `Error::Input`. Split them on the timestamp,
+    // which survives the exit the state word forgets — never on the word.
+    if state == Some("inactive") {
+        let ran = matches!(start_timestamp, Some(t) if !t.is_empty() && t != "empty");
+        return if ran {
+            format!(
+                "Headless daemon: STARTED AND IS NO LONGER RUNNING — it came up at {} and \
+                 exited ({}). The listener existed and went away, which is a listener \
+                 fault, not a crypto one.",
+                start_timestamp.unwrap_or("?"),
+                result.unwrap_or("result not recorded")
+            )
+        } else {
+            "Headless daemon: NEVER STARTED — no ExecMainStartTimestamp was recorded, so \
+             nothing ever bound the port. Not a failure of the unit and not a crypto \
+             question: there was never a listener to answer."
+                .to_string()
+        };
+    }
+    match state {
+        Some("active") => {
+            "Headless daemon: active when provisioning finished — the listener was up at \
+             that instant, so a later handshake failure is not explained by the unit \
+             never having started."
+                .to_string()
+        }
+        Some("failed") => "Headless daemon: FAILED when provisioning finished — the unit \
+             gave up. This is a listener fault, not a crypto one."
+            .to_string(),
+        Some(other) => format!(
+            "Headless daemon: {other} when provisioning finished. NOT a failure by itself — \
+             the record is written moments after `systemctl start`, so a unit still coming \
+             up is expected here."
+        ),
+        None => "Headless daemon: not recorded — this guest was provisioned before the state \
+             was captured. Absent, not inactive."
+            .to_string(),
+    }
+}
+
 pub(crate) fn provision_report_line() -> String {
     let text = std::fs::read_to_string(provision_state_path()).unwrap_or_default();
     match provision_record_from(&text) {
         ProvisionRecord::Complete {
             written_at,
             guest_binary_sha256,
+            headless_service_state,
+            headless_start_timestamp,
+            headless_result,
         } => format!(
-            "Provisioning: COMPLETE — the guest script recorded its own completion{}\n{}",
+            "Provisioning: COMPLETE — the guest script recorded its own completion{}\n{}\n{}",
             written_at
                 .map(|t| format!(" at {}", format_utc(t)))
                 .unwrap_or_default(),
-            guest_binary_skew_line(guest_binary_sha256.as_deref())
+            guest_binary_skew_line(guest_binary_sha256.as_deref()),
+            headless_service_line(
+                headless_service_state.as_deref(),
+                headless_start_timestamp.as_deref(),
+                headless_result.as_deref(),
+            )
         ),
         ProvisionRecord::Failed {
             written_at,
@@ -3204,6 +3303,9 @@ mod tests {
             super::ProvisionRecord::Complete {
                 written_at: Some(1_800_000_000),
                 guest_binary_sha256: None,
+                headless_service_state: None,
+                headless_start_timestamp: None,
+                headless_result: None,
             }
         );
 
@@ -3255,7 +3357,10 @@ mod tests {
             super::provision_record_from(no_ts),
             super::ProvisionRecord::Complete {
                 written_at: None,
-                guest_binary_sha256: None
+                guest_binary_sha256: None,
+                headless_service_state: None,
+                headless_start_timestamp: None,
+                headless_result: None,
             },
             "a record without a content timestamp reports None rather than \
              borrowing the filesystem's"
@@ -3280,9 +3385,90 @@ mod tests {
             super::ProvisionRecord::Complete {
                 written_at: Some(1_800_000_000),
                 guest_binary_sha256: Some("d677e5f5843d".into()),
+                headless_service_state: None,
+                headless_start_timestamp: None,
+                headless_result: None,
             },
             "the guest's hash must reach the host; it is the only way to ask what \
              the guest is running"
+        );
+
+        // 1084-x8ya CRITERION 3. INACTIVE IS NOT FAILED.
+        //
+        // The record is written moments after `systemctl start`, so a unit
+        // still coming up at that instant is EXPECTED. Reporting it as failed
+        // would invent a fault — the mirror of the silence this packet exists
+        // to remove — so the systemctl word is passed through verbatim and the
+        // report says NOT a failure by itself.
+        let inactive = "tillandsias-provision-state v1\nphase complete\n\
+                        headless_service_state inactive\n";
+        match super::provision_record_from(inactive) {
+            super::ProvisionRecord::Complete {
+                headless_service_state,
+                ..
+            } => {
+                assert_eq!(headless_service_state.as_deref(), Some("inactive"));
+                let line = super::headless_service_line(Some("inactive"), None, None);
+                // The INTENT of this assertion is "inactive is not failed",
+                // not any particular sentence. When the died/never-started
+                // split landed, `inactive` with no timestamp began routing to
+                // the NEVER STARTED branch and the old literal stopped
+                // matching. The literal was standing in for the intent; the
+                // intent is asserted directly here and the negative guard
+                // below is what actually enforces it.
+                assert!(
+                    line.contains("NEVER STARTED"),
+                    "inactive with no start timestamp means nothing ever bound the port: {line}"
+                );
+                assert!(
+                    !line.to_ascii_lowercase().contains("failed"),
+                    "the word failed must not appear for an inactive unit: {line}"
+                );
+            }
+            other => panic!("expected Complete, got {other:?}"),
+        }
+
+        // 1084-x8ya CRITERION 3, FOLLOW-UP. `inactive` IS TWO STATES.
+        //
+        // `systemctl is-active` prints `inactive` both for a unit that NEVER
+        // STARTED and for one that started, bound 42420 and DIED. Those are
+        // DIFFERENT explanations of the same `Error::Input`, so a report that
+        // prints only the word cannot answer the question the field exists
+        // for. The split is decided by ExecMainStartTimestamp, which survives
+        // the exit that the state word forgets — never by the word.
+        //
+        // Both arms are asserted because either alone is satisfiable by a
+        // reporter that always returns the other.
+        let died = super::headless_service_line(
+            Some("inactive"),
+            Some("Sat 2026-09-05 20:44:44 UTC"),
+            Some("exit-code"),
+        );
+        assert!(
+            died.contains("STARTED AND IS NO LONGER RUNNING"),
+            "a unit with a start timestamp RAN and must not read as never started: {died}"
+        );
+        assert!(
+            !died.contains("NEVER STARTED"),
+            "a unit that ran must not be reported as never started: {died}"
+        );
+
+        let never = super::headless_service_line(Some("inactive"), Some("empty"), None);
+        assert!(
+            never.contains("NEVER STARTED"),
+            "an empty ExecMainStartTimestamp means nothing ever bound the port: {never}"
+        );
+        assert!(
+            !never.contains("NO LONGER RUNNING"),
+            "a unit that never started must not read as one that exited: {never}"
+        );
+
+        // A unit that really did fail must say so, or the guard above would be
+        // satisfied by a reporter that never says "failed" at all.
+        let failed_line = super::headless_service_line(Some("failed"), None, None);
+        assert!(
+            failed_line.contains("FAILED"),
+            "a failed unit must be reported as failed: {failed_line}"
         );
 
         // ABSENT is an ANSWER, not a missing field. A provision that completed
