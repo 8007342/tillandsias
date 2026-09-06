@@ -1,0 +1,56 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: expire-claims-mutates-other-hosts-leases-by-default-so-a-read-probe-releases-them
+    event:
+      type: progress
+      ts: "2026-09-05T23:44:42Z"
+      agent_id: linux-yoga-claude-20260905t234442z
+      host: yoga
+      summary: |-
+        CLOSED. Writing is opt-in; bare `expire-claims` is a dry-run.
+
+        CRITERION 1: bare invocation reports what it WOULD expire and exits 0, with
+        mode=dry-run in its own output. Verified on the LIVE ledger, not only in a
+        fixture: 9 in_progress packets, plan/ tree sha256 86a0c11d... identical
+        before and after, `git status plan/` clean.
+
+        CRITERION 2: --write (and --apply) is the opt-in, and the dry-run output
+        names it — "N claim(s) above WOULD be returned to ready; nothing has been
+        written. Re-run with --write to apply." The old output's only mention of
+        its mode was `mode=write` in the summary, printed after the mutation.
+        --write with --dry-run is REFUSED (exit 2) rather than resolved: a caller
+        passing both does not know which it wants.
+
+        CRITERION 3: scripts/test-expire-claims-write-is-opt-in.sh, 16 arms, wired
+        into ./build.sh --check. Both directions, because "writes nothing" is
+        trivially satisfied by deleting the writer and would take 641-e2qa
+        criterion 2 with it. Inertness is asserted as BYTE-IDENTICAL by checksum
+        over the whole ledger tree, which also catches a fragment under an
+        unexpected name and an in-place base edit. Arm 1 additionally requires the
+        bare run to STILL SEE the stale candidate: inert by blindness is not the fix.
+        Against the pre-fix binary: 11 failed / 5 passed. The header says which of
+        the five are evidence — arms 7 and 8 pass pre-fix only because --write is
+        an unknown flag there, so a reader does not count them as proof.
+
+        CRITERION 4: swept. Every read path already passed --dry-run
+        (check-resumable-claim-dirt.sh, check-stranded-in-progress.sh:241) and is
+        unaffected. Two were not, and both would have failed SILENTLY:
+          - reclaim-stranded-claims.sh:141 passed no flag on --apply, so the write
+            path would have become a no-op that still printed reclaims.
+          - check-stranded-in-progress.sh:283 told the reader to run bare
+            `expire-claims` to fix the strandings — a hint that would now change
+            nothing while reading as done.
+
+        INCIDENTAL, AND IT CLOSES THE THING THIS PACKET WAS ENTANGLED WITH: the
+        TTL-suspension ruling for macneo's 980-ja2m is moot. macneo's credentials
+        are back (they claimed 1084-x8ya at 22:47Z) and 980-ja2m is `completed`, so
+        the lease nobody was allowed to expire is no longer a lease. The reaper now
+        reports expired=0 held=0 over 9 in_progress packets.

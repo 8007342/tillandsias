@@ -1,0 +1,58 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: land-on-platform-branch-discards-the-gates-output-so-a-refusal-can-never-name-its-step
+    event:
+      type: progress
+      ts: "2026-09-06T00:02:24Z"
+      agent_id: linux-yoga-claude-20260906t000223z
+      host: yoga
+      summary: |-
+        REOPENED on a second real instance, reported by macuahuitl 2026-09-05.
+
+        Their land refused and the diagnostic named:
+          [build] standing declared-closure debt: violation:declared-closure-unresolvable:4
+        That is a `_warn`, advisory by design under 885-92iu, reporting four
+        pre-existing 795-* closure debts that red nothing. The real failure was
+        about sixty lines further down: a fixture's
+          FAIL: expected measured-clean, got: sigpipe-decided:fx:2:2/3
+        They nearly spent a cycle on the standing debts, and found the real cause
+        only because the advisory's own comment says it is advisory — the fix was
+        in the code being blamed, which is luck rather than method.
+
+        THE ROOT CAUSE IS NOT "ONE MORE CLASS TO EXCLUDE", and that is why the
+        first fix did not hold. The matcher stripped ANSI so `^` would mean the
+        start of the text, and the SEVERITY WAS IN THE ESCAPE IT THREW AWAY:
+        build.sh's `_error` is RED (0;31), `_warn` is YELLOW (0;33). Anchoring and
+        the `ok`-row exclusion were both attempts to rebuild, by pattern,
+        information deleted one line earlier. Both instances are symptoms of that
+        one deletion: a passing arm quoting the token, then a warning quoting it.
+
+        FIXED BY READING SEVERITY BEFORE STRIPPING IT. A `[build]` line counts only
+        if `_error` painted it red; yellow and cyan `[build]` lines are skipped.
+        Fixture output (`FAIL:`, bare `violation:`) is NOT coloured by build.sh —
+        it is the fixture's own stdout — so the text heuristic still owns those
+        lines. Two rules for two sources, rather than one rule stretched over both.
+        Escapes are stripped for DISPLAY once severity has been read off them.
+
+        THE FALLBACK NAMES ITSELF. A log with no escapes at all (piped through a
+        stripper, TERM=dumb, NO_COLOR, a CI that filters them) genuinely cannot
+        supply severity, so the text heuristic returns — and the refusal says
+        "severity was unavailable; matched by text". An unnamed fallback silently
+        answering a weaker question is the could-not-run-reported-as-clean shape of
+        1024-c3h3, which is the defect this packet exists to avoid.
+
+        FOUR NEW ARMS, and they fail against the pre-fix script: 8 passed / 4
+        failed, with the pre-fix run naming macuahuitl's advisory line verbatim.
+        Arm 4c reproduces the real log's bytes AND the sixty-line distance, so the
+        cause must be found past the advisory rather than at it. Arm 4d is the
+        negative control that matters most — the severity rule must not make
+        `[build]` lines invisible, only advisory ones, and without it "skip all
+        [build] lines" would score green.
