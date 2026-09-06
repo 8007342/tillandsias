@@ -1,0 +1,66 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-fragment-repair-must-be-a-correction-fragment-and-the-scorable-guard-must-fold-before-it-can-be
+    event:
+      type: completed
+      ts: "2026-09-06T07:26:17Z"
+      agent_id: linux-lenovinha-claude-20260906t053519z
+      host: lenovinha
+      summary: |
+        CLOSING A STRANDED CLAIM OF MY OWN HOST'S. The work was finished and relayed on
+        2026-09-05 and the status was never flipped, so this packet sat in_progress —
+        hidden from `ready` and from burndown — for a day. Exactly the failure the
+        skill's release-on-exit rule exists to prevent, committed by lenovinha.
+
+        ALL FOUR CRITERIA CHECKED AGAINST THE TREE JUST NOW, not taken from the
+        previous session's word that they were met:
+
+          C1 fold-aware: check-scorable-obligation-added resolves the obligation over
+             the FOLD, as a monotone G-Set union scan — "once any fragment declares one
+             for a packet, the folded packet has one, and nothing can take it away."
+          C2 no-binary behaviour: satisfied by construction rather than by a blocking
+             verdict. The union scan needs no plan binary, so the gate neither blocks
+             hosts that have not built nor passes silently when it could not run. The
+             source states this explicitly, with a 36ms measurement over 585 fragments.
+          C3 in-place-amendment ban: present where a repairer meets it — 6 occurrences
+             in plan/index.d/README.md and 1 in methodology/distributed-work.yaml.
+          C4 two-sided fixture arm: scripts/test-scorable-obligation-gate.sh carries
+             "obligation in a correction fragment satisfies the FOLDED packet" (passes),
+             "the same declaration with NO correction anywhere is still refused"
+             (fails), and a third arm, "a silent correction fragment repairs nothing",
+             which stops a correction laundering a declaration.
+
+          scripts/test-scorable-obligation-gate.sh -> PASS 22/22, exit 0.
+          e3742f507 verified an ancestor of origin/linux-next before being cited.
+
+        TWO INDEPENDENT REASONS THIS HOST COULD NOT SEE ITS OWN WORK, and they
+        compounded. Worth recording because either alone is survivable.
+
+          (1) 1012-hu7d, the bucket defect: the claim fragment carries
+              host: lenovinha, but the two later fragments carry host: linux, because
+              set-field without --host falls back to TILLANDSIAS_HOST_KIND. So the
+              completion record is filed under a PLATFORM label while the claim is
+              under the WORKSTATION, and no query keyed on either returns both halves.
+
+          (2) check-claims-across-branches.sh reported
+              "A sibling branch holds this packet in_progress and your fold has not
+              seen it yet. It is NOT yours to implement." — about MY OWN claim. The
+              siblings had merged linux-next, so my claim was reflected back at me from
+              osx-next and windows-next, and the tool cannot distinguish "a sibling
+              claimed this" from "a sibling merged the claim I made". Its advice was
+              confidently wrong in the most expensive direction: it told a host to keep
+              its hands off its own finished work.
+
+        I acted on (2) and told a peer the packet was not mine. They had read the
+        fragments and corrected me. A cross-branch claim check that cannot subtract the
+        reader's own authorship will keep producing that, and it is a different defect
+        from 1034-whsp's relay latency — the information had arrived; it was
+        misattributed on the way back.
