@@ -1,0 +1,63 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: older-app-silently-downgrades-a-newer-enclave
+    event:
+      type: claim
+      ts: "2026-09-06T06:24:43Z"
+      agent_id: windows-yolanda-opus5-20260906t062430z
+      host: windows
+      summary: |
+        claimed for cycle by yolanda, status written first.
+
+        VERIFIED ON MY OWN TREE BEFORE CLAIMING, and the verification CHANGED THE SLICE.
+        The packet's next_action describes the whole guard as the work. It is not: the
+        guard is already implemented and already wired. main.rs:2648 downgrade_refusal()
+        exists, --force-downgrade and TILLANDSIAS_FORCE_DOWNGRADE exist (581, 596, 1425),
+        the warned-proceed path prints its rollback warning un-debug-gated (2658), and
+        ensure_image_exists calls the guard at 2686.
+
+        WHAT IS ACTUALLY MISSING IS THE PIN, AND ONLY THE PIN.
+        tillandsias_core::version_guard already carries ELEVEN tests, and they cover all
+        four cases this packet's verifiable_closure names: newer_images_are_refused,
+        equal_versions_proceed, newer_app_over_older_images_proceeds, and
+        the_override_converts_a_refusal_into_a_forced_proceed. Writing those again in
+        tillandsias-headless would duplicate green tests and close the packet on work
+        somebody else already did.
+
+        The gap is the WIRING. Nothing asserts that ensure_image_exists calls the guard
+        at all, and nothing asserts it calls it BEFORE THE DETACH. Three tests already
+        open a source window on this exact function
+        (detached_image_ensure_preserves_lock_and_decision_machinery,
+        on_demand_image_build_announces_slow_work_before_buffered_build,
+        on_demand_image_build_decides_on_content_identity_not_the_version_tag) and NONE
+        of them mentions the downgrade guard. Delete the call at 2686 and all eleven
+        version_guard tests stay green while every launch silently rolls enclaves back.
+
+        THE ORDERING IS A REAL PROPERTY WITH A STATED REASON, not a stylistic
+        preference. main.rs:2685 says the refusal must be raised before the detach
+        because "the helper runs in its own session with no controlling tty, so a
+        refusal raised in there would reach the operator as a bare non-zero exit." A
+        guard that refuses correctly but refuses in the wrong process is a guard whose
+        message never reaches a human — the same fail-loud-diagnosis family as 759-vceg,
+        where the verdict was right and the operator-facing text was wrong.
+
+        SCOPE I AM NOT TAKING: I am not re-testing decide_downgrade. Its tests are green
+        and thorough and duplicating them would inflate the packet without adding a
+        falsifiable claim.
+
+        Same file and same lane as 759-vceg, which I closed this cycle: crates/
+        tillandsias-headless is unix-only, so a native cargo run on this Windows host
+        reports a filtered-out count that says nothing about these arms. Everything runs
+        in the tillandsias-build WSL2 distro.
+
+        Both ledger writes are being COMMITTED AND PUSHED with this claim rather than
+        left on disk — last cycle mine sat untracked for the whole packet and the fleet
+        read the row as ready while I worked it.
