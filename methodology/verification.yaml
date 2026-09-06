@@ -491,6 +491,28 @@ verification:
           process actually received, or call the tool directly. A helper that
           loops variants is the thing most likely to alter them.
 
+      - id: a_guard_must_not_penalise_the_honest_verdict
+        kind: judgment
+        rule: >
+          A GUARD THAT MAKES THE TRUTHFUL ANSWER MORE EXPENSIVE THAN THE
+          FLATTERING ONE WILL BE ANSWERED FLATTERINGLY, and no amount of care in
+          the answering agent fixes that. Distinct from an instrument that cannot
+          report its own failure: this is an instrument that PENALISES the
+          report. MEASURED twice in one night, 2026-09-06, in two unrelated
+          guards. scripts/finalize-cycle.sh matched only `^MO-FULL: COMPLETE`, so
+          a cycle declaring the documented BLOCKED disposition was refused AFTER
+          its ledger line had been written — a cycle willing to say it was
+          blocked could not attest, while one claiming COMPLETE passed, and the
+          obvious recovery appended a duplicate line. The startup-boundary guard
+          accepts a snapshot taken at the END of a cycle, so an agent whose
+          finalize refuses can make it green by snapshotting late, manufacturing
+          the very artefact the guard exists to verify; the honest path — refuse,
+          report, explain — costs the marker. Neither required intent to
+          deceive: in both, the cheap path is the dishonest one and it is the
+          path a competent agent reaches for first. When designing a check, ask
+          what the agent does when it FAILS, and make the honest disposition a
+          first-class accepted outcome rather than an error state.
+
       - id: agreement_at_zero_is_not_a_remedy
         kind: judgment
         rule: >
