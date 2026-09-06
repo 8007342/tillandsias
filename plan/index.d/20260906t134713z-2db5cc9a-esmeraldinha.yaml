@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-capability-manifest-fixture-edits-a-tracked-file-in-the-shared-checkout-so-a-concurrent-commit-captures-a-trimmed-manifest
+    field: status
+    value: in_progress
+    ts: "2026-09-06T13:47:13Z"
+    host: esmeraldinha
+
+events:
+  - packet_id: the-capability-manifest-fixture-edits-a-tracked-file-in-the-shared-checkout-so-a-concurrent-commit-captures-a-trimmed-manifest
+    event:
+      type: note
+      ts: "2026-09-06T13:47:13Z"
+      host: esmeraldinha
+      summary: |-
+        claimed by esmeraldinha for the trap fix; taken as its own slice, not folded into 1109-t8kw
