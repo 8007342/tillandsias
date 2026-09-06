@@ -1,0 +1,90 @@
+packets:
+  - packet_id: nothing-in-a-cycles-exit-path-asks-what-the-host-is-still-holding
+    order: 1115-srfr
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    pickup_role: any
+    depends_on: []
+    capability_tags:
+      - meta-orchestration
+      - plan
+      - bash
+      - fleet
+    estimated_hours: 2
+    title: >
+      A cycle can end holding claims and nothing notices: the fleet sweep is
+      8-hour-aged and host-blind, so an unreleased claim is invisible for eight
+      hours to the one host that could release it in one command.
+    context: |
+      TWO INSTANCES ON ONE HOST IN ONE DAY, both lenovinha's, both found by
+      accident rather than by any check:
+
+        1071-adhj  finished, relayed, left in_progress ~24h. A PEER found it,
+                   and only after this host had told them the packet was not
+                   its own.
+        1063-nraf  left in_progress ~20h, discovered by running
+                   `expire-claims --list-live` by hand at the end of an
+                   unrelated cycle.
+
+      Both cycles did the work correctly and skipped the release step. Neither
+      noticed, because a cycle's exit path never asks the question.
+
+      THE EXISTING SWEEP DOES NOT COVER THIS, and the difference is the packet.
+      scripts/check-stranded-in-progress.sh is a FLEET sweep: measured here,
+      `STRANDED_HOURS` defaults to 8, and it carries no host filter at all
+      (zero occurrences of `hostname`). It exists for a COORDINATOR, and its
+      own discipline is right — advisory, never a gate, because a packet
+      legitimately in flight is indistinguishable from one abandoned an hour
+      ago, so bulk-closing what it reports would mark unfinished work done.
+
+      The exit-time question is a DIFFERENT question and needs no judgement at
+      all. Claims are cycle-scoped by design — "you claim one session's slice,
+      not the packet" — so a claim still held by THIS host at ITS OWN
+      finalization is unreleased by definition. There is nothing to
+      adjudicate: the host either finishes it or releases it, and it is the
+      only party that knows which.
+
+      Aging is what makes the fleet sweep unable to serve as the fix. Both
+      incidents above would have surfaced eight hours after the cycle that
+      stranded them, on a coordinator's screen, needing human judgement —
+      when the exiting host could have resolved either in one command with no
+      judgement at all.
+
+      AND THE GUARD IS NOT RUN BY A CYCLE ANYWAY. build.sh gates
+      scripts/test-check-stranded-in-progress.sh — the FIXTURE that proves the
+      predicate works — while nothing in a cycle invokes the guard itself; its
+      only caller is scripts/reclaim-stranded-claims.sh, which the worker skill
+      records as having no caller outside its own source and fixture. A tested
+      predicate nobody runs is 1009-gccx's shape one level up.
+    exit_criteria:
+      - |
+          A cycle's finalization reports, host-scoped and with NO aging, every
+          packet this host still holds in_progress, naming each one and the
+          exact `set-field ... status ready` command that releases it. Zero
+          held claims must print an explicit affirmative line, not silence —
+          silence is indistinguishable from the check not running.
+      - |
+          It degrades honestly: when the plan binary is unavailable it emits a
+          named skip rather than passing quietly (965-sxec), and it never
+          blocks attestation on its own inability to run.
+      - |
+          A DECISION, recorded rather than assumed: whether this stays advisory
+          or becomes a refusal. Advisory is what is implemented first because
+          it changes a script every host runs and tightening a shared gate
+          unilaterally is not this packet's call. If a host strands a claim
+          again WITH the report in place, that is the evidence for escalating,
+          and the escalation should be a refusal naming the release command,
+          since releasing at that point is always correct and costs seconds.
+    unscoreable: |
+      No litmus can be named yet: the pin is a fixture asserting the report
+      fires with a held claim, prints the affirmative line with none, and skips
+      namedly with no binary — and that fixture is created by criterion 1.
+      Naming a test that does not exist is what 885-92iu refuses. Replace this
+      with a verifiable_closure naming that fixture once it lands.
+    notes: |
+      Filed by the host that did it twice. The reaper's 24h TTL is documented
+      as a backstop for a DEAD host rather than a return path, and that is
+      correct; the return path is the exiting cycle, and on this host it failed
+      twice in a day without either failure being visible to it.
