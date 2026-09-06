@@ -29,6 +29,52 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
     `plan/issues/main-branch-direct-push-guard-2026-07-24.md`). Switch to
     your host's canonical branch or run the cycle read-only.
 
+1b. **Acquire the checkout lock — BEFORE any committable work** (orders
+    873-zcim, 1091-zh6d):
+
+    ```bash
+    TILLANDSIAS_CYCLE_HOLDER_PID=$PPID scripts/cycle-checkout-lock.sh acquire \
+        --lane prompt --source "<how this cycle was launched, one line>"
+    ```
+
+    **`TILLANDSIAS_CYCLE_HOLDER_PID=$PPID` MUST BE ON THE COMMAND LINE, in
+    YOUR shell.** It anchors liveness to the agent-harness process that spans
+    the whole cycle. Evaluated inside the script instead, `$PPID` is the tool
+    shell that invoked it — which dies the moment your tool call returns, so
+    the lock stale-reaps immediately, every later lane reads
+    `ok:checkout-lock:free`, and the verdict you got still said `acquired`.
+    Measured on yoga 2026-09-06, direct and via `bash -c`: both anchor on the
+    dying shell.
+
+    On `skip:overlap-lock-held:<holder>` **DO NOT PROCEED.** The verdict names
+    who holds the checkout (lane, pid, start, source). Report it as the cycle's
+    final output and exit — that is the designed outcome, not a failure, and it
+    is recorded outside the checkout in
+    `~/.cache/tillandsias/overlap-refusals.jsonl` so a refused-for-overlap
+    cycle is distinguishable from one that ran and found nothing. Do not retry
+    in a loop; the next scheduled fire retries on its own clock.
+
+    **WHY THIS SECTION EXISTS: it did not, and every worker host paid for it.**
+    The lock instruction lived only in `skills/meta-orchestration` — one host,
+    four-hourly — while THIS skill is the lane every host runs to drain plan
+    work. Measured on yoga 2026-09-06: a full night of cycles on one checkout,
+    eight lands, `./build.sh --check` runs of six to seven minutes, and the
+    lock taken ZERO times, because nothing here mentioned it. A sibling lane
+    firing into that checkout mid-gate produces a red with no discoverable
+    cause. Same shape as 943-7dn5, where `--emit-flow` lived in the
+    coordinator skill and the flow log was fed only when a session happened to
+    run it: **anything the worker loop must do belongs in the worker skill.**
+
+    Release at §7 Finalization, after the cycle's last commit lands:
+
+    ```bash
+    TILLANDSIAS_CYCLE_HOLDER_PID=$PPID scripts/cycle-checkout-lock.sh release
+    ```
+
+    A second agent NEVER works in a locked checkout (873-zcim criterion 4).
+    The sanctioned path for concurrent work on one host is a separate git
+    worktree or a clean temp clone.
+
 2.  **Instrument check**: `scripts/cycle-preflight.sh` must answer `ok:` before
     you select work — selecting with an unverified instrument is the one
     failure the loop cannot reason its way out of, because the tool it would
