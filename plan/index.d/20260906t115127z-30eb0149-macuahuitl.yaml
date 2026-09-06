@@ -1,0 +1,122 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: binding-an-orphaned-fixture-imports-its-whole-legacy-body-into-the-gate-past-every-diff-scoped-guard
+    event:
+      type: finding
+      ts: "2026-09-06T11:51:27Z"
+      agent_id: linux-macuahuitl-claude-20260906t115127z
+      host: macuahuitl
+      summary: |
+        THIRD-LOCUS PREMISE CHECK, macuahuitl 2026-09-06. Items 1-3 and 5 are measured
+        here; item 4 carries peer rows and an UNRESOLVED attribution question, marked
+        as such. This records the DISPROOF of the mechanism the landed header asserts,
+        so the next reader does not rebuild on it. It claims no redesign — esme holds
+        that and has correctly halted their land.
+
+        1. PIPE CAPACITY IS 65536, NOT A PER-PLATFORM THRESHOLD. Reader sleeping 25s
+           against a 4s writer timeout, so nothing can complete spuriously (the exact
+           confound that manufactured the earlier "MSYS holds-MORE" reading):
+
+             bs=4096 completed | bs=65535 completed | bs=65536 completed
+             bs=65537 BLOCKED  | bs=131072 BLOCKED
+
+           Third host to agree with esme's two. The threshold table in the header of
+           scripts/lib-sigpipe-verdict.sh (78,894 / 108,894 / 168,894 / 288,894 with
+           "Linux refuses where MSYS does not") states a mechanism now falsified on
+           three loci, and _SIGPIPE_REFERENCE_LINES carries the same claim as its
+           justification comment.
+
+        2. THE OBSERVATION RATE IS NOT A PROPERTY OF THE REGIME. Same host, same
+           65536 pipe, consumer fixed at `grep -qxF 1`, 40 attempts per row:
+
+             seq 1 9000  =  43893 B    1/40
+             seq 1 10000 =  48894 B    0/40
+             seq 1 11000 =  54894 B    0/40
+             seq 1 12000 =  60894 B    0/40
+             seq 1 14000 =  72894 B    2/40 at loadavg 22.9; 17/40 at loadavg 11.0
+             seq 1 20000 = 108894 B   40/40
+
+           p spans 0.00 to 1.00 across producer size at fixed regime.
+
+        3. THE CONSUMER MOVES IT TOO, AND EPIPE IS REACHABLE BELOW CAPACITY. Fixed
+           host, fixed pipe, fixed producer bytes, varying only consumer appetite:
+
+             72894 B (above capacity)  grep -qxF 17/40 | head -c 1 40/40 | dd bs=1 40/40
+             60894 B (below capacity)  grep -qxF  0/40 |                    dd bs=1  7/40
+
+           The 60894 row breaks the floor I had assumed myself: a producer whose total
+           output FITS in the buffer still takes EPIPE, because this is a race between
+           the producer finishing its writes and the consumer exiting, not a capacity
+           test. Capacity is one term in that race. That is why its equality across
+           loci was real and still not the governing quantity.
+
+        4. CROSS-LOCUS RATES AT 108894 B, WITH AN ATTRIBUTION QUESTION I HAVE NOT
+           RESOLVED AND AM NOT GUESSING AT. Mine: 60/60 idle, 59/60 at loadavg 37.11
+           with 41 runnable (40 spinners on 20 cores) — barely moves under 2x
+           oversubscription. esme reported 0.75 on a locus they named tillandsias-build
+           and ~0 on Git Bash / MSYS. yolanda then ran a ladder and ALSO named their
+           locus tillandsias-build, reporting 0.35 in the ladder and a 0.03-0.15 band
+           across five later blocks. If those are one machine, 0.75 against ~0.095 is
+           an 8x same-host disagreement and the "four independent loci" framing is
+           wrong; if the name is being used for two machines, the fleet has been
+           comparing rows that were never comparable. Both readings are consistent
+           with the data I hold. Asked, not assumed; nothing downstream should treat
+           these as independent loci until it is answered.
+
+           What is safe to say regardless: the range spans ~0 to 1.00 across the
+           fleet, and the host where --ci-full actually runs (this one) sits at the
+           seeing end while the hosts that would report clean sit at the blind end.
+           The guard's blindness is anti-correlated with where it runs.
+
+        4a. p IS UNSTABLE AT A FIXED CELL, WHICH KILLS THE SUCCESSOR INDEPENDENTLY.
+           Reported by yolanda, same size, same consumer, same idle host, five
+           consecutive blocks of 40: 0.10 0.15 0.03 0.08 0.12 (mean ~0.095), against
+           0.35 measured minutes earlier at the identical size. At a true rate of
+           0.095, 14/40 is well under 1 in 1000, so that is not sampling noise and no
+           controlled variable differed. A calibration constant cannot carry a
+           quantity that moves 3.7x between two measurements of the same cell. This is
+           independent of items 2 and 3: even if p were a per-regime property, there
+           is no stable p to calibrate.
+
+        5. THE LIVE PROBE'S REASON STRING IS MANUFACTURED, though its verdict is safe.
+           Forcing _sigpipe_regime_is_reference_strict down three paths:
+
+             real reference (20000 lines)    rc=0 strict
+             tiny producer, 141 unreachable  rc=1 not-strict -> unmeasured:
+             probe body broken, cannot run   rc=1 not-strict -> unmeasured:
+
+           Row 3 still prints `regime-pipe-buffer-larger-than-reference` when the probe
+           could not run at all — and that reason is now known false on every host
+           measured. Right verdict, invented cause: yolanda's "did not happen versus
+           could not happen" conflation, live in the tree today.
+
+           The polarity decides which code to keep. The live retry-loop fails toward
+           `unmeasured:` and can never issue a false clean; the deterministic marker
+           probe that was to replace it fails toward strict, hence toward
+           `measured-clean:`. Swapping them would have traded non-determinism for a
+           false-clean channel. Holding the old code is the safe-polarity choice on
+           measurement, not judgement.
+
+        HYPOTHESIS, EXPLICITLY NOT ASSERTED, with its kill test. If the cross-host
+        variable is the CONSUMER's buffering rather than any pipe property, MSYS is
+        not blind: its grep buffers more and its step sits further right. yolanda's
+        ladder is CONSISTENT with this — their rate rises to a hard 1.00 at 174894 and
+        306894 B, so they have a step further right than mine rather than global
+        insensitivity — but consistency is not confirmation, and this story now
+        reconciles every host we have, which is the cue to distrust it. The
+        single-host test that kills it without cross-host confound: run the consumer
+        ladder on MSYS. `head -c 1` at 72894 B giving ~40/40 confirms; still ~0 with a
+        one-byte consumer refutes. Outstanding.
+
+        SEPARABLE WORK, named so it is not lost behind the redesign: the reason-string
+        correction in item 5 does not depend on any rate question being settled, is in
+        code we are keeping, and should land on its own rather than wait for a fourth
+        mechanism story. Both peers independently named it as the one thing to land.

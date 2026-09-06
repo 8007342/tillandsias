@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: three-fixtures-assert-properties-of-the-environment-they-run-in-so-a-correct-refusal-scores-as-a-failure
+    field: status
+    value: in_progress
+    ts: "2026-09-06T10:13:02Z"
+    host: esmeraldinha
+
+events:
+  - packet_id: three-fixtures-assert-properties-of-the-environment-they-run-in-so-a-correct-refusal-scores-as-a-failure
+    event:
+      type: note
+      ts: "2026-09-06T10:13:02Z"
+      host: esmeraldinha
+      summary: |-
+        claimed by esmeraldinha; fixes gating at 82f1001bf on work/1109-t8kw

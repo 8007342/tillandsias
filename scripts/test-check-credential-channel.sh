@@ -88,6 +88,39 @@ case "$out" in
 esac
 [ "$rc" -ne 0 ] || bad "a push-refused verdict must exit non-zero"
 
+# ── 2b. ORDER 1106-k2df: THE CLASS THAT DEFEATED THE REST-API PROBE ────────
+# esmeraldinha measured this live on 2026-09-06 with the operator's new
+# fine-grained PAT: reads succeed, `gh api repos/{o}/{r} --jq .permissions.push`
+# answers `true`, and the push is denied 403. That field reports the
+# authenticated USER'S role on the repo, not the TOKEN'S grants, so it says
+# `true` for any repo owner regardless of what the token was granted.
+#
+# Arm 2 above already covers this shape, but it covers it INCIDENTALLY, through
+# a probe that fails for no stated reason. This arm states the reason, using the
+# remote's own words, so that a future rewrite of the guard cannot quietly stop
+# covering the one class the guard was rebuilt for and still pass arm 2.
+#
+# It also pins the SEPARATION 1106-k2df turns on: a 403 is AUTHORIZATION and a
+# 401 is AUTHENTICATION, they need opposite remedies, and neither may seed.
+D="$(scratch k2df)"
+_denied="$W/probe-403"
+cat > "$_denied" <<'PROBE'
+#!/usr/bin/env bash
+echo "remote: Permission to 8007342/tillandsias.git denied to 8007342." >&2
+echo "fatal: unable to access 'https://github.com/8007342/tillandsias.git/': The requested URL returned error: 403" >&2
+exit 128
+PROBE
+chmod +x "$_denied"
+out="$(run_guard "$D" "$_denied")"; rc=$?
+case "$out" in
+    ok:*|*seeding*)
+        bad "1106-k2df: a token that AUTHENTICATES and cannot PUSH was accepted: $out" ;;
+    *blocked:credential-accepted-but-push-refused*)
+        ok "1106-k2df: authenticates + 403 -> refused, and the PUSH is named" ;;
+    *) bad "1106-k2df: unexpected verdict for the authenticates-cannot-push class: $out" ;;
+esac
+[ "$rc" -ne 0 ] || bad "1106-k2df: the authenticates-cannot-push class must exit non-zero"
+
 # ── 3. gh green + probe SUCCEEDS -> the verified ok ─────────────────────────
 D="$(scratch c)"
 out="$(run_guard "$D" "true")"; rc=$?

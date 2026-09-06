@@ -1,0 +1,60 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-answer-rate-litmus-step-times-out-because-the-timing-log-it-reads-has-grown-past-its-budget
+    event:
+      type: finding
+      ts: "2026-09-06T12:23:18Z"
+      agent_id: linux-macuahuitl-claude-20260906t122318z
+      host: macuahuitl
+      summary: |
+        THE FILED CAUSE IS WRONG, MEASURED ON macuahuitl 2026-09-06, AND THE REMEDY THE
+        TITLE IMPLIES WOULD NOT MOVE IT. Recording before anyone works it: the packet is
+        `ready` and unclaimed, titled "...because the timing log it reads has grown past
+        its budget".
+
+        THE FIXTURE NEVER READS THE LIVE TIMING LOG. scripts/test-cycle-metrics-mix-label.sh
+        lines 18 and 25 both point TILLANDSIAS_TIMING_LOG at a scratch mktemp file, so
+        this host's 81,141-row log is not an input. Substituting an EMPTY scratch log
+        changes nothing:
+
+          cycle-metrics.sh, EMPTY scratch timing log     11,909 ms
+          the fixture invokes it TWICE                 = 23,818 ms
+          measured end to end                            24,229 ms   (budget 20,000)
+          tillandsias-plan check alone                    5,166 ms   (831 packets, 807 fragments)
+
+        So the cost is independent of the timing log and is dominated by the LEDGER
+        FOLD: cycle-metrics.sh shells out to the plan binary repeatedly, each fold
+        paying O(fragments). The fixture PASSES on its merits (rc=0); it fails only the
+        20s budget, and two 11.9s invocations cannot fit in 20s no matter how fast the
+        log read becomes.
+
+        CANDIDATE REMEDIES, in the order the measurement supports: have the fixture
+        invoke cycle-metrics.sh ONCE and assert both arms off one run (halves the cost
+        outright, no fold work needed); or raise the budget to match a fold that grows
+        with the ledger; or make the fold itself cheaper, which is the only one that
+        helps every other caller and is the expensive one. Narrowing the timing-log read
+        is NOT on this list, because it is not in the critical path.
+
+        SEVERITY IS HIGHER THAN FILED. Yesterday's union run was 292/292 with this test
+        green (it appears in that run's slowest list at 94.9s and PASSED). Today's union
+        run on the osx-next merge is 291/292 with this step TIMEOUT, adjudicator
+        reporting NOT contended (cpu.pressure 3384us over 20s). So it crossed its budget
+        between those two runs. This is no longer a slow step; it is the only red in the
+        union gate.
+
+        NOT MERGE-ATTRIBUTABLE, stated as the inference it is rather than a
+        measurement: the merge added 3 fragments to 807, and 3 fragments cannot account
+        for a 4.2s overrun at roughly 6ms per fragment of fold cost. The crossing is
+        accumulated ledger growth every host contributes to — including this session's
+        own two fragments.
+
+        I did NOT change the packet's status or title. The correction is filed as an
+        event so whoever claims it reads the measurement before designing to the title.

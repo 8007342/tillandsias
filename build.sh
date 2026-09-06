@@ -3780,6 +3780,11 @@ if [[ "$FLAG_CHECK" == true ]]; then
         _error "scripts/test-scorable-obligation-gate.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
         exit 1
     fi
+    _step "Checking the held-claim report (1115-srfr)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-cycle-claims-report.sh" 2>&1; then
+        _error "scripts/test-cycle-claims-report.sh failed — the exit-time held-claim report is what stops a cycle ending on an unreleased claim; read the fixture output above"
+        exit 1
+    fi
     _step "Checking test-subdomain-routing (1063-nraf; 14ms)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-subdomain-routing.sh" 2>&1; then
         _error "scripts/test-subdomain-routing.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"

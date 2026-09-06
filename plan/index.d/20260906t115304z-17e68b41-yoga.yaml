@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: litmus-podman-idiomatic-fails-on-any-host-without-a-staged-sidecar
+    field: status
+    value: completed
+    ts: "2026-09-06T11:53:04Z"
+    host: yoga
+
+events:
+  - packet_id: litmus-podman-idiomatic-fails-on-any-host-without-a-staged-sidecar
+    event:
+      type: completed
+      ts: "2026-09-06T11:53:04Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: ./build.sh --check rc=0 554s; reproduced the build.rs:139 panic with the artifact moved aside, then ran the litmus from that same state through the fixed runner: staged, [STEP 1/1] OK, Status PASS; criterion-3 audit found 29 litmus files with the dependency and confirmed run-litmus-test.sh is their sole executor
+  - packet_id: litmus-podman-idiomatic-fails-on-any-host-without-a-staged-sidecar
+    event:
+      type: note
+      ts: "2026-09-06T11:53:04Z"
+      host: yoga
+      summary: |-
+        closed: runner preflight stages the sidecar once per run, non-fatally
