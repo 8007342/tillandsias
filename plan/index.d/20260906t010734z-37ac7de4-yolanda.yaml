@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: windows-ready-not-durable-after-provision-once
+    field: status
+    value: completed
+    ts: "2026-09-06T01:07:34Z"
+    host: yolanda
+
+events:
+  - packet_id: windows-ready-not-durable-after-provision-once
+    event:
+      type: completed
+      ts: "2026-09-06T01:07:34Z"
+      host: yolanda
+      summary: |-
+        status 'completed' with evidence_refs: a8fb991ab landed 5ea174d10: cargo test -p tillandsias-windows-tray 114 passed 0 failed incl. guest_ready_record_separates_idled_out_from_never_ready (5 arms over a temp state root); both inversions sabotaged and caught (absent/corrupt-reads-ready FAILS, ignore-installation-identity FAILS); five-touchpoint lockstep 21->22 keys, pinned list, human line, tray-diagnose.ps1, cheatsheet
+  - packet_id: windows-ready-not-durable-after-provision-once
+    event:
+      type: note
+      ts: "2026-09-06T01:07:34Z"
+      host: yolanda
+      summary: |-
+        exit codes deliberately unchanged; criterion (a) — whether --provision-once should hold the guest resident — is a product decision and left to the coordinator

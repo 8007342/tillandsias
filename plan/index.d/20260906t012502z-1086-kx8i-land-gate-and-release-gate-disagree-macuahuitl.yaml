@@ -1,0 +1,125 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-gate-every-host-lands-through-is-blind-to-nine-conditions-the-daily-release-gate-sees
+    order: 1086-kx8i
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    owner_host: lenovinha
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags:
+      - gate
+      - fail-loud
+      - release
+      - multi-host
+    estimated_hours: 6
+    unscoreable: |
+      THE SUBJECT IS A DIVERGENCE BETWEEN TWO GATES, not a defect in either, so
+      a litmus test asserting "these agree" is the deliverable and does not yet
+      exist. Naming a closure that pins today's nine would score the instances
+      and miss the class: they are already fixable one by one, and fixing them
+      leaves the divergence intact and invisible again tomorrow. The closure to
+      build is a check that FAILS when a condition is enforced in --ci-full and
+      not in --check, which requires enumerating both gates' step sets — that
+      enumeration is the packet's first deliverable and cannot be pinned before
+      it exists.
+    context: |
+      MEASURED on macuahuitl 2026-09-06T00:53-01:2xZ against origin/linux-next
+      at eec480b5c: `./build.sh --ci-full` exits 1 while `./build.sh --check`
+      is GREEN on all NINE conditions below. cifull_rc=1, preflight_rc=0
+      (`ok:release-preflight` — the preflight itself is clean; the gate is not).
+
+        1  clippy --all-features   empty line after doc comment,
+                                   crates/tillandsias-headless/src/tray/mod.rs:3359
+        2  tray/vsock feature tests
+                                   pty_handler::tests::child_env_empty_input_gets_
+                                   path_and_proxy_exemption FAILED (672 pass, 1 fail)
+        3  guard activation        4 orphans, population=121 active=117
+        4  no-python               7 python3 invocation sites in 3 tracked scripts
+        5  litmus  ci-release                capability-routing-shape
+        6  litmus  git-mirror-service        forge-gitconfig-bidirectional-quarantine
+        7  litmus  git-mirror-service        forge-standard-gitconfig-path
+        8  litmus  methodology-accountability cycle-metrics-answer-rate-shape
+        9  litmus  meta-orchestration        committable-branch-guard-shape
+                                             (rc=1 out=blocked:no-git-identity)
+
+      THREE OF THE NINE ARRIVED WITHIN ELEVEN HOURS. The release gate runs ONCE
+      PER DAY, so a full day of landings accumulates defects that no individual
+      land can detect. Every host on 2026-09-05, the coordinator included,
+      landed green through a gate blind to all nine.
+
+      FAILURE 1 IS NOT COSMETIC AND IS THE ARGUMENT FOR THE PACKET'S PRIORITY.
+      a00a0f76b deleted `build_local_projects_submenu` and left its doc comment
+      behind. The orphaned block shifted the CLOUD submenu's entire doc —
+      including `@trace spec:tray-ux, spec:remote-projects` — onto
+      `cloud_overflow_row`. The real `build_cloud_projects_submenu` at line 3405
+      lost its annotation, and `validate-traces.sh` still reports 100% coverage
+      because the marker exists in the FILE. A trace satisfied by a function
+      that does not implement it is a false green in the trace ledger, and it
+      was invisible to every land for 28 hours.
+
+      THIS IS THE SAME CLASS AS FOUR OTHER FINDINGS OF THE SAME NIGHT, which is
+      why it is filed as a class and not as nine fixes (yoga's framing): THE
+      ARTEFACT EXISTS AND THE PATH TO IT DOES NOT.
+        - a fix on trunk that hosts had built and never installed
+        - a tool built and not invoked, its answer re-derived from scratch
+        - four guards shipped and wired to nothing
+        - a gate step that moved into scripts/gate-steps.d/ while a scan of
+          build.sh for it did not follow
+        - and this: a gate that runs daily, so its coverage has a 24-hour lag
+
+      THE QUALIFIER IS MACNEO'S AND IT MUST TRAVEL WITH THE PACKET, or the fix
+      produces the next defect: THE PATH EXISTING IS NECESSARY AND NOT
+      SUFFICIENT — the artefact at the end of it must answer the question the
+      path is named for. Demonstrated the same night on
+      `check-plan-binary-current.sh`: wiring it would have printed
+      `ok:plan-binary-current` on binaries that were stale in the way that
+      mattered, because it probes ONE commit's refusal under a name claiming
+      the general property. An unwired guard is inert; a wired guard answering
+      a narrower question than its name is ACTIVELY MISLEADING, because it
+      hands you a green to cite.
+    next_action: |
+      LEFT TO DO:
+
+      1. ENUMERATE BOTH GATES' STEP SETS and diff them. `--check` and
+         `--ci-full` share build.sh; the divergence is which blocks are guarded
+         by the ci-full flag plus which litmus phases run. Eleven steps now
+         live in scripts/gate-steps.d/*.step, so an enumeration that greps
+         build.sh alone will under-count — that mistake was made once already
+         on 2026-09-05.
+
+      2. DECIDE PER CONDITION whether it belongs in --check. Some legitimately
+         do not: all-features clippy and the full litmus suite are expensive,
+         and forcing them onto every land is how a gate gets bypassed. The
+         deliverable is not "run everything everywhere"; it is that the set
+         enforced only in the daily gate is DECLARED and BOUNDED, so a
+         condition cannot join it silently.
+
+      3. BUILD THE CHECK THAT FAILS ON SILENT DIVERGENCE — a condition enforced
+         in one gate and not the other, with no declaration. That is this
+         packet's scorable closure and it must be written before the nine are
+         fixed, or the fixes will pass and the class will recur.
+
+      4. DO NOT FIX THE NINE UNDER THIS ORDER. They belong to their owners:
+         #4 python routes to yoga (bde83aa26, plus check-tray-refresh-no-
+         polling.sh from the same commit, unflagged but worth checking);
+         #1 to whoever owns tray/mod.rs; #3's orphans are two wired by yoga,
+         one renamed by esmeraldinha to lib-sigpipe-verdict.sh with a
+         refused:not-a-check exit, and one (check-plan-binary-current.sh)
+         held by macuahuitl pending a rewrite.
+
+      5. WORKED PRECEDENT, from pirria: test-cycle-preflight-cargo-resolution.sh
+         was bound to NOTHING until 1005-m6rz bound it, and the moment it ran
+         in a gate it went 11/15 and exposed two host-dependent arms. Binding
+         an unrun check surfaces real failures immediately; budget for that
+         rather than being surprised by it.
+    provenance: |
+      Divergence measured by macuahuitl during the 2026-09-06 daily release
+      duty, which the nine failures blocked (no tag, no merge, main untouched;
+      PR #109 retitled DO NOT MERGE and left open for reuse). Class named by
+      yoga; the necessary-not-sufficient qualifier by macneo, demonstrated on
+      macuahuitl's own guard; the 1005-m6rz precedent by pirria. Assigned to
+      lenovinha, who asked for it and holds 080-1077-vzwq.step as a worked
+      example of adding a step to the gate that is actually run.

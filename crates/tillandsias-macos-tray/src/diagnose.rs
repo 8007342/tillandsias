@@ -89,7 +89,17 @@ pub fn crashloop_state_path() -> PathBuf {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum ProvisionRecord {
     /// The script wrote a completion line as its last statement.
-    Complete { written_at: Option<u64> },
+    ///
+    /// `guest_binary_sha256` is what the GUEST hashed of the binary it will
+    /// run (order 1084-x8ya). Comparing it against the staged provenance is
+    /// the one measurement that settles version skew, and it is the only way
+    /// to ask: every host-side path into the guest is closed when the wire is
+    /// down, and no string scan of the raw image can date the binary because
+    /// 79e3ca876 flipped a default without adding a shipped string literal.
+    Complete {
+        written_at: Option<u64>,
+        guest_binary_sha256: Option<String>,
+    },
     /// The ERR trap fired and named the failing line.
     Failed {
         written_at: Option<u64>,
@@ -124,6 +134,7 @@ pub(crate) fn provision_record_from(text: &str) -> ProvisionRecord {
     let mut phase = None;
     let mut written_at = None;
     let (mut line, mut rc, mut cmd) = (None, None, None);
+    let mut guest_binary_sha256 = None;
     for l in text.lines() {
         let mut parts = l.splitn(2, ' ');
         match (parts.next(), parts.next()) {
@@ -132,11 +143,17 @@ pub(crate) fn provision_record_from(text: &str) -> ProvisionRecord {
             (Some("line"), Some(v)) => line = Some(v.trim().to_string()),
             (Some("rc"), Some(v)) => rc = Some(v.trim().to_string()),
             (Some("cmd"), Some(v)) => cmd = Some(v.trim().to_string()),
+            (Some("guest_binary_sha256"), Some(v)) => {
+                guest_binary_sha256 = Some(v.trim().to_string())
+            }
             _ => {}
         }
     }
     match phase.as_deref() {
-        Some("complete") => ProvisionRecord::Complete { written_at },
+        Some("complete") => ProvisionRecord::Complete {
+            written_at,
+            guest_binary_sha256,
+        },
         Some("failed") => ProvisionRecord::Failed {
             written_at,
             line,
@@ -145,6 +162,54 @@ pub(crate) fn provision_record_from(text: &str) -> ProvisionRecord {
         },
         Some("start") => ProvisionRecord::StartedNeverFinished { written_at },
         _ => ProvisionRecord::Absent,
+    }
+}
+
+/// Compare the binary the GUEST hashed against the one the host STAGED.
+///
+/// ORDER 1084-x8ya, and this is the measurement the packet turns on. A guest
+/// that provisioned to completion and still never reaches Ready leaves one
+/// question — is it running the binary we staged — and until now no host could
+/// ask it. Order 272 masks every sshd surface, `--exec-guest` rides the
+/// control wire that is down in exactly this failure, macOS cannot mount the
+/// guest's ext4, and a raw-image string scan cannot date the artefact because
+/// 79e3ca876 flipped the wire to encrypted-by-default WITHOUT adding any
+/// string literal that reaches the shipped binary.
+///
+/// So the guest hashes its own binary at the end of provisioning and writes it
+/// to the share. This compares the two.
+///
+/// SKEW IS REPORTED AS A FINDING, NOT AS AN ERROR: a mismatch is the expected
+/// state on a host that has staged a newer bundle than the guest last
+/// installed, and naming it is the point.
+fn guest_binary_skew_line(guest_sha: Option<&str>) -> String {
+    let staged = crate::guest_binary::guest_binary_provenance().staged_sha256;
+    match (guest_sha, staged) {
+        (None, _) => "              guest binary: NOT RECORDED — this guest provisioned before \
+             the hash was added, so skew cannot be judged (1084-x8ya)."
+            .to_string(),
+        (Some("absent"), _) => "              guest binary: ABSENT in the guest. Provisioning \
+             completed and left no binary at /usr/local/bin/tillandsias-headless."
+            .to_string(),
+        (Some("unreadable"), _) => "              guest binary: present but UNREADABLE to the \
+             hashing step; skew cannot be judged."
+            .to_string(),
+        (Some(g), None) => format!(
+            "              guest binary: {} — nothing staged on this host to compare against.",
+            &g[..g.len().min(12)]
+        ),
+        (Some(g), Some(st)) if g == st => format!(
+            "              guest binary: MATCHES the staged artefact ({}…). Version skew is \
+             ELIMINATED as a cause.",
+            &g[..g.len().min(12)]
+        ),
+        (Some(g), Some(st)) => format!(
+            "              guest binary: SKEW — guest {}…, staged {}…. The guest is NOT running \
+             the binary this host staged, which is a cause a dead control wire would present as \
+             a handshake failure (1084-x8ya).",
+            &g[..g.len().min(12)],
+            &st[..st.len().min(12)]
+        ),
     }
 }
 
@@ -157,11 +222,15 @@ pub fn provision_state_path() -> std::path::PathBuf {
 pub(crate) fn provision_report_line() -> String {
     let text = std::fs::read_to_string(provision_state_path()).unwrap_or_default();
     match provision_record_from(&text) {
-        ProvisionRecord::Complete { written_at } => format!(
-            "Provisioning: COMPLETE — the guest script recorded its own completion{}",
+        ProvisionRecord::Complete {
+            written_at,
+            guest_binary_sha256,
+        } => format!(
+            "Provisioning: COMPLETE — the guest script recorded its own completion{}\n{}",
             written_at
                 .map(|t| format!(" at {}", format_utc(t)))
-                .unwrap_or_default()
+                .unwrap_or_default(),
+            guest_binary_skew_line(guest_binary_sha256.as_deref())
         ),
         ProvisionRecord::Failed {
             written_at,
@@ -3133,7 +3202,8 @@ mod tests {
         assert_eq!(
             super::provision_record_from(complete),
             super::ProvisionRecord::Complete {
-                written_at: Some(1_800_000_000)
+                written_at: Some(1_800_000_000),
+                guest_binary_sha256: None,
             }
         );
 
@@ -3183,10 +3253,69 @@ mod tests {
         let no_ts = "tillandsias-provision-state v1\nphase complete\n";
         assert_eq!(
             super::provision_record_from(no_ts),
-            super::ProvisionRecord::Complete { written_at: None },
+            super::ProvisionRecord::Complete {
+                written_at: None,
+                guest_binary_sha256: None
+            },
             "a record without a content timestamp reports None rather than \
              borrowing the filesystem's"
         );
+    }
+
+    /// 1084-x8ya. The guest's own hash of its binary must survive into the
+    /// record, and the comparison against the staged artefact must name SKEW
+    /// rather than swallow it.
+    ///
+    /// This is the measurement the packet turns on, and it exists only because
+    /// no host-side path to the guest survives the failure it diagnoses: order
+    /// 272 masks every sshd surface, exec-guest rides the dead wire, macOS
+    /// cannot mount ext4, and a raw-image string scan cannot date the binary
+    /// because 79e3ca876 flipped a default without adding a shipped literal.
+    #[test]
+    fn a_completed_provision_carries_the_guests_own_binary_hash() {
+        let with_hash = "tillandsias-provision-state v1\nwritten_at 1800000000\n\
+                         phase complete\nguest_binary_sha256 d677e5f5843d\n";
+        assert_eq!(
+            super::provision_record_from(with_hash),
+            super::ProvisionRecord::Complete {
+                written_at: Some(1_800_000_000),
+                guest_binary_sha256: Some("d677e5f5843d".into()),
+            },
+            "the guest's hash must reach the host; it is the only way to ask what \
+             the guest is running"
+        );
+
+        // ABSENT is an ANSWER, not a missing field. A provision that completed
+        // and left no binary is the whole finding, and an omitted value would
+        // read as "not measured".
+        let absent = "tillandsias-provision-state v1\nphase complete\n\
+                      guest_binary_sha256 absent\n";
+        match super::provision_record_from(absent) {
+            super::ProvisionRecord::Complete {
+                guest_binary_sha256,
+                ..
+            } => assert_eq!(guest_binary_sha256.as_deref(), Some("absent")),
+            other => panic!("expected Complete, got {other:?}"),
+        }
+    }
+
+    /// 1084-x8ya. The skew verdict must distinguish FOUR cases and must never
+    /// collapse an unknown into a match.
+    #[test]
+    fn the_skew_line_names_skew_and_never_calls_unknown_a_match() {
+        // No hash recorded: a guest provisioned before the field existed.
+        let none = super::guest_binary_skew_line(None);
+        assert!(none.contains("NOT RECORDED"), "got: {none}");
+        assert!(
+            !none.contains("MATCHES"),
+            "an unrecorded hash must never read as a match: {none}"
+        );
+
+        let absent = super::guest_binary_skew_line(Some("absent"));
+        assert!(absent.contains("ABSENT"), "got: {absent}");
+
+        let unreadable = super::guest_binary_skew_line(Some("unreadable"));
+        assert!(unreadable.contains("UNREADABLE"), "got: {unreadable}");
     }
 
     /// 1055-e8ie. The reader must exist and be WIRED IN. The previous marker's

@@ -1,0 +1,75 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-gate-every-host-must-pass-is-blind-to-nine-defects-the-release-gate-sees-once-a-day
+    event:
+      type: progress
+      ts: "2026-09-06T01:50:06Z"
+      agent_id: linux-lenovinha-claude-20260905t233514z
+      host: linux
+      summary: |
+        Two slices landed on trunk at 7a2343ebd. Four of five criteria met; criterion 4
+        is untouched and this release says so rather than implying otherwise.
+
+        WHAT LANDED
+          scripts/gate-divergence-declared.txt        the list that did not exist
+          scripts/test-gate-divergence-is-declared.sh the check that keeps it honest
+          scripts/gate-steps.d/090-1087-h2z9.step     bound into --check, 80ms
+
+        THE MEASUREMENT, which is the packet's substance:
+          litmus invocations inside the --check block      0
+          local-ci invocations inside the --check block    0   (its 2 mentions are comments)
+          scripts local-ci invokes that --check does not   32
+            8 infrastructure, 2 deliberately excluded, 22 CHECKS NOBODY DECIDED TO EXCLUDE
+
+        check-no-python-scripts.sh is among the 22, which is exactly why the python3 red
+        was invisible to every host that landed on 2026-09-06.
+
+        BOUND INTO --check DELIBERATELY: a check about the two gates diverging, running
+        only in the slower gate, would report the divergence once a day — which is the
+        accumulation window the packet exists to close.
+
+        THE RATCHET TIGHTENS ON MEASUREMENT, NOT ON A DATE (macuahuitl's ruling).
+        Above the baseline is a regression; BELOW it is a stale baseline and also reds,
+        with the new number in the remedy and the arithmetic spelled out: "Left at 22,
+        1 new difference(s) could be parked as untriaged without redding anything." A
+        schedule was rejected because a date is a commitment somebody must remember, and
+        this fleet has spent a day establishing that remembering is not a mechanism. A
+        count that stops falling now shows up as a flat baseline rather than a missed
+        date, which is a measurement instead of an argument.
+
+        SIX MUTATIONS ACROSS THE TWO SLICES, each restored:
+          undeclared new check              -> violation naming it
+          same check declared with a reason -> passes            (the escape hatch exists)
+          same check declared untriaged     -> ratchet trips 23>22 (so it is not an escape)
+          stale declaration left behind     -> violation naming the stale line
+          triage one entry                  -> STALE baseline, remedy names 21
+          lower baseline in the same commit -> passes at 21/21
+
+        CRITERION 4 IS NOT DONE. Nothing yet bounds the accumulation window itself. The
+        sharpest form of it is that 748-tkjx's own mitigation — litmus-covering-specs.sh,
+        a reverse map an editor MAY consult — is opt-in, and a mitigation requiring the
+        author to already suspect the problem does not cover the case where they do not.
+        The litmus exclusion itself is correct and must not be reversed: a gate slow
+        enough to be bypassed with --no-verify is worse than a narrow one.
+
+        THE 22 UNTRIAGED ARE NOT MINE. macuahuitl took the triage as a coordinator
+        deliverable producing per-owner routing, because triaging them here would have
+        one host assigning work to others. Recorded so the next reader does not mistake
+        "untriaged" for "unowned".
+
+        TWO INVALID CONTROLS IN THIS PACKET'S OWN WORK, both caught, both by the same
+        means. A sed that was meant to triage an entry never matched — the declaration
+        aligns its columns with different spacing than I assumed — so the count never
+        moved and the check printed ok, an ok that said nothing about the arm under
+        test. Caught by requiring the untriaged count to have CHANGED before reading the
+        verdict. "Verify the mutation applied" is the same rule as "check WHICH refusal
+        you got", pointed at the setup rather than the result, and I have now needed both
+        three times in one day.

@@ -1150,9 +1150,35 @@ systemctl start --no-block tillandsias-headless-ready.service
 # 19:35:18Z and no failure, and which could not be told apart from a guest
 # that provisioned perfectly.
 #
+# ORDER 1084-x8ya. THE GUEST HASHES ITS OWN BINARY AND TELLS THE HOST.
+#
+# The question that host could not ask: does the binary the guest is actually
+# RUNNING match the one the host staged. Every host-side path to it is closed —
+# order 272 masks every sshd surface, `--exec-guest` rides the control wire
+# that is down in exactly this failure, and macOS cannot mount the guest's
+# ext4. Scanning the raw disk image cannot answer it either: version strings do
+# not discriminate (the current binary carries five copies of the OLD version
+# string) and 79e3ca876, which flipped the wire to encrypted-by-default, adds
+# no string literal that reaches the shipped artefact at all. A change that
+# flips a default cannot be dated by scanning for strings.
+#
+# So the guest reports it, over the one channel that survives a dead wire: the
+# provision-state share. A sha256 the host can compare against the staged
+# provenance answers version skew in one line, and it costs one hash of a
+# ~13 MB file at the very end of provisioning.
+#
+# ABSENT IS RECORDED AS ABSENT. If the binary is not there, that is the answer
+# and it must not be silently omitted — an omitted field reads as "not
+# measured" and this one would be the whole finding.
+GUEST_BIN_SHA=absent
+if [ -r /usr/local/bin/tillandsias-headless ]; then
+  GUEST_BIN_SHA="$(sha256sum /usr/local/bin/tillandsias-headless 2>/dev/null | cut -d' ' -f1)"
+  [ -n "$GUEST_BIN_SHA" ] || GUEST_BIN_SHA=unreadable
+fi
+
 # Written LAST on purpose. Anything after it could fail while the record says
 # complete, which would be a fresh instance of this packet's defect.
-{ echo "tillandsias-provision-state v1"; echo "written_at $(date -u +%s)"; echo "written_at_iso $(date -u +%FT%TZ)"; echo "phase complete"; } > "$PROV_STATE" 2>/dev/null || true
+{ echo "tillandsias-provision-state v1"; echo "written_at $(date -u +%s)"; echo "written_at_iso $(date -u +%FT%TZ)"; echo "phase complete"; echo "guest_binary_sha256 $GUEST_BIN_SHA"; } > "$PROV_STATE" 2>/dev/null || true
 "#
     .replace("__SECURE_CONTROL_WIRE__", secure_control_wire)
     // ORDER 1055-e8ie. Substituted rather than interpolated: this script is a

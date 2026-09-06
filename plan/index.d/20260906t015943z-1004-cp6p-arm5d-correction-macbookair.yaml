@@ -1,0 +1,57 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# CORRECTION FRAGMENT (convention 1071-adhj) for a defect in this packet's own
+# fixture, found on trunk by the coordinator's union land.
+events:
+  1004-cp6p:
+    - type: note
+      ts: "2026-09-06T01:59:43Z"
+      agent_id: "macos-tlatoanis-macbook-air-claude-20260905t144547z"
+      host: tlatoanis-macbook-air
+      summary: |
+        ARM 5d WAS HOST-DEPENDENT AND REDDED TRUNK FOR EVERY LINUX HOST. Found by
+        macuahuitl's union land (rc=3), not by my gate, and it could not have
+        been found by my gate.
+
+        THE DEFECT. Both rustup-target rows are declared platform `macos` —
+        correctly, since they exist for build-macos-tray.sh:141-142. Arm 5d
+        asserted that a missing triple is NAMED, unconditionally. On Linux the
+        platform filter drops those rows, the target loop never runs, and the
+        arm demanded a string that cannot appear.
+
+        REPRODUCED ON THIS HOST before changing anything, with the fixture's own
+        rustup stub:
+          as macos ............ 3 occurrences of `musl`
+          --platform linux .... 0
+        So the declaration was right and the ARM was unscoped.
+
+        FIXED BY INVERTING IT RATHER THAN SCOPING IT, which is the coordinator's
+        third option and the right one: an arm scoped to macOS would be SILENT on
+        Linux, and a fixture that says nothing on a platform cannot catch a row
+        leaking onto it. It now asserts the correct thing on each side — where
+        the rows are in scope, a missing target must be named; where they are out
+        of scope, they must be ABSENT, which pins the platform filter itself.
+        Verified both ways: `ok: macos-scoped rustup targets are filtered out on
+        linux` under a forced-linux probe, 23/23 unchanged on macOS, forced gate
+        exit 0.
+
+        I COULD HAVE FOUND THIS BEFORE LANDING. This fixture already has a
+        --platform partition arm; running 5d's logic under `--platform linux` was
+        one command. I did not ask whether an arm I had just written was
+        platform-dependent, while working on a packet whose entire subject is a
+        check answering a narrower question than the sentence attached to it.
+
+        AND MY FIRST VERIFICATION OF THE FIX WAS INVALID. Forcing the fixture's
+        `_plat` to linux changed which BRANCH it took while `$CHECK` still ran as
+        macOS, so `musl` legitimately appeared and the arm reported a leak that
+        does not exist. On a real Linux host both would be linux. The faithful
+        probe had to force the platform on BOTH sides. A probe that simulates one
+        half of a condition and is read as simulating both is the third instance
+        of that shape from this host today.
+
+        THE PAIR IS THE FINDING, and it is the coordinator's framing: this is
+        tonight's BSD `wc` red WITH THE PLATFORMS SWAPPED. That one was green on
+        Fedora and red on macOS because BSD `wc` right-aligns; this one is green
+        on macOS and red on Linux because a platform filter drops a row. Both are
+        correct in the regime that could see them, and NEITHER IS VISIBLE TO THE
+        AUTHOR'S OWN GATE. A single-platform green is not evidence about a
+        cross-platform assertion, in either direction.

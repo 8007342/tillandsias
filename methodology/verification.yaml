@@ -388,6 +388,37 @@ verification:
           have applied. A green sabotage silently certifies a blind test, which
           is worse than no sabotage at all because it manufactures confidence.
         enforced_by: "judgment — a probe that cannot report how much it examined has a zero that is not reportable; a mutation that cannot show it changed the file has a red that proves nothing"
+      - id: a_control_must_be_observed_to_have_changed_its_subject
+        kind: judgment
+        rule: >
+          A POSITIVE CONTROL THAT DID NOT ACTUALLY MUTATE IS A NULL RESULT
+          WEARING A CONTROL'S CLOTHES. Before reading the verdict of an arm that
+          depends on a deliberate mutation — a sabotage arm, a pre-fix mutant, a
+          seeded failure — the mutation must be OBSERVED to have changed the
+          subject, by a measurement INDEPENDENT of the mutation itself. Not
+          "verify your edit", which is advice: compare a count, a hash or a
+          field before and after and REQUIRE it to differ, then read the
+          verdict. An edit that runs, exits zero and changes nothing looks
+          identical to one that worked, and the arm it was setting up then
+          reports a pass that is about nothing.
+        earned_by: >
+          2026-09-06, lenovinha, building the downward arm of the gate-
+          divergence ratchet. A `sed` meant to triage one entry did not match,
+          because the declaration file aligns its columns with a different
+          number of spaces than assumed. The sed ran, exited 0, the untriaged
+          count never moved, and the check printed `ok` — an ok that said
+          nothing about the arm under test. Caught by requiring the count to
+          have CHANGED before reading the verdict; not by inspecting the sed, not
+          by re-reading the file, and not by confidence that the edit was right.
+          Third invalid control that host wrote in one day, the second caught
+          only this way.
+        rule_general_form: >
+          This is `a_null_result_needs_a_positive_control` applied one step
+          earlier — to the SETUP rather than the RESULT — and it is the same
+          rule as "check WHICH refusal you got" pointed at the mutation instead
+          of the outcome. Both fail the same way: a step that consults an
+          external fact instead of REQUIRING it.
+        enforced_by: "judgment — an arm whose mutation is not separately observed to have landed reports on nothing; require the delta, then read the verdict"
       - id: a_discriminating_probe_needs_both_controls
         kind: judgment
         rule: >

@@ -58,7 +58,32 @@ done
 #
 # Format: <tool>|<platforms>|<why>|<remedy>
 required_tools() {
-    # <tool>|<platforms>|<prover>|<expect>|<why>|<remedy>
+    # <tool>|<kind>|<scope>|<platforms>|<prover>|<expect>|<why>|<remedy>
+    #
+    # ORDER 1004-cp6p. TWO COLUMNS, BOTH ADDED BECAUSE ONE UNDIFFERENTIATED LIST
+    # ANSWERED A QUESTION NOBODY ASKED.
+    #
+    # <scope> names the CONSUMER that requires the entry. Until now every entry
+    # was implicitly gate-scoped, so a Mac read `ok:host-tools:macos:5 required
+    # present` and concluded "this host is equipped" — then died at
+    # build-macos-tray.sh:45 in under a second on a missing zig. The verdict was
+    # TRUE as written and MISLEADING as used: those five are what ./build.sh
+    # --check needs, and the reader was about to run the platform's own build.
+    #   gate ......... ./build.sh --check cannot start without it. Terminal.
+    #   tray-build ... scripts/build-macos-tray.sh cannot start without it.
+    #                  ADVISORY to the gate: a host that never builds the tray is
+    #                  not broken, and failing --check on it would enforce more
+    #                  than this packet describes.
+    #
+    # <kind> exists because A PREREQUISITE IS NOT ALWAYS A BINARY. Every entry
+    # was resolved with `command -v`, so a missing rustup target was invisible by
+    # construction — macneo lost 166 seconds to `E0463 can't find crate for
+    # core` on x86_64-unknown-linux-musl while aarch64 succeeded, an asymmetry no
+    # `command -v` could ever have reported.
+    #   binary ......... resolved with command -v, through the prefix search.
+    #   rustup-target .. resolved by asking `rustup target list --installed`.
+    #                    ASK THE SUBSYSTEM WHAT IT HAS; do not stat a path and
+    #                    infer. The triple is the tool name.
     #
     # <prover> is a check script that FAILS without the tool, so every claim
     # carries its own falsification and scripts/test-host-tools.sh runs it.
@@ -71,12 +96,18 @@ required_tools() {
     # still pass, because each prefers the compiled plan binary and only
     # falls back to jq. Listing it would report a working host as broken.
     cat <<'SPEC'
-git|macos,linux,windows|check-committable-branch.sh|blocked:not-a-git-repo|every check reads the outgoing diff|xcode-select --install
-timeout|macos|check-credential-channel.sh|blocked:gh-cli-only|GNU coreutils. check-credential-channel.sh bounds gh api with it; without it the probe returns 127 and the guard reported a KEYRING fault on a platform with no keyring (988-7kxf). MEASURED here: omitting timeout AND gtimeout flips ok:gh-keyring-push-verified to blocked:gh-cli-only. PRECONDITION (1004-x9ua): this prover only reaches the timeout dependency AFTER the credential guard gets past its token arm, so on a host with a dead or absent gh token it answers missing:no-credential-channel either way and proves nothing about coreutils. test-host-tools.sh detects that by comparing the with-tool and without-tool verdicts and SKIPS, named, rather than reporting a coreutils fault|brew install coreutils
-cargo|macos,linux,windows|-|-|the gate compiles and clippies the workspace|rustup toolchain install stable
-rustc|macos,linux,windows|-|-|same as cargo|rustup toolchain install stable
-pkg-config|macos|-|-|the workspace build needs it to locate native deps; without it --check cannot start. NOT self-measured: reported by macneo-macos on a factory-fresh Mac 2026-09-03|brew install pkg-config
-openssl|linux|-|-|ORDER 1042-svey. The gate's CA-generating test (source_built_init_and_status_check_smoke_uses_fake_podman -> ensure_ca_bundle) shells out to the openssl COMMAND. Without it that test dies with os error 2 ELEVEN MINUTES into the run, long after this step passed. Tagged linux because on Windows the gate re-execs into the tillandsias-build WSL2 distro and this check reports ok:host-tools:linux — a windows tag would never fire during a gate. NOT self-measured by a prover: the only thing that fails is a Rust test, not a check script, so the honest entry is '-' and the fixture counts it unverified rather than pretending otherwise|dnf install -y openssl
+git|binary|gate|macos,linux,windows|check-committable-branch.sh|blocked:not-a-git-repo|every check reads the outgoing diff|xcode-select --install
+timeout|binary|gate|macos|check-credential-channel.sh|blocked:gh-cli-only|GNU coreutils. check-credential-channel.sh bounds gh api with it; without it the probe returns 127 and the guard reported a KEYRING fault on a platform with no keyring (988-7kxf). MEASURED here: omitting timeout AND gtimeout flips ok:gh-keyring-push-verified to blocked:gh-cli-only. PRECONDITION (1004-x9ua): this prover only reaches the timeout dependency AFTER the credential guard gets past its token arm, so on a host with a dead or absent gh token it answers missing:no-credential-channel either way and proves nothing about coreutils. test-host-tools.sh detects that by comparing the with-tool and without-tool verdicts and SKIPS, named, rather than reporting a coreutils fault|brew install coreutils
+cargo|binary|gate|macos,linux,windows|-|-|the gate compiles and clippies the workspace|rustup toolchain install stable
+rustc|binary|gate|macos,linux,windows|-|-|same as cargo|rustup toolchain install stable
+pkg-config|binary|gate|macos|-|-|the workspace build needs it to locate native deps; without it --check cannot start. NOT self-measured: reported by macneo-macos on a factory-fresh Mac 2026-09-03|brew install pkg-config
+openssl|binary|gate|linux|-|-|ORDER 1042-svey. The gate's CA-generating test (source_built_init_and_status_check_smoke_uses_fake_podman -> ensure_ca_bundle) shells out to the openssl COMMAND. Without it that test dies with os error 2 ELEVEN MINUTES into the run, long after this step passed. Tagged linux because on Windows the gate re-execs into the tillandsias-build WSL2 distro and this check reports ok:host-tools:linux — a windows tag would never fire during a gate. NOT self-measured by a prover: the only thing that fails is a Rust test, not a check script, so the honest entry is '-' and the fixture counts it unverified rather than pretending otherwise|dnf install -y openssl
+codesign|binary|tray-build|macos|-|-|build-macos-tray.sh:43 signs the .app; without it the build dies before compiling|xcode-select --install
+shasum|binary|tray-build|macos|-|-|build-macos-tray.sh:44 hashes the staged guest binary for the provenance sidecar|xcode-select --install
+zig|binary|tray-build|macos|-|-|build-macos-tray.sh:45. MEASURED by macneo-macos 2026-09-04: absent, the build exits rc=1 in under a second with its whole output being "ERROR: zig not in PATH", while check-host-tools said ok:host-tools:macos:5 required present|brew install zig
+cargo-zigbuild|binary|tray-build|macos|-|-|build-macos-tray.sh:46, the linker driver for the musl guest cross-builds below|cargo install cargo-zigbuild
+aarch64-unknown-linux-musl|rustup-target|tray-build|macos|-|-|build-macos-tray.sh:141 builds the guest binary for this triple|rustup target add aarch64-unknown-linux-musl
+x86_64-unknown-linux-musl|rustup-target|tray-build|macos|-|-|build-macos-tray.sh:142. MEASURED: installed for aarch64 and NOT x86_64, so the first cross-build succeeded and the second died with E0463 "can't find crate for core" after 166 seconds. A command -v could not have seen either|rustup target add x86_64-unknown-linux-musl
 SPEC
 }
 
@@ -202,26 +233,65 @@ have() {
 
 missing=""
 present=0
-while IFS='|' read -r tool platforms prover expect why remedy; do
+# ORDER 1004-cp6p. `rustup target list --installed` is asked ONCE and cached:
+# it is a subprocess, and the alternative is one per declared target. Empty when
+# rustup is absent, which is correct — no rustup means no installed targets, and
+# every rustup-target entry then reports missing with `rustup target add` as its
+# remedy, which is the actionable line.
+_installed_targets=""
+if command -v rustup >/dev/null 2>&1; then
+    _installed_targets="$(rustup target list --installed 2>/dev/null || true)"
+fi
+
+# Is this declared prerequisite present? Dispatches on <kind>, because a rustup
+# target is not on PATH and `command -v` would report it missing forever.
+have_kind() { # $1=kind $2=name
+    case "$1" in
+        rustup-target)
+            printf '%s\n' "$_installed_targets" | grep -qx -- "$2"
+            ;;
+        *)
+            have "$2"
+            ;;
+    esac
+}
+
+tray_missing=""
+tray_present=0
+while IFS='|' read -r tool kind scope platforms prover expect why remedy; do
     [ -n "$tool" ] || continue
     case ",$platforms," in *",$PLATFORM,"*) ;; *) continue ;; esac
-    if have "$tool"; then
-        present=$((present + 1))
-    else
-        missing="${missing:+$missing,}$tool"
+    if have_kind "$kind" "$tool"; then
+        if [ "$scope" = tray-build ]; then
+            tray_present=$((tray_present + 1))
+        else
+            present=$((present + 1))
+        fi
+        continue
+    fi
+    # ABSENT. Which scope decides whether this is terminal.
+    if [ "$scope" = tray-build ]; then
+        tray_missing="${tray_missing:+$tray_missing,}$tool"
         {
-            echo "  MISSING: $tool"
+            echo "  MISSING (tray-build): $tool"
             echo "    needed because: $why"
             echo "    remedy: $remedy"
-            # ORDER 1066-dkkb: state the boundary of what was inspected, so a
-            # reader can tell "not installed" from "not where I looked". The
-            # prefix list below is standard, not exhaustive, and a tool sitting
-            # somewhere else would otherwise get the same confident remedy that
-            # sent an operator to reinstall what they already had.
-            echo "    searched PATH plus: $(tool_prefixes | tr '\n' ' ')"
-            echo "    if it IS installed elsewhere this is a PATH fault, not a missing tool — put its directory on PATH (agent shells are non-login and never source your rc file)"
         } >&2
+        continue
     fi
+    missing="${missing:+$missing,}$tool"
+    {
+        echo "  MISSING: $tool"
+        echo "    needed because: $why"
+        echo "    remedy: $remedy"
+        # ORDER 1066-dkkb: state the boundary of what was inspected, so a
+        # reader can tell "not installed" from "not where I looked". The
+        # prefix list below is standard, not exhaustive, and a tool sitting
+        # somewhere else would otherwise get the same confident remedy that
+        # sent an operator to reinstall what they already had.
+        echo "    searched PATH plus: $(tool_prefixes | tr '\n' ' ')"
+        echo "    if it IS installed elsewhere this is a PATH fault, not a missing tool — put its directory on PATH (agent shells are non-login and never source your rc file)"
+    } >&2
 done <<EOF
 $(required_tools)
 EOF
@@ -244,8 +314,24 @@ if [ "$ADVISORY" = 1 ] && [ -n "$absent_probed" ]; then
     echo "  advisory (probed-for, absent, each has a fallback path): $absent_probed" >&2
 fi
 
+# ORDER 1004-cp6p. THE VERDICT NAMES THE SCOPE IT COVERED.
+#
+# `ok:host-tools:macos:5 required present` was true and misleading: a reader on
+# a Mac took it as "this host is equipped" and then could not start the tray
+# build. A bare count cannot say which question it answered, so it gets read as
+# answering the one the reader has in mind. Naming the scope is the difference
+# between "nothing is wrong" and "nothing is wrong WITHIN WHAT I LOOKED AT" —
+# the 1066-dkkb rule applied to a verdict rather than to a guard's coverage.
+#
+# GATE SCOPE KEEPS ITS TERMINAL FORCE. A tray-build shortfall is reported and
+# does NOT fail: a host that never builds the tray is not broken, and failing
+# --check there would enforce more than this packet describes.
 if [ -n "$missing" ]; then
-    echo "missing:host-tools:$PLATFORM:$missing"
+    echo "missing:host-tools:$PLATFORM:gate:$missing"
     exit 1
 fi
-echo "ok:host-tools:$PLATFORM:$present required present"
+if [ -n "$tray_missing" ]; then
+    echo "ok:host-tools:$PLATFORM:gate:$present present; tray-build:$tray_present present, missing $tray_missing"
+else
+    echo "ok:host-tools:$PLATFORM:gate:$present present; tray-build:$tray_present present"
+fi
