@@ -1,0 +1,64 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-land-loop-treats-cannot-lock-ref-as-fatal-when-it-is-the-lost-race-a-busy-trunk-produces
+    order: 1112-x5rb
+    status: implemented
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [land, multi-host, fail-loud, coordination]
+    estimated_hours: 1
+    owned_files:
+      - scripts/land-on-platform-branch.sh
+    unscoreable: |
+      Fixed in the commit that files it; the change is one alternation in one
+      pattern and its control is inline in the commit message, exercising all
+      four phrasings in both directions. A fixture arm belongs with 1064-r8fv's
+      existing suite, which already has the pre-receive arm this must not break —
+      naming it here rather than duplicating that suite.
+    title: |
+      MEASURED twice consecutively on macuahuitl: a push refused with "cannot lock ref ... is at X but expected Y" is a LOST RACE, and the land loop classified it as non-retryable and told the trunk host to relay its own trunk work to a work ref
+    context: |
+      MEASURED on macuahuitl 2026-09-06T09:58Z and again at 09:59Z, on
+      consecutive land attempts, each after a full 433-second gate:
+
+        ! [remote rejected] linux-next -> linux-next (cannot lock ref
+          'refs/heads/linux-next': is at 405cae043 but expected 82cef6251)
+        refused:land:push-failed — not a lost race, so retrying cannot help
+
+      It is a lost race, stated as precisely as any phrasing the pattern already
+      accepts: the remote moved between the push negotiation and the ref update.
+      Retrying is exactly what fixes it, and the loop refused to.
+
+      THE CLASSIFIER AT :273 ENUMERATED THREE PHRASINGS AND THERE ARE FOUR.
+      It matched non-fast-forward, fetch first and stale info. A concurrent push
+      on a busy trunk produces the fourth, and a busy trunk is precisely when a
+      land loses races.
+
+      1064-r8fv WAS RIGHT AND INCOMPLETE, which is the transferable part. That
+      order NARROWED a bare `rejected` because it also matched
+      "pre-receive hook declined" — a server-side refusal that would fail
+      identically forever, burning a full gate per attempt. The narrowing was
+      correct. What followed it was an enumeration of three race phrasings
+      treated as though it were all of them. NARROWING A PATTERN IS NOT THE SAME
+      AS ENUMERATING WHAT IT MUST STILL COVER, and the second half is the one
+      nobody checks.
+
+      THE REMEDY IT OFFERED MADE IT WORSE ON THIS HOST. The refusal tells the
+      operator to push the gated tree to a work/ ref and ask a trunk host to
+      merge it. On macuahuitl that IS the trunk host, so the advice routes a
+      coordinator's own trunk work to a relay ref that only the coordinator can
+      merge. Correct advice for a platform host, self-defeating for this one.
+
+      COST, measured: two attempts, two full gates, roughly 14 minutes and two
+      complete re-validations, on a race that a single retry resolves. That is
+      the same per-lost-race cost macbookair measured from the other side —
+      678s hand gate plus two lost races, ~23 minutes to make one claim visible
+      — and it is why a misclassified race is expensive rather than merely
+      untidy.
+
+      FIXED HERE by adding cannot lock ref to the alternation. Control run
+      inline over all four phrasings: cannot-lock-ref and fetch-first RETRY,
+      while pre-receive-hook-declined and a bare push failure still REFUSE, so
+      1064-r8fv's narrowing is preserved rather than undone.
