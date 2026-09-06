@@ -90,6 +90,26 @@ critical_path:
     timeout_ms: 30000
     expected_behavior: "ok:cycle-flow-emit-idempotency:8"
 
+  # ── STALENESS (943-7dn5) ────────────────────────────────────────────────
+  # THE ARMS ABOVE CANNOT FAIL FOR THE REASON THE LOG IS DEAD. They invoke
+  # --emit-flow themselves and then assert on what they just wrote, which is a
+  # correct test of the EMITTER and a green light over a log no cycle has fed
+  # for four days. Every row in a dead log is perfectly well-formed.
+  - step: "MUTATION: a log whose newest record predates the commits is refused as STALE"
+    command: "W=$(mktemp -d); git -C $W init -q 2>/dev/null; cd $W && git -c user.email=t@t -c user.name=t commit -q --allow-empty --date='2020-01-02T00:00:00Z' -m c1 2>/dev/null; cd - >/dev/null; F=$(mktemp); printf '{\"ts\":\"2020-01-01T00:00:00Z\",\"completed\":1,\"commits\":3}\\n' > $F; out=$(cd $W && bash $OLDPWD/scripts/check-cycle-flow-log-fresh.sh --log $F 2>/dev/null); rm -rf $W $F; case \"$out\" in violation:cycle-flow-log-stale:*) echo 'ok: a stale log is refused' ;; *) echo \"observed=$out\"; echo 'fail: a stale log was not refused' ;; esac"
+
+  # MUTATION CONTROL, and it is the load-bearing half: without it, a guard that
+  # refuses unconditionally scores the arm above. Same shape, record NEWER than
+  # the commit, and it must be accepted.
+  - step: "MUTATION CONTROL: a log fed after the last commit is accepted"
+    command: "W=$(mktemp -d); git -C $W init -q 2>/dev/null; cd $W && git -c user.email=t@t -c user.name=t commit -q --allow-empty --date='2020-01-01T00:00:00Z' -m c1 2>/dev/null; cd - >/dev/null; F=$(mktemp); printf '{\"ts\":\"2020-01-02T00:00:00Z\",\"completed\":1,\"commits\":3}\\n' > $F; out=$(cd $W && bash $OLDPWD/scripts/check-cycle-flow-log-fresh.sh --log $F 2>/dev/null); rm -rf $W $F; case \"$out\" in ok:cycle-flow-log-fresh:*) echo 'ok: a fed log is accepted' ;; *) echo \"observed=$out\"; echo 'fail: a fresh log was refused' ;; esac"
+
+  # A REPO NOBODY WORKS IN OWES NOTHING. Absence of a log must not accuse a host
+  # that has run no settled cycle — 1024-c3h3: a check that cannot run says so.
+  - step: "MUTATION CONTROL: no settled commits means a named SKIP, never a violation"
+    command: "W=$(mktemp -d); git -C $W init -q 2>/dev/null; F=$(mktemp); rm -f $F; out=$(cd $W && bash $OLDPWD/scripts/check-cycle-flow-log-fresh.sh --log $F 2>/dev/null); rm -rf $W; case \"$out\" in skip:cycle-flow-log-fresh:*) echo 'ok: an idle repo is skipped, not accused' ;; *) echo \"observed=$out\"; echo 'fail: an idle repo was not skipped' ;; esac"
+
+
 observability:
   traces:
     - "@trace spec:methodology-accountability"
