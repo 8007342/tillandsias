@@ -1,0 +1,63 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: salvage-dirty-worktree-leaves-no-local-ref-so-a-host-that-cannot-push-gets-no-copy
+    event:
+      type: progress
+      ts: "2026-09-06T09:44:57Z"
+      agent_id: linux-yoga-claude-20260906t094457z
+      host: yoga
+      summary: |-
+        CLOSED. A host that cannot push now keeps its copy.
+
+        THE ORDERING WAS THE WHOLE DEFECT. The script built the commit with
+        commit-tree and pushed it straight to origin — `git push origin
+        <sha>:refs/heads/salvage/...` — never writing a local ref. So the only local
+        reference was the remote-tracking one the push itself created, and when the
+        push failed the commit object existed unreferenced and unreachable. Not a
+        record anyone can find.
+
+        Now: update-ref FIRST, then push, then report. A local ref costs one plumbing
+        call, survives a dead credential, and turns "no copy" into "a copy that has
+        not left the host yet" — which a later cycle or an operator can push. It
+        touches refs, not files, so the worktree-immutability property is unchanged.
+
+        THREE VERDICTS, NOT TWO, and the middle one is the packet:
+          ok:salvaged:<ref>:<sha>        on origin, survives a re-clone
+          ok:salvaged-local:<ref>:<sha>  in this repo only; survives a re-clone ONLY
+                                         if someone pushes that ref. EXIT 0.
+          fail:salvage:<reason>          no copy at all. exit 1.
+        Exit 0 for the local case is deliberate: a local copy is a real copy, and
+        reporting it as failure is how a host abandons the one thing standing between
+        it and 872-c9nd. stderr names the ref and the exact push command to run when
+        the credential is working.
+
+        MEASURED, both arms, scratch repos:
+          reachable origin     -> ok:salvaged:refs/heads/salvage/yoga/20260906-good:01fd2af5
+                                  local ref AND remote-tracking ref both present
+          unreachable origin   -> ok:salvaged-local:refs/heads/salvage/yoga/20260906-blocked:ca955bb0
+                                  rc=0, untracked file present in the ref's tree,
+                                  worktree byte-identical
+
+        WHY THE FIXTURE NEVER CAUGHT IT — the same shape as 1091-zh6d's fixture one
+        cycle earlier. Every existing arm hands the script a working local bare as
+        `origin`, so the push always succeeded and the failure path was never
+        executed. The defect lived where the fixture did not go. The new arm points
+        origin at a path that does not exist; against the pre-fix script three of its
+        four assertions fail with the exact symptom
+        (`fail:salvage:push:... does not appear to be a git repository`, exit 1, no
+        ref containing the file), and the fourth — the worktree byte-identical
+        control — passes both ways, which is what a control should do.
+
+        SKILL TEXT UPDATED IN THE SAME COMMIT. 1102-93ng's section, written one cycle
+        ago, told hosts that `fail:salvage:` meant the dirt was unprotected. That was
+        true then and is now incomplete, so it carries the three-verdict table
+        instead. A remedy whose grammar changed and whose instruction did not is the
+        coordinator/worker split in miniature.
