@@ -228,7 +228,16 @@ if [[ "${1:-}" == "--coverage-threshold" ]]; then
   fi
 
   # Calculate coverage: (specs-with-traces / total-active-specs) * 100
-  TOTAL_ACTIVE_SPECS=$(find "$SPECS_DIR" -mindepth 1 -maxdepth 1 -type d | wc -l)
+  # 1077-vzwq / macOS. BSD `wc -l` RIGHT-ALIGNS to width 8 when reading stdin;
+  # GNU pads nothing. Command substitution strips trailing newlines but NOT
+  # leading spaces, so on macOS this variable held "       2" and the JSON
+  # below rendered `"total_active_specs":        2,`. Still valid JSON, but
+  # every string-matching consumer breaks on it, and the gate fixture
+  # (test-trace-coverage.sh) correctly went red on macOS while staying green
+  # on Linux. The padding is an accident of the platform, not a format
+  # anyone chose, so it is stripped HERE rather than tolerated downstream —
+  # COVERAGE_PCT never had the bug because it comes from $(( )).
+  TOTAL_ACTIVE_SPECS=$(find "$SPECS_DIR" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d "[:space:]")
 
   # Collect specs with traces and those without
   SPECS_WITH_TRACES=0
