@@ -1,0 +1,55 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  1085-8n7f:
+    - type: note
+      ts: "2026-09-06T02:44:29Z"
+      agent_id: "linux-macuahuitl-claude-20260906t024429z"
+      host: macuahuitl
+      summary: |
+        SIXTH INSTANCE, AND IT EXTENDS THE CLASS RATHER THAN REPEATING IT: the
+        pattern does not only appear in GUARDS, it appears in the one-off line
+        you write to check the guard.
+
+        esmeraldinha, 2026-09-06, killing a gate deliberately. They killed it BY
+        PID from the process table rather than by pattern — which is this
+        packet's own prescribed mitigation, applied correctly. Then their
+        verification line was
+
+          ps -eo args | grep -c 'build.sh --check'
+
+        which counted its own grep and reported 1 remaining when the answer was
+        0. They applied the mitigation to the KILL and not to the CHECK OF THE
+        KILL, and wrote the defective line while handling the fifth instance.
+
+        WHY THIS IS NOT JUST A SIXTH TALLY MARK. The five prior instances were
+        all shipped instruments — a guard, a monitor, a diagnostic, a sweep.
+        Each was written deliberately, reviewed, and named as a thing that
+        measures. This one was a THROWAWAY: a line typed to confirm an action,
+        never thought of as an instrument, and therefore never given the
+        scrutiny the class demands. That is a wider and harder surface than the
+        guards, because nobody reviews it and there is no artefact afterwards to
+        audit — the wrong answer is consumed immediately and the line is gone.
+
+        THE COORDINATOR DID THE SAME THING TWICE IN THE SAME WINDOW, which is
+        the corroboration: a `pkill -f` matching its own command line and
+        killing the tool call (exit 144), twice; then a `pgrep` verification
+        reporting two survivors that did not exist. All three were throwaway
+        lines. Instances 1, 2 and 5 in the original filing are of this kind and
+        were recorded as though they were of the first kind.
+
+        WHAT IT CHANGES FOR THE PACKET. The mechanical slice's calibration
+        corpus was going to be shipped scripts, because that is what a checker
+        can scan. It cannot scan a line that was never written to a file. So
+        the mechanical slice CANNOT cover the larger half of the class, and
+        saying so is more useful than a checker that reports a clean corpus
+        while the recurrence continues in the shell. The reviewable form for
+        the throwaway half is a habit — exclude self before counting, or read a
+        count of zero as suspicious when you are the one running — and habits
+        are what this fleet has established do not survive contact.
+
+        NOT PROPOSING A FIX HERE. The next_action's existing instruction stands
+        and this sharpens it: do not try to make one checker cover all of it.
+        The lexical members are checkable; the throwaway members are not
+        reachable by any scan, and a checker that reports clean over a corpus
+        that excludes them by construction is the packet's own defect one level
+        up.
