@@ -1,0 +1,90 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-claim-fragment-that-parses-perfectly-and-was-never-committed-is-invisible-to-every-reader
+    order: 1095-vk8r
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [ledger, claims, multi-host, fail-loud, guards]
+    estimated_hours: 2
+    owned_files:
+      - scripts/check-added-fragments-parse.sh
+    verifiable_closure: |
+      bash scripts/check-added-fragments-parse.sh over a fixture pair — one tree
+      carrying a claim fragment that is UNTRACKED past the grace threshold (must
+      refuse, naming that fragment), one carrying the same fragment committed
+      (must pass) — and the guard goes RED on the first fixture when the new
+      assertion is reverted. Named as a script rather than a litmus test on
+      purpose: the test does not exist yet, and check-declared-closures-added.sh
+      correctly refuses a closure naming a litmus test that cannot resolve. The
+      enumeration this extends is already at that script's lines 89-95.
+    exit_criteria: |
+      1. A check reports a fragment that asserts a LIVE state — a claim event,
+         or a status transition to in_progress — which is untracked in git
+         beyond a grace threshold. PRE-FIX RESULT MUST FAIL: reproduce by
+         writing a claim fragment, leaving it untracked, and confirming the
+         check today reports nothing.
+      2. It does NOT fire at the instant of writing. A fragment is legitimately
+         untracked for the seconds between append-event and the commit, and a
+         check that reds every correct cycle is suppressed within a day.
+      3. A positive control shows the check can still return clean on a tree
+         whose claim fragments are all committed.
+    title: |
+      MEASURED on yolanda: a claim and its ready->in_progress transition sat untracked for an entire working cycle, so the fold read the row `ready` and the coordinator's sweep offered the packet as available — every reader looked in the only place a reader can look
+    context: |
+      REPORTED by yolanda 2026-09-06 with the exact shape; filed here so it is
+      not their third open thread.
+
+      THE INCIDENT. Two fragments under plan/index.d/, both written by
+      tillandsias-plan at 04:37:12Z:
+        20260906t043712z-0ebe9f84-yolanda.yaml   claim event (append-event)
+        20260906t043712z-2daa9ce0-yolanda.yaml   ready -> in_progress (set-field)
+      Both were `??` in git status from 04:37:12Z until a31621d32 at ~05:20Z —
+      the entire working span of the packet. `git log --diff-filter=A` names
+      a31621d32 as the first commit for both, so this is not a failed push:
+      they never entered the index. The tool wrote them and returned success,
+      which is CORRECT — writing is its job, committing is not.
+
+      WHY NO GUARD FIRED, in the order they would have had to.
+
+      1. NO HOOK COULD SEE IT. pre-commit and pre-push both exist and neither
+         ran, because no commit and no push happened between the claim and the
+         land. A hook is the wrong layer by construction: it fires on the
+         actions the failure consists of NOT taking. Anything triggered by
+         push cannot catch "never pushed".
+
+      2. THE ENUMERATION PRIMITIVE ALREADY EXISTS AND IS ONE ASSERTION SHORT.
+         scripts/check-added-fragments-parse.sh:89-95 builds its candidate set
+         from three sources, the second being
+
+           git ls-files --others --exclude-standard -- "$FRAG_DIR"/'*.yaml'
+
+         with the comment "a brand-new fragment is usually untracked at the
+         moment it is written". So the fleet ALREADY enumerates untracked
+         ledger fragments deliberately — and then only checks that they PARSE.
+         An untracked claim that parses perfectly passes today. Five siblings
+         share the enumeration: check-arrival-routing,
+         check-declared-closures-added, check-forge-findings-persisted,
+         check-fragment-closure-evidence-added, check-scorable-obligation-added.
+         The missing assertion is that a fragment asserting a live state is a
+         defect BY AGE, not by content. Parse-clean and invisible is the
+         failure.
+
+      3. PLACEMENT, and the trap in the obvious one. Asserting at write time
+         reds every correct cycle. yolanda's suggestion, which is the one to
+         try first: assert at the point the host is about to do WORK under the
+         claim, or make append-event/set-field print the fragment path AND its
+         tracked state in the success line, so "wrote it, did not land it" is
+         visible where the operator already looks.
+
+      WHAT IT IS NOT, so this does not over-scope. Not a fold bug and not a
+      compaction bug. The fold was RIGHT: the row genuinely was `ready`,
+      because nothing asserting otherwise existed anywhere but one disk. The
+      coordinator's 06:00Z sweep showing it available was CORRECT given its
+      inputs. That is what makes it the same inversion the fleet has hit four
+      times tonight, one layer up — absence-of-record indistinguishable from
+      absence-of-claim, with no error and nothing saying the probe could not
+      look. Siblings: 1091-h3cb (existence prefixed `ok:`), the agent-shell
+      grep zero, and macneo's self-matching pgrep.

@@ -60,7 +60,7 @@ critical_path:
   - step: "the recurrence fixture is green: exact arithmetic on all three lines, colon-bearing step parsed from the right, boundaries, windows, absent log, malformed rows, experts-only silence, sanitised step keys, unparsed cycle-start"
     command: "bash scripts/test-cycle-metrics-recurrence.sh 2>&1 | tail -1"
     timeout_ms: 30000
-    expected_behavior: "ok:cycle-metrics-recurrence-fixture:37"
+    expected_behavior: "ok:cycle-metrics-recurrence-fixture:39"
 
   - step: "the recur: line computes runs/total_ms/avg_ms/fail_pct over the window, not the last row and not call volume (inline fixture, exact string)"
     # step a: 100 + 300 -> runs=2 total=400 avg=200, no failures; step b runs once

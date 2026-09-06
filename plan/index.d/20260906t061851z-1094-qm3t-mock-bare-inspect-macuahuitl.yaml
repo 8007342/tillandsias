@@ -1,0 +1,75 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-usability-check-and-the-podman-mock-were-both-right-and-could-not-coexist
+    order: 1094-qm3t
+    status: implemented
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [litmus, podman, test-support, gate-divergence, fail-closed]
+    estimated_hours: 1
+    owned_files:
+      - scripts/test-support/podman-mock.sh
+      - scripts/test-podman-mock-refusal.sh
+    unscoreable: |
+      Fixed in the commit that files it. Both arms live in
+      scripts/test-podman-mock-refusal.sh, which the litmus framework spec
+      already runs; the convergence fixture is bound by litmus:image-build-
+      convergence-shape under forge-staleness.
+    title: |
+      verify-image-usable.sh must call `image inspect` with no --format to touch the layers, and podman-mock refuses exactly that form fail-closed — two correct decisions that could not coexist, landed green because --check runs zero litmus
+    context: |
+      FOUND in the union litmus run of 2026-09-06T06:00Z on macuahuitl.
+      NOT a union effect, and the control says so: the convergence fixture
+      fails IDENTICALLY in a pristine origin/linux-next worktree at
+      8289436a6, with none of the merge in it. All four participants
+      (verify-image-usable.sh, podman-mock.sh, test-image-build-
+      convergence.sh, build-image.sh) are byte-identical to trunk.
+
+      BOTH SIDES WERE RIGHT, which is why neither host saw it.
+
+      verify-image-usable.sh:62 calls `podman image inspect "$TAG"` with NO
+      --format on purpose, and 1073-dqtx's discriminating table is the
+      reason: `image exists` 0, a size in `images`, and `image tree` 0 ALL
+      return success over an image whose overlay layer is missing. Only
+      inspect and run touch the layers. It discards stdout and reads the rc.
+      Adding --format to satisfy the mock would reintroduce precisely the
+      blindness the packet was filed on.
+
+      podman-mock.sh refused the bare form fail-closed (797-p2xa) because it
+      has no bare-form payload to replay, and a mock that fabricates one
+      teaches its caller that a broken image is fine — this packet's defect
+      wearing a test harness.
+
+      THE RESOLUTION IS THAT THE VERB CARRIES TWO DIFFERENT QUESTIONS. With
+      --format it asks for a FIELD, and the mock has nothing real to say.
+      Bare, with stdout discarded, it asks whether the layers can be touched
+      — and that is a STATUS CODE the mock already knows from its own image
+      state. So the arm answers with an rc and emits no payload: 0 when the
+      image is present, 125 (real podman's code for an image it cannot
+      inspect) when it is not. Not a permissive tail: unknown image
+      subcommands still refuse, and a future payload caller must add its own
+      arm rather than read meaning into empty stdout.
+
+      Design confirmed independently by macbookair, who filed 1073-dqtx, and
+      who argued against the one-line --format change for the same reason
+      before seeing this fix.
+
+      HOW IT LANDED GREEN. 49ad76ce3 passed ./build.sh --check, which runs
+      ZERO litmus (1087-h2z9). Third confirmation tonight, alongside the
+      stale pinned arm count in litmus-cycle-metrics-recurrence-shape.yaml
+      (37 vs the fixture's 39, also pre-existing on trunk, also invisible to
+      --check) and macbookair's 1074-w7qv, where feature-gated tests are
+      COMPILED by --check's clippy and never EXECUTED. The shared question
+      none of the three packets answers for the others is: which checks does
+      the gate that guards landing actually execute?
+
+      EXIT CRITERIA MET, both directions sabotage-verified:
+        pre-fix convergence fixture      rc=1  (and rc=1 on pristine trunk)
+        post-fix convergence fixture     rc=0
+        SABOTAGE permissive tail         only the ABSENT arm catches it —
+          the two success-side arms pass against a mock that exits 0 for
+          everything, which is why the arm set is two-directional
+        SABOTAGE old blanket refusal     all three arms fail (rc=97)
+        forge-staleness spec             3/3 PASS
