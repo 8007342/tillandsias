@@ -322,16 +322,39 @@ credential_channel_verdict() {
   if git_dir="$(git rev-parse --git-dir 2>/dev/null)"; then
     cred_file="${git_dir}/.gh-credentials"
     if [ -s "$cred_file" ]; then
-      echo "ok:gh-credentials-store"
+      # ORDER 1092-uv3k. `unverified:`, not `ok:`. THIS ARM VERIFIES NOTHING —
+      # it reports that a store file EXISTS and is non-empty. The string was
+      # always narrow and truthful; the prefix was not, because every consumer
+      # pattern-matches on the prefix rather than reading the noun.
+      #
+      # MEASURED: `gh-keyring-push-verified` is referenced in exactly three
+      # files — this check, its fixture, and one comment in check-host-tools.sh
+      # — and NONE requires it. The dispatch preflight every host runs triggers
+      # on `blocked:*` (advance-work-from-plan/SKILL.md:247), so an unverified
+      # arm sails through silently and reads as a credential green.
+      #
+      # esmeraldinha's dead token was never caught by this check for exactly
+      # that reason: their host had a non-empty store file, so arm 4 — the only
+      # arm that probes anything — had never run there.
+      #
+      # THIS RENAME CHANGES NO CONTROL FLOW, deliberately. It cannot false-red
+      # any host, which is why it is safe to land before the real work: arm 1
+      # needs a bounded probe of ITS OWN channel (yoga measured a host where the
+      # store credential authenticates while the keyring token is invalid, so a
+      # fall-through to arm 4 would block a host over a channel git is not
+      # using). Tightening the dispatch rule to require a verified verdict comes
+      # only after that, or it strands store-file hosts with no arm to satisfy.
+      echo "unverified:gh-credentials-store"
       return 0
     fi
   fi
   if [ -n "${GH_TOKEN:-}" ]; then
-    echo "ok:gh-token-env"
+    # Unverified for the same reason: a variable is set. Nothing was probed.
+    echo "unverified:gh-token-env"
     return 0
   fi
   if [ -n "${GITHUB_TOKEN:-}" ]; then
-    echo "ok:github-token-env"
+    echo "unverified:github-token-env"
     return 0
   fi
   if [ "${TILLANDSIAS_CRED_SKIP_GH:-0}" != "1" ] \

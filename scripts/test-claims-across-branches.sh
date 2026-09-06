@@ -89,5 +89,43 @@ else
     bad "a run printed no verdict line" "n=$n"
 fi
 
+# A stub that knows NOTHING — what the real binary does for an unknown packet:
+# it prints no row. `mkstub` always answers, so it asserts existence for every
+# name and cannot express absence; the first version of arm 5 used it and failed
+# against a working fix for that reason.
+mkstub_absent() { # $1=dir
+    mkdir -p "$1"
+    printf '#!/bin/sh\nexit 1\n' > "$1/tillandsias-plan"
+    chmod +x "$1/tillandsias-plan"
+}
+
+# 5. A PACKET NOBODY HAS HEARD OF IS NOT "UNCLAIMED".
+#
+# The tool answered `ok:cross-branch-claims:2 sibling branch(es) checked` for a
+# packet that exists on NO branch — measured live on
+# `definitely-not-a-real-packet-xyz`, and on 1090-8nh4 during the window between
+# its author filing it and pushing it. A host acting on that ok claims a phantom.
+#
+# This is the defect this tool exists to catch, occurring in the tool: a green
+# answering a narrower question than the sentence attached to it. "ok" reads as
+# "safe to claim" and meant only "no sibling holds it in_progress".
+mkstub_absent "$W/none"
+out="$(cd "$ROOT" && TILLANDSIAS_PLAN_BIN="$W/none/tillandsias-plan" bash "$CHECK" NO-SUCH-PACKET-1091 --no-fetch 2>/dev/null)"; rc=$?
+if [ "$rc" -eq 2 ] && printf '%s' "$out" | grep -q '^unknown-packet:'; then
+    ok "a packet no branch and no local fold knows is reported unknown, not ok"
+else
+    bad "an unknown packet must not report ok" "rc=$rc out=[$out]"
+fi
+
+# NEGATIVE CONTROL. If existence were decided by something that says no to
+# everything, arm 5 would pass while the tool refused every real packet too.
+mkstub "$W/real" ready
+out="$(cd "$ROOT" && TILLANDSIAS_PLAN_BIN="$W/real/tillandsias-plan" bash "$CHECK" SOME-PKT --no-fetch 2>/dev/null)"; rc=$?
+if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q '^ok:cross-branch-claims:'; then
+    ok "a packet the fold knows still passes — arm 5 is not refusing everything"
+else
+    bad "a known packet must still pass" "rc=$rc out=[$out]"
+fi
+
 echo "claims-across-branches: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

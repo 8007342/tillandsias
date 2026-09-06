@@ -1,0 +1,69 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-cross-branch-claim-check-could-not-tell-unclaimed-from-nonexistent
+    order: 1090-ts9f
+    status: implemented
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [plan, multi-host, fail-loud, tooling]
+    estimated_hours: 1
+    owned_files:
+      - scripts/check-claims-across-branches.sh
+      - scripts/test-claims-across-branches.sh
+    unscoreable: |
+      Fixed in the same commit that files it, with both arms in
+      scripts/test-claims-across-branches.sh, which the gate already runs. No
+      litmus lane covers cross-branch claim visibility; the fixture is the pin.
+    title: |
+      check-claims-across-branches.sh answered ok for a packet that exists on no branch, so "safe to claim" and "there is no such packet" printed the same verdict
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-09-06, in the tool built THIS
+      SESSION for 1034-whsp to answer exactly this class of question.
+
+        bash scripts/check-claims-across-branches.sh definitely-not-a-real-packet-xyz
+        -> ok:cross-branch-claims:2 sibling branch(es) checked
+
+      And live rather than synthetically: the coordinator routed 1090-8nh4 as
+      "ready and unclaimed" from a fold where they had just filed it. It was on
+      NO branch — origin/linux-next, osx-next, windows-next and main all reported
+      zero mentions. Running the check on it returned the same ok. A host acting
+      on that verdict claims a packet that does not exist yet.
+
+      THE VERDICT ANSWERED A NARROWER QUESTION THAN ITS SENTENCE. ok reads as
+      "safe to claim"; it meant only "no sibling branch holds this in_progress".
+      Those coincide for every real packet and diverge for a phantom — which is
+      the one case a reader cannot check for themselves, because this tool is
+      what they are using to look.
+
+      THIS IS THE DEFECT THE TOOL WAS BUILT TO CATCH, IN THE TOOL. 1034-whsp is
+      about a claim that is real and invisible; this is a verdict that is green
+      and uninformative. Fourth instance in tooling written by this host today,
+      after a guard sitting behind a memoisation that ignores its own input
+      (1069-5sp4), a fix that fired only in the uncommon case (same packet), and
+      an arm asserting a string a platform filter made unreachable (1004-cp6p).
+
+      FIX: exit 2 with unknown-packet:<id> when no sibling branch AND the local
+      fold know the packet. The local fold counts as existence — a packet this
+      host just filed is real before it reaches a sibling.
+
+      THE FIXTURE COULD NOT EXPRESS THE CONDITION AT FIRST, which is the part
+      worth keeping. The first arm FAILED against a working fix, because the
+      fixture's stub answers a status for every packet name — the stub itself
+      asserted existence, so absence was inexpressible. A stub that prints
+      nothing, which is what the real binary does for an unknown packet, made the
+      arm real. Only then was the sabotage informative: existence check disabled
+      -> 5 passed 1 failed; restored -> 6 passed 0 failed, byte-identical.
+    exit_criteria:
+      - "a packet no branch and no local fold knows returns a non-ok verdict naming it, and exits non-zero"
+      - "a packet the fold knows still passes, so the check is not refusing everything — both arms present"
+      - "the refusal says why absence is not the same as unclaimed, so a reader does not treat it as a transient fetch failure"
+    events:
+      - type: filed
+        ts: "2026-09-06T04:29:10Z"
+        agent_id: "macos-tlatoanis-macbook-air-claude-20260905t144547z"
+        host: tlatoanis-macbook-air
+        summary: |
+          Found by trying to claim 1090-8nh4 in the window between its author
+          filing it and pushing it. Filed and fixed in one commit.
