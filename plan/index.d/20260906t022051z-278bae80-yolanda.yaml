@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: gate-ledger-native-fs-staging-windows
+    field: status
+    value: completed
+    ts: "2026-09-06T02:20:51Z"
+    host: yolanda
+
+events:
+  - packet_id: gate-ledger-native-fs-staging-windows
+    event:
+      type: completed
+      ts: "2026-09-06T02:20:51Z"
+      host: yolanda
+      summary: |-
+        status 'completed' with evidence_refs: implementation landed 2026-09-02 (scripts/native-scratch-dir.sh, archive-plan-packets.sh, archiver-check-memo.sh); verified 2026-09-06: memo fixture PASS 6/6, probe returns $REPO_ROOT on a fast worktree and /root/.cache/tillandsias-scratch/archiver (ext2/ext3) inside tillandsias-build where the worktree is v9fs; archiver ledger-bound portion 62.3s -> 5.3s; criterion 3 negative control baseline rc=3 = staged rc=3 same refusal
+  - packet_id: gate-ledger-native-fs-staging-windows
+    event:
+      type: note
+      ts: "2026-09-06T02:20:51Z"
+      host: yolanda
+      summary: |-
+        no new work: all three criteria were met on 2026-09-02 and the row was never transitioned — the landing/recording gap (1080-4deb) from the landing end
