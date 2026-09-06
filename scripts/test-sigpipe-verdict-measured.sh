@@ -57,16 +57,6 @@ bad() { echo "FAIL: $1" >&2; fail=$((fail+1)); }
 # shellcheck disable=SC1090
 . "$CHECK"
 
-# REFUSE EARLY IN A REGIME MORE PERMISSIVE THAN THE REFERENCE, rather than
-# failing arm 1 and leaving the reader to guess. Arm 1 is a KNOWN-BAD case, but
-# "bad" is a function of the platform's pipe buffer: MSYS lets a producer finish
-# that Linux refuses, so under Git Bash arm 1 comes back clean without the check
-# being broken at all. A suite whose known-bad arm is not bad here is measuring
-# nothing, and saying which platform to use beats a red arm with no explanation.
-if ! _sigpipe_regime_is_reference_strict; then
-    echo "refused:regime-more-permissive-than-reference:this shell does not refuse a producer at the reference size (~108,894 bytes), so its pipe buffer is larger than the gate platform's and a clean result here would be permissive rather than measured. Run this inside tillandsias-build: wsl.exe -d tillandsias-build -u root -- bash scripts/test-sigpipe-verdict-measured.sh" >&2
-    exit 2
-fi
 
 # Scratch lives INSIDE the checkout on purpose: it must inherit the checkout's
 # filesystem, since that is the variable that decides the answer. A /tmp scratch
@@ -83,11 +73,17 @@ case "$v" in
     *) bad "the known-bad case was not caught — the check cannot see a 141: $v" ;;
 esac
 
-# 2. A fast producer that matches is clean.
+# 2. NO 141 OBSERVED IS NOT A CLEAN BILL. This arm used to assert
+#    `measured-clean:` for a fast producer under PIPE_BUF, and that verdict no
+#    longer exists. 0 of REPS means NOT OBSERVED: the identical pipeline reads
+#    40/40 on one locus and 0/40 on another, and no rep count separates "safe"
+#    from "unsafe with a low observation rate" without a reference at this
+#    site's own producer size and consumer — which is the site itself.
 v="$(REPS=3 measure_pipeline fx 2 "cat $W/small.txt" "-q 'NEEDLE_HERE'")"
 case "$v" in
-    measured-clean:*) ok "a fast producer whose consumer matches is measured-clean ($v)" ;;
-    *) bad "expected measured-clean, got: $v" ;;
+    unmeasured:*not-observed*) ok "no 141 observed reads unmeasured, NOT clean ($v)" ;;
+    measured-clean:*)          bad "the clean verdict is back — it is the only verdict that can be false: $v" ;;
+    *)                         bad "expected unmeasured:not-observed, got: $v" ;;
 esac
 
 # 3. No match today is NOT safety — it is having nothing to report.
@@ -115,37 +111,6 @@ else
     bad "CONTROL failed: evaled pipeline reported ${broken} PIPESTATUS elements; this fixture's arm 1 may be passing for the wrong reason"
 fi
 
-# 6/7. THE REGIME GUARD, as a controlled A/B: the SAME pipeline, differing only
-#      in whether the regime is declared as strict as the reference platform.
-#
-#      Why it must exist. measure_pipeline counted 141s and reported
-#      `measured-clean:` on seeing none, with no evidence a 141 was REACHABLE at
-#      that producer size — and reachability depends on the PIPE BUFFER, which
-#      is platform-dependent. Measured: Linux refuses at 108,894 bytes where
-#      MSYS does not, and MSYS only refuses past ~168,894. So roughly
-#      109KB-169KB of output is sigpipe-decided on Linux and clean on MSYS, and
-#      a sweep on the permissive platform under-reports every site in that band.
-#      Nine of my own verdicts were voided that way, and the miss surfaced only
-#      when another host found a live defect in a file the sweep called safe.
-#
-#      Forcing the memo is the seam, so both arms are deterministic on every
-#      host rather than needing two platforms to exercise the pair.
-_SIGPIPE_REGIME_STRICT=no
-v="$(REPS=3 measure_pipeline fx 6 "cat $W/small.txt" "-q 'NEEDLE_HERE'")"
-case "$v" in
-    unmeasured:*regime-pipe-buffer-larger-than-reference*)
-        ok "a regime more permissive than the reference yields unmeasured, not clean ($v)" ;;
-    *)  bad "expected unmeasured:regime-pipe-buffer-larger-than-reference, got: $v" ;;
-esac
-
-_SIGPIPE_REGIME_STRICT=yes
-v="$(REPS=3 measure_pipeline fx 7 "cat $W/small.txt" "-q 'NEEDLE_HERE'")"
-case "$v" in
-    measured-clean:*)
-        ok "CONTROL: the same pipeline in a reference-strict regime is still measured-clean ($v)" ;;
-    *)  bad "CONTROL failed: the guard refuses even at reference strictness, so it is blanket rather than selective: $v" ;;
-esac
-unset _SIGPIPE_REGIME_STRICT
 
 echo "sigpipe-verdict-measured: $pass passed, $fail failed"
 [ "$fail" = 0 ] || exit 1
