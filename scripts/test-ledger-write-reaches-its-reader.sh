@@ -23,9 +23,24 @@ _n=0
 ok()   { _n=$((_n+1)); echo "ok: $1"; }
 bad()  { echo "FAIL: $1"; _fail=1; }
 
-PLAN="${PLAN_BIN:-./target/debug/tillandsias-plan}"
-[ -x "$PLAN" ] || PLAN="./target/release/tillandsias-plan"
-[ -x "$PLAN" ] || { echo "refused:no-plan-binary — cannot run"; exit 2; }
+# RESOLVE THROUGH THE SHARED PROBE (721-nyev), never a hardcoded target/ path.
+# The first version of this file did `[ -x ./target/debug/tillandsias-plan ]`
+# and the gate refused it — correctly, and for THIS PACKET'S OWN REASON. The
+# probe's header states it: "an executable BIT is a claim; RUNNING the binary
+# is evidence." On a shared Windows/WSL checkout a WSL build leaves a Linux ELF
+# beside the runnable .exe and `[ -x ]` is true for both, so the bit answers a
+# question nobody asked and the caller reads it as the answer to the one they
+# did. A write that lands where no reader looks, one layer down.
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ -r "$ROOT/scripts/plan-binary-probe.sh" ]; then
+    . "$ROOT/scripts/plan-binary-probe.sh"
+else
+    # A missing reader must ANNOUNCE itself rather than surface as
+    # file-not-found — the same rule the probe's own callers follow.
+    resolve_plan_binary() { return 1; }
+fi
+PLAN="$(resolve_plan_binary 2>/dev/null || true)"
+[ -n "$PLAN" ] || { echo "refused:no-plan-binary — the probe resolved nothing runnable"; exit 2; }
 
 # ---------------------------------------------------------------- fixtures --
 # One ledger, flipped in place, so the two directions cannot drift apart.
