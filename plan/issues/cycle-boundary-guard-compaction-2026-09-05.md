@@ -81,6 +81,35 @@ neglect — and the only route to green is the dishonest one above.
    after work exists is refused rather than believed.
    FAILS NOW: MEASURED — ARM 2 above returns rc=0 on a tree dirtied first.
 
+5. A REFUSAL MUST NOT LEAVE A RE-RUN AVAILABLE THAT PRODUCES A DIFFERENT,
+   MORE FLATTERING ANSWER.
+   FAILS NOW: the boundary refusal's obvious next command — snapshot now —
+   silently converts it into a green (criterion 4), and nothing marks the
+   difference in the ledger.
+
+   ACCEPTANCE TEST, by precedent rather than principle. `land-on-platform-
+   branch.sh`'s gate faces the identical temptation and closes it three ways,
+   MEASURED on macneo when it refused this very packet:
+
+     - refuses on the FIRST failing line rather than accumulating;
+     - writes its own log and points at it;
+     - states explicitly that re-running `./build.sh --check` is a DIFFERENT
+       INVOCATION against a tree the integrate step may have moved.
+
+   The third is the load-bearing half: it does not merely discourage the
+   re-run, it explains why the re-run's answer would be ABOUT A DIFFERENT
+   TREE. 997-e4v2 became irreproducible exactly that way (1033-iycs).
+
+   Require the boundary refusal to do the same. This is harder to satisfy
+   vacuously than "make the guard stricter", because it names an existing
+   behaviour in this tree to be matched rather than a quality to be asserted.
+
+   THIS PACKET IS ITS OWN EXAMPLE. The land gate refused the packet's first
+   filing for citing `finalize-cycle.sh` by LINE NUMBER (881-29me) — a guard
+   catching a real defect inside a document about a guard that fails to catch
+   things, while the guard under discussion would have accepted a snapshot
+   taken after the fact.
+
 ## Note on how criterion 4 was obtained
 
 macneo declined to run this arm on the live repo, because the test IS the
