@@ -1,0 +1,66 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  1106-k2df:
+    - type: progress
+      ts: "2026-09-06T09:00:08Z"
+      agent_id: "macos-tlatoanis-macbook-air-claude-20260905t144547z"
+      host: tlatoanis-macbook-air
+      summary: |
+        PREMISE AUDIT — claimed, investigated, releasing without a code change,
+        because THE PROBE THIS PACKET DESCRIBES DOES NOT EXIST IN THIS TREE.
+
+        SEARCHED every .sh, .rs, .md and .yaml outside target/ and plan/:
+        no `gh api repos/.../permissions` call anywhere. Every `permissions` hit
+        is a filesystem `permissions().mode()`. The only `gh api repos/...` call
+        in the repository is a release tag_name lookup at
+        test-promote-stable-evidence-gate.sh:497.
+
+        AND PUSH AUTHORIZATION IS ALREADY PROVEN BY GROUND TRUTH, in three
+        places:
+          check-credential-channel.sh arm 4:
+            _probe_cmd="${TILLANDSIAS_CRED_PROBE_CMD:-git push --dry-run origin HEAD}"
+          images/git/probe-upstream-auth.sh:212   git push --dry-run
+          scripts/forge-validate.sh:71            git push --dry-run
+        Arm 4's own comment is this packet's argument, made two orders earlier by
+        860-g798: "`gh auth status` PROVES THE WRONG THING ... So prove the
+        actual thing: an authenticated PUSH negotiation, dry-run."
+
+        SO esmeraldinha's MEASUREMENT IS TRUE AND ITS TARGET IS NOT HERE.
+        Confirmed independently on this host that `.permissions` reports the
+        USER's access: it returns admin/maintain/pull/push/triage ALL TRUE for
+        this token because 8007342 owns the repository. That is a real property
+        of the GitHub API and a real trap. It appears to describe a diagnostic
+        command they ran rather than a probe the fleet depends on.
+
+        THE READ-ONLY SIGNAL QUESTION, ANSWERED as far as this host can:
+          X-Accepted-Oauth-Scopes: repo                   <- the ENDPOINT's requirement
+          X-Oauth-Scopes: gist, read:org, repo, workflow  <- the TOKEN's grant
+        `X-Oauth-Scopes` is a property of the TOKEN, not the user, so comparing
+        the two headers IS the discriminator the packet asks for — FOR CLASSIC
+        TOKENS. It is an OAuth header and fine-grained PATs do not use OAuth
+        scopes, so it is absent for precisely the class that broke. The cheap
+        read-only signal exists for the class that never had the defect.
+
+        TWO LIMITS, STATED RATHER THAN GLOSSED:
+        (1) I CANNOT REPRODUCE THE FAILING CONDITION. This host holds one
+            credential, a working classic `gho_` token. I will not mint or
+            downgrade a token to manufacture a negative case.
+        (2) The claim that X-Oauth-Scopes is ABSENT for fine-grained PATs is
+            DOCUMENTED, NOT MEASURED HERE. One command settles it on a host that
+            has such a token:
+              gh api -i repos/8007342/tillandsias | grep -i x-oauth-scopes
+
+        RECOMMENDED DISPOSITION, not taken unilaterally: hold pending that
+        measurement, then re-premise as (a) a caution that `.permissions` must
+        never become a push-authorization signal, and (b) the finding that no
+        read-only discriminator exists for fine-grained tokens — so for that
+        class the honest verdict is "cannot verify", which is 1091-h3cb's
+        principle applied one layer down. It is worth recording; it is not a fix
+        to a probe in this tree, and I will not change a file to match a
+        description of a defect it does not have.
+
+        MOVING-TRUNK COST, measured for a CLAIM-ONLY commit and recorded here
+        because 1034-whsp asked for it: hand-run gate 678s, then two lost races
+        (each mandated merge brought source changes and staled the stamp), then
+        the land loop at 730s with one gate, succeeding on attempt 1. ~23 minutes
+        to make one claim visible. The push is cheap; the RE-VALIDATION is not.

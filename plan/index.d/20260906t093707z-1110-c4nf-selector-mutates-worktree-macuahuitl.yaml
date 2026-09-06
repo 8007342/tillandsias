@@ -1,0 +1,78 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-read-only-assertion-blames-the-selector-for-any-worktree-change-in-its-window-and-the-gate-runs-a-known-leaker
+    order: 1110-c4nf
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [testing, fixtures, release-gate, fail-loud, boundary]
+    estimated_hours: 2
+    owned_files:
+      - openspec/litmus-tests/litmus-cycle-batch-triage-shape.yaml
+      - scripts/archive-plan-packets.sh
+    verifiable_closure: |
+      bash scripts/run-litmus-test.sh ci-release --phase pre-build, with step
+      23/26 rewritten to NAME the paths that appeared rather than compare two
+      opaque strings. RED ON TODAY'S CODE in the useful direction: seed a
+      concurrent writer (touch a worktree path during the window) and the
+      current arm blames the selector, while a fixed arm names the path and
+      attributes correctly. A fix that merely makes the arm pass is not
+      acceptable — the red is a TRUE signal that something wrote.
+    title: |
+      cycle-batch-triage step 23/26 compares git status before and after the selector and blames the selector for ANY change — and build.sh runs archive-plan-packets.sh, a known worktree leaker, inside the same gate
+    context: |
+      FILED from the 09:00Z release gate, then RE-PREMISED before landing on
+      macneo's evidence. My first version of this row asserted "the selector
+      writes to the worktree" and routed that to a host to fix. That attribution
+      is NOT established, and acting on it would have changed code that is not
+      broken.
+
+      THE ARM CANNOT ATTRIBUTE. Verbatim from
+      openspec/litmus-tests/litmus-cycle-batch-triage-shape.yaml:282 —
+
+        before="$(git status --porcelain)"
+        scripts/select-work-batch.sh linux >/dev/null 2>&1
+        after="$(git status --porcelain)"
+        if [ "$before" != "$after" ]; then echo 'FAIL: selector mutated the worktree'
+
+      Any writer active in that window produces the identical verdict, and the
+      gate HAS one: build.sh:2771 runs
+      scripts/archive-plan-packets.sh --check.
+
+      AND THAT SCRIPT IS A KNOWN LEAKER, filed by yolanda on 2026-08-23 as
+      plan/issues/optimization-archive-plan-packets-scratch-left-in-worktree-2026-08-23.md:
+      after ./build.sh --check completed, on both a red and a green run, the
+      worktree carried untracked plan_tmp/ (a full copy of plan/) plus
+      plan_tmp_addressed.txt and plan_tmp_addressed_raw.txt, and it writes
+      scripts/archive-plan-packets-check.rb into scripts/. macneo observed
+      ?? plan_tmp/ in their own git status after a land tonight.
+
+      THE SELECTOR'S OWN WRITES GO TO TMPDIR. Verified here: three mktemp sites
+      (select-work-batch.sh:401, :478, :591) and no writes under plan/. And
+      macneo ran the selector on a host whose boundary snapshot PREDATED the
+      run: verify returned ok:startup worktree boundary preserved and
+      git status --porcelain was EMPTY. On that host the selector wrote nothing.
+
+      WHAT IS NOT PROVEN, and the distinction is the whole packet: nobody has
+      shown that a concurrent archiver caused THAT gate run's red. What is shown
+      is that the selector does not write on at least one host, that the archiver
+      does leak, that the gate runs it, and that the arm cannot tell them apart.
+      That is enough to call the ATTRIBUTION unsound. It is not enough to
+      declare the selector innocent everywhere.
+
+      THE RED IS A CORRECT SIGNAL AND MUST NOT BE SILENCED. Something wrote to
+      the worktree during a gate whose exit contract requires every boundary path
+      to stay byte-identical. A fix that makes the arm pass without naming the
+      writer converts a true signal into a vacuous green — and a wrong
+      attribution is worse than a missing one, the same way a trace that migrated
+      to the wrong function is worse than a trace that is absent.
+    next_action: |
+      Fix the FIXTURE first, not the selector. Capture the porcelain DIFF and
+      name the paths that appeared, then either exclude known concurrent leakers
+      explicitly or run the selector in a temp clone where nothing else writes.
+      Only once the arm can attribute should anyone open select-work-batch.sh.
+      Then close the archiver's leak on its own row — yolanda's 2026-08-23 issue
+      is still open and is the likelier culprit, and its abort paths already
+      rm -rf the scratch while at least one exit path under --check does not.

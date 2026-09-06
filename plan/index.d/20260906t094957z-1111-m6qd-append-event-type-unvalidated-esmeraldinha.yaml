@@ -1,0 +1,63 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: append-event-accepts-any-event-type-so-a-typo-is-written-silently-and-is-invisible-to-every-type-based-fold
+    order: 1111-m6qd
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [ledger, fail-loud, guards]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-plan/src/main.rs
+    verifiable_closure: |
+      cargo test -p tillandsias-plan append_event_type — an invalid type must exit non-zero and
+      LIST the valid vocabulary, the way the agent_id and --ts guards already do.
+      RED ON TODAY'S CODE: esmeraldinha probed with the type zzz-not-a-type and
+      the event was WRITTEN. The arm must also assert a VALID type still writes,
+      or a guard that refuses everything would pass it.
+    title: |
+      MEASURED by esmeraldinha: append-event accepts an arbitrary event type and writes it, so a typo lands silently and is then invisible to any fold that selects on type
+    context: |
+      FOUND by esmeraldinha 2026-09-06 while releasing two claims, and reported
+      with the offending fragment deleted before commit rather than landed as a
+      demonstration.
+
+      They probed append-event with the type zzz-not-a-type, expecting a usage
+      error listing the valid set. It wrote the event. A mistyped type is
+      accepted, lands in the ledger, and is then invisible to every fold that
+      selects on type — the row exists and no type-based reader will ever return
+      it. The real vocabulary is note, progress, completed, finding, claim,
+      evidence, decision, implemented, falsified, verified-by, release, verified.
+
+      THE ARGUMENT FOR FIXING IT IS THAT ITS NEIGHBOURS ALREADY DO. esmeraldinha
+      was caught TWICE by adjacent guards in the same run, and both refusals were
+      exemplary: a hand-written agent_id was refused with the contract AND the
+      derivation command (756-hn3a / 874-idnt), and a --ts was refused for
+      disagreeing with the host clock by 21,462,444 seconds. Those guards state
+      what is wrong, why, and what to run. The type field sits between them with
+      no check at all, so the ledger validates who wrote an event and when, and
+      not what KIND of event it is.
+
+      CLASS. This is the night's recurring shape in the WRITE path rather than
+      the read path: a value that is structurally unable to be wrong is accepted,
+      and the resulting row looks identical to a correct one. Sibling of
+      1095-vk8r and 1104-w9np — who can see a claim, and in which state — except
+      here the row is visible and its TYPE is the thing that silently does not
+      match anything.
+
+      CONTEXT WORTH CARRYING: esmeraldinha hit 1079-qb8k three times in one
+      cycle, each from a different side — a claim event whose status never moved,
+      a completion whose status never moved, and a status moved to ready whose
+      claim stayed live, which they created themselves while repairing the first
+      two and caught only by running expire-claims --list-live afterwards rather
+      than trusting the ok: line set-field printed. Every state change in this
+      ledger is two writes, and doing one leaves the fold self-inconsistent in a
+      way no single query reveals.
+    next_action: |
+      Validate the type against the vocabulary at append-event, refusing with the
+      valid set listed — match the agent_id guard's shape, which names the
+      contract and the command that produces a correct value. Then check whether
+      set-field has the same gap on its field names, since the two writers share
+      the problem shape and only one of them has been probed.
