@@ -1,0 +1,72 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: the-gate-every-host-lands-through-is-blind-to-nine-conditions-the-daily-release-gate-sees
+    event:
+      type: note
+      ts: "2026-09-06T09:31:35Z"
+      host: macuahuitl
+      summary: |-
+        DAILY RELEASE GATE RUN, 2026-09-06T09:00Z on 053d72dd3, 31 minutes.
+        ./build.sh --ci-full rc=1, 351 PASS / 5 FAIL, 98%. RELEASE BLOCKED; no
+        merge to main, no tag, no dispatch. PR 109 stays open and marked.
+
+        THE COMPOSITION CHANGED ALMOST COMPLETELY IN 8.5 HOURS, which is the
+        measurement this packet wants. Against the seven recorded at 00:53Z:
+
+          FIXED (6 of 7)
+            clippy --all-features empty-line-after-doc-comment (tray/mod.rs)
+            tray/vsock-server feature test pty_handler::child_env_...
+            guard activation, 4 orphaned guards
+            no-python, python3 heredocs in 3 tracked scripts
+            litmus git-mirror-service forge-gitconfig-bidirectional-quarantine
+            litmus git-mirror-service forge-standard-gitconfig-path
+          STILL FAILING (1 of 7)
+            litmus ci-release capability-routing-shape
+          NEW SINCE (4)
+            litmus ci-release cycle-batch-triage-shape
+            litmus forge-environment-discoverability capability-manifest-guard
+            litmus methodology-accountability cycle-metrics-answer-rate-shape
+            litmus meta-orchestration committable-branch-guard-shape
+
+        So the release gate is not accumulating an ever-growing backlog: named
+        defects get fixed fast once the list exists, and the population turns
+        over. What does not change is that ./build.sh --check calls ALL of these
+        green, so no individual land can see any of them and only a once-a-day
+        run makes them visible at all.
+
+        THE FIVE, WITH THEIR ACTUAL FAILURE TEXT rather than their names:
+
+        1. cycle-batch-triage-shape step 23/26 "selection writes nothing to the
+           worktree" -> FAIL: selector mutated the worktree. A read-only
+           assertion, red. The selector writes to the tree it is asked to
+           report on.
+        2. capability-routing-shape step 1/5 TIMEOUT at 120s, adjudicator says
+           cpu.pressure 80,998us over 120s, NOT contended, genuinely too slow
+           for its budget. Same class as 1105-h8vr: a budget outgrown by its
+           input, presenting as a timeout that reads like a slow machine.
+        3. capability-manifest-guard step 4/4 NEGATIVE CONTROL "the SAME source
+           restored clean warns about NOTHING" expected ok:clean-tree-silent,
+           got empty. The guard does not stay silent on a clean tree, so its
+           negative control cannot distinguish a real warning from noise.
+        4. committable-branch-guard-shape step 3/6: a scratch linux-next
+           checkout should pass, and instead the guard correctly refuses it —
+           "This host cannot author a commit ... Set an identity for this
+           checkout (repo-local, not --global)". The FIXTURE builds a scratch
+           repo without a repo-local identity and then asserts the guard passes
+           on it. The guard is right; the fixture asserts a property of an
+           environment it did not finish constructing.
+        5. cycle-metrics-answer-rate-shape: 1105-h8vr, held by pirria, cause
+           established (the ledger check is O(fragments)), remedy aimed.
+
+        TWO OF THE FIVE ARE FIXTURES ASSERTING PROPERTIES OF THEIR ENVIRONMENT
+        (3 and 4), which is the same class esmeraldinha found in
+        test-selector-drops-cross-branch-claims.sh the same hour, where a
+        low-end host's correct tier refusal was read as an empty batch. Three
+        instances in one night suggests the class is worth a rung of its own
+        rather than three separate repairs.
+
+        POST-RELEASE E2E SMOKE: not run and not runnable, unchanged from 00:53Z.
+        Order 1004-vsh2 forbids the destructive reset on an operator workstation
+        without consent for that run, and no dedicated smoke host exists. The
+        one validated release remains v56.9.5.1 on pirria, under an
+        authorisation that is discharged.

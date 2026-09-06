@@ -75,6 +75,54 @@ export -f SLOW_READ 2>/dev/null || true
 # afterwards has ONE element describing eval. Under pipefail that lone value is
 # 141, so the sigpipe arm passes by accident while the no-match arm never fires
 # — a check that measures nothing and reports plausibly.
+# THE INSTRUMENT'S OWN CALIBRATION (order 1076-kft9, measured 2026-09-06).
+#
+# measure_pipeline counts 141s and, seeing none, would report `measured-clean:`
+# with no evidence a 141 was REACHABLE at that producer size. Whether it is
+# reachable depends on the PLATFORM'S PIPE BUFFER, which is not constant:
+#
+#     producer bytes      Linux (tillandsias-build)     MSYS (Git Bash)
+#        78,894                  0/5                         -
+#       108,894                  5/5                        0/5
+#       168,894                   -                         5/5
+#       288,894                   -                        10/10
+#
+# Linux refuses a producer that MSYS lets finish. Roughly 109KB-169KB of output
+# is SIGPIPE-decided on Linux and clean on MSYS, so `measured-clean:` DOES NOT
+# PORT between them: the same call site is defective on one and spotless on the
+# other. A sweep run on the more permissive platform under-reports, silently.
+#
+# I FIRST READ THIS AS "MSYS NEVER DELIVERS SIGPIPE" on a single measurement at
+# 108,894 bytes — which sits almost exactly in the band where the two disagree.
+# One sample cannot tell "never" from "not yet"; a boundary looks like an
+# absence if you only sample one side of it. The table above is the corrected
+# claim and the reason this probe is a THRESHOLD question, not a yes/no one.
+#
+# So the calibration asks: IS THIS REGIME AT LEAST AS STRICT AS THE REFERENCE?
+# The reference is the size at which Linux — the gate's own platform and the
+# smaller buffer of the two — reliably refuses. A regime that also refuses there
+# can be trusted to have produced a meaningful clean; a more permissive one
+# cannot, and its cleans are downgraded to `unmeasured:`.
+#
+# RETRY IS SOUND HERE and is not the anti-pattern it resembles. The pipeline is
+# a RACE: at the reference size the distro gave 39/40 idle but 17/20 under load.
+# One 141 PROVES the regime refuses at this size; a miss proves nothing. So the
+# loop exits on first success and only a full run of misses concludes anything.
+# That is retrying a test whose POSITIVE is conclusive — the opposite case, "is
+# this site clean now", needs every repetition to pass and must never be retried.
+_SIGPIPE_REFERENCE_LINES=20000   # ~108,894 bytes: Linux refuses here, MSYS does not
+_sigpipe_regime_is_reference_strict() {
+    if [ -z "${_SIGPIPE_REGIME_STRICT:-}" ]; then
+        local _p _try
+        _SIGPIPE_REGIME_STRICT=no
+        for _try in 1 2 3 4 5 6 7 8; do
+            _p="$(bash -c "set -o pipefail; seq 1 ${_SIGPIPE_REFERENCE_LINES} | grep -qxF 1 >/dev/null 2>&1; echo \${PIPESTATUS[0]}" 2>/dev/null)"
+            if [ "$_p" = "141" ]; then _SIGPIPE_REGIME_STRICT=yes; break; fi
+        done
+    fi
+    [ "$_SIGPIPE_REGIME_STRICT" = "yes" ]
+}
+
 measure_pipeline() {
     local file="$1" line="$2" prod="$3" cons="$4"
     local i sig=0 nomatch=0 pstat first last     # NOT `line`: that is a parameter
@@ -88,6 +136,11 @@ measure_pipeline() {
         echo "sigpipe-decided:$file:$line:${sig}/${REPS}"
     elif [ "$nomatch" = "$REPS" ]; then
         echo "unmeasured:$file:$line:no-match-today-safe-only-while-absent"
+    elif ! _sigpipe_regime_is_reference_strict; then
+        # This regime tolerates a producer the reference platform refuses, so a
+        # clean count here is permissive rather than informative: the same site
+        # may be sigpipe-decided where the gate actually runs.
+        echo "unmeasured:$file:$line:regime-pipe-buffer-larger-than-reference"
     else
         echo "measured-clean:$file:$line:0/${REPS}"
     fi

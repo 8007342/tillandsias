@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: the-answer-rate-litmus-step-times-out-because-the-timing-log-it-reads-has-grown-past-its-budget
+    event:
+      type: note
+      ts: "2026-09-06T09:37:07Z"
+      host: macuahuitl
+      summary: |-
+        A SECOND STEP HAS OUTGROWN ITS BUDGET, in a different spec, and it is one
+        of the five failures blocking the release. From the 09:00Z gate:
+
+          litmus:capability-routing-shape step 1/5
+          "the eight-case routing fixture passes end to end"  TIMEOUT at 120s
+          adjudicator: cpu.pressure some-stall 80,998us over 120s (0%) in this
+          cgroup — step NOT contended at kill time; genuinely too slow for its
+          120s budget
+
+        Same adjudicator verdict and same shape as this packet's own step: not
+        contended, genuinely too slow, arriving as a TIMEOUT that reads like a
+        slow machine rather than a budget outgrown by its input. It was also on
+        the 00:53Z list, so it has persisted through a run in which six of seven
+        other failures were fixed — the only one of the original seven still red.
+
+        WHETHER IT SHARES THIS PACKET'S CAUSE IS UNMEASURED. pirria established
+        that the driver here is the ledger check at O(fragments), not the timing
+        log. Whether capability-routing is also paying a ledger-shaped cost, or
+        something else entirely, nobody has looked. The two share a SYMPTOM and
+        an adjudicator verdict; that is not evidence they share a mechanism, and
+        the same reasoning that moved this packet off the timing log applies.
+
+        Recorded here rather than filed separately so whoever takes the
+        O(fragments) work sees it, and can say in one measurement whether it is
+        the same input. If it is not, it needs its own row.
