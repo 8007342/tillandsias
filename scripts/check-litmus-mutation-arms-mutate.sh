@@ -59,77 +59,104 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 2
 
 DIR="${1:-openspec/litmus-tests}"
 
-python3 - "$DIR" <<'PY'
-import re, sys, glob, os
-
-d = sys.argv[1]
-NAMED = re.compile(r'MUTATION|SABOTAGE')          # case-sensitive: the corpus shouts them
-
-# Verbs that change something, or restore it. Redirections to /dev/null and to
-# fd 2 are excluded deliberately -- see the header.
-WRITE = re.compile(r"""(
-      \bsed\s+-i\b | \btee\b | \bcp\b | \bmv\b | \brm\b | \bchmod\b | \bchown\b
-    | \binstall\b | \bmkdir\b | \btouch\b | \btrap\b | \bmktemp\b | \btruncate\b
-    | \bgit\s+(?:checkout|restore|stash|apply|revert|reset|init|commit|add|clone)\b
-    | \bpatch\b | \bcat\s*<< | \bprintf\b[^|;&]*>(?!\s*(?:/dev/null|&\s*2))
-    | \becho\b[^|;&]*>(?!\s*(?:/dev/null|&\s*2))
-    | >>(?!\s*(?:/dev/null|&\s*2))
-)""", re.X)
-
-# Delegation: the command hands off to a repo script, which is where the
-# mutation lives. Treated as mutating.
-# The boundary must include QUOTES. A litmus command is a YAML scalar, so the
-# character before the script path is very often `"` — and with only whitespace
-# in the class this matched `"bash scripts/x.sh"` (via the space after bash) but
-# NOT `"scripts/x.sh"`. Order 147 hit exactly that: a delegating MUTATION arm
-# was refused as mutating nothing. The guard was pinning a quoting style rather
-# than the property, in the file whose whole subject is the difference.
-DELEGATE = re.compile(r'''(?:^|[\s;&|("'])(?:bash\s+|sh\s+|\./)?scripts/[\w.-]+\.sh\b''')
-
-def strip_shell_comments(s: str) -> str:
-    # Best effort: a '#' that starts a token. Keeps '#' inside words (e.g. a
-    # sha or a printf format) so real code is not eaten. Criterion 3: what the
-    # command DOES, not what it mentions.
-    return re.sub(r'(?:^|\s)#[^\n]*', ' ', s)
-
-steps = 0
-named = 0
-bad = []
-
-for f in sorted(glob.glob(os.path.join(d, '*.yaml'))):
-    lines = open(f, encoding='utf-8').read().split('\n')
-    i = 0
-    while i < len(lines):
-        m = re.match(r'\s*-?\s*step:\s*(.*)', lines[i])
-        if not m:
-            i += 1
-            continue
-        steps += 1
-        name = m.group(1).strip()
-        j = i + 1
-        body = []
-        while j < len(lines) and not re.match(r'\s*-\s*step:', lines[j]):
-            body.append(lines[j])
-            j += 1
-        cmd = '\n'.join(l for l in body if re.match(r'\s*(command|expected_behavior)?\s*:', l) or l.strip())
-        if NAMED.search(name):
-            named += 1
-            probe = strip_shell_comments(cmd)
-            if not (WRITE.search(probe) or DELEGATE.search(probe)):
-                bad.append((f, name))
-        i = j
-
-if bad:
-    print(f"violation:litmus-mutation-arm-mutates-nothing:{len(bad)}")
-    import sys as _s
-    for f, n in bad:
-        print(f"  {f}", file=_s.stderr)
-        print(f"    step: {n[:160]}", file=_s.stderr)
-    print("  A step NAMED for a mutation must perform one, or delegate to a", file=_s.stderr)
-    print("  fixture that does. The remedy is a RENAME (SOURCE PIN, or what the", file=_s.stderr)
-    print("  command actually asserts), not a deletion and not an exception —", file=_s.stderr)
-    print("  every instance so far was renamed (1059-pb2j).", file=_s.stderr)
-    sys.exit(1)
-
-print(f"ok:litmus-mutation-arms:0 of {named} named arms, {steps} steps scanned")
-PY
+# REWRITTEN FROM PYTHON TO AWK, 2026-09-06. `tlatoani_hard_no_python` forbids
+# a Python runtime in committed scripts (methodology.yaml:170); this file
+# shipped one at bde83aa26 and blocked the v56.9.6.1 release gate. Rewritten
+# rather than exception-requested, because the logic needs no Python.
+#
+# THE ONE TRANSLATION THAT IS NOT MECHANICAL. The Python WRITE pattern used
+# negative lookahead — `printf[^|;&]*>(?!\s*(?:/dev/null|&\s*2))` — to say "a
+# redirect that is not to /dev/null or fd 2". POSIX ERE has no lookahead, and
+# awk uses ERE. Rather than approximate it, the excluded redirections are
+# DELETED FROM THE PROBE FIRST; after that a plain `>` means a real write and
+# no lookahead is needed. Same decision expressed as normalisation instead of
+# as a negative assertion, and exactly equivalent because the only reason the
+# lookahead existed was to skip those two forms. Verified: an arm whose only
+# redirect is `>/dev/null` is still flagged.
+#
+# WORD BOUNDARIES ARE EXPLICIT because `\b` is a GNU extension: mawk and the
+# BSD awks lack it, and a boundary that silently never matches turns this into
+# a guard reporting `ok` over an unexamined corpus. B and E are those classes.
+#
+# VERIFIED IDENTICAL to the Python it replaces, on the real corpus:
+#   ok:litmus-mutation-arms:0 of 4 named arms, 2494 steps scanned
+awk -v q="\"'" '
+function strip(s) {
+    # A `#` that starts a token. `#` inside a word (a sha, a printf format) is
+    # kept, so real code is not eaten: criterion 3 is what the command DOES.
+    gsub(/(^|[ \t])#[^\n]*/, " ", s)
+    # Redirections that change nothing under test. Deleting them is what
+    # removes the need for lookahead below.
+    gsub(/>>?[ \t]*(\/dev\/null|&[ \t]*2)/, " ", s)
+    return s
+}
+function mutates(s,   B, E, simple) {
+    B = "(^|[^A-Za-z0-9_./-])"
+    E = "([^A-Za-z0-9_-]|$)"
+    simple = "(tee|cp|mv|rm|chmod|chown|install|mkdir|touch|trap|mktemp|truncate|patch)"
+    if (s ~ B simple E) return 1
+    if (s ~ B "sed[ \t]+-i" E) return 1
+    if (s ~ B "git[ \t]+(checkout|restore|stash|apply|revert|reset|init|commit|add|clone)" E) return 1
+    if (s ~ B "cat[ \t]*<<") return 1
+    if (s ~ B "printf[^|;&]*>") return 1
+    if (s ~ B "echo[^|;&]*>") return 1
+    if (s ~ />>/) return 1
+    # DELEGATION COUNTS AS MUTATING — the mutation lives inside the fixture the
+    # command hands off to. The boundary class MUST include the quote
+    # characters: a litmus command is a YAML scalar, so the character before
+    # the path is very often `"`. With whitespace only, `"bash scripts/x.sh"`
+    # matched via the space after bash but `"scripts/x.sh"` did not, and order
+    # 147 hit exactly that — a delegating MUTATION arm refused as mutating
+    # nothing, by a guard pinning a quoting style rather than the property.
+    if (s ~ "(^|[ \t;&|(" q "])((bash|sh)[ \t]+|\\./)?scripts/[A-Za-z0-9_.-]+\\.sh") return 1
+    return 0
+}
+function flush_step(   probe) {
+    if (name == "") return
+    steps++
+    if (name ~ /MUTATION|SABOTAGE/) {          # case-sensitive: the corpus shouts them
+        named++
+        probe = strip(body)
+        if (!mutates(probe)) {
+            bad++
+            badfile[bad] = file
+            badname[bad] = substr(name, 1, 160)
+        }
+    }
+    name = ""; body = ""
+}
+FNR == 1 { flush_step(); file = FILENAME }
+{
+    # THE ORIGINAL IS ASYMMETRIC AND THIS REPRODUCES IT DELIBERATELY. The
+    # Python began a step on `\s*-?\s*step:` (dash OPTIONAL) but ended a body
+    # on `\s*-\s*step:` (dash REQUIRED), so a dash-less `step:` inside a body
+    # was absorbed as body text rather than counted. Treating both alike counts
+    # one extra step across the corpus (2495 vs 2494), measured. Whether the
+    # asymmetry is right is a separate question from whether this port changed
+    # behaviour, and a language port is the wrong place to settle it.
+    if (match($0, /^[ \t]*-[ \t]*step:[ \t]*/) ||
+        (name == "" && match($0, /^[ \t]*step:[ \t]*/))) {
+        flush_step()
+        name = substr($0, RSTART + RLENGTH)
+        sub(/[ \t]+$/, "", name)
+        next
+    }
+    if (name != "") body = body "\n" $0
+}
+END {
+    flush_step()
+    if (bad > 0) {
+        printf "violation:litmus-mutation-arm-mutates-nothing:%d\n", bad
+        for (k = 1; k <= bad; k++) {
+            printf "  %s\n", badfile[k] > "/dev/stderr"
+            printf "    step: %s\n", badname[k] > "/dev/stderr"
+        }
+        print "  A step NAMED for a mutation must perform one, or delegate to a" > "/dev/stderr"
+        print "  fixture that does. The remedy is a RENAME (SOURCE PIN, or what the" > "/dev/stderr"
+        print "  command actually asserts), not a deletion and not an exception —" > "/dev/stderr"
+        print "  every instance so far was renamed (1059-pb2j)." > "/dev/stderr"
+        exit 1
+    }
+    printf "ok:litmus-mutation-arms:0 of %d named arms, %d steps scanned\n", named, steps
+}
+' "$DIR"/*.yaml

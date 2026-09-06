@@ -62,17 +62,22 @@ fi
 # A copy with an injected phase, because no real phase is slow enough to trip
 # the warning on a healthy tree.
 cp "$HOOK" "$W/hook.sh"
-python3 - "$W/hook.sh" <<'PY'
-import sys, re
-p = sys.argv[1]
-s = open(p).read()
-# A phase with a tiny budget, and a body slow enough to blow past 4x.
-s = s.replace('        zero_trace_check)       echo 2500 ;;',
-              '        zero_trace_check)       echo 2500 ;;\n        _fixture_slow_phase)    echo 1 ;;')
-s = s.replace('run_phase ghost_check',
-              '_fixture_slow_phase() { sleep 0.05; }\nrun_phase _fixture_slow_phase\nrun_phase ghost_check', 1)
-open(p, 'w').write(s)
-PY
+# In-place edit via awk to a sibling file, then move. Two injections:
+# a phase with a 1 ms budget, and a call to it before ghost_check. The
+# `run_phase` injection is FIRST-OCCURRENCE ONLY (the `done` flag), matching
+# the count=1 it replaces — injecting at every call site would run the slow
+# phase repeatedly and make the timing assertion depend on how many there are.
+awk '
+    index($0, "        zero_trace_check)       echo 2500 ;;") {
+        print; print "        _fixture_slow_phase)    echo 1 ;;"; next
+    }
+    !done && index($0, "run_phase ghost_check") {
+        print "_fixture_slow_phase() { sleep 0.05; }"
+        print "run_phase _fixture_slow_phase"
+        done = 1
+    }
+    { print }
+' "$W/hook.sh" > "$W/hook.next" && mv "$W/hook.next" "$W/hook.sh"
 out="$(cd "$ROOT" && bash "$W/hook.sh" 2>&1)"
 warn="$(printf '%s\n' "$out" | grep '_fixture_slow_phase took' || true)"
 if [ -n "$warn" ]; then
@@ -89,13 +94,14 @@ esac
 # Between 1x and 4x nothing is said. Pinning the CURRENT behaviour means the
 # day someone closes the band, this arm fails and forces them to read
 # 1064-5hv2 and the volume evidence rather than flipping a threshold quietly.
-python3 - "$W/hook.sh" <<'PY'
-import sys
-p = sys.argv[1]
-s = open(p).read()
-s = s.replace('_fixture_slow_phase)    echo 1 ;;', '_fixture_slow_phase)    echo 30 ;;')
-open(p, 'w').write(s)
-PY
+# Widen the budget so the same injected phase is inside 4x but over 1x: the
+# blind band. Exact-line swap, same reason as above.
+awk '
+    index($0, "_fixture_slow_phase)    echo 1 ;;") {
+        sub(/echo 1 ;;/, "echo 30 ;;"); print; next
+    }
+    { print }
+' "$W/hook.sh" > "$W/hook.next" && mv "$W/hook.next" "$W/hook.sh"
 out="$(cd "$ROOT" && bash "$W/hook.sh" 2>&1)"
 if printf '%s\n' "$out" | grep -q '_fixture_slow_phase took'; then
     bad "a phase between 1x and 4x now warns — the band is closed; if that is intended, update this arm and 1064-5hv2 together with the two-host volume evidence"
