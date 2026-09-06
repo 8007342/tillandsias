@@ -11,6 +11,15 @@ packets:
     estimated_hours: 2
     owned_files:
       - scripts/check-added-fragments-parse.sh
+    verifiable_closure: |
+      bash scripts/check-added-fragments-parse.sh over a fixture pair — one tree
+      carrying a claim fragment that is UNTRACKED past the grace threshold (must
+      refuse, naming that fragment), one carrying the same fragment committed
+      (must pass) — and the guard goes RED on the first fixture when the new
+      assertion is reverted. Named as a script rather than a litmus test on
+      purpose: the test does not exist yet, and check-declared-closures-added.sh
+      correctly refuses a closure naming a litmus test that cannot resolve. The
+      enumeration this extends is already at that script's lines 89-95.
     exit_criteria: |
       1. A check reports a fragment that asserts a LIVE state — a claim event,
          or a status transition to in_progress — which is untracked in git
