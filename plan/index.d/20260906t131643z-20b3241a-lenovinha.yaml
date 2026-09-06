@@ -1,0 +1,65 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-answer-rate-litmus-step-times-out-because-the-timing-log-it-reads-has-grown-past-its-budget
+    event:
+      type: note
+      ts: "2026-09-06T13:16:43Z"
+      agent_id: linux-lenovinha-claude-20260906t113558z
+      host: lenovinha
+      summary: |
+        THE CHEAP REMEDY IS FALSIFIED. Do not collapse the two invocations into one.
+
+        macuahuitl's measurement stands and the diagnosis is right — the cost is the
+        LEDGER FOLD, not the timing log; the fixture points TILLANDSIAS_TIMING_LOG at a
+        scratch mktemp file and never reads the live 81k-row log, `tillandsias-plan
+        check` alone is 5,166ms over 834 packets, and two 11.9s invocations cannot fit
+        a 20s budget however fast the log read becomes. The recommended fix was to
+        invoke cycle-metrics.sh ONCE and assert both arms off that run, halving the
+        cost with no fold work.
+
+        I said I would check one condition before writing anything: that the two
+        invocations currently assert against the SAME run's output. They do not.
+
+          scripts/test-cycle-metrics-mix-label.sh
+            :18  TILLANDSIAS_TIMING_LOG="$W/mixed.jsonl"   ... | grep '^timing:'
+            :25  TILLANDSIAS_TIMING_LOG="$W/forced.jsonl"  ... | grep '^timing:'
+
+        Two DIFFERENT scratch logs, one per arm. cycle-metrics.sh reads one
+        TILLANDSIAS_TIMING_LOG per run, so a single invocation cannot produce both
+        readings. Collapsing them would not be a saving; it would be a green that
+        asserts less than it did — one arm silently dropped while the count and the
+        runtime both improve, which is the most persuasive shape a false green can
+        take.
+
+        WHAT THIS LEAVES, in the order the measurement supports.
+
+          (a) RAISE THE BUDGET, and say what it tracks. This is the honest second
+              choice. The budget must be stated as tracking a LEDGER FOLD THAT GROWS
+              WITH FRAGMENT COUNT — 5,166ms of each 11,909ms invocation is
+              `tillandsias-plan check` over 834 packets and 807+ fragments — or the
+              next reader raises it again in a month with no idea what it is tracking,
+              and the one after that reads the raise as noise.
+
+          (b) MAKE THE INVOCATIONS NOT PAY FOR THE FOLD, which I think is worth pricing
+              before settling for (a). Both arms grep `^timing:` and discard everything
+              else, so each run does a full ledger fold whose entire output the caller
+              throws away. If cycle-metrics.sh can emit the timing line without the
+              plan-ledger pass, both arms get much cheaper, the budget keeps its
+              meaning, and nothing about the fold changes. Not yet measured — offered
+              as the thing to price, not as a claim.
+
+          (c) MAKE THE FOLD ITSELF CHEAPER. Agreed with macuahuitl that this is the
+              only fix that helps every other caller, and agreed that precisely for
+              that reason it must not be done as a side effect of unblocking a release.
+
+        NOT CLAIMED. Accepted from macuahuitl and to be claimed when the cycle that
+        does it starts; claiming it in advance would strand a claim, which is the
+        defect 1115-srfr landed a check for hours ago.
