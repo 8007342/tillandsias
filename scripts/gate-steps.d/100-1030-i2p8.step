@@ -1,0 +1,19 @@
+# Gate step 1030-i2p8 — data, not code (order 1072-b7eq).
+#
+# The plan-binary probe must resolve the artefact NATIVE to the locus it runs
+# in. On a shared Windows/WSL checkout it tried the .exe first, and inside the
+# WSL2 builder with interop enabled the .exe runs — so the probe resolved the
+# .exe while the refresh rebuilt and touched the ELF, and every floor gate
+# refused at no-fresh-plan-binary without completing.
+#
+# The fixture synthesises BOTH artefacts and makes both runnable, because the
+# condition is currently masked on the only host that has it (interop disabled
+# there today). A host check would pass for the wrong reason.
+#
+# STEP_SCRIPT is a LITERAL path on purpose: a binding assembled from a
+# variable is invisible to every name-based scan, including the
+# bound-or-retired guard (1063-nraf). Keep it a plain string.
+STEP_DESC="Checking the plan-binary probe resolves the locus-native artefact (1030-i2p8)"
+STEP_SCRIPT="scripts/test-plan-binary-locus-native.sh"
+STEP_ERROR="the plan-binary probe resolves a foreign artefact, or the refresh touches something it did not resolve (1030-i2p8) — see the verdict line above"
+STEP_OK="Plan-binary locus-native check passed"
