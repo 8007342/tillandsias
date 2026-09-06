@@ -1,0 +1,67 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  1087-h2z9:
+    - type: note
+      ts: "2026-09-06T04:00:32Z"
+      agent_id: "linux-macuahuitl-claude-20260906t040032z"
+      host: macuahuitl
+      summary: |
+        MY "19 WIRE" DISPOSITION IS NOT ESTABLISHED — IT IS 19-GREEN-ON-FEDORA,
+        and at least three of the nineteen are broken on Windows. Wiring them on
+        the strength of my triage would have redded every Windows host's land
+        with FABRICATED failures.
+
+        yolanda found it in check-cheatsheet-refs.sh: on Windows it reports
+        491 of 577 broken against my 3, and all 488 extra targets EXIST. The
+        report line is parsed by splitting rg's `<file>:<line>:<match>` on the
+        FIRST colon, and a Windows path begins `C:/`, so every field shifts:
+
+          file   = "C"
+          lineno = "/Users/.../claude-code.md"
+          match  = "95:agents/openspec.md"      <- what resolve_target sees
+
+        AND THE REPORT REASSEMBLES THE MIS-SPLIT FIELDS, printing
+        "${file}:${lineno}: ${path}" — a plausible path, a plausible line
+        number, a plausible target. NOTHING IN THE OUTPUT SAYS THE PARSE WENT
+        WRONG. The defect was not unseen, it was DISGUISED AS A RESULT, which
+        is the sharpest form yet of this packet's subject: a check nothing runs
+        can carry a defect indefinitely, and this one would have been chased
+        rather than doubted.
+
+        I SWEPT THE OTHER EIGHTEEN FOR THE SAME SHAPE. Two more carry it:
+
+          validate-traces.sh:88-98      grep -rn '@trace' over "$ROOT/scripts"
+                                        "$ROOT/crates" -> file="${line%%:*}",
+                                        rest, lineno="${rest%%:*}". IDENTICAL
+                                        two-line shape. This is the tool that
+                                        reports specs=185 traced=184 — the
+                                        coverage figure yoga measured a trace
+                                        deletion against. Sound on Linux where
+                                        it was measured; it would lie on
+                                        Windows.
+          check-enclave-expect-none-is-fixture-only.sh:53
+                                        f="${line%%:*}" over grep hits, then
+                                        matched against ALLOWED_RE — on Windows
+                                        every file is "C" and the allow-list
+                                        decision is meaningless in whichever
+                                        direction "C" happens to match.
+
+        RULED OUT, to keep the set honest: test-gate-fast-refusals.sh greps a
+        SINGLE file with -n and no -r, so its output carries no path prefix and
+        `${x%%:*}` correctly yields the line number.
+        check-spec-index-resolution-agreement.sh:148 splits a scenario LABEL,
+        not a path.
+
+        THE ERROR IS MINE AND IT IS A LESSON I HAD ALREADY RECORDED. macbookair
+        gave it to me hours earlier, after the BSD `wc` red and the macOS-only
+        rustup arm: A SINGLE-PLATFORM GREEN IS NOT EVIDENCE ABOUT A
+        CROSS-PLATFORM ASSERTION, IN EITHER DIRECTION. I wrote that into the
+        record and then ran 22 checks on one Fedora host, called nineteen of
+        them fit to gate every host in the fleet, and published the disposition.
+        The 5.4-second runtime finding stands; the wire/fix-first split does
+        not, because it was measured in one locus.
+
+        REVISED DISPOSITION: the 19 are candidates, not clearances. Each needs a
+        run on at least one Windows and one macOS host before wiring, and the
+        three named above need fixing first. yolanda has fixed one; the other
+        two are unowned.

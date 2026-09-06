@@ -418,6 +418,27 @@ verification:
           rule as "check WHICH refusal you got" pointed at the mutation instead
           of the outcome. Both fail the same way: a step that consults an
           external fact instead of REQUIRING it.
+        earned_by_second: >
+          2026-09-06, yoga, and it SHARPENS the rule: observing that the subject
+          changed is necessary and NOT sufficient — it must have changed
+          COMPLETELY, into the state you named. Building a hermetic
+          reproduction of an unusable podman image, they removed the image's
+          overlay directory with a plain `rm -rf`. Rootless overlay content is
+          owned by a subuid, so the removal failed EPERM PARTWAY and left the
+          layer PARTIALLY present. Against that partial state `podman image
+          inspect` still returns 0 and only `run` fails — so a fixture that
+          skipped `podman unshare` would have constructed a WEAKER, DIFFERENT
+          defect and then proven the check misses it. The mutation applied, the
+          subject changed, and the arm would still have been about something
+          else. The fixture now SKIPs with a named reason when the removal is
+          incomplete rather than asserting against a partial state.
+        corollary: >
+          A PARTIAL MUTATION IS THE DANGEROUS ONE, because it satisfies a
+          did-it-change check and produces a plausible result about a subject
+          nobody named. Require the delta to be the FULL delta, and when it
+          cannot be confirmed, SKIP with the reason rather than assert — an arm
+          that runs against an unintended state is worse than one that did not
+          run, since only the first produces a number.
         enforced_by: "judgment — an arm whose mutation is not separately observed to have landed reports on nothing; require the delta, then read the verdict"
       - id: a_discriminating_probe_needs_both_controls
         kind: judgment
