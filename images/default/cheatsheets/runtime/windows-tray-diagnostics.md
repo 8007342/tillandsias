@@ -152,6 +152,7 @@ The JSON shape is pinned by unit tests in `notify_icon::tests::diagnose_json_*` 
   "distro":                 "tillandsias", // string  — wsl.exe -d <distro> target
   "distro_registered":      true,          // bool    — `wsl -l -q` listed `distro`
   "distro_running":         false,         // bool    — `wsl -l --running -q` listed `distro` (WSL2 idles VMs down; flips frequently)
+  "ready_history":          "observed-ready", // str  — `observed-ready` | `never-observed-ready` (1004-5f7p). Which `distro_running:false` this is: a guest that idled out after a good provision, or one that never came up. Absent/corrupt/other-installation records all read `never-observed-ready`.
   "release_tag":            "v0.2.260526.1", // string  — embedded RECIPE_RELEASE_TAG
   "manifest_pin_x86_64_oci_tar_xz": "75200f5752a7", // string | null — first 12 hex of the x86_64 OCI archive SHA-256 pin
   "wire": {
