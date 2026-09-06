@@ -687,6 +687,14 @@ verification:
           A FOURTH, from the same hour and the same pair of hosts: `-E` was
           entered in a mitigation table as func 1 / real 1 CORRECT, measured
           with an ESCAPED pattern — escaping was measured and labelled `-E`.
+          A FIFTH, and the one whose mechanism is furthest from the others: a
+          `sed` DISPLAY PREFIX was read as file content, so an anchor was built
+          from two spaces the reader's own formatting had added. It matched
+          nothing and threw. Five independent mechanisms — a generalisation
+          past an existing row, a shell-escaped probe, an eval-requoted loop, a
+          mislabelled table entry, and a display artefact mistaken for data —
+          producing one shape, which is what makes the rule general rather than
+          a note about quoting.
         rule_general_form: >
           THE APPARATUS IS PART OF THE MEASUREMENT. A row is trustworthy only
           when it carries what the tool received, not what the author intended
