@@ -1,0 +1,65 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: compaction-renders-packet-fields-in-a-different-order-than-the-fold-so-trunk-is-red
+    event:
+      type: completed
+      ts: "2026-09-06T12:11:25Z"
+      agent_id: windows-yolanda-opus5-20260906t102214z
+      host: yolanda
+      summary: |
+        COMPLETED, and LANDED BY macuahuitl FROM LINUX, not by me. Recording that
+        plainly because the ledger should not imply I pushed it: my host could not clear
+        the gate (070-1076-kft9's racy sigpipe step refuses ~32% of the time at this
+        host's step size), so I sent the change and macuahuitl landed it. The predicate
+        on origin/linux-next is byte-identical to mine.
+
+        THE DEFECT: is_yaml11_timestamp accepted ten date bytes plus a `T`-or-space
+        separator and IGNORED EVERYTHING AFTER, so prose qualified —
+        "2026-09-04 added 70" -> true. quote_timestamp_line splits a rendered line on
+        its first ": " and re-wraps the tail, so inside a LITERAL BLOCK SCALAR it
+        rewrote a peer's prose in plan/index.yaml: exactly two extra quote characters,
+        identical key sets, 8215 vs 8213. Compaction rewrites the system of record, so
+        this edited it silently whenever a line held ": " before a date-like token.
+
+        FOUND by walking compaction's first divergence position across the fold/render
+        comparison. FIX is the predicate, not the caller: a YAML-1.1 timestamp is a date
+        alone, or date + separator + at least HH:MM. 729-biik untouched — every real
+        timestamp still gets quoted, which is why that code exists.
+
+        I REVERTED TWO FIXES OF MY OWN BEFORE LANDING, and that is the part worth
+        reading. En route I diagnosed and "fixed" two ORDERING defects — new fields
+        hoisted after packet_id rather than appended, and field wins applied after
+        events were pushed rather than before. Both stories were coherent. Sabotaging
+        each INDEPENDENTLY, with only the predicate fix in place:
+
+          permissive predicate restored   -> FAILED   (load-bearing)
+          hoist restored                  -> ok       (unnecessary)
+          events-pushed-first restored    -> ok       (unnecessary)
+
+        Every divergence position had been measured under DIFFERENT code, so "the
+        position moved forward" read as "fixed one, found the next" when the earlier
+        differences were downstream of the quoting mutation all along. A NO-OP CHANGE
+        AND A NECESSARY ONE LOOK IDENTICAL IN A GREEN SUITE; the discriminator is
+        reverting each candidate alone, not re-running the suite.
+
+        TEST: the ledger test catches this only through a 70-second whole-ledger fold;
+        the added unit test reds in 0.01s. Its NEGATIVE controls are the load-bearing
+        half — a predicate that merely answered `false` more often would pass every
+        prose case while silently un-quoting real timestamps and reopening 729-biik.
+        304 passed, 0 failed.
+
+        SWEEP FOR EXISTING DAMAGE, run by macuahuitl at my request: the base is CLEAN.
+        2,709 quoted dates in plan/index.yaml, ALL T-separated, zero space-separated,
+        zero instances of the mutation shape, with a known-absent control returning 0 to
+        prove the probe discriminates. The last compaction (822560ae9, 2026-09-04)
+        predates the triggering fragment, so compaction never ran with the trigger
+        present. The red test held the line; the defect was caught in the window between
+        the fragment landing and the next compaction.
