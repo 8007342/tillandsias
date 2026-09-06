@@ -1,0 +1,85 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: three-fixtures-assert-properties-of-the-environment-they-run-in-so-a-correct-refusal-scores-as-a-failure
+    order: 1109-t8kw
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [testing, fixtures, release-gate, fail-loud]
+    estimated_hours: 3
+    owned_files:
+      - openspec/litmus-tests/litmus-committable-branch-guard-shape.yaml
+      - openspec/litmus-tests/litmus-capability-manifest-guard.yaml
+      - scripts/test-selector-drops-cross-branch-claims.sh
+    verifiable_closure: |
+      bash scripts/run-litmus-test.sh meta-orchestration --phase pre-build and
+      bash scripts/run-litmus-test.sh forge-environment-discoverability must both
+      pass on a host with NO repo-local git identity in the scratch checkout and
+      on a LOW-END tier host. RED ON TODAY'S CODE for all three fixtures: each
+      currently reads a correct refusal as a failure. The arms must construct the
+      environment they assert about, or declare the precondition and skip with a
+      named reason — never score the guard's correct answer as red.
+    title: |
+      MEASURED in the 09:00Z release gate: two of five blocking failures are fixtures that did not finish constructing the world they then assert about, and esmeraldinha found a third the same hour — the guards are right and the fixtures score them wrong
+    context: |
+      FOUND by the daily release gate on macuahuitl 2026-09-06T09:00Z
+      (./build.sh --ci-full rc=1, 351 PASS / 5 FAIL) plus esmeraldinha's
+      independent finding on a low-end host the same hour.
+
+      THREE INSTANCES, one shape:
+
+      1. committable-branch-guard-shape step 3/6. A scratch linux-next checkout
+         should pass with ok:branch-linux-next. The guard instead refuses, and
+         its refusal is CORRECT and well-worded: "This host cannot author a
+         commit, so it cannot claim or push. Set an identity for this checkout
+         (repo-local, not --global)." The fixture builds a scratch repo without a
+         repo-local git identity, then asserts the guard passes on it.
+
+      2. capability-manifest-guard step 4/4, the NEGATIVE CONTROL: "the SAME
+         source restored clean warns about NOTHING" expects ok:clean-tree-silent
+         and gets empty output. The control that exists to prove the guard is not
+         always-warning cannot itself distinguish silence from a broken probe.
+
+      3. test-selector-drops-cross-branch-claims.sh, found by esmeraldinha on a
+         LOW-END host: 3 passed / 3 failed there, 6/6 with
+         TILLANDSIAS_HOST_TIER=general. The selector correctly refuses under the
+         847-wgy4 tier gate — "no ready packet tagged [low-end] is claimable by
+         role linux — the mandate forbids the general queue" — and the fixture's
+         baseline arm reads that legitimate refusal as an empty batch, with the
+         two arms after it cascading off a vacuous precondition.
+
+      WHY THEY REACH TRUNK AND STAY THERE. Each passes on the host that wrote it,
+      because that host HAS the property the fixture forgot to construct — a
+      global git identity that the scratch inherits, or a general tier. They fail
+      only elsewhere, and the failure looks like the guard misbehaving rather
+      than the fixture under-specifying. Instance 3 is doubly instructive:
+      esmeraldinha's own comment records that this fixture had ALREADY been
+      stubbed once for a live-state dependency, after it "passed when I wrote it
+      and refused a real land hours later" — and the TIER GATE sits UPSTREAM of
+      that stub and was never covered. One stub, one uncovered layer above it.
+
+      THE GENERAL RULE THE FIX SHOULD CARRY, which is bigger than the three
+      repairs: a fixture must construct the environment it asserts about, or
+      declare the precondition and SKIP with a named reason. What it must never
+      do is score a guard's correct refusal as a failure — that trains hosts to
+      distrust the guard, and it is how a correct refusal becomes the thing that
+      gets "fixed".
+    next_action: |
+      NOTE THE ARTEFACT TYPE: two of the three are LITMUS BINDINGS
+      (openspec/litmus-tests/*.yaml), not shell fixtures under scripts/. My first
+      version of this row named scripts/test-committable-branch-guard.sh and
+      scripts/test-capability-manifest-guard.sh, which DO NOT EXIST — I derived
+      the paths from the litmus test names instead of looking them up, and
+      esmeraldinha lost several minutes searching scripts/ and then trunk for
+      files that were never going to be there. Only the third,
+      scripts/test-selector-drops-cross-branch-claims.sh, is a shell fixture.
+      
+      Take all three together; they are one class and separate repairs would
+      re-derive the same rule three times. For each, first REPRODUCE the red on a
+      host that lacks the property (no repo-local identity; low-end tier), then
+      make the arm either construct the property or skip with a named reason.
+      Then check whether any OTHER fixture asserts a property of its host —
+      enumerate rather than fix the three that happened to fire, since these three
+      only surfaced because a release gate and a low-end host ran them.

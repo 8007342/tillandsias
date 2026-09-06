@@ -5,8 +5,13 @@
 #
 # THE PROBLEM THIS FIXTURE HAD TO SOLVE, and it is not obvious.
 #
-# The defect is decided by PRODUCER LATENCY, not by output size (measured
-# 2026-09-05, esmeraldinha + macuahuitl):
+# THE CONDITION IS WHETHER THE PRODUCER STILL HAS BYTES TO WRITE WHEN THE
+# CONSUMER EXITS. `grep -q` exits at its first match; a producer that has
+# finished writing is never refused, and one that has not is. Everything below
+# is a route to that condition, not a separate mechanism.
+#
+# ROUTE 1, PRODUCER LATENCY — a slow producer is still writing when the consumer
+# leaves (measured 2026-09-05, esmeraldinha + macuahuitl):
 #
 #   byte-identical file, same command, same consumer
 #     drvfs  /mnt/c/...     10/10 SIGPIPE     producer read 207 ms / 5
@@ -15,19 +20,26 @@
 #
 #   CAUSAL CONTROL, because a filesystem differs in more than speed: slowing the
 #   producer ON EXT4 with a per-line read loop — same bytes, same consumer —
-#   reproduces it 10/10. Nothing about drvfs is required. Latency is.
+#   reproduces it 10/10. Nothing about drvfs is required.
 #
-# So a KNOWN-BAD calibration case cannot be a live file: on a fast host no
-# pipeline SIGPIPEs at all, and the case would silently not be bad. And it
-# cannot be a plain synthetic either — every synthetic built during this
-# investigation lived on ext4 and NONE reproduced the defect across four
-# variables (size, match position, ERE complexity, sed doing real substitution
-# work). A synthetic calibration reports SAFE and makes the check confidently
-# blind, which is the exact failure the check exists to detect.
+# ROUTE 2, MATCH POSITION — a FAST producer with a large unwritten remainder
+# (macneo, 2026-09-06, from a live escape in scripts/litmus-covering-specs.sh):
 #
-# The portable known-bad case is therefore a DELIBERATELY SLOWED PRODUCER, which
-# forces the defect on any host irrespective of filesystem. That is the causal
-# control promoted into a fixture.
+#     seq 1 20000 | grep -qxF "1"       rc=141   match is the FIRST line
+#     seq 1 20000 | grep -qxF "20000"   rc=0     producer had finished
+#
+# This CORRECTS the earlier claim, kept here because the fixture was built on it,
+# that the defect is decided by latency and that no plain synthetic reproduces
+# it. A synthetic does reproduce it, deterministically, with no sleep and no
+# filesystem, provided the match is early enough that output remains. That is
+# why lib-sigpipe-verdict.sh can afford to run a calibration before EVERY clean
+# verdict — route 2 is cheap where route 1 is not.
+#
+# A KNOWN-BAD calibration case still cannot be a LIVE FILE: on a fast host whose
+# match happens to be late, no pipeline SIGPIPEs and the case would silently
+# stop being bad. Arm 1 keeps the deliberately slowed producer, which forces the
+# defect irrespective of filesystem — the causal control promoted into a
+# fixture, and now one of two independent routes rather than the only one.
 #
 # Arm 5 is the teeth: it re-runs arm 1 through the BROKEN eval form and requires
 # it to MISS. Without that, a check that measures nothing passes arms 1-4 by
@@ -44,6 +56,17 @@ bad() { echo "FAIL: $1" >&2; fail=$((fail+1)); }
 [ -f "$CHECK" ] || { echo "FAIL: the check is missing: $CHECK" >&2; exit 1; }
 # shellcheck disable=SC1090
 . "$CHECK"
+
+# REFUSE EARLY IN A REGIME MORE PERMISSIVE THAN THE REFERENCE, rather than
+# failing arm 1 and leaving the reader to guess. Arm 1 is a KNOWN-BAD case, but
+# "bad" is a function of the platform's pipe buffer: MSYS lets a producer finish
+# that Linux refuses, so under Git Bash arm 1 comes back clean without the check
+# being broken at all. A suite whose known-bad arm is not bad here is measuring
+# nothing, and saying which platform to use beats a red arm with no explanation.
+if ! _sigpipe_regime_is_reference_strict; then
+    echo "refused:regime-more-permissive-than-reference:this shell does not refuse a producer at the reference size (~108,894 bytes), so its pipe buffer is larger than the gate platform's and a clean result here would be permissive rather than measured. Run this inside tillandsias-build: wsl.exe -d tillandsias-build -u root -- bash scripts/test-sigpipe-verdict-measured.sh" >&2
+    exit 2
+fi
 
 # Scratch lives INSIDE the checkout on purpose: it must inherit the checkout's
 # filesystem, since that is the variable that decides the answer. A /tmp scratch
@@ -91,6 +114,38 @@ if [ "$broken" = "1" ]; then
 else
     bad "CONTROL failed: evaled pipeline reported ${broken} PIPESTATUS elements; this fixture's arm 1 may be passing for the wrong reason"
 fi
+
+# 6/7. THE REGIME GUARD, as a controlled A/B: the SAME pipeline, differing only
+#      in whether the regime is declared as strict as the reference platform.
+#
+#      Why it must exist. measure_pipeline counted 141s and reported
+#      `measured-clean:` on seeing none, with no evidence a 141 was REACHABLE at
+#      that producer size — and reachability depends on the PIPE BUFFER, which
+#      is platform-dependent. Measured: Linux refuses at 108,894 bytes where
+#      MSYS does not, and MSYS only refuses past ~168,894. So roughly
+#      109KB-169KB of output is sigpipe-decided on Linux and clean on MSYS, and
+#      a sweep on the permissive platform under-reports every site in that band.
+#      Nine of my own verdicts were voided that way, and the miss surfaced only
+#      when another host found a live defect in a file the sweep called safe.
+#
+#      Forcing the memo is the seam, so both arms are deterministic on every
+#      host rather than needing two platforms to exercise the pair.
+_SIGPIPE_REGIME_STRICT=no
+v="$(REPS=3 measure_pipeline fx 6 "cat $W/small.txt" "-q 'NEEDLE_HERE'")"
+case "$v" in
+    unmeasured:*regime-pipe-buffer-larger-than-reference*)
+        ok "a regime more permissive than the reference yields unmeasured, not clean ($v)" ;;
+    *)  bad "expected unmeasured:regime-pipe-buffer-larger-than-reference, got: $v" ;;
+esac
+
+_SIGPIPE_REGIME_STRICT=yes
+v="$(REPS=3 measure_pipeline fx 7 "cat $W/small.txt" "-q 'NEEDLE_HERE'")"
+case "$v" in
+    measured-clean:*)
+        ok "CONTROL: the same pipeline in a reference-strict regime is still measured-clean ($v)" ;;
+    *)  bad "CONTROL failed: the guard refuses even at reference strictness, so it is blanket rather than selective: $v" ;;
+esac
+unset _SIGPIPE_REGIME_STRICT
 
 echo "sigpipe-verdict-measured: $pass passed, $fail failed"
 [ "$fail" = 0 ] || exit 1
