@@ -38,38 +38,35 @@ sed 's/^static LIVE_CLIENT/static LIVE_CLIENT_RENAMED/' "$SRC" > "$W/m1.rs"
     || bad "the guard accepted a source with no persistent client"
 
 # ── 2. The accessor stops being backed by the static ──────────────────────
-python3 - "$SRC" "$W/m2.rs" <<'PY'
-import sys, re
-src, dst = sys.argv[1], sys.argv[2]
-s = open(src).read()
-s = s.replace('    LIVE_CLIENT.get_or_init(|| tokio::sync::Mutex::new(None))',
-              '    Box::leak(Box::new(tokio::sync::Mutex::new(None)))')
-open(dst, 'w').write(s)
-PY
+# Exact-line swap. `index`/`substr` rather than a regex: the target line is
+# full of `|`, `(` and `:` and escaping it into a sed expression is how a
+# mutation silently stops mutating.
+awk -v old='    LIVE_CLIENT.get_or_init(|| tokio::sync::Mutex::new(None))' \
+    -v new='    Box::leak(Box::new(tokio::sync::Mutex::new(None)))' '
+    index($0, old) { print new; next } { print }
+' "$SRC" > "$W/m2.rs"
 [ "$(_rc "$W/m2.rs")" != "0" ] && ok "an accessor no longer backed by the static is caught" \
     || bad "the guard accepted an accessor that builds a fresh mutex per call"
 
 # ── 3. A retry loop in refresh_vm_status ──────────────────────────────────
-python3 - "$SRC" "$W/m3.rs" <<'PY'
-import sys
-src, dst = sys.argv[1], sys.argv[2]
-s = open(src).read()
-i = s.index('async fn refresh_vm_status')
-j = s.index('{', i) + 1
-open(dst, 'w').write(s[:j] + '\n    loop { break; }\n' + s[j:])
-PY
+# Insert immediately after the opening brace of the named fn. The brace is
+# line-terminal in this source (verified: `async fn refresh_vm_status(hwnd: HwndHandle) {`),
+# so "after that line" and "after that brace" are the same position.
+awk -v fn='async fn refresh_vm_status' -v ins='    loop { break; }' '
+    { print }
+    !done && index($0, fn) && index($0, "{") { print ins; done = 1 }
+' "$SRC" > "$W/m3.rs"
 [ "$(_rc "$W/m3.rs")" != "0" ] && ok "a retry loop in refresh_vm_status is caught" \
     || bad "the guard accepted a loop in a refresh that must be single-shot"
 
 # ── 4. A sleep in refresh_github_login ────────────────────────────────────
-python3 - "$SRC" "$W/m4.rs" <<'PY'
-import sys
-src, dst = sys.argv[1], sys.argv[2]
-s = open(src).read()
-i = s.index('async fn refresh_github_login')
-j = s.index('{', i) + 1
-open(dst, 'w').write(s[:j] + '\n    tokio::time::sleep(std::time::Duration::from_secs(1)).await;\n' + s[j:])
-PY
+# Insert immediately after the opening brace of the named fn. The brace is
+# line-terminal in this source (verified: `async fn refresh_github_login(hwnd: HwndHandle) {`),
+# so "after that line" and "after that brace" are the same position.
+awk -v fn='async fn refresh_github_login' -v ins='    tokio::time::sleep(std::time::Duration::from_secs(1)).await;' '
+    { print }
+    !done && index($0, fn) && index($0, "{") { print ins; done = 1 }
+' "$SRC" > "$W/m4.rs"
 [ "$(_rc "$W/m4.rs")" != "0" ] && ok "a sleep in refresh_github_login is caught" \
     || bad "the guard accepted a sleep in a refresh that must be single-shot"
 
@@ -77,14 +74,13 @@ PY
 # A comment naming a loop must not trip the guard, and the fast path reaching
 # the client through the accessor rather than the static's name must still pass
 # — which is where the guard's own first draft was wrong.
-python3 - "$SRC" "$W/m5.rs" <<'PY'
-import sys
-src, dst = sys.argv[1], sys.argv[2]
-s = open(src).read()
-i = s.index('async fn refresh_vm_status')
-j = s.index('{', i) + 1
-open(dst, 'w').write(s[:j] + '\n    // this used to loop and sleep( before order 147\n' + s[j:])
-PY
+# Insert immediately after the opening brace of the named fn. The brace is
+# line-terminal in this source (verified: `async fn refresh_vm_status(hwnd: HwndHandle) {`),
+# so "after that line" and "after that brace" are the same position.
+awk -v fn='async fn refresh_vm_status' -v ins='    // this used to loop and sleep( before order 147' '
+    { print }
+    !done && index($0, fn) && index($0, "{") { print ins; done = 1 }
+' "$SRC" > "$W/m5.rs"
 [ "$(_rc "$W/m5.rs")" = "0" ] && ok "a COMMENT naming a loop and a sleep does not trip the guard" \
     || bad "the guard counts mentions rather than actions"
 

@@ -1,0 +1,53 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  1086-kx8i:
+    - type: note
+      ts: "2026-09-06T01:37:23Z"
+      agent_id: "linux-macuahuitl-claude-20260906t013723z"
+      host: macuahuitl
+      summary: |
+        scripts/finalize-cycle.sh WROTE THE ATTESTATION LINE AND THEN REPORTED
+        THAT IT HAD NOT. Measured on macuahuitl 2026-09-06T01:36Z:
+
+          finalize: record the attestation (attests the now-landed WORK head)
+          MO-FULL: BLOCKED 092e64187... linux-next 092e64187...
+          refused:finalize:record-failed — the ledger line was not written;
+            do NOT emit a marker.
+
+        The line WAS written. plan/mo-full-attestations.d/macuahuitl.md carries
+        `## 2026-09-06T01:36:21Z macuahuitl` with exactly that marker, and the
+        timestamp matches the finalize run rather than anything after it.
+
+        THE REMEDY IT PRINTS IS THE DAMAGE. "do NOT emit a marker" is correct
+        advice for a genuine record failure and wrong here: a cycle that
+        completed its exit contract would be recorded as having no marker, and
+        the outer gate treats a missing marker as a loud failure by design. So
+        a false negative here manufactures the exact breach the attestation
+        machinery exists to detect.
+
+        AND IT INDUCED A SECOND DEFECT IN THE OPERATOR OF THE TOOL. Believing
+        the record had not been written, I ran `mo-full-attest.sh record`
+        directly. It succeeded, and the ledger then carried TWO identical
+        markers for one head, 01:36:21 and 01:36:30. I removed the second —
+        mine, uncommitted, never landed — and kept the sanctioned writer's. A
+        checker whose false negative prompts a retry produces duplicates in an
+        append-only ledger, which is a worse state than the one it reported.
+
+        `scripts/check-mo-full-attestations.sh` accepts the file either way
+        (`ok:mo-full-attestations:9 files 669 markers verified`), so nothing
+        downstream would have caught the duplicate.
+
+        SAME CLASS AS THE PACKET IT IS FILED UNDER, one layer up: this is not a
+        gate that fails to run, it is a gate step that runs, SUCCEEDS, and
+        reports failure. The four other instances of the night were absent
+        paths; this is a present path whose verdict does not match what it did.
+        It belongs beside macneo's qualifier — the artefact at the end of the
+        path must answer the question the path is named for, and here the
+        artefact answered a question about its own success incorrectly.
+
+        NOT DIAGNOSED FURTHER: I have not read finalize-cycle.sh's detection
+        logic, so I do not know whether it re-reads the file, checks an exit
+        code, or greps for the line. Whoever takes this should establish that
+        first — the fix depends on which, and guessing is how the byte model
+        died earlier tonight. What is measured is only that the write happened
+        and the verdict said it did not.
