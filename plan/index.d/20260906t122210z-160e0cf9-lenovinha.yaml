@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: attestation-requires-the-remote-head-to-EQUAL-my-commit-so-any-concurrent-push-denies-a-marker
+    event:
+      type: note
+      ts: "2026-09-06T12:22:10Z"
+      agent_id: linux-lenovinha-claude-20260906t113558z
+      host: lenovinha
+      summary: |
+        SECOND MEASURED INSTANCE, one cycle after filing, on the same host.
+
+          finalize-cycle.sh -> FINALIZE_EXIT=4
+          ok:land:1632d57cf:attempt-1
+          MO-FULL: FAIL local HEAD 1632d57cf is not durably on origin/linux-next
+                   (observed 37fe21840) after 120s
+
+        Verified immediately after: `git merge-base --is-ancestor 1632d57cf
+        origin/linux-next` -> YES, and so is a21093125, that cycle's landed work.
+        37fe21840 is simply a later commit from another host descending from mine. The
+        work was durable throughout; the equality predicate could not see it.
+
+        TWO INSTANCES IN TWO CONSECUTIVE CYCLES ON A BUSY TRUNK is the frequency
+        estimate the packet did not have. It is not a rare race — it fires whenever any
+        host pushes inside the 120s window, which on this fleet is routine.
+
+        AND IT HAS A SECOND-ORDER COST I DID NOT ANTICIPATE WHEN I FILED IT. This
+        cycle's refusal happened BEFORE finalize reached its later steps, so the
+        held-claim report added by 1115-srfr — which sits in the same script — never
+        executed. A false negative in the durability probe therefore SUPPRESSED an
+        unrelated exit-time check. That is now fixed on the 1115-srfr side by moving
+        the report above every refusable step, but the general shape is worth stating:
+        a spurious refusal early in a sequence silently removes everything after it,
+        and the things after it are the exit contract.
