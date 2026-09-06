@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: older-app-silently-downgrades-a-newer-enclave
+    field: status
+    value: completed
+    ts: "2026-09-06T08:15:37Z"
+    host: windows
+
+events:
+  - packet_id: older-app-silently-downgrades-a-newer-enclave
+    event:
+      type: completed
+      ts: "2026-09-06T08:15:37Z"
+      host: windows
+      summary: |-
+        status 'completed' with evidence_refs: landed 731312086 on windows-next, verified against origin with merge-base; two wiring pins covering BOTH guard call sites; six-row falsification matrix, each sabotage reding exactly one test
