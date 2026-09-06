@@ -52,7 +52,7 @@ farm() {
 
 # 1. This host, as it is. Whatever the answer, it must be well-formed.
 out="$("$CHECK" 2>/dev/null)"; rc=$?
-if printf '%s' "$out" | grep -qE '^(ok:host-tools:[a-z]+:[0-9]+ required present|missing:host-tools:[a-z]+:[a-z0-9,.-]+)$'; then
+if printf '%s' "$out" | grep -qE '^(ok:host-tools:[a-z]+:gate:[0-9]+ present; tray-build:[0-9]+ present(, missing [a-z0-9,._-]+)?|missing:host-tools:[a-z]+:gate:[a-z0-9,._-]+)$'; then
     check ok "live verdict is well-formed: $out"
 else
     check FAIL "live verdict is well-formed" "rc=$rc out=[$out]"
@@ -106,7 +106,7 @@ fi
 # 4. EVERY CLAIM WITH A PROVER IS FALSIFIED. This is what stops the required
 #    list from becoming the same unmaintained prose it replaces: an entry that
 #    is not actually required fails HERE.
-while IFS='|' read -r tool platforms prover expect why remedy; do
+while IFS='|' read -r tool kind scope platforms prover expect why remedy; do
     [ -n "$tool" ] || continue
     case ",$platforms," in *",$(uname -s | tr 'A-Z' 'a-z' | sed 's/darwin/macos/'),"*) ;; *) continue ;; esac
     if [ "$prover" = "-" ]; then
@@ -181,7 +181,11 @@ EOF
 #     /opt/homebrew/bin cannot otherwise construct the absent case for a tool
 #     living there. Without the seam this arm would cover cargo and rustc and
 #     silently skip timeout and pkg-config.
-_reqs="$(printf '%s\n' "$_spec" | awk -F'|' -v p="$_plat" 'NF && index(","$2",", ","p",")>0 {print $1}')"
+# ORDER 1004-cp6p: platforms is now field 4 (tool|kind|scope|platforms|...).
+# Reading $2 here silently produced an EMPTY list, so the farm hid nothing and
+# the "true absence" arm passed against the real PATH — a fixture measuring the
+# machine again.
+_reqs="$(printf '%s\n' "$_spec" | awk -F'|' -v p="$_plat" 'NF && $3=="gate" && index(","$4",", ","p",")>0 {print $1}')"
 mkdir -p "$tmp/offpath" "$tmp/empty"
 _have_all=1
 for _t in $_reqs; do
@@ -261,6 +265,148 @@ if [ "$_plat" = macos ] && command -v gtimeout >/dev/null 2>&1; then
     fi
 fi
 
+# ── ORDER 1004-cp6p: SCOPE AND KIND ─────────────────────────────────────────
+#
+# The defect: one undifferentiated macOS list, every entry resolved with
+# `command -v`. A Mac read `ok:host-tools:macos:5 required present` and could not
+# start the tray build — the verdict was TRUE for the gate and was read as
+# "this host is equipped".
+
+# 5a. A HOST MISSING ONLY TRAY-BUILD TOOLS MUST NOT FAIL. Widening what is
+#     DESCRIBED must never widen what is ENFORCED on the gate.
+mkdir -p "$tmp/noprefix"
+farm "$tmp/notray" zig cargo-zigbuild
+out="$(PATH="$tmp/notray" TILLANDSIAS_HOST_TOOL_PREFIXES="$tmp/noprefix" "$CHECK" 2>/dev/null)"; rc=$?
+if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q '^ok:host-tools:'; then
+    check ok "1004-cp6p: a tray-build-only shortfall does not fail the gate"
+else
+    check FAIL "1004-cp6p: tray-build shortfall must not fail the gate" "rc=$rc out=[$out]"
+fi
+
+# 5b. AND IT MUST STILL BE NAMED. Not failing is only correct if the shortfall
+#     is reported — silently passing is the defect wearing the fix's clothes.
+if printf '%s' "$out" | grep -q 'tray-build:'; then
+    check ok "1004-cp6p: the verdict names the tray-build scope it covered"
+else
+    check FAIL "1004-cp6p: the verdict must name its scope, not print a bare count" "out=[$out]"
+fi
+
+# 5c. A GATE-SCOPE TOOL KEEPS ITS TERMINAL FORCE. The negative half of 5a: if
+#     scope routing sent everything down the advisory path, 5a would pass and
+#     the gate would have stopped enforcing anything.
+farm "$tmp/nogate" cargo rustc
+out="$(PATH="$tmp/nogate" TILLANDSIAS_HOST_TOOL_PREFIXES="$tmp/noprefix" "$CHECK" 2>/dev/null)"; rc=$?
+if [ "$rc" -eq 1 ] && printf '%s' "$out" | grep -q '^missing:host-tools:[a-z]*:gate:'; then
+    check ok "1004-cp6p: a missing gate-scope tool still fails, exit 1"
+else
+    check FAIL "1004-cp6p: gate scope must keep its terminal force" "rc=$rc out=[$out]"
+fi
+
+# 5d. A RUSTUP TARGET IS NOT A BINARY. `command -v` could never see one, which
+#     is why a missing x86_64-unknown-linux-musl cost 166 seconds and an E0463
+#     rather than one actionable line. Stub rustup so the arm does not depend on
+#     what this host happens to have installed.
+mkdir -p "$tmp/rustupstub"
+cat > "$tmp/rustupstub/rustup" <<'STUB'
+#!/bin/sh
+# stub: reports ONE installed target, so the other declared triple is missing
+[ "$1" = target ] && { echo aarch64-unknown-linux-musl; exit 0; }
+exit 0
+STUB
+chmod +x "$tmp/rustupstub/rustup"
+# TWO-SIDED ACROSS PLATFORMS, and the first version of this arm was NOT.
+#
+# It asserted the triple appears, unconditionally. Both rustup-target rows are
+# declared `macos` (they exist for build-macos-tray.sh:141-142), so on Linux the
+# platform filter drops them, the loop never runs, and the assertion demands a
+# string that cannot appear. GREEN ON macOS, RED ON LINUX — and invisible to the
+# author's own gate. macuahuitl's union land refused rc=3 on exactly this.
+#
+# REPRODUCED HERE before fixing, with this fixture's own stub:
+#   as macos -> 3 occurrences of `musl`
+#   --platform linux -> 0
+#
+# This is tonight's BSD `wc` red with the platforms swapped: that one was green
+# on Fedora and red on macOS because BSD `wc` pads; this is green on macOS and
+# red on Linux because a filter drops a row. Both are "correct in the regime
+# that could see it".
+#
+# So the arm now asserts the RIGHT THING ON EACH PLATFORM rather than skipping
+# on one: where the rows are in scope, a missing target must be named; where
+# they are out of scope, they must be ABSENT — which pins the filter itself and
+# would catch a row that leaked across platforms.
+out="$(PATH="$tmp/rustupstub:$PATH" "$CHECK" 2>&1)"
+if [ "$_plat" = macos ]; then
+    if printf '%s' "$out" | grep -q 'x86_64-unknown-linux-musl'; then
+        check ok "1004-cp6p: a missing rustup target is reported, naming the triple"
+    else
+        check FAIL "1004-cp6p: a missing rustup target must name the triple" "out=[$out]"
+    fi
+else
+    # The mirror: the macos-scoped rows must NOT appear here. An arm that merely
+    # skipped would say nothing on this platform and let a leaked row through.
+    if printf '%s' "$out" | grep -q 'unknown-linux-musl'; then
+        check FAIL "1004-cp6p: macos-scoped rustup targets leaked onto $_plat" "out=[$out]"
+    else
+        check ok "1004-cp6p: macos-scoped rustup targets are filtered out on $_plat"
+    fi
+fi
+# NEGATIVE CONTROL: the triple that IS installed must not be reported missing,
+# or the arm above would pass by reporting everything.
+if [ "$_plat" = macos ]; then
+    if printf '%s' "$out" | grep -q 'MISSING (tray-build): aarch64-unknown-linux-musl'; then
+        check FAIL "1004-cp6p: an installed target must not be reported missing" "out=[$out]"
+    else
+        check ok "1004-cp6p: an installed rustup target is not reported missing"
+    fi
+fi
+
+# 5e. THE DECLARED SET MUST MATCH WHAT THE BUILD SCRIPT ACTUALLY INVOKES.
+#     This is the anti-drift arm: the list and the script are two places to look,
+#     and a prerequisite added to one and not the other is exactly how this
+#     packet's defect arrived. Read the script's OWN prerequisite lines rather
+#     than a copy of them.
+_bmt="$ROOT/scripts/build-macos-tray.sh"
+if [ -f "$_bmt" ]; then
+    # WHICH `command -v` SITES ARE PREREQUISITES, and this arm got it wrong on
+    # its first run — usefully, because the file's own header already warns:
+    # "Most `command -v` sites in scripts/ are probes with a fallback, and
+    # listing those would report a working host as broken."
+    #
+    # MEASURED when this arm first ran, it demanded brew, cargo and xcrun:
+    #   brew:29   a PROBE — `if command -v brew && brew --prefix rustup`, with a
+    #             fallback. Declaring it would fail a host that has no Homebrew
+    #             and does not need one.
+    #   xcrun:211 `|| die`, but INDENTED inside the notarization branch, which
+    #             runs only when a signing identity and notary keys are set.
+    #             Declaring it would fail every host that builds unsigned.
+    #   cargo:42  a genuine unconditional prerequisite, and ALREADY declared at
+    #             gate scope — which is why the check below accepts any scope.
+    #
+    # So: unindented (top-level, not inside a conditional) AND `|| die`. An
+    # indented one is guarded by something and is not a property of the host.
+    _script_needs="$(sed 's/#.*//' "$_bmt" \
+        | grep -E '^command -v [a-z-]+.*\|\| die' \
+        | awk '{print $3}' | sort -u)"
+    _script_targets="$(sed 's/#.*//' "$_bmt" \
+        | grep -oE '[a-z0-9_]+-unknown-linux-musl' | sort -u)"
+    # ANY scope counts as declared: a gate-scope tool is present whenever the
+    # gate has run, so requiring cargo to be listed twice would be noise.
+    _declared_tray="$(printf '%s\n' "$_spec" \
+        | awk -F'|' '$4 ~ /macos/ {print $1}' | sort -u)"
+    _undeclared=""
+    for _n in $_script_needs $_script_targets; do
+        printf '%s\n' "$_declared_tray" | grep -qx "$_n" || _undeclared="${_undeclared:+$_undeclared,}$_n"
+    done
+    if [ -z "$_undeclared" ]; then
+        check ok "1004-cp6p: every prerequisite build-macos-tray.sh invokes is declared at tray-build scope"
+    else
+        check FAIL "1004-cp6p: build-macos-tray.sh needs tools the SPEC does not declare" "undeclared=[$_undeclared]"
+    fi
+else
+    check FAIL "1004-cp6p: build-macos-tray.sh is missing, so the anti-drift arm cannot run"
+fi
+
 # 5. The check is wired into the gate.
 if grep -q 'check-host-tools.sh\|test-host-tools.sh' "$ROOT/build.sh"; then
     check ok "build.sh consults the host-tools check"
@@ -285,15 +431,27 @@ fi
 #
 #    That is checkable on macOS for linux and windows, because a tool this host
 #    lacks simply lands in the `missing:` list instead of the present count.
-for _p in $(printf '%s\n' "$_spec" | awk -F'|' '{print $2}' | tr ',' '\n' | sort -u); do
+for _p in $(printf '%s\n' "$_spec" | awk -F'|' '{print $4}' | tr ',' '\n' | sort -u); do
     [ -n "$_p" ] || continue
     _declared="$(printf '%s\n' "$_spec" \
-        | awk -F'|' -v p="$_p" '$2 ~ "(^|,)" p "(,|$)" {print $1}' | sort -u)"
+        | awk -F'|' -v p="$_p" '$4 ~ "(^|,)" p "(,|$)" {print $1}' | sort -u)"
     _n_declared="$(printf '%s\n' "$_declared" | grep -c .)"
     _out="$(PATH="$PATH" "$CHECK" --platform "$_p" 2>/dev/null)"
+    # ORDER 1004-cp6p: the verdict now names both scopes, so the partition must
+    # add gate + tray-build present counts and pick up a tray-build shortfall as
+    # "named but absent". Counting only the gate half would let every tray-build
+    # entry vanish from the partition without the arm noticing.
     case "$_out" in
-        ok:host-tools:$_p:*) _reported_missing=""; _n_present="$(printf '%s' "$_out" | sed -E 's/.*:([0-9]+) required present/\1/')" ;;
-        missing:host-tools:$_p:*) _reported_missing="$(printf '%s' "$_out" | sed -E 's/^missing:host-tools:[a-z]+://' | tr ',' '\n')"; _n_present="" ;;
+        ok:host-tools:$_p:*)
+            _g="$(printf '%s' "$_out" | sed -E 's/^ok:host-tools:[a-z]+:gate:([0-9]+) present;.*/\1/')"
+            _t="$(printf '%s' "$_out" | sed -E 's/.*tray-build:([0-9]+) present.*/\1/')"
+            _n_present=$(( _g + _t ))
+            case "$_out" in
+                *", missing "*) _reported_missing="$(printf '%s' "$_out" | sed -E 's/.*, missing //' | tr ',' '\n')" ;;
+                *) _reported_missing="" ;;
+            esac
+            ;;
+        missing:host-tools:$_p:*) _reported_missing="$(printf '%s' "$_out" | sed -E 's/^missing:host-tools:[a-z]+:gate://' | tr ',' '\n')"; _n_present="" ;;
         *) check FAIL "--platform $_p returns a well-formed verdict" "out=[$_out]"; continue ;;
     esac
     # Nothing may be named that the spec did not declare for this platform.
@@ -326,7 +484,11 @@ done
 #    comma-delimited membership test, and it is what makes arm 6 worth running.
 for _bogus in os mac inux; do
     _out="$("$CHECK" --platform "$_bogus" 2>/dev/null)"
-    if printf '%s' "$_out" | grep -qE "^ok:host-tools:[a-z]*:0 required present$"; then
+    # ORDER 1004-cp6p: "selects nothing" is now zero in BOTH scopes. Asserting
+    # only the gate half would let a substring match every tray-build row while
+    # this arm reported success — the loosened-membership bug it exists to catch,
+    # surviving in the half the arm stopped looking at.
+    if printf '%s' "$_out" | grep -qE "^ok:host-tools:[a-z]*:gate:0 present; tray-build:0 present$"; then
         check ok "--platform $_bogus selects nothing (substring must not match)"
     else
         check FAIL "--platform $_bogus selects nothing" "out=[$_out]"
