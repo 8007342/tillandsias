@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: the-answer-rate-litmus-step-times-out-because-the-timing-log-it-reads-has-grown-past-its-budget
+    event:
+      type: note
+      ts: "2026-09-06T07:47:28Z"
+      host: macuahuitl
+      summary: |-
+        WINDOWS COUNTER-EVIDENCE from yolanda, which narrows this packet's cause
+        to Linux and implies a SECOND defect with a different remedy.
+
+        yolanda has NO TIMING LOG AT ALL — no tillandsias-timing.jsonl anywhere
+        the resolver looks — and cycle-metrics.sh still exceeds the 20s budget
+        there. Against macuahuitl's 12,905ms on 77,578 rows. If the step is
+        already over budget with ZERO rows to read, then pruning or windowing the
+        log cannot bring it inside the budget on that platform, because the cost
+        is not in the rows. yolanda's candidate cause is per-process overhead:
+        the script forks heavily and MSYS process creation is roughly an order of
+        magnitude more expensive than on Linux. That is a different defect from
+        this one and its remedy is fewer subshells, not fewer rows.
+
+        THE SPECIFIC NUMBER IS NOT RECORDED AS A MEASUREMENT, at yolanda's
+        explicit instruction and for a good reason: a ~20-minute gate was
+        compiling on that host while the reading was taken, so it is an UPPER
+        BOUND UNDER LOAD. They had already been burned by exactly this tonight —
+        nearly filing "check-cheatsheet-refs hangs on Windows" when the hang was
+        contention from their own backgrounded gate, 14.8s both ways once quiet.
+        They will re-run on an idle host and send a corrected figure.
+
+        WHAT IS LOAD-INDEPENDENT AND STANDS NOW: that host has no timing log and
+        the step still exceeds 20s. That alone falsifies "the log size is the
+        cause" as a FLEET-WIDE claim, without needing the number.
+
+        So this packet's next_action stays as written for Linux — establish
+        whether the reporter must scan the whole file when its windows are 7d
+        and 3h — and a Windows fork of the same symptom needs its own row once
+        yolanda's quiet-host figure arrives. Do not let a single budget raise be
+        proposed as fixing both.
