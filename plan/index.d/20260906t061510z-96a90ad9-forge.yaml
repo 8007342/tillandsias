@@ -1,0 +1,64 @@
+packets:
+  - packet_id: the-1034-selector-fixture-and-1064-land-arm-assume-a-plain-host-and-vacate-on-a-forge-without-env-seams
+    order: 1090-45da
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: linux
+    capability_tags: [linux, gate, fixture, forge, host-tools, tier, hooks]
+    estimated_hours: 2
+    owned_files:
+      - scripts/test-selector-drops-cross-branch-claims.sh
+      - scripts/test-land-merges-trunk.sh
+      - scripts/select-work-batch.sh
+    title: |
+      two gate fixtures assume a PLAIN git host and a general-queue-capable selector, so a
+      low-end forge (TILLANDSIAS_HOST_TIER undefined -> tier gate 847-wgy4) reds them
+      vacuously under ./build.sh --check unless the documented seams are set
+    context: |
+      FILED from the 2026-09-06 meta-orchestration full cycle on forge-tillandsias, after the
+      openssl/host-tools unblock (order 1090-vc2d). The forge reds two fixtures that are
+      environmental to the host, not regressions in the code under test:
+      (1) 1064-r8fv/land-merges-trunk arm3: the forge's GLOBAL core.hookspath
+      (/home/forge/.cache/tillandsias/git-hooks) silently overrides the fixture's freshly-made
+      bare remote's own hooks/pre-receive, so the push-r refusal never fires and the script
+      "succeeds" (rc=0, no relay-lane naming). Arms 1/2 pass. Worked around by running the gate
+      with GIT_CONFIG_GLOBAL pointing at a global config with core.hookspath removed (local
+      workspace hooks still fire via the repo's own core.hookspath). The fixture should pin
+      `git -C "$origin" config core.hookspath "$origin/hooks"` (or equivalent) so receive hooks
+      fire regardless of a global hooksPath.
+      (2) 1034-whsp/test-selector-drops-cross-branch-claims arm0: on a low-end host the tier
+      gate (847-wgy4) makes select-work-batch.sh refuse with refused:no-tier-work BEFORE the
+      selector logic runs, so the baseline batch is 0 => every arm is vacuous-red. Worked around
+      by setting TILLANDSIAS_HOST_TIER=mid in the gate env (documented seam, select-work-batch.sh
+      :307/:337). The fixture's own header admits arm0 is "a control depending on live external
+      state"; the honest long-term fix is either (a) the arm0 prelude accepting
+      refused:no-tier-work as a valid skip with a loud note, or (b) explicitly running the
+      selector with a declared TILLANDSIAS_HOST_TIER so arm0 tests code, not fleet claim state.
+      Neither fixture touched this cycle; the product code is sound.
+    exit_criteria:
+      - "on a fresh FEDORA fork with the forge global core.hookspath set but NO low-end work,
+      ./build.sh --check reaches the zip and stamps without either env seam
+      (GIT_CONFIG_GLOBAL scrub / TILLANDSIAS_HOST_TIER)"
+      - "1064 fixture: arm3 passes even with a global core.hookspath set (the fixture itself pins
+      the repo-local hooks path); pre-fix: fails with expected [6] got [0]"
+      - "1034 fixture: arm0 passes under refused:no-tier-work with a LOUD skip note rather than
+      vacuous-red; pre-fix: selector-drops-cross-branch-claims 3 passed, 3 failed"
+    unscoreable: |
+      claimer runs ./build.sh --check on a fresh forge container (image rebuild or clean
+      provision) before and after the change and records the 1064 and 1034 verdict lines.
+    events:
+      - type: finding
+        ts: "2026-09-06T05:25:00Z"
+        host: forge-tillandsias
+        agent_id: forge-forge-tillandsias-opencode-20260906t040047z
+        summary: |
+          Gate Run 3 red: 1034-whsp selector fixture vacuous (3 passed, 3 failed,
+          selector emitted no packets because refused:no-tier-work on a low-end
+          forge). Gate Run 2 red: 1064-r8fv arm3 (expected [6] got [0], no
+          relay-lane naming) traced to the forge's global core.hookspath overriding
+          the fixture's pre-receive. Both worked around via documented env seams
+          (GIT_CONFIG_GLOBAL scrub, TILLANDSIAS_HOST_TIER=mid) for the gate run;
+          filing the fixture-level fixes so a fresh forge needs no seams.

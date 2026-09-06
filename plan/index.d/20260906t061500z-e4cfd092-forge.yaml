@@ -1,0 +1,56 @@
+packets:
+  - packet_id: host-tools-openssl-required-entry-falsifies-the-forge-gate-despite-the-1042-svey-forge-exemption
+    order: 1090-vc2d
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: linux
+    capability_tags: [linux, gate, host-tools, openssl, forge, fail-loud]
+    estimated_hours: 1
+    owned_files:
+      - scripts/check-host-tools.sh
+      - scripts/test-host-tools.sh
+    title: |
+      check-host-tools.sh declares openssl required unconditionally, so EVERY forge now reds the
+      989-ykks host-tools fixture (3/17) even though 1042-svey's criterion 3 keeps the forge exempt
+      and ensure_ca_bundle early-returns on TILLANDSIAS_HOST_KIND=forge
+    context: |
+      Filed from the 2026-09-06 meta-orchestration full cycle on forge-tillandsias. The host-tools
+      fixture `scripts/test-host-tools.sh` is 3/17 red on the forge (arms 5a/5b build-equivalents
+      and the "--platform linux accounts for every declared tool" accounting arm) with
+      `missing:host-tools:linux:gate:openssl`; the forge genuinely ships no openssl CLI and has no
+      root/sudo to add one (dnf needs root). This is not a host defect: 1042-svey deliberately
+      KEPT the forge exempt — criterion 3 (forged exemption unchanged; host injects its CA) and
+      ensure_ca_bundle (`crates/tillandsias-headless/src/main.rs`, TILLANDSIAS_HOST_KIND==forge
+      early-return) are both current. But the 1042-svey fix (fragment 20260905t023823z-07a454b4-
+      yolanda.yaml, entry at check-host-tools.sh:104) added `openssl|binary|gate|linux` to the
+      required-tools list WITHOUT consulting TILLANDSIAS_HOST_KIND, so the two genuinely
+      reconcilable requirements now contradict on every forge: the forge gate reds in seconds for
+      a tool the forge's own code path never needs. The forge gate was worked around this cycle
+      with a user-local, functionally-equivalent openssl binary extracted rootlessly from the
+      distro RPM (PATH-shimmed for the gate and push only) — the honest long-term fix is the
+      forge-aware declaration, not the shim. No branch/product behavior changes; host-tools is
+      gate-internal.
+    exit_criteria:
+      - "on this forge (TILLANDSIAS_HOST_KIND=forge, no openssl), ./build.sh --check passes the 989-ykks host-tools step (0 red for the linux partition) with the openssl exemption in place; pre-fix: 3/17 red naming missing:host-tools:linux:gate:openssl"
+      - "1042-svey criterion 2 is PRESERVED: with openssl hidden on a NON-forge host (or inside the tillandsias-build distro), the host-tools step still refuses and names openssl in seconds; the builder stays NOT-exempt"
+      - "test-host-tools.sh reports the forge variant explicitly (e.g. `--platform linux` with TILLANDSIAS_HOST_KIND=forge counts only the tools the forge truly requires) and remains 0 FAIL on forge when the require-set matches"
+    unscoreable: |
+      claimer runs ./build.sh --check on a forge host after the change; measure the
+      host-tools fixture verdict line. A non-forge host can additionally run the control
+      (hidden openssl) to re-verify 1042-svey criterion 2 regression-free.
+    events:
+      - type: finding
+        ts: "2026-09-06T05:10:00Z"
+        host: forge-tillandsias
+        agent_id: forge-forge-tillandsias-opencode-20260906t040047z
+        summary: |
+          GATE RED measured on forge-tillandsias during the 2026-09-06 full cycle:
+          host-tools 3/17 red, root cause missing:host-tools:linux:gate:openssl,
+          openssl absent from the forge by design (and uninstallable without root).
+          Contradicts the still-live 1042-svey forge exemption (criterion 3 +
+          ensure_ca_bundle early-return). Cycled gate was unblocked locally with a
+          rootless RPM-extracted openssl binary on PATH; filing for the real,
+          forge-aware fix.
