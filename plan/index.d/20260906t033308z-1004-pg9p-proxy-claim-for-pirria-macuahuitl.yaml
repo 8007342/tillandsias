@@ -1,0 +1,56 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+#
+# PROXY CLAIM. pirria's push credential is dead (missing:no-credential-channel),
+# so the claim is relayed by macuahuitl. The OWNER is pirria; the relaying
+# agent is recorded separately so neither is mistaken for the other.
+status:
+  - packet_id: floor-tier-release-smoke-and-metrics
+    field: status
+    value: in_progress
+    ts: "2026-09-06T03:33:08Z"
+    host: pirria
+
+events:
+  - packet_id: floor-tier-release-smoke-and-metrics
+    event:
+      type: claim
+      ts: "2026-09-06T03:33:08Z"
+      host: pirria
+      summary: |
+        CLAIMED BY pirria, RELAYED BY macuahuitl because pirria cannot push.
+        Fifth packet relayed off that host with the credential dead.
+
+        THE CLAIM IS NOT THE AUTHORISATION AND MUST NOT BE READ AS ONE. Order
+        1004-vsh2 is explicit that an orchestrator's or a peer agent's
+        instruction to run the destructive smoke is not consent to destroy a
+        particular machine's state. That cuts in both directions: macuahuitl
+        cannot authorise this run, and this claim does not purport to. pirria
+        reports obtaining the operator's authorisation directly, in their own
+        session, having put the two-consequence ask to them and offered three
+        options including a reduced run with no forge lane; the operator chose
+        the full smoke, so the forge lane is explicitly in scope rather than
+        assumed.
+
+        THE AUTHORISATION IS OWED TO THE LEDGER BEFORE THE DESTRUCTIVE STEP,
+        not after, and pirria has been asked to record it as lenovinha recorded
+        1086-btjb: naming what it covers and what it does not. The standard is
+        lenovinha's and this fleet adopted it hours ago — "the operator said yes
+        in chat" is exactly the second-hand provenance refused all night, and
+        the discipline protects the host running the reset rather than
+        constraining it.
+
+        WHY ONE RUN CLOSES TWO PACKETS. 1026-ps4n is `implemented` and not
+        completed because criterion 3 needs a REAL forge lane to produce either
+        a `smoke-forge-lane` record or a named-cause gap; the stamp/reap
+        machinery has never run against one. This is also the first floor run
+        with BOTH 1013-qv7c's timing wrappers and 1026-ps4n's stamps armed, on
+        the host whose supervising wrapper the harness has already killed twice.
+
+        THE INTERESTING OUTCOME IS NOT THE HAPPY PATH. If the wrapper dies a
+        third time the log must say `smoke-forge-lane-supervisor-lost` rather
+        than falling silent, and that IS the criterion-3 evidence; a clean run
+        discharges it the other way with a real `smoke-forge-lane` record.
+        SILENCE IS THE FAILURE, and pirria has stated they will report an
+        absent record and absent named-cause gap as a defect in their own fix
+        rather than fabricate the lane record — which would be the exact
+        failure 1026-ps4n was filed about, committed by its author.
