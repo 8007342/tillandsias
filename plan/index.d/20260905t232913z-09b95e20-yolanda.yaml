@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: build-windows-tray-embeds-a-zero-byte-headless-and-reports-success
+    event:
+      type: completed
+      ts: "2026-09-05T23:29:13Z"
+      agent_id: windows-yolanda-opus5-20260905t232913z
+      host: yolanda
+      summary: |
+        CLOSED at 5eefe097e. All three exit criteria met, and the packet's deliberately-open question is answered.
+
+        EC1 (a build that would embed a zero-byte guest refuses or warns, naming the path and the no-op): build.rs now emits a cargo warning keyed on the ZERO-BYTE CONDITION rather than on creation -- the placeholder persists, so a host that generated it in August would otherwise never be told again -- and scripts/build-windows-tray.ps1 REFUSES before printing Built:.
+
+        EC2 (the skill names the staging step): it now does. Confirmed the pre-fix claim on this host first: grep -niE 'musl|asset|embed|headless' over skills/build-windows-tray/SKILL.md returned ZERO.
+
+        EC3 (a fixture asserting the refusal fires on a placeholder and not on a real asset): scripts/test-tray-asset-placeholder-refused.sh, bound as scripts/gate-steps.d/055-1059-ry6t.step. Arms 1-2 EXECUTE the packaging predicate against a 0-byte file and a real one; arm 2 is the negative control and the scorable half, because a guard refusing unconditionally would pass arm 1 and make the tray unbuildable.
+
+        THE OPEN QUESTION IS ANSWERED: the packet said "NOT ESTABLISHED, deliberately: whether any host other than esmeraldinha carries a zero-byte asset". Yolanda does -- both assets 0 bytes since 2026-08-22, against esmeraldinha's 2026-08-23. TWO OF TWO Windows hosts checked, and the cause is not a stale checkout: build.rs CREATES the placeholder on first build and nothing replaces it, so a non-injecting tray was the DEFAULT state of a Windows dev checkout rather than one machine's accident.
+
+        THE SPLIT FOLLOWS AN EXISTING PRECEDENT RATHER THAN A NEW OPINION. render_msix_logos, ten lines above the placeholder code, already documents the policy this asset never received: a missing asset must not break cargo check, and "the packaging step is where absence becomes an error, because that is where it actually matters". So build.rs warns and the packaging script refuses. I did not invent the boundary; I applied the one the file already states.
+
+        THE SIBLING TRAP IS CARRIED INTO THE REMEDY rather than left where only a reader of build.rs would find it: cargo does not rebuild when only the asset changes, so restaging and rebuilding embeds the PREVIOUS bytes while reporting success. Both the refusal message and the skill say to touch a .rs file.
+
+        VERIFIED TO DISCRIMINATE: removing the packaging refusal reds three arms; making the warning ignore the zero-byte condition reds a fourth.
+
+        AND MY OWN FIXTURE SCORED AN EMPTY STRING AS A VERDICT, which the gate caught. It passed standalone on MSYS and failed inside the gate on a correct tree with "expected [missing] got []". The guard was `command -v powershell.exe`, TRUE inside the WSL distro the gate re-execs into via interop, while cygpath is not there -- so the arms compared an EMPTY STRING and failed. An empty result is not a verdict, it is the absence of one, and scoring absence as a value is the same family as the zero-byte asset that compiled clean. I wrote the defect into the fixture guarding against it. It now probes for a known answer before trusting any answer and SKIPS loudly when it cannot run: 8/8 on MSYS, 6/6 with an explicit skip in WSL. That is lenovinha's corollary -- check WHICH refusal you got -- arriving as my own defect.
+
+        FIRST BINDING WRITTEN AS A DATA FILE rather than an inline build.sh block, which is the direct payoff of esme's migration: two of the seven near-drops that motivated tonight's freeze were my steps landing into that shared region.

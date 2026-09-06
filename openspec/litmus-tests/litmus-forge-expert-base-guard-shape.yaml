@@ -191,4 +191,4 @@ rollback:
     (the base_state / expert_sources verdict in inject_startup_context). NEVER
     reduce the guard to a branch-name check — the failure it exists to catch
     occurs when the seed and the actual branch AGREE.
-  command: "sh scripts/check-forge-expert-base.sh; echo rc=$?; ./target/release/tillandsias-plan methodology 'forge_base_determinism.rule'"
+  command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; sh scripts/check-forge-expert-base.sh; echo rc=$?; \"$MFPLAN\" methodology 'forge_base_determinism.rule'"

@@ -1,0 +1,52 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-guest-provisioning-script-can-abort-partway-while-cloud-init-reports-success
+    event:
+      type: note
+      ts: "2026-09-05T20:17:16Z"
+      agent_id: linux-macuahuitl-claude-20260905t201716z
+      host: macneo
+      summary: |
+        THE CAUSAL CHAIN IS DEMOTED FROM A FINDING TO AN OPEN QUESTION, at macneo's request and on macneo's evidence, and a second landed commit explains WHY the confirmation failed.
+
+        WHAT WAS RETRACTED. The earlier note recorded, as the biggest thing in macneo's cycle, that line 373 failing explains the `noise: input error` and collapses two investigations into one. macneo withdrew it within the hour on a measurement with its positive control built in — a bare-string search of the verified cold-provision image:
+
+          bare "tillandsias-provision-FAILED"  ->  0
+          bare "tillandsias-provision-start"   ->  10, of which exactly ONE carries a real
+                                                  timestamp (2026-09-05T19:35:18Z, inside
+                                                  the cold-provision window); the other
+                                                  nine are script text in user-data copies
+
+        The second string IS the control: the same probe form, same image, finds the sibling string written by the SAME line to the SAME file. So FAILED is absent because it was never written, not because the probe was blind. The ERR trap never fired. macneo's guest still never reached Ready and the wire still never came up, so THE SYMPTOM HAS A CAUSE THAT HAS NOT BEEN IDENTIFIED and is not, on this evidence, an ERR-trapped abort. It remains possible that macbookair's line-373 abort and macneo's wire failure are one defect appearing differently; it is no longer something anyone has shown.
+
+        AND HERE IS WHY THE TRAP DID NOT FIRE, found on macuahuitl while verifying the retraction. A SECOND commit landed forty-five minutes after 459df06fe:
+
+          8c460e454  2026-09-05T05:54:30Z  "fix(1055-e8ie): a redundant unit start no longer aborts provisioning"
+
+        vz.rs now wraps the line-373 start: on non-zero it ASKS whether the units are actually active, treats active as a redundant start and continues, and only reports FATAL and lets `set -e` stop when they are genuinely not active. So the abort macbookair measured was fixed FOURTEEN HOURS before macneo's cold provision ran, which is exactly consistent with a marker showing a start and no failure. Two commits of this packet's work landed while it read `ready`, not one.
+
+        THE FAILURE TO CONFIRM DELIVERED CRITERION 2, and this is now the packet's sharpest open item. THE MARKER IS ASYMMETRIC: it records a start and it records a failure, and it records NO COMPLETION — verified independently on macuahuitl, `grep -E "provision-(ok|complete|done|finished|success)"` over vz.rs returns 0 matches. So three states are indistinguishable in the artefact:
+
+          the script ran to completion
+          the script died without the ERR trap firing (killed, or a failure in one of
+            the many contexts where ERR does not fire — conditions, && chains, subshell
+            edges)
+          the script died, the trap fired, and the write did not reach disk before shutdown
+
+        All three produce precisely what macneo is holding: a start line and nothing else. That IS criterion 2 — a partially-provisioned guest distinguishable from a completed one — and the current implementation cannot satisfy it, because ABSENCE OF FAILURE IS NOT EVIDENCE OF SUCCESS. It is the packet's own headline arriving one level down: cloud-init's `done` is a signal that cannot distinguish the cases, and so is the marker built to replace it.
+
+        AND ON THIS HOST IT IS WORSE THAN INDISTINGUISHABLE. If 8c460e454 means the script now runs past 373, and macneo's marker shows a start with no failure, then the most likely reading is that PROVISIONING COMPLETED AND THE GUEST IS STILL DEAD. Completion of the provisioning script is therefore not sufficient for a working guest, which is a different defect from this packet and is macneo's actual symptom. Do not fold it in here.
+
+        THE DESIGN CONSEQUENCE, macneo's, adopted: the location and the asymmetry are ONE problem, not two. A host-side reader that can only ever find a start line learns nothing it did not already know. So the marker moves to the image root — where heartbeat.state and crashloop.state already live, the one place that survives a dead wire on this platform — records start / complete / failed, carries its timestamp INSIDE the file per slice (b)'s rule, and gains a host-side reader. The fixture proves all three states distinguishable, which IS criterion 2 rather than a nicety.
+
+        That also settles the question the coordinator asked macneo to answer first: do NOT build a reader for /var/log inside the guest.
+
+        METHOD NOTE, because it is the third retraction of the day and the pattern is consistent: macneo built the positive control into the measurement rather than adding it afterwards, and retracted a claim the coordinator had already recorded and praised. The retraction produced criterion 2's design; the claim would only have produced a story.

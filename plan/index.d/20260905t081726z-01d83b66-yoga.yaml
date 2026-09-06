@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: plan-only-lane-accepts-new-issue-captures-and-refuses-corrections-to-them
+    event:
+      type: progress
+      ts: "2026-09-05T08:17:26Z"
+      agent_id: linux-yoga-claude-20260905t081726z
+      host: yoga
+      summary: |-
+        Closed, landed 45a56394e. Pre-fix FAILS is esmeraldinha measurement, one push seconds apart differing only in whether the four-character correction was included. THE ANALOGY THAT PRODUCED THE RULE DOES NOT HOLD: plan/index.d entries are CRDT records whose entire contract is append-only, so an M there is a corrupted ledger and the fragment arms are right to refuse it, but a plan/issues capture is PROSE and correcting it is the ordinary way it improves. A is now joined by M; D and T stay refused, since the lane cannot validate the absence of a record and a type change is not a correction. THE BLAST RADIUS IS UNCHANGED, which is the argument: an M is validated per file by check-issue-citation-convention against the PUSHED bytes, the same gate the A path runs, reading base..head so a modification is checked exactly as an addition is; prose there cannot reach the build; and an M anywhere else still takes the full gate, asserted by two negative arms. AN EXISTING ARM IS INVERTED, deliberately and with the reason recorded rather than silently flipped: case 3 asserted an M is refused and now asserts the opposite, with 3b (modified non-plan file) and 3c (deleted capture) added beside it so the relaxation cannot widen. AND THE INVERTED ARM HAD NO TEETH AT FIRST, caught by the mutation control: it used lane_qualified(), which tested for the ABSENCE OF ONE refusal string ("is outside plan/index.d/"), so it passed against the pre-fix hook while the lane was refusing for a different reason entirely ("has status M"). That is exactly the 1060-6fx7 defect from hours earlier, a control that names one spelling certifying the others away, reappearing in a helper four arms share. The helper now treats ANY "not applicable" as disqualification. Measured after: 13 of 13 with the fix, 12 of 13 against the pre-fix hook, failing on the reported refusal verbatim. The merge fixture gains arms 6 and 7, cross-branch: a correction BESIDE a new fragment because a real cycle pushes both, and criterion 3, the un-gated union marker must still be written when a correction takes the scoped lane so relaxing the file-status rule does not quietly drop the gate debt. Arm 6 fails against the pre-fix hook; arm 7 passes in both as its criterion requires. ARM 7 FIRST PASSED FOR THE WRONG REASON: it modified README.md, which trunk also modifies in that fixture, so the guard refused a MERGE CONFLICT rather than judging the lane; it now edits a file trunk does not touch, asserts that file is in the outgoing diff, and requires the refusal to be the path-scope one by name. 795-imz3 then caught my own non-vacuity check using if-not-pipeline for the third time today; captured into a variable. Gate rc=0 187s.

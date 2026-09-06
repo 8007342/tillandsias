@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: linux-native-stream-audit
+    event:
+      type: progress
+      ts: "2026-09-05T11:36:53Z"
+      agent_id: linux-lenovinha-claude-20260905t113606z
+      host: lenovinha
+      summary: |-
+        BOUNDED AUDIT SLICE, not the 6h refactor. Two of the three exit criteria now have a measured verdict; the third is out of this slice's scope and I am not claiming it.
+
+        CRITERION 3 — 'Event bus uses tokio::sync::broadcast or watch, not mpsc::unbounded' — SATISFIED, mechanically:
+            grep -rn 'mpsc::unbounded|unbounded_channel' crates/tillandsias-headless/src/   ->  ZERO matches
+            broadcast:: / watch:: in use, 34 occurrences in vsock_server.rs
+        So this criterion is met at HEAD and needs no work. Recording it because an unassessed criterion and a satisfied one look identical from the ledger, and this packet has carried all three as open since 2026-08-10.
+
+        CRITERION 2 — 'No polling loops for VM status, login state, or cloud projects' — ONE OF THREE PATHS STILL POLLS:
+            VM STATUS      push-based. VmStatusPush is a real control message (control_dispatch.rs:181/369/375/442); no sleep in its path.
+            CLOUD PROJECTS event-driven with a TTL, not a loop: refresh_cloud_projects_if_stale fires on tray launch, GitHubLogin success and AboutToShow, gated by CLOUD_TTL (tray/cloud.rs). No timer wakeups.
+            LOGIN STATE    STILL POLLS. main.rs around 15488: a 2s tokio::time::sleep tick plus ticks_since_presence >= 30, i.e. a 60s heavy presence poll. A login_transition_sentinel short-circuits the 60s wait so a transition is seen on the next 2s tick, but the loop itself remains. Same site I recorded on 158 (vault-blocking-watch) after re-verifying its five-week-old citation.
+
+        A CLASSIFICATION ERROR OF MINE, CAUGHT AND CORRECTED, because the method matters more than the result here. I first classified the sleeps by grepping 25 lines of context for the three path names, and that labelled main.rs:15664 a CLOUD PROJECTS poll. Reading the line instead of the proximity match shows it is a podman-socket-readiness wait with a documented removal condition ('an event source for podman socket readiness in the guest') — the string cloud_projects merely happened to sit within 25 lines. A heuristic that names a defect by adjacency will produce confident wrong locations, which is how 158's citation rotted in the first place. One of my two hits was wrong; only reading the context separated them.
+
+        CRITERION 1 — 'All SC-01..SC-15 verified in the Linux tray / headless local path' — NOT ASSESSED. That is the substance of the 6h estimate and it carries a four-agent verification_required block; a single host asserting it from a grep would be the vacuous-closure shape. Left open.
+
+        WHAT REMAINS, and it is smaller than the packet reads: one polling loop, in the login-state path, whose disposition is already the open question on 158 — make the sentinel authoritative and delete the tick, rewrite SC-01/SC-14 around what community Vault can do, or keep the bounded poll and say so. That choice belongs with 151's ratification rather than one host, which is why I am releasing rather than implementing it.
+
+        Released back to ready. Nothing in the tree was changed by this slice.

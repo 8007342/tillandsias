@@ -1,0 +1,79 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: standing-operator-authorization-for-podman-system-reset-on-the-only-silverblue-host
+    order: 1086-btjb
+    status: ready
+    kind: decision
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    owner_host: linux
+    capability_tags: [release, smoke, authorization, silverblue]
+    estimated_hours: 1
+    unscoreable: |
+      A RECORD OF CONSENT, not work. There is nothing to score: the packet exists
+      so that a future release cycle can cite a durable authorization instead of
+      "the operator said yes in chat", which is the second-hand provenance this
+      fleet spent 2026-09-05 refusing to accept for a gate SHA and a build id.
+      It closes when the authorization is either exercised on a published
+      artifact or withdrawn by the operator.
+    title: |
+      Standing operator authorization for `podman system reset --force` on lenovinha, for release smoke validation only
+    context: |
+      STANDING OPERATOR AUTHORIZATION, recorded so it is not second-hand.
+      
+      WHAT WAS AUTHORIZED. The operator authorized `podman system reset --force` on
+      lenovinha.ayahuitlcalpan.com for the purpose of post-release e2e smoke
+      validation, with the destruction itemised in front of them before they answered:
+      
+          tillandsias-vault          the Vault store
+          tillandsias-mirror-*       the project mirror
+          tillandsias-spec-index-*   the spec index volume
+          tillandsias-forge-cache-*
+          27 images
+          5 containers, up 42-43h at the time of asking
+      
+      WHY IT WAS ASKED. 1004-vsh2 holds that this procedure destroys operator work and
+      that the skill "cannot consent on their behalf"; an orchestrator's instruction to
+      run it "is not that authorization". macuahuitl-fedora asked whether this host is
+      a dedicated smoke host and explicitly did not authorize it, on the grounds that
+      the clause stopping them running it there stops them authorizing it here. It is
+      not dedicated: it is the operator's own workstation, and it is the fleet's only
+      Silverblue host, which is the platform the daily release exists for. That
+      asymmetry is standing, not incidental — there is no unattended way to validate a
+      Silverblue release in this fleet today.
+      
+      IT WAS NOT SPENT. Between the question and the answer, v56.9.6.1 was found
+      BLOCKED at the local gate, so no artifact existed to validate. Running the reset
+      would have destroyed the operator's Vault, mirrors and images to smoke-test
+      something that does not exist. A STANDING AUTHORIZATION IS NOT A STANDING
+      INSTRUCTION: the thing that made it worth saying yes to was gone, and the action
+      is irreversible, so it was held rather than executed.
+      
+      WHAT IT COVERS: `podman system reset --force` on this host, for post-release e2e
+      smoke validation of a PUBLISHED artifact, at a time when one exists.
+      
+      WHAT IT DOES NOT COVER: any other destructive operation; the same procedure for
+      any purpose other than validating a published release; and any host but this one.
+      It is not a general licence to reset, and a future cycle citing it must check
+      that an artifact exists before acting.
+      
+      WHY IT WAS ASKED TONIGHT RATHER THAN WHEN IT IS NEEDED — macuahuitl's reason and
+      it is the right one: asking while the reason is legible is better than asking on
+      a night when a green release is waiting and the pressure runs toward yes.
+    exit_criteria:
+      - "a release cycle needing e2e smoke on Silverblue can cite THIS record rather than asking again under release pressure"
+      - "the scope limits are honoured: a published artifact must exist before the reset is run, and the authorization covers no other destructive operation, purpose or host"
+      - "if the operator withdraws it, a correction fragment says so and this row is closed"
+    next_action: |
+      NOTHING TO DO UNTIL A RELEASE ARTIFACT EXISTS. When one does: confirm the
+      artifact is published and downloadable FIRST, then cite this row, then run
+      the procedure. Do not reset to validate a release that is blocked at the
+      gate — that is the exact case this authorization was held rather than spent
+      on.
+    provenance: |
+      Asked by linux-lenovinha-claude-20260905t233514z at macuahuitl-fedora's
+      prompting on 2026-09-05, with the destruction itemised. Answered
+      "Yes — authorize the full reset" by the operator in session
+      session_01YE1RUjHPXubqhGBZBZisHh. Held unspent the same hour because
+      v56.9.6.1 was blocked at the local gate and no artifact existed.

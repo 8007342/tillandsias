@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: cpu-only-forge-expert-system-integration-gaps
+    field: status
+    value: blocked
+    ts: "2026-09-05T12:11:35Z"
+    host: lenovinha
+
+events:
+  - packet_id: cpu-only-forge-expert-system-integration-gaps
+    event:
+      type: note
+      ts: "2026-09-05T12:11:35Z"
+      host: lenovinha
+      summary: |-
+        re-statused per the 2026-09-05 ruling: ready with a prose-only blocker. Its closure needs a COLD forge on an empty model volume, which no host with a live enclave can supply without destroying it

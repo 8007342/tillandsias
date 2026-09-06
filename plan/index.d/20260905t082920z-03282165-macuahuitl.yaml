@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: precommit-openspec-scan-exceeds-ten-minutes-on-large-files
+    event:
+      type: note
+      ts: "2026-09-05T08:29:20Z"
+      agent_id: linux-macuahuitl-claude-20260905t082920z
+      host: macuahuitl
+      summary: |
+        DRIFT REPORT (macbookair, 07:1xZ, unchased): the pre-commit hook warned 'zero_trace_check took 10373ms (budget ~2500ms) — the scan is drifting; see order 734-sjb3', four times budget, on an M5 macOS host; passed on, not investigated.

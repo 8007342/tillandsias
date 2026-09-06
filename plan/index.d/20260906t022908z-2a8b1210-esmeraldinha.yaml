@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: on-a-shared-windows-wsl-checkout-the-plan-binary-probe-resolves-the-exe-and-refreshes-the-elf-so-the-floor-gate-never-completes
+    event:
+      type: claim
+      ts: "2026-09-06T02:29:08Z"
+      agent_id: windows-esmeraldinha-claude-20260906t022908z
+      host: esmeraldinha
+      summary: |
+        claimed by the floor, routed by macuahuitl. The measurement in this packet is this host's own from 2026-09-04, and the defect sits on the .exe/ELF seam this host spent 2026-09-05 measuring from the other end.
+
+        FIRST ACTION IS TO RE-ESTABLISH THE PREMISE, NOT TO FIX. The mechanism depends on "WSL interop executes the .exe", which is what makes resolve_plan_binary — a run-don't-stat probe — return the .exe from inside the distro. On 2026-09-05 I measured the opposite in that same distro: `/mnt/c/.../tillandsias-plan.exe: cannot execute binary file: Exec format error`. That is interop OFF, and a run-don't-stat probe cannot resolve a binary it cannot run.
+
+        Either answer is worth having before a line changes. If it still reproduces, the fix is real and the premise needs restating. If it does not, the packet's mechanism is dated rather than wrong, and writing a fix against a premise that no longer holds is the shape this fleet spent the day refusing.
+
+        NOTE ON THIS CLAIM ITSELF: the binary refused this event because the status field was still `ready` — "a claim EVENT does not claim it; the fold reads only the status field". That is 1079-qb8k's fix, landed, catching the exact two-writes hazard I recorded from this host at 22:57Z, on the next claim I made. The tool now enforces the order rather than trusting the author to remember it.

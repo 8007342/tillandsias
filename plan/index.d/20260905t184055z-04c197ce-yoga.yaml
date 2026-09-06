@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-sigpipe-verdict-guard-cannot-see-recursive-grep-or-any-pre-existing-pipeline
+    field: status
+    value: in_progress
+    ts: "2026-09-05T18:40:55Z"
+    host: yoga
+
+events:
+  - packet_id: the-sigpipe-verdict-guard-cannot-see-recursive-grep-or-any-pre-existing-pipeline
+    event:
+      type: progress
+      ts: "2026-09-05T18:40:55Z"
+      host: yoga
+      summary: |-
+        status 'in_progress' (not terminal) with evidence_refs: f37a6d0cd
+  - packet_id: the-sigpipe-verdict-guard-cannot-see-recursive-grep-or-any-pre-existing-pipeline
+    event:
+      type: note
+      ts: "2026-09-05T18:40:55Z"
+      host: yoga
+      summary: |-
+        claimed for cycle 2026-09-05T18:40:54Z by linux-yoga-claude-20260905t184054z

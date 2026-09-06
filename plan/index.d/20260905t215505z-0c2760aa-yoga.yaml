@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-selector-and-the-plan-tool-both-report-blocking-and-mean-different-things
+    event:
+      type: progress
+      ts: "2026-09-05T21:55:05Z"
+      agent_id: linux-yoga-claude-20260905t215505z
+      host: yoga
+      summary: |-
+        RECONCILED EXACTLY, and the gap was my own query rather than a third definition. THE FULL DERIVATION, reproducible in one command: blocking = sum of per-packet dependent counts over the epic rows from `select-rows --status ready --claimable-by <role> --release <rel> --limit 400`, capped at 10. For socket-audit-master on linux/v0.5 that is 8 rows summing to 9, which is exactly the frontier line packets=8 blocking=9. The eight rows and their counts: transport-negligible-overhead-audit 0, wire-oscillation-root-cause 1, linux-native-stream-audit 3, headless-podman-unix-streams 2, git-mirror-observability-and-managed-alternatives 0, research-auth-flow-state-machines 0, research-unified-runtime-data-dependency-graph 1, research-flow-state-event-channel 2. WHY I REPORTED 6 THEN 8 AND COULD NOT REACH 9: I omitted `--limit 400`. Without it select-rows returns FOUR rows for this epic instead of eight, so my hand-sums were over a truncated row set. That is a capped list read as a total, which is the rule I wrote into my own notes this morning after the head -8 incident, and I hit it twice inside one investigation while looking for a third definition that did not exist. The extra rows are not exotic: they are the research-* and git-mirror-* members I never saw because they were below the default cut. THE TRAP IS WORTH THE PACKET ON ITS OWN. Anyone reproducing a frontier figure with select-rows will silently get a truncated row set unless they pass --limit, and the truncation is invisible: the output is well-formed and the sum is plausible. That is a stronger argument for making the frontier line checkable with one documented command than the original naming confusion was. CRITERION 2 IS THEREFORE MET: the row set is identified and matches a reproducible query. What remains is the JUDGEMENT, which I am deliberately leaving to a second reader: rename the selector column to say it is an aggregate, or teach blocking-counts to accept an epic and emit the aggregate itself. The measurement no longer constrains that choice.

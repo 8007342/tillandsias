@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: linux-native-stream-audit
+    field: status
+    value: in_progress
+    ts: "2026-09-05T11:36:06Z"
+    host: lenovinha
+
+events:
+  - packet_id: linux-native-stream-audit
+    event:
+      type: note
+      ts: "2026-09-05T11:36:06Z"
+      host: lenovinha
+      summary: |-
+        claimed for cycle 2026-09-05T11:36:04Z by linux-lenovinha-claude-20260905t113604z — bounded audit slice, not the full 6h refactor

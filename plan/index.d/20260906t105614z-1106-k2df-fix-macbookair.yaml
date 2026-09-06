@@ -1,0 +1,138 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# EVENT-ONLY fragment: the packet is declared by esmeraldinha's filing fragment.
+# Re-declaring it under `packets:` mints a SECOND entry in the G-Set at the same
+# order, which is what `plan-orders` reported as a duplicate-order group on the
+# first gate of this cycle.
+events:
+  1106-k2df:
+    - type: progress
+      ts: "2026-09-06T10:56:14Z"
+      agent_id: "macos-tlatoanis-macbook-air-claude-20260905t144547z"
+      host: tlatoanis-macbook-air
+      summary: |
+        THE SIGNAL WAS REPLACED, NOT REINTERPRETED. .permissions.push from
+        GET /repos/{owner}/{repo} reports the AUTHENTICATED USER'S ROLE on the
+        repository. It is not a property of the token. A repo owner holding a
+        fine-grained PAT with no Contents:write is still an admin of their own
+        repository, so the field answers true and the lane seeds a credential
+        that is denied at push time. The value is TRUE about the artefact (this
+        user may push) and FALSE about the property it was read as (this token
+        may push), which is why no reinterpretation of it helps.
+
+        THE REPLACEMENT is the negotiation the token itself must survive:
+        git push --dry-run, run in the SAME ephemeral login container, with the
+        token supplied to git by 'gh auth git-credential' over git's credential
+        protocol. The token-isolation property the lane exists for is preserved
+        exactly: it is never interpolated into the argv and never reaches host
+        disk or env. Dry-run connects, authenticates, and takes the
+        receive-pack advertisement, then sends no pack and applies no ref
+        update.
+
+        RED ARM FIRST, and it redded on today's code for the stated reason:
+          the_probe_does_not_rest_on_the_user_role_permissions_field FAILED
+            ["exec","tillandsias-git-login","gh","api","repos/o/r","--jq",".permissions.push"]
+          only_a_completed_push_negotiation_seeds_the_credential FAILED
+            "a dry-run push that the server accepted must seed"
+
+        MEASURED ON THE REAL REMOTE, both controls, on this host 2026-09-06.
+        These are the tool's own bytes, not a description of them:
+
+          NEGATIVE CONTROL, a repo this host cannot push to:
+            $ git push --dry-run https://github.com/torvalds/linux.git HEAD:refs/heads/tillandsias-push-authorization-probe
+            push-probe: denied rc=128
+            remote: Permission to torvalds/linux.git denied to 8007342.
+            fatal: unable to access 'https://github.com/torvalds/linux.git/': The requested URL returned error: 403
+
+          POSITIVE CONTROL, the repo this host does push to:
+            push-probe: allowed
+            $ git ls-remote ... 'refs/heads/tillandsias-push-authorization-probe' | wc -l
+                   0        <- the dry-run applied nothing
+
+          REVOKED, invalid token in the URL:
+            push-probe: denied rc=128
+            remote: Invalid username or token. Password authentication is not supported for Git operations.
+            fatal: Authentication failed for 'https://github.com/8007342/tillandsias.git/'
+
+        THAT THIRD MEASUREMENT IS THE ONE I WOULD HAVE GOT WRONG BY REASONING.
+        I carried esmeraldinha's 401 discriminator (759-vceg) across the probe
+        rewrite and it does not transfer: git push prints no "Bad credentials"
+        and no "401" — those are the REST API's words. Had I not run it, every
+        revoked credential would have fallen through to the generic scope
+        advice again, with all of esmeraldinha's tests still GREEN, because
+        those tests carry the OLD probe's inputs. A property re-opened through
+        the door of a rewrite, with its own guard still passing. The classifier
+        now matches the measured git strings; the REST strings are kept for a
+        container still running the pre-1106 probe.
+
+        SABOTAGE, four mutations, each verified APPLIED before its result was
+        read, each naming which arm it redded:
+          A probe reads .permissions.push again -> 2 failed
+              (the_probe_does_not_rest_on_the_user_role_permissions_field,
+               the_probe_runs_in_container_and_negotiates_against_the_repo)
+          B accept the old "true" signal again  -> 1 failed
+              (only_a_completed_push_negotiation_seeds_the_credential)
+          C drop the measured git revoked string -> 1 failed
+              (a_revoked_credential_is_told_to_re_login_not_to_edit_scopes)
+          D refuse unconditionally              -> 2 failed
+              (a_push_capable_token_seeds_exactly_as_before,
+               only_a_completed_push_negotiation_seeds_the_credential)
+        D is the arm that stops "refuse always" passing as a fix.
+
+        A TEST THAT PINNED THE FALSIFIED CLAIM WAS REPOINTED, NOT DELETED.
+        the_probe_runs_in_container_and_asks_for_the_push_permission asserted
+        ".permissions.push -- the field reported for classic AND fine-grained
+        tokens". What survives is the container requirement and the repo
+        targeting (now the_probe_runs_in_container_and_negotiates_against_the_repo,
+        plus a new assertion that no token appears in the argv). What was false
+        is asserted against, in the red arm.
+
+        THE FAILING CLASS IS ALREADY MEASURED, AND BY THIS INSTRUMENT.
+        esmeraldinha's filing measured it live on the operator's new
+        fine-grained PAT:
+
+          gh api repos/8007342/tillandsias --jq .permissions.push  -> true rc=0
+          git push --dry-run                                       -> 403
+            remote: Permission to 8007342/tillandsias.git denied to 8007342.
+
+        So the discriminator I adopted is not a plausible substitute for the
+        retired one -- it is the very instrument that FALSIFIED it, on the very
+        token class that broke. I did not need to reproduce that (and could
+        not: minting or downgrading a token to manufacture the condition is
+        forbidden and I did not do it). What I contributed is the two ends
+        esmeraldinha's measurement does not pin: that the discriminator returns
+        `allowed` for a token that CAN push and writes no ref doing so, and
+        that git's revoked wording differs from the REST API's.
+
+        NEXT_ACTION SAID A DRY-RUN IS "SIDE-EFFECTING AND EXPENSIVE". Measured
+        here, it is not side-effecting: ls-remote for the probe ref returns 0
+        after a successful dry-run. This repo already relies on that property
+        -- images/git/probe-upstream-auth.sh calls its dry-run "non-mutating",
+        and check-credential-channel.sh arm 4 has run one since 860-g798. Cost
+        is one HTTPS round trip, once, at login. The packet's fallback ("if no
+        cheap read-only signal exists, THAT is the finding") is therefore not
+        the outcome: a signal exists, it is simply not read-only, and paying
+        one round trip at login beats discovering it hours into a work cycle.
+
+        THE PROBE'S NEW DEPENDENCY IS SATISFIED AND FAILS LOUD IF IT IS NOT.
+        The GitHub login runs in the `forge` image (main.rs:9464 spec), whose
+        base installs `git gh` (images/default/Containerfile.base:20), so git
+        is present where the probe runs. Read, not assumed. If it ever is not,
+        the script answers `push-probe: unavailable no-git` and the verdict
+        refuses naming it, rather than reporting a missing tool as a missing
+        permission.
+
+        THE SHELL HALF OF verifiable_closure. check-credential-channel.sh arm
+        4 already refuses this class -- it has done a real dry-run push since
+        860-g798, so a token that authenticates and cannot push fails it. What
+        was missing is that the coverage was INCIDENTAL: test arm 2 drives it
+        with `probe=false`, a failure with no stated reason, so a rewrite could
+        stop covering the one class the guard exists for and still pass. Added
+        arm 2b, driven by the remote's own 403 words, asserting no ok:/seeding
+        verdict and a non-zero exit. Sabotage (make a failed push probe accept)
+        applied and redded it by name:
+          FAIL: 1106-k2df: a token that AUTHENTICATES and cannot PUSH was
+                accepted: ok:gh-keyring-push-verified
+        Arms 1-3 of that guard still short-circuit ahead of arm 4, but since
+        1091-h3cb they answer `unverified:` rather than `ok:` and so claim no
+        verification. Tightening that dispatch is credential-sequence step 3
+        and is not this packet.

@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: jq-crlf-on-windows-turns-shell-reads-into-silent-wrong-answers
+    event:
+      type: claim
+      ts: "2026-09-05T12:59:13Z"
+      agent_id: windows-yolanda-opus5-20260905t125913z
+      host: yolanda
+      summary: |
+        claimed for cycle by yolanda. Taking the SKIP-should-be-FAIL half first, because it is the mechanism that turned a broken lookup into a PASS verdict and it is platform-independent: a name bound in openspec/litmus-bindings.yaml whose file is absent is a CORPUS-INTEGRITY error, and today it is logged SKIP and excluded from coverage, so the run reports success having executed less than it was asked to. Fixing the CR without fixing that leaves the mechanism intact for the next cause.
+
+        Holding the gate meanwhile on macuahuitl's instruction: scripts/test-cycle-preflight-cargo-resolution.sh reads 16 of 19 here with three identity arms failing blocked:not-a-git-repo, esmeraldinha's PATH fix is inbound, and I will not spend a gate until it lands.

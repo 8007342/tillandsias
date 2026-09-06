@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: cmdkey-credential-verifier-matches-unconditionally
+    field: status
+    value: completed
+    ts: "2026-09-05T20:51:51Z"
+    host: yolanda
+
+events:
+  - packet_id: cmdkey-credential-verifier-matches-unconditionally
+    event:
+      type: completed
+      ts: "2026-09-05T20:51:51Z"
+      host: yolanda
+      summary: |-
+        status 'completed' with evidence_refs: 23c3baeea landed at d9496d128: bash scripts/test-cmdkey-predicate-discriminates.sh -> ok:cmdkey-predicate:4 arm(s); measured on yolanda absent/ORIGINAL=True, absent/SHIPPED=False, present-LegacyGeneric-queried-bare=2 echoes True; restoring the always-true form as live code reds arm 1
+  - packet_id: cmdkey-credential-verifier-matches-unconditionally
+    event:
+      type: note
+      ts: "2026-09-05T20:51:51Z"
+      host: yolanda
+      summary: |-
+        the fix was already in the tree from 2026-09-04 and unclosed; this cycle verified both directions on a Windows host and landed the regression guard

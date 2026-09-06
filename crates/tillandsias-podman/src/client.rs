@@ -2489,23 +2489,59 @@ fn observed_failure_hint(stage: &str, _container_name: &str, args: &[String]) ->
     "next: inspect the entrypoint lines immediately above and the rendered container diagnostics below".to_string()
 }
 
+/// 1044-2raf. THIS TOOK `status_code` AND NEVER LOOKED AT IT.
+///
+/// Both the `cause:` and `next:` lines were unconditional constants that
+/// happen to be right for the common case. On exit 125 they are both FALSE,
+/// and pirria reproduced exactly that on v56.9.4.1: podman printed
+/// `Error: creating container storage: the container name … is already in use`
+/// — it never started the container — and three lines below, this function
+/// said "the container launched and the foreground tool exited non-zero" and
+/// "auth, upstream service, or model availability errors are agent/runtime
+/// issues, NOT podman launch failures".
+///
+/// 125 IS PODMAN'S OWN CODE FOR "the container was not started". A foreground
+/// tool CAN also exit 125, so the code alone is ambiguous — but the old text
+/// resolved that ambiguity toward the case it cannot check and AWAY FROM the
+/// one podman had just printed. That is worse than an unhelpful hint: a reader
+/// who trusts it stops reading podman's stderr, which is where both the cause
+/// and the remedy are.
+///
+/// So 125 gets its own account, and every other status keeps the old one —
+/// the fix NARROWS a claim rather than deleting a hint that is usually right.
 fn format_attached_command_failure(stage: &str, container_name: &str, status_code: &str) -> String {
+    // `status_code` arrives as the Display of an Option<i32>, e.g. "Some(125)".
+    let is_125 = status_code.contains("125");
+
     let mut lines = vec![
         format!("stage '{stage}' attached command exited with status {status_code}"),
         format!("container: {container_name}"),
-        "cause: the container launched and the foreground tool exited non-zero".to_string(),
     ];
 
-    if matches!(stage, "claude" | "codex" | "opencode") {
+    if is_125 {
         lines.push(
-            "next: read the agent output immediately above; auth, upstream service, or model availability errors are agent/runtime issues, not podman launch failures"
+            "cause: AMBIGUOUS at 125 — podman returns 125 when it could not start the container at all, and a foreground tool can also exit 125. Do not assume the container ran."
+                .to_string(),
+        );
+        lines.push(
+            "next: read podman's own error immediately above FIRST — a name already in use, an image or storage failure means the container never started and the remedy is there. Only if podman reported no error is this an agent/runtime failure."
                 .to_string(),
         );
     } else {
         lines.push(
-            "next: read the terminal output immediately above; the runtime stack was started and the foreground command returned this status"
-                .to_string(),
+            "cause: the container launched and the foreground tool exited non-zero".to_string(),
         );
+        if matches!(stage, "claude" | "codex" | "opencode") {
+            lines.push(
+                "next: read the agent output immediately above; auth, upstream service, or model availability errors are agent/runtime issues, not podman launch failures"
+                    .to_string(),
+            );
+        } else {
+            lines.push(
+                "next: read the terminal output immediately above; the runtime stack was started and the foreground command returned this status"
+                    .to_string(),
+            );
+        }
     }
 
     lines.join("\n")
@@ -2707,6 +2743,53 @@ impl PodmanClient {
 
 #[cfg(test)]
 mod tests {
+    /// 1044-2raf. EXIT 125 MUST NOT CLAIM THE CONTAINER LAUNCHED.
+    ///
+    /// `format_attached_command_failure` took `status_code` and never looked
+    /// at it: both the `cause:` and `next:` lines were unconditional
+    /// constants. pirria reproduced the consequence on v56.9.4.1 — podman
+    /// printed "creating container storage: the container name … is already
+    /// in use", never starting the container, and three lines below this
+    /// function said the container launched and that this was NOT a podman
+    /// launch failure.
+    ///
+    /// Asserts the NARROWING, both directions: 125 gets its own account, and
+    /// every other status keeps the old one. A fix that simply deleted the
+    /// agent-runtime hint would pass a one-sided test while throwing away a
+    /// line that is right in the common case.
+    #[test]
+    fn exit_125_does_not_assert_the_container_launched() {
+        let at_125 = super::format_attached_command_failure("opencode", "c", "Some(125)");
+        assert!(
+            !at_125.contains("the container launched"),
+            "125 must not assert the container launched — podman returns 125 \
+             when it could not start one (1044-2raf): {at_125}"
+        );
+        assert!(
+            !at_125.contains("not podman launch failures"),
+            "125 must not steer the reader away from podman's own error, which \
+             is printed directly above it (1044-2raf): {at_125}"
+        );
+        assert!(
+            at_125.contains("read podman's own error immediately above FIRST"),
+            "125 must send the reader to podman's error first (1044-2raf): {at_125}"
+        );
+
+        // The other direction: a non-125 agent failure keeps the hint that is
+        // right for it. Without this arm the fix could pass by deleting the
+        // agent-runtime line outright.
+        let at_1 = super::format_attached_command_failure("opencode", "c", "Some(1)");
+        assert!(
+            at_1.contains("the container launched"),
+            "a non-125 status still means the container ran (1044-2raf): {at_1}"
+        );
+        assert!(
+            at_1.contains("not podman launch failures"),
+            "the agent-runtime hint must survive for the statuses it fits \
+             (1044-2raf): {at_1}"
+        );
+    }
+
     use super::*;
     use crate::backend::{CommandFailure, CommandOutput, OperationKind, RetryClass};
     use std::time::Duration;

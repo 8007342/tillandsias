@@ -1,0 +1,217 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# EVENT-ONLY for 1103-r7wq and 1008-85ry; declares one new packet (1116-h99j).
+events:
+  1103-r7wq:
+    - type: progress
+      ts: "2026-09-06T12:15:18Z"
+      agent_id: "macos-tlatoanis-macbook-air-claude-20260905t144547z"
+      host: tlatoanis-macbook-air
+      summary: |
+        AUDIT-DISPOSE. This packet's next_action is already implemented, and was
+        four days before the packet was filed. It asks to "memoise 831-ezea on a
+        digest of the plan ledger corpus plus the archiver script, emitting a hit
+        record per 1074-96z9". That is scripts/archiver-check-memo.sh, landed
+        2026-09-02 as 911-m7js (b300d6b92), wired at build.sh:2767, digesting
+        plan/index.yaml + plan/archive/*.yaml + plan/index.d/*.yaml + the four
+        archiver scripts + the plan binary's identity — AND emitting
+        archiver-check-hit / archiver-check-miss timing records, which is
+        precisely the observability the closure demands.
+
+        THE PREMISE THIS AND 1008-85ry REST ON IS MEASURABLY FALSE ON THIS HOST.
+        Both were told that a memo hit emits no timing record, so the log counts
+        only misses and the average stays high whether the memoisation works or
+        not. Measured in .cache/metrics/tillandsias-timing.jsonl, the last twelve
+        terminology records in file order alternate:
+
+          2026-09-06T11:25:20Z  terminology-check-hit                      0 ms
+          2026-09-06T11:28:59Z  step:checking-user-visible-terminology...  0 ms
+
+        A hit emits BOTH its own hit record AND the build-span step record, at
+        duration_ms 0. The instrument is not blind. 1074-96z9's own fixture is
+        landed and running here (step:checking-a-memo-hit-is-observable-and-a-
+        miss-stays-profiled-1074, 17 runs).
+
+        SO THE HIT RATE IS DIRECTLY COMPUTABLE, and nobody had computed it:
+
+          memo                     hits  misses  hit_rate  avg_miss
+          terminology  629-t6b       50       1     98.0%   30000 ms
+          archiver     831-ezea       2      16     11.1%   66125 ms
+
+          step-records  629-t6b   202 total ->  37 at 0ms, 165 costly avg 28903
+          step-records  831-ezea  205 total ->  22 at 0ms, 183 costly avg 27923
+
+        THAT EXPLAINS THE SKIPPABLE LIST WITHOUT ANY BLINDNESS. The 7-day window
+        straddles the two landings (911-m7js 09-02, 1054-zvq4 09-05), so only 37
+        of 202 terminology records and 22 of 205 archiver records are post-memo.
+        The averages are window artefacts and they DECAY on their own as the
+        pre-memo runs age out. 1054-zvq4's own context said exactly this — "the
+        7-day window straddles that landing and the log cannot show hit rate" —
+        and it is now half-wrong in the useful direction: the window still
+        straddles, but the log CAN show the hit rate.
+
+        AND IT CORRECTS caveat 1 BY AN ORDER OF MAGNITUDE. saved_ms_upper for
+        831-ezea was 3,626,332 ms, explicitly flagged as "what memoisation could
+        save if EVERY run were a hit". Measured, 11.1% of runs can hit, so the
+        realisable ceiling is roughly a ninth of that — and the memo already
+        collects it. The caveat was right that the bound was not a saving; what
+        it could not say is how far apart they were.
+
+        DISPOSITION: obsoleted-superseded by 911-m7js. Not "wrong" — the audit
+        rule fired correctly on a real signal, and the signal was a stale window
+        rather than an unmemoised step. The residual it was reaching for is real
+        and is filed separately as 1116-h99j: the archiver memo hits 11% of the
+        time, structurally, and that is the only number here worth attacking.
+
+        ONE ERROR OF MY OWN, caught before it reached this record. My second
+        aggregation script read `r["ms"]` where the log writes `duration_ms`, so
+        every row came back 0 ms and I was one sentence from reporting "all 205
+        archiver step-records cost nothing" — a false green produced by reading
+        the wrong field, which is the same shape as citing a measurement that
+        was never taken. Caught by the contradiction with my first aggregate,
+        which had a `duration_ms` fallback. Raw records pasted above and below
+        are the tool's own bytes, from grep, not from my parser.
+
+  1008-85ry:
+    - type: note
+      ts: "2026-09-06T12:15:18Z"
+      agent_id: "macos-tlatoanis-macbook-air-claude-20260905t144547z"
+      host: tlatoanis-macbook-air
+      summary: |
+        AUDIT-DISPOSE, same cycle, same measurements as 1103-r7wq above (which
+        is a narrower re-filing of this packet's first bullet). All THREE steps
+        this packet names are now resolved or gone:
+
+          terminology-dictionary 629-t6b   memoised 1054-zvq4, hit rate 98.0%
+          plan-archiver          831-ezea  memoised 911-m7js,  hit rate 11.1%
+          plan-ledger-tests                STEP NO LONGER EXISTS
+
+        The third is this packet's own finding, not mine: its note of
+        2026-09-04T14:00:31Z records that 1003-444f closed at 1e82211f8 and the
+        step name "NO LONGER EXISTS". So a third of the packet was already void
+        by its own ledger.
+
+        exit_criterion 1 asked for `skip:memoised:<step>:<digest>` in the gate
+        log. Both memos emit a verdict of that kind, in the grammar their own
+        orders chose rather than this one's:
+          ok:terminology-check-memoized:127e9541 — dictionary, locales and
+            checker unchanged since the last pass; check not re-run
+          ok:archiver-check-memoized:<d8>
+        Different token, same property, and I am not going to churn two landed
+        scripts to match a string this packet proposed before either existed.
+
+        exit_criterion 4 ("one week after landing, skippable: no longer names
+        the three in its top three") is the one to keep in mind for whoever
+        reads the audit next: it will come true WITHOUT further work, as the
+        pre-memo runs age out of the 7-day window. If someone reads that as
+        their memoisation succeeding, they will be right about the list and
+        wrong about the cause.
+
+  1116-h99j:
+    - type: note
+      ts: "2026-09-06T12:15:18Z"
+      agent_id: "macos-tlatoanis-macbook-air-claude-20260905t144547z"
+      host: tlatoanis-macbook-air
+      summary: |
+        Filed by this audit. See the packet block below for the shape.
+packets:
+  - packet_id: the-archiver-check-memo-cannot-hit-on-a-drain-gate-because-every-drain-writes-a-fragment-before-it-runs
+    order: 1116-h99j
+    status: ready
+    kind: enhancement
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [gate, performance, memoisation, plan-ledger]
+    estimated_hours: 3
+    owned_files:
+      - scripts/archiver-check-memo.sh
+    title: |
+      The plan-archiver memo (911-m7js) hits 11.1% of the time where the terminology memo hits 98.0%, and the gap is structural: its digest covers plan/index.d/*.yaml, and a drain cycle writes a fragment BEFORE the gate that would consult it
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-09-06 from
+      .cache/metrics/tillandsias-timing.jsonl, using the hit/miss records
+      911-m7js and 1054-zvq4 already emit:
+
+        memo                     hits  misses  hit_rate  avg_miss
+        terminology  629-t6b       50       1     98.0%   30000 ms
+        archiver     831-ezea       2      16     11.1%   66125 ms
+
+      Both memos are correct. Neither is broken. The difference is WHAT THEY KEY
+      ON relative to what a cycle touches: the terminology memo keys on
+      locales/*.toml plus its checker, and a drain cycle touches none of those,
+      so it hits nearly always. The archiver memo keys on the ledger, and the
+      sanctioned cycle REQUIRES a fragment write — the claim before the work,
+      then the evidence — before Finalization runs ./build.sh --check. So the
+      one gate that every cycle runs is the one gate the archiver memo cannot
+      hit, by construction.
+
+      This is the same argument terminology-check-memo.sh makes in its own
+      header against the whole-tree gate memo (765-tkq2): "that one keys on the
+      whole tree, so it never hits during a drain — every cycle writes plan/."
+      The archiver memo is narrower than the tree but still wider than the
+      cycle's own writes, so it inherits a weaker form of the same problem.
+
+      WHY THIS IS NOT "JUST MEMOISE HARDER", AND WHY IT IS p3. A miss is
+      CORRECT: the check asks whether archiving completed packets preserves the
+      ready set, a new fragment can add a ready row, so a changed ledger can
+      genuinely change the verdict. Any narrowing needs a soundness argument
+      that a particular class of fragment cannot affect the answer — and
+      "cannot affect the ready set" is close to what the check itself computes,
+      so the narrowing may cost what it saves. That is the actual question this
+      packet is for, and the honest outcome may be that no sound narrowing
+      exists, in which case say so and close it.
+
+      CONFIRMED ON A SECOND HOST, and macuahuitl's cut is a better instrument
+      than mine because it PREDICTS rather than describes. I said the averages
+      are window artefacts that decay; they measured the decay directly, same
+      host, same log, three windows:
+
+        terminology   7d 19.9%   3d 46.4%   1d 100.0%   (67 hits, 0 misses)
+        archiver      7d  1.5%   3d  3.9%   1d   8.6%
+
+      A 7-day aggregate straddling the landing reads 19.9% where the last day
+      reads 100%. Anyone reporting a memo's effectiveness from a window wider
+      than the time since it landed is reporting the width of their window.
+
+      The archiver number is the one that survives every cut and every host:
+      11.1% here, 8.6% at one day there, 1.5% at seven. Low everywhere, which
+      is why this packet is not a macOS artefact.
+
+      A NEAR-MISS WORTH RECORDING, theirs: their first cut was the ALL-HISTORY
+      rate (15.7% / 1.1%) and they nearly sent it as a CONTRADICTING locus
+      before noticing the window was not mine. It would have read as a real
+      cross-host disagreement and been nothing but an aggregation boundary.
+      Same family as the field-name error above — a number that is honest about
+      what it computed and silent about what it was asked.
+
+      DO NOT re-derive the hit rate from `skippable:` or from step averages. The
+      7-day window straddles the 09-02 and 09-05 memo landings, so those numbers
+      mix pre-memo and post-memo runs and will decay on their own; the hit/miss
+      records are the instrument.
+    next_action: |
+      Decide whether any sound narrowing of the archiver memo's key exists —
+      e.g. whether a fragment that declares no new packet and changes no status
+      can be excluded from the digest without weakening the verdict. Establish
+      the answer before writing code. If no sound narrowing exists, THAT IS THE
+      FINDING: record it and close, rather than trading a real check for a
+      cheaper one. A second, cheaper option worth pricing first: the check
+      itself costs 66 s average on a miss here — making the CHECK faster may
+      beat making it skippable, and does not require any soundness argument.
+    unscoreable: |
+      No pin exists yet and one of the two valid outcomes never produces one.
+      Outcome (a) — a narrowed digest — would create the fixture and convert
+      this row. Outcome (b) is a recorded finding that no sound narrowing
+      exists, which is a paragraph and not a test, and naming a litmus here
+      would commit the packet to (a) before the soundness question is answered.
+      That is the question the packet exists to ask, so it must not be
+      pre-decided by its own obligation field. Whoever lands (a) writes the
+      fixture and converts this; whoever establishes (b) closes it citing what
+      was tried.
+    verifiable_closure: |
+      Either (a) a narrowed digest plus a fixture proving a fragment of the
+      excluded class does not change the verdict — mutate such a fragment,
+      assert the memo still hits AND the check's own negative control still
+      reds; or (b) a recorded finding that no sound narrowing exists, citing
+      what was tried. Measured hit rate BEFORE: 11.1% (2 hits / 16 misses,
+      tlatoanis-macbook-air, 2026-09-06). Any claimed improvement must be
+      stated as a hit rate from the same records, on at least two hosts.

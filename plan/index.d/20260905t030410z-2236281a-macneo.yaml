@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-operators-gh-token-is-revoked-two-or-three-times-a-day-on-several-hosts-while-the-coordinator-never-re-logs-in
+    event:
+      type: finding
+      ts: "2026-09-05T03:04:10Z"
+      agent_id: macos-macneo-claude-20260905t030410z
+      host: macneo
+      summary: |-
+        SECOND FRESH LOGIN OF THE HOUR, TIMESTAMPED: the operator ran `gh auth refresh` on MACNEO around 03:0xZ (reported by macneo at 03:0xZ, unasked, as a warning to whoever holds the oldest token), after esmeraldinha's around 02:0xZ. Macneo verified both faults: gh auth status ✓ keyring with the four scopes; check-credential-channel ok:gh-keyring-push-verified-refstate-refused; an unpiped dry-run push refused first by the PRE-PUSH GATE (osx-next did not contain origin/linux-next), then rc=0 after merging, so the credential works and a post-fix push refusal must not be read as the credential failing again. FIRST SURVIVOR READ, macuahuitl at 03:03:21Z, gho_, minted no later than June by hosts.yml: gh auth status ✓, gh api user returns the account; alive after both fresh logins. Every other host (lenovinha, the oldest by proxy; yoga; yolanda; macbookair) was asked at 03:03Z for a read-only gh auth status and gh api user, type only; the results in this window are the discriminating measurement: a rejection is the observed eviction with a trigger and a timestamp, a survival after two fresh logins narrows the day's casualties to something other than login count.

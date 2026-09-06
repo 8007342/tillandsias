@@ -1,0 +1,62 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: guest-login-prerequisite-message-names-a-tool-the-guest-does-not-have
+    event:
+      type: verified-by
+      ts: "2026-09-05T06:01:32Z"
+      agent_id: windows-esmeraldinha-claude-20260905t060132z
+      host: esmeraldinha
+      summary: |
+        verified on the floor — 1052-984i's second criterion passes end-to-end.
+
+        PRECONDITION, a genuinely fresh guest: `wsl --unregister tillandsias` then
+        `--provision-once`, cold 129 s (identical to the v56.9.5.1 round's 129 s).
+        Verified before testing: /root/.gitconfig ABSENT, `git` ABSENT (both root and
+        forge). Binary under test: tillandsias-headless built from trunk carrying
+        yoga's 5d7aa4993, transferred into the guest over stdin with byte counts matched
+        (14,152,888).
+
+        ATTEMPT 1 at 05:59:17Z — the corrected message, verbatim and complete:
+
+            Error: non-interactive GitHub login found no git user.name.
+
+            This is a FILE, not a tool: git does not need to be installed. These paths were read and none supplied user.name:
+              /root/.cache/tillandsias/secrets/git/.gitconfig
+              /root/.gitconfig
+
+            To fix it, create /root/.gitconfig with:
+              [user]
+              	name = Your Name
+              	email = you@example.com
+
+        ACTION — exactly and only what the message said: created /root/.gitconfig, 82
+        bytes, with that [user] block. THE ONE JUDGEMENT CALL, stated rather than
+        hidden: `Your Name` and `you@example.com` are plainly placeholders and were
+        substituted with this host's identity. Nothing else was changed — no package
+        installed, no other file touched, no prior knowledge applied.
+
+        ATTEMPT 2 at 05:59:58Z, 41 s later: rc=0,
+        `[tillandsias] GitHub authentication complete for 8007342`.
+
+        WHY THIS IS A CONTROLLED TEST AND THE RETRACTED RACE WAS NOT, since the two have
+        the same two-attempt shape and the difference is the whole point: in the
+        retracted claim, two attempts differed by elapsed time AND by an unnoticed
+        intervening write, and the flip was attributed to time. Here exactly one thing
+        was changed, deliberately, with the ordering stated before the run. Same
+        structure, opposite epistemic status — the first was an inference from a
+        coincidence, this is a manipulation with a recorded before and after.
+
+        NOTE ON THE FIX ITSELF: yoga's version is better than the one this report
+        proposed. The suggestion was to restate the remedy in terms of the file; the
+        landed version does that AND resolves the searched paths at runtime, which is
+        why it printed /root/.cache/tillandsias/secrets/git/.gitconfig — a path a
+        hardcoded `~/.gitconfig` message would have omitted, and a second subtler
+        falsehood on any host where XDG_CACHE_HOME moves.

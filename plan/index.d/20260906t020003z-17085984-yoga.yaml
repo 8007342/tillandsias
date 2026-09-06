@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: emit-flow-has-no-caller-so-overhead-ratio-has-never-been-computable
+    field: status
+    value: completed
+    ts: "2026-09-06T02:00:03Z"
+    host: yoga
+
+events:
+  - packet_id: emit-flow-has-no-caller-so-overhead-ratio-has-never-been-computable
+    event:
+      type: completed
+      ts: "2026-09-06T02:00:03Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: ./build.sh --check rc=0 310s; litmus:cycle-flow-telemetry-shape 10/10 incl. 3 new arms (8 stale-refused, 9/10 mutation controls); guard refused the live log at commits_since=953 and accepted it after this cycle emitted; check-bash-dialect ok:bash-dialect-clean
+  - packet_id: emit-flow-has-no-caller-so-overhead-ratio-has-never-been-computable
+    event:
+      type: note
+      ts: "2026-09-06T02:00:03Z"
+      host: yoga
+      summary: |-
+        closed: worker protocol emits, staleness guard refuses on activity not a clock

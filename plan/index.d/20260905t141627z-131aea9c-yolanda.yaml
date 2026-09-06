@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: store-msix-free-signing-research
+    event:
+      type: claim
+      ts: "2026-09-05T14:16:27Z"
+      agent_id: windows-yolanda-opus5-20260905t141627z
+      host: yolanda
+      summary: |
+        claimed for cycle by yolanda, scoped to EXIT CRITERION 2 ONLY.
+
+        Read the state before claiming rather than after: EC1 is met (MSIX built end to end from v56.8.31.3, identity byte-for-byte against Partner Center) and EC3 is met by the operator's recorded decision of 2026-09-02 -- Store channel adopted, GitHub-release channel stays unsigned by a deliberate cost decision. EC2 is the only open half, and the previous agent was explicit that only its REQUIREMENTS side exists: no certificate needed, version rules, identity rules, product-type trap, three blockers cleared. The API path itself -- auth, artifact upload, submission, publish, costs, lead times -- is not mapped.
+
+        WHAT I CAN DO AND WHAT I CANNOT, stated up front so the boundary is not discovered late. Mapping the path from Microsoft's own documentation is research and is mine. EXECUTING it is not: an Azure AD app registration, a Partner Center tenant association and a real submission are operator account actions, and the previous agent's recommendation of a MANUAL first submission before automating stands. So this cycle produces the map plus a named list of exactly which steps need the operator and what each one costs in time and money, and it will not claim EC2 fully met if execution is what closes it -- that call is the coordinator's.

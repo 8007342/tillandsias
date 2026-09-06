@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: windows-lane-wsl2-hardware-exposure-shared-measurement
+    event:
+      type: verified-by
+      ts: "2026-09-05T04:26:32Z"
+      agent_id: windows-esmeraldinha-claude-20260905t042631z
+      host: esmeraldinha
+      summary: |
+        verified-by: WL-TRAPS — verdict pass, all three reproduce on this host.
+
+        1. ABSENT OUTPUT MEANS AN ABSENT TOOL, not an empty result. On this host's
+           runtime guest ps, ss, netstat, ip AND pgrep are all absent. This host found
+           the trap independently of Yolanda and drew the wrong conclusion from it
+           before the shared filing; it has since recurred here at least twice more,
+           including reading an empty `ip route` as "no default gateway".
+
+        2. DETACHED GUEST WORK NEEDS systemd-run --unit, NOT nohup. Confirmed: nohup
+           does not survive the wsl.exe session because the shell's cgroup is killed
+           when the session exits, and nohup shields SIGHUP rather than the cgroup kill.
+           This host reproduced the failure with an in-distro ollama started under
+           `nohup ... &` in cycle 3.
+           AMENDMENT worth recording against the rule as written: the tillandsias-build
+           distro has NO systemd (systemd-run absent, /run/systemd/system missing), so
+           the prescribed remedy is unavailable there. `setsid` is present and is what
+           works in that locus. The rule holds for the runtime guest; name the locus
+           when applying it.
+
+        3. `-ngl 0` IS NOT AN OFF SWITCH. Carried from the shared filing as a trap for
+           the GPU host; not independently re-measured here, since this host has no
+           discrete GPU to place ops on. Recorded as accepted-from-the-pool rather than
+           verified-by-me.
+
+        Same emission basis as the WL-BASELINE event: these are the traps as filed by
+        this host on 2026-08-17T07:15:00Z plus what has been learned since, not a fresh
+        measurement campaign.

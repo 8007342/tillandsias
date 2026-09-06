@@ -99,7 +99,7 @@ check "(a) recur: runs>=2 only, top3 by total_ms desc, exact totals/avg/fail_pct
   "recur: window=7d runs=14 steps=3 top3=step:gate:archiver:runs=5:total_ms=20000:avg_ms=4000:fail_pct=0,build-check:runs=2:total_ms=16000:avg_ms=8000:fail_pct=50,litmus-suite:runs=6:total_ms=15000:avg_ms=2500:fail_pct=100 source=$A"
 check "(a) skippable: invariant + expensive + repeated, saved_ms_upper = total - avg" \
   "$(printf '%s\n' "$out" | line skippable)" \
-  "skippable: candidates=2 floor_ms=2000 min_runs=5 top3=step:gate:archiver:runs=5:avg_ms=4000:fail_pct=0:saved_ms_upper=16000,litmus-suite:runs=6:avg_ms=2500:fail_pct=100:saved_ms_upper=12500 source=$A"
+  "skippable: window=7d candidates=2 floor_ms=2000 min_runs=5 top3=step:gate:archiver:runs=5:avg_ms=4000:fail_pct=0:saved_ms_upper=16000,litmus-suite:runs=6:avg_ms=2500:fail_pct=100:saved_ms_upper=12500 source=$A"
 # Parse-from-the-right on the first skippable entry: the step keeps its colons.
 entry="$(printf '%s\n' "$out" | line skippable | sed 's/^skippable: .*top3=//; s/ source=.*$//' | cut -d, -f1)"
 check "(a) parse rule: step is everything before the first :runs=" "${entry%%:runs=*}" "step:gate:archiver"
@@ -113,7 +113,7 @@ rows "$B" 6 "$T" "alwaysfail" 3000 1                                # 100%: incl
 rows "$B" 249 "$T" "nearly" 3000 0; row "$B" "$T" "nearly" 3000 1   # 1/250 rounds to 0%: still excluded
 out="$(report "$B" | line skippable)"
 check "(b) mixed excluded, always-failing included, 1-in-250 not rounded into invariance" "$out" \
-  "skippable: candidates=1 floor_ms=2000 min_runs=5 top3=alwaysfail:runs=6:avg_ms=3000:fail_pct=100:saved_ms_upper=15000 source=$B"
+  "skippable: window=7d candidates=1 floor_ms=2000 min_runs=5 top3=alwaysfail:runs=6:avg_ms=3000:fail_pct=100:saved_ms_upper=15000 source=$B"
 case "$(report "$B" | line recur)" in
     *"nearly:runs=250:total_ms=750000:avg_ms=3000:fail_pct=0"*) ok "(b) recur still reports the near-invariant step with its rounded fail_pct=0" ;;
     *) bad "(b) recur should carry nearly:runs=250:total_ms=750000:avg_ms=3000:fail_pct=0" ;;
@@ -126,10 +126,10 @@ rows "$C" 4 "$T" "belowmin" 5000 0      # runs == min_runs-1: out
 rows "$C" 5 "$T" "belowfloor" 1999 0    # avg == floor-1: out
 out="$(report "$C" | line skippable)"
 check "(c) avg exactly at floor_ms is a candidate; one run short or one ms short is not" "$out" \
-  "skippable: candidates=1 floor_ms=2000 min_runs=5 top3=atfloor:runs=5:avg_ms=2000:fail_pct=0:saved_ms_upper=8000 source=$C"
+  "skippable: window=7d candidates=1 floor_ms=2000 min_runs=5 top3=atfloor:runs=5:avg_ms=2000:fail_pct=0:saved_ms_upper=8000 source=$C"
 out="$(TILLANDSIAS_SKIP_MIN_RUNS=4 TILLANDSIAS_SKIP_FLOOR_MS=1999 report "$C" | line skippable)"
 check "(c) env knobs move both boundaries and are echoed on the line" "$out" \
-  "skippable: candidates=3 floor_ms=1999 min_runs=4 top3=belowmin:runs=4:avg_ms=5000:fail_pct=0:saved_ms_upper=15000,atfloor:runs=5:avg_ms=2000:fail_pct=0:saved_ms_upper=8000,belowfloor:runs=5:avg_ms=1999:fail_pct=0:saved_ms_upper=7996 source=$C"
+  "skippable: window=7d candidates=3 floor_ms=1999 min_runs=4 top3=belowmin:runs=4:avg_ms=5000:fail_pct=0:saved_ms_upper=15000,atfloor:runs=5:avg_ms=2000:fail_pct=0:saved_ms_upper=8000,belowfloor:runs=5:avg_ms=1999:fail_pct=0:saved_ms_upper=7996 source=$C"
 
 # ── (d) repeat window: --cycle-start vs the 3h default ──────────────────────
 D="$W/d.jsonl"; : > "$D"
@@ -161,7 +161,7 @@ out="$(report "$W/does-not-exist.jsonl")"; rc=$?
 check "(f) missing log: exit 0" "$rc" "0"
 check "(f) missing log: repeat absent" "$(printf '%s\n' "$out" | line repeat)" "repeat: window=3h steps=0 top3=- source=absent"
 check "(f) missing log: recur absent" "$(printf '%s\n' "$out" | line recur)" "recur: window=7d runs=0 steps=0 top3=- source=absent"
-check "(f) missing log: skippable absent" "$(printf '%s\n' "$out" | line skippable)" "skippable: candidates=0 floor_ms=2000 min_runs=5 top3=- source=absent"
+check "(f) missing log: skippable absent" "$(printf '%s\n' "$out" | line skippable)" "skippable: window=7d candidates=0 floor_ms=2000 min_runs=5 top3=- source=absent"
 
 # ── (g) malformed and unplaceable rows are dropped, never fatal ─────────────
 G="$W/g.jsonl"; : > "$G"
@@ -197,7 +197,7 @@ check "(i) recur: label carries recur data, not the tail of repeat" \
   "recur: window=7d runs=20 steps=4 top3=com_ma:runs=5:total_ms=15000:avg_ms=3000:fail_pct=0,line_break:runs=5:total_ms=15000:avg_ms=3000:fail_pct=0,sp_ace:runs=5:total_ms=15000:avg_ms=3000:fail_pct=0 source=$I"
 check "(i) skippable: line is present and its own" \
   "$(printf '%s\n' "$out" | line skippable)" \
-  "skippable: candidates=4 floor_ms=2000 min_runs=5 top3=com_ma:runs=5:avg_ms=3000:fail_pct=0:saved_ms_upper=12000,line_break:runs=5:avg_ms=3000:fail_pct=0:saved_ms_upper=12000,sp_ace:runs=5:avg_ms=3000:fail_pct=0:saved_ms_upper=12000 source=$I"
+  "skippable: window=7d candidates=4 floor_ms=2000 min_runs=5 top3=com_ma:runs=5:avg_ms=3000:fail_pct=0:saved_ms_upper=12000,line_break:runs=5:avg_ms=3000:fail_pct=0:saved_ms_upper=12000,sp_ace:runs=5:avg_ms=3000:fail_pct=0:saved_ms_upper=12000 source=$I"
 I2="$W/i2.jsonl"; : > "$I2"
 TILLANDSIAS_TIMING_LOG="$I2" bash "$ROOT/scripts/cycle-metrics.sh" --emit-timing 'step=q"u\o\te' phase='p"h' duration_ms=3000 exit=0 host='h\x' 2>/dev/null
 check "(i) --emit-timing strips quote and backslash from step/phase/host" \
@@ -230,6 +230,21 @@ rows "$L" 4 "$T" "frac" 3000 0; row "$L" "$T" "frac" 3000.7 0     # 15000.7 -> 1
 check "(l) total_ms is floored to an integer; avg unaffected" \
   "$(report "$L" | line recur)" \
   "recur: window=7d runs=5 steps=1 top3=frac:runs=5:total_ms=15000:avg_ms=3000:fail_pct=0 source=$L"
+
+# ── (m) ORDER 1074-96z9: skippable: states its window, and TRACKS the flag ──
+# The token must be derived, not decorative. A hardcoded `window=7d` would pass
+# every arm above — they all use the default — while telling a reader the wrong
+# period the moment anyone widens the window. `recur:` is asserted the same way
+# by (e); this is its missing sibling, and it exists because `skippable:` is the
+# line the audit rule instructs a coordinator to compare `runs=` across hosts on.
+M="$W/m.jsonl"; : > "$M"
+rows "$M" 5 "$T" "widewin" 4000 0
+check "(m) skippable: echoes the DEFAULT window" \
+  "$(report "$M" | line skippable)" \
+  "skippable: window=7d candidates=1 floor_ms=2000 min_runs=5 top3=widewin:runs=5:avg_ms=4000:fail_pct=0:saved_ms_upper=16000 source=$M"
+check "(m) --recur-window-days moves skippable's window token too" \
+  "$(report "$M" --recur-window-days 10 | line skippable)" \
+  "skippable: window=10d candidates=1 floor_ms=2000 min_runs=5 top3=widewin:runs=5:avg_ms=4000:fail_pct=0:saved_ms_upper=16000 source=$M"
 
 total=$((pass+fail))
 if [ "$fail" -eq 0 ]; then echo "ok:cycle-metrics-recurrence-fixture:${total}"; exit 0; fi

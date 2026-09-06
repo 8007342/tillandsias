@@ -597,6 +597,30 @@ filing — not the prompt.
    re-establishes the dev inference endpoint. Both are idempotent; the common
    path costs a no-op `cargo build` and one HTTP round trip, measured at ~2.8s.
 
+   **The `<plan>` segment names WHICH instrument the cycle is running on, and
+   `existing` is a legitimate verdict** (order 1004-ws5q):
+
+   | verdict | meaning |
+   |---|---|
+   | `rebuilt` | cargo was present and the instrument was built or confirmed current |
+   | `existing` | **no cargo on this host, but a runnable binary resolved** — the cycle proceeds on it |
+   | `skipped` | the build step was skipped by `CYCLE_PREFLIGHT_SKIP_BUILD=1` |
+   | `blocked:preflight:plan:cargo-absent` | no cargo AND no runnable binary — no instrument, and the cycle must not start |
+
+   `existing` exists because the old order of checks was backwards: preflight
+   declared the COMPILER absent before ever looking for a BINARY, so a host
+   doing compile-free work lost its whole slot with a healthy instrument on
+   disk. Measured on pirria 2026-09-04, where a floor-tier release smoke —
+   which compiles nothing — was refused a 4h slot.
+
+   **`CYCLE_PREFLIGHT_SKIP_BUILD=1` is for compile-free work on a host that
+   cannot compile, and nothing else.** It is NOT a way past a red build on a
+   host that can compile: that is a broken instrument, and selecting work with
+   one is the failure this whole step exists to prevent. Since 1004-ws5q a host
+   with no cargo but a working binary no longer needs the variable at all —
+   preflight answers `existing` on its own — so reaching for it should now be
+   rare enough to be worth a second thought.
+
    It rebuilds the INSTRUMENT, not the product: `./build.sh --check` already
    compiles what it validates, and rebuilding everything on a schedule is a
    heavier decision than this step is making.

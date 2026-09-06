@@ -1,0 +1,91 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: validate-yaml-greens-a-zero-byte-fragment-so-a-failed-heredoc-reads-as-valid-evidence
+    order: 1117-66qv
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [plan-ledger, fail-loud, verdict-grammar]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-plan/src/main.rs
+    title: |
+      tillandsias-plan validate-yaml answers ok:yaml-loads for a ZERO-BYTE fragment, so a heredoc that failed to write reads as validated evidence — and the closure order flips status before committing evidence, which is exactly the window this lands in
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-09-06, by hitting it accidentally.
+
+      A shell heredoc writing a ledger fragment failed to parse under zsh. The
+      redirection had already created the file, so it existed at ZERO BYTES. The
+      validator was then run on it, as the cycle protocol requires, and answered:
+
+        ok:yaml-loads:plan/index.d/20260906t123644z-829-dkuc-governance-detector-macbookair.yaml
+
+      An empty file IS valid YAML - it parses to null - so the validator is not
+      wrong about what it checked. It is wrong about what a reader takes it to mean.
+      The verdict token says `yaml-loads`, and that is literally true; what the cycle
+      uses it for is "this evidence fragment is well-formed", and a zero-byte file is
+      not evidence.
+
+      WHY THIS IS WORSE THAN AN ORDINARY FALSE GREEN. The sanctioned closure order
+      flips status BEFORE committing evidence. So the window this defect lives in is
+      exactly the window where the claim has already been released and the evidence
+      has not yet landed. In this instance the sequence was:
+
+        1. set-field ... status ready          -> succeeded, claim released
+        2. cat > fragment <<YAML               -> zsh parse error, file left empty
+        3. validate-yaml fragment              -> ok:yaml-loads
+        4. (would have been) git commit        -> a released packet, no evidence,
+                                                  and a green validator line in the
+                                                  transcript saying it was fine
+
+      It was caught by reading the file back with wc -l, not by the validator, and
+      not by the parse error either - step 2's error scrolled past above two
+      successful commands and read as noise.
+
+      REPRODUCED DELIBERATELY AFTERWARDS, not left as an anecdote about my
+      own accident. Both arms of the closure below are measured, on this host,
+      against ./target/release/tillandsias-plan:
+
+        $ : > /tmp/empty.yaml
+        $ tillandsias-plan validate-yaml /tmp/empty.yaml
+        ok:yaml-loads:/tmp/empty.yaml            EXIT=0
+
+        $ printf 'foo: bar\n' > /tmp/nofrag.yaml
+        $ tillandsias-plan validate-yaml /tmp/nofrag.yaml
+        ok:yaml-loads:/tmp/nofrag.yaml           EXIT=0
+
+      So the second arm is not a speculative generalisation of the first: a
+      file that parses and declares neither packets: nor events: greens too.
+
+      RELATED SHAPE, same family: 1106-k2df (a value true about the artefact and
+      false about the property it names) and 1024-c3h3 (evidence that cites something
+      which is not there). This is the third instance this week of a verdict that is
+      honest about what it computed and silent about what it was asked.
+    unscoreable: |
+      The pin is the red arm this packet's fix creates, and it does not exist
+      yet. Naming a litmus:<test> here would mint a reference to a test nobody
+      has written — a phantom-ref, which is one of 829-dkuc's own sweep classes,
+      so filing one to satisfy an obligation check would be the precise
+      self-parody. Same disposition 1008-85ry took for the same reason: whoever
+      lands the emptiness refusal writes the arm and converts this row. The
+      closure below is measured and reproducible today, so the row is not
+      unfalsifiable — only unpinned.
+    verifiable_closure: |
+      - validate-yaml on a zero-byte file does NOT emit an ok: verdict; it emits a
+        distinct refusal naming emptiness, and exits non-zero. RED ON TODAY'S CODE:
+        `: > /tmp/empty.yaml && tillandsias-plan validate-yaml /tmp/empty.yaml`
+        currently prints ok:yaml-loads and exits 0.
+      - a fragment that parses but declares neither `packets:` nor `events:` is also
+        refused, since it is the same class (well-formed, carries nothing) and the
+        empty file is only its limiting case
+      - a CONTROL arm: a normal fragment carrying events: still validates ok, so the
+        fix is a refusal of empty content and not a refusal of everything
+    next_action: |
+      Add an emptiness/content check to validate-yaml ahead of the parse:
+      refuse a file whose parsed document is null, and refuse one that declares
+      neither packets: nor events:. Write the red arm first against a zero-byte
+      file. Keep the ok: path for real fragments as the positive control — the
+      failure mode to avoid is a validator that refuses everything and looks
+      strict.

@@ -1,0 +1,19 @@
+# Gate step 1076-kft9 — data, not code (order 1072-b7eq).
+#
+# The measuring check replaces a producer-NAME list with a measurement. The live
+# instance on 2026-09-05 met the existing guard's verdict-context and
+# early-exit-consumer tests and escaped solely because `sed` is absent from
+# UNBOUNDED_PRODUCER_RE — the third time that list has failed this way, after
+# `grep -r` (1069-c9w6, 1070-a4gc). A check that EXECUTES has no list to be
+# absent from.
+#
+# The self-test is NOT advisory. Its whole value is that it fails loudly: three
+# versions of this check passed inspection while measuring nothing.
+#
+# STEP_SCRIPT is a LITERAL path on purpose: a binding assembled from a
+# variable is invisible to every name-based scan, including the
+# bound-or-retired guard (1063-nraf). Keep it a plain string.
+STEP_DESC="Checking the SIGPIPE verdict check measures rather than pattern-matches (1076-kft9)"
+STEP_SCRIPT="scripts/test-sigpipe-verdict-measured.sh"
+STEP_ERROR="the measuring check cannot detect a SIGPIPE-decided verdict, or its calibration case stopped being known-bad (1076-kft9) — see the verdict line above"
+STEP_OK="SIGPIPE verdict measurement check passed"

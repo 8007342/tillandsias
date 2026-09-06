@@ -1,0 +1,87 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: reopening-a-terminally-closed-packet-reds-the-gate-so-the-sanctioned-reopen-path-cannot-be-landed
+    order: 1085-g52w
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [plan, ledger, guards, multi-host]
+    estimated_hours: 3
+    owned_files:
+      - scripts/check-fragment-status-loss.sh
+    title: |
+      `set-field --reopen-evidence` is the sanctioned way to reopen a closed packet, but any reopen leaves a terminal EVENT against a non-terminal fold and check-fragment-status-loss refuses it — so no host can land a reopen
+    context: |
+      TWO SUPPORTED MECHANISMS CONTRADICT EACH OTHER, and the ledger tool is on
+      the losing side of its own guard.
+
+      MEASURED on yoga 2026-09-05T23:5xZ. Reopening 1033-iycs on a second real
+      instance, using the path the tool itself prescribes:
+
+        set-field 1033-iycs status in_progress --reopen-evidence "<falsifying observation>"
+          -> ok: ... done -> in_progress
+
+      and the very next `./build.sh --check`:
+
+        violation:fragment-status-loss:1
+          1033-iycs...: has a 'completed' EVENT but folds as 'in_progress'
+          CAUSE: a terminal event was recorded without the matching `status:`
+                 transition. Nothing was discarded, so nothing looks wrong —
+                 the packet just stays claimable forever.
+        [build] a fragment declares a status the fold does not apply
+        gate rc=1
+
+      The CAUSE text is right about the shape it was written for and wrong
+      here. Nothing is missing: the terminal event and the reopen are BOTH
+      real, and the event is HISTORY rather than an unapplied transition. The
+      guard (check-fragment-status-loss.sh:433) accepts a `completed` event
+      only when the packet folds to completed/verified/done/obsoleted, and a
+      reopen by construction folds to something else.
+
+      SO THE REOPEN PATH IS UNLANDABLE FLEET-WIDE. `--reopen-evidence` exists
+      (650-dq6u), refuses a status walk-back without a falsifying observation,
+      and is the correct discipline — but any host that uses it cannot pass the
+      gate afterwards, so the only options are to abandon the reopen or to push
+      red. This is not specific to 1033-iycs or to yoga; it applies to every
+      terminally-closed packet on every host.
+
+      WHY IT WAS INVISIBLE UNTIL NOW: reopening is rare. The guard has been
+      correct for every case it has actually seen, which is the same reason
+      1067-24q6's write-default survived — a defect on a path nobody walks is
+      not a defect anybody has met.
+
+      THE DISCRIMINATOR IS ALREADY IN THE LEDGER AND IS NOT AVAILABLE TO THE
+      GUARD. A terminal event OLDER than the current status transition is
+      history; one NEWER than it, or with no transition at all, is the loss
+      this guard exists to catch. `declared_events` currently carries
+      packet_ids only — no timestamps — so the fix is to thread the event ts
+      and the winning status ts (FoldProvenance::lww_wins already keys packet
+      id plus field to fragment/ts/host) into the join and compare them,
+      rather than to widen the accepted-status set. WIDENING WOULD BE WRONG:
+      accepting `in_progress` against a `completed` event would delete the
+      guard's actual subject, which is a closure whose transition never landed
+      — 11 of 21 such packets on 2026-08-09.
+    exit_criteria:
+      - "a packet reopened via `set-field --reopen-evidence` passes ./build.sh --check with no fragment-status-loss violation; pre-fix result: FAILS (violation:fragment-status-loss:1, measured on 1033-iycs 2026-09-05T23:5xZ)"
+      - "a genuine unapplied closure — terminal event, no matching status transition, no later reopen — is STILL refused; pre-fix result: passes and must keep passing, and a fixture must prove it rather than a reading of the diff"
+      - "a terminal event NEWER than the current non-terminal status transition is still refused: that is a closure racing a reopen, not history"
+    unscoreable: |
+      The pin is a fixture with all three arms above against a scratch ledger:
+      reopen-accepted, unapplied-closure-refused, and newer-terminal-refused.
+      The middle arm is the negative control — without it, deleting the check
+      scores two green arms. The claimer adds it.
+    events:
+      - type: filed
+        ts: "2026-09-06T00:08:00Z"
+        agent_id: "linux-yoga-claude-20260906t000800z"
+        host: yoga
+        summary: |
+          Filed by yoga after a sanctioned reopen refused the gate. Found while
+          taking a second instance of 1033-iycs; that work moved to child
+          packet 1085-eepi precisely because this made the reopen unlandable.
+          p1 because it blocks a correction path every host is told to use, and
+          the workaround (abandon the reopen) silently converts a falsified
+          closure back into a standing one.

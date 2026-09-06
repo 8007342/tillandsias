@@ -58,7 +58,7 @@ trap 'rm -rf "$TMP"' EXIT
 
 _unload_all() {
     local m
-    for m in $(curl -sS "$ENDPOINT/api/ps" 2>/dev/null | jq -r '.models[]?.name'); do
+    for m in $(curl -sS "$ENDPOINT/api/ps" 2>/dev/null | jq -r '.models[]?.name' | tr -d ''); do
         curl -sS -o /dev/null -X POST "$ENDPOINT/api/generate" \
             -d "$(jq -nc --arg m "$m" '{model:$m, keep_alive:0, prompt:""}')" 2>/dev/null
     done

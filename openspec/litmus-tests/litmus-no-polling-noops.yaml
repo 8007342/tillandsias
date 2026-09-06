@@ -1,0 +1,52 @@
+# @trace spec:podman-idiomatic-patterns
+name: litmus:no-polling-noops
+spec: podman-idiomatic-patterns
+phase: pre-build
+description: Verify the tray's status refreshes stay single-shot over one persistent control-wire client, rather than reconnecting or retrying per tick
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-windows-tray/src/notify_icon.rs
+
+# ORDER 147, exit criterion 4. The audit's criteria 1 and 2 were confirmed by
+# INSPECTION on 2026-08-16 and cited by line: "LIVE_CLIENT is a static OnceLock
+# reused on the fast path (notify_icon.rs:135,1272-1293); refresh_vm_status
+# (:1886) and refresh_github_login (:2116) are single-shot". Every one of those
+# line numbers is now wrong — the symbols sit at :134, :1475, :2211 and :2389.
+# The facts still hold, re-checked rather than assumed, but the citation rotted
+# in three weeks and nothing said so. That is why the property is pinned instead
+# of re-read.
+#
+# WHY IT MATTERS TO THIS AUDIT SPECIFICALLY: 147 exists because the wire showed
+# degraded/recovered oscillation, and a tray that reconnects on every poll tick
+# manufactures exactly that signal — a regression here would look like a
+# transport fault and send the next reader to the transport.
+#
+# The existing litmus:podman-idiomatic-events-no-polling covers the podman
+# EVENTS module only; this covers the tray refresh path, which nothing did.
+
+critical_path:
+  - step: "the tray's status refreshes are single-shot over a persistent client"
+    command: "scripts/check-tray-refresh-no-polling.sh"
+    timeout_ms: 20000
+    expected_behavior: "ok:tray-refresh-no-polling"
+
+  # A guard over Windows-only sources that no Linux or macOS host can compile is
+  # otherwise a grep nobody has watched refuse. Every arm mutates a copy of the
+  # real file; arm 5 pins that a COMMENT naming a loop does not trip it.
+  - step: "MUTATION CONTROL: the guard catches a lost static, an unbacked accessor, a retry loop and a sleep"
+    command: "scripts/test-tray-refresh-no-polling.sh"
+    timeout_ms: 60000
+    expected_behavior: "tray-refresh-no-polling: 6 passed, 0 failed"
+
+observability:
+  traces:
+    - "@trace spec:podman-idiomatic-patterns"
+  expected_log: "The tray refresh path stays single-shot over one persistent control-wire client"
+  log_fields:
+    spec: "podman-idiomatic-patterns"
+    test: "no-polling-noops"
+
+rollback:
+  on_failure: "inspect crates/tillandsias-windows-tray/src/notify_icon.rs — the live client must stay a persistent static reached through live_client_mutex(), and both refresh functions must be single-shot"

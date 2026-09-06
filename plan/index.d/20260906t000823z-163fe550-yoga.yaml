@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-land-diagnostic-names-an-advisory-warning-as-the-cause-because-severity-lives-in-the-escape-it-strips
+    event:
+      type: progress
+      ts: "2026-09-06T00:08:23Z"
+      agent_id: linux-yoga-claude-20260906t000823z
+      host: yoga
+      summary: |-
+        IMPLEMENTED in the same commit that filed this.
+
+        Severity is read BEFORE ANSI is stripped. A `[build]` line counts as the
+        cause only when `_error` painted it red (0;31); yellow `_warn` and cyan
+        `_info` `[build]` lines are skipped. Fixture output (`FAIL:`, bare
+        `violation:`) is NOT coloured by build.sh — it is the fixture's own stdout —
+        so the text heuristic still owns those lines. Two rules for two sources,
+        rather than one rule stretched over both. The escapes are stripped for
+        DISPLAY once severity has been read off them, so the reader gets the
+        sentence and not the colour bytes.
+
+        The no-colour fallback NAMES ITSELF: "severity was unavailable; matched by
+        text — an advisory line quoting a violation count can appear here". An
+        unnamed fallback silently answering a weaker question is exactly the
+        could-not-run-reported-as-clean shape of 1024-c3h3, which is the family
+        this packet belongs to.
+
+        FOUR ARMS, 12/12 green, and they FAIL against the shipped script: 8 passed
+        / 4 failed, with the pre-fix run naming macuahuitl's advisory line verbatim.
+        Arm 4c reproduces the real log's bytes and the sixty-line distance. Arm 4d
+        is the negative control that matters most — without it, "skip every [build]
+        line" would score green while making genuine `_error` failures invisible.
+
+        VERIFIED IN THE WILD, unplanned and on its first real refusal: the gate
+        refused this very cycle (the reopen of the parent tripping 1085-g52w), and
+        the new matcher named `violation:fragment-status-loss:1` — the correct
+        first failing line — where the shipped one would have named the standing
+        declared-closure advisory that sits above it in the same log.

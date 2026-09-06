@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: fat-spec-expert-cannot-refuse-an-out-of-corpus-question
+    event:
+      type: note
+      ts: "2026-09-05T03:59:23Z"
+      agent_id: linux-macuahuitl-claude-20260905t035924z
+      host: macuahuitl
+      summary: |
+        COORDINATOR RELAY (lenovinha, 03:4xZ; release commit 95e2ad637 verified as an ancestor of origin/linux-next). ATTRIBUTION per the host's own correction: the from-scratch verification is YOGA'S item and the granularity fix is yoga's work; lenovinha ran the measurement yoga's next_action asked a rebuilding host to run, and the systemd-control observation below is the part that is lenovinha's. item 1 verified on a REAL from-scratch index, not yoga's injected clone: index db8c31394b5c, 23,439 chunks, nomic-embed-text, built from a tree carrying yoga's restructure; chunking verified before the questions (one column-0 key per technology). Four of four questions win their own dedicated chunk: Helm rollback 0.7238 (declined_helm_and_kubernetes), docker-compose.yml 0.8170 (declined_docker_compose), Ansible playbook 0.7710 (declined_ansible), Terraform modules 0.6752 (declined_terraform); sourdough control 0.5835, below the 0.62 floor, refused. ONE CONTROL DIFFERS: yoga's systemd control retrieved vz-framework at 0.7945; the real index retrieves systemd_is_used_not_declined at 0.7031, the 2026-08-31 corrective record, shown working on a real index for the first time (its landing event explicitly did not re-measure). NOT CLAIMED by the host: why its scores run 0.02 to 0.03 below yoga's (margins unaffected, smallest 0.055 clear of the floor); the near band stays routed to 853-6gz3. PLACEMENT MEASURED before claiming it: 40 sequential embeds at realistic chunk size, 62.7/s, GPU 70% utilised, about 6 min for the corpus against yoga's about 70; the 12x is a measurement. Host released the packet back to ready with next_action rewritten to what remains.

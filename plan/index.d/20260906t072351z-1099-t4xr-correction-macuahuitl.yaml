@@ -1,0 +1,66 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Correction fragment per 1071-adhj: 1099-t4xr's declaring row rests on a
+# premise that is false. The declaration stands as a record; act on this.
+events:
+  - packet_id: the-mcp-first-read-path-degrades-silently-and-the-filesystem-fallback-is-what-carries-the-loop
+    event:
+      type: note
+      ts: "2026-09-06T07:23:51Z"
+      host: macuahuitl
+      summary: |-
+        CORRECTION — plan_status is NOT broken and the packet's premise is
+        withdrawn by both its reporter and its filer.
+
+        The parameter is `reference`. Verified on macuahuitl:
+          plan_status {reference: "1004-pg9p"} -> 1004-pg9p done floor-tier-...
+        pirria had tried {id:} and {query:}, neither of which exists in the
+        schema, so the server genuinely received nothing and the literal `null`
+        in the error was accurate. I filed "the MCP path degrades silently and
+        the filesystem fallback carries the loop" on three fallbacks, one of
+        which was a caller error and one of which (tillandsias-plan absent for
+        glibc skew) is 889-twhe and unrelated. That generalisation does not
+        survive.
+
+        THREE NARROWER CLAIMS SURVIVE, all resting on calls that WERE made
+        correctly, and pirria located the root cause in the schema itself:
+
+        1. FOUR OF FIVE reference-taking tools are unhardened.
+           images/default/config-overlay/mcp/forge-plan.sh — plan_blocked_on has
+           minLength:1 and additionalProperties:false; plan_status,
+           plan_blocked_by, plan_closure and plan_burndown have neither. With
+           additionalProperties:false, {id:} would be rejected as an unknown
+           property NAMING the property, so the error would teach the caller the
+           parameter. Two tokens per tool. Same shape as the checkout lock, the
+           litmus binding and the memo: a fix applied where it was found and not
+           to its siblings.
+
+        2. THE ERROR REPORTS A SCHEMA FAILURE AS A LOOKUP MISS. "no packet
+           matches 'null'" is the grammar of "I looked and found nothing" when
+           the truth is "I could not look". unresolved_reason() in main.rs:1490
+           already splits UNKNOWN from AMBIGUOUS, with a comment saying a bare
+           "no packet matches" is "a FALSE NEGATIVE that reads as no such work" —
+           the author identified this exact class and covered two of three cases.
+           There is no ABSENT arm, so an empty reference falls through to unknown.
+
+        3. plan_status ANSWERS FROM THE LOCAL FOLD WITH NO STALENESS SIGNAL.
+           pirria's first correct call returned in_progress for 1004-pg9p while
+           macuahuitl read done for the same packet at the same moment. Not a
+           disagreement — their checkout was 7 commits behind; they pulled and
+           got done. So the tool served a confident, well-formed, WRONG answer
+           about a packet's state with nothing marking it as a snapshot. The
+           bootstrap tells hosts to ASK rather than read precisely so they need
+           not think about the file layer, and this is the class the whole night
+           has been about arriving in the tool the bootstrap recommends first.
+
+        4. NO DOCUMENT NAMES THE PARAMETER. CLAUDE.md:26 lists plan_status as a
+           bare name; methodology/distributed-work.yaml:1159 shows it
+           POSITIONALLY ("plan_status 575 is a miss, plan_status 575-k3f9 is a
+           hit"), which reads as a CLI signature. A caller following the
+           bootstrap has to guess, and id/query are the two best guesses.
+
+        NEXT ACTION replaces the declaring row's: harden the four schemas to
+        match plan_blocked_on; add the ABSENT arm to unresolved_reason(); name
+        the parameter in CLAUDE.md and distributed-work.yaml; and either carry
+        the fold's head in plan_* answers or state in the bootstrap that answers
+        are only as fresh as the last fetch. Prefer the first — a caller cannot
+        act on advice it has to remember.

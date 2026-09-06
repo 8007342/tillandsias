@@ -407,12 +407,36 @@ fn test_stress_no_resource_leaks() {
     let first_10_avg: Duration = cycle_times.iter().take(10).sum::<Duration>() / 10;
     let last_10_avg: Duration = cycle_times.iter().rev().take(10).sum::<Duration>() / 10;
 
-    // Last 10 should not be significantly slower than first 10
-    let ratio = last_10_avg.as_secs_f64() / first_10_avg.as_secs_f64();
+    // A RATIO IS ONLY MEANINGFUL ABOVE A FLOOR (1051-f7e2, esme's finding).
+    //
+    // This asserted `ratio < 2.0` unconditionally. On a host with no podman
+    // every attach/launch/stop/detach in the loop fails FAST, so a cycle is
+    // MICROSECONDS and the ratio stops measuring leakage and starts measuring
+    // scheduler jitter. MEASURED on esmeraldinha (four cores, loaded): the
+    // whole six-test binary finishes in 0.01 s and this assertion read 4.46x —
+    // red, gate 9, with nothing leaking.
+    //
+    // THE BOUND IS RELATIVE *PLUS* AN ABSOLUTE CUSHION, in one expression
+    // rather than a branch on host speed. The doubling keeps the original
+    // meaning where cycles are real work; the cushion absorbs jitter where
+    // they are not. A branch would make the test assert different things on
+    // different hosts, which is the defect restated rather than fixed.
+    //
+    // THE CUSHION IS SIZED TO JITTER, NOT TO CONVENIENCE. esme's false red was
+    // 4.46x of a microsecond-scale mean — a few microseconds of absolute
+    // growth. 250us leaves that roughly two orders of magnitude of headroom
+    // while staying far below the growth a real per-cycle leak produces over
+    // 100 cycles. A FIRST DRAFT USED 2ms AND THE SABOTAGE ARM BELOW DID NOT
+    // TRIP IT: a cushion loose enough to swallow every jitter is also loose
+    // enough to swallow the leak, and a guard that cannot fail is not a guard.
+    const JITTER_CUSHION: Duration = Duration::from_micros(250);
+
+    let bound = first_10_avg * 2 + JITTER_CUSHION;
     assert!(
-        ratio < 2.0,
-        "Potential resource leak: later cycles {} slower than early",
-        ratio
+        last_10_avg <= bound,
+        "Potential resource leak: last-10 mean {last_10_avg:?} exceeds \
+         2x first-10 ({first_10_avg:?}) plus {JITTER_CUSHION:?} jitter cushion \
+         = {bound:?}"
     );
 
     eprintln!(

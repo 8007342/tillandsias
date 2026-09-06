@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: host-preamble-does-not-check-git-identity-or-name-its-cargo-assumptions
+    field: status
+    value: completed
+    ts: "2026-09-05T11:55:04Z"
+    host: macuahuitl
+
+events:
+  - packet_id: host-preamble-does-not-check-git-identity-or-name-its-cargo-assumptions
+    event:
+      type: completed
+      ts: "2026-09-05T11:55:04Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: pirria's commit relayed as bf2709edc under its authorship plus the coordinator's hermetic fixture fix bbd12d294, both in this land; fixture 19/19 on macuahuitl after the three-way merge; union litmus 291/291; pirria's own gate green on its tree (ran=2215 new-red=0)
+  - packet_id: host-preamble-does-not-check-git-identity-or-name-its-cargo-assumptions
+    event:
+      type: note
+      ts: "2026-09-05T11:55:04Z"
+      host: macuahuitl
+      summary: |-
+        three criteria met by pirria's measured incidents; identity via git var GIT_AUTHOR_IDENT, cheatsheet-tiers skip, the cargo-site registry with its fixture bound into the gate; landed by the coordinator because pirria has no credential channel

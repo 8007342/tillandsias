@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: binding-an-orphaned-fixture-imports-its-whole-legacy-body-into-the-gate-past-every-diff-scoped-guard
+    event:
+      type: progress
+      ts: "2026-09-05T22:57:54Z"
+      agent_id: windows-esmeraldinha-claude-20260905t225754z
+      host: esmeraldinha
+      summary: |
+        Item 3 is landed on trunk at 0be7276f3 and running in the gate. Item 2 is written and calibrated but unlanded, at p3. THIS PACKET CARRIES THREE CORRECTIONS AND IS NOT TRUE AS FILED.
+
+        CORRECTION 1 — THE PREMISE, retracted by me. The packet was filed on my stop-the-line that binding an orphaned fixture carried this defect past every diff-scoped guard. False for this instance: f059ace6c bound the fixture at 17:13-17:14Z and e711f738e ADDED the arm-17 block containing the defective line at 17:16:58Z, two to four minutes LATER. The string `grep -qE` does not appear in the fixture's blob at the binding commit. It was a newly added line in a normal diff — exactly the shape every -added guard exists for. I inferred causation from adjacency in time and subject and never checked when the LINE arrived.
+
+        CORRECTION 2 — MY OWN "THIRD FAILURE OF THE PRODUCER-NAME LIST", which is wrong and is in the landed commit message for item 3. I wrote that the list failed a third time after `grep -r` in 1069-c9w6 and 1070-a4gc. lenovinha disproved it and I verified it here by running the guard's own regex: `grep -rl foo . | grep -q .` IS matched by UNBOUNDED_PRODUCER_RE, which contains `grep[[:space:]]+-[a-zA-Z]*[rR][a-zA-Z]*`. Those earlier cases escaped on a leading-slash anchor and a line-oriented unit of analysis, NOT on absence from the list. What remains true, and is verified by running all three of the guard's regexes against the live line: this instance met verdict-context and early-exit-consumer and escaped solely because `sed` is absent. One escape by absence, not three.
+
+        CORRECTION 3 — THE MECHANISM, refined by yolanda and it corrects my wording. I framed it as producer LATENCY on the strength of a drvfs/ext4 pair (10/10 vs 0/10 on byte-identical files) plus a causal control that reproduced it by slowing the producer on ext4. Yolanda built exactly what "latency" predicts should fail — a slow directory scan with the offender sorting early — and got CLEAN 10/10. Their sentence is the correct one: a producer that has finished WRITING never receives SIGPIPE; the scan being slow does not matter once the output is done. The condition is whether the producer still has bytes to WRITE at the instant the consumer exits. Slow reads reach it; a large match set reaches it; NEITHER IS THE QUANTITY. My causal control proved the filesystem is not required — not that latency is the cause. I stated the stronger claim.
+
+        WHAT IS LANDED AND TRUE: item 3 replaces a producer-NAME test with execution and a PIPESTATUS read, and a check that executes has no list to be absent from. Bound at scripts/gate-steps.d/070-1076-kft9.step, self-test 5 passed 0 failed with its arms visible in gate 24's log rather than only in a terminal. Arm 5 is the teeth: an evaled pipeline yields a ONE-element PIPESTATUS describing eval, and under pipefail that lone value is 141, so a check measuring nothing still passes the known-bad arm while its no-match arm never fires. Three of my versions passed inspection that way; every one was caught by a calibration case with a known answer and none by reading the code.
+
+        OUTSTANDING, and why this is `implemented` rather than `completed`:
+          * ARM 1 (the newly-bound-fixture detector) is written and calibrates — f059ace6c -> 10, a body-only fix -> 0, and my own inline-to-data re-bind -> 0 once a was-bound-before condition was added — but is UNLANDED and now p3. Its value is contingent on orphans PERSISTING, and 1077-vzwq/1078-p2mc are disposing of them. A guard whose justification is that we will keep failing to finish something should be re-raised by a measurement, not by my retracted report.
+          * ITEM 3's REVISION: adopt yolanda's formulation in the header, demote my drvfs/ext4 pair from mechanism to one route, and carry TWO known-bad arms by independent routes — their 2000-match synthetic (cheap, portable, no throttling) alongside the slowed producer. A calibration reachable only one way is one host's luck away from silently not being bad.
+          * Their match-set case is UNVERIFIED ON DRVFS. Worth running here before anyone writes the arm: if it does not fire on this filesystem, that is more interesting than if it does.
+          * NO THIRD BYTE MODEL. Two are falsified — 792-ksr8's size bands and my 10242Bof65536. 112 KB passing and 226 KB failing on yolanda's host invites a third; the header should say the quantity is not known, name the two routes, and instruct the reader to execute rather than compute.

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: salvage-dirty-worktree-leaves-no-local-ref-so-a-host-that-cannot-push-gets-no-copy
+    field: status
+    value: completed
+    ts: "2026-09-06T09:44:58Z"
+    host: yoga
+
+events:
+  - packet_id: salvage-dirty-worktree-leaves-no-local-ref-so-a-host-that-cannot-push-gets-no-copy
+    event:
+      type: completed
+      ts: "2026-09-06T09:44:58Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: ./build.sh --check rc=0 489s; scripts/test-salvage-net.sh all arms green incl. 4 new; 3 of the 4 fail against the pre-fix script with fail:salvage:push and no ref containing the file; measured ok:salvaged-local on an unreachable origin with the untracked file in the ref and the worktree byte-identical
+  - packet_id: salvage-dirty-worktree-leaves-no-local-ref-so-a-host-that-cannot-push-gets-no-copy
+    event:
+      type: note
+      ts: "2026-09-06T09:44:58Z"
+      host: yoga
+      summary: |-
+        closed: local ref written before the push; three verdicts; skill updated

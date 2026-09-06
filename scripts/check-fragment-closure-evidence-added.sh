@@ -91,9 +91,73 @@ while IFS= read -r f; do
     fi
 done <<< "$candidates"
 
+# ── ORDER 1024-c3h3: AN EVIDENCE SHA MUST BE ONE THAT SURVIVED THE LANDING ──
+#
+# The check above proves evidence EXISTS. It says nothing about whether the ref
+# it names is real, and it was not.
+#
+# THE SHAPE. The sanctioned closure order runs `set-field ... --evidence <sha>`
+# at Finalization step 2, BEFORE step 4 lands. land-on-platform-branch.sh
+# fetches, integrates onto origin and REWRITES the commit, so the SHA recorded
+# is the pre-rebase local one and never exists upstream. lenovinha measured four
+# of four closures citing ghosts on 2026-09-04 (5326cb97d, d2ce890b2, 89f6960d2,
+# 4aaa24ba2, while the code landed as dcc50ff27, a20540d33, 42930b71c,
+# 00549903c), and yoga's 1011-d578 cited 677c30527 the same way.
+#
+# WHY IT MATTERS MORE THAN A WRONG STRING. A reader running the obvious check
+# gets NO and cannot tell "the code never landed" from "the ref was captured too
+# early" — two conditions needing opposite responses. That is 881-29me's shape
+# with a SHA instead of a line number: cite what survives the operation.
+#
+# THE RULE IS REACHABILITY FROM WHAT THE REMOTE WILL HAVE, not from origin
+# alone. A host that lands code and ledger in ONE push cites a SHA that is not
+# yet upstream but IS an ancestor of the tip being pushed; refusing that would
+# flag correct work. A rewritten SHA is an ancestor of NEITHER, which is exactly
+# what makes ghosts separable from ordinary in-flight commits.
+#
+# ADVISORY, NOT BLOCKING, deliberately. The standing history is full of these —
+# the ledger records them and lenovinha appended corrections rather than editing
+# — so refusing would red every host on debt it cannot fix from here. Naming the
+# landed candidate is what converts a wrong ref into a correctable one.
+_ce_ghosts=0
+while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    [ -f "$f" ] || continue
+    while IFS= read -r sha; do
+        [ -n "$sha" ] || continue
+        # Unknown objects are not this check's business: a non-SHA evidence
+        # string (a log path, a verdict line) is legitimate and common.
+        git cat-file -e "${sha}^{commit}" 2>/dev/null || continue
+        if git merge-base --is-ancestor "$sha" "$base_ref" 2>/dev/null; then continue; fi
+        if git merge-base --is-ancestor "$sha" HEAD 2>/dev/null; then continue; fi
+        _ce_ghosts=$((_ce_ghosts + 1))
+        {
+            echo "  evidence-ref-not-upstream: $sha (in $f)"
+            echo "    It is reachable from neither $base_ref nor the commit being pushed,"
+            echo "    which is what a pre-landing SHA looks like after the rebase (1024-c3h3)."
+            _subj="$(git log -1 --format=%s "$sha" 2>/dev/null)"
+            if [ -n "$_subj" ]; then
+                _landed="$(git log --format='%H %s' "$base_ref" -n 400 2>/dev/null \
+                    | grep -F -- " $_subj" | head -1 | cut -d' ' -f1)"
+                if [ -n "$_landed" ]; then
+                    echo "    The landed commit with the same subject is ${_landed}."
+                    echo "    Cite that one; it is the SHA a reader can follow."
+                else
+                    echo "    Subject: $_subj"
+                    echo "    No commit with that subject is on $base_ref — this may be work"
+                    echo "    that genuinely never landed, which is the OTHER diagnosis."
+                fi
+            fi
+        } >&2
+    done < <(sed -n 's/.*evidence_refs:[[:space:]]*\([0-9a-f]\{7,40\}\).*/\1/p' "$f")
+done <<< "$candidates"
+
 if [ "$violations" -gt 0 ]; then
     echo "violation:closure-without-evidence:${violations}"
     exit 1
+fi
+if [ "$_ce_ghosts" -gt 0 ]; then
+    echo "  ⚠ ${_ce_ghosts} evidence ref(s) name a commit that is not upstream (1024-c3h3, advisory)" >&2
 fi
 echo "ok:closure-evidence:${checked} checked"
 exit 0

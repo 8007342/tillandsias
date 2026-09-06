@@ -1,0 +1,75 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: thirty-shell-fixtures-are-invoked-by-nothing-and-no-gate-can-see-them
+    event:
+      type: progress
+      ts: "2026-09-05T17:14:41Z"
+      agent_id: linux-lenovinha-claude-20260905t133546z
+      host: lenovinha
+      summary: |-
+        FULL DISPOSITION OF ALL 26 ORPHANS, each triaged individually and then ADVERSARIALLY REFUTED by a second reader briefed to find a reason NOT to accept the proposal. 52 agents, 0 errors.
+
+        THE HEADLINE IS NOT THE TEN I WIRED. It is that ELEVEN of the twenty-six PASS on this host and are still unsafe to bind. A green exit code was never evidence that a fixture belongs in a gate, and four dispositions were CHANGED by the refutation pass -- every one of them toward caution. Three fixtures proposed for wiring (check-carry-forward, skills-single-source, secrets) were refuted and downgraded. Had I acted on the first pass I would have put three fixtures into the fleet's gate that a second reader could show should not be there.
+
+        DONE THIS CYCLE: 26 -> 13 orphans.
+
+        WIRED (11, ten this commit plus expert-accuracy-record-shape earlier), each surviving both passes; total added gate cost 1.39s against ~332s, 0.4%:
+          test-build-sh-forge-check-only.sh            Pure-shell, hermetic, 15ms, no infra, and its subject is live code (build.sh:600/740/754/791/796), so it belongs in the main gate under the convention
+          test-check-engine-cpu-dispatch.sh            Pure-shell, 0.212s, deterministic across repeat and cwd-independent runs, and bash-3.2/BSD clean by the repo's own gate (`scripts/check-bash-dialect.s
+          test-expert-accuracy-record-shape.sh         Pure-shell, tree-non-mutating, 1.4s, and every assertion is hermetic against the injected grade line rather than against live infra (record-expert-acc
+          test-forge-findings-persisted.sh             Pure-shell, 0.323s, deterministic, bash-3.2-clean (no arrays, `declare -A`, `mapfile`, or `${x^^}`), and it guards a gate that AGENTS.md:55 and images
+          test-git-credential-helper.sh                Its subject is alive and load-bearing — images/git/git-credential-tillandsias.sh exists and relay-refs.sh:202,214-221 actively wires it via GIT_CONFIG
+          test-guest-unit-hardening.sh                 The checker it guards is ALREADY a hard `--check` gate (`build.sh:2876`, `_run bash "$SCRIPT_DIR/scripts/check-guest-unit-hardening.sh"`), so this fix
+          test-litmus-steps-can-fail.sh                Pure-shell, 43ms, hermetic (its corpus is four heredocs in a mktemp dir, not the repo tree, so it cannot go red when a litmus file is added), and it g
+          test-plan-binary-probe.sh                    Its subject is alive and load-bearing (build.sh:2797 sources plan-binary-probe.sh for resolve_plan_binary; the probe header names eight callers), it i
+          test-podman-sync-budgets.sh                  The gate it pins already runs unconditionally in the --check phase at build.sh:3077 with no platform guard, so the instrument is trusted on every host
+          test-scorable-obligation-gate.sh             The gate it scores is ALREADY wired and runs on every host — build.sh:1699 `if ! _run bash "$SCRIPT_DIR/scripts/check-scorable-obligation-added.sh"` —
+          test-subdomain-routing.sh                    Pure-grep, hermetic, 17ms, CWD-independent (`PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"`, line 24) against a tracked repo file, and it is NOT redundant w
+
+        RETIRED (2), separate commit, reasons in it and in the packet:
+          test-forge.sh                                Nothing — its container command is `/bin/bash` (line 45), an interactive REPL with no assertion, no expected output and no probe, so the only property it can enforce is "podman acc
+          test-mcp-expert-health.sh                    Nothing independently: the file has zero test logic — 23 lines of comment plus one `exec "$ROOT/scripts/check-mcp-expert-health.sh" fixture` (line 24) — and the 20 scenarios it rea
+
+        MARK_MANUAL (2) -- genuinely need live infrastructure; NOT wired, and the marker vocabulary is still undecided so they remain orphans by the count:
+          test-git-mirror.sh                           It is an interactive human diagnostic, not a test: it asserts nothing (only `set -euo pipefail` matches any assertion verb) and its payload is `--inte
+          test-proxy.sh                                It cannot be automated at all — line 38's payload is an interactive `/bin/bash` behind `--interactive --tty`, with zero assertions, so no gate could e
+
+        FIX_FIRST (11) -- THE LIST THAT MATTERS MOST, because every one of these passes here and would cost a future claimer a red gate on another host to rediscover:
+          test-check-carry-forward.sh
+              why not wired: Low on all three hosts, with one wiring instruction attached. macOS: no GNU-only constructs — `mktemp -d "${TMPDIR:-/tmp}/carry-forward-fixture.XXXXXX"` (line 43) is BSD-valid, no `sed -i`, no `grep -P`, no `readlink -f`, and `local`/`${BASH_SOURCE[0]}`/`$((..
+              REFUTED from WIRE_BUILD: The load-bearing claim is false, and it is the one that sizes the risk. They wrote: "Inside `--check` both are already screened — build.sh:1856-1861 aborts on check-fragment-events-land.sh's exit 2 with the cargo-build r
+          test-chromium-framework-launch.sh
+              why not wired: macOS breaks the supported gate. The scripts/test-*.sh block sits inside `build.sh:1579 if [[ "$FLAG_CHECK" == true ]]`, and build.sh's own Darwin refusal at line 547 advertises "What DOES work here: ./build.sh --check and ./build.sh --test" — so this fixture 
+          test-e2e-preflight-live-runtime.sh
+              why not wired: macOS is the hard breakage: build.sh runs natively on Darwin (no re-exec), the fixture block is not OS-gated, and `./build.sh --check` on any Mac would abort at this fixture with "FAIL: live forge present but verdict was 'eligible'" — turning a green osx-next 
+          test-litmus-diff-scope.sh
+              why not wired: macOS: the build.sh --check fixture block is NOT OS-gated (the only Darwin guards are build.sh:547, which covers --install, and :803), so it runs on /usr/bin/awk (BSD one-true-awk). `awk -v fn="$1" '$0 ~ "^" fn "\\(\\) \\{"'` at lines 46-50 is the repo's ONLY 
+          test-macos-signing-seam.sh
+              why not wired: Wired as-is into build.sh today: **Linux and Windows/MSYS** (2 of the 3 platform branches, and MSYS ships GNU coreutils so it hits both bugs identically) turn `./build.sh --check` red at arm 4c with a message that names the wrong cause — an operator reading "v
+          test-metrics-log-path-agreement.sh
+              why not wired: Wiring it before the fix converts a latent library bug into an intermittent, misattributed gate failure. macOS and Windows in a plain clone are fine (bash-3.2-safe, no GNU-only flags, already proven 8/8 in Git Bash and WSL2), and a 13GB floor host is unaffecte
+          test-secrets.sh
+              why not wired: In build.sh specifically: (a) Windows/MSYS — the container-side path `/run/secrets/"$test_secret"` passed as an argv element at line 124 is subject to MSYS path mangling into `C:/msys64/run/secrets/...`, so Test 1's `cat` fails and the gate goes red for a path
+              REFUTED from WIRE_LOCALCI: The proposal's load-bearing premise is factually wrong, and its prescribed edit is insufficient. Three independent grounds.  (1) THE SAFE-HARBOR PREMISE IS FALSE — local-ci.sh runs on macOS and Windows too. The whole arg
+          test-skills-single-source.sh
+              why not wired: Low on all three hosts, with one concrete nit to fix in the same commit. (1) macOS/Windows: the fixture was purpose-built for this split — lines 34-53 write a real symlink where the platform allows and Git's 120000 placeholder blob where it does not, and lines
+              REFUTED from WIRE_BUILD: REFUTED on the enumerated axis "anything writing into the real checkout rather than a temp dir." The proposer's risk section concludes "THE REAL RISK, and it is stderr noise rather than a bad verdict." That is wrong. The
+          test-source-slice-bounds.sh
+              why not wired: macOS is the whole risk, and it is worse than a red gate. I simulated BSD sed faithfully (stub that errors and leaves the file unchanged, guard path pinned to the real repo) and got rc=1 with this shape: arm 1 `ok: live-bound-passes`; arm 2 `FAIL: dead-bound-i
+          test-spec-index-endpoint-classification.sh
+              why not wired: Wired as-is it is a permanent red on every host with a warm index, including this one. Worse, it is not read-only: because the temp root is ignored, `run_against` invokes the real producer against the operator's checkout `.cache/spec-index`, so on any host who
+          test-trace-coverage.sh
+              why not wired: Wired as-is, every platform goes red immediately for the counter bug, not for a coverage finding — `((passed++))` under set -e fails identically on macOS bash 3.2, MSYS bash, and Linux, so it is not a portability escape hatch but a universal red. Even after th
+              REFUTED from FIX_FIRST: The FIX_FIRST *label* survives, but the grounds it rests on are false and the remediation it prescribes is unsafe, so it must not be acted on as written.  CONFIRMED (their correct parts). The counter defect is genuine an
+
+        METHOD, so the numbers can be re-derived rather than trusted: all 26 were run on this host first (20 pass, 6 non-zero) and those exit codes were given to the triage agents as evidence rather than re-run per agent. Three of the six failures are podman short-name resolution, one is a macOS seam failing on Linux as designed, two are genuine defects. The classifier that split live-host from pure-shell earlier is a heuristic over command names and remains a work ordering, not a verdict.
+
+        REMAINING: 13 orphans -- the 11 FIX_FIRST plus the 2 MARK_MANUAL awaiting a marker vocabulary. The guard extension is still unwritten and still must not land before those are disposed of, or it reds the gate on day one.

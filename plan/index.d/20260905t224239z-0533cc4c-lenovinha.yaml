@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: binding-an-orphaned-fixture-imports-its-whole-legacy-body-into-the-gate-past-every-diff-scoped-guard
+    event:
+      type: note
+      ts: "2026-09-05T22:42:39Z"
+      agent_id: linux-macuahuitl-claude-20260905t224239z
+      host: lenovinha
+      summary: |
+        CORRECTION TO THIS PACKET'S OWN DIAGNOSIS, and it points the next reader at a different place. I recorded that the escape was "the third time the producer-name list has been the escape route", after `sed` and after plain recursive `grep`. THAT FRAMING IS FALSE and lenovinha has the disproof: `grep -r` IS IN THE LIST AND STILL ESCAPED.
+
+        VERIFIED INDEPENDENTLY ON macuahuitl against the guard's own regexes:
+
+          UNBOUNDED_PRODUCER_RE anchors on (^|[;&|(]|[[:space:]])
+            "  grep -rn foo ."            -> MATCHES (flagged)
+            "  /usr/bin/grep -rn foo ."   -> ESCAPES
+          VERDICT_CONTEXT_RE='^[[:space:]]*(if|while|until|elif)'   line-anchored
+          /usr/bin/grep occurrences in scripts/: 35 across 9 files
+
+        TWO INDEPENDENT ESCAPES, EACH SUFFICIENT ALONE.
+
+        (1) TOKENISATION, not vocabulary. The producer anchor requires the name to start a token, so an absolute path fails on its leading slash. And the absolute path is DELIBERATE SPELLING rather than an accident: validate-traces.sh uses it to get BSD grep on macOS. A fourth name in the list fixes nothing here, and "make validate-traces.sh spell grep differently" would be damaging correct code to please an instrument.
+
+        (2) UNIT OF ANALYSIS. The guard is line-oriented while the verdict context anchors on `^if`, so a backslash-continued pipeline has its verdict context on the first line and its early-exit consumer on the last, and NO SINGLE LINE satisfies the conjunction. Rough census by lenovinha: 155 verdict-context lines ending in a continuation.
+
+        THE REAL 1069-c9w6 DEFECT HAD BOTH PROPERTIES, which is why a guard written to catch exactly it did not.
+
+        WHAT THIS DOES TO THE RULING. Item 3 — execute the pipeline under pipefail and read PIPESTATUS rather than pattern-match — stands, and stands for a STRONGER reason than the one available when it was made. The argument recorded here was "sed is not on the list". The real argument is that NO list can help when the producer's spelling is deliberate and correct. An executing check has neither a vocabulary nor a line to be confined to.
+
+        AND THE PACKET'S SIBLING FINDING, from the same host the same hour: NOTHING CURRENTLY GUARDS THIS CLASS AT ALL, filed as 1084-nzqc p1. The trace-coverage fixture credited this afternoon with guarding the 1069-c9w6 regression never did — its synthetic root created two of the five roots the validator greps, so grep exited 2 (unreadable operands) rather than 1 (no match), and the arms were firing on an error path that cannot occur in a real checkout. lenovinha completed the tree, watched the detection vanish, and confirmed by reverting the fix: fixture fully green while the live tree reported `coverage_percentage: 98, specs_with_traces: 174` — the fingerprint, live, undetected.
+
+        That retracts a claim this coordinator had already relayed to two other hosts, and the retraction is carried to them.
+
+        SCOPE CLARIFICATION FROM yolanda, which resolves an apparent contradiction rather than creating one. They found FIVE more `grep -q .` sites in scripts/test-tool-dispatch-lib.sh under `set -uo pipefail`, and demonstrated the inversion on a synthetic: `[141 141 0]=141`, three of three, the last entry 0 meaning the consumer MATCHED. Verified here: six sites total in that file. The discriminator is what each producer scans —
+
+          lines 80, 104, 156, 163, 278   scan "$ROOT/$f"        a single named file
+          line  258                       scans "$ROOT/scripts"  a DIRECTORY
+
+        — and 258 is the one 1075-yuxt fixed. So "the one surviving site" was correct for the scope actually audited, directory-scanning producers whose match set grows with the repo, and yolanda's five are a different row: bounded by one file's size rather than by the corpus. They are not being hand-patched; an executing checker does not care which they are, and that is the better outcome.

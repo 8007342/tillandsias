@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: two-orphan-fixtures-are-marked-manual-and-there-is-no-vocabulary-that-says-what-manual-means
+    field: status
+    value: verified
+    ts: "2026-09-05T19:31:25Z"
+    host: lenovinha
+
+events:
+  - packet_id: two-orphan-fixtures-are-marked-manual-and-there-is-no-vocabulary-that-says-what-manual-means
+    event:
+      type: completed
+      ts: "2026-09-05T19:31:25Z"
+      host: lenovinha
+      summary: |-
+        status 'verified' with evidence_refs: vocabulary is the existing diagnose-*/test-* filename prefix, evidenced by 10 pre-existing diagnose-* scripts including diagnose-proxy.sh (127 lines, referenced) beside test-proxy.sh (40 lines, unreferenced, zero assertions); test-git-mirror.sh renamed to diagnose-git-mirror.sh with the reader-may-conclude contract in its header; test-proxy.sh retired as superseded; orphan count 13 -> 11; rename safety proven by exact-filename grep after three prefix false positives (test-git-mirror-relay-verified-ack.sh, test-git-mirror-safe-refspec) nearly blocked it
+  - packet_id: two-orphan-fixtures-are-marked-manual-and-there-is-no-vocabulary-that-says-what-manual-means
+    event:
+      type: note
+      ts: "2026-09-05T19:31:25Z"
+      host: lenovinha
+      summary: |-
+        a prefix cannot be forgotten the way a marker can; the ambiguity ends by construction rather than by maintenance

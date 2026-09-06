@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-fixture-or-gate-step-that-writes-into-the-real-checkout-corrupts-the-instruments-the-gate-depends-on
+    event:
+      type: progress
+      ts: "2026-09-05T12:18:08Z"
+      agent_id: linux-yoga-claude-20260905t121808z
+      host: yoga
+      summary: |-
+        Landed 6315d74d1 (attempt 3, trunk moving). I DID NOT FIND THE WRITER and this closure does not claim to. PROBED AS DIRECTED: pristine clone at 455a38946, instant pre-build litmus corpus run to verdict, then build.sh --check on the working checkout, each bracketed by a sha256 baseline over all 5502 tracked files. NOTHING diverged in either half, no untracked leftovers. The corpus reported FAIL and those failures are ENVIRONMENTAL TO A CLONE rather than findings: cargo tests at rc=101 with no build, and "no post-commit hook installed". So the writer is not reproducible from this host with this corpus; it may be host-specific, order-specific, or in a phase yoga does not run. Rather than keep hunting something that leaves no trace here, the class now NAMES ITSELF on whichever host it next happens. THE GUARD: snapshot the tracked set before the gate first phase, verify BEFORE the stamp is written. Verifying before the stamp is the point, since the stamp claim is "the gate validated THIS tree" and a tree the gate rewrote mid-run is not that tree, so a corrupted run cannot mint the token that lets it push. 61ms against a 254s gate, 0.05 percent. CONTENT NOT git status: a modify-then-restore leaves git clean while every measurement in between ran against different bytes; sha256 costs 61ms against 14ms for git status, so there is no reason to take the weaker signal at that price. TWO DEFECTS IN MY OWN GUARD, both found by running it rather than reading it: it reported snapshot-failed while writing a perfectly good baseline (a pipeline under pipefail whose exit status is not a statement about the artefact, so it now judges the artefact), and its first comparison split sha256sum "<hash>  <path>" on whitespace, silently dropping any path containing a space, which is precisely the near-miss this class is about. FIXTURE 7 arms wired into --check: arm 2 reproduces lenovinha corruption exactly (plan-binary-probe.sh overwritten with check-fragment-status-loss.sh) rather than an imitation and the guard names the file; arm 4 pins the spaces case on a real file with a real space; arm 5 pins that a missing baseline BLOCKS instead of reading as a clean tree, the fail-open shape this guard exists to refuse; arm 6 pins that untracked scratch files are NOT flagged, since a fixture leaving its own scratch behind is untidy rather than a corrupted instrument and a guard that fires on it gets switched off.

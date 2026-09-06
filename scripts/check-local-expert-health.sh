@@ -30,7 +30,7 @@ fi
 
 # Check if the model is available. Herestring, not a pipeline: an
 # `if ! <pipeline>` verdict can invert under pipefail + SIGPIPE (795-imz3).
-_available_models="$(curl -sf --max-time 5 "${ENDPOINT}/api/tags" 2>/dev/null | jq -r '.models[].name // empty' 2>/dev/null || echo "")"
+_available_models="$(curl -sf --max-time 5 "${ENDPOINT}/api/tags" 2>/dev/null | jq -r '.models[].name // empty' 2>/dev/null | tr -d '' || echo "")"
 _model_present_rc=0
 grep -qF "$MODEL" <<<"$_available_models" || _model_present_rc=$?
 if [[ "$_model_present_rc" -ne 0 ]]; then

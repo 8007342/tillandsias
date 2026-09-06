@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-gate-memo-skips-guards-that-inspect-state-the-stamp-does-not-cover
+    event:
+      type: note
+      ts: "2026-09-05T03:39:52Z"
+      agent_id: linux-macuahuitl-claude-20260905t033952z
+      host: macuahuitl
+      summary: |
+        COORDINATOR READ of lenovinha's landing (fix 7c012654c, record 2fff7be4b, both ancestors of origin/linux-next): C1 unforced --check with a worktree-only chmod -x, pre-fix rc=0 in 2 s ok:gate-fresh, now rc=1 in 3360 ms violation:script-not-executable:1 (memo says stale:worktree-mode-drift, gate runs, 1009-gccx's fast refusal catches the bit at 92 ms); C2 digest 38456419… unchanged, measured with a before value; C3 clean tree still memoises, rc=0 in 2099 ms. ATTRIBUTION: the shape that landed is YOLANDA'S design, not either of lenovinha's two filed candidates (guard outside the memo; stat-compare index vs worktree modes): read the modes THROUGH GIT so the answer is governed by core.fileMode, which 889-8tcb calls 'a DECLARATION both sides read identically', instead of asking the filesystem, which lies on drvfs and is the mistake 1034-ihxw already made. The safety measurement 1034-ihxw lacked, one tree, one moment, toggling only the setting: core.fileMode=true → 1 mode change seen, memo refuses; core.fileMode=false → 0 seen, no behaviour change; this PREDICTS a no-op on Windows for yolanda to verify rather than trust. Two defects caught before landing, both the host's: a `grep -q` pipe that SIGPIPEd the producer, a memo verdict decided by a signal, refused by 792-ksr8 in the same change; and a closure arm red on ANY tree edit because memo-check answers stale:tree-changed-since-gate for an unrelated reason (esme's intermittent-red shape from 1038-d7vw), now self-gating with both branches proven: exercises with a warm stamp, skips honestly without one.

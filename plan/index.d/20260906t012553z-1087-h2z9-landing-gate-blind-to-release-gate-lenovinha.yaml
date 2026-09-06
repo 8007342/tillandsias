@@ -1,0 +1,108 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-gate-every-host-must-pass-is-blind-to-nine-defects-the-release-gate-sees-once-a-day
+    order: 1087-h2z9
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    owner_host: any
+    capability_tags: [gate, ci, fail-loud, multi-host, convergence]
+    estimated_hours: 6
+    multi_cycle: true
+    owned_files:
+      - build.sh
+      - scripts/local-ci.sh
+    verifiable_closure: |
+      bash scripts/test-gate-divergence-is-declared.sh
+
+      A fixture that ENUMERATES what ./build.sh --check runs and what
+      ./build.sh --ci-full runs, and fails when a check exists in the second and
+      is absent from the first WITHOUT being on a declared exclusion list.
+
+      PRE-FIX RESULT: FAILS. Today there is no such list and no such fixture, so
+      the difference between the two gates is discoverable only by running the
+      slow one and comparing by hand — which is how this was found, a full day
+      late.
+
+      NEGATIVE CONTROL: adding a check to --ci-full and declaring it excluded
+      must PASS, and adding one without declaring it must FAIL. Otherwise the
+      remedy is satisfied by declaring everything, which is the same as
+      declaring nothing.
+    title: |
+      `--check` is green and `--ci-full` is red on the same trunk: the gate every host lands through cannot see what the release gate sees, and the release gate looks once a day
+    context: |
+      MEASURED BY macuahuitl 2026-09-06 on trunk: ./build.sh --ci-full RED on
+      nine counts while ./build.sh --check — the gate every host lands through —
+      is GREEN on all nine. An all-features clippy error, a failing pty_handler
+      test, four orphaned guards, python3 in tracked scripts, and five litmus
+      reds (capability-routing-shape, forge-gitconfig-bidirectional-quarantine,
+      forge-standard-gitconfig-path, cycle-metrics-answer-rate-shape,
+      committable-branch-guard-shape). Three of the four non-litmus reds arrived
+      in the preceding 11 hours.
+
+      THE COMPOSITION, VERIFIED HERE RATHER THAN INFERRED FROM THE REDS:
+
+        litmus invocations inside the --check block        0
+        local-ci.sh invocations inside the --check block   0  (its 2 mentions
+                                                              there are comments)
+
+      So --check is not a subset of --ci-full that runs fewer of the same
+      things. It is a DIFFERENT INSTRUMENT: --ci/--ci-full drive
+      scripts/local-ci.sh (--phase pre-build, with --fast for the quick form)
+      and --ci-full additionally builds images and runs the post-build e2e
+      litmus phase. --check runs neither.
+
+      PART OF THIS IS DELIBERATE AND MUST NOT BE "FIXED". build.sh:2252 states
+      it: "./build.sh --check runs NO litmus (deliberate — the suite is minutes
+      and a gate that slow gets bypassed with --no-verify)". That reasoning is
+      sound and this packet does not propose reversing it. A gate people route
+      around is worse than a narrow one.
+
+      WHAT MAKES IT A DEFECT ANYWAY IS THAT THE SAME COMMENT ALREADY DESCRIBES
+      THE FAILURE, AND THE MITIGATION IS OPT-IN. It continues: "a green gate
+      plus the spec you happened to run can both pass over another spec's broken
+      pin. Measured twice" — an edit leaving litmus:startup-context-addendum-shape
+      red through both on 2026-08-15, and 921-vtf4 finding three tests red back
+      to af745f3fd on 2026-08-28. The mitigation shipped for it is
+      scripts/litmus-covering-specs.sh, a reverse map letting an editor ask which
+      specs cover a file they touched. NOTHING MAKES ANYONE ASK. A mitigation
+      that depends on the author already suspecting the problem does not cover
+      the case where they do not.
+
+      THE SHAPE, AND WHY IT IS p1 RATHER THAN A CLEANUP. Every host lands
+      through --check. --ci-full runs once a day. So a full day of green
+      landings accumulates defects no individual land can see, and each host is
+      correct in believing its own gate was green. This is not a host being
+      careless; it is an instrument answering a narrower question than the one
+      its role implies, which is the class this fleet has spent 2026-09-05
+      dismantling in seven other places. The nine reds are symptoms and are being
+      fixed elsewhere; the divergence is the defect and it will regenerate them.
+    exit_criteria:
+      - "the difference between --check and --ci-full is DECLARED in one place a reader can consult, rather than discoverable only by running the slow gate and diffing by hand"
+      - "a check present in --ci-full and absent from --check is either wired into --check or listed as a deliberate exclusion WITH its reason, on the 748-tkjx model — the litmus exclusion is the worked example and stays excluded"
+      - "a fixture fails when that invariant is broken, and passes when an exclusion is declared; adding an undeclared check to --ci-full must red it (pre-fix result: FAILS, no such fixture exists)"
+      - "the accumulation window is bounded: something surfaces the divergence more often than once a day, OR the once-a-day cadence is stated as accepted risk with the window named"
+      - "the deliberate litmus exclusion is NOT reversed, and the packet says so — a remedy that makes --check slow enough to bypass replaces this defect with a worse one"
+    next_action: |
+      START BY ENUMERATING BOTH GATES, not by fixing any of the nine reds. The
+      list of what each runs does not exist anywhere today, and every other
+      criterion depends on having it. build.sh's --check block and
+      scripts/local-ci.sh's phase list are the two sources.
+
+      THEN CLASSIFY EACH DIFFERENCE into deliberate-with-a-reason versus nobody
+      decided. Expect most of them to be the second: the four orphaned guards in
+      macuahuitl's list are checks that exist and are invoked by nothing, which
+      is 1063-nraf's class arriving in the gate rather than in the fixtures.
+
+      DO NOT REVERSE THE LITMUS EXCLUSION. Its reasoning is in build.sh:2252 and
+      it is right. The question for litmus is cadence and surfacing, not
+      inclusion.
+    provenance: |
+      Found by macuahuitl-fedora 2026-09-06 while cutting v56.9.6.1, which is
+      blocked at the local gate as a result. Composition of the two gates
+      verified independently on lenovinha before filing. Filed and claimed by
+      linux-lenovinha-claude-20260905t233514z at macuahuitl's direction, who
+      holds the fleet queue and judged this ahead of the 1063-nraf orphans on the
+      grounds that it is the reason they were invisible.

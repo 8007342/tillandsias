@@ -91,7 +91,20 @@ critical_path:
     # Token count computed from the checkout manifest, not hardcoded — same
     # 606-h9vy cycle finding as step 2: a literal count turns every honest
     # capability addition into a red guard.
-    command: "F=/tmp/.litmus-583; CARGO_TARGET_DIR=$F/target cargo build -q -p tillandsias-plan --release && cp $F/target/release/tillandsias-plan $F/bin-clean && $F/bin-clean capabilities >$F/o2.txt 2>$F/e2.txt; rc=$?; want=$(grep -cE '^[a-z][a-z0-9-]*$' crates/tillandsias-plan/capabilities.txt); test $rc = 0 && test ! -s $F/e2.txt && test $(wc -l < $F/o2.txt) = $want && grep -q '^query$' $F/o2.txt && echo 'ok: clean-tree-silent'"
+    #
+    # EVERY LINK NOW NAMES ITSELF ON FAILURE (order 1109-t8kw). This was one
+    # `&&` chain ending in `echo 'ok: clean-tree-silent'` with no failure
+    # branch, so ANY broken link — build, missing artefact, non-zero exit,
+    # stderr output, token count, absent token — produced EMPTY OUTPUT and an
+    # expected_behavior that simply did not appear. The control that exists to
+    # prove the guard is not always-warning could not itself distinguish a
+    # clean tree from a probe that never ran, which is the same defect it is
+    # built to catch, one layer up.
+    #
+    # The links are deliberately NOT collapsed back into a chain: what makes a
+    # negative control trustworthy is that its silence is impossible, so each
+    # assertion must be able to say which one it was.
+    command: "F=/tmp/.litmus-583; CARGO_TARGET_DIR=$F/target cargo build -q -p tillandsias-plan --release || { echo 'FAIL: cargo build -p tillandsias-plan --release failed'; exit 1; }; cp $F/target/release/tillandsias-plan $F/bin-clean || { echo 'FAIL: no built artefact at $F/target/release/tillandsias-plan (locus-native name? see 1030-i2p8)'; exit 1; }; $F/bin-clean capabilities >$F/o2.txt 2>$F/e2.txt; rc=$?; [ \"$rc\" = 0 ] || { echo \"FAIL: capabilities exited $rc\"; exit 1; }; [ ! -s $F/e2.txt ] || { echo \"FAIL: stderr not empty: $(head -c 160 $F/e2.txt)\"; exit 1; }; want=$(grep -cE '^[a-z][a-z0-9-]*$' crates/tillandsias-plan/capabilities.txt); got=$(wc -l < $F/o2.txt); [ \"$got\" = \"$want\" ] || { echo \"FAIL: token count got=$got want=$want\"; exit 1; }; grep -q '^query$' $F/o2.txt || { echo 'FAIL: query absent from capabilities output'; exit 1; }; echo 'ok: clean-tree-silent'"
     timeout_ms: 300000
     expected_behavior: "ok: clean-tree-silent"
 

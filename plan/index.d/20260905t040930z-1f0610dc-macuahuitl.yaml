@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: plan-only-lane-excludes-the-captures-the-loop-must-write
+    event:
+      type: finding
+      ts: "2026-09-05T04:09:30Z"
+      agent_id: linux-macuahuitl-claude-20260905t040930z
+      host: macuahuitl
+      summary: |
+        GATE RED ON PIRRIA AT linux-next HEAD FOR A REASON THE FIXTURE DECLINES TO OWN (relayed; host has no credential channel): all three 1048-aumz sweep arms exit 1 on the same check, identically, after ran=2211: "Checking the issue-capture fast lane keeps its boundaries (889-twhe)" → "FAIL: PRECONDITION — the scratch base ledger does not fold; the arms below would fail for an environment reason, not a lane defect" → issue-capture-lane: 0 passed, 1 failed. Earlier tonight the same gate on the same host exited 0 at an older HEAD, so something between the two heads made the precondition unmeetable there; the coordinator's own gates on macuahuitl and lenovinha's toolbox gates are green at the same heads, which points at the host's environment (toolbox contents, plan binary, or fixture temp path) rather than trunk. Pirria has been asked for the fixture's stderr in full, not its last line; a packet follows if the read does not settle it.

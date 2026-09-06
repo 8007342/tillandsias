@@ -1,0 +1,63 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# CORRECTION FRAGMENT (convention 1071-adhj) — the relaying host recording what
+# its own gate did and did not cover.
+events:
+  1084-x8ya:
+    - type: note
+      ts: "2026-09-06T01:14:19Z"
+      agent_id: "macos-tlatoanis-macbook-air-claude-20260905t144547z"
+      host: tlatoanis-macbook-air
+      summary: |
+        RELAY RECORD for criterion 1, landed a4f9e6857 under macneo's
+        authorship. Written because "gate green on macOS" would otherwise read
+        as full coverage, and BETWEEN THE TWO HOSTS THE COVERAGE IS COMPLETE
+        WHILE FROM EITHER ALONE IT IS NOT.
+
+        WHAT THIS HOST VERIFIED (tlatoanis-macbook-air):
+          transfer integrity — both parts and the assembled file, six figures
+            each plus sha256: part 1 13065 B/269 lines/ws 3/empty 11
+            9b21851757…; part 2 3092 B/53/ws 1/empty 1 896ad37e7d…; whole
+            16157 B/322/ws 4/empty 12 da3bea424f…. All exact.
+          git am -3 -> rc 0
+          forced ./build.sh --check on macOS -> exit 0
+          the four new tests by name, all ok
+        So: the HOST-SIDE READER and the fixtures.
+
+        WHAT THIS HOST DID NOT VERIFY, and cannot without a cold provision:
+          THE GUEST-SIDE WRITER. cloud-init runs the user script per instance,
+          so the hashing step added to vz.rs does not execute on an existing
+          guest. This gate exercised the reader against records, not the writer
+          that produces them.
+        macneo verified that half live by DESTROYING AND RE-PROVISIONING, and
+        measured guest d677e5f5843d… against staged d677e5f5843d…. That
+        measurement is theirs; this host contributed no evidence for it.
+
+        WHY THE SPLIT IS WORTH RECORDING RATHER THAN AVERAGING. A packet that
+        says "verified on macOS" invites a reader to assume one host ran the
+        whole thing. Neither did. The reader half needs a host with a live
+        credential and a platform gate; the writer half needs a host willing to
+        destroy its guest. Those were different hosts tonight and the packet
+        should say so, because the next person asking "was this actually
+        exercised" gets a true answer instead of a confident one.
+
+        A TRANSFER-PROTOCOL FINDING, recorded here because the next relay will
+        meet it. macneo's manifest carried "non-ASCII: 22 x U+2014 EM DASH,
+        nothing else". The bytes are 16 x U+2014, 5 x U+2026, 1 x U+1F535 — 22
+        non-ASCII CHARACTERS and 67 non-ASCII BYTES. The sha256 matched, so
+        nothing needed repair and the patch was applied on that authority.
+        THE CAUSE IS NOT A MISCOUNT: their probe
+        (`grep -o '[^ -~]' | sort | uniq -c | sort -rn | head`) COLLAPSES
+        distinct characters into one row labelled with whichever it saw first,
+        so it cannot enumerate and cannot report "nothing else" — both halves of
+        the sentence came from a probe incapable of producing either. It had
+        survived four relays because it was the first of their blind probes to
+        emit a plausible POSITIVE rather than a suspicious zero.
+        THE HARM IS TO A FUTURE RECIPIENT, not to this transfer: someone
+        counting 16 em dashes in a CORRECT reconstruction would conclude damage
+        and repair a good file. A label a reader acts on, disagreeing with the
+        mechanism that decides. macneo has DROPPED the inventory rather than
+        fixed it, on the reasoning that a corrected secondary metric is still a
+        surface a recipient can act on in preference to the hash.
+        WHAT SURVIVES AND SHOULD: the six-number reconciliation, and naming the
+        whitespace-significant lines INDIVIDUALLY — those are instructions to a
+        restoration step rather than a census of the file.

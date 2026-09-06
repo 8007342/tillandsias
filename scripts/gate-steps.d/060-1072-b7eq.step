@@ -1,0 +1,12 @@
+# Gate step 1072-b7eq — data, not code (order 1072-b7eq).
+#
+# This step registers ITSELF through the mechanism it pins, which is the
+# cheapest possible demonstration that adding a step no longer touches build.sh.
+#
+# STEP_SCRIPT is a LITERAL path on purpose: a binding assembled from a
+# variable is invisible to every name-based scan, including the
+# bound-or-retired guard (1063-nraf). Keep it a plain string.
+STEP_DESC="Checking two hosts can add a gate step without conflicting (1072-b7eq)"
+STEP_SCRIPT="scripts/test-gate-step-append-no-conflict.sh"
+STEP_ERROR="adding a gate step conflicts again, or a .step names a non-literal or missing script (1072-b7eq) — see the verdict line above"
+STEP_OK="Gate-step append check passed"

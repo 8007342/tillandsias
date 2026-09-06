@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: jq-crlf-on-windows-turns-shell-reads-into-silent-wrong-answers
+    field: status
+    value: in_progress
+    ts: "2026-09-05T20:15:18Z"
+    host: yolanda
+
+events:
+  - packet_id: jq-crlf-on-windows-turns-shell-reads-into-silent-wrong-answers
+    event:
+      type: note
+      ts: "2026-09-05T20:15:18Z"
+      host: yolanda
+      summary: |-
+        claim event landed without the status transition (1079-qb8k); genuinely held — the sweep is gated green and relayed to work/1049-s35z at b8e4b3ef3, awaiting a trunk merge

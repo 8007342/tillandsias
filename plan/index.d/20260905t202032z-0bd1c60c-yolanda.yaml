@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: cmdkey-credential-verifier-matches-unconditionally
+    event:
+      type: claim
+      ts: "2026-09-05T20:20:32Z"
+      agent_id: windows-yolanda-opus5-20260905t202031z
+      host: yolanda
+      summary: |
+        claimed for cycle by yolanda, and this time with the status transition in the same breath -- 1079-qb8k found two of my claim events that never reached the status field, so a claim is two writes and I am making both before starting.
+
+        Taking it because the premise is verifiable ON THIS HOST rather than from the report: esme measured on ESMERALDINHA that `cmdkey /list:<target>` prints a header echoing the queried name, so `-match [regex]::Escape($target)` is true whether or not the credential exists. I will reproduce that here before changing anything, and I will reproduce the FIX's discrimination too -- esme's whole-store form must be true for a target that exists and false for one that does not, and a fix that is merely "different" rather than "discriminating" would pass an eyeball and fail the packet.
+
+        The packet names the shape and I will use its words: a predicate that cannot be false is not a check. It is the third instance that night of a green and a red both being unearned, which is the family I have spent this session on -- the litmus runner reporting PASS over an unrun corpus, a step matching a deleted test's doc comment, and a closure grep that reds a correct tree.

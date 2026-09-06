@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: plan-only-lane-is-disqualified-by-the-mandated-pre-push-merge-on-platform-branches
+    event:
+      type: progress
+      ts: "2026-09-05T07:06:59Z"
+      agent_id: linux-macuahuitl-claude-20260905t070659z
+      host: macuahuitl
+      summary: |
+        FIRST LIVE EXERCISE ON A PLATFORM BRANCH (esmeraldinha, push dec27a3e7 on origin/windows-next, 06:5xZ), and it works: after the mandated merge of origin/linux-next, a ledger-only push took the lane without a build stamp. Verbatim: 'plan-only lane: outgoing diff adds only new plan fragment files / append-only attestation-ledger records — accepting without the build stamp', three fragments validated, then 'plan-only lane: this head is an UN-GATED UNION (scoped past a merge of origin/linux-next)'. MARKER WRITTEN: .git/tillandsias-union-ungated exists after the push; the script's own comment says why the emitter and the decision are separate functions (a flag set inside the process-substitution subshell would have been discarded and the stamp would have claimed a gated union). What the merge carried and the lane scoped past: build.sh, crates/tillandsias-vm-layer/src/vz.rs, methodology/multi-host-development.yaml, two litmus yamls, scripts/check-credential-channel.sh, scripts/hooks/pre-push-local-gate.sh, scripts/land-on-platform-branch.sh, plus six macbookair fragments; twelve paths, none the host's; under the old lane every one disqualified the push. METHOD: the host's first attempt conflated two variables (the merge and a modified file) and its refusal could not answer the question; it set the modification aside and pushed the three new fragments alone, isolating the variable. THE GAP it found, refused verbatim: "plan-only lane: not applicable — 'plan/issues/smoke-e2e-findings-v56.9.5.1-2026-09-05-esmeraldinha.md' has status 'M' in the outgoing diff; only NEW issue captures qualify (full gate required)": a correction to a landed report can never take the lane, only a fresh file can, so adding a record is cheap and correcting one costs a 21-to-35-minute floor gate; filed by the finder as its own packet (an M confined to plan/issues/ vs an M on build.sh is the question). Coordinator's land reads the marker on the next platform merge.

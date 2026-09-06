@@ -1,0 +1,110 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-sigpipe-verdict-guard-cannot-see-an-absolute-path-grep-or-a-line-continued-pipeline
+    order: 1084-nzqc
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    owner_host: any
+    capability_tags:
+      - testing
+      - gate
+      - fail-loud
+    estimated_hours: 3
+    owned_files:
+      - scripts/check-sigpipe-verdict-pipelines-added.sh
+    verifiable_closure: |
+      litmus:sigpipe-verdict-pipeline-shape — extended with the two escapes
+      below, which it does not currently express.
+
+      Revert the 1069-c9w6 fix in scripts/validate-traces.sh — that is, put back
+      `/usr/bin/grep -rl ... | grep -q .` in verdict position, spanning a line
+      continuation exactly as it did — and require the guard to FLAG it.
+
+      PRE-FIX RESULT: FAILS. Measured 2026-09-05: with that revert in the working
+      tree, scripts/check-sigpipe-verdict-pipelines-added.sh exits 0 and
+      scripts/test-sigpipe-verdict-measured.sh exits 0, while
+      `validate-traces.sh --coverage-threshold 0` reports
+      "coverage_percentage": 98 / "specs_with_traces": 174 — the 1069-c9w6
+      fingerprint, live, undetected by both guards.
+
+      NEGATIVE CONTROL: the guard must not start flagging every multi-line `if`.
+      A line-continued pipeline whose consumer reads to EOF (wc, sort, sha256sum)
+      must stay unflagged, and so must a bounded producer.
+    title: |
+      The SIGPIPE verdict guard misses `/usr/bin/grep` and misses any pipeline split across a line continuation
+    context: |
+      Found while making a synthetic test tree faithful for 1077-vzwq, which
+      removed an accidental detection and left the class guarded by nothing.
+
+      TWO INDEPENDENT ESCAPES, each sufficient on its own, MEASURED against the
+      guard's own regexes rather than inferred:
+
+        line under test                          producer verdict consumer
+        bare grep, single line                     YES     YES     YES   FLAGGED
+        /usr/bin/grep, single line                 no      YES     YES   ESCAPES
+        bare grep, continuation line 1             YES     YES     no    ESCAPES
+        bare grep, continuation line 3             no      no      YES   ESCAPES
+
+      (1) ABSOLUTE PATHS. UNBOUNDED_PRODUCER_RE (:115) anchors the producer with
+      `(^|[;&|(]|[[:space:]])` before `grep`. In `/usr/bin/grep` the preceding
+      character is `/`, so it does not match. This is not hypothetical spelling:
+      scripts/validate-traces.sh calls `/usr/bin/grep` 8 times — deliberately,
+      so macOS gets BSD grep regardless of Homebrew — and 35 occurrences across
+      9 files under scripts/ are invisible to the guard for the same reason.
+
+      (2) LINE CONTINUATIONS. The guard is line-oriented, and VERDICT_CONTEXT_RE
+      (:119) anchors on `^[[:space:]]*(if|while|until|elif)[[:space:]]`. A
+      pipeline written across `\` continuations puts the verdict context on the
+      first line and the early-exit consumer on the last, so NO SINGLE LINE
+      carries both and the conjunction at :147 is never satisfied. A rough
+      census finds 155 verdict-context lines ending in a continuation under
+      scripts/ — an upper bound, since not all are pipelines, but it is the
+      surface.
+
+      THE ACTUAL 1069-c9w6 DEFECT HAD BOTH PROPERTIES, which is why it survived
+      a guard written to catch exactly it.
+
+      WHY p1 AND NOT p2: 1076-kft9 records this as "the third time that list has
+      failed this way, after grep -r (1069-c9w6, 1070-a4gc)", and the remedy
+      adopted there was to stop pattern-matching and MEASURE. That reasoning is
+      right and this packet is evidence for it from a different direction: the
+      failure here is not a missing entry in a list of producer names — `grep -r`
+      IS in the list and still escaped — it is the TOKENISATION around the name.
+      Adding more names cannot fix a matcher that cannot see the token at all.
+
+      A guard that has now missed the same defect class four times, twice for
+      reasons unrelated to its producer list, is reporting a green that means
+      "not examined".
+    exit_criteria:
+      - "a verdict-position pipeline is detected regardless of whether its producer is invoked by bare name or absolute path"
+      - "a verdict-position pipeline is detected when it spans line continuations — the unit of analysis is the logical command, not the physical line"
+      - "the 1069-c9w6 revert described in verifiable_closure is FLAGGED; pre-fix result: it is not"
+      - "a line-continued pipeline with an EOF-reading consumer, and one with a bounded producer, both stay unflagged (no new false positives)"
+      - "the guard says which of its three conditions it matched, so a future escape can be diagnosed without re-deriving the regexes"
+    next_action: |
+      JOIN THIS TO 1076-kft9 RATHER THAN PATCHING THE REGEXES. Two more entries
+      in UNBOUNDED_PRODUCER_RE would fix neither escape: one is an anchor
+      problem, the other is that the analysis unit is wrong. The measuring
+      approach 1076-kft9 adopted does not have either failure mode, and the
+      cheapest honest fix may be to retire the pattern-matching guard in favour
+      of it rather than to harden it a fourth time.
+
+      IF THE PATTERN GUARD IS KEPT: join continuation lines into logical commands
+      before matching, and relax the producer anchor to allow a path prefix.
+      Both changes need the negative control above, because widening a matcher
+      that already runs on every diff is how a guard becomes noise and then gets
+      switched off.
+
+      DO NOT CLOSE THIS BY MAKING validate-traces.sh SPELL grep DIFFERENTLY. The
+      absolute path is deliberate (BSD grep on macOS) and the defect is in the
+      guard.
+    provenance: |
+      Measured by linux-lenovinha-claude-20260905t213827z on 2026-09-05 while
+      re-checking scripts/test-trace-coverage.sh before binding it (1077-vzwq).
+      The regex table above was produced by running the guard's own three
+      patterns against four candidate lines. The undetected-revert result was
+      produced by reverting 1069-c9w6 in the working tree, running both guards,
+      and restoring the file byte-identically (git diff --quiet verified).

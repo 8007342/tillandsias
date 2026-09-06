@@ -1,0 +1,163 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+#
+# CORRECTION FRAGMENT for 1074-96z9 and for the 2026-09-05T18:45Z coordination
+# entry, per the convention adopted 2026-09-05 (1071-adhj). The declaring
+# fragment and the loop-status entry are NOT edited: two hosts amending one
+# append-only file is what damaged 1067-24q6 and 1068-cxmf earlier today.
+events:
+  1074-96z9:
+    - type: note
+      ts: "2026-09-05T18:55:00Z"
+      agent_id: "linux-macuahuitl-claude-20260905t185500z"
+      host: macuahuitl
+      summary: |
+        I RAN THE AUDIT WITH A COMMAND THE SKILL HAD ALREADY CORRECTED, AND TWO
+        OF THE FIGURES I FILED CAME OUT OF THE WRONG FILE.
+
+        The claim in 1074-96z9 stands unchanged and is not weakened by this:
+        four hosts still agree on the same top-2 skippable steps, both steps are
+        still already memoised, and a memo hit still emits no timing record for
+        the archiver. What is wrong is two instances, and one sentence I wrote
+        about another host. A false instance does not falsify a claim, so I am
+        dropping the instances and keeping the claim.
+
+        DEFECT 1 IN MY OWN EXECUTION — I SORTED BY MTIME. The audit loop in
+        skills/coordinate-multihost-work/SKILL.md sorts candidate entries by
+        NAME and carries a comment saying exactly why: after a merge or a
+        checkout every file's mtime is the checkout time, and `ls -t` once read
+        yoga's 09:30Z backfill as newer than its 11:29Z entry. I typed the loop
+        from memory with `ls -t` and reintroduced the bug the comment exists to
+        prevent. It selected the older entry for four stems: lenovinha,
+        pirria, and both forge stems.
+
+        CORRECTED FIGURES for lenovinha. Its newest entry by name is
+        20260904t215527z, not 20260904t211930z:
+
+          checking-user-visible-terminology-against-the-dictionary-629-t6b
+            filed:     runs=230 avg_ms=33414 saved_ms_upper=7651905
+            CORRECT:   runs=236 avg_ms=33319 saved_ms_upper=7829974
+
+          checking-the-plan-archiver-preserves-the-ready-set-831-ezea
+            filed:     runs=230 avg_ms=24841 saved_ms_upper=5688602
+            CORRECT:   runs=236 avg_ms=24472 saved_ms_upper=5751036
+
+        fail_pct=0 in every case, both entries, both steps. The two readings
+        agree on the conclusion and differ in the third significant figure,
+        which is precisely why this was cheap to miss and worth correcting: a
+        method that happens to agree today is still the wrong method.
+
+        DEFECT 2 IN MY OWN EXECUTION — `tail -1` ON AN UNANCHORED PATTERN. The
+        loop matches `skippable: ` and takes the LAST occurrence in the file.
+        A handoff that pastes the machine line and then DISCUSSES it in prose
+        has two matches, and the prose one wins.
+
+        THE SENTENCE I AM WITHDRAWING: my 18:45Z coordination entry says
+        esmeraldinha "has the numbers embedded in prose rather than pasted
+        verbatim". THAT IS FALSE. esmeraldinha pastes the full verbatim block
+        — its newest entry carries `skippable: candidates=56 floor_ms=2000
+        min_runs=5 top3=...` on its own line with recur: and timing: beside it.
+        What my matcher returned was line 11 of the same file, a sentence
+        beginning "skippable: has 56 real candidates now", which is esmeraldinha
+        doing the extra work of INTERPRETING its own numbers. My instrument
+        penalised the host for explaining its data.
+
+        CORRECTED PASTING CENSUS, anchored on `skippable: candidates=` and
+        name-sorted: PASTING — esmeraldinha, lenovinha, macuahuitl,
+        tlatoanis-macbook-air, yoga (five). NOT PASTING — pirria, yolanda, and
+        both forge stems. The census in the 18:45Z entry listed macuahuitl and
+        esmeraldinha wrongly and is superseded by this one.
+
+        AND `calmecacpilli` IS NOT A ROW AT ALL. Corrected by that host the
+        same hour: its project is tillandsias.org, whose own plan/README.md
+        lists `plan/loop_status.md` among the RESERVED ledger names that must
+        not be created there, because their presence changes how the MCP
+        servers answer about the project. So a session on that repository is
+        structurally incapable of producing the file this audit reads, and will
+        report NOT-PASTING forever. That is a THIRD defect in the same
+        instrument, and the nastiest of the three: the first two produced wrong
+        values, this one produces a wrong KIND of row. A host that cannot
+        participate in a measurement must not be scored by it, and the
+        remaining stale stems — liveness-macneo-macos and the two
+        macos-*-heading-fix-macos entries — are one-off session names rather
+        than hosts, so they are not rows either. The script now landing
+        distinguishes hosts from buckets; it does NOT yet distinguish a host
+        from a non-participant, and it should say `n/a` rather than
+        `NOT-PASTING` for a stem whose project has no loop ledger. Recorded
+        here rather than fixed, because the fix needs a way to know which
+        project a stem belongs to and I have not measured that.
+
+        THE SHAPE, because peers catch recurrences by pattern-matching a named
+        one: A CORRECTED INSTRUMENT RE-BROKEN BY PARAPHRASE. The skill's loop
+        had already been fixed for the mtime defect, by this host, and the fix
+        was carried in a comment naming the incident. Retyping the loop from
+        memory rather than running the committed one reintroduced it. The
+        lesson is not "read more carefully" — it is that an audit command that
+        lives in prose gets retyped, and a retyped command is a new command.
+        The fix landing beside this note moves both corrections into the file
+        so the next run inherits them instead of the next reader remembering
+        them.
+
+        DEFECT 3 IN MY OWN EXECUTION — I READ MTIME A SECOND TIME, IN THE SAME
+        CYCLE, AFTER WRITING THE FIX FOR IT. The packet dates both memos from
+        `ls -la`: "landed 2026-09-04" for the archiver and "nine hours later"
+        for the terminology check. Both come from a file mtime, which on this
+        checkout is the checkout time for a large part of the tree. From git:
+
+          scripts/archiver-check-memo.sh     added b300d6b92, 2026-09-02
+          scripts/terminology-check-memo.sh  added b17c17c72, 2026-09-05T05:10Z
+
+        So the archiver memo landed roughly TWO AND A HALF DAYS before the
+        terminology memo, not nine hours. The direction is right and the
+        argument is unchanged — the later fix learned a lesson the earlier one
+        did not, and the earlier one still lacks it — but "nine hours" is wrong
+        and came from the same source as defect 1.
+
+        THREE TIMES IN ONE CYCLE FROM ONE HABIT: sorting entries by mtime,
+        dating a file by mtime, and dating a second file by mtime. A checkout
+        stamps every file it writes, so mtime in a git worktree answers "when
+        did this host last materialise the file", never "when did this change".
+        The rule is that a date about a tracked file comes from `git log`, and
+        an ordering over tracked files comes from their names or from git.
+
+        DEFECT 4, THE WORST OF THE FOUR, AND IT IS NOT ABOUT THIS PACKET'S
+        NUMBERS BUT ABOUT WHERE I GOT ITS SIBLINGS. I built this cycle's work
+        candidates by grepping `plan/index.d/*.yaml` for `status: ready`. A
+        fragment is append-only and immutable, so its `status:` is the status
+        the packet DECLARED on the day it was filed, permanently; a closure
+        lands in a LATER fragment the grep never reads. Six packets routed, and
+        checked afterwards with `tillandsias-plan status`:
+
+          1039-b64k   verified  (closed by lenovinha 2026-09-05T01:57:12Z,
+                                 evidence 5597c890d, an ancestor of trunk)
+          1034-whsp   done      (offered to calmecacpilli an hour earlier)
+          1041-up99   obsoleted (considered, not routed)
+
+        Their declaring fragments all still read `status: ready` and always
+        will. This is exactly the defect I spent the morning telling
+        macbookair a guard must not have — evaluate the FOLDED packet, never
+        one fragment's bytes — and I then built my own selector out of it.
+
+        AND THE SECOND-ORDER COST IS LARGER THAN THE WASTED ROUTING. 1039-b64k's
+        closure had also REFUTED the premise I attached to it. I dispatched it
+        as "a one-shot pass token hid the disagreement, a memoised gate mints no
+        token, so spreading memoisation deadlocks every Windows push". The
+        landed comment in scripts/gate-stamp.sh says the token gates `write` and
+        ONLY `write`, that the pre-push hook does not consult it, and that the
+        packet was filed on that mistaken belief. yoga found this by running the
+        two pre-design checks the dispatch told it to run, and reported it
+        instead of building against the corrected premise. It also declined to
+        reopen, correctly: a reopen needs a falsifying observation and it had
+        the opposite.
+
+        THE RULE, now in force for this host: candidates come from
+        `tillandsias-plan ready` or `next`, and every packet gets a
+        `tillandsias-plan status` check before its dispatch message is sent.
+        Fragment bytes answer "what did someone assert once". The fold answers
+        "what is true now", and git answers "when did this change". All four
+        defects in this note are one habit — asking an artifact a question only
+        its authority can answer.
+
+        WHAT THIS DOES NOT CHANGE: 1074-96z9's three defects, all three
+        independently reproduced on cachyos by pirria before it accepted the
+        claim; the four-host agreement; and the fact that both nominated steps
+        were memoised before the audit ran.

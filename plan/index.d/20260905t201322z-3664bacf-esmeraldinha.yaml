@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-claim-event-does-not-move-the-status-so-four-packets-are-held-by-a-host-invisible-to-the-sweep-and-still-offered-by-the-selector
+    event:
+      type: note
+      ts: "2026-09-05T20:13:22Z"
+      agent_id: linux-macuahuitl-claude-20260905t201322z
+      host: esmeraldinha
+      summary: |
+        THE PACKET ASSUMED ONLY ONE HALF CAN BE MISSED. BOTH CAN, AND esmeraldinha PRODUCED THE MIRROR WITHIN AN HOUR OF THE FILING, BY ACCIDENT, WHILE CLAIMING 1076-kft9.
+
+          20:08:45Z  set-field status in_progress   LANDED
+          20:08:45Z  append-event --type claim      REFUSED — the agent id was hand-written with an uppercase timestamp suffix, against the 756-hn3a contract
+
+        So for about four minutes 1076-kft9 carried a STATUS TRANSITION AND NO CLAIM EVENT: the fold said in_progress, the selector correctly withheld it, and nothing recorded WHO held it or WHY. That is this packet's defect running in the opposite direction, and it is arguably the worse one — a claim event without a status is invisible and harmless to the holder, while a status without a claim event is a lease with no lessee, which is exactly the `unclaimed-in-progress` row the sweep already prints for 1025-a896 and which 1065-4t7t had to add prose to explain.
+
+        SO THE FIX MUST TREAT THE TWO WRITES AS ONE TRANSACTION OR REPORT EITHER HALF MISSING, not merely make the claim event imply the status. Option (a) in this packet's next_action — `append-event --type claim` also performs the transition — closes only the direction that was measured first. A host that runs set-field and then fails to append still produces a lease nobody can attribute. Whichever remedy is chosen, its fixture needs BOTH directions, and the claimer should treat this note as the second one's pre-fix evidence.
+
+        esmeraldinha's own correction is the transferable part: the id is now derived with `scripts/agent-identity.sh` rather than typed. A hand-written identifier that must satisfy a contract is a place where the contract can be missed silently, and the tool that derives it cannot be.
+
+        A SECOND INSTANCE FROM THE READER'S SIDE, same host, same hour, recorded here because 1080-4deb's family is about readers looking in the wrong place. Asked to confirm the 1004-4xie claim, esmeraldinha grepped plan/index.d/ and the folded plan/index.yaml for the order dated that day, found NOTHING, and was one sentence from replying that no claim event existed and the coordinator's 17:11Z timestamp was wrong. `tillandsias-plan plan-events 1004-4xie` shows it immediately at 17:11:34Z. The greps could not see into the fold; the tool could. An instrument's blindness was about to be reported as another host's error, and the coordinator's timestamp was exact — the one-second difference was the commit, not the event.
+
+        THIRD, AND IT IS THE COORDINATOR'S: verifying esmeraldinha's merge resolution, my first probe was `grep -c '<<<"$(sed'`, which returned 0 because `$` before `(` is an end-of-line anchor in a basic regex and the pattern cannot match. `grep -F` returns 1. The 0 was consistent with esmeraldinha's own account of the resolution, so it would have CONFIRMED a wrong report rather than contradicting it. Three blind probes across three hosts in one day, and this is the first where a blind probe would have agreed with the claim it was checking.

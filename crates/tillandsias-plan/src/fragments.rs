@@ -1360,6 +1360,13 @@ pub fn compact_text(index: &Path) -> Result<CompactionText, String> {
     }
     let mut candidate = candidate_lines.join("\n") + "\n";
 
+    // ORDER 1107-bb6s: LWW FIELD WINS ARE APPLIED BEFORE NEW EVENTS ARE
+    // PUSHED, because that is the order the Value-domain fold uses. The fold
+    // writes field wins into the packet mapping and attaches events afterwards,
+    // so a field the base has never seen lands after the base's own keys
+    // (including a base `events:`) but AHEAD of events contributed by
+    // fragments. Pushing events first put every newly-seen field on the wrong
+    // side of them.
     for (pid, ev) in &new_events {
         candidate = crate::edit::push_event(&candidate, pid, &render_list_item(ev, 8))?;
     }
@@ -1597,7 +1604,21 @@ fn is_yaml11_timestamp(s: &str) -> bool {
         && b[7] == b'-'
         && digit(8)
         && digit(9)
-        && (b.len() == 10 || b[10] == b'T' || b[10] == b' ')
+        // ORDER 1107-bb6s. A YAML-1.1 timestamp is a date ALONE, or a date plus a
+        // separator plus at least HH:MM. The old form accepted ten date bytes and
+        // a separator and IGNORED THE REST, so ordinary prose qualified:
+        // "2026-09-04 added 70" -> true. quote_timestamp_line then split that on
+        // its first ": " and re-wrapped the tail, which for a line inside a
+        // LITERAL BLOCK SCALAR silently rewrote a peer's prose in the system of
+        // record. Found by yolanda by walking compaction's first divergence
+        // position; the fix is the predicate, not the caller.
+        && match b.len() {
+            10 => true,
+            n if n >= 16 && (b[10] == b'T' || b[10] == b' ') => {
+                digit(11) && digit(12) && b[13] == b':' && digit(14) && digit(15)
+            }
+            _ => false,
+        }
 }
 
 /// Quote a bare timestamp scalar on a rendered `key: value` line. Applied to
@@ -1767,6 +1788,31 @@ fn apply_lww(lines: &mut Vec<String>, pid: &str, field: &str, value: &Value) -> 
             lines.splice(li..field_end, rendered);
         }
         None => {
+            // ORDER 1107-bb6s: A FIELD ABSENT FROM THE BASE IS APPENDED, NOT
+            // HOISTED. This used to splice at `start + 1`, putting a brand-new
+            // key immediately after `- packet_id:`. The Value-domain fold
+            // inserts an unseen key at the END of the mapping (serde_yaml
+            // preserves insertion order), so the two renderings held the SAME
+            // fields with the SAME values in a DIFFERENT ORDER — and
+            // `assert_fold_equivalent` compares Vec<Mapping> with assert_eq,
+            // which is order-sensitive. Trunk went red for the whole fleet on a
+            // pure ordering difference: measured identical key sets, identical
+            // content, 11727 bytes on both sides.
+            //
+            // Appending is also the right FORMAT answer independently of the
+            // test. Compaction rewrites plan/index.yaml, so hoisting would move
+            // next_action above order/title/status for every packet that gained
+            // one, churning the whole ledger in the one feature whose stated
+            // purpose is preserving format.
+            // The insertion point is the END of the item, and the ORDER OF
+            // OPERATIONS in compact_text is what makes that correct: field wins
+            // are applied BEFORE new events are pushed, mirroring the fold,
+            // which writes field wins into the packet mapping and attaches
+            // events afterwards. A positional heuristic here ("insert before
+            // `events:`") is NOT equivalent and was measured wrong: it fixed a
+            // packet whose events all came from fragments and re-broke one
+            // whose events were already in the base, moving the first
+            // divergence from 5875648 BACK to 28111.
             lines.splice(start + 1..start + 1, rendered);
         }
     }
@@ -1888,6 +1934,7 @@ impl Ledger {
             ledger.set_fragment_sources(
                 std::collections::BTreeMap::new(),
                 std::collections::BTreeMap::new(),
+                std::collections::BTreeMap::new(),
                 corpus_files,
                 skipped,
             );
@@ -1943,6 +1990,9 @@ impl Ledger {
             }
         }
         let mut field_sources = std::collections::BTreeMap::new();
+        // ORDER 1065-4t7t: the winning `status` entry's (host, ts) IS the lease.
+        let mut status_leases: std::collections::BTreeMap<String, (String, String)> =
+            std::collections::BTreeMap::new();
         for (key, (idx, ts, host)) in &provenance.lww_wins {
             let frag = &fragments[*idx];
             let mut parts = key.split('\u{1}');
@@ -1953,6 +2003,9 @@ impl Ledger {
             // one fragment by requiring the winning ts/host to appear in the
             // block. Empty ts/host (legal, they default to "" in the fold)
             // cannot be required — the field needle alone identifies the entry.
+            if field == "status" {
+                status_leases.insert(pid.to_string(), (host.clone(), ts.clone()));
+            }
             let field_needle = format!("field: {field}");
             let mut needles: Vec<&str> = vec![field_needle.as_str()];
             if !ts.is_empty() {
@@ -1972,7 +2025,13 @@ impl Ledger {
                 );
             }
         }
-        ledger.set_fragment_sources(origin_sources, field_sources, corpus_files, skipped);
+        ledger.set_fragment_sources(
+            origin_sources,
+            field_sources,
+            status_leases,
+            corpus_files,
+            skipped,
+        );
         Ok(ledger)
     }
 }
@@ -2629,6 +2688,50 @@ packets:
         let p = ps.first().expect("alpha present");
         let (text, _) = crate::answer::effective_next_action(p).expect("has a next_action");
         assert_eq!(text, "even fresher event queue");
+    }
+
+    /// ORDER 1107-bb6s. PROSE THAT MERELY OPENS WITH A DATE IS NOT A TIMESTAMP.
+    ///
+    /// `quote_timestamp_line` splits a rendered line on its first ": " and
+    /// re-wraps the tail when this predicate says "timestamp". The predicate
+    /// checked ten date bytes and a separator and ignored everything after, so
+    /// a sentence qualified and compaction REWROTE a peer's prose inside a
+    /// literal block scalar - two characters, on the real ledger, red for the
+    /// whole fleet.
+    ///
+    /// The negative controls are the load-bearing half: a predicate that simply
+    /// answered `false` more often would pass the prose cases and silently
+    /// un-quote real timestamps, reopening 729-biik (Psych reads a bare
+    /// YAML-1.1 timestamp as `Time`, which `safe_load` refuses).
+    #[test]
+    fn prose_opening_with_a_date_is_not_a_yaml11_timestamp() {
+        for s in [
+            "2026-09-04 added 70",
+            "2026-09-04 added 70 fragments, 2026-09-05 added 528",
+            "2026-09-06 119 so far",
+            "2026-09-04 x",
+            "2026-09-04T",
+            "2026-09-04 ",
+        ] {
+            assert!(
+                !is_yaml11_timestamp(s),
+                "prose must not be treated as a timestamp: {s:?}"
+            );
+        }
+
+        // NEGATIVE CONTROLS: every real shape stays quoted.
+        for s in [
+            "2026-09-04",
+            "2026-09-04 11:00:00",
+            "2026-09-04T11:00:00Z",
+            "2026-09-04T11:00:00+02:00",
+            "2026-08-23T11:00:00Z",
+        ] {
+            assert!(
+                is_yaml11_timestamp(s),
+                "a real YAML-1.1 timestamp must still be quoted (729-biik): {s:?}"
+            );
+        }
     }
 
     #[test]
@@ -3602,6 +3705,39 @@ packets:
 
 #[cfg(test)]
 mod compaction_text_tests {
+    /// ORDER 1107-bb6s. The predicate must reject date-led PROSE and still accept
+    /// every real timestamp shape. The negative controls are the load-bearing
+    /// half: a predicate that merely answers `false` more often would pass every
+    /// prose case while silently UN-quoting real timestamps and reopening
+    /// 729-biik. Reds in 0.01s where the whole-ledger fold takes ~70.
+    #[test]
+    fn is_yaml11_timestamp_rejects_prose_and_keeps_real_timestamps() {
+        for prose in [
+            "2026-09-04 added 70",
+            "2026-09-04 x",
+            "2026-09-04T",
+            "2026-09-04 ",
+            "2026-09-04 11",
+        ] {
+            assert!(
+                !is_yaml11_timestamp(prose),
+                "date-led prose must NOT be quoted as a timestamp: {prose:?}"
+            );
+        }
+        for real in [
+            "2026-09-04",
+            "2026-09-04 11:00:00",
+            "2026-09-04T11:00:00Z",
+            "2026-09-04T11:00:00+02:00",
+            "2026-09-04 11:00",
+        ] {
+            assert!(
+                is_yaml11_timestamp(real),
+                "a real YAML-1.1 timestamp must still be quoted: {real:?}"
+            );
+        }
+    }
+
     use super::*;
 
     const COMMITTED: &str = "\

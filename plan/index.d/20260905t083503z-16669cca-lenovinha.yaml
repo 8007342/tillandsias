@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: probe-usage-guard-accepts-a-comment-as-compliance
+    event:
+      type: progress
+      ts: "2026-09-05T08:35:03Z"
+      agent_id: linux-lenovinha-claude-20260905t033623z
+      host: lenovinha
+      summary: |-
+        FIXED AND ON TRUNK (9f75f5d47, relay-landed by the coordinator at 3a608300b; both verified as ancestors of origin/linux-next before this event was written). Guard on the trunk tree reads ok:plan-binary-probe-usage:20 eligible of 948 scanned [scripts=7/527 litmus=13/421].
+
+        THE DEFECT HAD THREE LAYERS AND I WROTE TWO OF THEM INSIDE THE FIX FOR THE FIRST. Recording that plainly because the pattern is the finding:
+          1. YOGA'S. Eligibility computed on comment-STRIPPED code, compliance tested with grep -q on the RAW file. A filename anywhere — a comment, or a `for f in plan-binary-probe.sh gate-stamp.sh` copy loop — conferred compliance. test-pre-push-issue-capture-lane.sh named the probe twice, sourced it never, hand-rolled , and the guard reported ok:24. That is how 1058-fenk was possible.
+          2. MINE. I made the two reads symmetric but tested PER FILE, so one compliant step covered a hand-rolled one in the same YAML. Found ONLY because I checked a prediction the guard had just turned green in my favour — my sizing said litmus-fragment-status-loss-attribution-shape.yaml was a violation and my own change said it was not, and one of those had to be wrong.
+          3. MINE AGAIN. I then accepted a probe FILENAME inside a command as use. Line 126 of that same file is `cp scripts/check-fragment-status-loss.sh scripts/plan-binary-probe.sh` — a copy loop. That is yoga's original loophole reproduced inside its own repair, one scope smaller. Found by reading the line that made it pass rather than accepting that it passed.
+
+        WHAT LANDED: scripts require an actual `.` or `source` of the probe or a resolver call; litmus requires mf_plan_binary — the compliant form on that surface per the file's own header — evaluated PER COMMAND rather than per file.
+
+        SWEEP, sized before the rule changed and corrected TWICE against my own numbers. I predicted 0, then 1; it is 2:
+          openspec/litmus-tests/litmus-forge-expert-base-guard-shape.yaml            (1 command)
+          openspec/litmus-tests/litmus-fragment-status-loss-attribution-shape.yaml   (8 commands)
+        Nine commands converted to mf_plan_binary. SIX FURTHER FILES LEAVE THE COUNT rather than going red: they hardcode nothing and were never eligible, so the raw-file fallback had been inflating litmus=19 with files that use the binary not at all. That matters for the reason the guard's own header already argues — a total that does not track the real population is how a surface hides — and it is why litmus went 19 -> 13 with only 2 violations.
+
+        NO ALLOW-LIST, per the packet, and the one apparent exception is why that instruction was right. scripts/test-plan-binary-freshness.sh looked like a violation under my first tightening. It is the fixture FOR the probe: it sources it at lines 90 and 128, and 7 of its 9 target/release/tillandsias-plan mentions are $TMPD stub scaffolding with the rest expected-output strings. Had I trusted my first sizing I would have 'fixed' working code.
+
+        CONTROLS, both run against a scratch corpus:
+          POSITIVE — yoga's exact pre-fix shape (a comment naming the probe, a cp loop naming it again, a hand-rolled `[ -x target/release/tillandsias-plan ]`, never sourced) is now REFUSED: violation:plan-binary-probe-usage:1. The old guard reported ok on that shape.
+          NEGATIVE — the same file made genuinely compliant (sources the probe, calls resolve_plan_binary) PASSES: ok:1 eligible of 2. So the guard is not simply failing everything, which is the failure mode a tightening most easily becomes.
+        Both converted litmus specs pass; ./build.sh --check rc=0 (332s, forced).
+
+        NOT MINE, ruled out by measurement before I said so: litmus:litmus-bindings-reconciliation-shape step 1 times out at 36.44/36.84/36.91s against a 30s budget. Zero references to my guard in either of its scripts, no cargo in its path so the 1047-h88p jobs cap cannot reach it, and the runner's own 820-c8q8 diagnostic says it was NOT contended. Filed separately as 1062-v3j4.

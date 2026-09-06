@@ -111,23 +111,51 @@ if [ "${CYCLE_PREFLIGHT_SKIP_BUILD:-0}" != "1" ]; then
         done
     fi
     if ! command -v cargo >/dev/null 2>&1; then
-        # Name the fault. A cycle that cannot rebuild its instrument should say
-        # so rather than proceed on whatever binary happens to be lying around.
-        echo "blocked:preflight:plan:cargo-absent"
-        exit 1
+        # ORDER 1004-ws5q. ASK WHETHER THERE IS AN INSTRUMENT BEFORE DECLARING
+        # THE COMPILER'S ABSENCE TERMINAL. The verdict above 876-irn7 narrowed
+        # was still ordered backwards: it stopped the cycle on the absence of a
+        # BUILDER without ever looking for a runnable BINARY, so a host that
+        # needs no compiler this cycle lost its whole slot with a healthy
+        # instrument sitting on disk.
+        #
+        # MEASURED on pirria 2026-09-04: a floor-tier release smoke — which
+        # compiles nothing — was refused its 4h slot, and the only way through
+        # was CYCLE_PREFLIGHT_SKIP_BUILD=1, an env seam named in no skill. A
+        # fix that works only because a human remembers an undocumented
+        # variable is the "protects whoever remembers" shape 1000-rqmx already
+        # declined once.
+        #
+        # THE TRUE POSITIVE KEEPS ITS VERDICT AND ITS TERMINAL FORCE. No cargo
+        # AND no runnable binary is a host with no instrument, and it must
+        # still stop — `cargo-absent` below is reached only when the probe has
+        # also failed. What changes is that the cycle now says WHICH it found.
+        . "$ROOT/scripts/plan-binary-probe.sh"
+        if plan_bin="$(resolve_plan_binary)"; then
+            plan_verdict="existing"
+        else
+            # Name the fault. A cycle that can neither rebuild its instrument
+            # nor find one should say so rather than proceed on nothing.
+            echo "blocked:preflight:plan:cargo-absent"
+            exit 1
+        fi
     fi
-    build_log="$(mktemp)"
-    if cargo build --release -p tillandsias-plan >"$build_log" 2>&1; then
-        # `cargo build` is a no-op when nothing changed, so this is cheap on the
-        # common path and correct on the uncommon one.
-        plan_verdict="rebuilt"
-    else
-        reason="$(grep -m1 '^error' "$build_log" | cut -c1-120)"
+    # ORDER 1004-ws5q. Skipped when the probe above already found a runnable
+    # instrument on a host with no cargo: there is nothing to build with, and
+    # the binary it would verify is the one already resolved.
+    if [ "$plan_verdict" != "existing" ]; then
+        build_log="$(mktemp)"
+        if cargo build --release -p tillandsias-plan >"$build_log" 2>&1; then
+            # `cargo build` is a no-op when nothing changed, so this is cheap on
+            # the common path and correct on the uncommon one.
+            plan_verdict="rebuilt"
+        else
+            reason="$(grep -m1 '^error' "$build_log" | cut -c1-120)"
+            rm -f "$build_log"
+            echo "blocked:preflight:plan:${reason:-build-failed}"
+            exit 1
+        fi
         rm -f "$build_log"
-        echo "blocked:preflight:plan:${reason:-build-failed}"
-        exit 1
     fi
-    rm -f "$build_log"
 
     # Prove the freshly built binary answers, rather than assuming a successful
     # compile means a working instrument.
@@ -144,6 +172,63 @@ if [ "${CYCLE_PREFLIGHT_SKIP_BUILD:-0}" != "1" ]; then
     if ! plan_bin="$(resolve_plan_binary)"; then
         echo "blocked:preflight:plan:capabilities-refused"
         exit 1
+    fi
+
+    # ── ORDER 1058-fenk: THE TWO LOCI MUST AGREE ─────────────────────────────
+    #
+    # Everything above proves the binary runs HERE. The gate runs SOMEWHERE
+    # ELSE: build.sh sources scripts/with-tillandsias-builder.sh (build.sh:44)
+    # and re-execs inside the tillandsias-builder toolbox, while this script
+    # has no builder line at all and builds on the host. So "the plan binary"
+    # names two different runtime environments and nothing compared them.
+    #
+    # MEASURED by pirria 2026-09-05 on CachyOS (glibc 2.44) against
+    # fedora-toolbox:42. Same file, two answers:
+    #   host:    folds a minimal ledger
+    #   toolbox: /lib64/libm.so.6: version `GLIBC_2.44' not found
+    # Every gate red from 19:07Z at a head that had been GREEN while
+    # target/release was empty — the variable was a host-built artefact, not
+    # trunk. Latent on every rolling-release host that adopts the toolbox gate.
+    #
+    # WHAT THIS DOES AND DOES NOT DO. It NAMES the skew; it does not repair it.
+    # The stronger fix is to build in the locus that consumes — this script
+    # sourcing the builder the way build.sh does — but that changes where every
+    # host's preflight compiles and I could not test it beyond this one, so it
+    # is recommended rather than done. Naming satisfies the criterion and
+    # cannot break a host that has no skew.
+    #
+    # Silent on hosts where the question does not arise: no builder wrapper, or
+    # a gate that does not re-exec, means one locus and nothing to compare.
+    # Never blocks — a cycle that can still build should not be stopped by a
+    # cross-locus report, and the gate is where the consequence lands.
+    _builder="$ROOT/scripts/with-tillandsias-builder.sh"
+    if [ -r "$_builder" ] && grep -q 'with-tillandsias-builder.sh' "$ROOT/build.sh" 2>/dev/null; then
+        # A SENTINEL FROM THE INNER COMMAND, not the contents of the streams.
+        # The wrapper announces itself on stderr ("Re-execing inside
+        # 'tillandsias-builder' toolbox..."), and a first cut here treated any
+        # stderr as failure — reporting skew on this host, where both loci had
+        # already been measured to run the binary. The verdict must come from
+        # the thing under test, not from whatever else wrote to the terminal.
+        _locus_out="$(timeout 180 bash "$_builder" sh -c \
+            "if '$plan_bin' capabilities >/dev/null 2>&1; then echo LOCUS_OK; \
+             else echo \"LOCUS_FAIL:\$('$plan_bin' capabilities 2>&1 >/dev/null | head -1)\"; fi" 2>&1)"
+        _locus_rc=$?
+        case "$_locus_out" in
+            *LOCUS_OK*) : ;;  # both loci run it; nothing to report
+            *)
+            _why="$(printf '%s' "$_locus_out" | grep -o 'LOCUS_FAIL:.*' | cut -c12-160)"
+            [ -n "$_why" ] || _why="the builder could not be entered (exit $_locus_rc)"
+            echo "warn:preflight:plan:locus-skew: the binary runs here and NOT inside the builder toolbox the gate uses"
+            echo "warn:preflight:plan:locus-skew-reason:${_why:-no output, exit $_locus_rc}"
+            echo "  This host builds tillandsias-plan on the host and gates inside the"
+            echo "  toolbox (build.sh sources with-tillandsias-builder.sh). Those are"
+            echo "  different runtimes, and this binary links in only one of them, so"
+            echo "  the gate will report ledger faults that are really instrument"
+            echo "  faults (1058-fenk, pirria on CachyOS 2.44 vs fedora-toolbox:42)."
+            echo "  Remedy: build the binary where it is consumed —"
+            echo "    bash scripts/with-tillandsias-builder.sh cargo build --release -p tillandsias-plan"
+            ;;
+        esac
     fi
 
     # Order 799-m2vk. The instrument this step rebuilds is the one under
@@ -169,15 +254,11 @@ if [ "${CYCLE_PREFLIGHT_SKIP_BUILD:-0}" != "1" ]; then
     # (704-zcgi); and never blocks — a failed refresh is a report, because a
     # stale expert is bad but refusing to start the cycle is worse.
     expert_bin="${HOME}/.local/bin/tillandsias-plan"
-    expert_report="absent"
-    if [ -e "$expert_bin" ]; then
-        if cmp -s "$plan_bin" "$expert_bin"; then
-            expert_report="current"
-        elif install -m0755 "$plan_bin" "$expert_bin" 2>/dev/null; then
-            expert_report="refreshed"
-        else
-            expert_report="refresh-failed"
-        fi
+    # ORDER 1060-wxdh: the decision lives in the probe, which runs the binary
+    # before installing it. See refresh_plan_binary_copy for what this cost.
+    expert_report="$(refresh_plan_binary_copy "$plan_bin" "$expert_bin")"
+    if [ "$expert_report" = "refresh-refused-not-runnable" ]; then
+        echo "warn:preflight:plan:expert-refresh-refused: $plan_bin does not run here, so it was NOT installed over $expert_bin (1060-wxdh)"
     fi
     plan_verdict="${plan_verdict}+expert-${expert_report}"
 

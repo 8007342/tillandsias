@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: stranded-claim-sweep-keys-on-a-phrase-so-reopened-and-differently-worded-claims-read-as-unclaimed
+    event:
+      type: progress
+      ts: "2026-09-05T18:23:02Z"
+      agent_id: linux-yoga-claude-20260905t182302z
+      host: yoga
+      summary: |-
+        Closed, landed 6bbda483b. THE LEASE WAS ALREADY THERE and that is the finding: every set-field status in_progress writes a status entry carrying ts and host, and the fold already records which entry won that field (FoldProvenance::lww_wins). The authoritative claimant and claim time have been present the whole time; only live_claims was reading the wrong channel. So the fix is NOT a new claim field, which is the shape the packet suggested, but a sidecar exposing what the fold already computed: Ledger::status_lease_of. MEASURED ON THE LIVE LEDGER, same fragments, two binaries: before rows live=3 unclaimed=2 with 317 reported unclaimed; after rows live=4 unclaimed=1 with 317 attributed to tlatoanis-macbook-air at 16:54:06Z. macuahuitl proxy claim on 1026-ps4n and lenovinha on 1063-nraf also became visible. Nothing about the ledger changed between the two runs. THE ONE ROW STILL UNCLAIMED IS CORRECT and I checked rather than assuming: 1025-a896 is in_progress in the BASE INDEX with no fragment status entry, so there is no claimant to name; status_lease_of returns None and the sweep says so. A base row carries no owner, which is the honest answer rather than a gap, and it is what fail-closed means here. THE TEXT PATH REMAINS, WIDENED, as a fallback: "claimed for cycle", "claimed <ts> by" and "claim(<id>)" all say the same thing to a reader and said nothing to a prefix test; fallback and not primary, because prose is what failed. BOTH HALVES ARE PINNED: a new test builds a real fragment whose status entry claims a packet while its event summary says only "reopened after a falsifying observation", which is the 734-sjb3 shape, and asserts both the lease and the live-claim row; the existing test gains lenovinha actual phrasing as a second live row. Ownership still never comes from the newest event, since any host may note on a claimed row and last-toucher attribution names the wrong host. Gate rc=0 358s. Canonical ~/.local/bin copy refreshed from the new build and verified runnable before installing (1060-wxdh).

@@ -1,0 +1,68 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-checkout-locks-bare-invocation-is-the-line-agents-type-and-no-fixture-can-make-it-red
+    order: 1098-q7bk
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [testing, docs, multi-host, fixture-coverage]
+    estimated_hours: 2
+    owned_files:
+      - scripts/test-cycle-checkout-lock.sh
+      - skills/advance-work-from-plan/SKILL.md
+    verifiable_closure: |
+      bash scripts/test-cycle-checkout-lock.sh with a new arm that invokes
+      cycle-checkout-lock.sh with NO TILLANDSIAS_CYCLE_HOLDER_PID and asserts the
+      lock survives a tool-call boundary. IT MUST RED ON TODAY'S CODE or it is not
+      evidence — all eleven current invocations set the variable, so the bare path
+      cannot currently make the fixture red.
+    title: |
+      MEASURED by pirria: all eleven $LOCKSH invocations in both lock fixtures set TILLANDSIAS_CYCLE_HOLDER_PID, so the bare line an agent actually types is uncovered — and the two candidate fixes fail in opposite directions
+    context: |
+      FOUND by pirria 2026-09-06, from macuahuitl's WITHDRAWN lock report. The
+      withdrawal is recorded separately; what survives is this, and it is pirria's
+      and yoga's, not mine.
+
+      THREE SIDES OF ONE DEFECT.
+
+      1. THE BARE PATH IS UNCOVERED IN BOTH FIXTURES. All eleven $LOCKSH
+         invocations in scripts/test-cycle-checkout-lock.sh set
+         TILLANDSIAS_CYCLE_HOLDER_PID; bare invocations = 0. Same in
+         test-cycle-lock-attested-release.sh. So `bash
+         scripts/cycle-checkout-lock.sh acquire` — the line an agent actually
+         types, whose default anchors one shell too deep and dies with the tool
+         call — cannot make either fixture red. yoga measured the behaviour
+         directly on a FREE lock: bare acquire records the invoking shell
+         (3551919, dead now) while the harness (8462) lives.
+
+      2. advance-work-from-plan NEVER MENTIONED THE LOCK. Measured before yoga's
+         25ec242dc: 0 mentions of checkout-lock|CYCLE_HOLDER_PID there against 4
+         in meta-orchestration. Worker hosts took NO checkout lock at all — not a
+         broken one. 943-7dn5's shape: the instruction lived only with the
+         coordinator. yoga has since landed the section; the FIXTURE half remains.
+
+      3. THE SAFE FIX HAS A MEASURED TRAP ON THE OTHER SIDE. If the script
+         resolves the harness pid itself rather than trusting callers, then
+         dir_lock_live()'s line 160 becomes binding: on a session harness the
+         pid-liveness escape can NEVER fire, so correctness rests entirely on the
+         `attested` marker and STALE_S=10800. That file records a MEASURED
+         over-hold on macuahuitl 2026-08-26T03:38Z — the hourly fire refused by
+         its own $PPID, a live `claude` 07:56:39 old that had already attested.
+
+      THE TWO FINDINGS ARE ONE FIX SEEN FROM OPPOSITE ENDS: too shallow an anchor
+      releases at the first tool call; too deep an anchor holds for three hours.
+
+      NOTE, load-bearing and easy to flatten by accident: pid_is_self_or_ancestor
+      returns 2 for COULD-NOT-DETERMINE, distinct from "no", for a measured MSYS
+      reason. Collapsing that tri-state to a boolean reintroduces the class this
+      fleet spent 2026-09-06 dismantling — a probe that cannot answer returning
+      the answer that looks like data.
+    next_action: |
+      Add the bare-invocation fixture arm and confirm it REDS on today's code. If
+      the anchor moves up, test the arm where a cycle ends WITHOUT calling
+      `record`: that is the common path, because finalization step 9 states four
+      times that the MO-FULL marker is the final output line, so agents stop
+      there — and on that path a raised anchor converts an early release into a
+      3h hold.

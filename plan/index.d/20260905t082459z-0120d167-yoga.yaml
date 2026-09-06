@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: plan-only-push-lane-refuses-append-only-edits-to-work-queue-ledgers
+    event:
+      type: progress
+      ts: "2026-09-05T08:24:59Z"
+      agent_id: linux-yoga-claude-20260905t082459z
+      host: yoga
+      summary: |-
+        Closed, landed 8c6ed8e26. TWO CORRECTIONS TO THE PACKET, both established before writing anything. FIRST, CRITERION 1 WAS ALREADY SATISFIED an hour earlier and by a neighbouring packet: 1060-7mmm (45a56394e) admits an M anywhere under plan/issues/, and work-queue ledgers ARE plan/issues/*.md, so pirria append already took the lane before I claimed this. Measured not assumed: against the pre-1013 hook the new append arm PASSES and only the rewrite arm fails, 15 of 16. Not claiming credit for a criterion met elsewhere. SECOND, CRITERION 2 AS WRITTEN CONFLICTS WITH 1060-7mmm and I did not implement it as written: it asks that any modification deleting or rewriting lines be refused across plan/issues/, but 1060-7mmm deliberately enabled exactly that, its whole case being a FOUR-CHARACTER correction to a wrong order id, which rewrites a line. Implementing criterion 2 literally would have reverted an hour-old change without saying so. WHAT DISTINGUISHES THEM is the coordinator own framing, an append to a work-queue file is a record and a rewrite is not, and it is narrower than either packet states: a work-queue ledger is SHARED, several hosts append to one document, so a rewrite there can silently drop a sibling line and the lane cannot tell a correction from an erasure; a smoke report is one host prose about its own run. So the append-only rule applies to work-queue files ONLY, matched on the filename, and ordinary captures keep 1060-7mmm freedom. Arm 3f pins that interaction directly so this packet cannot quietly re-impose append-only on the case the last one opened. CONTROLS IN THE PRESENCE-OF-SUCCESS FORM as ruled: the accepting arms assert the lane NAMED the validated file, which only happens on the accepting path, rather than testing for the absence of a refusal string, which is what let an inverted arm pass against a pre-fix hook in 1060-7mmm. The refusal names the offending hunk per criterion 2 second half, printing the removed lines capped at three. Mutation control across BOTH prior hook states: 15 of 16 against the hook before this change with only the rewrite arm red, 12 of 16 against the hook before 1060-7mmm, 16 of 16 now. LEDGER NOTE: this packet owned_files names scripts/hooks/pre-push-plan-only-lane.sh, which does not exist and appears never to have; the lane lives in scripts/hooks/pre-push-local-gate.sh. Gate rc=0 228s.

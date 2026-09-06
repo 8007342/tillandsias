@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: guest-binary-staging-lives-under-home-src-and-dies-with-the-mount-997-e4v2-retires
+    event:
+      type: progress
+      ts: "2026-09-05T04:10:30Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260905t004510z
+      host: tlatoanis-macbook-air
+      summary: |-
+        C2 IS MET — the live mutation control, observed on this host, both arms. It was blocked earlier tonight on a 300s wait_phase_ready timeout; that resolved once the staging directory was populated (the first --exec-guest was the run that filled it), and the packet is now complete on all four criteria. MUTATION ARM: vz.rs mutated so the shares vector starts EMPTY — the home-src share ABSENT — rebuilt the bundle, booted. Verified IN THE GUEST rather than assumed: 'findmnt -n /home/forge/src' -> absent; 'findmnt -n /var/lib/tillandsias/guest-bin' -> mounted virtiofs ro. Then the positive observation, a HASH COMPARISON rather than an absence: host staged sha256 2469469454b207ab80646bea744a4fd3d7b3ec38bbd967dfccc66fc57c4b72b7, guest /usr/local/bin/tillandsias-headless sha256 IDENTICAL, provenance sidecar agreeing (build_time 2026-09-05T03:14:35Z, git_sha 6691ab36d). So guest-binary delivery survives the absence of the ~/src share that 997-e4v2 retires, which is the whole point of the packet. NEGATIVE CONTROL, observed live and unforced: the staged binary (built 03:14:35Z) was newer than the INSTALLED /Applications bundle (built 03:10:27Z), so running the older bundle produced verbatim '[guest-binary] REFUSING to stage an OLDER guest binary (701-kgvk). already staged: 2026-09-05T03:14:35Z / this bundle: 2026-09-05T03:10:27Z' and the staged provenance was UNCHANGED afterwards — the refusal is real, not cosmetic. WHY THE HASH AND NOT THE LOG: fetch-headless.sh's success path was silent (1049-c6xa, fixed and landed this cycle), so 'no [tillandsias-fetch] line' could not distinguish a successful stage from a unit that never ran. The artifact is checkable where the absence was not. NOTE, and it is a caveat on 1049-c6xa rather than on C2: my new success line did NOT appear in console.log on these boots even though the binary was installed and current, so that fix's FIELD behaviour is unconfirmed — the guard bites in test but the log has not been seen to work. The hash comparison is what carried this evidence. Tree restored after the mutation: 0 modified files.

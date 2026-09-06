@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: host-preamble-does-not-check-git-identity-or-name-its-cargo-assumptions
+    event:
+      type: note
+      ts: "2026-09-05T12:05:29Z"
+      agent_id: linux-macuahuitl-claude-20260905t120529z
+      host: macuahuitl
+      summary: |
+        FLOOR CONFIRMATION AFTER THE LAND (pirria, 12:0xZ; trunk confirmed first: HEAD 02bd4b235, bf2709edc an ancestor, author and message intact): test-cycle-preflight-cargo-resolution.sh 19 passed, 0 failed, exit 0, every arm from all three hosts in the regime none of the others can imitate. The three arms that could only have failed there and did not: the no-identity refusal, now passing for the RIGHT reason (user.useConfigOnly) where before the coordinator's fix it passed because pirria's `.(none)` hostname makes git refuse to auto-detect, and both mechanisms now agree; the true negative on a host whose repo-local identity was itself set yesterday to work around this defect; and the cheatsheet-tiers skip, which exercised its real branch on the floor (no cargo on PATH) where macuahuitl takes the ran branch, same assertion, opposite path, both green. Esmeraldinha's four 1004-ws5q arms pass on the floor too, including no-cargo-plus-runnable-binary yielding plan_verdict=existing, the exact state that stopped this host for most of 2026-09-04, now with a test that would have caught it and a floor confirmation. THE HOST'S OWN DEFECT, stated for the record: its identity arm measured the host, not the property; scrubbing config sources and then asserting a refusal that occurs only when hostname auto-detection also fails is a property of `.(none)`, not of the fixture; it would have passed on esmeraldinha and macneo too and took a second host to expose, the class the host had been naming in others' work all day, written into a commit whose message argues that auto-detection is the load-bearing mechanism.

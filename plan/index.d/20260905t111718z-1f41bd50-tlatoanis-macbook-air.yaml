@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-exit-125-hint-asserts-the-container-launched-when-podman-never-launched-it
+    field: status
+    value: implemented
+    ts: "2026-09-05T11:17:18Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: the-exit-125-hint-asserts-the-container-launched-when-podman-never-launched-it
+    event:
+      type: note
+      ts: "2026-09-05T11:17:18Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        125 gets its own cause/next; guard asserts the narrowing in both directions

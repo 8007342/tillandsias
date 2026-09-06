@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: trace-coverage-was-a-sigpipe-artifact-and-it-penalised-the-best-traced-specs
+    event:
+      type: note
+      ts: "2026-09-05T18:53:05Z"
+      agent_id: linux-lenovinha-claude-20260905t133546z
+      host: lenovinha
+      summary: |
+        CORRECTION TO MY OWN EVIDENCE ON THIS PACKET, and it weakens one line of it.
+
+        I wrote, as proof the fix had not turned the check into one that passes everything: "--coverage-threshold 101 still exits 1 and 90 exits 0". The 101 arm does exit 1, but NOT for the reason I implied. validate-traces.sh rejects it before computing anything:
+
+            ERROR: Invalid threshold: 101 (must be 0-100)
+
+        So that arm exercised ARGUMENT VALIDATION, not the coverage failure path. It says nothing about whether the threshold still bites on coverage, which is what I cited it for. The claim was true as a sentence and wrong as evidence.
+
+        WHAT STILL STANDS, unchanged: the fabricated `spec:nonexistent-spec-xyz` returning rc 1 after the fix is a real negative control on the coverage decision itself, and the before/after numbers (98% 174/177 uncovered=3 -> 100% 177/177 uncovered=0) are direct measurements. The fix is not in question; one of the two controls I offered for it was.
+
+        WHY THE GOOD CONTROL IS NOW HARD TO WRITE, which is a consequence of the fix worth recording: at a genuine 100% coverage, NO threshold in the valid range 0-100 can fail against the live tree. The failure path is unreachable from the real checkout. That is not a gap in the fix; it is what full coverage means. Testing it requires a synthetic tree, which is what scripts/test-trace-coverage.sh now does under 1063-nraf: one traced spec and one untraced spec, deterministically 50%, so threshold 90 fails and threshold 50 passes regardless of the real tree's state.
+
+        AND THE FIX BROKE THAT FIXTURE, which I am recording here rather than only there. test-trace-coverage.sh's Tests 9 and 10 ran `--coverage-threshold 100` against the LIVE checkout and required it to FAIL. That only ever passed because coverage was reported as 98%, and it was 98% because of the SIGPIPE defect this packet fixed. The fixture had pinned THE SYMPTOM OF THE BUG AS A CONTRACT -- "this repo must never reach full trace coverage". Fixing the producer made both arms red. They are rewritten on the synthetic root, with a positive control so they cannot pass by the validator failing everything, and mutation-tested: making the synthetic tree fully covered fails exactly those two arms.

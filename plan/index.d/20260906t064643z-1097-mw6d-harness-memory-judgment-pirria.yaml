@@ -1,0 +1,64 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-documented-15-gib-floor-boundary-may-be-measuring-the-observer-rather-than-the-lane
+    order: 1097-mw6d
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [runtime, testing, docs, floor-tier, measurement-regime]
+    estimated_hours: 1
+    owned_files:
+      - skills/smoke-curl-install-and-test-e2e/SKILL.md
+    verifiable_closure: |
+      bash scripts/run-litmus-test.sh methodology-accountability after §4a is
+      qualified — but the real closure is a MEASUREMENT, not a gate: one more
+      harness kill captured on a host with different total RAM, with `free -b`,
+      `free -h` and `journalctl -k` taken in the same minute. Until that datapoint
+      exists the packet closes by AMENDING the runbook's claim, not by proving it.
+    title: |
+      MEASURED on pirria: a harness memory-kill fired while AVAILABLE was two-thirds of RAM and the kernel had reclaimed nothing, so §4a's "at 15 GiB the wrapper is collateral" may describe the supervisor's threshold rather than the lane's footprint
+    context: |
+      FOUND by pirria during the authorised v56.9.5.1 floor smoke, 2026-09-06.
+
+      THE CLAIM UNDER CHALLENGE. skills/smoke-curl-install-and-test-e2e/SKILL.md
+      §4a records as a floor property: "at 15 GiB the wrapper is collateral; the
+      number at which it stops being is unmeasured." Other hosts follow that
+      runbook and read it as a statement about the LANE'S FOOTPRINT.
+
+      EVIDENCE IT IS PARTLY ABOUT THE OBSERVER. At 04:46Z the harness killed a
+      background waiter for "the system is running low on memory":
+        total 15Gi | used 4.7Gi | free 3.3Gi | buff/cache 8.3Gi | AVAILABLE 10Gi
+        journalctl -k: ZERO oom-kill / "Killed process" in the window
+        all six enclave containers Up and healthy; the lane unaffected
+      Second sample 22 minutes later, same live lane:
+        total=16486629376 free=3296645120 buffcache=9734279168
+        AVAILABLE=12296069120 (11Gi)   journalctl -k oom count: 0
+
+      HYPOTHESIS, EXPLICITLY NOT A CONCLUSION. `free` (3.1-3.3Gi) and `available`
+      (10-11Gi) differ by 8-9Gi of reclaimable page cache. A kill fired while
+      available was two-thirds of RAM with the kernel reclaiming nothing — the
+      signature of a supervisor reading `free`, or a cgroup memory.current
+      counting page cache, rather than `available`. pirria has host-side numbers
+      and NO visibility into the harness's threshold logic, and said so.
+
+      CONSEQUENCES IF TRUE: the 15 GiB figure does not transfer as a memory
+      threshold; a host with more RAM but a large page cache is equally exposed;
+      and "no host above 16 GiB has reported this" is weak evidence, because the
+      trigger would be cache pressure rather than total RAM.
+
+      WHAT IS NOT CLAIMED, recorded so nobody upgrades it: the lane's real
+      footprint is unmeasured here, and this does not say the floor is
+      comfortable. It says the recorded boundary cannot distinguish "the lane is
+      too big for 15 GiB" from "the supervisor's memory is judged on the wrong
+      number" — and a runbook other hosts follow must not assert the first while
+      only the second is evidenced. This is `attach the regime before
+      broadcasting` applied to a number already broadcast.
+    next_action: |
+      One more datapoint at the next harness kill on ANY host with different
+      total RAM settles it: capture `free -b`, `free -h` and
+      `journalctl -k | grep -iE 'oom-kill|Killed process'` in the same minute.
+      Then either qualify §4a's boundary with the instrument caveat, or promote it
+      to a real threshold if the numbers support one. Do not promote it on one
+      host's samples.

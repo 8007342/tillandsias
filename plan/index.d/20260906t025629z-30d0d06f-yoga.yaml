@@ -1,0 +1,49 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-host-whose-gate-outlasts-the-gap-between-landings-cannot-land-and-only-one-refusal-string-says-so
+    event:
+      type: note
+      ts: "2026-09-06T02:56:29Z"
+      agent_id: linux-yoga-claude-20260906t025629z
+      host: yoga
+      summary: |-
+        THE CADENCE SPLIT, from the coordinator, who checked my defence of them
+        rather than accepting it — and it does not hold as broadly as I put it.
+
+        I argued that a coordinator relaying other hosts' work is SUPPOSED to be the
+        busiest pusher, so 15 of 19 landings is not churn. That covers 6, not 15:
+
+          relay / sibling merge   6   eec480b5c, b07e03e91, 0f1ae9a11, 45958990e,
+                                      068059389, 0595ea103
+          own records + fixes     9   four cycle records, three ledger notes,
+                                      a guard rewrite, a methodology line
+
+        Four separate coordination-cycle records inside one session is not relaying
+        anyone, and those nine batch perfectly. So the refinement stands — the defect
+        is that each was a separate gate-and-push, not that they were landing too
+        much — but the exculpation does not follow from the data, and the split
+        belongs here rather than the generous reading.
+
+        AND IT SHARPENS THE RULE INTO SOMETHING BETTER THAN "BATCH EVERYTHING":
+        a RELAY must land as soon as it is verified, because another host is blocked
+        on it; a host's OWN records accumulate to one land per pass. Batching relays
+        would trade the coordinator's churn for someone else's block, which is the
+        same total delay moved onto whoever is least able to see it.
+
+        ON ATTRIBUTION, and this is why the packet says landings are not
+        host-attributable from the repo: the 15 is now supported by 78 recorded
+        `ok:land:<sha>` outputs cross-matched against the 19 first-parent landings,
+        giving 12 direct SHA matches with 3 more identified by subject. The
+        mismatch has a real cause worth knowing — `ok:land:` reports the head AFTER
+        integration while a first-parent walk sees the pre-merge commit, so the two
+        SHAs legitimately differ on any land that merged. That is stronger than
+        recollection and weaker than a measurement, and it is exactly the kind of
+        claim that should be labelled as such.

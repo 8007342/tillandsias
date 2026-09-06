@@ -720,6 +720,67 @@ case "${1:-verify}" in
             echo "stale:tree-changed-since-gate"
             exit 1
         fi
+        # ── WORKTREE MODE DRIFT (order 1036-e5w9) ────────────────────────────
+        #
+        # THE MEMO KEYS ON A DIGEST THAT DELIBERATELY CANNOT SEE THIS. `compute`
+        # sources exec bits from the INDEX (889-8tcb, and that is not negotiable
+        # — the worktree read deadlocked every Windows host). So a worktree-only
+        # `chmod -x` leaves the digest identical, the memo says ok:gate-fresh,
+        # and the gate never runs — including `check-script-exec-bits`, the
+        # guard that exists to refuse exactly that defect.
+        #
+        # MEASURED on lenovinha 2026-09-04, which is why this packet exists:
+        #     chmod -x scripts/check-litmus-pin-claims.sh   # worktree only
+        #     ./build.sh --check                  -> rc=0 in 2s, ok:gate-fresh
+        #     TILLANDSIAS_FORCE_CHECK=1 …         -> rc=1, violation:script-not-executable:1
+        # Both components were correct; the memo's safety argument ("the gate is
+        # a pure function of tree bytes and toolchain") is true and INSUFFICIENT,
+        # because at least one guard is not a function of tree bytes alone.
+        #
+        # THE FIX IS IN THE MEMO, NEVER IN THE DIGEST. I tried the digest first
+        # (1034-ihxw, obsoleted) and reintroduced the drvfs deadlock; the revert
+        # is 0a1419ffe and it cost yolanda ~40 minutes rediscovering a defect
+        # documented eighty lines above the line they were debugging. The digest
+        # is the one thing here that must not change, and this check does not
+        # touch it — measured before and after a chmod, `compute` returns the
+        # same 38456419… either way.
+        #
+        # WHY `git diff --summary` AND NOT A STAT (yolanda's shape). A stat asks
+        # the FILESYSTEM, and on drvfs the filesystem lies — that is the whole of
+        # 889-8tcb. git's answer is governed by `core.fileMode`, which 889-8tcb
+        # itself calls "a DECLARATION both sides read identically, not an
+        # inference the broken filesystem gets to answer". So this reads modes
+        # through the same declaration the digest already trusts.
+        #
+        # MEASURED, on one tree, one moment, toggling only that setting:
+        #     core.fileMode=true   -> mode changes seen: 1   (POSIX: memo refuses)
+        #     core.fileMode=false  -> mode changes seen: 0   (drvfs/Windows: memo
+        #                                                     behaves exactly as
+        #                                                     today, no deadlock)
+        # A Windows host therefore sees NO behaviour change from this block,
+        # which is the property the previous attempt failed to have.
+        #
+        # COST, stated because the packet asked for it: one `git diff --summary`
+        # on the memo path (~20ms here), against the ~2s memoised gate it
+        # protects. It is scoped to mode changes only — a content edit already
+        # moves the digest and is caught above, so this adds no coverage there
+        # and no cost beyond the single call.
+        #
+        # SCOPE: worktree-vs-index only. A STAGED mode change moves the index,
+        # therefore the digest, therefore `stale:tree-changed-since-gate` above.
+        # CAPTURE BEFORE MATCHING (792-ksr8). The first version of this was
+        # `git diff --summary | grep -q '^ mode change '`, and the gate refused
+        # it: `grep -q` exits on the FIRST match, SIGPIPEs `git diff`, and the
+        # pipeline's status then depends on which side won a race. A memo
+        # verdict decided by a signal is precisely the class this block exists
+        # to close, so the guard was right to refuse it in the same change.
+        _mode_drift="$(git diff --summary 2>/dev/null || true)"
+        case $'\n'"$_mode_drift" in
+            *$'\n'" mode change "*)
+                echo "stale:worktree-mode-drift"
+                exit 1
+                ;;
+        esac
         echo "ok:gate-fresh $recorded_stamped"
         ;;
     classify)

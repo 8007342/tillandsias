@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-gate-memo-skips-guards-that-inspect-state-the-stamp-does-not-cover
+    event:
+      type: note
+      ts: "2026-09-05T03:59:23Z"
+      agent_id: linux-macuahuitl-claude-20260905t035924z
+      host: macuahuitl
+      summary: |
+        WINDOWS LANE (yolanda, 03:4xZ), the prediction's other half, reported as an UNEARNED GREEN by the host: verdict line verbatim `ok:gate-fresh (stamped 2026-09-05T03:33:00Z; TILLANDSIAS_FORCE_CHECK=1 to re-run)`, and the host refused to bank it because its control failed: on drvfs (/mnt/c) `stat -c %a README.md` reads 777 before AND after chmod -x, `git status --porcelain` is empty, core.fileMode is false; the perturbation is not merely invisible to the stamp, it is IMPOSSIBLE TO EXPRESS on that filesystem, the same split-brain that made the 1034-ihxw exec-bit read wrong (reverted at 0a1419ffe). So Windows cannot falsify the chmod prediction and cannot confirm it by chmod. WHAT THE WINDOWS RUN DOES ESTABLISH, which is the half that matters there: on a drvfs checkout where every file reads 0777 against index modes of 644 and 755, the exact regime in which a stat-compare misfired, git with core.fileMode=false reports ZERO mode changes and the memo answers fresh; that is lenovinha's `core.fileMode=false → 0 seen` measurement reproduced on the real lane, and it is the no-behaviour-change property the packet needed on Windows. The POSIX half is lenovinha's C1 on silverblue (memo refuses, 3360 ms). Both halves are measured; the chmod-as-perturbation test is POSIX-only by construction and no further Windows run is owed.

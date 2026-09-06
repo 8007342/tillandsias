@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: test-stress-no-resource-leaks-asserts-a-ratio-between-ten-sample-means-of-sub-millisecond-cycles-with-no-absolute-floor-so-it-measures-scheduler-jitter-on-the-floor
+    event:
+      type: implemented
+      ts: "2026-09-05T03:32:03Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260905t004510z
+      host: tlatoanis-macbook-air
+      summary: |-
+        FIXED, and MY FIRST FIX FAILED ITS OWN SABOTAGE ARM — kept in the code comment, not only here. Esme's diagnosis is exactly right: with no podman every attach/launch/stop/detach fails FAST, cycles are MICROSECONDS, and 'ratio < 2.0' stops measuring leakage and starts measuring scheduler jitter; her 4.46x on a 0.01 s six-test binary is the pre-fix red. FIRST ATTEMPT, WRONG: a branch — keep the ratio above a 500us floor, use a 2ms absolute slack below it. The sabotage arm PASSED under it. A cushion loose enough to swallow every jitter is also loose enough to swallow the leak, and a guard that cannot fail is not a guard — I would have shipped one inside the packet whose second criterion is that it must fail. SHIPPED INSTEAD, one expression rather than a branch: last_10_avg <= first_10_avg * 2 + 250us. The doubling keeps the original meaning where cycles are real work; the cushion absorbs jitter where they are not. A BRANCH WOULD MAKE THE TEST ASSERT DIFFERENT THINGS ON DIFFERENT HOSTS, which is esme's defect restated rather than fixed. The cushion is sized to her observation: 4.46x of a microsecond-scale mean is a few microseconds of absolute growth, so 250us leaves about two orders of magnitude of headroom while staying far below what a real per-cycle leak produces over 100 cycles. SABOTAGE, criterion 2, run and quoted: per-cycle work that grows (256 KiB retained each cycle plus a walk over everything retained) -> RED, 'Potential resource leak: last-10 mean 384us exceeds 2x first-10 (60.974us) plus 250us jitter cushion = 371.948us'. Restored: 6 passed. HONEST LIMIT, in the comment so a later reader does not over-trust it: at microsecond cycles this catches GROSS growth only; a leak adding a microsecond per cycle is invisible — but it was equally invisible to the ratio, which was drowning in jitter of the same size. Neither form turns a no-podman host into a leak detector; the fix stops it reporting one falsely. Forced gate on a quiet machine: ok:test-baseline:ran=2296 new-red=0 tolerated=0 stale=0, exit 0. Criterion 3, esme's floor gate on the fixed tree, is hers and is not claimed here.

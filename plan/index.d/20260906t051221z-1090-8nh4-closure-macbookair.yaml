@@ -1,0 +1,63 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  1090-8nh4:
+    - type: progress
+      ts: "2026-09-06T05:12:21Z"
+      agent_id: "macos-tlatoanis-macbook-air-claude-20260905t144547z"
+      host: tlatoanis-macbook-air
+      summary: |
+        FIXED, all three criteria, fixture first as criterion 2 required.
+
+        WHAT WAS THERE: detect_inference_tier() had two arms and only one looked
+        at the machine.
+          #[cfg(target_os = "macos")]      { "metal" }
+          #[cfg(not(target_os = "macos"))] { nvidia-smi; rocminfo; ...; "cpu" }
+        The second OBSERVES and falls back to a measured floor. The first
+        asserted a runtime accelerator from a COMPILE-TIME fact.
+
+        CRITERION 2 FIRST, AND ITS SHAPE WAS FORCED BY THE DEFECT. The fixture
+        asserts on the SOURCE, not the return value, because a guessed "metal"
+        and an observed "metal" are the same string — an output-only test passes
+        identically before and after the fix and proves nothing. Written against
+        the unfixed function it RED with the stated reason, then passed after.
+
+        CRITERION 1 RULED OUT THE EASY FIX. Returning "unmeasured" from the same
+        `#[cfg(target_os = "macos")]` arm would have satisfied my own grep while
+        remaining exactly what the packet forbids: a tier derived from the build
+        target. The cfg is GONE and the fallback OBSERVES —
+        `sysctl -n machdep.cpu.brand_string`, which reports "Apple M5" on this
+        host and does not exist on the linux-aarch64 guest, so the guest still
+        answers from measurement rather than from a compile flag.
+
+        CRITERION 3: the answer now states what it measured. Apple hardware seen
+        and Metal not probed reports `unmeasured`, NOT `metal` — reporting metal
+        there would be the same guess the cfg made, relocated. Nothing observed
+        reports `cpu`, which is a measured floor.
+        MEASURED HERE: legacy_tier went from a cfg-derived "metal" to
+        "unmeasured", with `sysctl` returning "Apple M5".
+
+        VOCABULARY: "unmeasured" added to the two tier validation lists
+        (main.rs). `legacy_tier` is a recorded document field compared at
+        accel_probe.rs:445, not a routing switch, so the blast radius is the
+        capability document and those two assertions.
+
+        SABOTAGE, BOTH DIRECTIONS:
+          restore the cfg arm -> fixture REDS with the stated reason
+          force the Apple observation false -> this host reports "cpu" instead
+            of "unmeasured"
+        The second arm is the one worth keeping: it proves the verdict follows
+        the MEASUREMENT rather than being a relocated constant. Without it I
+        could have swapped one hardcoded string for another and had a green
+        fixture either way.
+
+        WHY THE DISTINCTION MATTERS BEYOND THIS FUNCTION: `unmeasured` tells a
+        router "there may be acceleration here that nobody probed"; `cpu`
+        asserts a measured floor. Collapsing them is what let a Mac advertise
+        Metal it had never checked for — and, per 657-zm2n, be marked usable
+        while routing to nothing.
+
+        I did NOT inherit the parent's cited spans, per the next_action. Every
+        one I checked was stale.
+
+        Forced gate: exit 0, ok:test-baseline:ran=2329 new-red=0 tolerated=0
+        stale=0.

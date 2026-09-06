@@ -361,6 +361,24 @@ errors, unexpected registry pulls, and enclave-health failures.
 
 ### 3·macOS
 
+> **A 300 s `wait_phase_ready` timeout on macOS is answered FIRST by
+> `/var/log/tillandsias-provision-marker` inside the guest** (1055-e8ie). Read
+> it with
+> `…/tillandsias-tray --exec-guest 'cat /var/log/tillandsias-provision-marker'`.
+> It says in one file whether the cloud-init provisioning script COMPLETED,
+> and if not, the exact line it died on plus `systemctl --failed` and
+> `systemctl status` for the headless units at that moment.
+>
+> WHY THIS IS THE FIRST THING TO READ, not the last: the guest boots fine,
+> networks, reaches a login prompt and installs its binary while failing to
+> provision — because the script is `set -euo pipefail` and cloud-init does
+> NOT surface a user-script failure, so `cloud-init status` still reports
+> `done, errors: []`. Measured 2026-09-05: the script aborted at its
+> `systemctl start` of the headless units, and the readiness-service start on
+> the VERY NEXT LINE never ran, so the guest could not report Ready. Nothing
+> anywhere said so. Four hypotheses were spent before the marker existed;
+> reading it now costs one command.
+
 ```bash
 # Cold provision: re-downloads the Fedora cloud rootfs and re-materializes the
 # ext4 VM disk from nothing (this is the highest-signal step — it exercises the

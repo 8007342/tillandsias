@@ -1,0 +1,126 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-claim-event-does-not-move-the-status-so-four-packets-are-held-by-a-host-invisible-to-the-sweep-and-still-offered-by-the-selector
+    order: 1079-qb8k
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    owner_host: any
+    release_target: stable-milestone-v1
+    capability_tags:
+      - plan
+      - claims
+      - multi-host
+      - coordination
+      - fail-loud
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-plan/src/main.rs
+      - skills/advance-work-from-plan/SKILL.md
+    verifiable_closure: |
+      bash scripts/test-claim-event-moves-status.sh exits 0, with:
+
+      ARM 1 (a claim event alone is not silently ignored). After
+      `append-event <order> --type claim` with no set-field, the packet is NOT
+      offered by `tillandsias-plan ready` AND appears in
+      `expire-claims --dry-run --list-live`. PRE-FIX RESULT: FAILS — measured
+      2026-09-05T20:0xZ, four packets carrying claim events were offered by the
+      selector 4 of 4 and appeared in the sweep 0 of 4.
+
+      ARM 2 (the two writes cannot disagree). Whatever the chosen remedy —
+      the tool transitioning on a claim event, or a refusal that names the
+      missing write — a claim event and a status that contradict each other
+      must be REPORTED, not silently resolved in favour of either. PRE-FIX
+      RESULT: FAILS, there is no reporting of the disagreement anywhere.
+
+      NEGATIVE CONTROL, and it is the arm that matters: a packet with NO claim
+      event and status `ready` must still be offered by the selector and must
+      still be absent from the sweep. A fix that made the sweep report every
+      packet with any event, or made the selector withhold anything it could
+      not positively confirm free, would satisfy arms 1 and 2 by emptying the
+      ready set — which is the failure mode 1024-c3h3 calls could-not-run
+      posing as a verdict.
+    title: |
+      `append-event --type claim` records the claim and does not move the status, so a host that files one and skips `set-field` holds a packet that the sweep cannot see and the selector keeps handing to everyone else
+    context: |
+      MEASURED on macuahuitl 2026-09-05 during the hourly coordination pass,
+      while checking why esmeraldinha's 1072-b7eq read `ready` ninety minutes
+      after esmeraldinha claimed it in a message to the coordinator.
+
+      THE CLAIM IS TWO WRITES AND HOSTS DO ONE. `append-event <order> --type
+      claim` appends an event keyed by PACKET_ID. `set-field <order> status
+      in_progress` is a SEPARATE call, and it is the only one the fold reads
+      for status. A host that files the event and skips the field has recorded
+      its intent in a place nothing consults.
+
+      THE CORPUS, MEASURED NOT ESTIMATED. Eight packets in plan/index.d carry a
+      `type: claim` event. Four are `completed`, which is the healthy path.
+      FOUR ARE `ready` RIGHT NOW WHILE A HOST HOLDS THEM:
+
+        jq-crlf-on-windows-turns-shell-reads-into-silent-wrong-answers
+            claimed by yolanda 2026-09-05T12:59Z
+        windows-lane-sends-a-verbatim-argv-and-drops-its-escaping-workarounds
+            claimed by yolanda 2026-09-05T12:29Z
+        guest-pulls-full-multiarch-qemu-user-static
+            claimed by esmeraldinha 2026-09-05T17:11Z
+        every-host-appends-its-gate-step-to-the-same-region-of-build-sh (1072-b7eq)
+            claimed by esmeraldinha 2026-09-05T18:17Z
+
+      Two hosts, both Windows, four packets, up to seven hours. The jq one is
+      the sweep this coordinator has been tracking all evening and reporting on
+      by name.
+
+      THE TWO INSTRUMENTS DISAGREE IN THE WORST POSSIBLE DIRECTION, and this is
+      the measurement that makes it p1:
+
+        tillandsias-plan expire-claims --dry-run --list-live   -> 0 of 4 appear
+        tillandsias-plan ready                                 -> 4 of 4 offered
+
+      So the coordinator cannot see them as held, and every host on the fleet is
+      being offered them. That is not a latency problem. 1034-whsp measured a
+      claim taking ten minutes and four push attempts to become visible; this is
+      a claim that NEVER becomes visible, on a host that did everything except
+      one command.
+
+      WHY IT SURVIVED. The failure is silent on both sides. `append-event`
+      succeeds and prints ok, so the claiming host has no reason to doubt it.
+      The selector offering a held packet looks identical to it offering a free
+      one. And the sweep's own output is a list of in_progress rows, so a
+      packet missing from it reads as "not claimed" rather than "claimed in a
+      way I cannot see" — absence posing as a verdict.
+
+      RELATED AND DISTINCT. 1034-whsp (done) addressed cross-branch visibility
+      of a claim that WAS written correctly, and yoga's batch checker folds
+      sibling branches to refuse a packet held elsewhere. It reads STATUS, so a
+      claim that never reached the status field is invisible to that too. This
+      packet is the other half: not "the claim takes too long to be seen" but
+      "the claim was never written where anything looks".
+    next_action: |
+      LEFT TO DO, and the first step is a decision the claimer must NOT skip:
+
+      1. DECIDE WHERE THE FIX GOES, and record which was chosen and why.
+         (a) `append-event --type claim` also performs the status transition.
+             Cheapest for hosts, and the two writes can no longer disagree —
+             but it makes one subcommand do two things and it must not silently
+             overwrite a status that is already terminal.
+         (b) `append-event --type claim` REFUSES when the packet is not
+             in_progress and names the missing `set-field` command. Loud, no
+             hidden behaviour, one more step for the host.
+         (c) The selector and the sweep both read claim EVENTS as well as
+             status. Changes no write path, but two readers now need the same
+             rule and can drift apart, which is how this defect happened one
+             level up.
+         Measure before choosing: how many claim events exist fleet-wide, and
+         whether any legitimately precede a status the tool should not touch.
+
+      2. DISPOSE OF THE FOUR EXISTING ROWS. They are held by real hosts doing
+         real work right now. Do NOT expire them and do not transition them from
+         another host — ask yolanda and esmeraldinha to write the missing
+         `set-field`, which costs each of them one command and keeps the
+         authorship correct.
+
+      3. The negative control is not optional. A fix that empties the ready set
+         to be safe is worse than the defect: a host with nothing offered stops,
+         and a coordinator reading an empty queue concludes the fleet is done.

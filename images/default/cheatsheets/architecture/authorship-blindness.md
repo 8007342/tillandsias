@@ -5,8 +5,8 @@ since: 2026-08-26
 last_verified: 2026-08-26
 sources:
   - plan/index.yaml order:803-49re
-  - plan/index.yaml order:804-ckst
-  - plan/index.yaml order:899-q9di
+  - plan/archive/packets-2026-08.yaml order:804-ckst
+  - plan/archive/packets-2026-08.yaml order:899-q9di
   - plan/index.yaml order:903-8wsa
   - plan/index.yaml order:904-dprq
 authority: high

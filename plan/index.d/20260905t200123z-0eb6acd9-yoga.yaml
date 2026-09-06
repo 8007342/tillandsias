@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: land-on-platform-branch-discards-the-gates-output-so-a-refusal-can-never-name-its-step
+    event:
+      type: progress
+      ts: "2026-09-05T20:01:23Z"
+      agent_id: linux-yoga-claude-20260905t200123z
+      host: yoga
+      summary: |-
+        Closed, landed 0492c1be4. ALL THREE CRITERIA MET, and the third was NOT synthesised. Criteria 1 and 2 pre-fix FAILS; mutation control with the fix reverted puts 4 of 7 arms red while both negative controls stay green. CRITERION 3 WAS MET BY A REAL REFUSAL ON THIS HOST, minutes after the fix existed: the first attempt to land THIS COMMIT hit a genuine gate refusal, and I diagnosed it from the captured log with NO re-run, which is exactly what the criterion asks and what nobody can manufacture on demand. The log named my own 1034-whsp selector fixture, "FAIL: a clean check altered the batch (3 vs 2)". ITS BASELINE WAS TAKEN WITH THE LIVE CROSS-BRANCH CHECKER, which DROPS held packets, while its stub arms drop nothing, so on a day when a sibling actually held one of the picked packets the baseline came back short and the comparison failed. That fixture passed when I wrote it this afternoon and refused a real land hours later, having tested nothing but the fleet claim state: a control depending on live external state. Baseline is now taken with the clean stub so it is the unfiltered batch by construction. AND THE REFUSAL NAMED THE WRONG CAUSE ON ITS FIRST REAL USE, which is the more important of the two findings. My matcher looked for violation: or refused: ANYWHERE in a line, and this gate is full of fixtures whose EXPECTED output quotes those tokens; it reported "first failing line: ok   no evidence at all -> refused:no-evidence:...", a PASSING arm, as the cause. A diagnostic that names the wrong cause is worse than the four words it replaced, because this one looks like an answer. Now anchored at line start with ok rows excluded and ANSI stripped first so ^ means the start of the text rather than of a colour escape; arm 4b pins it with a gate whose passing arms quote both markers. WHY RE-RUN WAS NEVER A REMEDY: macbookair instance re-ran clean on the same commit graph because the remedy text runs a DIFFERENT invocation against a tree the integrate step may have moved; the refusal now says so. FIRST failing line not the last, since build.sh prints its verdict after the failure so a tail hides the cause. Per-attempt logs under GIT_DIR because the loop gates up to ATTEMPTS times against different trees. My fixture also failed on its own layout first: I copied the script to the scratch repo root and it derives the root from scripts/.., so it resolved one directory too high and six arms went red for a reason unrelated to the subject. Fixture 8 arms, gate rc=0 265s. LANDING NOTE: the first land exhausted 4 attempts with refused:land:attempts-exhausted "origin is moving faster than this host gates", which is the already-correct half of this tool; a retry with 8 attempts landed on attempt 2.

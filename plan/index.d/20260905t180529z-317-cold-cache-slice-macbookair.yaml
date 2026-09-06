@@ -1,0 +1,81 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  317:
+    - type: progress
+      ts: "2026-09-05T18:05:29Z"
+      agent_id: "macos-tlatoanis-macbook-air-claude-20260905t144547z"
+      host: tlatoanis-macbook-air
+      summary: |
+        COLD-CACHE SLICE. Criterion 2 is STILL NOT MET and I am claiming no part
+        of it. What this slice establishes is that the prerequisites are gone and
+        exactly one boundary remains, which is a different boundary from any
+        previously recorded on this packet.
+
+        THE COLD CONDITION IS NOW A MEASURED FACT, not an assumption. Taken
+        before any container ran:
+          forge containers ......... 0
+          harness cache dirs ....... 0  (find over all podman volumes)
+          npm caches (_cacache) .... 0
+        So nothing had to be cleared. The four cache paths named in the
+        pristineness re-read did not exist, and no last-good rollback state
+        (orders 181/284) was put at risk.
+
+        THE IMAGE BUILDS HERE, which retires the prerequisite. The earlier report
+        that this host could not build was wrong and its cause is filed as
+        1072-qk43: --exec-guest leaves HOME unset, so build-image.sh died at
+        "line 40: HOME: unbound variable" in 0 seconds. With HOME exported the
+        build succeeded in 121s.
+
+        A BUILD THAT REPORTS SUCCESS DOES NOT ESTABLISH A RUNNABLE IMAGE, and
+        this cost a cycle:
+          build 1: BUILD_EXIT=0, listed at 3.03 GB, `podman image exists` exit 0
+                   -> `podman inspect` exit 125,
+                      faccessat .../overlay/1854a588...: no such file or directory
+          build 2: same script, --no-cache --force, 122s
+                   -> REBUILD_EXIT=0, INSPECT_EXIT=0, id bafc32a7...
+        Three independent green signals (build exit, existence check, a plausible
+        size) over an artifact that could not be inspected or run. Only inspect
+        and run reach the truth. Transient — a no-cache rebuild fixed it — which
+        points at layer reuse rather than the Containerfile. Worth its own packet
+        if it recurs.
+
+        THE REMAINING BOUNDARY, AND IT IS NOT PRISTINENESS OR TOOLING. A bare
+        `podman run` of the forge image cannot exercise ensure_forge_harnesses:
+          PODMAN_RUN_EXIT=2
+          [trust] WARNING: runtime proxy CA is not mounted; using vendor roots only
+          vault-cli: no Vault token at /run/secrets/vault-token
+          curl: (60) SSL certificate ... unable to get local issuer certificate
+          ERROR: claude credentials are unavailable or invalid
+        The install path runs inside a forge launched WITH its proxy and vault
+        sidecars, which mount the runtime CA and the vault token. Without them
+        TLS verification fails before any harness installer can report anything,
+        so what a bare container measures is the absence of the sidecars, not the
+        installers' behaviour.
+
+        SO CRITERION 2 NEEDS AN ORCHESTRATED FORGE LAUNCH, and that needs
+        credentials that belong to the operator. I did not run
+        `tillandsias --claude-login` and will not: it is a credential action, and
+        1025-a896 already records that logging in where a token still works
+        evicts another host's.
+
+        WHAT THE NEXT CLAIMER INHERITS, all measured here:
+          - a runnable forge image (rebuild the image if inspect fails)
+          - a genuinely cold harness cache, with the numbers above
+          - the guest had NO forge container beforehand, so first-install is a
+            fact rather than an inference
+          - the only missing piece is a forge launched with proxy + vault
+
+        BOUND ON EVERYTHING ABOVE, unchanged: the tray REFUSED to stage its guest
+        binary (701-kgvk — already-staged 2026-09-05T03:14:35Z is NEWER than the
+        installed bundle's 03:10:27Z), so this describes the guest's current
+        binary, not this checkout.
+
+        SILENT 127s OBSERVED TODAY, count attached because the count is the
+        argument (coordinator's framing) — 4th and 5th across three hosts:
+          4th: git absent while hash-image-sources.sh uses it for staleness
+               detection; a degradation, not a blocker — the build still worked.
+          5th: generate-dashboard.sh:12 "jq: command not found" AFTER a
+               successful build. REPRODUCED IDENTICALLY in the rebuild, so it is
+               deterministic on this host rather than incidental.
+
+        RELEASING THE LEASE back to ready.

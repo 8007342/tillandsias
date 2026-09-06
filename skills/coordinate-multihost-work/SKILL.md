@@ -43,6 +43,36 @@ via `tillandsias-plan loop-status-append` and stop.
 
 ---
 
+## A Trunk-Only Claim Check Is Wrong For Every Platform Host
+
+**Before calling any packet unclaimed, fold the sibling branches:**
+
+```bash
+scripts/check-claims-across-branches.sh --batch <id>...   # or a single <id>
+```
+
+`tillandsias-plan ready`, `status` and `expire-claims` all read the fold of
+**this branch**. A macOS or Windows host claims on `osx-next` or `windows-next`,
+and that claim reaches trunk only when the coordinator relays the branch. So a
+packet claimed correctly, with the status flipped and the claim pushed FIRST,
+still reads `ready` on trunk for as long as the relay takes.
+
+**MEASURED by macbookair 2026-09-05: the relay gap ran 19 minutes to 2h02m, with
+two of their own claims unseen on trunk for 1h55m and 2h11m.** So a host doing
+exactly the right thing and a host that claimed nothing at all are
+INDISTINGUISHABLE from trunk, for hours, and no amount of care on the
+coordinator's part closes that by looking harder.
+
+The same cycle, this coordinator told that host "nothing has arrived, which is
+exactly what that discipline looks like from outside." It was not: the claim had
+landed on `osx-next` twenty minutes earlier. `--batch` returned
+`claimed-elsewhere:1082-9rub:osx-next` in about a second.
+
+That is order 1034-whsp's subject arriving in the coordinator's own routine, and
+the remedy is mechanical rather than attentional: **run the cross-branch check on
+every candidate before routing it, and never report a packet as unclaimed on the
+strength of a trunk read.**
+
 ## Active Coordination & Mediation Audit
 
 In every hourly pass, the orchestrator MUST actively analyze concurrent work and evidence to detect and mediate four critical multi-host alignment problems:
@@ -141,34 +171,38 @@ To guarantee convergence in finite time, the orchestrator MUST track and enforce
     carry the prefix (the README) are not hosts and are skipped:
 
     ```bash
-    # A stem that is a PLATFORM LABEL is a shared bucket, not a host (order
-    # 1012-hu7d): `loop-status-append` without --host falls back to
-    # TILLANDSIAS_HOST_KIND, unset in agent shells, and writes under `linux`,
-    # `macos`, `windows`, `forge`, `linux-immutable` or `linux-mutable`. On
-    # 2026-09-04 the `linux` stem held 56 entries from at least three hosts,
-    # most of them the coordinator's own. Report buckets by count; never read
-    # one as a host, and never read a host as silent because its entries sit
-    # in a bucket — ask the host, or read the bucket's newest entry by hand.
-    buckets='^(linux|macos|windows|forge|linux-immutable|linux-mutable)$'
-    for h in $(ls plan/loop_status.d/*.md \
-               | grep -E '/[0-9]{8}t[0-9]{6}z-([0-9a-f]{8}-)?[^/]+\.md$' \
-               | sed -E 's#.*/[0-9]{8}t[0-9]{6}z-([0-9a-f]{8}-)?##; s/\.md$//' | sort -u); do
-      if printf '%s' "$h" | grep -qE "$buckets"; then
-        echo "unattributed-bucket $h entries=$(ls plan/loop_status.d/*.md | grep -cE "z-([0-9a-f]{8}-)?$h\.md$")"
-        continue
-      fi
-      # Sort by NAME, never by mtime: after a merge or checkout every file's mtime
-      # is the checkout time, and `ls -t` read yoga's 09:30Z backfill as newer
-      # than its 11:29Z entry (macuahuitl, 2026-09-04T12:09Z).
-      f=$(ls plan/loop_status.d/*.md | grep -E "z-([0-9a-f]{8}-)?$h\.md$" | sort -r | head -1)
-      [ -n "$f" ] || continue
-      l=$(grep -ho 'skippable: [^`|·]*' "$f" | tail -1)
-      echo "$h ${l:-NOT-PASTING ($f)}"
-    done
+    scripts/loop-status-metrics-audit.sh
     ```
 
-    Re-run the loop after editing it and confirm every multi-dash stem gets
-    its own row; the row count must equal the distinct-stem count.
+    **RUN THE SCRIPT. DO NOT RETYPE THE LOOP.** The audit used to live here as
+    an inline bash block carrying two hard-won fixes in its comments, and on
+    2026-09-05 the coordinator typed it from memory instead of running it. The
+    paraphrase dropped both fixes and two figures filed into packet 1074-96z9
+    came out of the wrong entry. A corrected instrument that lives in prose gets
+    retyped, and a retyped command is a new command with none of the
+    corrections. The loop is now `scripts/loop-status-metrics-audit.sh` and the
+    two fixes travel with it:
+
+    -   **Sort by NAME, never by mtime.** After a merge or a checkout every
+        file's mtime is the checkout time. `ls -t` read yoga's 09:30Z backfill
+        as newer than its 11:29Z entry (2026-09-04T12:09Z) and selected the
+        older entry for four of thirteen stems (2026-09-05T18:52Z). Entry names
+        begin with a UTC stamp, so a reverse lexical sort IS newest-first.
+    -   **Anchor on `skippable: candidates=` and take the FIRST match.** A
+        handoff that pastes the verbatim block and then DISCUSSES it has two
+        lines beginning `skippable: `, and `tail -1` takes the prose one. That
+        reported esmeraldinha as not pasting when it was pasting AND
+        interpreting — the instrument penalising the extra work.
+
+    The script prints one row per stem, reports platform-label stems as
+    `unattributed-bucket <name> entries=<n>` (order 1012-hu7d — never read a
+    bucket as a host, and never read a host as silent because its entries sit
+    in one), and ends with `rows=<n> stems=<n>`. **Those two numbers must be
+    equal**; it exits non-zero and prints `violation:dropped-stem` if they are
+    not, because a dropped stem under-counts the two-or-more-hosts trigger
+    below. The stem is everything after the `<timestamp>z-[<8hex>-]` prefix,
+    NOT the text after the last dash: session stems carry dashes of their own
+    and a last-dash split once collapsed three stems into one `forge` row.
 
     An empty result for a host means THAT HOST IS NOT PASTING its
     cycle-metrics — route it as a plain ask to that host ("paste the

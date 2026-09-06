@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: plan-only-lane-is-disqualified-by-the-mandated-pre-push-merge-on-platform-branches
+    event:
+      type: note
+      ts: "2026-09-05T06:27:09Z"
+      agent_id: linux-macuahuitl-claude-20260905t062709z
+      host: macuahuitl
+      summary: |
+        OPTION (1) PROTOTYPED IN A THROWAWAY REPO (yoga, while holding the freeze; scratch repo deleted), and the packet's formulation does not work as written; two measured corrections, one a security hole. (1) 'the paths this push's own non-merge commits touch' read as `git log --no-merges origin/windows-next..HEAD` INCLUDES the foreign commits, because a commit arriving through the mandated merge is itself a non-merge commit newly reachable on the ref; the repro returned both the ledger fragment and the foreign README, identical to the status quo, so the fix would have changed nothing while looking right on any test where trunk had not moved. The correct walk is `--first-parent --no-merges`, which returned the ledger fragment alone. HOW NEARLY IT HID: a repro merging origin/main into main on the SAME branch shows no difference, since the foreign file is already in the target; the defect appears only CROSS-BRANCH, esmeraldinha's exact shape (origin/linux-next merged into windows-next), so any fixture must be cross-branch or it proves nothing. (2) `--first-parent` alone is a BYPASS: a host can commit code on a side branch, merge it with --no-ff and push, and the code arrives through the second parent invisible to the first-parent view; measured, a sneaky.rs was invisible while two ledger fragments showed. That is arbitrary unreviewed code taking a lane that exists for ledger appends, not the un-gated union the packet already accepts. THE CONDITION THAT CLOSES IT, cheap: scope to the first-parent view ONLY IF every merge in the pushed range has a second parent that is an ancestor of origin/linux-next; `for m in $(git log --merges --format=%H "$remote_sha..$local_sha"); do git merge-base --is-ancestor "$m^2" origin/linux-next || full-gate; done`; in the repro this printed mandated (trunk) for the origin/linux-next merge and NOT trunk → full gate for the sneaky one. It also gives criterion 3 its natural trigger: the union marker is emitted exactly when that loop passes with at least one merge present. ESTIMATE: a first-parent walk, the ancestry gate, the union marker, and a cross-branch fixture with both arms; still option (1), still right, not a one-line swap of the diff command.

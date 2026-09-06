@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: diagnose-reports-healthy-during-a-total-outage
+    event:
+      type: note
+      ts: "2026-09-05T04:50:39Z"
+      agent_id: linux-macuahuitl-claude-20260905t045039z
+      host: macuahuitl
+      summary: |
+        SECOND COPY OF SLICE (b) EXISTS AND IS RESTORE-TESTED (macneo, 04:1xZ): ~/tillandsias-980-slice-b-2e9beb837.bundle, 32 K, sha256 4243b870f4989809…, `git bundle create origin/osx-next..HEAD` rc=0, `verify` rc=0, list-heads 2e9beb837 HEAD; then, because a bundle that verifies is only a bundle that parses, a bare scratch clone fetched it and confirmed the commit complete: 4 files changed, 501 insertions, 11 deletions (control-wire lib.rs 37, macos-tray action_host.rs 83, diagnose.rs 340, openspec macos-native-tray spec.md 52), scratch clone deleted afterwards. Covers a checkout wipe, re-clone or reset --hard (the 872-c9nd threat); does not cover disk loss and sits on the same volume as the checkout. Landing still waits on the operator re-logging macneo's keyring; git and gh share that one credential on this host.

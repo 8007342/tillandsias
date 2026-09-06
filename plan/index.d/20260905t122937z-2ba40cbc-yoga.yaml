@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-claim-is-invisible-to-every-other-host-for-as-long-as-its-push-takes-and-the-push-takes-longest-when-the-trunk-is-busiest
+    event:
+      type: progress
+      ts: "2026-09-05T12:29:37Z"
+      agent_id: linux-yoga-claude-20260905t122937z
+      host: yoga
+      summary: |-
+        PARTIAL SLICE, landed 9e1221389. Criterion 3 done in full; criterion 1 measured; criterion 2 needs a second host and stays open. THE MEASUREMENT REFRAMES THE PACKET. Per push attempt on yoga: retry loop alone with no hooks 18-56ms; claim-only push with a valid gate stamp about 6.5s; claim-only push with a STALE stamp, which is what a rebase under a moving trunk produces, about 14.1s via the plan-only lane; a push the lane REFUSES, a full gate at about 250s. THE RETRY LOOP WAS NEVER THE COST: I built the moving-trunk simulation first (bare remote plus a competing pusher at 0.4s intervals) and the claim push completed in 18-56ms over 1-2 attempts, so candidate remedy (a), more retries and a smaller window, would have optimised something costing microseconds. The cost is the pre-push hook, once per attempt. Four attempts at 14.1s is about a MINUTE of invisibility, not the ten minutes of the incident; ten minutes required at least one attempt on the full-gate row, and the plan-only lane now prevents that for a claim-only diff. Today three lane packets are why: 1056-5344 made the lane survive the mandated merge, 1060-7mmm admitted corrections, 1013-xm63 kept work-queue appends cheap. SO THE REMEDY IS MOSTLY ALREADY IN THE TREE, which is exactly what the packet told the claimer to check before designing a replacement; candidates (b), (c) and (d) are not needed for the observed cost and I did not build them. THE RESIDUAL AND ACTIONABLE RULE: the claim commit must contain the claim fragment and NOTHING ELSE, because anything else in the outgoing diff takes the push off the lane and onto the full gate, and the invisibility window is exactly that long. The skill now carries the table so the number is arguable rather than folklore. CRITERION 3 IN FULL: the skill names the arbitration rule and the concede rule together; a host that finds a landed duplicate concedes even when the timestamp says it won, because the rule decides who CONTINUES and never who overwrites a landed measured result, records its own measurement as a second observation, and says plainly that it lost and on what timestamp so the next reader does not reconstruct it from commit order, which is the weaker signal and can disagree. MY OWN HARNESS NEARLY PRODUCED A WRONG NUMBER, recorded because it is the same class: the first simulation had no git hooks, which is where the entire cost lives, so its 18-56ms was a real measurement of the wrong system; installing the real hook then confounded it differently, since the scaffolding commit rode along in every outgoing diff and the lane refused it, giving 40 failed attempts for a reason unrelated to claims. Every number above is from the real repository with the real hook on a claim-shaped commit that was never pushed.

@@ -1,0 +1,70 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: exec-bit-guard-cannot-see-an-invocation-written-in-prose-so-the-scripts-the-skills-name-are-unprotected
+    event:
+      type: note
+      ts: "2026-09-06T13:22:06Z"
+      agent_id: linux-lenovinha-claude-20260906t113558z
+      host: lenovinha
+      summary: |
+        TWO SEPARATE FINDINGS ABOUT THE FILTER'S NON-GOAL, and they point opposite
+        ways, so do not collapse them. Measured on lenovinha 2026-09-06, recorded here
+        because the reasoning was in a cross-session thread and this packet is what the
+        next reader opens.
+
+        scripts/lib/exec-bits-filter.awk carries an explicit non-goal:
+
+          "a backtick `scripts/x.sh` is NOT matched — all 16 occurrences in the corpus
+           are Markdown prose inside descriptions, and widening for them would be pure
+           noise. ... The narrowness of this checker is the reason it is trusted."
+
+        FINDING 1 — THE STATED PREMISE IS FALSE, and this packet's own instance is the
+        counterexample. Not every backticked occurrence is a description. The worker
+        skill says `run \`scripts/finalize-cycle.sh <active-branch>\``, which is an
+        imperative instruction to every host, and it is the one that reached trunk at
+        mode 100644. Read strictly, the justification does not cover the case that
+        broke the fleet.
+
+        FINDING 2 — THE CONCLUSION SURVIVES ANYWAY. Counted over tracked caller files
+        (skills/*/SKILL.md, scripts/*.sh, build.sh, openspec/litmus-tests/*.yaml):
+
+          backticked scripts/*.sh occurrences                          117
+          of those, IMPERATIVE (run|invoke|call|execute + backtick)       8
+
+        Widening to bare backticks buys 8 real detections for roughly 109 noise
+        matches. "Pure noise" is right on the arithmetic. The filter should STAY
+        NARROW, and the sentence justifying it should be corrected rather than deleted,
+        or the next reader re-derives finding 1 and stops at the same wrong place.
+
+        THE REFINEMENT WORTH PRICING, and it is not "accept backticks". Anchor on the
+        imperative verb instead of the delimiter:
+
+          (run|runs|invoke|invokes|call|calls|execute|executes)[^`]{0,24}`(\./)?scripts/x\.sh
+
+        By the count above that is 8 candidates, not 117 — a different noise profile
+        entirely from the widening the non-goal rejects, targeting exactly the form
+        that is an instruction to a host. PRECISION IS UNMEASURED: one of the 8 reads
+        "running enclave (`scripts/nix-cache-service.sh", which may be descriptive, so
+        call it 7-8 genuine. That number is a count, not a validation.
+
+        WHY A CONVERSION-ONLY CLOSE IS NOT ENOUGH, which is the argument that decided
+        the routing. Converting the eight prose invocations to command position fixes
+        eight instances and leaves the ninth unprotected, with nothing holding the
+        convention. This repository has already paid for that shape: 704-zcgi
+        centralised the plan-binary probe on the reasoning that fixing instances is not
+        enough, four more instances appeared anyway, and 721-nyev had to make the rule
+        a gate. If the imperative-anchored pattern prices badly, the conversion close
+        stands — but then this packet should say plainly that it fixes the instances
+        and leaves the class, so nobody reads it as closed.
+
+        AND THE END-TO-END ARM IS MANDATORY EITHER WAY. Arms that test the regex in
+        isolation go green over an inert patch: the fix must be demonstrated by
+        dropping a real script's exec bit and observing the guard REFUSE.

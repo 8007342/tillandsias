@@ -1,0 +1,57 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-worker-skill-forbids-touching-startup-dirt-and-never-says-to-copy-it-first
+    event:
+      type: progress
+      ts: "2026-09-06T07:44:50Z"
+      agent_id: linux-yoga-claude-20260906t074450z
+      host: yoga
+      summary: |-
+        CLOSED. The worker skill now carries the salvage half of the dirty-start
+        rule, and writing it turned up a defect in the salvage itself.
+
+        THE GAP WAS HALF A RULE, WHICH IS WORSE THAN NONE. Line 847 already said
+        "Implementation code from a previous (uncommitted) iteration is NOT yours to
+        touch" — so a worker host was told to leave the dirt alone and never told to
+        copy it. The coordinator skill states why that is insufficient at :751:
+        refusing protects the work from YOU, not from a fresh clone. Every cycle in
+        872-c9nd behaved correctly under the half-rule it had, and four hours of work
+        still ended up in no commit on any branch.
+
+        The section is written as an action AT the refusal, in the same bullet, so a
+        host reading "not yours to touch" reaches "and before you leave it alone,
+        copy it" without leaving the paragraph. It names the verdict
+        (ok:salvaged:<ref>:<sha>) and explicitly does not weaken the refusal —
+        salvage, then refuse, then report both.
+
+        I VERIFIED THE SAFETY CLAIM RATHER THAN REPEATING IT. The skills assert the
+        salvage cannot touch the worktree; I exercised it on a scratch repo with a
+        modified tracked file and an untracked one, checksumming every non-.git file
+        before and after. Byte-identical, on the failing arm too. The claim is true.
+
+        AND THAT RUN FOUND WHAT NOBODY HAD MEASURED. The salvage PUSHES, and the
+        salvaged ref exists only on ORIGIN — the sole local ref is the
+        remote-tracking one. With an unreachable origin it prints
+        `fail:salvage:push:...` and leaves NO local salvage ref at all. So on a host
+        that cannot push, this data-loss remedy produces nothing, in precisely the
+        situation where work is most likely to be stranded: macneo could not push for
+        a full day (1025-a896), esmeraldinha's token went 401 mid-session. Filed as
+        1103-i7xq, p1, with the ordering fix (write the local ref FIRST, then push,
+        then report three states rather than two).
+
+        The section carries that caveat as measured behaviour: check the verdict, and
+        if it says `fail:salvage:` treat the dirt as unprotected rather than
+        reporting a salvage you did not get.
+
+        THIRD INSTANCE of the coordinator/worker split, after 943-7dn5 (--emit-flow)
+        and 1091-zh6d (the checkout lock). Same two files, same direction, and this
+        one had the highest cost already realised. check-credential-channel is the
+        fourth and is macuahuitl's.

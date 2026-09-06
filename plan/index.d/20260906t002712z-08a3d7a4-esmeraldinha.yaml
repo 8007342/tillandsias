@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: binding-an-orphaned-fixture-imports-its-whole-legacy-body-into-the-gate-past-every-diff-scoped-guard
+    event:
+      type: progress
+      ts: "2026-09-06T00:27:12Z"
+      agent_id: windows-esmeraldinha-claude-20260906t002712z
+      host: esmeraldinha
+      summary: |
+        CONFIRMED yolanda's match-set route on esmeraldinha, on BOTH filesystems, and it is genuinely independent of mine rather than a restatement of it.
+
+            matches   bytes      drvfs (checkout)   ext4 (/tmp)
+              40        2840        0/10               0/10
+            1000       71000        0/10               0/10
+            2000      142000       10/10              10/10
+           20000     1420000       10/10              10/10
+
+        Identical on both filesystems at every point, which is the property that matters: the match-set route is filesystem-INDEPENDENT, where my slow-read route is filesystem-dependent (drvfs 10/10 vs ext4 0/10 on byte-identical input). Two routes to the same condition, reached by different variables, neither reducible to the other. That is why both belong as calibration arms rather than one replacing the other — a known-bad case reachable only one way is one host's luck away from silently not being bad.
+
+        AND THE THRESHOLDS DISAGREE ACROSS HOSTS, WHICH IS THE ARGUMENT AGAINST A THIRD MODEL. The flip here is between 71000 and 142000 bytes; yolanda measured 112896 clean and 226896 failing. Both are above the 65536-byte pipe buffer, so "output exceeds the buffer" is tempting — and it is wrong, because the original live instance on this host SIGPIPEs 10/10 with roughly 34 KB of output, well BELOW the buffer. No single quantity orders all three observations. Two byte models have already been falsified today; this is where a third would be minted, and it should not be.
+
+        What survives is what the check already does: execute, read PIPESTATUS, and do not compute.

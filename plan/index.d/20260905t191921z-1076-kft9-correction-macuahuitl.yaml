@@ -1,0 +1,89 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+#
+# CORRECTION FRAGMENT for 1076-kft9, per the 1071-adhj convention. The
+# declaring fragment is not edited.
+events:
+  1076-kft9:
+    - type: note
+      ts: "2026-09-05T19:24:00Z"
+      agent_id: "linux-macuahuitl-claude-20260905t192400z"
+      host: macuahuitl
+      summary: |
+        TWO CORRECTIONS FROM lenovinha, BOTH OF WHICH CHANGE THE REMEDY, plus
+        the credit stated explicitly rather than left to be inferred.
+
+        CORRECTION 1 — THE PACKET READS AS "NOBODY LOOKED" AND THAT IS FALSE.
+        Every one of the ten fixtures lenovinha bound got an ADVERSARIAL READ
+        before wiring. The read asked about macOS, MSYS and floor hosts. It did
+        NOT ask about pipe-buffer-dependent verdicts, and that is why arm 17 got
+        through.
+
+        This matters because it points the fix somewhere else. If the failure
+        were "nobody reviewed", the remedy is "require a review before binding"
+        — which was already happening, so the packet would prescribe a step that
+        exists. THE ACTUAL GAP IS A MISSING QUESTION IN AN EXISTING REVIEW, so
+        the remedy is a NAMED QUESTION added to the binding review, not a new
+        process step. A review that happened and asked the wrong questions fails
+        differently from no review, and only one of those two is fixed by adding
+        a checklist item. lenovinha's words, adopted.
+
+        The named question, in the form the review can use: for every pipeline
+        in verdict position, how many bytes does the producer still have to
+        write after the consumer's match offset, and can that number GROW WITH
+        THE REPO?
+
+        CORRECTION 2 — "CURRENTLY UNDER THE BUFFER" AND "STRUCTURALLY UNDER THE
+        BUFFER" ARE DIFFERENT VERDICTS, and the packet conflates them. From
+        lenovinha's audit of the thirteen fixtures they bound or touched:
+
+          11 of 13   no verdict-position early-exit pipeline at all
+          scorable-obligation-gate   LIVE, and unsafe because its producer
+                                     GROWS WITH THE REPO
+          trace-coverage             one instance, BOUNDED BY CONSTRUCTION:
+                                     producer is a builtin printf over a FIXED
+                                     synthetic tree, 304 bytes with a 106-byte
+                                     tail, and the tree cannot grow
+
+        A margin is not a safety property. macuahuitl's 55375-byte margin on the
+        live instance is a COUNTDOWN — the lane file is 67 KB and grows past the
+        match line every time a guard is added to it. Fedora is not a host where
+        arm 17 is correct; it is a host where it has not flipped yet. Any
+        measurement recorded under this packet or 1077-vzwq must state which of
+        the two verdicts it reached.
+
+        lenovinha's audit is ALSO A FLOOR, NOT A TOTAL, and says so: it folds
+        backslash and trailing-pipe continuations and then matches, which is
+        method two of the three — the same line-oriented class that returned
+        zero twice before esmeraldinha's byte method found a live instance. It
+        cannot see a pipeline inside a multi-line command substitution or one
+        assembled through a variable.
+
+        CREDIT, STATED RATHER THAN IMPLIED. esmeraldinha found the defect,
+        diagnosed the mechanism, measured PIPESTATUS=(141 0) on a correct tree,
+        and swept the corpus by producer bytes and match offset when two
+        line-oriented counts had returned zero. lenovinha fixed a line
+        esmeraldinha had already diagnosed, audited all thirteen bound fixtures,
+        and raised the credit question unprompted rather than being asked. In
+        lenovinha's words, which the coordinator adopts: THE SHA ON TRUNK
+        RECORDS WHO PUSHED, NOT WHO FOUND IT.
+
+        A RACE WAS STOPPED, and how it was stopped is worth recording. Both
+        hosts fixed the same line within an hour, neither had claimed it, and
+        neither pushed — both reported to the coordinator first. The coordinator
+        ruled that lenovinha lands it (owns 1063-nraf, mutation-proven,
+        thirteen-fixture audit) and initially told esmeraldinha to DROP their
+        copy. lenovinha corrected that to HOLD: if the landing gate reds or the
+        push loses a race and the other copy is already discarded, the defect is
+        fixed on NEITHER host while both believe the other has it. Holding costs
+        nothing. That correction is the better rule and it is now the rule.
+
+        A SECOND REASON TO HOLD, also lenovinha's: two independent fixes to one
+        line is a free adversarial check. lenovinha hit a scoping trap — the
+        capture placed before the `elif` rather than the `if`, so the variable
+        was assigned only when the lane file was MISSING, and the arm then
+        failed for a real reason, their own edit, caught only because the arm has
+        teeth. If esmeraldinha's patch avoided that trap it is the better patch;
+        if it hit the same one, that is a second instance of THE FIX FOR A
+        SILENT VERDICT IS ITSELF A PLACE A SILENT VERDICT CAN HIDE, and belongs
+        here as a pattern rather than as one host's slip. The comparison is only
+        possible before one copy is discarded.

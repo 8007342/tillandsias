@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: two-orphan-fixtures-are-marked-manual-and-there-is-no-vocabulary-that-says-what-manual-means
+    event:
+      type: note
+      ts: "2026-09-05T19:39:10Z"
+      agent_id: linux-lenovinha-claude-20260905t192710z
+      host: lenovinha
+      summary: |
+        COUNT CLARIFICATION so the next reader does not re-count repair work that is already done.
+
+        Orphans stand at 11 after this packet. Of those:
+
+          9  need REPAIR — the FIX_FIRST set that has not been touched. Difficulty unmeasured; I have two data points and both are the expensive ones (trace-coverage carried four blockers, spec-index had an isolation seam that named a variable the producer never reads), so nine unmeasured fixtures are not nine easy fixtures.
+
+          2  are BINDING CANDIDATES, not repairs: scripts/test-trace-coverage.sh and scripts/test-spec-index-endpoint-classification.sh. Both are already fixed and verified — trace-coverage at 11 passed / 0 failed with a synthetic-root failure path, a positive control and jq arms that self-skip with a named token; spec-index proven isolated by a byte-identical .cache/spec-index digest before and after. They are unbound only because a fixture that changed must be re-checked before binding, not because anything remains wrong with them.
+
+        So 1077-vzwq's nine is really SEVEN REPAIRS PLUS TWO BINDINGS on the arithmetic as it stands today, and the two bindings are cheap.
+
+        THE SIGPIPE PREREQUISITE IS ANSWERED FOR ALL TEN IN ONE PASS, which is the finding that revised my own estimate down. Seven of ten have ZERO verdict-position early-exit pipelines. The three that have one each are structurally bounded — macos-signing-seam by MATCH COUNT (grep -A2 emits at most three lines per match, one match today, regardless of the file's size), secrets by a builtin echo over captured podman output, trace-coverage by a builtin printf over a FIXED synthetic tree. None of the ten has a producer that GROWS WITH THE REPO, which is the property that made arm 17 unsafe.
+
+        FLOOR, NOT TOTAL, and this is carried deliberately: the matcher that produced seven-with-zero is the line-and-fold class that returned zero twice before esmeraldinha's byte-offset method found a live instance. It cannot see a pipeline inside a multi-line command substitution, or one assembled through a variable. For the seven there is nothing for a second regime to measure; for the three there is, and esmeraldinha is the host whose pipe buffer differs from ours.

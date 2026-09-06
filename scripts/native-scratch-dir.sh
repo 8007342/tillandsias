@@ -49,6 +49,32 @@ _NATIVE_SCRATCH_SLOW_FS="v9fs 9p fuseblk nfs nfs4 cifs smb2 smbfs virtiofs prl_f
 # The filesystem type of one directory, lowercased, or the empty string when it
 # cannot be determined. An UNKNOWN type is never treated as slow: staging is an
 # optimisation, and guessing wrong in that direction adds a copy for nothing.
+# REFUSE TO BE EXECUTED (order 964-9yyp, second instance of esmeraldinha's
+# lib-sigpipe-verdict.sh finding). This file is a LIBRARY: sourced it defines
+# native_scratch_fstype / native_scratch_is_slow / native_scratch_dir; run
+# directly it defines them into a shell that immediately exits, printing
+# nothing and returning 0.
+#
+# THAT SILENCE COSTS A READER, measured on me 2026-09-06: verifying this
+# packet's own closure I ran `bash scripts/native-scratch-dir.sh`, got no
+# output, and read it against the closure's claim that the probe "always prints
+# a directory that exists and is writable" — which looks exactly like a
+# regression. It is the correct response to a wrong invocation. The tell was
+# that the apparent defect was ABSOLUTE rather than partial, which is worth
+# more as a heuristic than this guard is as a fix.
+#
+# The refusal is the half that matters here. esmeraldinha ALSO renamed theirs,
+# because `check-sigpipe-verdict-measured.sh` could be wired as a guard by its
+# prefix and pass by executing to zero bytes and exit 0. This file carries no
+# such prefix and nothing would wire it as a check, so a rename would buy
+# consistency and cost three call sites plus a memo digest — stated rather
+# than silently skipped.
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+    echo "refused:not-a-script:native-scratch-dir.sh is a library, not a command — source it and call native_scratch_dir <slug> <fallback>" >&2
+    exit 2
+fi
+
+
 native_scratch_fstype() {
     local dir="$1" t=""
     t="$(stat -f -c %T "$dir" 2>/dev/null)" || t=""

@@ -138,7 +138,14 @@ stranded="$(./scripts/check-stranded-in-progress.sh 2>/dev/null \
 
 expire_args=(expire-claims --ttl-hours "$TTL_HOURS")
 [ -n "$NOW_EPOCH" ] && expire_args+=(--now-epoch "$NOW_EPOCH")
-[ "$APPLY" -eq 1 ] || expire_args+=(--dry-run)
+# ORDER 1067-24q6: expire-claims now defaults to dry-run and WRITING IS
+# OPT-IN. This wrapper must ask for the write explicitly; passing neither
+# flag would make `--apply` a silent no-op that still reported reclaims.
+if [ "$APPLY" -eq 1 ]; then
+    expire_args+=(--write)
+else
+    expire_args+=(--dry-run)
+fi
 if ! expire_out="$("$PLAN" "${expire_args[@]}" 2>&1)"; then
     echo "summary: candidates=0 reclaimed=0 refused=0 mode=refused-expire-claims-failed"
     printf '%s\n' "$expire_out" | head -3 >&2

@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: windows-lane-sends-a-verbatim-argv-and-drops-its-escaping-workarounds
+    event:
+      type: note
+      ts: "2026-09-05T20:15:37Z"
+      agent_id: windows-yolanda-opus5-20260905t201537z
+      host: yolanda
+      summary: |
+        RELEASED, and deliberately NOT set to in_progress. macuahuitl's 1079-qb8k sweep found two of my claim events that never reached the status field and asked for a set-field in_progress on each. That is right for 1049-s35z, which I am actively holding, and WRONG here, so I am writing the other half of the truth instead.
+
+        I am not advancing this packet. Its deletion half is met and landed (the scan that classifies by position rather than presence, c437e68b5); its remaining half is "a Windows lane launch OBSERVED opening in Windows Terminal rather than conhost", and that needs a fresh tray install plus an interactive launch on the operator's machine. No agent can produce it. Marking the row in_progress would hold a packet nobody is moving, and a false hold is worse than the missing transition it would fix: the missing transition let every host see a free packet that was held, and a false hold would make every host skip a packet that is free.
+
+        So the status stays ready, which is already correct, and this event removes the ambiguity by saying so explicitly rather than leaving a seven-hour-old claim as the last word on the row.
+
+        WHAT THE NEXT HOST SHOULD KNOW: the deletion half needs nothing further. The observation half needs an operator, and the terminal= spawn record that makes it checkable is already in the tree and emitted from the same branch that selects the spawn, so it cannot drift from what actually ran. The installed tray on yolanda predates it -- zero "spawning in-VM PTY" lines in its tray.log -- so the observation requires installing a current tray, not just launching a lane.

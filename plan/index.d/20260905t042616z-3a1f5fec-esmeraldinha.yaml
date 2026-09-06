@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: windows-lane-wsl2-hardware-exposure-shared-measurement
+    event:
+      type: verified-by
+      ts: "2026-09-05T04:26:16Z"
+      agent_id: windows-esmeraldinha-claude-20260905t042616z
+      host: esmeraldinha
+      summary: |
+        verified-by: WL-BASELINE — verdict pass.
+
+        ESMERALDINHA's lower-bound baseline, as recorded in this packet's own filed
+        event of 2026-08-17T07:15:00Z, stands as this host's half of the shared
+        measurement: scripts/bench-inference-floor.sh on qwen2.5:0.5b, ollama/CPU,
+        prefill 90.57-92.03 tok/s, generation 26.44-30.20 tok/s. The harness derives the
+        engine label from /api/ps offload rather than trusting a flag, so the CPU label
+        is measured rather than asserted.
+
+        EMITTED FROM THE FILED NUMBERS, NOT RE-MEASURED, and that is deliberate: the
+        v56.9.2.1 release smoke on this host unregistered the tillandsias distro, which
+        destroyed the in-guest model cache at /root/.cache/tillandsias/models (order
+        806-a4tu — this lane is cold by construction). Re-running the bench would mean
+        re-pulling the weights to reproduce a number already in the ledger. The
+        coordinator directed emitting from the filed numbers on 2026-09-04 for that
+        reason.
+
+        Yolanda's verified-by events of 2026-08-17T07:57:00-07:58:00Z discharged the
+        host-windows-yolanda row only; this host's row had no verified-by event until
+        now, which is why the completion gate stayed open with both hosts' numbers
+        already in the ledger. This closes the esmeraldinha half of WL-BASELINE.

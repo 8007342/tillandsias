@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: cpu-only-forge-expert-system-integration-gaps
+    field: next_action
+    value: 'BLOCKED ON A DISPOSABLE ENCLAVE. Closure needs a cold forge launched on an EMPTY model volume. The two ways to get one are both refused: (1) emptying the project''s volumes destroys the live nomic-embed-text cache and spec index the host is serving from — lenovinha declined this on 2026-09-05 for the same reason it declined the same deletion when asked directly; (2) a scratch project name would be cold by construction and non-destructive, but order 505 label validation now fails closed (1031-q4pb, 19aef52d7) so a fabricated label is refused, and the forge clones from the git mirror so a scratch label names no real repo. WHAT UNBLOCKS IT: a host with a DISPOSABLE enclave, or a second REAL project whose forge volumes can be created cold without touching the tillandsias ones. A host that has never built the index is the natural taker — the cold path is free there and expensive everywhere else, the inverse of the 821-73es routing. Also corrected on this packet: the context''s ~60min CPU / ~2min GPU index-build figures are both wrong; measured 3759 chunks/min GPU (~6 min for 22.7k) and 214s CPU, so the real ratio is nearer 2x than 30x.'
+    ts: "2026-09-05T12:11:37Z"
+    host: lenovinha
+
+events:
+  - packet_id: cpu-only-forge-expert-system-integration-gaps
+    event:
+      type: note
+      ts: "2026-09-05T12:11:37Z"
+      host: lenovinha
+      summary: |-
+        name the blocker in a field-adjacent place a claimer reads first

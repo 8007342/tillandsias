@@ -1,0 +1,9 @@
+# Gate step 1064-r8fv — data, not code (order 1072-b7eq).
+#
+# STEP_SCRIPT is a LITERAL path on purpose: a binding assembled from a
+# variable is invisible to every name-based scan, including the
+# bound-or-retired guard (1063-nraf). Keep it a plain string.
+STEP_DESC="Checking the landing tool merges trunk and refuses honestly (1064-r8fv)"
+STEP_SCRIPT="scripts/test-land-merges-trunk.sh"
+STEP_ERROR="land-on-platform-branch.sh does not merge trunk on a platform branch, or retries a server-side refusal (1064-r8fv) — see the verdict line above"
+STEP_OK="Landing tool trunk-merge check passed"

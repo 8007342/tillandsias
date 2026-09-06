@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-gate-memo-skips-guards-that-inspect-state-the-stamp-does-not-cover
+    event:
+      type: progress
+      ts: "2026-09-05T03:32:32Z"
+      agent_id: linux-lenovinha-claude-20260905t030501z
+      host: lenovinha
+      summary: |-
+        FIXED AND LANDED (ok:land:7c012654c). My own packet, and the hole was one I opened: 1034-ihxw tried to fix this in the DIGEST and reintroduced the Windows drvfs deadlock. The fix that works is in the MEMO and leaves the digest untouched.
+
+        RESULTS AGAINST THE THREE CRITERIA, each with the pre-fix number I recorded when filing:
+          C1 unforced --check + worktree-only chmod -x   PRE-FIX rc=0 in 2s (ok:gate-fresh)  ->  NOW rc=1 in 3360ms, violation:script-not-executable:1
+          C2 stamp digest unchanged, no worktree field   38456419... before AND after the chmod, measured with a BEFORE value rather than only an after
+          C3 clean tree still memoises                   rc=0 in 2099ms, ok:gate-fresh  (the memo is scoped, not destroyed)
+
+        C1's 3360ms is the two fixes composing: memo-check says stale:worktree-mode-drift, the gate runs, and 1009-gccx's fast-refusal phase catches the exec bit at 92ms instead of at line 3269.
+
+        THE MECHANISM, and why it is not either candidate I named when filing. The packet offered (a) run the exec-bit guard outside the memo, or (b) compare index and worktree modes with a stat. yolanda proposed the third and it is the right one: read the modes through git, not through the filesystem. A stat asks the FILESYSTEM, and on drvfs the filesystem lies — that is the whole of 889-8tcb. git's answer is governed by core.fileMode, which 889-8tcb itself calls 'a DECLARATION both sides read identically, not an inference the broken filesystem gets to answer'.
+
+        THE SAFETY MEASUREMENT MY PREVIOUS ATTEMPT NEVER TOOK, one tree, one moment, toggling only that setting:
+          core.fileMode=true   -> mode changes seen: 1   POSIX: memo refuses, guard runs
+          core.fileMode=false  -> mode changes seen: 0   drvfs/Windows: NO behaviour change, no deadlock
+        That is the property 1034-ihxw lacked, and it is why this one is safe to land where that one was not.
+
+        COST, since the packet asked for the mechanism to be stated with it: one 'git diff --summary' on the memo path, ~20ms, against the ~2s memoised gate it protects. Scoped to mode changes only — a content edit already moves the digest and is caught above. A STAGED mode change moves the index, therefore the digest, therefore stale:tree-changed-since-gate; this covers worktree-vs-index only.
+
+        TWO DEFECTS INSIDE THIS CHANGE, both caught and both mine:
+          1. The first version was 'git diff --summary | grep -q'. grep -q exits on first match and SIGPIPEs the producer, so the pipeline's status depends on a race — A MEMO VERDICT DECIDED BY A SIGNAL, which is precisely the class this block exists to close. The 792-ksr8 guard refused it in the same change that introduced it. Now capture-then-case, no pipeline.
+          2. The first closure arm demanded stale:worktree-mode-drift unconditionally. Any tree edit — including editing the litmus file itself — makes memo-check answer stale:tree-changed-since-gate for an unrelated reason, so the arm went RED during ordinary development. That is the intermittent-red shape esme argued about on 1038-d7vw: it gets a check ignored rather than fixed. It is now self-gating, asking the clean question first and skipping honestly, while the digest-invariance half stays UNCONDITIONAL — if a future edit 'fixes' this by moving the digest, that arm fails with the 889-8tcb reason named.
+
+        THE CLOSURE ARM IS PROVEN IN BOTH DIRECTIONS, because a skip that never exercises is the orphan-fixture problem I filed hours earlier as 1041-up99:
+          with a warm stamp   -> 'ok: memo refuses on worktree mode drift, digest unchanged'; control 'ok:gate-fresh 2026-09-05T03:24:43Z'
+          with a stale stamp  -> 'skip: no warm stamp — digest-invariance verified, memo arm not exercised', exit 0
+        And the control beside it is the one that matters: a fix making the memo refuse ALWAYS would satisfy the chmod arm perfectly while destroying 765-tkq2.
+
+        HOST NOTE, correcting my own figure for the THIRD time and this is the last number I will give without the full table: on this 13GB host a land was OOM-killed at CARGO_BUILD_JOBS=4 AND at 2, and completed at 1. --check alone survives at 4 and 2. I reported 2 as sufficient after one success and it failed twice more after that. A killed land is indistinguishable from a refused one at a glance — nothing pushed, commit intact, rebased — so this is a correctness setting here.

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: preflight-declares-cargo-absent-before-looking-for-a-binary
+    event:
+      type: note
+      ts: "2026-09-05T11:55:04Z"
+      agent_id: linux-macuahuitl-claude-20260905t115504z
+      host: macuahuitl
+      summary: |
+        THREE HOSTS' WORK MET IN ONE FIXTURE AND ONE GATE REGION, resolved by the coordinator in the 11:41Z pass: pirria's 1005-m6rz (relayed by hashed patch, arms 6–8: identity, cheatsheet skip, registry; binds the fixture into build.sh) and esmeraldinha's 1004-ws5q (landed on windows-next at fb1cce1c1, arms 6–8: no-cargo-with-binary, cargo-present, mutation control) both appended after the 876-irn7 mutation control in scripts/test-cycle-preflight-cargo-resolution.sh, and yolanda's 1055-6yp8 gate step landed in build.sh beside pirria's binding. Resolution: every arm kept; esmeraldinha's arms renumbered 9–11 under their own header; esmeraldinha's two absence arms moved from PATH=/usr/bin:/bin to the fixture's scratch PATH without cargo (bbd12d294's hermetic fix), since on macuahuitl /usr/bin/cargo exists and "absent" would have read "found"; both build.sh steps kept in sequence. Merged fixture: 19 passed, 0 failed on macuahuitl; union litmus re-run on the merged union before the gate. The merge order of the three, and the fact that esmeraldinha's arms would have failed on this host as pirria's did, are the reason a fixture bound into the gate is run on two regimes before landing.

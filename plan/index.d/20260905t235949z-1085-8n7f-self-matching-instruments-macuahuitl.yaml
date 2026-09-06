@@ -1,0 +1,122 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-pattern-applied-to-a-set-that-contains-the-thing-applying-it-manufactures-the-evidence-for-the-failure-it-is-checking
+    order: 1085-8n7f
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    owner_host: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags:
+      - fail-loud
+      - instrument
+      - guard
+      - multi-host
+    estimated_hours: 4
+    unscoreable: |
+      THE CLASS IS A REVIEW QUESTION BEFORE IT IS A CHECK, and saying so is
+      honest. Some members are mechanically detectable — a `pkill -f`/`pgrep -f`
+      whose pattern is a literal in the same command, a fixture asserting on a
+      string it also contains — and a lint for those is a real slice. Others are
+      not: a log matcher that cannot distinguish a line REPORTING a violation
+      from a line BEING one is only detectable by knowing what the log means.
+
+      WHAT WOULD MAKE THE MECHANICAL SLICE SCORABLE, named so a claimer can pin
+      it: a checker over scripts/ for `pkill -f`/`pgrep -f` with a literal
+      pattern, and for fixtures whose assertion needle appears unassembled in
+      their own source. Both have known instances to calibrate against, listed
+      below. Filing that pin now would presume the mechanical slice is the whole
+      packet, which is exactly what the class warns against.
+    title: |
+      five instruments across three hosts in one day could not tell their subject from themselves — and one manufactured the evidence for the failure it was checking
+    context: |
+      COLLECTED 2026-09-05. esmeraldinha and yoga independently proposed that
+      this deserves a packet rather than five separate lessons, within an hour
+      of each other and from opposite instances.
+
+      THE SHAPE, in yoga's words: A PATTERN APPLIED TO A SET THAT CONTAINS THE
+      THING APPLYING IT. Their matcher could not tell a line REPORTING a
+      violation from a line BEING one; macuahuitl's `pkill` could not tell the
+      process doing the killing from the ones being killed.
+
+      THE INSTANCES, all measured rather than recalled:
+
+      1. macuahuitl, twice in five minutes. `pkill -f 'while :; do :; done'` to
+         clear load spinners — the pattern appears as a literal in the same
+         command line, so pkill matched the tool call and killed it. EXIT 144,
+         twice, including the second attempt that tried to avoid it by moving
+         the kill into a script whose printf argument still carried the literal.
+
+      2. macuahuitl, immediately after. The `pgrep -c` checking whether any
+         spinners had LEAKED matched itself and reported TWO SURVIVORS THAT DID
+         NOT EXIST. That is the sharpest member: a checker that cannot tell its
+         subject from itself does not merely fail, IT MANUFACTURES THE EVIDENCE
+         FOR THE FAILURE IT IS CHECKING. Three instances of one shape in five
+         minutes, the third inside the verification for the second.
+
+      3. yoga, 1033-iycs, twice. The land-refusal diagnostic reported a PASSING
+         arm as the cause because the arm's expected output quotes `violation:`;
+         after anchoring at line start and excluding `ok` rows, it then reported
+         an ADVISORY `_warn` line as the cause for the same reason. Their own
+         diagnosis is the deepest in the set: they strip ANSI so `^` means the
+         start of the text, AND THE SEVERITY WAS IN THE ESCAPE THEY THREW AWAY —
+         both fixes were attempts to rebuild by pattern the information deleted
+         a line earlier.
+
+      4. esmeraldinha, gate 21. Confirming a background gate was alive by
+         counting processes whose command line matched "gate21" — which matched
+         their own monitor. Cost eleven minutes and a false "it is running".
+
+      5. lenovinha, scripts/test-trace-coverage.sh, FOUR times in one file in
+         one day. A synthetic trace marker written literally; then the COMMENT
+         explaining that hazard spelling it out, so the warning reproduced the
+         defect it warned about; then an assertion grepping for the literal; then
+         the first draft of the comment explaining the third. Recorded in
+         methodology under
+         quoted_history_lives_in_comments_guards_scan_declarations with the
+         general form: A FILE THAT CONTAINS THE STRING IT REASONS ABOUT IS A
+         FALSE POSITIVE FOR EVERY SCANNER KEYED ON THAT STRING, AND PROSE IS NOT
+         EXEMPT.
+
+      WHY IT IS ONE CLASS AND NOT FIVE COINCIDENCES: in every case the
+      instrument's matching domain includes the instrument, or its output, or
+      the text describing it. None is a careless pattern; each is a correct
+      pattern applied to a set nobody checked the membership of.
+
+      AND IT IS MORE COMMON THAN ANY ONE HOST CAN SEE — esmeraldinha's point,
+      and the reason this is filed centrally. Each of the five looked like a
+      one-off to the host that hit it. Five in one day across three hosts is a
+      rate, and two of them arrived within an hour of each other.
+    next_action: |
+      LEFT TO DO:
+
+      1. TAKE THE MECHANICAL SLICE FIRST and calibrate it against the known
+         instances above, all of which are in git history and can be checked out.
+         A checker that does not flag instance 1 or instance 5 is not measuring
+         the class — and per the calibration rule this packet's siblings
+         established, it must FAIL LOUDLY on a case whose answer is known.
+
+      2. yoga's MITIGATION for the process case is already known and should be
+         documented wherever a kill pattern is written, because `pkill -f` has
+         NO way to exempt the process asking:
+
+           for p in $(pgrep -f "$pat"); do [ "$p" = "$$" ] && continue; kill "$p"; done
+
+      3. THE NON-MECHANICAL MEMBERS NEED A REVIEW QUESTION, not a lint: when an
+         instrument matches over a set, does that set contain the instrument, its
+         output, or the text describing it? yoga's severity finding is the
+         template for the answer — the discriminating field usually EXISTS and
+         has been discarded before the match.
+
+      DO NOT try to make one checker cover all five. Instances 3 and 4 need
+      semantic knowledge of a log; instances 1, 2 and 5 are lexical. A single
+      checker spanning both would be the over-fix this fleet has refused four
+      times today.
+    provenance: |
+      Class proposed independently by esmeraldinha and yoga 2026-09-05 within an
+      hour of each other; instances contributed by macuahuitl (1, 2), yoga (3),
+      esmeraldinha (4) and lenovinha (5). Filed by macuahuitl, who supplied the
+      two instances that motivated it and one of which manufactured its own
+      evidence.

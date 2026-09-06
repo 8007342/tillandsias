@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-claim-without-status-row-repeats-on-a-packet-whose-host-already-declined-it
+    event:
+      type: progress
+      ts: "2026-09-06T12:12:10Z"
+      agent_id: linux-yoga-claude-20260906t121210z
+      host: yoga
+      summary: |-
+        CLOSED, 14h after the code landed — the claim was held past its usefulness
+        and a coordinator heartbeat is what surfaced that. Recorded because "held a
+        claim on work I had finished" is the same defect class as holding one on work
+        I had abandoned: both make the next coordinator's blocking tree wrong.
+
+        ALL THREE CRITERIA VERIFIED TOGETHER, on a scratch ledger with three packets
+        that differ only in what follows the claim:
+
+          typed  (claim + type: release) -> NOT reported   criterion 1
+          prose  (claim + type: note)    -> reported       criterion 2, by design
+          bare   (claim, nothing since)  -> reported       criterion 3
+
+        The middle row is the one worth stating: prose saying "RELEASED" is still
+        reported, because prose is not a signal. That criterion "passes by accident"
+        pre-fix and had to keep passing by design, so it is a negative control rather
+        than a feature — without it, widening the predicate to anything mentioning
+        release would have scored criterion 1.
+
+        The code landed at 84293fe48. The live instance is clear too: 823-u5zf's
+        fold is `ready`, its event log ends in a typed `release` at 2026-09-05T23:30Z,
+        and it produces no row.

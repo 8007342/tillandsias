@@ -280,7 +280,10 @@ if "$PLAN" capabilities 2>/dev/null | grep -qx 'expire-claims'; then
     threshold=$("$PLAN" expire-claims --dry-run 2>/dev/null \
         | grep -c '^expire-candidate' || true)
     if [ "${threshold:-0}" -gt 0 ]; then
-        echo "hint: ${threshold} claim(s) past the 24h TTL — run 'tillandsias-plan expire-claims' to return them to ready (641-e2qa criterion 2)"
+        # ORDER 1067-24q6: name the WRITE form. Bare `expire-claims` is now a
+    # dry-run, so the old hint pointed at a command that would print the
+    # candidates again and change nothing — a hint that reads as done.
+    echo "hint: ${threshold} claim(s) past the 24h TTL — run 'tillandsias-plan expire-claims --write' to return them to ready (641-e2qa criterion 2)"
     fi
 fi
 printf 'summary: population=%s in_progress=%s stranded=%s threshold_events=%s\n' \

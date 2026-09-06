@@ -1,0 +1,102 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-host-whose-gate-outlasts-the-gap-between-landings-cannot-land-and-only-one-refusal-string-says-so
+    order: 1089-zdn5
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [coordination, multi-host, convergence, tooling]
+    estimated_hours: 4
+    owned_files:
+      - scripts/land-on-platform-branch.sh
+    title: |
+      land-on-platform-branch integrates, gates, then pushes, so a host whose gate outlasts the gap between landings is overtaken during its own gate and exhausts its retries — the slowest host starves first and nothing but one refusal string says it happened
+    context: |
+      OBSERVED on yoga 2026-09-06T02:2xZ: `refused:land:attempts-exhausted:4 —
+      origin is moving faster than this host gates`, after four full gates.
+      The commit landed twenty minutes later on attempt 2 of a fresh run, so
+      the work was never at risk. What is at risk is a host with a slower gate,
+      or a busier trunk.
+
+      THE MECHANISM. The loop integrates onto current origin, gates the
+      RESULTING tree, then pushes. So it needs a quiet window longer than its
+      own gate. This host's gate: 435-499s across five measured attempts.
+
+      MEASURED, AND MY FIRST TWO NUMBERS WERE BOTH WRONG — recorded because
+      the corrected method is the packet's real content:
+
+        WRONG:   33 commits in 2h, mean gap 194s, Poisson => ~9%/attempt
+        RIGHT:   19 LANDINGS (git log --first-parent) in the same window
+                 gaps n=19: min 0s, median 366s, max 1536s
+                 >=500s: 5 of 19       >=300s: 12 of 19
+
+      Two errors. The race is against PUSHES, not commits, and one push can
+      carry 3-8 commits when it is a merge — counting commits inflated the
+      rate about 1.7x. And the distribution is CLUSTERED with a fat tail, not
+      exponential: there are five windows in two hours long enough to fit a
+      470s gate, rather than a flat 9% grind. Corrected by macuahuitl, verified
+      independently here.
+
+      THE IMMEDIATE CAUSE WAS CADENCE, NOT DESIGN, AND IT IS ALREADY FIXED.
+      The coordinator was landing five and six times per coordination pass —
+      each relay of another host's work a separate gate-and-push — against
+      their own rule of one land per pass. They batch from 2026-09-06 and
+      offer a quiesce proactively to a host that says it is gating. That costs
+      nothing and removes most of the pressure. THIS PACKET IS THE RESIDUAL:
+      the tool still has this shape when fleet velocity rises for any reason,
+      and the numbers will show it cleanly once one host's cadence is not
+      dominating them.
+
+      WHY IT IS WORTH A PACKET AT ALL. Nothing is wrong with any individual
+      host. The system starves whoever is slowest, and it does so silently
+      apart from one refusal line — no metric counts exhausted lands, so a host
+      that quietly stops landing looks like a host with nothing to land. That
+      is the convergence risk convergence.yaml names, arriving through
+      throughput rather than through work selection.
+
+      THE OBVIOUS REMEDIES EACH COST SOMETHING REAL, which is why this is
+      filed rather than fixed:
+        * raise the attempt budget — same odds, more gate cycles burned;
+        * skip the re-gate when the integration is a clean fast-forward —
+          tempting, but the gate stamp is per-TREE and a sibling's green does
+          not certify YOUR merge result;
+        * a landing token — serialises the fleet and costs parallelism;
+        * jittered//backoff retry — looks BETTER under the measured fat tail
+          than under the Poisson model, because waiting genuinely finds the
+          1536s window instead of burning attempts at a flat rate. This is the
+          cheapest candidate and the one the corrected distribution favours.
+
+      A SEPARATE GAP FOUND WHILE MEASURING THIS: landings cannot be attributed
+      to a host from the repository. `git log --format=%an` over the window
+      gives 13 `Tlatoani` + 5 `Tlatoāni` + 2 others — two spellings of the
+      operator's identity, because every host commits as the operator. Any
+      claim of the form "N of these landings were mine" currently rests on a
+      host's own record and is not checkable from git. If per-host landing
+      rate is going to inform a throughput decision, that gap has to close
+      first or the decision rests on self-report.
+    exit_criteria:
+      - "an exhausted land is COUNTED somewhere a coordinator reads, not only printed once — a host that stops landing must be distinguishable from a host with nothing to land; pre-fix result: FAILS (no metric counts it; the only evidence is one line in one session's scrollback)"
+      - "the retry strategy is chosen against the MEASURED gap distribution (clustered, fat-tailed, median 366s / max 1536s) rather than a mean, and the choice records which tradeoff was accepted; pre-fix result: FAILS (fixed immediate retry, no backoff, budget 4)"
+      - "NEGATIVE CONTROL: a land that fails for a NON-race reason (gate red, non-fast-forward needing manual resolution) must still refuse promptly and must not be retried into the budget — a retry loop that treats every failure as a race hides real refusals; pre-fix result: passes today and must keep passing"
+    unscoreable: |
+      The pin is a fixture driving the land loop against a stub remote that
+      advances between attempts, asserting: exhaustion is counted, a race
+      failure retries, and a gate-red failure does NOT consume the budget.
+      The third arm is the negative control — without it, retrying everything
+      scores the first two.
+    events:
+      - type: filed
+        ts: "2026-09-06T02:55:00Z"
+        agent_id: "linux-yoga-claude-20260906t025500z"
+        host: yoga
+        summary: |
+          Filed by yoga after exhausting a land's four attempts. Filed with the
+          CORRECTED numbers and with both of my wrong ones recorded, because
+          the method error (counting commits instead of first-parent landings,
+          then assuming Poisson without checking the tail) is more instructive
+          than the finding. The immediate cause was one host's push cadence and
+          is already remedied by batching; this packet is the residual
+          structural risk, not that incident.

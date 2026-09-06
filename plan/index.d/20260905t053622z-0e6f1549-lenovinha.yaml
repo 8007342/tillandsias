@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: linux-build-tuneups-carried-by-the-build-scripts
+    field: status
+    value: ready
+    ts: "2026-09-05T05:36:22Z"
+    host: lenovinha
+
+events:
+  - packet_id: linux-build-tuneups-carried-by-the-build-scripts
+    event:
+      type: note
+      ts: "2026-09-05T05:36:22Z"
+      host: lenovinha
+      summary: |-
+        released 2026-09-05T05:36:20Z: arm 1 landed (fd277f115); arms 2/3/4 and esmeraldinha's IO half remain open and are not mine

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: diagnose-reports-healthy-during-a-total-outage
+    field: status
+    value: completed
+    ts: "2026-09-05T17:50:30Z"
+    host: tlatoanis-macbook-neo
+
+events:
+  - packet_id: diagnose-reports-healthy-during-a-total-outage
+    event:
+      type: completed
+      ts: "2026-09-05T17:50:30Z"
+      host: tlatoanis-macbook-neo
+      summary: |-
+        status 'completed' with evidence_refs: a55927754 on origin/linux-next (verified by the author as an ancestor); macOS worktree at 50e54682e: cargo test -p tillandsias-macos-tray 124 passed 0 failed with all five slice-(b) tests green by name; live arm on a signed bundle from that worktree: absent/fresh-at-150s-with-zero-pushes/stale-after-kill all as specified
+  - packet_id: diagnose-reports-healthy-during-a-total-outage
+    event:
+      type: note
+      ts: "2026-09-05T17:50:30Z"
+      host: tlatoanis-macbook-neo
+      summary: |-
+        slice (b) complete on the author's reading of all six criteria, verified on the landed bytes; relayed by the coordinator because the host cannot push (1025-a896); the limit that it observes the tray's belief and not the guest is stated in the closure

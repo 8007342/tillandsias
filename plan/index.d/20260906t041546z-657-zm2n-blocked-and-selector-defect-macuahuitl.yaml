@@ -1,0 +1,81 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: macos-accel-probe-truthfulness
+    field: status
+    value: blocked
+    ts: "2026-09-06T04:15:45Z"
+    host: macuahuitl
+
+events:
+  - packet_id: macos-accel-probe-truthfulness
+    event:
+      type: note
+      ts: "2026-09-06T04:15:45Z"
+      host: macuahuitl
+      summary: |
+        BLOCKED, NOT READY, AND SPLIT. Routing decision by macuahuitl after
+        macbookair audited it and released rather than re-statusing, on the
+        grounds that choosing the disposition is routing. It is, and this is it.
+
+        WHY BLOCKED: the deliverable is EngineRecords that appear and disappear
+        with a leased registration, and usable=true only while a live sidecar
+        registration exists. Both need a sidecar lane nobody has built. Verified
+        here — `host-native-sidecar-endpoints` and `macos-metal-sidecar-bringup`
+        are both `ready`, i.e. UNSTARTED. Blocked rather than obsoleted, because
+        obsoleted would falsely satisfy dependents (the 795-bmbq rule), and
+        blocked rather than pending so it stops being offered.
+
+        SPLIT: 1090-8nh4 carries structural fiction (1), the only part needing
+        no sidecar, WITH A NEW CRITERION — all four of this packet's criteria
+        are sidecar-conditioned, so nothing could be inherited.
+
+        FICTION (2) IS ALREADY FIXED AND THE PACKET DOES NOT KNOW IT. Verified:
+        `enumerate_engines_with(is_binary_available, inference_image_present)`
+        is live at accel_probe.rs:3144/3166, so the "hardcodes exactly one
+        ollama/llama-server EngineRecord" claim is false at HEAD — fixed by
+        803-825k, which this packet does not reference. What SURVIVES is
+        narrower and should be restated if this is ever unblocked: the dynamic
+        path is SIDECAR-BLIND. `HostNativeSidecar` appears 0 times in
+        accel_probe.rs while engine_slots.rs:11,20 already defines the kind.
+        "Discovery does not know about the sidecar" is a different claim from
+        "the field is a hardcoded literal", and a claimer working from the
+        packet text would hunt a hardcode that is not there.
+
+        EVERY CITED SPAN IS STALE. Do not trust the line numbers.
+
+  - packet_id: the-ledger-has-more-than-one-place-to-look-and-every-reader-looks-in-one-so-five-writes-landed-somewhere-nothing-consults
+    event:
+      type: note
+      ts: "2026-09-06T04:15:45Z"
+      host: macuahuitl
+      summary: |
+        THE SELECTOR OFFERS WORK BLOCKED BY UNSTARTED DEPENDENCIES, and this is
+        this packet's family with the READER and WRITER SWAPPED. macbookair's
+        finding, verified here.
+
+        657-zm2n depends on two packets that are `ready` — declared, structured,
+        and simply not started. Measured:
+
+          tillandsias-plan blocked-by 657-zm2n   ->  NOTHING
+          no parked-block row mentions it
+          `ready` offers it as claimable
+
+        THE PARKED-BLOCK MECHANISM FLAGS DEPENDENCIES AT `implemented` AND
+        `blocked` AND NEVER AT `ready`. So a dependency whose work has not
+        STARTED is not treated as an edge at all, and the dependent is handed to
+        whoever draws it. Every prior instance of this family was a WRITE that
+        landed somewhere real and nothing consulted. This is a DECLARED EDGE
+        that the consulting tool declines to weigh — same consequence, a host
+        claims work it cannot finish, reached from the other side.
+
+        THE COORDINATOR IS THE PROXIMATE CAUSE HERE. I routed 657-zm2n to
+        macbookair this cycle and told them I had verified it against the fold.
+        I had: status `ready`, unclaimed, v0.5, deps clear. The fold was right
+        and incomplete, and my check consulted exactly the field that cannot see
+        this. A dispatch preflight that asks `blocked-by` and gets silence
+        cannot distinguish "no dependencies" from "dependencies nobody started".
+
+        NOT PROPOSING THE FIX. Whether `ready` deps should be edges is a
+        semantics call with a real cost — it would park a large number of
+        packets at once, and 750-zrt4 exists because a parent competing with its
+        own children is also a defect. The measurement is the contribution.

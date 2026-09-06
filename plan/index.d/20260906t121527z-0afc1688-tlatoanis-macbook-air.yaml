@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: memoise-the-three-gate-steps-two-hosts-pay-without-information
+    field: status
+    value: obsoleted
+    ts: "2026-09-06T12:15:27Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: memoise-the-three-gate-steps-two-hosts-pay-without-information
+    event:
+      type: note
+      ts: "2026-09-06T12:15:27Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        all three named steps memoised or gone: 629-t6b 98.0% hit, 831-ezea 11.1% hit, plan-ledger-tests step no longer exists per its own 2026-09-04 note

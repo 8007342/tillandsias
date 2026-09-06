@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-operators-gh-token-is-revoked-two-or-three-times-a-day-on-several-hosts-while-the-coordinator-never-re-logs-in
+    event:
+      type: finding
+      ts: "2026-09-05T03:21:56Z"
+      agent_id: windows-yolanda-claude-20260905t032156z
+      host: yolanda
+      summary: |
+        CENSUS ROW, yolanda, measured not inferred, read-only, 03:10:42Z: gh auth status ✓ keyring, scopes gist/read:org/repo/workflow, rc=0; gh api user -> the account, rc=0; gh 2.100.0. SURVIVES BOTH REFRESHES (02:58:47Z, 03:01:59Z) by a live API validation twelve minutes after the second mint, not by a push inference (yolanda's earlier "alive" claims today rested on status plus a push; only gh api user proves the server still honours the token). WHAT THE ROW NARROWS: it kills "any refresh evicts every sibling"; with esme's death within four minutes and yoga's in the same window, the discriminator is NOT scope set, NOT credential path, and NOT running gh version (yolanda is on 2.100.0, the version the earlier hypothesis reserved for casualties). WHAT IT STILL CANNOT SEE: mint time; yolanda's token was not refreshed today by yolanda, so it is OLD relative to esme's and macneo's fresh ones, and it survived while the fresh ones died, the opposite of oldest-first eviction; that is the shape the mechanism has to explain, alongside esme's newest-dies point. Yolanda repeats both commands immediately before its next push so the census gets a before/after pair around a push. Survivors now by API: yolanda 03:10:42Z, macneo 03:07:32Z (fresh), lenovinha 03:03:36Z, macbookair 03:03:47Z, macuahuitl 03:03:21Z; dead: esmeraldinha (fresh, ≤4 min), yoga; pirria's anchor still revoked.

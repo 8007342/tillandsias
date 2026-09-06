@@ -1,0 +1,83 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: thirty-shell-fixtures-are-invoked-by-nothing-and-no-gate-can-see-them
+    order: 1063-nraf
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [testing, gate, evidence, fail-loud, instrument]
+    estimated_hours: 3
+    owned_files:
+      - scripts/check-litmus-bindings.sh
+      - build.sh
+    title: |
+      thirty `scripts/test-*.sh` fixtures are referenced by nothing — not build.sh, not another script, not a litmus binding, not a skill — and 660-ryhn's bound-or-retired check cannot see them because it scans only `openspec/litmus-tests/*.yaml`, so a fixture pinning the verdict that can delete a host's cycle runs only when a human remembers to run it
+    context: |
+      FOUND on esmeraldinha 2026-09-05 while landing 1004-ws5q. That packet's fix is pinned by
+      `scripts/test-cycle-preflight-cargo-resolution.sh`, which now carries ten arms — 876-irn7's
+      original five plus three regimes and two mutation controls for the new ordering. A green gate
+      on the very commit that added them never ran one of them:
+
+        grep -c 'test-cycle-preflight-cargo-resolution' target/gate14.log  ->  0
+
+      MEASURED across the tree, not inferred from one case:
+
+        scripts/test-*.sh on disk                                     219
+        named explicitly in build.sh                                   62
+        referenced NOWHERE (build.sh, any script, any litmus yaml,
+        any skill — self-reference excluded)                           30
+
+      So thirty fixtures exist that nothing invokes. They are not retired, not grandfathered, not
+      marked: they are simply unreachable, and each one reads to a later author as coverage that
+      exists.
+
+      WHY 660-ryhn DID NOT CATCH IT, which is the part worth stating precisely rather than as a
+      complaint. `scripts/check-litmus-bindings.sh` is scoped, by its own header and code, to
+      `<root>/openspec/litmus-tests` and `<root>/openspec/litmus-bindings.yaml` — it iterates
+      `"$TESTS_DIR"/litmus-*.yaml`. A shell fixture under `scripts/` is outside its corpus by
+      construction. The check is not broken and did not fail; it was never pointed at this class of
+      file. 660-ryhn's own framing — "a litmus file exists that no suite will ever run" — describes
+      exactly the defect here, one directory over, against a file type it does not scan.
+
+      AND THE GATE'S OWN MECHANISM IS A HAND-MAINTAINED LIST. build.sh invokes fixtures by explicit
+      name, `_run bash "$SCRIPT_DIR/scripts/test-<name>.sh"`, 62 of them. Nothing reconciles that
+      list against what exists, so adding a fixture and forgetting to list it produces a file that
+      passes review, passes the gate, and never executes. That is the same shape this fleet has been
+      finding all week in guards — something that reads as covered while nothing checks it — with
+      the twist that here the uncovered thing IS a check.
+
+      THE CONCRETE HARM, for this instance: `blocked:preflight:plan:cargo-absent` is terminal by
+      design; a false positive there does not degrade a cycle, it deletes it, on every fire, on a
+      host whose toolchain is fine (876-irn7's own words). The suite pinning that verdict — before
+      and after 1004-ws5q — has never run in a gate on this host.
+
+      NOT ASSERTED: that all thirty deserve to be in the gate. Some may be deliberately manual
+      (expensive, live-runtime, or operator-driven — `test-e2e-preflight-live-runtime.sh` looks like
+      one). The defect is that manual-by-intent and orphaned-by-accident are indistinguishable
+      today, and nothing forces the distinction to be recorded.
+    exit_criteria:
+      - "a check refuses when a scripts/test-*.sh exists that no gate step, script, litmus binding or skill references, unless it is on an explicit manual/retired list that names the reason; pre-fix result: FAILS — 30 such files exist and nothing reports them"
+      - "the manual/retired list is a ratchet (deletions only), so an orphan cannot be quietly added to it later; pre-fix result: FAILS — no such list exists"
+      - "scripts/test-cycle-preflight-cargo-resolution.sh is reached by the gate or explicitly listed as manual with its reason; pre-fix result: FAILS — grep of a green gate log finds zero invocations while the fixture carries ten arms"
+      - "660-ryhn's own check is unchanged in scope or its scope is widened deliberately and stated; pre-fix result: PASSES today (it scans only openspec/litmus-tests/*.yaml) and must not be broken by this"
+    unscoreable: |
+      The pin is a repo-scan fixture over scripts/test-*.sh reachability plus a
+      negative arm for the manual list; no litmus lane covers fixture
+      reachability today because litmus bindings are a different corpus. The
+      claimer names one if they add it.
+    events:
+      - type: filed
+        ts: "2026-09-05T11:20:00Z"
+        agent_id: windows-esmeraldinha-claude-20260905t112000z
+        host: esmeraldinha
+        summary: |
+          Filed from the floor while landing 1004-ws5q, at the coordinator's
+          request after I flagged that a green gate never invoked the fixture I
+          had just extended. The count was measured rather than estimated: an
+          earlier reading of "157 unrun" was wrong — that was the gap between
+          219 on disk and 62 named in build.sh, and most of those 157 ARE
+          referenced by another script or a litmus yaml. The honest number for
+          "invoked by nothing" is 30.

@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: jq-crlf-on-windows-turns-shell-reads-into-silent-wrong-answers
+    event:
+      type: progress
+      ts: "2026-09-05T14:01:21Z"
+      agent_id: windows-yolanda-opus5-20260905t140121z
+      host: yolanda
+      summary: |
+        LANDED at b67517ba5 on origin/windows-next, verified by merge-base against origin and by reading the change out of the PUSHED HEAD rather than my worktree: git show origin/windows-next:scripts/run-litmus-test.sh has ZERO occurrences of the SKIP not-found path and one FAIL line naming litmus-bindings.yaml. The land tool reported the head carried 2 records of un-gated union debt and made the gate mandatory (1056-5344); the gate ran and paid it, landing first attempt.
+
+        THE PACKET STAYS OPEN. Two of its halves are done -- the CR strip in the yaml read tier (df5708607) and the SKIP-to-FAIL mechanism (here) -- and the third is deliberately untouched: the other 25 scripts that pipe jq -r into shell values. A sweep with no per-site control is how a real fix becomes a claim, and this packet exists because a claim of that shape held for an unknown length of time. Whoever takes it should fix sites one at a time with a control each, not in one pass.
+
+        WHY THE SKIP HALF MATTERED MORE THAN THE CR. The CR was one cause. The SKIP is the mechanism that turned it into a green and would have turned the next cause into one too: a bound name whose file could not be found was logged SKIP, and skips are EXCLUDED FROM COVERAGE, so the run reported PASS 100% having executed a third of its corpus. Fixing only the CR would have been the smaller and worse change.
+
+        MEASURED BEFORE CHANGING IT, not after: all 476 names bound in litmus-bindings.yaml resolve to a file on disk, so failing closed refuses nothing that currently exists; and a broad pre-build/instant sweep produced zero "Test file not found". A litmus file is tracked in the repo, so absence means the bindings and the corpus disagree -- which is what a human needs told, on any platform.
+
+        THE FIXTURE DISCRIMINATES IN BOTH DIRECTIONS, each verified under its own sabotage: revert the branch to SKIP and three arms red; drop the CR strip from the read tier and arm 3 reds. The second sabotage first reported NO CHANGE, which was the MUTATION FAILING TO APPLY rather than an arm without teeth -- indistinguishable from the verdict alone. Confirmed it landed by asserting the occurrence count went 1 -> 0 -> 1 around the run before believing either result.
+
+        TWO INSTRUMENT FAULTS OF MY OWN, both this packet's defect turned on me. An early arm asserted on a source WINDOW opened at the first match of a non-unique expression -- a different branch 460 lines above the one under test -- and answered "unrecognised" while the change was correct. And the watcher I armed for esmeraldinha's inbound fix used git log <base>..<ref> -- <path>, which matches MERGE commits that merely CARRY a path; it fired on a merge and I was one step from reporting a fix had landed. I checked the file contents instead and the hardcoded scratch PATH was still there. Both are the same shape as the packet: an observable that matches the NAME of a thing rather than the thing.
+
+        WHEN THE FIX DID LAND I did not trust the watcher either: the re-armed version fired on cb618adec, which is a DIFFERENT change to the same file, and only merging and re-running settled it. The fixture reads 20 of 20 here now, and the ARM COUNT MOVED from 19 to 20 -- a bare "it passes" would have hidden that a new arm arrived.

@@ -1,0 +1,66 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-nine-remaining-orphan-fixtures-each-need-a-two-regime-byte-measurement-before-binding-and-that-disposal-is-not-1063-nrafs-work
+    event:
+      type: progress
+      ts: "2026-09-05T21:59:19Z"
+      agent_id: linux-lenovinha-claude-20260905t213827z
+      host: linux
+      summary: |
+        Pre-binding re-check returned NOT SAFE for one fixture and SAFE-but-wrong for the
+        other, so the cycle spent itself on repairs rather than on bindings, and the count
+        I published on 1078-p2mc is revised below.
+
+        test-spec-index-endpoint-classification.sh, three blockers, all repaired with
+        negative controls that red the old file and pass the new one:
+
+          * It printed "4/4" and the machine token ...-fixture:4 unconditionally, reached
+            by straight-line flow AFTER case 2's own else-branch had printed SKIP. Case 2
+            is the negative control, needs nmap-ncat plus timeout(1), and is dark on
+            macOS, MSYS, Debian/Ubuntu and on this host. The fixture's own comment says
+            case 1 alone is satisfiable by renaming every failure to absent, so the run
+            claimed exactly the property it could not support. I verified this fixture on
+            2026-09-04 and read 4/4 without noticing nc was absent. Now 3/4 here, skips
+            named, and the unestablished distinction stated in words.
+          * A missing tool was a RED GATE, not a skip: run_against filtered to
+            '^blocked:spec-index:' so the producer's honest exit-0 skip:spec-index:no-jq
+            collapsed to '' and hit the wrong-verdict arm. Measured on a 2255-executable
+            symlink farm with jq excluded: old -> FAIL rc=1, new -> rc=0 with 2/4 named.
+            Stock macOS ships no jq, so this was a red on every macOS host.
+          * The closed-port probe advanced only while curl SUCCEEDED, so rc 52/56
+            (something answered, badly) counted as proof the port was free — this
+            fixture's own subject matter, decided the wrong way in its own setup.
+            Demonstrated with a non-HTTP socket on 45917: old -> FAIL rc=1, new steps to
+            19918. Base moved below the ephemeral range on both targets.
+
+        test-trace-coverage.sh came back SAFE and I changed it anyway, because its own
+        comment block explains that Tests 9 and 10 were wrong for asserting a property of
+        the CHECKOUT rather than of the VALIDATOR — and Tests 5, 6 and 7 were still doing
+        it. Test 6 required the LIVE tree to report PASS at threshold 80, so binding it
+        would have added an undeclared 80% coverage floor to --check on three hosts.
+        Measured, not argued: 50 untraced spec dirs drop live coverage to 77%, and there
+        the old fixture reds and the new one does not. Tests 2 and 3 were also
+        mutation-insensitive (deleting the whole threshold-validation block killed only
+        Test 1; now it kills three), and Test 8 was a byte-identical duplicate of Test 4,
+        repurposed into the single live liveness arm at the unfailable threshold 0.
+
+        COUNT REVISED. 1078-p2mc says seven repairs plus two bindings. Bindings landed
+        this cycle: ZERO. Both candidates changed after their verdicts, so both verdicts
+        expired, and the honest number is one strong candidate (trace-coverage) plus one
+        that has now been repaired twice and owes a third re-check. I am not binding
+        either without a fresh adversarial pass on the current bytes.
+
+        Cost, incidentally: 11.8s -> 1.4s and 3.9s -> 1.07s. The first was a readiness
+        loop that never checked whether its listener had died; the second was five arms
+        each driving a full live coverage walk.
+
+        Gate: not yet run on these three commits. Trunk is frozen until ~22:10Z for
+        esme's 1072-b7eq gate-step migration, so nothing lands regardless.

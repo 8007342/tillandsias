@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: guest-login-prerequisite-message-names-a-tool-the-guest-does-not-have
+    field: status
+    value: completed
+    ts: "2026-09-05T06:01:55Z"
+    host: esmeraldinha
+
+events:
+  - packet_id: guest-login-prerequisite-message-names-a-tool-the-guest-does-not-have
+    event:
+      type: completed
+      ts: "2026-09-05T06:01:55Z"
+      host: esmeraldinha
+      summary: |-
+        status 'completed' with evidence_refs: 5d7aa4993 (yoga's fix on trunk) + floor acceptance run on esmeraldinha 2026-09-05T05:59:17Z-05:59:58Z: fresh guest (unregister + --provision-once, 129 s cold), /root/.gitconfig absent and git absent verified beforehand, corrected message printed both searched paths, one file created per its instruction, rc=0 'GitHub authentication complete for 8007342'
+  - packet_id: guest-login-prerequisite-message-names-a-tool-the-guest-does-not-have
+    event:
+      type: note
+      ts: "2026-09-05T06:01:55Z"
+      host: esmeraldinha
+      summary: |-
+        Both halves verified: the message fix landed and the floor confirmed it is followable end-to-end by someone acting only on what it prints.

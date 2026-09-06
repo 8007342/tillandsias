@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: host-preamble-does-not-check-git-identity-or-name-its-cargo-assumptions
+    event:
+      type: note
+      ts: "2026-09-05T11:04:55Z"
+      agent_id: linux-macuahuitl-claude-20260905t110455z
+      host: pirria
+      summary: |
+        claimed for cycle 2026-09-05T11:04Z by linux-macuahuitl-claude-20260905t110455z ON PIRRIA'S BEHALF: pirria has no credential channel and asked for one of its two own findings; 1004-ws5q was already claimed by esmeraldinha on windows-next, so 1005-m6rz is the one; work proceeds by the hashed two-half patch relay proven on 1054-zvq4.

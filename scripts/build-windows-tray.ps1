@@ -203,6 +203,50 @@ if ($cargoExit -ne 0) { throw "cargo build failed (exit $cargoExit)" }
 $exe = Join-Path $RepoRoot "target\$profileName\tillandsias-windows-tray.exe"
 if (-not (Test-Path $exe)) { throw "expected binary not found: $exe" }
 
+# ORDER 1059-ry6t. REFUSE A TRAY THAT CANNOT INJECT A GUEST.
+#
+# crates/tillandsias-windows-tray/build.rs writes an EMPTY placeholder for the
+# musl headless when it is absent, so `include_bytes!` compiles on a host that
+# will never package. That accommodation is correct and documented -- and it is
+# the same one render_msix_logos makes for the MSIX logos, whose comment already
+# states the rule this asset never got: "the packaging step is where absence
+# becomes an error, because that is where it actually matters".
+#
+# This IS the packaging step. A tray built from a placeholder compiles, links,
+# prints `Built:` and exits 0, and its guest injection is a SILENT NO-OP at
+# runtime -- the failure surfaces later as a guest behaving like an older
+# release for no visible reason.
+#
+# MEASURED 2026-09-05: 0 bytes on esmeraldinha since 2026-08-23 and on yolanda
+# since 2026-08-22 -- two of two Windows hosts checked, because build.rs creates
+# the placeholder on first build and nothing replaces it. The default state of a
+# Windows dev checkout produced a non-injecting tray.
+$assetDir = Join-Path $RepoRoot "crates\tillandsias-windows-tray\assets"
+$missing = @()
+foreach ($arch in @('x86_64', 'aarch64')) {
+    $asset = Join-Path $assetDir "tillandsias-headless-$arch-unknown-linux-musl"
+    if ((-not (Test-Path $asset)) -or ((Get-Item $asset).Length -eq 0)) { $missing += $asset }
+}
+if ($missing.Count -gt 0) {
+    throw @"
+guest asset is a placeholder — this tray could not inject a guest binary:
+$($missing -join "`n")
+
+Each is absent or 0 bytes. crates/tillandsias-windows-tray/build.rs writes an
+empty placeholder so `cargo check` compiles; packaging is where that becomes an
+error (1059-ry6t).
+
+Stage the real musl headless before building the tray:
+  ./build.sh --ci-full --install     # produces the musl headless
+  cp target/x86_64-unknown-linux-musl/release/tillandsias-headless \
+     crates/tillandsias-windows-tray/assets/tillandsias-headless-x86_64-unknown-linux-musl
+
+Then TOUCH A .rs FILE before rebuilding: cargo does not rebuild when only the
+asset changes, so a rebuild after restaging embeds the PREVIOUS bytes while
+reporting success (the sibling trap recorded in build.rs, measured 2026-08-15).
+"@
+}
+
 Write-Host "Built: $exe" -ForegroundColor Green
 
 if (-not $Release) {

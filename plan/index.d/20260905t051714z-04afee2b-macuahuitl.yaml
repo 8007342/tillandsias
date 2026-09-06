@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: memoise-the-terminology-dictionary-check-on-a-digest-of-its-inputs
+    event:
+      type: progress
+      ts: "2026-09-05T05:17:14Z"
+      agent_id: linux-macuahuitl-claude-20260905t051714z
+      host: macuahuitl
+      summary: |
+        IMPLEMENTED ON PIRRIA, UNPUSHED (credential missing:no-credential-channel; relayed): scripts/terminology-check-memo.sh (new, mirrors archiver-check-memo.sh) wired into build.sh, plus scripts/test-terminology-check-memo.sh beside the archiver memo fixture. THREE FORCED GATE RUNS, timing records verbatim from .cache/metrics/tillandsias-timing.jsonl: {"step":"terminology-check-miss","duration_ms":24251,"exit":0} cold memo, ran; {"step":"terminology-check-hit","duration_ms":43,"exit":0} unchanged inputs, skipped; {"step":"terminology-check-miss","duration_ms":25792,"exit":1} one dictionary entry changed, re-ran. Criterion 1 MET: 24251 ms → 43 ms on unchanged inputs, 564x, far under floor_ms 2000. Criterion 2 MET: a changed dictionary entry missed and ran. Criterion 3 MET: the key names its inputs in the script and the timing line carries hit/miss as the step NAME (terminology-check-hit / -miss) so the next audit measures the hit rate instead of bounding it. SAFETY PROPERTY DEMONSTRATED LIVE, unplanned: the arm-3 entry (canonical 'Tillandsias', wrong 'tillandsia') matched the project's own name as a substring, so the check genuinely FAILED with exit 1; the memo did NOT record it, because build.sh records only after a pass, so after restoring the dictionary the memo still held the original digest 1e306f75 which equals the current digest and returns a hit. Had a red been memoised, the next gate would have replayed a failure's exit as a hit and the terminology gate would have gone permanently green on a broken dictionary; that is the failure mode a memo is judged on and it is now demonstrated. Fixture 11/11 including the negative controls: changed dictionary, changed scanned string, a locale file APPEARING (names are in the key, a content-only hash could not catch it), and the checker itself as an input; hermetic in a temp locale tree because a fixture that died midway must not leave the repository's dictionary altered. Baseline on this host 25.4 s, inside the 14.3 to 33.4 s band the audit found across yoga, lenovinha and macbookair. Landing waits on the operator's credential reset for pirria; a local commit and bundle are requested as the second copy meanwhile.
+         SECOND COPY (pirria, 05:10Z): branch work/1054-zvq4-terminology-memo, commit d6a71e968 (3 files, +202/-8), SELF-CONTAINED bundle ('records a complete history', 139 M) at /home/lapto/tillandsias-bundles/1054-zvq4-terminology-memo-20260905T051046Z.bundle, outside the checkout on persistent btrfs and not on tmpfs, verify okay; self-contained on purpose, because an incremental bundle's prerequisites would live only in the checkout the bundle insures against. SALVAGE PATH: `scripts/salvage-dirty-worktree.sh` printed ok:salvage-not-needed, exit 0, which is a NO-OP on a clean tree and not a success; the host answered the real question with `git push --dry-run` of the branch to a salvage-shaped ref: 'Invalid username or token', exit 128. The salvage path is closed on pirria for the same reason as on macneo, the credential and not the script.

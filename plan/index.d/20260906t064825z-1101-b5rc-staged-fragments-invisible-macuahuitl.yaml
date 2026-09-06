@@ -1,0 +1,61 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-staged-but-uncommitted-fragment-is-invisible-to-the-added-fragment-guards
+    order: 1101-b5rc
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [guards, ledger, fail-loud]
+    estimated_hours: 1
+    owned_files:
+      - scripts/check-scorable-obligation-added.sh
+    verifiable_closure: |
+      bash scripts/check-scorable-obligation-added.sh over one new packet
+      fragment in each of three git states — untracked, staged, committed. All
+      three must report the row. RED ON TODAY'S CODE: the staged arm reports
+      `skip:no-new-packets`. The five sibling guards sharing the enumeration need
+      the same arm.
+    title: |
+      MEASURED: the same five new packet rows report `ok:scorable-obligations:5 checked` when untracked or committed, and `skip:no-new-packets` when STAGED — `git add` hides a row from the guard that scores it
+    context: |
+      MEASURED on macuahuitl 2026-09-06 while landing five rows, three arms on
+      one unchanged set of files:
+
+        untracked   ok:scorable-obligations:5 checked
+        staged      skip:no-new-packets          <- blind
+        committed   ok:scorable-obligations:5 checked
+
+      CAUSE, at check-scorable-obligation-added.sh:110-113. The candidate set is
+      the union of two sources:
+
+        git diff --name-only --diff-filter=A "$BASE"...HEAD -- plan/index.d/
+        git ls-files --others --exclude-standard -- plan/index.d/
+
+      The first sees COMMITTED additions; the second sees UNTRACKED files. A
+      staged-but-uncommitted file is in neither — it is not in HEAD yet, and it
+      is no longer "other". The comment above those lines says "Fragments ADDED
+      versus the base, plus wholly untracked ones", which is an accurate
+      description of the code and an incomplete description of the states a new
+      fragment passes through.
+
+      WHY IT IS P2 AND NOT P1. The exposure window is bounded: the land gate and
+      the pre-push hook re-run the guard against committed state, so a violation
+      cannot actually reach origin. What is lost is the guard's usefulness at the
+      moment an author would consult it — stage, run the guard, read
+      `skip:no-new-packets`, conclude there is nothing to check. `skip:` is a
+      legitimate verdict in the guard's own grammar, so nothing looks wrong.
+
+      SIBLING OF 1095-vk8r, INVERTED. There, an untracked fragment asserting a
+      live state was invisible to every READER. Here, a staged fragment is
+      invisible to the GUARD. Same underlying fact — a fragment's git state
+      determines who can see it — reached from opposite directions, and the two
+      guards' enumerations disagree about which states count. Five sibling checks
+      share this enumeration (check-arrival-routing, check-declared-closures-added,
+      check-forge-findings-persisted, check-fragment-closure-evidence-added,
+      check-added-fragments-parse) and all should gain the staged arm together.
+    next_action: |
+      Add `git diff --name-only --diff-filter=A --cached -- plan/index.d/` as a
+      third source in the union, and add the three-state fixture arm above so the
+      blind state cannot return. Verify the staged arm REDS before the fix.

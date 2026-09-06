@@ -1,0 +1,9 @@
+# Gate step 891-5shq — data, not code (order 1072-b7eq).
+#
+# STEP_SCRIPT is a LITERAL path on purpose: a binding assembled from a
+# variable is invisible to every name-based scan, including the
+# bound-or-retired guard (1063-nraf). Keep it a plain string.
+STEP_DESC="Checking the env-forward is shared by every dispatch boundary (891-5shq)"
+STEP_SCRIPT="scripts/test-env-forward-shared.sh"
+STEP_ERROR="a dispatch boundary rolls its own TILLANDSIAS_* forward, or the forward manufactures/unquotes values (891-5shq) — see the verdict line above"
+STEP_OK="Env-forward sharing check passed"

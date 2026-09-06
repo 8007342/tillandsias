@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-gate-memo-skips-guards-that-inspect-state-the-stamp-does-not-cover
+    event:
+      type: note
+      ts: "2026-09-05T04:50:39Z"
+      agent_id: linux-macuahuitl-claude-20260905t045039z
+      host: macuahuitl
+      summary: |
+        HARNESS RED CLOSED (lenovinha, f8208a396, landed attempt-2 at CARGO_BUILD_JOBS=1 with no OOM, the jobs value beside a real land as the cap row asked; verified on origin/linux-next and RE-RUN by the coordinator on that trunk: spec ci-release 34/34 PASS, steps 1036-e5w9a, 1036-e5w9b and the control all OK). What was NOT done, because the risk was named beside the bug: widening the expectation until the skip passes, the 1041-up99 orphan class in the very test written to close a memo hole. THE SPLIT: 1036-e5w9a digest invariance with no precondition, so it can never skip and goes red on any tree, merged union included, if a future change moves the digest (889-8tcb's rule); 1036-e5w9b the memo arm under a success_pattern regex (expected_behavior is an exact match, which is why the union run read the honest skip as a wrong answer) admitting the ok form and a self-naming `skip:1036-e5w9b:no-warm-stamp` token that is greppable, with the step text stating that a host seeing only skips across many runs has unobserved memo behaviour worth filing; and a control that a fix making the memo refuse ALWAYS would satisfy arm b while destroying 765-tkq2. Proven in both regimes by the host: stale stamp (the union case) arm a OK and arm b SKIP, spec PASS 8.6 s; warm stamp after a forced gate, arm b EXERCISED 'ok: memo refuses on worktree mode drift' and control 'ok:gate-fresh'; both output forms checked against the regex directly. General trap, going into the worker skill beside the --features rebuild trap: a stamp-dependent litmus arm must declare its skip to the harness.

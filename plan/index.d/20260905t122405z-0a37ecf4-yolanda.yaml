@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: core-symlinks-false-makes-the-skill-canonicalization-check-unrunnable-and-misdiagnosed
+    field: status
+    value: completed
+    ts: "2026-09-05T12:24:05Z"
+    host: yolanda
+
+events:
+  - packet_id: core-symlinks-false-makes-the-skill-canonicalization-check-unrunnable-and-misdiagnosed
+    event:
+      type: completed
+      ts: "2026-09-05T12:24:05Z"
+      host: yolanda
+      summary: |-
+        status 'completed' with evidence_refs: 15106499d: bash scripts/test-skill-canonicalization-remedy.sh -> ok:skill-canonicalization-remedy:11 arm(s); bash scripts/check-skill-canonicalization.sh -> ok:skills-canonical:119 entries checked across 5 harnesses (was violation:harness-exclusive-skill:75); macuahuitl re-ran the fixture 11/11 on the merged trunk before a union litmus of 291/291
+  - packet_id: core-symlinks-false-makes-the-skill-canonicalization-check-unrunnable-and-misdiagnosed
+    event:
+      type: note
+      ts: "2026-09-05T12:24:05Z"
+      host: yolanda
+      summary: |-
+        landed on trunk at 15106499d, verified by merge-base against origin/linux-next and by reading the content out of the pushed head

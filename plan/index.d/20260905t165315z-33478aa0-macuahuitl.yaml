@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: expire-claims-mutates-other-hosts-leases-by-default-so-a-read-probe-releases-them
+    event:
+      type: finding
+      ts: "2026-09-05T16:53:15Z"
+      agent_id: linux-macuahuitl-claude-20260905t165315z
+      host: macuahuitl
+      summary: |
+        SECOND INSTANCE, FROM THE COORDINATOR'S OWN AUDIT, AND THE REASON THIS IS p1 (macuahuitl, 16:41:18Z): the coordinator ran `tillandsias-plan expire-claims --list-live` as the stranded-claim sweep every coordinate and meta cycle runs, to READ the leases. It wrote plan/index.d/20260905t164118z-0a32fa1f-linux.yaml, releasing macneo's 24-hour-stale claim on 980-ja2m and flipping the packet to `ready`, and the sweep's own summary line said mode=write. The fragment was untracked and was deleted before any staging, and 980-ja2m folds as in_progress under macneo again; it survived only because the coordinator went looking for what `expired=1` meant, and every claim recipe in the skills does `git add plan/index.d/` shortly after. TWO DETAILS THAT SHARPEN THE FILING: the flag is named `--list-live`, so the read-shaped invocation is the one that writes, which is worse than a bare command defaulting to write; and the fragment was attributed to host `linux`, the TILLANDSIAS_HOST_KIND bucket (1012-hu7d), so a published expiry would not even name the host that caused it. macbookair's both-directions criteria stand as filed; this instance adds that the read-shaped flags must be read-only too, and that a coordinator whose every cycle runs this sweep is the highest-frequency caller in the fleet.

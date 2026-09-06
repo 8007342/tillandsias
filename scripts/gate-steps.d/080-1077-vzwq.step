@@ -1,0 +1,37 @@
+# Gate step 1077-vzwq — data, not code (order 1072-b7eq).
+#
+# scripts/test-trace-coverage.sh was one of the orphan fixtures 1063-nraf
+# measured: present, maintained, and invoked by nothing. Binding it IS its
+# disposal.
+#
+# WHAT IT DOES AND DOES NOT COVER, because the last two things said about this
+# file turned out to be wrong in the same direction:
+#
+#   IT DOES pin the validator's argument handling, its PASS/FAIL implication,
+#   its failure path (exit code, the uncovered listing by NAME, the action
+#   trailer), its default threshold, and that its denominator matches the number
+#   of spec directories that actually exist.
+#
+#   IT DOES NOT guard the 1069-c9w6 SIGPIPE regression. Two of its arms appeared
+#   to and did not: they were firing on grep's rc=2 error path, produced only
+#   because the synthetic tree omitted three of the five roots the validator
+#   greps. With the tree made faithful, reverting that fix leaves this fixture
+#   green while the live tree reports 98% / 174-of-177. Nothing else catches it
+#   either — filed as 1084-nzqc.
+#
+# It adds NO coverage floor. Exactly one arm touches the real checkout, at
+# --coverage-threshold 0, which no coverage figure can fail; the earlier version
+# of this file required the live tree to PASS at 80 and would have wired an
+# undeclared floor into every host's gate. The project's one real live floor
+# stays where it is, in scripts/local-ci.sh.
+#
+# On a host without jq three arms self-skip and the run is 9 of 12, printing
+# `skip:test-trace-coverage:no-jq`. Nothing in --check counts that token yet.
+#
+# STEP_SCRIPT is a LITERAL path on purpose: a binding assembled from a
+# variable is invisible to every name-based scan, including the
+# bound-or-retired guard (1063-nraf). Keep it a plain string.
+STEP_DESC="Checking the trace-coverage validator's thresholds, failure path and denominator (1077-vzwq)"
+STEP_SCRIPT="scripts/test-trace-coverage.sh"
+STEP_ERROR="the trace-coverage validator mis-handles a threshold, mis-reports its failure path, or its denominator disagrees with the specs on disk (1077-vzwq) — see the verdict line above"
+STEP_OK="Trace-coverage validator check passed"

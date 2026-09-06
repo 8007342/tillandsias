@@ -1,0 +1,85 @@
+packets:
+  - packet_id: the-portable-digest-fixtures-path-farm-carries-no-interpreter-for-shasum
+    order: 1066-xxsu
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: windows
+    release_target: stable-milestone-v1
+    capability_tags:
+      - windows
+      - testing
+      - fail-loud
+      - portability
+    estimated_hours: 3
+    verifiable_closure: |
+      bash scripts/test-gate-stamp-portable-digest.sh exits 0 on a Windows host,
+      with its S2 arms (compute-succeeds-without-sha256sum,
+      digest-byte-identical-across-tools) passing rather than skipped.
+
+      NEGATIVE CONTROL, and it is the scorable half: the fixture must still RED
+      when the portable dispatch is mutated to drop its non-sha256sum branch —
+      the mutation arms it already carries. A "fix" that made the farm resolve
+      by widening it until nothing is hidden would pass S2 while proving
+      nothing about the dispatch, because the farm's entire purpose is to hide
+      sha256sum. Whatever change is made, `farm-hides-sha256sum` must still
+      pass.
+    title: |
+      scripts/test-gate-stamp-portable-digest.sh builds a PATH farm from a hardcoded tool list, and on a host where shasum is a Perl script the farm carries no perl — so shasum emits nothing, the digest comes back empty, and two S2 arms fail on a correct tree.
+    deliverable: |
+      A portable-digest fixture whose PATH farm carries what the tools it links
+      actually need to run, so its verdict describes the dispatch under test
+      rather than the host's tool layout.
+    context: |
+      MEASURED ON YOLANDA 2026-09-05, found while verifying an unrelated change
+      against the wider litmus corpus.
+
+      THE SYMPTOM. `bash scripts/test-gate-stamp-portable-digest.sh` fails two
+      arms on a correct tree:
+
+        FAIL  S2-compute-succeeds-without-sha256sum
+        FAIL  S2-digest-byte-identical-across-tools
+
+      and litmus:gate-stamp-portable-digest (spec ci-release) fails with it.
+
+      THE MECHANISM, reduced rather than inferred. The fixture builds a scratch
+      PATH "farm" at scripts/test-gate-stamp-portable-digest.sh:69-70 by
+      symlinking a HARDCODED list of tools — bash, sh, git, sort, cut, xargs,
+      readlink, grep, sed, awk, mktemp, rm, cat, mv, dirname, basename, date,
+      head, tail, wc, tr, find, ls, env — then hides sha256sum so S2 exercises
+      the shasum fallback. On this host both tools exist (sha256sum at
+      /usr/bin/sha256sum, shasum at /usr/bin/core_perl/shasum), so the farm
+      links the real shasum. But MSIX/MSYS `shasum` is a PERL SCRIPT
+      (`#!/usr/bin/perl`), and **perl is not in that list**. Two lines
+      reproduce it: symlink shasum and bash into a scratch dir and run
+      `shasum -a 256 <file>` with PATH set to only that dir — it emits NOTHING.
+      Empty output, so the dispatch computes an empty digest and the
+      byte-equality arm fails.
+
+      THE TREE IS CORRECT AND THE INSTRUMENT IS NOT. Nothing about the portable
+      digest dispatch is wrong here; the fixture cannot run on this host's tool
+      layout. That is the same shape as the preflight fixture esmeraldinha
+      found the same day (scripts/test-cycle-preflight-cargo-resolution.sh
+      built its scratch PATH from /usr/bin and /bin, and git lives in
+      /mingw64/bin on MSYS, so three identity arms answered
+      blocked:not-a-git-repo). SIBLING INSTANCE, DIFFERENT FIXTURE AND A
+      DIFFERENT MECHANISM: hers was a tool absent from the farm's source
+      directories, this is a tool PRESENT in the farm but missing the
+      INTERPRETER it needs to run. Filed separately on the coordinator's ruling
+      rather than as a row on hers.
+
+      WHY IT HID FOR SO LONG, and this is the part worth carrying: THIS FIXTURE
+      IS NOT GATE-BOUND. `grep -c test-gate-stamp-portable-digest build.sh`
+      returns 0, so every `./build.sh --check` on this host has been green over
+      it. It only surfaces through the litmus corpus, which a Windows worker
+      runs rarely — and, until 1049-s35z landed, ran while silently skipping
+      most of it. A fixture that is neither gate-bound nor reliably reachable
+      by the litmus path is a check nobody is reading.
+
+      GENERAL RULE THE TWO INSTANCES TOGETHER SUGGEST, offered for 761-g36m's
+      family rather than asserted as adopted: a fixture that CONSTRUCTS a PATH
+      must derive it from what the tools under test actually need to execute,
+      not from a hardcoded list of names — and a list that names interpreters'
+      clients without their interpreters is the failure mode that is invisible
+      on the platform where the list was written.

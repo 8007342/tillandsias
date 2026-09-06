@@ -1,0 +1,88 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: build-image-reports-success-for-an-image-whose-layers-are-missing-so-three-green-signals-cover-an-unrunnable-artifact
+    order: 1073-dqtx
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [images, podman, fail-loud, build, verification]
+    estimated_hours: 3
+    owned_files:
+      - scripts/build-image.sh
+    unscoreable: |
+      THE TEST IS THE FIX: criterion 3 is the fixture. A closure may only pin a
+      test that exists, and no litmus covers post-build image usability today;
+      the claimer names one if it adds it. Deliberately not pinned to an existing
+      image lane — those assert what a build PRODUCES, and this packet is about
+      whether the product can be RUN, which is the distinction it exists to make.
+    title: |
+      scripts/build-image.sh reports success for an image podman cannot inspect or run: build exit 0, `image exists` exit 0 and a plausible 3.03 GB size all stand over a missing overlay layer
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-09-05, in the guest, while building
+      the forge image for 317.
+
+      THREE INDEPENDENT GREEN SIGNALS OVER AN UNUSABLE ARTIFACT:
+        scripts/build-image.sh forge      -> BUILD_EXIT=0, 121s
+        podman image exists ...:latest    -> exit 0
+        podman images                     -> localhost/tillandsias-forge:latest 3.03 GB
+        podman inspect ...:latest         -> EXIT 125
+             Error: faccessat /var/lib/containers/storage/overlay/
+             1854a5889043e77479e6d36d376ab37767844a9e4858509145126a83bb512c9b:
+             no such file or directory
+        podman run ...                    -> same faccessat error, container never started
+
+      A build verdict, an existence check and a size all agreed the image was
+      fine. Only inspect and run reached the truth. This is the shape the fleet
+      has spent the day on — a green that reports the absence of a complaint
+      rather than the presence of a working thing — arriving somewhere none of
+      our checks look: after the build, at the artifact itself.
+
+      IT CLEARED UNDER --no-cache, WHICH MAKES THE CAUSE TESTABLE:
+        same script, TILLANDSIAS_BUILD_NO_CACHE=1 ... --force, 122s
+        -> REBUILD_EXIT=0, INSPECT_EXIT=0, id bafc32a7a1c8b7ed...
+      Same Containerfile, same sources, two minutes apart, opposite outcomes. So
+      the Containerfile is not implicated and LAYER REUSE is: a cached layer was
+      referenced by the new image and its backing directory was absent from
+      storage. That is a claim someone can test rather than a guess.
+
+      WHY p1 DESPITE BEING TRANSIENT. The failure mode is not "a build broke" —
+      builds break loudly and get retried. It is that the build SAID IT WORKED
+      and the three cheapest confirmations agreed. Anything downstream that gates
+      on build success, or on `podman image exists`, or on an image appearing in
+      `podman images` with a size, will proceed against an image that cannot
+      start. On this host it cost a cycle: I recorded a successful image build,
+      moved on to the harness capture, and only then discovered the artifact had
+      never been runnable.
+
+      NOT REPRODUCED ON DEMAND, stated plainly. It happened once, in the first
+      build on a guest that had never built this image, and the rebuild that
+      cleared it also DESTROYED THE EVIDENCE — the broken artifact no longer
+      exists. So criterion 3 below cannot simply say "fail on the pre-fix
+      artifact"; the broken state has to be constructed. It is constructible:
+      build an image, then remove one directory under
+      /var/lib/containers/storage/overlay/ that the image's RootFS references.
+      That is a synthetic reproduction of the observed state, and the check must
+      refuse it.
+
+      RELATED BUT NOT THE SAME: 747-knbp pins that an image rebuild keeps the
+      installed binary's launch tag — a property of what the build PRODUCES. This
+      packet is about whether the product can be RUN at all, which no current
+      lane asks.
+    exit_criteria:
+      - "scripts/build-image.sh does not report success until the image it just built INSPECTS successfully — the verdict says the artifact is usable, not merely that podman build returned 0"
+      - "the failure names the artifact and the missing path, and says the remedy is a --no-cache rebuild, so an operator is not left reading a faccessat error against a build that claimed to work"
+      - "a fixture constructs the broken state — build an image, remove a directory under /var/lib/containers/storage/overlay/ that its RootFS references — and proves the check REFUSES it; and proves an intact image still passes, so the check is not simply refusing everything"
+      - "whatever else gates on build success in this repo (scripts, litmus, the tray's image-ensure path) is found by grep and shown either to inherit this check or to make its own usability assertion — a fix that leaves a second caller trusting `podman image exists` has moved the defect rather than closed it"
+    events:
+      - type: filed
+        ts: "2026-09-05T18:17:33Z"
+        agent_id: "macos-tlatoanis-macbook-air-claude-20260905t144547z"
+        host: tlatoanis-macbook-air
+        summary: |
+          Filed at the coordinator's instruction after being recorded as an
+          observation on 317. Their framing is the packet's spine: a build is not
+          complete until the image inspects and runs, and clearing under
+          --no-cache points at layer reuse rather than the Containerfile, which
+          is a testable claim rather than a guess.

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-fragment-repair-must-be-a-correction-fragment-and-the-scorable-guard-must-fold-before-it-can-be
+    field: next_action
+    value: relay work/1071-adhj (e3742f507); all four criteria met and gated. Nothing left to implement — if the relay conflicts, the fixture is scripts/test-scorable-obligation-gate.sh and it must stay 22/22.
+    ts: "2026-09-05T23:54:02Z"
+    host: linux
+
+events:
+  - packet_id: a-fragment-repair-must-be-a-correction-fragment-and-the-scorable-guard-must-fold-before-it-can-be
+    event:
+      type: note
+      ts: "2026-09-05T23:54:02Z"
+      host: linux
+      summary: |-
+        carry-forward

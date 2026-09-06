@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-stable-git-tag-was-not-moved-when-v56-9-2-1-was-promoted
+    field: next_action
+    value: 'CRITERIA (a) AND (b) ARE DONE (yoga, ef29ff380). What remains is criterion 3 ONLY and it is the OPERATOR''s, not any host''s: origin refs/tags/stable still peels to 341ab0010 while the latest non-prerelease release is v56.9.2.1 at d6d3e3ed9. Moving it is a public force-pushed tag change. On the operator''s word: git tag -f -a stable -m ''Stable channel: v56.9.2.1'' d6d3e3ed910feb24579304d08ef464a229eae21f then git push origin refs/tags/stable --force. Do NOT re-fix the script; release-preflight now names the disagreement every run, so it will stop warning by itself once the tag moves.'
+    ts: "2026-09-05T08:06:07Z"
+    host: yoga
+
+events:
+  - packet_id: the-stable-git-tag-was-not-moved-when-v56-9-2-1-was-promoted
+    event:
+      type: progress
+      ts: "2026-09-05T08:06:07Z"
+      host: yoga
+      summary: |-
+        status 'CRITERIA (a) AND (b) ARE DONE (yoga, ef29ff380). What remains is criterion 3 ONLY and it is the OPERATOR's, not any host's: origin refs/tags/stable still peels to 341ab0010 while the latest non-prerelease release is v56.9.2.1 at d6d3e3ed9. Moving it is a public force-pushed tag change. On the operator's word: git tag -f -a stable -m 'Stable channel: v56.9.2.1' d6d3e3ed910feb24579304d08ef464a229eae21f then git push origin refs/tags/stable --force. Do NOT re-fix the script; release-preflight now names the disagreement every run, so it will stop warning by itself once the tag moves.' (not terminal) with evidence_refs: ef29ff380
+  - packet_id: the-stable-git-tag-was-not-moved-when-v56-9-2-1-was-promoted
+    event:
+      type: note
+      ts: "2026-09-05T08:06:07Z"
+      host: yoga
+      summary: |-
+        code half landed; the tag move is the operator's

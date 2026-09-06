@@ -1,0 +1,77 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+#
+# CORRECTION FRAGMENT for 1086-kx8i per the 1071-adhj convention. Three claims
+# this host published as fact and which are now measured otherwise. The notes
+# they correct are NOT edited.
+events:
+  1086-kx8i:
+    - type: note
+      ts: "2026-09-06T02:27:03Z"
+      agent_id: "linux-macuahuitl-claude-20260906t022703z"
+      host: macuahuitl
+      summary: |
+        THREE CORRECTIONS TO THIS PACKET'S OWN EVIDENCE.
+
+        1. "FOUR ORPHANED GUARDS" WAS NEVER TRUE. Published in the packet
+        context, a DO-NOT-MERGE PR body, a cycle record and four messages. The
+        measured population is now orphan=0, and only one of the four was ever
+        a real orphan:
+
+          check-jq-multiline-capture-strips-cr.sh   NOT an orphan — invoked by
+          check-wt-reparse-workarounds-deleted.sh   a fixture that is itself a
+                                                    gate step, one hop past the
+                                                    auditor's surface list.
+                                                    Both had been guarding on
+                                                    every gate run for a day.
+                                                    (yoga, dcf772b2e)
+          check-sigpipe-verdict-measured.sh         a LIBRARY under a check-
+                                                    prefix; renamed to
+                                                    lib-sigpipe-verdict.sh with
+                                                    a refused:not-a-check exit
+                                                    (esmeraldinha)
+          check-plan-binary-current.sh              the only true orphan, mine,
+                                                    now wired
+
+        THE OBVIOUS REMEDY WOULD HAVE RATIFIED THE FALSE ACCUSATION. Wiring the
+        first two as new steps — the natural response to "orphan" — would have
+        double-run two active guards and recorded the fix as a fix.
+
+        2. THE `a00a0f76b` ATTRIBUTION IS WRONG. That commit did not detach the
+        `@trace spec:tray-ux, spec:remote-projects`. yoga reconstructed the file
+        at `a00a0f76b~1`: the cloud doc block ALREADY ran into
+        `cloud_overflow_row` in the parent. a00a0f76b deleted the local-projects
+        consumers and left two orphaned doc lines — the clippy red, and nothing
+        more. The detachment came with `112ea637c`, which inserted a function
+        INTO THE GAP between a doc block and the thing it documents.
+
+        THE MECHANISM IS WORTH MORE THAN THE ATTRIBUTION: a doc comment does not
+        know what it describes. It attaches to whatever follows it, so inserting
+        a function between a doc block and its subject silently reassigns the
+        documentation and any `@trace` inside it, with NO diff hunk that looks
+        wrong. Both commits are individually correct, which is why reading a
+        diff could not find it and reconstructing the parent could. I read a
+        deletion-shaped diff and named the commit whose message said "remove".
+
+        3. "FIVE OF EIGHT HOSTS RUNNING A WRITING BINARY" IS NOT A DEFENSIBLE
+        COUNT and is replaced by per-host statements with their basis, because
+        one instance came from an instrument that could not run its subject
+        (esmeraldinha's .exe under WSL scores 5/16 with `Exec format error`):
+
+          macuahuitl    stale — built 15:32, installed copy 13:36 first on PATH
+          lenovinha     stale — 13:39 binary carried the 1079-qb8k refusal AND
+                        read 5/16; the independent pair proving the two
+                        properties are unrelated
+          macneo        stale — b98f2f9a7 absent from history, verified by them
+                        against their own source
+          pirria        stale — build-id and source-revision disagreed
+          yolanda       stale — 5/16 moved to 16/16 on REBUILD ALONE, which an
+                        exec-format failure cannot explain
+          esmeraldinha  stale by temporal impossibility only — .exe built
+                        08:31Z, b98f2f9a7 landed 23:59:59Z. Their 5/16 was not
+                        a measurement. What the artefact did is now unknowable;
+                        they remediated before measuring it properly.
+          yoga          clean
+          macbookair    clean — structurally, no PATH copy exists to drift
+
+        All eight now measure 16/16. The claim survives losing one instance;
+        the count did not.

@@ -66,6 +66,65 @@ unset _BUILDER_DIR
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# ── MEMORY-DERIVED CARGO_BUILD_JOBS CEILING (order 1047-h88p, arm 1) ─────────
+#
+# THE CAP MUST BE APPLIED INSIDE THE SCRIPT, not exported by the caller, and
+# that is not a style choice. esmeraldinha measured that CARGO_BUILD_JOBS does
+# NOT cross the wsl.exe boundary: scripts/with-wsl2-builder.sh forwards only
+# `compgen -v | grep '^TILLANDSIAS_'`, so `CARGO_BUILD_JOBS=2 wsl.exe …` arrives
+# UNSET in the distro (with WSLENV=CARGO_BUILD_JOBS it arrives as [2]). A cap
+# passed as a bare environment variable is therefore honoured on Linux and inert
+# on the Windows dispatch — silently, which is the worse half.
+#
+# WHY A CAP AT ALL. Measured on lenovinha 2026-09-05, one host, one observation
+# per cell: `./build.sh --check` completes at jobs 4 and 2, but a LAND — the
+# same gate plus the push and the pre-push ledger check — was OOM-killed at 4
+# AND at 2, and completed at 1. 13.5 GB total, 16 cores, so an uncapped gate
+# runs up to 16 rustc writers. A killed land is indistinguishable from a refused
+# one at a glance (nothing pushed, commit intact and rebased), which is what
+# makes this a correctness setting on a small-memory host rather than desktop
+# comfort — I nearly debugged my own change over one.
+#
+# ONLY WHERE MEASURED. This caps hosts BELOW 16 GB and leaves everything else
+# exactly as it is today. macuahuitl at 62 GB is untouched by construction. The
+# 16-32 GB band is UNMEASURED and deliberately gets no cap: inventing a ceiling
+# for a tier nobody has seen fail would be folklore, and the status quo there is
+# uncapped. If a mid-tier host starts dying, that is a measurement to add, not a
+# number to guess now.
+#
+# IT ONLY EVER LOWERS. An operator-set CARGO_BUILD_JOBS is honoured verbatim —
+# the cap defers to an explicit choice rather than overriding it, so a host that
+# knows better keeps its setting and this stays a floor-protection default.
+#
+# NOT ESMERALDINHA'S HALF. The IO-derived cap for the test and fixture phases is
+# measured on the floor tier and is a separate arm; this one is memory only.
+_tillandsias_memory_job_ceiling() {
+    local mem_kb mem_gb
+    mem_kb="$(awk '/^MemTotal:/ {print $2; exit}' /proc/meminfo 2>/dev/null || true)"
+    [[ "$mem_kb" =~ ^[0-9]+$ ]] || return 0   # unreadable: no cap, never a guess
+    mem_gb=$(( mem_kb / 1048576 ))
+    if (( mem_gb < 16 )); then
+        printf '1\n'
+    fi
+}
+# NO FORWARDING IS NEEDED, and that is why the cap is computed here rather than
+# mirrored into a TILLANDSIAS_ variable for with-wsl2-builder.sh to carry. The
+# gate RE-EXECS into the tillandsias-build distro and runs THIS script again
+# inside it, so this block evaluates on whichever side is actually going to run
+# cargo, against that side's own /proc/meminfo. A forwarded value would also
+# have been the wrong number: esmeraldinha measured the distro seeing 7942 MB
+# where the host has more, because WSL2 defaults to half of physical, so the
+# memory that matters for the jobs a distro-side cargo spawns is the distro's.
+# Closing the gap by construction beats carrying a value across a boundary that
+# is documented to drop it.
+if [[ -z "${CARGO_BUILD_JOBS:-}" ]]; then
+    _tillandsias_job_cap="$(_tillandsias_memory_job_ceiling)"
+    if [[ -n "$_tillandsias_job_cap" ]]; then
+        export CARGO_BUILD_JOBS="$_tillandsias_job_cap"
+    fi
+    unset _tillandsias_job_cap
+fi
+
 # Prefer a rustup-managed toolchain when present so optional targets such as
 # x86_64-unknown-linux-musl are visible to host-native builds.
 if [[ -d "$HOME/.cargo/bin" ]]; then
@@ -1191,6 +1250,19 @@ _write_gate_stamp() {
         } > "$_pass_token" 2>/dev/null || true
     fi
 
+    # ORDER 1063-363b. Verify BEFORE the stamp: the stamp's whole claim is "the
+    # gate validated THIS tree", and a tree the gate itself rewrote mid-run is
+    # not that tree. Refusing here keeps a corrupted run from minting the token
+    # that lets it push.
+    if [ -n "${_TRACKED_STATE:-}" ]; then
+        _step "Checking the gate did not write into the checkout (1063-363b)..."
+        if ! _run bash "$SCRIPT_DIR/scripts/check-tracked-files-unwritten.sh" verify "$_TRACKED_STATE" 2>&1; then
+            _error "the gate modified tracked files while measuring them (1063-363b) — every verdict after the write is suspect; restore with 'git checkout --' and see the named paths above"
+            exit 1
+        fi
+        _info "No tracked file was written during the gate"
+    fi
+
     _step "Writing the gate stamp..."
     if bash "$SCRIPT_DIR/scripts/gate-stamp.sh" write --scope full --dispatch "$_stamp_dispatch" >/dev/null 2>&1; then
         _info "Gate stamp recorded (pre-push will accept this tree)"
@@ -1612,6 +1684,16 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # than the clippy pass it would jump ahead of (2.3s), so hoisting it would
     # add more to every GREEN run than it saves on the red ones. If a guard here
     # ever grows past a second, it belongs back in the body.
+    # ORDER 1063-363b: BASELINE THE TREE THE GATE IS ABOUT TO MEASURE.
+    # On lenovinha 2026-09-05 something in the gates and litmus overwrote
+    # scripts/plan-binary-probe.sh in the WORKING TREE with the contents of
+    # scripts/check-fragment-status-loss.sh. That file is an instrument — half
+    # the gate resolves the plan binary through it — so every verdict taken
+    # after the write measured something other than the tree under test, and
+    # said so confidently. 61ms against a 254s gate.
+    _TRACKED_STATE="$(git rev-parse --absolute-git-dir 2>/dev/null)/tillandsias-tracked-baseline"
+    bash "$SCRIPT_DIR/scripts/check-tracked-files-unwritten.sh" snapshot "$_TRACKED_STATE" >/dev/null 2>&1 || true
+
     _step "Fast refusals: sub-second deciders before any compile (1009-gccx)..."
 
     if ! _run bash "$SCRIPT_DIR/scripts/check-scorable-obligation-added.sh" 2>&1; then
@@ -1667,6 +1749,17 @@ if [[ "$FLAG_CHECK" == true ]]; then
         _error "a new reader of TILLANDSIAS_SECURE_CONTROL_WIRE appeared (972-umik) — see the verdict line above"
         exit 1
     fi
+    # 1053-a7qr: a cheatsheet `sources:` anchor must name the file that
+    # DECLARES the order. Tree-only, sub-second, and it can fail — the fast
+    # phase by lenovinha's two criteria. Nothing read these anchors before:
+    # a fixture naming a nonexistent file AND a nonexistent order passed both
+    # the ghost-trace gate and trace-coverage.sh, because those scan `@trace`
+    # ANNOTATIONS and frontmatter is a different field.
+    if ! _run bash "$SCRIPT_DIR/scripts/check-cheatsheet-source-anchors.sh" 2>&1; then
+        _error "a cheatsheet anchors an order to a file that does not declare it (1053-a7qr) — see the verdict line above"
+        exit 1
+    fi
+
     _info "Fast refusals passed"
 
     # 765-uti9 quick win (velocity audit F3): the dedicated `cargo check
@@ -1990,6 +2083,21 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "expire-claims --list-live rows fixture passed"
+
+    # `expire-claims` must not mutate unless asked (1067-24q6). It defaulted to
+    # write mode, so asking what it would do RELEASED another host's claim —
+    # three independent hosts did it in one day, each catching it only by
+    # reading `git status` afterwards. The victim is by construction a host that
+    # is not present to object. Both directions are pinned: bare invocation
+    # leaves the ledger byte-identical, and --write still expires a genuinely
+    # stale claim, because "writes nothing" is trivially satisfied by breaking
+    # the reaper and would silently delete 641-e2qa criterion 2.
+    _step "Checking expire-claims writes only when asked (1067-24q6)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-expire-claims-write-is-opt-in.sh" 2>&1; then
+        _error "expire-claims mutates without an explicit --write, or --write no longer expires — a read probe can release another host's lease"
+        exit 1
+    fi
+    _info "expire-claims write-is-opt-in fixture passed"
 
     _step "Checking the release runbook's tag/back-merge order (898-zhf3)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-release-runbook-tag-order.sh" 2>&1; then
@@ -2350,6 +2458,90 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "$_ws_baseline_verdict"
 
+    # ORDER 1074-w7qv. THE FEATURE-GATED PASS BELONGS IN THE GATE THAT GUARDS
+    # LANDING, and until now it ran only under `--test`.
+    #
+    # `tray` and `listen-vsock` are not default features, so the --workspace
+    # pass above compiles neither `mod tray` nor `mod vsock_server`. A test
+    # added there ran nowhere before a push and the suite still counted it as
+    # coverage. The fix for order 254 was applied to `--test`, which a human
+    # runs deliberately; `--check` is what the pre-push hook stamps and what
+    # land-on-platform-branch.sh runs before every push.
+    #
+    # MEASURED on yoga 2026-09-06, `-- --list` counts, --all-targets:
+    #   tillandsias-headless        581 -> 745 under --all-features   +164
+    #   tillandsias-vm-layer         94 -> 159                         +65
+    #   tillandsias-router-sidecar   27 ->  57                         +30
+    #   tillandsias-control-wire     70 ->  69                          -1
+    # 258 tests no per-land gate compiled. This step closes the
+    # tillandsias-headless half — the crate whose gated modules are the tray's
+    # control socket and the in-VM control wire's server.
+    #
+    # NOT `--all-features`, AND THE -1 IS WHY. --all-features is NOT a superset
+    # of default: `transport::tests::vsock_listener_unsupported_on_non_linux`
+    # exists only when `vsock` is OFF, correctly, because it tests the
+    # unsupported path. A gate that reached for the maximum would add 258 and
+    # silently drop 1, with the larger number as its evidence of improvement.
+    # A maximum is not a matrix; this names its feature set explicitly.
+    #
+    # COST, measured on yoga 2026-09-06, and the first number I was given for
+    # this was wrong so all three are stated:
+    #   compile, FIRST run for this feature set   13.7s   (one-time per tree)
+    #   compile, steady state (artifacts cached)   0.16s
+    #   running the pass, parallel                33.9s
+    #   running the pass, SERIAL (what ships)     46.1s   for 679 tests
+    # So the recurring marginal cost is ~46s on a ~420s gate, about 11%. The
+    # 12s serial premium buys a failure set that does not move between runs,
+    # which is the difference between a gate and a coin flip.
+    #
+    # THE FEATURE SETS DO NOT THRASH EACH OTHER, which is the obvious fear and
+    # is measurable rather than arguable: `cargo test --workspace --no-run`
+    # immediately after the feature-gated build takes 247ms, so cargo keeps
+    # both artifact sets and neither pass rebuilds the other. Alternating them
+    # every gate costs nothing beyond the first build.
+    #
+    # A cited ~1.1s marginal compile turned out to be a warm measurement for an
+    # already-built feature set; measured cold here it is 13.7s. Re-measured
+    # rather than repeated.
+    #
+    # Deliberately NOT routed through the baseline ratchet, matching the
+    # --test pass: no known-red entry lives here today, so strict is correct.
+    _step "Running feature-gated tests (tray, listen-vsock) — 1074-w7qv..."
+    _fg_transcript="$SCRIPT_DIR/target/test-transcript-feature-gated-gate.log"
+    mkdir -p "$(dirname "$_fg_transcript")"
+    _fg_rc=0
+    # SERIAL, for the reason the --workspace pass above is serial, and it was
+    # not a precaution — it was measured here. Adding ONE deliberately failing
+    # probe to pty_handler also failed an unrelated
+    # `tray::tests::mcp_connection_is_denied_when_the_host_knows_no_projects`,
+    # which passes 3/3 on its own. These tests share process-global state, so
+    # under threads the failure set is a function of scheduling as well as of
+    # the tree, and merely ADDING a test can red a different one. A gate whose
+    # red set moves when you add an unrelated test teaches people to re-run it
+    # until it passes.
+    _run cargo test -p tillandsias-headless --bin tillandsias \
+        --features tray,listen-vsock --no-fail-fast \
+        --manifest-path "$SCRIPT_DIR/Cargo.toml" -- --test-threads=1 2>&1 |
+        tee "$_fg_transcript" || _fg_rc="${PIPESTATUS[0]}"
+    if [[ $_fg_rc -ne 0 ]]; then
+        _error "the tray/listen-vsock test set failed (cargo rc=$_fg_rc) — transcript: $_fg_transcript"
+        _error "these tests compile only with --features tray,listen-vsock; the --workspace pass above cannot see them"
+        exit 1
+    fi
+    # CRITERION 2: state how many actually RAN, so "ran 0 because the feature
+    # was off" is distinguishable from "ran and passed". A pass that silently
+    # executes nothing is the failure this packet exists to close, and it has
+    # a precedent — two bound tests once reported "0 passed; 383 filtered out",
+    # indistinguishable from a filter typo.
+    _fg_ran="$(awk '/^test result:/ { p += $4; f += $6 } END { print p + f + 0 }' "$_fg_transcript" 2>/dev/null)"
+    case "$_fg_ran" in ''|*[!0-9]*) _fg_ran=0 ;; esac
+    if [[ "$_fg_ran" -eq 0 ]]; then
+        _error "the feature-gated pass executed ZERO tests — the features did not take effect (1074-w7qv)"
+        _error "  transcript: $_fg_transcript"
+        exit 1
+    fi
+    _info "Feature-gated tests passed: $_fg_ran test(s) executed under tray,listen-vsock"
+
     # CRITERION 3 (1003-444f) IS SATISFIED BY --workspace, NOT BY A SECOND
     # CHECK, and the check I wrote first is deleted rather than shipped.
     #
@@ -2555,12 +2747,31 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # phase timing and the cd into SCRIPT_DIR, and a capture that dropped it
     # would silently stop this step being profiled.
     _archiver_log="$(mktemp "${TMPDIR:-/tmp}/tillandsias-archiver.XXXXXX")"
+    # ORDER 1074-96z9. A memo HIT used to emit nothing at all: this branch was
+    # `_info` and a return, so the step simply vanished from the timing log and
+    # the hit rate was not computable. The audit that nominates steps for
+    # memoisation could therefore never measure whether memoisation WORKED —
+    # and worse, kept re-nominating this already-memoised step, because its
+    # cheap hits no longer accumulated under any name to dilute the old
+    # average. The terminology memo (1054-zvq4) already carries the fix; this
+    # copies that convention rather than inventing a third.
+    #
+    # THE MISS DELIBERATELY STAYS INSIDE `_run`. build.sh's own 965-sxec note
+    # records that `_run` carries the phase timing, so lifting the work out of
+    # it to emit a tidier hit/miss pair would delete the only measurement of
+    # what this step actually COSTS while still satisfying "a hit is recorded".
+    # The hit/miss records answer "did the memo fire"; the `_run` phase record
+    # answers "what does the work cost". Both are needed and they are not the
+    # same number.
+    _arch_t0="$(timing_now_ms)"
     if _archiver_memo="$(bash "$SCRIPT_DIR/scripts/archiver-check-memo.sh" check 2>/dev/null)"; then
         _info "$_archiver_memo — ledger and archiver unchanged since the last pass; check not re-run"
+        timing_emit archiver-check-hit check "$_arch_t0" 0 || true
     else
         _run bash "$SCRIPT_DIR/scripts/archive-plan-packets.sh" --check 2>&1             | tee "$_archiver_log" || true
         _archiver_rc="${PIPESTATUS[0]}"
         [ "$_archiver_rc" -eq 0 ] && bash "$SCRIPT_DIR/scripts/archiver-check-memo.sh" record >/dev/null 2>&1 || true
+        timing_emit archiver-check-miss check "$_arch_t0" "${_archiver_rc:-1}" || true
     fi
     if [ "$_archiver_rc" -eq 3 ]; then
         # ORDER 965-sxec. A forge ships NO ruby by design, so the archiver's
@@ -2913,15 +3124,39 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
 
+    # ORDER 1054-zvq4. The check is pure over the dictionary, the locale files
+    # it scans and the checker itself, so its verdict is memoised on a digest of
+    # exactly those inputs (scripts/terminology-check-memo.sh). A hit repeats a
+    # verdict the same bytes earned; a change to any of them is a miss and runs
+    # it. Measured before memoising: 14.3s (yoga), 33.4s (lenovinha), 29.8s
+    # (macbookair), 25.4s (pirria), fail_pct=0 on all four — the step topped the
+    # skippable list on three hosts in the 2026-09-05 recurrence audit.
+    #
+    # The timing record carries hit= so the NEXT audit can measure the hit rate
+    # instead of bounding it: saved_ms_upper was only ever an upper bound
+    # because the timing log carried no input identity, and a memo that did not
+    # say whether it hit would leave the next reader with the same bound.
     _step "Checking user-visible terminology against the dictionary (629-t6bx)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-terminology.sh" 2>&1; then
-        # The script names the file, the variant and the offending string, and
-        # says the two remedies (fix the string, or add the variant to the
-        # dictionary if it is correct). Do not restate a cause here — its
-        # verdict distinguishes a violation from a blocked/unreadable
-        # dictionary, and a wrapper that collapses those sends the reader to
-        # the wrong fix.
-        exit 1
+    _term_t0="$(timing_now_ms)"
+    if _term_memo="$(bash "$SCRIPT_DIR/scripts/terminology-check-memo.sh" check 2>/dev/null)"; then
+        _info "$_term_memo — dictionary, locales and checker unchanged since the last pass; check not re-run"
+        timing_emit terminology-check-hit check "$_term_t0" 0 || true
+    else
+        if ! _run bash "$SCRIPT_DIR/scripts/check-terminology.sh" 2>&1; then
+            timing_emit terminology-check-miss check "$_term_t0" 1 || true
+            # The script names the file, the variant and the offending string, and
+            # says the two remedies (fix the string, or add the variant to the
+            # dictionary if it is correct). Do not restate a cause here — its
+            # verdict distinguishes a violation from a blocked/unreadable
+            # dictionary, and a wrapper that collapses those sends the reader to
+            # the wrong fix.
+            exit 1
+        fi
+        # RECORD ONLY AFTER A PASS, the same rule the gate stamp follows: a red
+        # verdict must never be memoised, or the next gate would repeat a
+        # failure's exit code as a hit and the check would go permanently green.
+        bash "$SCRIPT_DIR/scripts/terminology-check-memo.sh" record >/dev/null 2>&1 || true
+        timing_emit terminology-check-miss check "$_term_t0" 0 || true
     fi
     _info "Terminology gate passed"
 
@@ -3037,6 +3272,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Host-tools check passed"
 
+    _step "Checking cross-branch claim visibility refuses a packet held elsewhere (1034-whsp)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-claims-across-branches.sh" 2>&1; then
+        _error "the cross-branch claim check is unsound (1034-whsp) — a false 'nobody holds this' hands a claimed packet to a second host, which is the 814-iyu7 duplication"
+        exit 1
+    fi
+    _info "Cross-branch claim visibility passed"
+
     _step "Checking the raw frame-decode ratchet (795-5itp)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-framing-raw-decodes.sh" 2>&1; then
         _error "the framing ratchet refused (795-5itp) — a new hand-rolled u32-BE frame decode, or a baseline nobody tightened after a migration"
@@ -3088,6 +3330,77 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Archiver-check memo check passed"
 
+    # 1054-zvq4: the terminology memo's sibling fixture. Same bar as the
+    # archiver's above — a memo is only safe while it still MISSES, so the
+    # negative controls (dictionary, scanned source, a file appearing, the
+    # checker) are what this pins. A memo that only ever hits has stopped
+    # checking and would turn a gate green by never running it.
+    _step "Checking the terminology memo keys on the dictionary, the locales and the checker (1054-zvq4)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-terminology-check-memo.sh" 2>&1; then
+        _error "the terminology memo does not miss on a dictionary, locale or instrument change (1054-zvq4) — see the verdict line above"
+        exit 1
+    fi
+    _info "Terminology memo check passed"
+
+    # 876-irn7 + 1005-m6rz. The suite existed and was invoked by NOTHING — it
+    # pinned the cargo-resolution fix and could have rotted silently, which is
+    # the shape it was written to prevent one layer down. Binding it here is
+    # part of 1005-m6rz's closure. It compiles nothing and touches no real
+    # toolchain: every arm is hermetic in a scratch tree.
+    _step "Checking cargo resolution, git identity and the cargo-site registry (876-irn7, 1005-m6rz)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-cycle-preflight-cargo-resolution.sh" 2>&1; then
+        _error "a preamble host-readiness arm regressed (876-irn7, 1005-m6rz) — see the verdict line above"
+        exit 1
+    fi
+    _info "Preamble host-readiness checks passed"
+
+    # ORDER 1072-b7eq — THE GATE'S STEP LIST IS DATA AT THIS INSERTION POINT.
+    #
+    # Every host used to append its new fixture step to the end of this block,
+    # so every merge conflicted in the same thirty lines. The conflicts were
+    # content-free — both sides were additions, and every resolution was "keep
+    # both in sequence" — but resolving one is a CODE EDIT to build.sh, which
+    # sits outside the plan-only push lane, so a conflict that changed nothing
+    # anyone reviewed obliged a full ~25-minute re-gate on whichever host
+    # merged. Four such merges on 2026-09-05, one of them committed with its
+    # markers still in it.
+    #
+    # Now each step is one file under scripts/gate-steps.d/, so two hosts
+    # adding steps touch two different files and git merges them without a
+    # conflict. TO ADD A STEP: write a new .step file there. Do not add one
+    # here.
+    #
+    # THE LITERAL PATH STAYS GREPPABLE, and that is a constraint rather than a
+    # detail (1063-nraf): a binding assembled from a variable is invisible to
+    # every name-based scan, including the bound-or-retired guard — and thirty
+    # fixtures were already invoked by nothing when that was measured. Each
+    # .step file therefore carries `STEP_SCRIPT="scripts/test-<name>.sh"` as a
+    # plain string a grep can find, and this loop refuses a file whose script
+    # is missing rather than skipping it.
+    #
+    # Numeric prefixes fix the order and are spaced by ten so a later step can
+    # land between two without renaming either.
+    for _step_file in "$SCRIPT_DIR"/scripts/gate-steps.d/*.step; do
+        [ -e "$_step_file" ] || continue
+        STEP_DESC=""; STEP_SCRIPT=""; STEP_ERROR=""; STEP_OK=""
+        # shellcheck disable=SC1090
+        . "$_step_file"
+        if [ -z "$STEP_DESC" ] || [ -z "$STEP_SCRIPT" ]; then
+            _error "gate step ${_step_file##*/} declares no STEP_DESC/STEP_SCRIPT (1072-b7eq)"
+            exit 1
+        fi
+        if [ ! -f "$SCRIPT_DIR/$STEP_SCRIPT" ]; then
+            _error "gate step ${_step_file##*/} names $STEP_SCRIPT, which does not exist — a step that cannot run must refuse, not skip (1072-b7eq)"
+            exit 1
+        fi
+        _step "$STEP_DESC..."
+        if ! _run bash "$SCRIPT_DIR/$STEP_SCRIPT" 2>&1; then
+            _error "${STEP_ERROR:-$STEP_SCRIPT failed} — see the verdict line above"
+            exit 1
+        fi
+        _info "${STEP_OK:-${STEP_SCRIPT##*/} passed}"
+    done
+
     # 965-sxec: a missing or unusable ruby must read as COULD-NOT-RUN (exit 3),
     # never as a claim about the ready set. Inside a forge `command -v ruby`
     # finds a brew shim that cannot install one, exits 127, and the caller's
@@ -3137,6 +3450,145 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Issue-capture lane fixture passed"
+
+    # Order 1058-fenk. That fixture's precondition guarded on the executable
+    # BIT, so an ELF that cannot link inside the toolbox took the branch meant
+    # for a present binary and every gate on a rolling-release host went red at
+    # a head that was green with an empty target/release. This pin drives the
+    # fixture with an unlinkable stub at target/release and asserts it SKIPS
+    # with a named reason, plus the control that a runnable binary still
+    # exercises the ledger arms — a fix of "skip always" would pass the first
+    # arm and remove the validation the lane depends on.
+    _step "Checking an unrunnable plan binary skips with a reason, not a precondition FAIL (1058-fenk)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-plan-binary-runnability-precondition.sh" 2>&1; then
+        _error "the issue-capture precondition no longer distinguishes an unrunnable binary from an absent one (1058-fenk) — see the verdict line above"
+        exit 1
+    fi
+    _info "Plan-binary runnability pin passed"
+
+    # Order 1060-wxdh. cycle-preflight installs the resolved plan binary over
+    # ~/.local/bin/tillandsias-plan, and resolve_plan_binary honours an explicit
+    # override WITHOUT running it — so a preflight with a broken override
+    # replaced this host's canonical copy with a binary that could not link.
+    # 30ms, and it pins both the refusal and that preflight still routes through
+    # the guarded function rather than installing directly.
+    _step "Checking an unrunnable binary is never installed over the canonical copy (1060-wxdh)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-plan-binary-copy-refresh.sh" 2>&1; then
+        _error "the expert-refresh no longer refuses an unrunnable binary (1060-wxdh) — see the verdict line above"
+        exit 1
+    fi
+    _info "Expert-refresh runnability pin passed"
+
+    # Order 1060-6fx7. The lane set have_plan from "the probe returned a path",
+    # and the probe honours an explicit override without executing it — so a
+    # binary that could not link became a validator and its failures were
+    # reported as faults in the pushed LEDGER. Both controls matter: a real
+    # malformed fragment must still be refused, and a real ledger fault must not
+    # be blamed on the instrument.
+    _step "Checking the lane blames the instrument, not the ledger, when the binary cannot run (1060-6fx7)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-lane-instrument-vs-ledger.sh" 2>&1; then
+        _error "the plan-only lane misattributes an instrument failure to the ledger (1060-6fx7) — see the verdict line above"
+        exit 1
+    fi
+    _info "Instrument-vs-ledger pin passed"
+
+    # Order 1059-pb2j. A litmus step whose NAME promises a MUTATION or SABOTAGE
+    # while its command performs none is asserting nothing, and a reader
+    # auditing the suite reads names. Three instances were found by three
+    # unrelated routes before this was mechanised. Sub-second; the fixture
+    # carries the real pre-fix arm from git history as its positive control.
+    _step "Checking litmus steps named MUTATION/SABOTAGE actually mutate (1059-pb2j)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-mutation-arms-mutate.sh" 2>&1; then
+        _error "a litmus step named for a mutation performs none (1059-pb2j) — rename it to what it asserts; see the verdict line above"
+        exit 1
+    fi
+    if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-mutation-arm-guard.sh" 2>&1; then
+        _error "the mutation-arm guard lost a control (1059-pb2j) — see the verdict line above"
+        exit 1
+    fi
+    _info "Mutation-arm guard and fixture passed"
+
+    # Order 734-sjb3. The pre-commit spec sweep now excludes build output, which
+    # is only safe if it does not change the ANSWER — a spec referenced solely
+    # from target/ would otherwise be reported as a zero-trace spec that is not
+    # one, a false accusation produced by an optimisation.
+    _step "Checking the pre-commit spec sweep's exclusions are answer-preserving (734-sjb3)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-precommit-zero-trace-scan-scope.sh" 2>&1; then
+        _error "excluding build output changed the referenced-spec set (734-sjb3) — see the verdict line above"
+        exit 1
+    fi
+    _info "Zero-trace scan scope pin passed"
+
+    # Order 1024-c3h3. An evidence SHA captured before land-on-platform-branch
+    # rewrites the commit names a ref that never reaches origin, and a reader
+    # cannot tell that from "the code never landed" — opposite diagnoses. The
+    # fixture reproduces the rewrite and pins that the two stay separable.
+    _step "Checking a rewritten evidence SHA is named with its landed replacement (1024-c3h3)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-closure-evidence-survives-landing.sh" 2>&1; then
+        _error "the closure-evidence check no longer separates a rewritten ref from work that never landed (1024-c3h3) — see the verdict line above"
+        exit 1
+    fi
+    _info "Closure-evidence landing pin passed"
+
+    # Order 1063-363b. The guard above only helps if it can still SEE a write —
+    # a comparison that drops paths with spaces, or reads a missing baseline as
+    # a clean tree, would be worse than none.
+    _step "Checking the tracked-file guard still detects a write (1063-363b)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-tracked-files-unwritten-guard.sh" 2>&1; then
+        _error "the tracked-file guard lost an arm (1063-363b) — see the verdict line above"
+        exit 1
+    fi
+    _info "Tracked-file guard fixture passed"
+
+    # Order 1064-5hv2. The hook can now report its own per-phase timings, so a
+    # host measuring drift no longer has to make a throwaway copy with the
+    # warning forced true — which macbookair and yoga both did, independently,
+    # hours apart. The last arm pins that the 1x-to-4x blind band is still OPEN,
+    # so closing it cannot happen quietly without the volume evidence.
+    _step "Checking the hook can report its own phase timings (1064-5hv2)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-hook-phase-instrumentation.sh" 2>&1; then
+        _error "the hook's phase instrumentation or its drift warning changed (1064-5hv2) — see the verdict line above"
+        exit 1
+    fi
+    _info "Hook phase-instrumentation pin passed"
+
+    # Order 1034-whsp. A claim lands on the claimant's PLATFORM branch and only
+    # reaches a trunk host when the coordinator relays it — measured gaps of 19
+    # minutes to 2h02m — so a selector reading its own branch alone hands out
+    # work another host is doing. The third arm is the one that matters: a
+    # checker that cannot fold the siblings must leave the batch ALONE and say
+    # so, or a network blip stops every host.
+    _step "Checking the selector drops packets held on a sibling branch (1034-whsp)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-selector-drops-cross-branch-claims.sh" 2>&1; then
+        _error "the selector's cross-branch claim filter changed (1034-whsp) — see the verdict line above"
+        exit 1
+    fi
+    _info "Selector cross-branch filter pin passed"
+
+    # Order 1033-iycs. The land tool discarded the gate's entire output, so its
+    # refusal named no step and no log — in the file whose header records that
+    # discarding the PUSH's output reported LANDED for a refused push. The
+    # negative control matters as much as the rest: arms that only check a
+    # refusal are satisfied by a tool that refuses unconditionally.
+    _step "Checking a land gate refusal names its step and its log (1033-iycs)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-land-gate-refusal-names-its-step.sh" 2>&1; then
+        _error "the land tool's gate refusal lost its diagnostic (1033-iycs) — see the verdict line above"
+        exit 1
+    fi
+    _info "Land-refusal diagnostic pin passed"
+
+    # Order 1056-5344. The lane now scopes PAST a mandated merge of
+    # origin/linux-next, which widens the bypass further: without the ancestry
+    # gate a host could park code on a side branch, merge it --no-ff, and the
+    # first-parent view would not see it. Arm 3 of this fixture is that negative
+    # control, so it belongs inside the gate for the same reason its sibling
+    # does — a control nothing executes cannot protect the hole it names.
+    _step "Checking the plan-only lane survives the mandated merge without opening a bypass (1056-5344)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-pre-push-plan-lane-after-merge.sh" 2>&1; then
+        _error "the plan-only lane's merge scoping lost a boundary (1056-5344) — see the verdict line above"
+        exit 1
+    fi
+    _info "Plan-lane merge-scoping fixture passed"
 
     # Order 251 criterion LM-04. `plan/long-running.md` is declared a filtered
     # view of the ledger's active multi_cycle packets and nothing enforced it.
@@ -3231,6 +3683,114 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Freshness regime-budget fixture passed"
+
+    # 1063-nraf / 1041-up99: this fixture was ORPHANED — invoked by no script,
+    # no litmus binding and no skill — while plan/index.yaml stated, of it, "THE
+    # NEGATIVE CONTROL, pinned by scripts/test-expert-accuracy-record-shape.sh,
+    # 6/6". The ledger recorded an enforcement that did not run. That is worse
+    # than recording none: a later reader has no reason to doubt it, and the
+    # control it names is the one that keeps a never-called expert from being
+    # reported as 100% accurate rather than as null.
+    #
+    # Wired here rather than left to a human's memory, which is the whole of
+    # 1063-nraf: a fixture pinning a verdict that can delete a host's cycle runs
+    # only when someone remembers to run it. Verified green before wiring
+    # (ok:test-expert-accuracy-record-shape:6-passed) — wiring a red fixture
+    # would trade a silent gap for a broken gate.
+    _step "Checking the expert-accuracy record shape (917-6iwv)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-expert-accuracy-record-shape.sh" 2>&1; then
+        _error "the expert-accuracy record shape regressed (917-6iwv) — a never-called expert must record rate=null, never 0 and never 100, and a partial run must carry its denominator"
+        exit 1
+    fi
+    _info "Expert-accuracy record fixture passed"
+
+    # ── 1063-nraf: TEN ORPHANED FIXTURES BOUND ─────────────────────────────
+    #
+    # These ran only when a human remembered to run them. Each was triaged
+    # individually (what it pins, whether its exit code is environmental or a
+    # defect, what would break on a host unlike this one) and then ADVERSARIALLY
+    # REFUTED by a second reader whose job was to find a reason NOT to wire it.
+    # Only these ten survived both passes.
+    #
+    # THE REFUTATION PASS IS WHY THIS LIST IS TEN AND NOT THIRTEEN. Three more
+    # were proposed for wiring on the first pass and refuted: check-carry-forward,
+    # skills-single-source and secrets. All three PASS on this host and are still
+    # unsafe to bind — which is the finding, not the exception. A green exit code
+    # was never evidence that a fixture belongs in the gate; eleven of the
+    # twenty-six pass here and are recorded as FIX_FIRST on the packet with the
+    # reason each one would red a host that is not this one.
+    #
+    # COST, measured rather than assumed, so the fleet's slowest gate does not
+    # grow silently: 1.39s total for all ten (scorable-obligation-gate 580ms,
+    # forge-findings-persisted 283ms, check-engine-cpu-dispatch 206ms,
+    # podman-sync-budgets 116ms, guest-unit-hardening 62ms, plan-binary-probe
+    # 45ms, litmus-steps-can-fail 38ms, git-credential-helper 28ms,
+    # build-sh-forge-check-only 18ms, subdomain-routing 14ms) against a ~332s
+    # gate — 0.4%. None touches podman, the network, or the working tree.
+    # LITERAL NAMES, NOT A LOOP, AND THAT IS THE POINT. The first version of
+    # this block wired all ten through `for _orphan in ...; do _run bash
+    # "$SCRIPT_DIR/scripts/test-${_orphan}.sh"`. It worked — every fixture ran —
+    # and it left the orphan count UNCHANGED at 26, because no name-based scan
+    # can see a reference assembled from a variable. That includes the
+    # bound-or-retired guard this packet exists to build, and it includes a
+    # human grepping for the fixture name. A binding nobody can find is the
+    # defect this packet is about, so the compact form was the wrong form.
+    _step "Checking test-build-sh-forge-check-only (1063-nraf; 18ms)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-build-sh-forge-check-only.sh" 2>&1; then
+        _error "scripts/test-build-sh-forge-check-only.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
+        exit 1
+    fi
+    _step "Checking test-check-engine-cpu-dispatch (1063-nraf; 206ms)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-check-engine-cpu-dispatch.sh" 2>&1; then
+        _error "scripts/test-check-engine-cpu-dispatch.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
+        exit 1
+    fi
+    _step "Checking test-forge-findings-persisted (1063-nraf; 283ms)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-forge-findings-persisted.sh" 2>&1; then
+        _error "scripts/test-forge-findings-persisted.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
+        exit 1
+    fi
+    _step "Checking test-git-credential-helper (1063-nraf; 28ms)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-git-credential-helper.sh" 2>&1; then
+        _error "scripts/test-git-credential-helper.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
+        exit 1
+    fi
+    _step "Checking test-guest-unit-hardening (1063-nraf; 62ms)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-guest-unit-hardening.sh" 2>&1; then
+        _error "scripts/test-guest-unit-hardening.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
+        exit 1
+    fi
+    _step "Checking test-litmus-steps-can-fail (1063-nraf; 38ms)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-steps-can-fail.sh" 2>&1; then
+        _error "scripts/test-litmus-steps-can-fail.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
+        exit 1
+    fi
+    _step "Checking test-plan-binary-probe (1063-nraf; 45ms)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-plan-binary-probe.sh" 2>&1; then
+        _error "scripts/test-plan-binary-probe.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
+        exit 1
+    fi
+    _step "Checking test-podman-sync-budgets (1063-nraf; 116ms)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-podman-sync-budgets.sh" 2>&1; then
+        _error "scripts/test-podman-sync-budgets.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
+        exit 1
+    fi
+    _step "Checking test-scorable-obligation-gate (1063-nraf; 580ms)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-scorable-obligation-gate.sh" 2>&1; then
+        _error "scripts/test-scorable-obligation-gate.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
+        exit 1
+    fi
+    _step "Checking the held-claim report (1115-srfr)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-cycle-claims-report.sh" 2>&1; then
+        _error "scripts/test-cycle-claims-report.sh failed — the exit-time held-claim report is what stops a cycle ending on an unreleased claim; read the fixture output above"
+        exit 1
+    fi
+    _step "Checking test-subdomain-routing (1063-nraf; 14ms)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-subdomain-routing.sh" 2>&1; then
+        _error "scripts/test-subdomain-routing.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
+        exit 1
+    fi
+    _info "Ten formerly-orphaned fixtures passed (1063-nraf)"
 
     _step "Checking litmus steps can actually fail (972-cvdg)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-steps-can-fail.sh" 2>&1; then

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: expire-claims-mutates-other-hosts-leases-by-default-so-a-read-probe-releases-them
+    event:
+      type: finding
+      ts: "2026-09-05T17:20:52Z"
+      agent_id: linux-macuahuitl-claude-20260905t172052z
+      host: macuahuitl
+      summary: |
+        THE FIX IS NARROWER THAN FILED, AND THE FLAG ALREADY EXISTS (coordinator, 17:0xZ, found while looking for a read-only way to run the sweep after causing the 16:41Z instance). `tillandsias-plan expire-claims` accepts `--dry-run` (crates/tillandsias-plan/src/main.rs, the arg loop at ~6620 sets `dry_run` on it); `--list-live` does NOT imply it. Verified read-only in the working tree: `expire-claims --dry-run --list-live` printed the same rows plus `mode=dry-run`, and the fragment count in plan/index.d was identical before and after with a clean worktree, where the same command without --dry-run wrote an expiry an hour earlier. So the packet does not need a new opt-in invented: the writing path is already opt-out, and the defect is that the DEFAULT is the mutating one and that a read-shaped verb does not imply the read-only mode. The criteria narrow accordingly: `--list-live` (and any listing or reporting verb) implies dry-run; mutation requires the explicit flag; and the both-directions fixture asserts every documented read verb leaves the ledger byte-identical, which is macbookair's tightening and is what would have caught this on their host where a bare-invocation-only arm would have passed. UNTIL IT LANDS, the coordinator's sweep runs `expire-claims --dry-run --list-live` in every cycle and any host auditing leases should do the same; that is recorded here rather than only in a skill because the wrong invocation is the one that reads correct.

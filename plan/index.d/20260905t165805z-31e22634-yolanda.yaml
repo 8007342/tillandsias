@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-wsl-dispatch-drops-every-tillandsias-control-flag-at-the-boundary
+    event:
+      type: progress
+      ts: "2026-09-05T16:58:05Z"
+      agent_id: windows-yolanda-opus5-20260905t165804z
+      host: yolanda
+      summary: |
+        ALL FOUR EXIT CRITERIA MET, and criterion 1 is DEMONSTRATED rather than argued as it demanded. Landed with the shared forward at 8cf111fce.
+
+        MEASURED AT HEAD BEFORE CHANGING ANYTHING, because the packet was filed when the WSL side forwarded a single hardcoded flag and the tree has moved since. Both boundaries already forwarded the namespace: 889-8tcb carried the fix across to with-wsl2-builder.sh. So criteria 1-3 were already satisfied by that order and criterion 4 was not. Saying so rather than claiming credit for work another order did.
+
+        CRITERION 1, SHOWN NOT ARGUED, three runs on this host in sequence:
+          RUN 1, unforced, tree changed: re-ran, 1151s of gate phases, wrote the stamp.
+          RUN 2, unforced again: "ok:gate-fresh (stamped 2026-09-05T16:39:22Z; TILLANDSIAS_FORCE_CHECK=1 to re-run) / Tree bytes and toolchain are unchanged since that passing gate; nothing re-run."
+          RUN 3, TILLANDSIAS_FORCE_CHECK=1: ZERO occurrences of gate-fresh in the whole log, re-ran, 1000s of gate phases, wrote a new stamp.
+        That is a forced run after an unforced one on the platform where the flag used to die silently.
+
+        CRITERION 2, the other flag the toolbox comment names: TILLANDSIAS_SKIP_VERSION_BUMP arrives set inside the distro across the real wsl.exe boundary.
+
+        CRITERION 3, THE NEGATIVE CONTROL: a name that was never set on the host arrives UNSET inside WSL. This is the arm that matters, because from the near side "forwards correctly" and "exports everything it can think of" are indistinguishable -- only the unset case separates them. Pinned in the fixture, not left to inspection.
+
+        CRITERION 4 WAS THE ONLY OPEN ONE AND IS WHAT THIS COMMIT DOES. Two independent copies of the same four-line loop existed, differing only in variable names and a stray space. The criterion offers "share the logic, or a check proves they agree"; sharing is the stronger option because it makes divergence IMPOSSIBLE rather than detectable, and a third dispatch now has something to call instead of a fourth thing to reimplement. Both dispatches call scripts/lib-env-forward.sh.
+
+        I HONOURED THE PACKET'S OWN WARNING rather than discovering it late: "Do not fix this by hardcoding a second flag into _ENV_PREFIX. That is what made the current state look intentional." Nothing was hardcoded; the namespace is forwarded.
+
+        FIXTURE, 10 arms, wired into build.sh, each guarded property redding under its OWN sabotage:
+          - make the forward MANUFACTURE a value: arm 2 reds. That is criterion 3 and the scorable half.
+          - drop the %q quoting: arm 3 reds in BOTH directions -- the value arrives truncated at the first space AND the fixture's canary file is CREATED. The injection is demonstrated, not asserted: a forwarded flag containing a semicolon is otherwise a command the far side runs. That seam was already closed; the arm keeps it closed.
+          - arm 5 appends a bespoke compgen loop to a scratch copy of a dispatch and requires the arm-4 detector to catch it, because a structural assertion that cannot fail is decoration.
+
+        ONE DISTINCTION THE FIXTURE MAKES DELIBERATELY: an empty-but-SET flag still crosses, because TILLANDSIAS_X= is how an operator turns something off explicitly, and collapsing it into "unset" would silently discard an instruction.

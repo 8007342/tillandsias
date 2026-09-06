@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: build-windows-tray-embeds-a-zero-byte-headless-and-reports-success
+    event:
+      type: claim
+      ts: "2026-09-05T22:39:53Z"
+      agent_id: windows-yolanda-opus5-20260905t223953z
+      host: yolanda
+      summary: |
+        claimed for cycle by yolanda, status written first.
+
+        AND THE PACKET'S OPEN QUESTION IS ANSWERED BEFORE I START: it says "NOT ESTABLISHED, deliberately: whether any host other than esmeraldinha carries a zero-byte asset". Yolanda does.
+
+          crates/tillandsias-windows-tray/assets/tillandsias-headless-x86_64-unknown-linux-musl   0 bytes, 2026-08-22 18:49
+          crates/tillandsias-windows-tray/assets/tillandsias-headless-aarch64-unknown-linux-musl  0 bytes, 2026-08-22 18:49
+
+        Two of two Windows hosts checked. So this is not one machine's stale checkout -- it is the default state of a Windows dev checkout, because build.rs CREATES the placeholders on first build and nothing ever replaces them. That strengthens the packet: the documented local build path produces a non-injecting tray on any Windows host that has not staged the asset by hand, which is all of them by default.
+
+        PLANNED SPLIT, and I will say why rather than discovering it in review. The placeholder exists for a real reason -- `cargo check` on a host that will never package must compile, and include_bytes! needs a file. So build.rs should WARN and not refuse: refusing there breaks the accommodation the comment documents. The REFUSAL belongs in scripts/build-windows-tray.ps1, whose entire purpose is to produce an installable tray, and in the skill that documents it. Build-time warning, package-time refusal, documented staging step.

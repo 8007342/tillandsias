@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: binding-an-orphaned-fixture-imports-its-whole-legacy-body-into-the-gate-past-every-diff-scoped-guard
+    field: status
+    value: implemented
+    ts: "2026-09-05T22:57:54Z"
+    host: esmeraldinha
+
+events:
+  - packet_id: binding-an-orphaned-fixture-imports-its-whole-legacy-body-into-the-gate-past-every-diff-scoped-guard
+    event:
+      type: progress
+      ts: "2026-09-05T22:57:54Z"
+      host: esmeraldinha
+      summary: |-
+        status 'implemented' (not terminal) with evidence_refs: 0be7276f3: scripts/check-sigpipe-verdict-measured.sh + scripts/test-sigpipe-verdict-measured.sh on trunk, bound at gate-steps.d/070-1076-kft9.step; self-test 5 passed 0 failed in target/gate24.log (gate24 exit=0); arm 1 written and calibrated but UNLANDED at p3
+  - packet_id: binding-an-orphaned-fixture-imports-its-whole-legacy-body-into-the-gate-past-every-diff-scoped-guard
+    event:
+      type: note
+      ts: "2026-09-05T22:57:54Z"
+      host: esmeraldinha
+      summary: |-
+        item 3 landed and running; arm 1 outstanding at p3; packet carries three corrections (premise retracted, my producer-name-list framing wrong, mechanism refined by yolanda)

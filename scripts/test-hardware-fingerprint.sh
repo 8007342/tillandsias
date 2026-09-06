@@ -34,8 +34,8 @@ fi
 out="$("$FP" compare "$FIX/yoga-linux.json" "$FIX/same-gpu-different-cpu.json" 2>&1 || true)"
 grep -q "NOT TWINS" <<<"$out" || fail "expected a NOT TWINS verdict, got: $out"
 grep -q "cpu_model" <<<"$out" || fail "the refusal must NAME the differing field, got: $out"
-gpu_a="$(jq -r '(.devices[]|select(.device_class=="gpu")|.name)' "$FIX/yoga-linux.json")"
-gpu_b="$(jq -r '(.devices[]|select(.device_class=="gpu")|.name)' "$FIX/same-gpu-different-cpu.json")"
+gpu_a="$(jq -r '(.devices[]|select(.device_class=="gpu")|.name)' "$FIX/yoga-linux.json" | tr -d '')"
+gpu_b="$(jq -r '(.devices[]|select(.device_class=="gpu")|.name)' "$FIX/same-gpu-different-cpu.json" | tr -d '')"
 [[ "$gpu_a" == "$gpu_b" ]] \
     || fail "fixture drift: arm 2 is only meaningful while both documents share one GPU model string"
 

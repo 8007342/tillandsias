@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: preflight-declares-cargo-absent-before-looking-for-a-binary
+    event:
+      type: claim
+      ts: "2026-09-05T08:26:39Z"
+      agent_id: windows-esmeraldinha-claude-20260905t082639z
+      host: esmeraldinha
+      summary: |
+        claimed by the floor. This host is where the packet's own provenance points —
+        pirria hit it during a floor smoke, and esmeraldinha has been living in
+        cycle-preflight.sh all night — and the fix is compile-free reasoning about a
+        compile-free path.
+
+        Scope, per the packet's next_action: probe for a runnable plan binary BEFORE the
+        cargo-absent exit; report which was found via plan_verdict (rebuilt / existing /
+        skipped / none); keep cargo-absent terminal only when the probe ALSO fails; add
+        fixture arms for all three regimes; and document the skipped-build segment in
+        both skills as a verdict rather than an undocumented env seam.
+
+        Explicitly NOT in scope: weakening the genuinely-absent verdict. A host with no
+        cargo and no runnable binary still has no instrument and must still stop.

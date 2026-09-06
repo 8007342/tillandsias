@@ -60,6 +60,13 @@ make_repo() {
         cp "$ROOT/scripts/gate-stamp.sh" scripts/
         cp "$ROOT/scripts/hooks/pre-push-local-gate.sh" scripts/hooks/
         cp "$ROOT/scripts/plan-binary-probe.sh" scripts/ 2>/dev/null || true
+        # ORDER 1069-5sp4: the lane now runs the scorable-obligation guard, so
+        # the temp repo carries it and the arm exercises the REAL lane path
+        # rather than the absent-checker skip. (The lane only NOTES the absence,
+        # so this cp is not required for the arm to pass — it is here so the arm
+        # measures the lane instead of which scripts the fixture copied, the same
+        # substitution this file's own case-7 note records for yq on macOS.)
+        cp "$ROOT/scripts/check-scorable-obligation-added.sh" scripts/ 2>/dev/null || true
         printf 'packets: []\n' > plan/index.yaml
         printf 'pub fn seed() {}\n' > crates/demo/lib.rs
         printf 'seed\n' > README.md

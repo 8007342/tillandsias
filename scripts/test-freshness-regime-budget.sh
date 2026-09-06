@@ -132,11 +132,31 @@ fi
 # timeout_ms is a hard ceiling now; it must sit ABOVE the largest regime budget,
 # or the runner kills the step before the step can report its own verdict, and
 # a timeout kill reads as a hang rather than as a budget breach.
-_ceiling="$(grep -A1 'freshness-regime-budget.sh' "$LIT" | grep -oE 'timeout_ms: [0-9]+' | grep -oE '[0-9]+' | head -1)"
-if [ -n "$_ceiling" ] && [ "$_ceiling" -gt "$REMOTE" ]; then
+# 1083-gzqj: SEPARATE "I could not find the ceiling" FROM "the ceiling is wrong".
+# This was `grep -A1 <selector> | grep -oE 'timeout_ms: [0-9]+'`: a POSITIONAL
+# parse requiring timeout_ms to be the very next line after the command, over a
+# file scanned INCLUDING its comments (the selector's name appears in prose in
+# the block above the step). Insert a `description:` between the two keys,
+# reorder them, or wrap the long command in a block scalar — all edits that
+# change nothing semantically — and the parse yields "", and the arm reds with
+# "runner ceiling '' does not exceed the remote budget". Two different failures
+# collapsed into one message, and the message names the wrong one: the ceiling
+# is fine, the fixture cannot read it. Found in my own file by the 1083-gzqj
+# sweep, which is the class I raised.
+_lit_code="$(sed '/^[[:space:]]*#/d' "$LIT")"
+_ceiling="$(awk '
+    /^[[:space:]]*-[[:space:]]*step:/ { inblk = 0 }
+    /freshness-regime-budget\.sh/    { inblk = 1 }
+    inblk && match($0, /timeout_ms:[[:space:]]*[0-9]+/) {
+        s = substr($0, RSTART, RLENGTH); gsub(/[^0-9]/, "", s); print s; exit
+    }
+' <<<"$_lit_code")"
+if [ -z "$_ceiling" ]; then
+    bad "no timeout_ms found in the budget-selector step block of $LIT — the fixture cannot READ the ceiling, which is not the same as the ceiling being too low"
+elif [ "$_ceiling" -gt "$REMOTE" ]; then
     ok "the runner ceiling ($_ceiling ms) is above the largest regime budget ($REMOTE ms)"
 else
-    bad "runner ceiling '$_ceiling' does not exceed the remote budget $REMOTE — the runner would kill the step first"
+    bad "the runner ceiling ${_ceiling}ms does not exceed the remote budget ${REMOTE}ms — the runner would kill the step before it could report a budget breach"
 fi
 
 printf 'freshness-regime-budget: %d passed, %d failed\n' "$pass" "$fail"

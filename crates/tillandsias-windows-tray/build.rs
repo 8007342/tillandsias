@@ -40,16 +40,46 @@ fn main() {
     // where it actually matters — see package-msix in build-windows-tray.ps1.
     render_msix_logos(&manifest_dir_path);
 
-    // Generate dummy headless binaries if they do not exist so include_bytes! compiles
+    // Generate dummy headless binaries if they do not exist so include_bytes! compiles.
+    //
+    // ORDER 1059-ry6t: THE PLACEHOLDER STAYS, THE SILENCE DOES NOT. Writing an
+    // empty file here is the same accommodation render_msix_logos documents
+    // above -- a missing asset must not break `cargo check` on a host that will
+    // never package -- and that policy already names where absence becomes an
+    // error: "the packaging step ... because that is where it actually
+    // matters". This asset never got the second half.
+    //
+    // WHAT THAT COST, measured 2026-09-05: the asset was 0 bytes on
+    // esmeraldinha since 2026-08-23 and 0 bytes on yolanda since 2026-08-22 --
+    // two of two Windows hosts checked, because build.rs CREATES the
+    // placeholder on first build and nothing ever replaces it. So the default
+    // state of a Windows dev checkout is a tray that compiles, links, prints
+    // `Built:` and exits 0, and whose guest injection is a silent no-op. A tray
+    // built that way does not fail at build; it fails later, in a guest that
+    // behaves like an older release for no visible reason.
+    //
+    // The warning fires on the ZERO-BYTE CONDITION rather than only on
+    // creation, because the file persists: a host that generated the
+    // placeholder in August would otherwise never be told again.
     let assets_dir = manifest_dir_path.join("assets");
     let _ = std::fs::create_dir_all(&assets_dir);
-    let x86_bin = assets_dir.join("tillandsias-headless-x86_64-unknown-linux-musl");
-    if !x86_bin.exists() {
-        let _ = std::fs::write(&x86_bin, b"");
-    }
-    let arm_bin = assets_dir.join("tillandsias-headless-aarch64-unknown-linux-musl");
-    if !arm_bin.exists() {
-        let _ = std::fs::write(&arm_bin, b"");
+    for arch in ["x86_64", "aarch64"] {
+        let bin = assets_dir.join(format!("tillandsias-headless-{arch}-unknown-linux-musl"));
+        if !bin.exists() {
+            let _ = std::fs::write(&bin, b"");
+        }
+        let is_placeholder = std::fs::metadata(&bin)
+            .map(|m| m.len() == 0)
+            .unwrap_or(true);
+        if is_placeholder {
+            println!(
+                "cargo:warning=tillandsias-windows-tray: {} is 0 bytes (placeholder). \
+                 This build embeds an EMPTY guest binary, so guest injection will be a \
+                 SILENT NO-OP at runtime. Stage the real musl headless before packaging \
+                 -- scripts/build-windows-tray.ps1 refuses on this condition (1059-ry6t).",
+                bin.display()
+            );
+        }
     }
 
     // Read the workspace VERSION file and expose it as WORKSPACE_VERSION so

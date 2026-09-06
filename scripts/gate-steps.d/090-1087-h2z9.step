@@ -1,0 +1,20 @@
+# Gate step 1087-h2z9 — data, not code (order 1072-b7eq).
+#
+# WHY THIS ONE IS IN --check AND NOT ONLY IN --ci-full, which would be the
+# obvious place for a check about --ci-full: a difference between the two gates
+# that is only detectable by the slower gate is detectable once a day, which is
+# the exact accumulation window this packet is about. It has to run where every
+# host runs.
+#
+# It is a set comparison over two files plus a small data file — sub-second, no
+# build artifact, no podman, no network. See the fixture header for why the
+# untriaged count ratchets rather than redding: there were 22 on the day it was
+# written, and a gate that reds trunk on day one gets switched off.
+#
+# STEP_SCRIPT is a LITERAL path on purpose: a binding assembled from a
+# variable is invisible to every name-based scan, including the
+# bound-or-retired guard (1063-nraf). Keep it a plain string.
+STEP_DESC="Checking every landing-gate/release-gate difference is declared (1087-h2z9)"
+STEP_SCRIPT="scripts/test-gate-divergence-is-declared.sh"
+STEP_ERROR="a check runs in --ci-full and not in --check without being declared, or the untriaged ratchet turned the wrong way (1087-h2z9) — see the verdict line above"
+STEP_OK="Gate-divergence declaration check passed"

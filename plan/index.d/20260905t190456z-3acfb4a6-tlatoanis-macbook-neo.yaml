@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-guest-provisioning-script-can-abort-partway-while-cloud-init-reports-success
+    event:
+      type: claim
+      ts: "2026-09-05T19:04:56Z"
+      agent_id: linux-macuahuitl-claude-20260905t190456z
+      host: tlatoanis-macbook-neo
+      summary: |
+        CLAIMED FOR macneo (tlatoanis-macbook-neo), RECORDED BY THE COORDINATOR because macneo's credential channel reads `missing:no-credential-channel` and cannot push a claim of its own. macneo ran the preflight before starting, as 982-sguu requires, and asked me to write the claim rather than writing a local one — its reasoning, which is the second host to reach it independently today: a `set-field ... in_progress` it cannot push is WORSE than no claim, because it marks the packet taken in one working tree while every host that CAN push still reads it ready. That is the separation mechanism failing in the direction that causes duplicate work, which is 1034-whsp's subject. Both credential-blocked hosts refused the local claim for the same reason within an hour of each other.
+
+        macneo RESTATED THE PACKET MORE SHARPLY THAN THE ROUTING THAT SENT IT, and the restatement is why this is recorded rather than just claimed. I routed it as "the same shape as 980-ja2m one layer down". macneo's reading: 980-ja2m was a reporter that COULD NOT SEE; this is a reporter that CAN see and DOES NOT LOOK. cloud-init's modules genuinely succeeded, so `status: done, errors: []` is TRUE — it simply does not mean what every consumer reads it to mean. That makes this a harder packet than the one it resembles: there is nothing false to correct, the signal is accurate and the inference from it is wrong, so the fix must INTRODUCE A FACT THAT DOES NOT EXIST YET rather than stop asserting one that was never measured.
+
+        THE ORDER macneo INTENDS, stated before the work so it can be corrected:
+
+        1. REPRODUCE ON ITS OWN HOST FIRST. Boot the provisioned guest and read /var/log/cloud-init-output.log through --exec-guest for the last line the user script emitted. Criterion 3 requires the aborting command to be IDENTIFIED FROM THAT LOG rather than by inspection, and macneo has said explicitly it will not substitute reading provision_user_data() for reading what actually ran. That substitution is what 1049-c6xa's source-string guard did: reading the source tells you what SHOULD have run, and only the log tells you what did.
+
+        2. THEN the fix: an ERR trap recording the failing line where the HOST can read it. The open question macneo names is "where the host can read it", since the host cannot reach the guest without the wire. A marker inside the image root is the candidate, and it INHERITS SLICE (b)'S RULE from 980-ja2m — the timestamp goes inside the file and mtime is never the truth, because a copy, a restore, a touch or an rsync gives stale content a fresh mtime and nothing at the filesystem layer distinguishes that from a real write.
+
+        3. The fixture in both directions: a completed run distinguishable from an aborted one, with neither direction satisfiable by a checker that always says one thing.
+
+        4. Criterion 4 — find the consumers of cloud-init's `done` rather than assume there is one, and stop them treating it as sufficient.
+
+        DECLARED IN ADVANCE, AND IT IS THE PART THAT MAKES THIS CLAIM TRUSTWORTHY: if macneo's guest provisions cleanly and the abort cannot be reproduced, it will SAY SO rather than construct a synthetic failure and call it the instance. In that case the contribution is a fixture, not a reproduction, macbookair's measurement stands on its own, and the packet closes `implemented` with the unexercised arm named. A synthetic failure built to match a story is worse than an honest gap.
+
+        RELAY: all work returns by hash-verified paste — whole-file sha256 and per-part hashes published BEFORE the content, line-boundary splits under 16000 bytes per part. macneo is second behind pirria in the credential queue and neither host runs `gh auth login` or `gh auth refresh`; those are the operator's alone.

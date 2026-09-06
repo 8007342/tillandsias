@@ -84,6 +84,429 @@ pub fn crashloop_state_path() -> PathBuf {
     image_root().join("crashloop.state")
 }
 
+/// What the guest's provisioning script recorded about its own outcome
+/// (order 1055-e8ie).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum ProvisionRecord {
+    /// The script wrote a completion line as its last statement.
+    ///
+    /// `guest_binary_sha256` is what the GUEST hashed of the binary it will
+    /// run (order 1084-x8ya). Comparing it against the staged provenance is
+    /// the one measurement that settles version skew, and it is the only way
+    /// to ask: every host-side path into the guest is closed when the wire is
+    /// down, and no string scan of the raw image can date the binary because
+    /// 79e3ca876 flipped a default without adding a shipped string literal.
+    Complete {
+        written_at: Option<u64>,
+        guest_binary_sha256: Option<String>,
+        /// The literal `systemctl is-active` word for the headless daemon at
+        /// the instant provisioning finished (order 1084-x8ya criterion 3).
+        ///
+        /// VERBATIM, NEVER NORMALISED. `inactive` is NOT `failed`, and the
+        /// two must not collapse: conflating them is the loss that cost this
+        /// packet eight hours on the wrong hypothesis.
+        headless_service_state: Option<String>,
+        /// `ExecMainStartTimestamp`, which SURVIVES THE EXIT that `is-active`
+        /// forgets.
+        ///
+        /// `is-active` prints `inactive` both for a unit that NEVER STARTED
+        /// and for one that started, bound 42420 and DIED. Those are different
+        /// explanations of the same `Error::Input`, so the word alone cannot
+        /// answer the question this field was added for. EMPTY means never
+        /// started; non-empty means it ran, whatever it says now.
+        headless_start_timestamp: Option<String>,
+        /// systemd's own verdict — success, exit-code, signal, timeout.
+        headless_result: Option<String>,
+    },
+    /// The ERR trap fired and named the failing line.
+    Failed {
+        written_at: Option<u64>,
+        line: Option<String>,
+        rc: Option<String>,
+        cmd: Option<String>,
+    },
+    /// A start with NO completion and NO failure. This is a POSITIVE signal of
+    /// an aborted provision, not an absence of information: the completion line
+    /// is the script's last statement, so a start that is not followed by one
+    /// means the script did not reach its end.
+    StartedNeverFinished { written_at: Option<u64> },
+    /// No record at all. Either no provisioning has run since this image root
+    /// was created, or the share is not mounted. NEVER read as success.
+    Absent,
+}
+
+/// Read the provisioning record the guest wrote to the host-visible share.
+///
+/// THIS READER IS THE POINT. Before 1055-e8ie the marker was written inside the
+/// guest at /var/log and NOTHING read it — `grep -rn provision-marker` found no
+/// consumer anywhere in the tree — so a record existed that no host could ever
+/// consult, in exactly the condition it was written for. Order 272 makes the
+/// control wire the only host<->guest channel, so when provisioning fails there
+/// is no way in: `--exec-guest` rides the wire that is down and macOS cannot
+/// mount the guest's ext4.
+///
+/// The timestamp is read from INSIDE the file, never from mtime (980-ja2m): a
+/// copy, a restore or a `touch` forges an mtime, and mtime is a property of the
+/// filesystem rather than of the event.
+pub(crate) fn provision_record_from(text: &str) -> ProvisionRecord {
+    let mut phase = None;
+    let mut written_at = None;
+    let (mut line, mut rc, mut cmd) = (None, None, None);
+    let mut guest_binary_sha256 = None;
+    let mut headless_service_state = None;
+    let mut headless_start_timestamp = None;
+    let mut headless_result = None;
+    for l in text.lines() {
+        let mut parts = l.splitn(2, ' ');
+        match (parts.next(), parts.next()) {
+            (Some("phase"), Some(v)) => phase = Some(v.trim().to_string()),
+            (Some("written_at"), Some(v)) => written_at = v.trim().parse::<u64>().ok(),
+            (Some("line"), Some(v)) => line = Some(v.trim().to_string()),
+            (Some("rc"), Some(v)) => rc = Some(v.trim().to_string()),
+            (Some("cmd"), Some(v)) => cmd = Some(v.trim().to_string()),
+            (Some("guest_binary_sha256"), Some(v)) => {
+                guest_binary_sha256 = Some(v.trim().to_string())
+            }
+            (Some("headless_service_state"), Some(v)) => {
+                headless_service_state = Some(v.trim().to_string())
+            }
+            (Some("headless_exec_main_start_timestamp"), Some(v)) => {
+                headless_start_timestamp = Some(v.trim().to_string())
+            }
+            (Some("headless_result"), Some(v)) => headless_result = Some(v.trim().to_string()),
+            _ => {}
+        }
+    }
+    match phase.as_deref() {
+        Some("complete") => ProvisionRecord::Complete {
+            written_at,
+            guest_binary_sha256,
+            headless_service_state,
+            headless_start_timestamp,
+            headless_result,
+        },
+        Some("failed") => ProvisionRecord::Failed {
+            written_at,
+            line,
+            rc,
+            cmd,
+        },
+        Some("start") => ProvisionRecord::StartedNeverFinished { written_at },
+        _ => ProvisionRecord::Absent,
+    }
+}
+
+/// Compare the binary the GUEST hashed against the one the host STAGED.
+///
+/// ORDER 1084-x8ya, and this is the measurement the packet turns on. A guest
+/// that provisioned to completion and still never reaches Ready leaves one
+/// question — is it running the binary we staged — and until now no host could
+/// ask it. Order 272 masks every sshd surface, `--exec-guest` rides the
+/// control wire that is down in exactly this failure, macOS cannot mount the
+/// guest's ext4, and a raw-image string scan cannot date the artefact because
+/// 79e3ca876 flipped the wire to encrypted-by-default WITHOUT adding any
+/// string literal that reaches the shipped binary.
+///
+/// So the guest hashes its own binary at the end of provisioning and writes it
+/// to the share. This compares the two.
+///
+/// SKEW IS REPORTED AS A FINDING, NOT AS AN ERROR: a mismatch is the expected
+/// state on a host that has staged a newer bundle than the guest last
+/// installed, and naming it is the point.
+fn guest_binary_skew_line(guest_sha: Option<&str>) -> String {
+    let staged = crate::guest_binary::guest_binary_provenance().staged_sha256;
+    match (guest_sha, staged) {
+        (None, _) => "              guest binary: NOT RECORDED — this guest provisioned before \
+             the hash was added, so skew cannot be judged (1084-x8ya)."
+            .to_string(),
+        (Some("absent"), _) => "              guest binary: ABSENT in the guest. Provisioning \
+             completed and left no binary at /usr/local/bin/tillandsias-headless."
+            .to_string(),
+        (Some("unreadable"), _) => "              guest binary: present but UNREADABLE to the \
+             hashing step; skew cannot be judged."
+            .to_string(),
+        (Some(g), None) => format!(
+            "              guest binary: {} — nothing staged on this host to compare against.",
+            &g[..g.len().min(12)]
+        ),
+        (Some(g), Some(st)) if g == st => format!(
+            "              guest binary: MATCHES the staged artefact ({}…). Version skew is \
+             ELIMINATED as a cause.",
+            &g[..g.len().min(12)]
+        ),
+        (Some(g), Some(st)) => format!(
+            "              guest binary: SKEW — guest {}…, staged {}…. The guest is NOT running \
+             the binary this host staged, which is a cause a dead control wire would present as \
+             a handshake failure (1084-x8ya).",
+            &g[..g.len().min(12)],
+            &st[..st.len().min(12)]
+        ),
+    }
+}
+
+/// Where the host reads the provisioning record.
+pub fn provision_state_path() -> std::path::PathBuf {
+    image_root().join("provision").join("provision.state")
+}
+
+/// The `Provisioning` line of the report.
+/// Report the daemon's state as the guest recorded it (1084-x8ya criterion 3).
+///
+/// THE WORD IS PASSED THROUGH, NOT INTERPRETED. `inactive` is reported as
+/// inactive and never as failed — the record is written moments after
+/// `systemctl start`, and a unit that has not finished coming up at that
+/// instant is expected rather than broken. Saying "failed" there would invent
+/// a fault, which is the mirror of the silence this packet exists to remove.
+///
+/// WHY IT IS WORTH RECORDING AT ALL: the handshake dies with `noise: input
+/// error`, which is snow's SIZE error rather than its crypto error, and a
+/// response too short to hold the ephemeral key is what an absent or closed
+/// listener produces. "Is anything listening" is therefore the live question,
+/// and order 272 leaves the host no way to ask it once the wire is down.
+pub(crate) fn headless_service_line(
+    state: Option<&str>,
+    start_timestamp: Option<&str>,
+    result: Option<&str>,
+) -> String {
+    // `inactive` IS TWO STATES. A unit that never started and one that started,
+    // bound 42420 and died both print `inactive`, and they are DIFFERENT
+    // explanations of the same `Error::Input`. Split them on the timestamp,
+    // which survives the exit the state word forgets — never on the word.
+    if state == Some("inactive") {
+        let ran = matches!(start_timestamp, Some(t) if !t.is_empty() && t != "empty");
+        return if ran {
+            format!(
+                "Headless daemon: STARTED AND IS NO LONGER RUNNING — it came up at {} and \
+                 exited ({}). The listener existed and went away, which is a listener \
+                 fault, not a crypto one.",
+                start_timestamp.unwrap_or("?"),
+                result.unwrap_or("result not recorded")
+            )
+        } else {
+            "Headless daemon: NEVER STARTED — no ExecMainStartTimestamp was recorded, so \
+             nothing ever bound the port. Not a failure of the unit and not a crypto \
+             question: there was never a listener to answer."
+                .to_string()
+        };
+    }
+    match state {
+        Some("active") => {
+            "Headless daemon: active when provisioning finished — the listener was up at \
+             that instant, so a later handshake failure is not explained by the unit \
+             never having started."
+                .to_string()
+        }
+        Some("failed") => "Headless daemon: FAILED when provisioning finished — the unit \
+             gave up. This is a listener fault, not a crypto one."
+            .to_string(),
+        Some(other) => format!(
+            "Headless daemon: {other} when provisioning finished. NOT a failure by itself — \
+             the record is written moments after `systemctl start`, so a unit still coming \
+             up is expected here."
+        ),
+        None => "Headless daemon: not recorded — this guest was provisioned before the state \
+             was captured. Absent, not inactive."
+            .to_string(),
+    }
+}
+
+pub(crate) fn provision_report_line() -> String {
+    let text = std::fs::read_to_string(provision_state_path()).unwrap_or_default();
+    match provision_record_from(&text) {
+        ProvisionRecord::Complete {
+            written_at,
+            guest_binary_sha256,
+            headless_service_state,
+            headless_start_timestamp,
+            headless_result,
+        } => format!(
+            "Provisioning: COMPLETE — the guest script recorded its own completion{}\n{}\n{}",
+            written_at
+                .map(|t| format!(" at {}", format_utc(t)))
+                .unwrap_or_default(),
+            guest_binary_skew_line(guest_binary_sha256.as_deref()),
+            headless_service_line(
+                headless_service_state.as_deref(),
+                headless_start_timestamp.as_deref(),
+                headless_result.as_deref(),
+            )
+        ),
+        ProvisionRecord::Failed {
+            written_at,
+            line,
+            rc,
+            cmd,
+        } => format!(
+            "Provisioning: FAILED{} — line {}, rc {}, cmd: {}",
+            written_at
+                .map(|t| format!(" at {}", format_utc(t)))
+                .unwrap_or_default(),
+            line.unwrap_or_else(|| "?".into()),
+            rc.unwrap_or_else(|| "?".into()),
+            cmd.unwrap_or_else(|| "?".into())
+        ),
+        ProvisionRecord::StartedNeverFinished { written_at } => format!(
+            "Provisioning: ABORTED — the script started{} and never recorded completion. \
+             The completion line is its LAST statement, so a start without one means it did \
+             not reach the end. This guest may be assembled from a mixture of runs.",
+            written_at
+                .map(|t| format!(" at {}", format_utc(t)))
+                .unwrap_or_default()
+        ),
+        ProvisionRecord::Absent => {
+            "Provisioning: UNKNOWN — no record. Either nothing has provisioned this image \
+             root, or the provision-state share is not mounted. Never read as success."
+                .to_string()
+        }
+    }
+}
+
+/// Heartbeat period: how often the live tray writes `heartbeat.state`
+/// (980-ja2m slice (b)).
+///
+/// MEASURED, NOT CHOSEN BY TASTE. On macneo 2026-09-05 a healthy, Ready,
+/// podman-ready guest emitted exactly ONE `vm-status` line in 25m34s — the
+/// first, nine seconds after boot — and nothing for the remaining 1525
+/// seconds. SC-07 says why in its own log line: "vm-status/login/cloud/local
+/// polls demoted to fallback". The push channel is event-driven and correctly
+/// silent, so a timestamp written only on pushes is 25 minutes stale on a
+/// system with nothing wrong, and unbounded thereafter.
+///
+/// That kills every push-driven threshold in BOTH directions: short enough to
+/// notice death means UNKNOWN continuously on a working guest, and long enough
+/// to avoid that cannot notice death at all. The heartbeat is therefore the
+/// mechanism, not an optimisation — the freshness bound is the load-bearing
+/// part of this packet, and a bound that reads UNKNOWN precisely when the
+/// system works is the original defect with extra steps.
+///
+/// 30 s bounds worst-case staleness in SECONDS, as the criterion requires, for
+/// two writes a minute of a ~100-byte file. Set on the fleet's most
+/// memory-constrained host deliberately: if 8 GB can afford it, everything can.
+pub(crate) const HEARTBEAT_PERIOD_SECS: u64 = 30;
+
+/// Staleness bound: a heartbeat older than this reads UNKNOWN, never a phase.
+///
+/// THREE PERIODS, NOT ONE. A single missed write — a scheduling stall, a
+/// suspend, a slow disk on a loaded 8 GB host — must not flip a healthy system
+/// to UNKNOWN, which would be the false-alarm half of the defect. Three
+/// consecutive misses is the same shape as the crash-loop detector's own
+/// `threshold 3` already in crashloop.state, and it keeps the worst-case
+/// detection latency inside 90 s.
+pub(crate) const HEARTBEAT_STALE_AFTER_SECS: u64 = 3 * HEARTBEAT_PERIOD_SECS;
+
+/// Where the live tray writes its heartbeat. Same image root as the rest of
+/// the report, so `--diagnose` and the tray agree on one location.
+pub fn heartbeat_state_path() -> std::path::PathBuf {
+    image_root().join("heartbeat.state")
+}
+
+/// Serialize a heartbeat record. Line-based and forward-compatible, matching
+/// crashloop.state's format so a reader learns one shape, not two.
+///
+/// The timestamp is INSIDE the file. mtime is never the truth here — see
+/// `TimestampSource` — so a copy or a `touch` cannot manufacture freshness.
+pub fn heartbeat_state_string(status_line: &str, written_at_unix: u64) -> String {
+    // `status` carries the tray's chip text VERBATIM and may contain spaces and
+    // emoji, so it is written last and parsed to end-of-line. Everything above
+    // it is a single token, which keeps the format readable by the same
+    // split_whitespace parser crashloop.state uses.
+    format!(
+        "tillandsias-heartbeat-state v1\nwritten_at {written_at_unix}\nperiod_secs {HEARTBEAT_PERIOD_SECS}\nstatus {status_line}\n"
+    )
+}
+
+/// What the heartbeat file says about the guest right now.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum HeartbeatVerdict {
+    /// A heartbeat written within the staleness bound: the phase is CURRENT.
+    Fresh { phase: String, age_secs: u64 },
+    /// A heartbeat older than the bound. The phase it names is NOT reported —
+    /// a stale phase is exactly the lie this packet exists to stop.
+    Stale { age_secs: u64 },
+    /// No heartbeat file, or one this reader cannot parse.
+    Absent,
+}
+
+/// Read the heartbeat and bound it by age.
+///
+/// Prefers the content timestamp and falls back to mtime only for a file that
+/// predates it, disclosing the fallback to the caller so the printed line can
+/// say "mtime" — the same rule the Guest health line follows, through the same
+/// `TimestampSource`, so the two readers cannot drift apart.
+pub(crate) fn heartbeat_verdict_at(now_unix: u64) -> HeartbeatVerdict {
+    let path = heartbeat_state_path();
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        return HeartbeatVerdict::Absent;
+    };
+    heartbeat_verdict_from(&text, file_mtime_unix(&path), now_unix)
+}
+
+/// The parse and the bound, with no filesystem in the way.
+///
+/// Split out so both directions of the bound are testable as pure values.
+/// `mtime_fallback` is the file's mtime for a record that predates
+/// `written_at`; it is used ONLY then, and never silently — see
+/// `TimestampSource`.
+pub(crate) fn heartbeat_verdict_from(
+    text: &str,
+    mtime_fallback: Option<u64>,
+    now_unix: u64,
+) -> HeartbeatVerdict {
+    let mut phase = None;
+    let mut written = None;
+    for line in text.lines() {
+        if let Some(rest) = line.strip_prefix("status ") {
+            // To end-of-line: the tray's chip text contains spaces and emoji.
+            phase = Some(rest.trim().to_string());
+            continue;
+        }
+        let mut parts = line.split_whitespace();
+        if let Some("written_at") = parts.next() {
+            written = parts.next().and_then(|v| v.parse::<u64>().ok());
+        }
+    }
+    let src = written
+        .map(TimestampSource::Content)
+        .or_else(|| mtime_fallback.map(TimestampSource::Mtime));
+    let (Some(phase), Some(src)) = (phase, src) else {
+        return HeartbeatVerdict::Absent;
+    };
+    let age = now_unix.saturating_sub(src.unix());
+    if age > HEARTBEAT_STALE_AFTER_SECS {
+        HeartbeatVerdict::Stale { age_secs: age }
+    } else {
+        HeartbeatVerdict::Fresh {
+            phase,
+            age_secs: age,
+        }
+    }
+}
+
+/// The `Guest state` line: the ONE place in this report that can speak about a
+/// live guest, and only within `HEARTBEAT_STALE_AFTER_SECS`.
+pub(crate) fn guest_state_report_line_at(now_unix: u64) -> String {
+    match heartbeat_verdict_at(now_unix) {
+        HeartbeatVerdict::Fresh { phase, age_secs } => format!(
+            "Guest state: {phase} — as the live tray reported it (heartbeat {} old, bound {}s)",
+            humanize_age(age_secs),
+            HEARTBEAT_STALE_AFTER_SECS
+        ),
+        HeartbeatVerdict::Stale { age_secs } => format!(
+            "Guest state: UNKNOWN — the last heartbeat is {} old, past the {}s bound. \
+             The phase it names is NOT reported: a stale phase is indistinguishable \
+             from a live one, which is the defect this bound exists to close.",
+            humanize_age(age_secs),
+            HEARTBEAT_STALE_AFTER_SECS
+        ),
+        HeartbeatVerdict::Absent => format!(
+            "Guest state: UNKNOWN — no heartbeat file. Either no tray has run since \
+             this was installed, or the tray is not writing one. Absence is never \
+             read as healthy (bound {}s).",
+            HEARTBEAT_STALE_AFTER_SECS
+        ),
+    }
+}
+
 fn unix_now_secs() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -186,20 +609,20 @@ fn humanize_age(secs: u64) -> String {
 fn guest_health_report_line() -> String {
     let verdict = guest_health_verdict();
     let path = crashloop_state_path();
-    let age = std::fs::metadata(&path)
-        .and_then(|m| m.modified())
-        .ok()
-        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|d| d.as_secs());
+    let written_at = tillandsias_control_wire::crashloop::CrashLoopDetector::load(&path)
+        .written_at()
+        .map(TimestampSource::Content)
+        .or_else(|| file_mtime_unix(&path).map(TimestampSource::Mtime));
 
-    match age {
-        Some(written) => {
-            let now = unix_now_secs();
-            let elapsed = now.saturating_sub(written);
+    match written_at {
+        Some(src) => {
+            let written = src.unix();
+            let elapsed = unix_now_secs().saturating_sub(written);
             format!(
                 "Guest health: RECORDED, not observed — last recorded verdict \
-                 \"{verdict}\" (crashloop.state, written {}, {} ago)",
+                 \"{verdict}\" (crashloop.state, written {}{}, {} ago)",
                 format_utc(written),
+                src.disclosure(),
                 humanize_age(elapsed)
             )
         }
@@ -208,6 +631,53 @@ fn guest_health_report_line() -> String {
              \"{verdict}\" (crashloop.state age UNKNOWN: file absent or unreadable)"
         ),
     }
+}
+
+/// Where a state file's write time came from (980-ja2m).
+///
+/// MTIME IS NOT THE TRUTH. A copy, a restore, a `touch` or an rsync gives stale
+/// content a fresh mtime, and nothing at the filesystem layer can tell that
+/// apart from a real write. A timestamp written INSIDE the file cannot be
+/// forged by ordinary filesystem operations, so it is preferred whenever the
+/// file carries one.
+///
+/// The mtime path is kept ONLY for files written before the content timestamp
+/// existed, and a reader that falls back MUST SAY SO — hence `disclosure()`
+/// putting the word "mtime" in the printed line. A silent fallback would make
+/// a forgeable number indistinguishable from an unforgeable one, which is the
+/// same class of defect as printing a recorded phase as if it were observed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TimestampSource {
+    /// Read from inside the file. Not forgeable by filesystem operations.
+    Content(u64),
+    /// Read from the filesystem. Forgeable; always disclosed to the reader.
+    Mtime(u64),
+}
+
+impl TimestampSource {
+    pub(crate) fn unix(self) -> u64 {
+        match self {
+            Self::Content(t) | Self::Mtime(t) => t,
+        }
+    }
+
+    /// Text appended after the rendered timestamp. Empty for a content
+    /// timestamp; names mtime when the fallback was used.
+    pub(crate) fn disclosure(self) -> &'static str {
+        match self {
+            Self::Content(_) => "",
+            Self::Mtime(_) => " (from mtime: this file predates the written_at field)",
+        }
+    }
+}
+
+/// Unix seconds of a file's mtime, or `None` if absent or unreadable.
+fn file_mtime_unix(path: &std::path::Path) -> Option<u64> {
+    std::fs::metadata(path)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs())
 }
 
 /// 972-umik: DELEGATES to the one reader in tillandsias-control-wire. This
@@ -558,6 +1028,8 @@ fn print_human(r: &DiagnoseReport) {
     // restart/unseal/handshake pattern flips it to crash-loop:<subsystem>.
     // Additive — does NOT affect the 0/2/1 exit-code contract.
     // @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+    println!("{}", provision_report_line());
+    println!("{}", guest_state_report_line_at(unix_now_secs()));
     println!("{}", guest_health_report_line());
     println!("No live probe was made; this report cannot contact the guest.");
     println!();
@@ -2069,10 +2541,21 @@ mod tests {
     /// non-mechanical effect and it is asserted rather than left to be noticed.
     #[test]
     fn shared_reader_owns_the_default_and_refuses_blank() {
+        // 972-umik FLIPPED, and this pin is what noticed. It asserted
+        // absent -> Off "until the last reader is converted"; yolanda converted
+        // the last one (hvsocket.rs) and landed the flip, the ratchet now reads
+        // ok:secure-wire-single-reader:0 of 0, and this test went red on the
+        // merge — which is the pin doing its job, not a regression.
+        //
+        // ABSENT NOW MEANS SECURE. That is the direction a default should move
+        // and the reason the flip waited for every reader: a host that reads
+        // the variable itself could otherwise disagree with the shared reader
+        // about what "unset" means, and one of them would be running plaintext
+        // while believing otherwise.
         assert_eq!(
             parse_secure_wire_mode(Err(std::env::VarError::NotPresent)),
-            Ok(SecureWireMode::Off),
-            "absent must still mean Off until the last reader is converted"
+            Ok(SecureWireMode::On),
+            "absent must mean On now that every reader is converted (972-umik)"
         );
         assert!(
             parse_secure_wire_mode(Ok(String::new())).is_err(),
@@ -2802,6 +3285,363 @@ mod tests {
     ///
     /// 2000-02-29 is the case the `year % 4 == 0 && year % 100 != 0` rule gets
     /// WRONG on its own: 2000 is divisible by 100 and IS a leap year because it
+    /// 1055-e8ie CRITERION 2: a partially-provisioned guest is distinguishable
+    /// from a completed one.
+    ///
+    /// ALL THREE STATES, because two would not settle it. The defect this
+    /// closes is that the previous marker recorded a start and a failure and NO
+    /// completion, so "ran to completion", "died without the ERR trap firing"
+    /// and "died before the write landed" collapsed into one artefact — a start
+    /// line and nothing else. A fixture that only proved failure-is-detected
+    /// would pass on that broken marker, because the broken marker detects
+    /// failure too. What it could not do is tell success from silence.
+    #[test]
+    fn provision_record_distinguishes_complete_aborted_and_failed() {
+        let complete = "tillandsias-provision-state v1\nwritten_at 1800000000\nphase complete\n";
+        assert_eq!(
+            super::provision_record_from(complete),
+            super::ProvisionRecord::Complete {
+                written_at: Some(1_800_000_000),
+                guest_binary_sha256: None,
+                headless_service_state: None,
+                headless_start_timestamp: None,
+                headless_result: None,
+            }
+        );
+
+        // The case the old marker could not express: started, never finished.
+        // This must NOT read as success and must NOT read as "no information".
+        let aborted = "tillandsias-provision-state v1\nwritten_at 1800000000\nphase start\n";
+        assert_eq!(
+            super::provision_record_from(aborted),
+            super::ProvisionRecord::StartedNeverFinished {
+                written_at: Some(1_800_000_000)
+            },
+            "a start with no completion is a POSITIVE abort signal, not an absence"
+        );
+
+        let failed = "tillandsias-provision-state v1\nwritten_at 1800000000\nphase failed\n\
+                      line 373\nrc 1\ncmd systemctl start tillandsias-headless.service\n";
+        assert_eq!(
+            super::provision_record_from(failed),
+            super::ProvisionRecord::Failed {
+                written_at: Some(1_800_000_000),
+                line: Some("373".into()),
+                rc: Some("1".into()),
+                cmd: Some("systemctl start tillandsias-headless.service".into()),
+            },
+            "the failing line must survive into the verdict; a bare FAILED is what \
+             sent an investigation to the raw disk image"
+        );
+
+        // NEGATIVE CONTROL, load-bearing: absence must not be any of the three.
+        // Without this, a reader that returned Complete for everything would
+        // satisfy the first assertion.
+        assert_eq!(
+            super::provision_record_from(""),
+            super::ProvisionRecord::Absent
+        );
+        assert_eq!(
+            super::provision_record_from("garbage\nphase wat\n"),
+            super::ProvisionRecord::Absent
+        );
+    }
+
+    /// 1055-e8ie. The record must be read from INSIDE the file, never mtime.
+    /// A copy, a restore or a `touch` forges an mtime; mtime is a property of
+    /// the filesystem and not of the event (980-ja2m).
+    #[test]
+    fn provision_record_takes_its_timestamp_from_the_content() {
+        let no_ts = "tillandsias-provision-state v1\nphase complete\n";
+        assert_eq!(
+            super::provision_record_from(no_ts),
+            super::ProvisionRecord::Complete {
+                written_at: None,
+                guest_binary_sha256: None,
+                headless_service_state: None,
+                headless_start_timestamp: None,
+                headless_result: None,
+            },
+            "a record without a content timestamp reports None rather than \
+             borrowing the filesystem's"
+        );
+    }
+
+    /// 1084-x8ya. The guest's own hash of its binary must survive into the
+    /// record, and the comparison against the staged artefact must name SKEW
+    /// rather than swallow it.
+    ///
+    /// This is the measurement the packet turns on, and it exists only because
+    /// no host-side path to the guest survives the failure it diagnoses: order
+    /// 272 masks every sshd surface, exec-guest rides the dead wire, macOS
+    /// cannot mount ext4, and a raw-image string scan cannot date the binary
+    /// because 79e3ca876 flipped a default without adding a shipped literal.
+    #[test]
+    fn a_completed_provision_carries_the_guests_own_binary_hash() {
+        let with_hash = "tillandsias-provision-state v1\nwritten_at 1800000000\n\
+                         phase complete\nguest_binary_sha256 d677e5f5843d\n";
+        assert_eq!(
+            super::provision_record_from(with_hash),
+            super::ProvisionRecord::Complete {
+                written_at: Some(1_800_000_000),
+                guest_binary_sha256: Some("d677e5f5843d".into()),
+                headless_service_state: None,
+                headless_start_timestamp: None,
+                headless_result: None,
+            },
+            "the guest's hash must reach the host; it is the only way to ask what \
+             the guest is running"
+        );
+
+        // 1084-x8ya CRITERION 3. INACTIVE IS NOT FAILED.
+        //
+        // The record is written moments after `systemctl start`, so a unit
+        // still coming up at that instant is EXPECTED. Reporting it as failed
+        // would invent a fault — the mirror of the silence this packet exists
+        // to remove — so the systemctl word is passed through verbatim and the
+        // report says NOT a failure by itself.
+        let inactive = "tillandsias-provision-state v1\nphase complete\n\
+                        headless_service_state inactive\n";
+        match super::provision_record_from(inactive) {
+            super::ProvisionRecord::Complete {
+                headless_service_state,
+                ..
+            } => {
+                assert_eq!(headless_service_state.as_deref(), Some("inactive"));
+                let line = super::headless_service_line(Some("inactive"), None, None);
+                // The INTENT of this assertion is "inactive is not failed",
+                // not any particular sentence. When the died/never-started
+                // split landed, `inactive` with no timestamp began routing to
+                // the NEVER STARTED branch and the old literal stopped
+                // matching. The literal was standing in for the intent; the
+                // intent is asserted directly here and the negative guard
+                // below is what actually enforces it.
+                assert!(
+                    line.contains("NEVER STARTED"),
+                    "inactive with no start timestamp means nothing ever bound the port: {line}"
+                );
+                assert!(
+                    !line.to_ascii_lowercase().contains("failed"),
+                    "the word failed must not appear for an inactive unit: {line}"
+                );
+            }
+            other => panic!("expected Complete, got {other:?}"),
+        }
+
+        // 1084-x8ya CRITERION 3, FOLLOW-UP. `inactive` IS TWO STATES.
+        //
+        // `systemctl is-active` prints `inactive` both for a unit that NEVER
+        // STARTED and for one that started, bound 42420 and DIED. Those are
+        // DIFFERENT explanations of the same `Error::Input`, so a report that
+        // prints only the word cannot answer the question the field exists
+        // for. The split is decided by ExecMainStartTimestamp, which survives
+        // the exit that the state word forgets — never by the word.
+        //
+        // Both arms are asserted because either alone is satisfiable by a
+        // reporter that always returns the other.
+        let died = super::headless_service_line(
+            Some("inactive"),
+            Some("Sat 2026-09-05 20:44:44 UTC"),
+            Some("exit-code"),
+        );
+        assert!(
+            died.contains("STARTED AND IS NO LONGER RUNNING"),
+            "a unit with a start timestamp RAN and must not read as never started: {died}"
+        );
+        assert!(
+            !died.contains("NEVER STARTED"),
+            "a unit that ran must not be reported as never started: {died}"
+        );
+
+        let never = super::headless_service_line(Some("inactive"), Some("empty"), None);
+        assert!(
+            never.contains("NEVER STARTED"),
+            "an empty ExecMainStartTimestamp means nothing ever bound the port: {never}"
+        );
+        assert!(
+            !never.contains("NO LONGER RUNNING"),
+            "a unit that never started must not read as one that exited: {never}"
+        );
+
+        // A unit that really did fail must say so, or the guard above would be
+        // satisfied by a reporter that never says "failed" at all.
+        let failed_line = super::headless_service_line(Some("failed"), None, None);
+        assert!(
+            failed_line.contains("FAILED"),
+            "a failed unit must be reported as failed: {failed_line}"
+        );
+
+        // ABSENT is an ANSWER, not a missing field. A provision that completed
+        // and left no binary is the whole finding, and an omitted value would
+        // read as "not measured".
+        let absent = "tillandsias-provision-state v1\nphase complete\n\
+                      guest_binary_sha256 absent\n";
+        match super::provision_record_from(absent) {
+            super::ProvisionRecord::Complete {
+                guest_binary_sha256,
+                ..
+            } => assert_eq!(guest_binary_sha256.as_deref(), Some("absent")),
+            other => panic!("expected Complete, got {other:?}"),
+        }
+    }
+
+    /// 1084-x8ya. The skew verdict must distinguish FOUR cases and must never
+    /// collapse an unknown into a match.
+    #[test]
+    fn the_skew_line_names_skew_and_never_calls_unknown_a_match() {
+        // No hash recorded: a guest provisioned before the field existed.
+        let none = super::guest_binary_skew_line(None);
+        assert!(none.contains("NOT RECORDED"), "got: {none}");
+        assert!(
+            !none.contains("MATCHES"),
+            "an unrecorded hash must never read as a match: {none}"
+        );
+
+        let absent = super::guest_binary_skew_line(Some("absent"));
+        assert!(absent.contains("ABSENT"), "got: {absent}");
+
+        let unreadable = super::guest_binary_skew_line(Some("unreadable"));
+        assert!(unreadable.contains("UNREADABLE"), "got: {unreadable}");
+    }
+
+    /// 1055-e8ie. The reader must exist and be WIRED IN. The previous marker's
+    /// defect was not that it was written badly — it was that nothing read it:
+    /// `grep -rn provision-marker` found no consumer anywhere in the tree, so a
+    /// record was produced for a reader that had never been written.
+    #[test]
+    fn the_provisioning_line_is_actually_printed_by_the_report() {
+        let source = include_str!("diagnose.rs");
+        assert!(
+            source.contains("println!(\"{}\", provision_report_line());"),
+            "the provisioning record must be PRINTED; a reader nothing calls is \
+             the same defect as a record nothing reads (1055-e8ie)"
+        );
+    }
+
+    /// 980-ja2m slice (b). BOTH DIRECTIONS, round-tripped through the real
+    /// parser. A bound proved only on the stale side is satisfied by a reader
+    /// that says UNKNOWN always — and that reader is the original defect
+    /// wearing the fix's clothes, because it reports UNKNOWN precisely when
+    /// the system works.
+    #[test]
+    fn heartbeat_bound_reports_a_phase_when_fresh_and_unknown_when_stale() {
+        let now = 1_800_000_000u64;
+
+        // FRESH: 10 s old, inside the 90 s bound. The phase IS reported, and
+        // it is the tray's own chip text, emoji and all.
+        let fresh = super::heartbeat_state_string("\u{1F535} Booting\u{2026}", now - 10);
+        match super::heartbeat_verdict_from(&fresh, None, now) {
+            super::HeartbeatVerdict::Fresh { phase, age_secs } => {
+                assert_eq!(
+                    phase, "\u{1F535} Booting\u{2026}",
+                    "chip text is recorded verbatim"
+                );
+                assert_eq!(age_secs, 10);
+            }
+            other => panic!("a 10 s old heartbeat must report a phase, got {other:?}"),
+        }
+
+        // STALE: 120 s old, past the bound. The phase must NOT survive into
+        // the verdict — reporting a two-minute-old phase as current is the
+        // lie, not the age.
+        let stale = super::heartbeat_state_string("\u{1F7E2} Ready", now - 120);
+        match super::heartbeat_verdict_from(&stale, None, now) {
+            super::HeartbeatVerdict::Stale { age_secs } => assert_eq!(age_secs, 120),
+            other => panic!("a 120 s old heartbeat must read UNKNOWN, got {other:?}"),
+        }
+
+        // ABSENT beats a guess: no timestamp anywhere is not "just now".
+        assert_eq!(
+            super::heartbeat_verdict_from("garbage", None, now),
+            super::HeartbeatVerdict::Absent
+        );
+    }
+
+    /// 980-ja2m. mtime is the fallback ONLY for a record predating
+    /// `written_at`, and using it must change what the reader is told.
+    #[test]
+    fn heartbeat_falls_back_to_mtime_only_when_the_record_has_no_timestamp() {
+        let now = 1_800_000_000u64;
+        let no_ts = "tillandsias-heartbeat-state v1\nstatus Ready\n";
+        match super::heartbeat_verdict_from(no_ts, Some(now - 5), now) {
+            super::HeartbeatVerdict::Fresh { age_secs, .. } => assert_eq!(age_secs, 5),
+            other => panic!("mtime must be used when the record carries none, got {other:?}"),
+        }
+        // With a content timestamp present, a LYING mtime must not win: a
+        // `touch` on a stale file cannot manufacture freshness.
+        let with_ts = super::heartbeat_state_string("Ready", now - 600);
+        assert_eq!(
+            super::heartbeat_verdict_from(&with_ts, Some(now), now),
+            super::HeartbeatVerdict::Stale { age_secs: 600 },
+            "a fresh mtime must not override a stale content timestamp"
+        );
+    }
+
+    /// 980-ja2m slice (b). The bound must be a MULTIPLE of the period, not an
+    /// independent number: one missed write under load must not flip a healthy
+    /// host to UNKNOWN, and the relationship is what makes that true.
+    #[test]
+    fn heartbeat_bound_is_three_periods() {
+        assert_eq!(super::HEARTBEAT_PERIOD_SECS, 30);
+        assert_eq!(super::HEARTBEAT_STALE_AFTER_SECS, 90);
+        assert_eq!(
+            super::HEARTBEAT_STALE_AFTER_SECS,
+            3 * super::HEARTBEAT_PERIOD_SECS,
+            "the bound is three periods so a single missed write is tolerated"
+        );
+    }
+
+    /// 980-ja2m slice (b). THE ARM A PUSH-DRIVEN DESIGN FAILS, exercised
+    /// against the real verdict rather than by comparing two constants.
+    ///
+    /// Measured on macneo 2026-09-05: one `vm-status` line in 25 m 34 s on a
+    /// healthy, Ready, podman-ready guest, so a record written only when a
+    /// push arrives is 1525 s old on a system with nothing wrong. Fed to the
+    /// bound it reads UNKNOWN — which is the false alarm this design exists to
+    /// avoid — while the heartbeat's own worst case, one period, reads as a
+    /// phase. Both halves are asserted here; the first alone would be
+    /// satisfied by a reader that always says UNKNOWN.
+    #[test]
+    fn a_push_driven_timestamp_would_fail_the_bound_a_heartbeat_passes() {
+        const MEASURED_SILENT_SPAN_SECS: u64 = 1525;
+        let now = 1_800_000_000u64;
+
+        let push_driven = super::heartbeat_state_string("Ready", now - MEASURED_SILENT_SPAN_SECS);
+        assert_eq!(
+            super::heartbeat_verdict_from(&push_driven, None, now),
+            super::HeartbeatVerdict::Stale {
+                age_secs: MEASURED_SILENT_SPAN_SECS
+            },
+            "a push-driven record on a HEALTHY guest reads UNKNOWN — the false \
+             alarm that rules the push stream out as a liveness source"
+        );
+
+        let heartbeat_worst_case =
+            super::heartbeat_state_string("Ready", now - super::HEARTBEAT_PERIOD_SECS);
+        match super::heartbeat_verdict_from(&heartbeat_worst_case, None, now) {
+            super::HeartbeatVerdict::Fresh { age_secs, .. } => {
+                assert_eq!(age_secs, super::HEARTBEAT_PERIOD_SECS)
+            }
+            other => panic!("one period old must still report a phase, got {other:?}"),
+        }
+    }
+
+    /// 980-ja2m. mtime must never silently stand in for a content timestamp: a
+    /// copy or a `touch` forges it. When the fallback IS used the printed line
+    /// has to say so, and this pins the disclosure.
+    #[test]
+    fn an_mtime_fallback_is_disclosed_and_a_content_timestamp_is_not() {
+        assert_eq!(super::TimestampSource::Content(1).disclosure(), "");
+        assert!(
+            super::TimestampSource::Mtime(1)
+                .disclosure()
+                .contains("mtime"),
+            "a forgeable timestamp must name itself in the output"
+        );
+        assert_eq!(super::TimestampSource::Content(42).unix(), 42);
+        assert_eq!(super::TimestampSource::Mtime(42).unix(), 42);
+    }
+
     /// is divisible by 400. 2100-03-01 is the converse — divisible by 100, not
     /// by 400, NOT a leap year — and the day after the February that a wrong
     /// implementation gives 29 days. An implementation that handles only the

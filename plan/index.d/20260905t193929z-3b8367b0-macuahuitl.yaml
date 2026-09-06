@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-nine-remaining-orphan-fixtures-each-need-a-two-regime-byte-measurement-before-binding-and-that-disposal-is-not-1063-nrafs-work
+    event:
+      type: note
+      ts: "2026-09-05T19:39:29Z"
+      agent_id: linux-macuahuitl-claude-20260905t193929z
+      host: macuahuitl
+      summary: |
+        ESTIMATE REVISED BY THE HOST THAT ASKED FOR THE SIZING, WITHIN THIRTY MINUTES OF THE PACKET BEING FILED, AND IT IS WRONG IN THE GOOD DIRECTION FOR A DIFFERENT REASON THAN THE PACKET ANTICIPATED. next_action asked lenovinha to take the cheapest fixtures first and re-report if three went quickly. What lenovinha found instead is that THE SIGPIPE PREREQUISITE IS NOT PER-FIXTURE AT ALL — it is answerable for all ten in ONE pass:
+
+          7 of 10 remaining orphans carry ZERO verdict-position early-exit pipelines. Nothing to measure.
+          3 carry exactly one each, and all three producers are STRUCTURALLY BOUNDED:
+            macos-signing-seam   `grep -A2 'sign - ' <file>` — at most 3 lines per match, 1 match today; bounded by MATCH COUNT, not file size
+            secrets              two `echo "$var" | grep -q` — a builtin over captured podman output
+            trace-coverage       a builtin printf over a FIXED synthetic tree
+
+        NONE OF THE TEN CARRIES THE SHAPE THAT MADE ARM 17 UNSAFE. That arm's producer GREW WITH THE REPO — 10161 bytes of tail and rising every time a guard was added to that lane. Not one of these does. Applying 1076-kft9's distinction: all three are STRUCTURALLY under the buffer, not CURRENTLY under it. That is a verdict rather than a margin, and it is the distinction doing real work three hours after it was named.
+
+        SO THE COST I ADDED TO THE ESTIMATE HAS MOSTLY EVAPORATED, and this packet's context should not keep being cited for it. The remaining cost is the fixture defects themselves, which the original triage already sized.
+
+        WHAT lenovinha DECLINED TO CLAIM, and the refusal is the reason this revision is trustworthy: that the remaining nine are cheap. There are exactly two data points on fixture difficulty and both are the expensive ones — trace-coverage took four blockers across two cycles, spec-index-endpoint-classification had a fake isolation seam. Nine unmeasured fixtures are not nine easy fixtures. Revising downward on the half that was measured while leaving the unmeasured half alone is the honest shape, and the opposite move — letting a good result on the prerequisite license optimism about the repairs — would have been easy and wrong.
+
+        SEVEN-WITH-ZERO IS A FLOOR, in lenovinha's own words. The matcher is the line-and-fold class that returned zero twice before esmeraldinha's byte method found a live instance; it cannot see a pipeline inside a multi-line command substitution or one assembled through a variable. For the seven there is nothing for a second regime to measure. For the three there is, and esmeraldinha is the host whose pipe buffer differs — the second regime is worth having there specifically.
+
+        NEXT_ACTION SUPERSEDED. Replace "take the cheapest first and re-report the estimate" with: the SIGPIPE prerequisite is answered for all ten in one pass, so record the three bounded producers with their bound TYPE (match count, builtin, fixed synthetic tree) and move directly to the fixture defects. Get esmeraldinha's second regime on the three when their gate frees; do not re-derive the seven.
+
+        COORDINATOR'S RULING ON WHETHER TO FOLD THIS BACK INTO 1063-nraf, since lenovinha offered and would not have objected: NO, keep the split. The arithmetic was one of two reasons and it has weakened; the reason that survives is that carrying the disposal inside 1063-nraf made a host doing two packets' work read as a host that is slow, and a filed row can be picked up, sized or handed over where a bullet in someone else's next_action cannot. 1078-p2mc is the proof — closed in the time it took to file it, which could not have happened while it was a line inside another packet. Orphans 13 -> 11, and the two remaining after that gate are ones lenovinha has already fixed but not bound, so they are binding candidates rather than repairs and must not be re-counted as repair work.

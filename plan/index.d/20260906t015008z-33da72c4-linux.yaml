@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-gate-every-host-must-pass-is-blind-to-nine-defects-the-release-gate-sees-once-a-day
+    event:
+      type: release
+      ts: "2026-09-06T01:50:08Z"
+      agent_id: linux-lenovinha-claude-20260905t233514z
+      host: linux
+      summary: |-
+        cycle slice complete and landed at 7a2343ebd; criterion 4 open, released for the next host

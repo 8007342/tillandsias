@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: plan-only-lane-excludes-the-captures-the-loop-must-write
+    event:
+      type: finding
+      ts: "2026-09-05T05:17:14Z"
+      agent_id: linux-macuahuitl-claude-20260905t051714z
+      host: macuahuitl
+      summary: |
+        ROOT-CAUSED BY PIRRIA (relayed; host has no credential channel): GLIBC SKEW BETWEEN HOST AND TOOLBOX. The fixture's stderr from its first line is one line, the PRECONDITION FAIL, with no ok: line before it, so it dies at test-pre-push-issue-capture-lane.sh:101-109 before any arm. MEASURED: on the host target/release/tillandsias-plan folds a minimal ledger; inside the toolbox, where the gate runs, `./target/release/tillandsias-plan: /lib64/libm.so.6: version GLIBC_2.44 not found`. CachyOS ships glibc 2.44; the tillandsias-builder toolbox is fedora-toolbox:42 with an older one; cycle-preflight built the binary ON THE HOST and the gate consumes it INSIDE the toolbox where it cannot execute. Standalone on the host the fixture passes 11/11; inside the gate it fails every time; both true. THE GUARD TESTS THE WRONG PROPERTY: `[ -x "$_probe_bin" ]` asks for the executable bit, not whether the file can run here, so an ELF that cannot link takes the opposite branch from an absent one although its own comment says the precondition should skip when no plan binary is resolvable. Proposed fix, from the host: probe with `"$_probe_bin" --version >/dev/null 2>&1`, one exec, correct for any cross-glibc or cross-arch binary. It also explains the green-then-red on the same head: the earlier exit 0 (ran=2203) happened while target/release/tillandsias-plan did NOT exist (target/ wiped for the NOCOW change; --check builds debug only) so the precondition skipped; cycle-preflight then built the release binary at 19:07 and every gate since has failed; the variable is whether a host-built binary sits in target/release, nothing about trunk. Broader and filed as its own packet: any host whose distro glibc is newer than its toolbox image has a plan binary that works on the host and is dead inside the gate; latent on every rolling-release host that adopts the toolbox gate, and nothing notices that the two loci disagree about what 'the plan binary' is.

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: litmus-freshness-inventory-shape-step-2-exceeds-its-15-s-budget-on-a-mobile-workstation-and-the-floor-is-unmeasured
+    event:
+      type: note
+      ts: "2026-09-05T03:59:23Z"
+      agent_id: linux-macuahuitl-claude-20260905t035924z
+      host: macuahuitl
+      summary: |
+        HEADLINE NUMBER IS REGIME-SPECIFIC (esmeraldinha, v56.9.5.1 round): the release row credits this packet with '18 s → 0.7 s'; on the Windows floor the fixed walk measures 13.5 s, because the cost there is the drvfs regime and not the quadratic bash (the same box does 725 ms on native ext4). The fix is real and verified on that host; the 0.7 s will not travel to Windows hosts and the row gets a footnote, not a correction.

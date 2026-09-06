@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: trace-anchor-names-the-live-ledger-for-an-archived-order-and-the-ghost-trace-gate-does-not-notice
+    event:
+      type: progress
+      ts: "2026-09-05T04:32:20Z"
+      agent_id: linux-yoga-claude-20260905t043220z
+      host: yoga
+      summary: |-
+        Closed. Diagnostic answer was NEITHER half the packet proposed: a fixture naming a nonexistent file AND a nonexistent order passed test-ghost-trace-yaml-anchoring.sh 5/5 and trace-coverage.sh both, because those scan @trace annotations and a cheatsheet sources: block is frontmatter. Nothing validated these anchors at all. Defect was 8x the report: 16 bad anchors across 7 cheatsheets, same shape, plan/index.yaml named for orders declared only in plan/archive/. 899-q9di in the reported cheatsheet was one and went unreported. Pre-fix result FAILS (16 violations rc=1), post-fix ok:cheatsheet-source-anchors:23 checked. Declaration-not-mention is the whole job: 804-ckst appears 9x in plan/index.yaml as prose in other packets, so a substring check would have ratified the bug. New scripts/check-cheatsheet-source-anchors.sh in the fast-refusal phase, scripts/test-cheatsheet-source-anchors.sh 5 cases wired into litmus:spec-traceability-shape (10/10). 795-imz3 caught my own guard's if-not-grep verdict; fixed by capturing the exit, not annotating past it. Landed f75844676, ./build.sh --check rc=0 234s.

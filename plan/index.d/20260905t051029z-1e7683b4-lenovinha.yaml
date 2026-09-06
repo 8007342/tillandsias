@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: linux-build-tuneups-carried-by-the-build-scripts
+    field: status
+    value: in_progress
+    ts: "2026-09-05T05:10:29Z"
+    host: lenovinha
+
+events:
+  - packet_id: linux-build-tuneups-carried-by-the-build-scripts
+    event:
+      type: note
+      ts: "2026-09-05T05:10:29Z"
+      host: lenovinha
+      summary: |-
+        claimed 2026-09-05T05:10:27Z by linux-lenovinha-claude-20260905t051027z for ARM 1 ONLY — the memory-derived CARGO_BUILD_JOBS ceiling applied INSIDE the build scripts (the env does not cross the wsl.exe boundary). SPLIT, stated so the packet does not get two designs: esmeraldinha's IO-derived half for the test and fixture phases stays on the floor and is NOT mine; arms 2 (chattr +C), 3 (builder --device-write-bps/--cpus) and 4 (dirty-bytes advisory) are untouched by this claim.

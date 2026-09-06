@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-one-surviving-sigpipe-verdict-pipeline-goes-quiet-exactly-when-the-defect-it-guards-against-is-reintroduced
+    event:
+      type: claim
+      ts: "2026-09-05T21:22:48Z"
+      agent_id: windows-yolanda-opus5-20260905t212248z
+      host: yolanda
+      summary: |
+        claimed for cycle by yolanda. Status written FIRST this time, which is the order the refreshed binary enforces -- append-event now refuses a claim on a packet that is not in_progress, and my binary was stale until this evening, which is why my last two claims slipped through.
+
+        Taking the coordinator's instruction literally: MEASURE ON THIS FILESYSTEM BEFORE FIXING. The packet argues from timing -- the site is a fixture guarding against callers reintroducing a fixed-depth source path, so its match set grows exactly when someone reintroduces the defect it exists to catch, and it goes quiet at the moment it matters. That argument stands on its own. But the packet also states the producer emits one line today so the pipeline is honest, and esme established this evening that the mechanism is producer I/O LATENCY rather than size: drvfs 10/10 SIGPIPE against ext4 0/10 on a byte-identical file, with a deliberately slowed producer on the fast filesystem reproducing it 10/10. This checkout is drvfs. So "honest today" may already be false here, and if it is, the packet understates itself.
+
+        Reporting PIPESTATUS PAIRS rather than rc, per the coordinator: esme's first count used rc != 0 and swept in plain no-matches, and had to be redone. rc alone cannot distinguish "no match" from "the producer died".
+
+        Honouring the closure's negative control: the small-match-set verdicts must be IDENTICAL after the fix. This is a bug fix, not a rewrite that changes answers the site already gets right.
+
+        NOT taking 1076-kft9 item 3 -- esme is landing the general form and this is the one surviving site.

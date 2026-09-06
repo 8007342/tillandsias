@@ -1,0 +1,46 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: memoise-the-terminology-dictionary-check-on-a-digest-of-its-inputs
+    order: 1054-zvq4
+    status: ready
+    kind: task
+    priority: p2
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: any
+    capability_tags: [gate, build, metrics]
+    estimated_hours: 3
+    owned_files:
+      - build.sh
+      - scripts/check-terminology.sh
+    title: |
+      Memoise the user-visible terminology check (build.sh "Checking user-visible terminology against the dictionary (629-t6bx)", scripts/check-terminology.sh) on a digest of exactly its inputs; it runs unconditionally on every gate, fails 0% of the time on every host, and tops the skippable list on three hosts in the 2026-09-05 recurrence audit
+    context: |
+      Cross-host recurrence audit (order 1001-q3zf), newest loop_status entry per host, skippable line,
+      window=7d, floor_ms=2000, min_runs=5. The SAME step tops or co-tops the list on three hosts:
+        yoga (silverblue, host-native):        runs=150 avg_ms=14275 fail_pct=0 saved_ms_upper=2127016
+        lenovinha (silverblue, toolbox gate):  runs=230 avg_ms=33414 fail_pct=0 saved_ms_upper=7651905
+        tlatoanis-macbook-air (macOS, M5):     runs=122 avg_ms=29803 fail_pct=0 saved_ms_upper=3606197
+      saved_ms_upper is a BOUND and is stated as one: the timing log carries no input identity, so nobody
+      can claim a given run would have hit a cache. The regime is attached because the numbers differ
+      threefold across hosts. build.sh:1593's own comment already prices the step at 33 s. The check is
+      pure over its inputs (the dictionary plus the user-visible string sources it scans), so a memo keyed
+      on a digest of those paths is safe and the 831-ezea ready-set memo (b300d6b92) is the pattern to
+      follow. The sibling observation, recorded and NOT filed: the 831-ezea step ALSO tops skippable on
+      four hosts (yoga 150/17048, yolanda 99/105107, lenovinha 230/24841, macbookair 122/18204) although
+      it was memoised on 09-02; the 7-day window straddles that landing and the log cannot show hit rate,
+      which is the 1001-q3zf tree-digest rung's question, not a new packet.
+    exit_criteria:
+      - "a second consecutive gate on an unchanged dictionary and unchanged scanned sources skips the terminology check and the cycle-metrics log shows the step under floor_ms; pre-fix result: FAILS (the step runs every gate, avg 14 to 33 s across three hosts)"
+      - "changing one dictionary entry or one scanned source string re-runs the check on the next gate (a hit is never returned for changed inputs); pre-fix result: n/a, the check always runs"
+      - "the memo key names its inputs explicitly in the script and the timing log line carries a hit/miss field so the next audit can measure the hit rate instead of bounding it"
+    unscoreable: |
+      The pin is a two-gate litmus on an unchanged tree asserting the second run's step time is below
+      floor_ms, plus the changed-input arm; the claimer adds both under the ci-release spec.
+    events:
+      - type: note
+        ts: "2026-09-05T04:04:34Z"
+        host: macuahuitl
+        summary: |
+          FILED by the coordinator from the 2026-09-05T03:41Z recurrence audit (1001-q3zf rule: the same
+          step topping skippable on two or more hosts is one packet with every host's numbers).

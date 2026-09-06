@@ -4,9 +4,9 @@ languages: [bash, rust]
 since: 2026-08-26
 last_verified: 2026-08-26
 sources:
-  - plan/index.yaml order:894-scxy
-  - plan/index.yaml order:886-qmdz
-  - plan/index.yaml order:887-bz88
+  - plan/archive/packets-2026-08.yaml order:894-scxy
+  - plan/archive/packets-2026-08.yaml order:886-qmdz
+  - plan/archive/packets-2026-08.yaml order:887-bz88
   - plan/index.yaml order:889-twhe
 authority: high
 status: current

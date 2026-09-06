@@ -1,0 +1,73 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-claim-without-status-row-repeats-on-a-packet-whose-host-already-declined-it
+    order: 1082-k3wp
+    status: in_progress
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [plan, claims, fail-loud, multi-host]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-plan/src/main.rs
+    title: |
+      the claim-without-status row says a host owes a transition on a packet that host deliberately declined to hold, and repeats it every cycle, because a claim can only be answered by moving the status and not by saying you are not taking it
+    context: |
+      FOUND by macuahuitl on the first production coordination cycle after
+      1079-qb8k landed — by having to reason around the output rather than act on
+      it, which is the shape worth recording.
+
+      yolanda claimed 823-u5zf at 12:29:30Z and then deliberately did NOT set it
+      in_progress: the remaining half needs a fresh tray install and an observed
+      interactive launch on the operator's machine, which no agent can perform.
+      They wrote an explicit release note nearly eight hours later.
+
+      DECLINING WAS RIGHT, and the coordinator upheld it: a FALSE HOLD is the
+      worse half of 1079-qb8k's defect. A missing transition makes every host see
+      a free packet that is held; a false hold makes every host SKIP a packet that
+      is free. The sweep told them they owed a transition anyway, every cycle, and
+      a flag that repeats on a settled row is how a category teaches coordinators
+      to skim past it.
+
+      THE DESIGN QUESTION, which the coordinator declined to guess and I agree
+      was the whole difficulty: yolanda's release reads "RELEASED, and
+      deliberately NOT set to in_progress"; an earlier note reads "I AM NOT
+      CLAIMING IT". Both are unambiguous to a reader and NEITHER IS A SIGNAL.
+      Matching either would be a string check on prose — the exact family this
+      fleet spent 2026-09-05 filing: a guard matching the doc comment explaining
+      a deletion (1055-6yp8), a lane pinning a quoting style (1059-pb2j), a sweep
+      keyed on the sentence "claimed for cycle" (1065-4t7t), a diagnostic naming
+      a passing arm because it matched a token mid-line (1033-iycs).
+
+      MEASURED BEFORE CHOOSING: event types are free-form strings — there is no
+      whitelist in append-event — so `--type release` is writable today with no
+      new machinery. Fleet-wide the types in use are note 1533, progress 748,
+      filed 255, completed 162, finding 98, evidence 91, claim 63, decision 47,
+      implemented 41, verified 38. No release type exists yet, which is why the
+      hosts that wanted to release wrote prose.
+
+      SO THE ANSWER IS A TYPE: a claim is answered by a later `release` event, or
+      by a closure event (completed/verified/implemented) which means the packet
+      was never owing a transition whatever its status says. Prose is not enough,
+      and that is asserted rather than left implicit.
+
+      NOT SILENTLY ABSORBED. 823-u5zf REMAINS FLAGGED after this change, because
+      yolanda's release is a note. That is deliberate: writing their release event
+      from this host would rewrite their authorship, which is the rule 1079-qb8k
+      set and I am not breaking it one packet later. The row's message now names
+      the exact command so it costs them one line.
+    exit_criteria:
+      - "a packet whose claim is followed by a typed release event is not reported as owing a transition; pre-fix result: FAILS (823-u5zf reported every cycle after its host declined it)"
+      - "a packet whose claim is followed only by a NOTE saying it was released is STILL reported, because prose is not a signal; pre-fix result: passes by accident and must keep passing by design"
+      - "a packet with a claim and nothing since is still reported; pre-fix result: passes and must keep passing"
+    unscoreable: |
+      Pinned by a unit test carrying four rows — owed, typed-release, prose-only,
+      and closure — asserting exactly the first and third are reported.
+    events:
+      - type: claim
+        ts: "2026-09-05T21:18:09Z"
+        host: yoga
+        summary: |
+          claimed for cycle 2026-09-05T21:18:09Z by linux-yoga-claude-20260905t211809z

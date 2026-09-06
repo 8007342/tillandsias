@@ -232,10 +232,75 @@ fi
 # already printed), 1 to fall back to the full gate (reason already printed).
 LANE_NOTES=()
 
+# ORDER 1056-5344. The paths THIS PUSH ITSELF changes, excluding what a
+# mandated merge of trunk dragged in.
+#
+# THE COMPOSITION THAT BROKE THE LANE. methodology pull_merge_cadence.pre_push_gate
+# requires merging origin/linux-next into a platform branch before EVERY push.
+# That merge brings other hosts' non-plan files into the diff against the
+# PLATFORM remote — they are new relative to windows-next even though they are
+# old on trunk — and the lane judged that whole diff. So the two rules compose
+# into "plan-only only if trunk has not moved", and the busier trunk is the less
+# reachable the lane. esmeraldinha hit it 2026-09-05 with a one-fragment cycle
+# on a night the fleet landed several times an hour.
+#
+# WHY --first-parent AND NOT --no-merges ALONE. "The paths this push's own
+# non-merge commits touch" reads naturally as `git log --no-merges A..B`, and
+# that is WRONG: a commit arriving through the merge is ITSELF a non-merge
+# commit newly reachable on this ref, so it is included and the scoped set is
+# identical to the unscoped one. Measured while designing this — that
+# formulation returned the foreign README right alongside the ledger fragment,
+# so the "fix" would have changed nothing while looking correct on any
+# same-branch test.
+#
+# WHY THE ANCESTRY GATE IS NOT OPTIONAL. --first-parent alone is a BYPASS: a
+# host can park code on a side branch, merge it with --no-ff and push, and the
+# code arrives through the SECOND parent where a first-parent walk cannot see
+# it. Measured: a sneaky.rs was invisible to the scoped view while the ledger
+# fragments showed. That is not the un-gated union this order knowingly accepts
+# (trunk's own content, gated when the coordinator merges into linux-next); it
+# is arbitrary unreviewed code taking a lane meant for ledger appends. So the
+# scoped view is used ONLY when every merge in the range brings trunk content:
+# each merge's second parent must be an ancestor of origin/linux-next. Anything
+# else falls back to the FULL net diff, which disqualifies as it always did.
+#
+# THE DECISION AND THE EMISSION ARE SEPARATE FUNCTIONS ON PURPOSE. The emitter
+# is consumed through process substitution, which is a SUBSHELL: a
+# LANE_UNION_UNGATED=1 set inside it is discarded, so the marker would silently
+# never be written and the stamp would claim a gated union. The decision
+# therefore runs in the caller's shell and the caller sets the flag.
+_lane_can_scope() { # remote_sha local_sha -> 0 when the merge-scoped view applies
+    local remote_sha="$1" local_sha="$2" m p2 merges=0
+
+    while IFS= read -r m; do
+        [[ -n "$m" ]] || continue
+        merges=$((merges + 1))
+        p2="$(git rev-parse --verify --quiet "${m}^2" 2>/dev/null)" || return 1
+        [[ -n "$p2" ]] || return 1
+        # A merge of anything but trunk content cannot be scoped away.
+        git merge-base --is-ancestor "$p2" refs/remotes/origin/linux-next 2>/dev/null || return 1
+    done < <(git log --merges --format=%H "${remote_sha}..${local_sha}" 2>/dev/null)
+
+    # No merge, nothing to scope away: the net diff already IS this push's own
+    # changes. Returning 1 keeps behaviour bit-identical to before this order
+    # for every push that does not merge.
+    [[ "$merges" -gt 0 ]]
+}
+
+_lane_scoped_diff() { # remote_sha local_sha -> "<status>\t<path>" lines
+    local remote_sha="$1" local_sha="$2" c
+    while IFS= read -r c; do
+        [[ -n "$c" ]] || continue
+        git diff --name-status --no-renames "${c}^" "$c" -- 2>/dev/null
+    done < <(git log --first-parent --no-merges --format=%H "${remote_sha}..${local_sha}" 2>/dev/null) \
+        | LC_ALL=C sort -u
+}
+
 attempt_plan_only_lane() {
     local -a files=() srcs=() bases=() issue_bases=()
     local att_seen=0
     LANE_NOTES=()
+    LANE_UNION_UNGATED=0
 
     if [[ -z "$REFS" ]]; then
         echo "plan-only lane: not applicable — no ref list on stdin to scope the outgoing diff (full gate required)" >&2
@@ -258,6 +323,15 @@ attempt_plan_only_lane() {
             echo "plan-only lane: not applicable — remote base $remote_sha is not present locally (full gate required)" >&2
             return 1
         fi
+
+        # ORDER 1056-5344: decide HERE, in this shell, whether the merge-scoped
+        # view applies — the emitter below runs in a subshell and cannot record it.
+        local _scoped=0
+        if _lane_can_scope "$remote_sha" "$local_sha"; then
+            _scoped=1
+            LANE_UNION_UNGATED=1
+        fi
+        _lane_can_scope_decided() { [[ "$_scoped" -eq 1 ]]; }
 
         # Net outgoing diff for this ref: what the remote will see change.
         # --no-renames keeps the status alphabet to A/M/D/T: a rename of a
@@ -333,13 +407,88 @@ attempt_plan_only_lane() {
                     # filing LESS. Ruled approved by the coordinator with the
                     # four conditions enforced here and in the validator below.
                     #
-                    # NEW FILES ONLY — status A, never M/D/T. Same immutability
-                    # rule the fragment arms apply, for the same reason: a new
-                    # file is a capture, a modified one can carry anything.
-                    if [[ "$status" != "A" ]]; then
-                        echo "plan-only lane: not applicable — '$path' has status '$status' in the outgoing diff; only NEW issue captures qualify (full gate required)" >&2
+                    # A OR M, NEVER D OR T (order 1060-7mmm). This was A only,
+                    # by analogy with the fragment arms — but the analogy does
+                    # not hold, and the asymmetry it produced points the wrong
+                    # way.
+                    #
+                    # FRAGMENTS ARE IMMUTABLE BY CONSTRUCTION: plan/index.d/
+                    # entries are CRDT records whose whole contract is
+                    # append-only, so an M there is a corrupted ledger. A
+                    # plan/issues capture is PROSE. Nothing about it is
+                    # append-only, and a correction to it is the ordinary way it
+                    # improves.
+                    #
+                    # MEASURED on esmeraldinha 2026-09-05, in the same push,
+                    # seconds apart, differing only in whether one correction was
+                    # included:
+                    #   refused: '...smoke-e2e-findings-v56.9.5.1...md' has status
+                    #            'M'; only NEW issue captures qualify
+                    #   accepted: outgoing diff adds only new plan fragment files
+                    # The change was FOUR CHARACTERS — the report cited order
+                    # 1029-5vwd, which has no referent; the real one is
+                    # 1029-5wvd. The lane accepted the creation of that report
+                    # unreviewed and refused the fix to it.
+                    #
+                    # WHY THIS IS WORTH RELAXING RATHER THAN LIVING WITH. A lane
+                    # whose economics favour APPENDING a new record over
+                    # CORRECTING an existing one selects for records that read as
+                    # settled while carrying something wrong — the failure mode
+                    # this fleet keeps finding. The cheap path should be the
+                    # honest one. On the night this was filed the finding host
+                    # made three corrections to landed or relayed records in one
+                    # shift, and this rule taxed every one of them.
+                    #
+                    # THE BLAST RADIUS IS UNCHANGED, which is the whole argument.
+                    # An M here is still validated per-file by
+                    # check-issue-citation-convention against the PUSHED bytes,
+                    # the same gate the A path runs; the diff it reads is
+                    # base..head, so a modification is checked exactly as an
+                    # addition is. Prose under plan/issues/ cannot reach the
+                    # build and cannot change what the gate validates. An M
+                    # ANYWHERE ELSE still takes the full gate — that refusal is
+                    # the escape hatch this lane exists to keep shut, and the
+                    # fixture asserts it.
+                    #
+                    # D and T stay refused: a DELETION removes a record the lane
+                    # cannot validate the absence of, and a type change is not a
+                    # correction.
+                    if [[ "$status" != "A" && "$status" != "M" ]]; then
+                        echo "plan-only lane: not applicable — '$path' has status '$status' in the outgoing diff; issue captures qualify as new (A) or corrected (M) only (full gate required)" >&2
                         return 1
                     fi
+                    # A WORK-QUEUE LEDGER IS A SHARED RECORD, NOT ONE HOST'S
+                    # PROSE (order 1013-xm63). 1060-7mmm admits an M anywhere
+                    # under plan/issues/ because correcting a report you wrote is
+                    # the ordinary way it improves. A work-queue file is
+                    # different in kind: several hosts append to the same
+                    # document, and a rewrite there can silently drop a sibling's
+                    # line — the lane cannot tell a correction from an erasure,
+                    # and neither can a reader afterwards.
+                    #
+                    # So for these files only, the M must be an APPEND. That is
+                    # the whole of pirria's case (2026-09-04, a cargo-less host
+                    # that could work and report but not comply: the skill's
+                    # §6.3 mandates a work-queue line, which is an M by
+                    # construction, and the refusal sent it to a full gate it had
+                    # no toolchain to run). An append is a record; a rewrite is
+                    # not, and it keeps the full gate.
+                    #
+                    # `git diff` deletion lines, minus the `---` file header. A
+                    # pure append has none.
+                    case "${path##*/}" in
+                        *work-queue*)
+                            if [[ "$status" == "M" ]]; then
+                                _wq_removed="$(git diff "$remote_sha" "$local_sha" -- "$path" 2>/dev/null \
+                                    | grep '^-' | grep -v '^---' | head -3)"
+                                if [[ -n "$_wq_removed" ]]; then
+                                    echo "plan-only lane: not applicable — '$path' is a work-queue ledger and this edit REMOVES or REWRITES lines, which the lane cannot tell from erasing a sibling host's entry (full gate required)" >&2
+                                    printf '%s\n' "$_wq_removed" | sed 's/^/    /' >&2
+                                    return 1
+                                fi
+                            fi
+                            ;;
+                    esac
                     # DEPTH IS DECIDED EXPLICITLY, not left to a glob. The
                     # Reduction Engine names four classification directories;
                     # a capture lives at the top level or in exactly one of
@@ -379,7 +528,11 @@ attempt_plan_only_lane() {
             # the validator below can index it without drifting out of step.
             issue_bases+=("$issue_base")
             issue_base=""
-        done < <(git diff --name-status --no-renames "$remote_sha" "$local_sha" -- 2>/dev/null)
+        done < <(if _lane_can_scope_decided; then
+                     _lane_scoped_diff "$remote_sha" "$local_sha"
+                 else
+                     git diff --name-status --no-renames "$remote_sha" "$local_sha" -- 2>/dev/null
+                 fi)
     done <<< "$REFS"
 
     if [[ ${#files[@]} -eq 0 ]]; then
@@ -392,7 +545,7 @@ attempt_plan_only_lane() {
     # pushed YAML blob; tillandsias-plan check validates fragment schema by
     # folding every fragment (so it also parses them — which is why yq-absent
     # may delegate to it, but BOTH absent is a refusal, never a pass).
-    local have_yq=0 have_plan=0 plan_bin=""
+    local have_yq=0 have_plan=0 plan_bin="" plan_why="" plan_not_runnable=""
     command -v yq >/dev/null 2>&1 && have_yq=1
     # Order 721-nyev: `-x` is a CLAIM; running the binary is evidence. On a
     # shared Windows/WSL checkout that test passes on a Linux ELF sitting
@@ -401,7 +554,40 @@ attempt_plan_only_lane() {
     # gather, which is the worst shape in this file.
     . "$(dirname "${BASH_SOURCE[0]}")/../plan-binary-probe.sh"
     plan_bin="$(resolve_plan_binary || true)"
-    [[ -n "$plan_bin" ]] && have_plan=1
+    # ORDER 1060-6fx7: RESOLVED IS NOT THE SAME AS RUNNABLE, and conflating them
+    # made this lane blame the DATA for a missing INSTRUMENT.
+    #
+    # resolve_plan_binary honours an explicit TILLANDSIAS_PLAN_BIN on EXISTENCE
+    # alone — deliberately (704-zcgi), so a stub failing the way a STALE binary
+    # fails stays distinguishable from an absent one. So `plan_bin` may name a
+    # file that cannot execute, and every consumer below then read a non-zero
+    # exit as a verdict about the ledger.
+    #
+    # MEASURED on yoga 2026-09-05: with the override pointed at a binary that
+    # dies on exec, three arms of test-pre-push-issue-capture-lane.sh went red
+    # with, verbatim:
+    #   plan-only lane: validation FAILED — tillandsias-plan check refused the
+    #   folded ledger (full gate required)
+    # The ledger was sound. That is the 923-ws3r class — "the instrument is
+    # missing, not the data" — surviving inside the lane's own validation, and a
+    # refusal naming the wrong layer sends the reader to the ledger confidently
+    # and they stop when they find nothing wrong there.
+    #
+    # ONE EXEC, HERE, rather than pattern-matching exit codes at each of the
+    # three call sites below: a dynamic-link failure and a genuine refusal are
+    # both non-zero, and only running the thing separates them. A binary that
+    # cannot answer `capabilities` is not a validator, so the lane treats it as
+    # ABSENT — which routes into the existing fail-closed path — and says which
+    # of the two it was.
+    if [[ -n "$plan_bin" ]]; then
+        if plan_why="$("$plan_bin" capabilities 2>&1 >/dev/null)"; then
+            have_plan=1
+        else
+            LANE_NOTES+=("$plan_bin resolved but does NOT run here, so it is not a validator: ${plan_why:-no output}")
+            plan_not_runnable="$plan_bin"
+            plan_bin=""
+        fi
+    fi
     # Order 889-twhe: fail closed only when this push actually carries YAML that
     # needs a YAML parser. Before, an issues-only or loop-status-only push was
     # refused for lacking a validator it had nothing to run — the fail-closed
@@ -412,7 +598,15 @@ attempt_plan_only_lane() {
         case "$f" in plan/index.d/*) needs_yaml=1 ;; esac
     done
     if [[ $needs_yaml -eq 1 && $have_yq -eq 0 && $have_plan -eq 0 ]]; then
-        echo "plan-only lane: not applicable — neither yq nor target/release/tillandsias-plan is available to validate fragments (fail closed; full gate required)" >&2
+        # NAME WHICH OF THE TWO IT WAS. "not available" reads as absent, and an
+        # operator who can see the file sitting in target/release will not
+        # believe it — then look for the wrong problem (1060-6fx7).
+        if [[ -n "$plan_not_runnable" ]]; then
+            echo "plan-only lane: not applicable — $plan_not_runnable exists but does NOT run here, and yq is absent, so no validator (fail closed; full gate required)" >&2
+            echo "  ${plan_why:-}" >&2
+        else
+            echo "plan-only lane: not applicable — neither yq nor target/release/tillandsias-plan is available to validate fragments (fail closed; full gate required)" >&2
+        fi
         return 1
     fi
 
@@ -634,6 +828,60 @@ attempt_plan_only_lane() {
         LANE_NOTES+=("scripts/check-added-fragments-parse.sh absent — skipped")
     fi
 
+    # ORDER 1069-5sp4: THE SCORABLE-OBLIGATION GUARD CANNOT RUN
+    # ANYWHERE ELSE FOR A PLAN-ONLY PUSH, and that is structural rather than an
+    # authoring mistake.
+    #
+    # check-scorable-obligation-added.sh reads ONE input: newly added
+    # plan/index.d/*.yaml. It lives in build.sh's fast-refusal block (line ~1699).
+    # But gate-stamp.sh:343 deliberately EXCLUDES plan/index.d/*.yaml from the
+    # stamp hash (930-i6x4, "append-only ledger traffic the plan fast lane
+    # covers"). So a plan-only change never invalidates the stamp,
+    # `./build.sh --check` answers ok:gate-fresh and runs NOTHING — including the
+    # one guard whose only input is the thing that changed.
+    #
+    # A guard behind a memoisation that ignores the guard's own input can only
+    # fire when something ELSE changed. MEASURED on tlatoanis-macbook-air
+    # 2026-09-05: standalone the guard reports
+    # violation:scorable-obligation-missing:2, while `./build.sh --check` on the
+    # SAME TREE reports ok:gate-fresh and exits 0.
+    #
+    # And this lane — the one place a plan-only push is actually inspected —
+    # validated the fragments' YAML and never asked the scorable question. So
+    # three fragments (1059-yekz, 1067-24q6, 1068-cxmf) reached trunk unchecked
+    # and redded the COORDINATOR's gate minutes later, where the guard finally
+    # ran because that host had other changes. The authoring host, which could
+    # have said so in under a second, stayed green every time.
+    #
+    # ABSENCE IS A NOTED SKIP, NOT A REFUSAL, and I got this wrong first.
+    # I made it fail closed, reasoning that a missing guard silently readmits the
+    # defect. Measured consequence: NINE fixtures build a scratch repo that
+    # copies this hook without the checkers, so the lane refused in all of them
+    # and the gate went red in five arms of test-pre-push-issue-capture-lane
+    # alone. The branch fires ONLY in synthetic repos — a real checkout always
+    # carries the file, and if it were deleted, build.sh's fast refusal invokes
+    # it directly and the full gate fails there. So fail-closed bought nothing in
+    # production and broke the instruments.
+    #
+    # test-gate-stamp-scope.sh's own case-7 note records this exact substitution
+    # one dependency over: without yq on macOS that arm "stopped testing the
+    # lane's stamp handling and started testing tool availability". A fixture
+    # that fails for want of a copied script is measuring the fixture.
+    #
+    # The skip is NOTED, not silent: LANE_NOTES is printed in the push record
+    # below, so "the guard did not run" is visible rather than absent — which is
+    # the distinction this whole packet is about.
+    if [[ -f scripts/check-scorable-obligation-added.sh ]]; then
+        if ! out="$(bash scripts/check-scorable-obligation-added.sh 2>&1)"; then
+            echo "plan-only lane: validation FAILED — check-scorable-obligation-added refused (977-448j):" >&2
+            echo "$out" | head -8 | sed 's/^/  /' >&2
+            echo "  A new packet must name a litmus in verifiable_closure, or say 'unscoreable: <reason>'." >&2
+            return 1
+        fi
+    else
+        LANE_NOTES+=("scripts/check-scorable-obligation-added.sh absent — scorable-obligation check skipped")
+    fi
+
     # Order 767-iukh: when the push touches the attestation ledger, the
     # dedicated gate must vouch for it — it re-validates the WHOLE ledger
     # (grammar on every file, commit reachability for this host's own file),
@@ -681,6 +929,20 @@ attempt_plan_only_lane() {
         for note in ${LANE_NOTES[@]+"${LANE_NOTES[@]}"}; do
             echo "plan-only lane: note: $note" >&2
         done
+    fi
+    # ORDER 1056-5344: RECORD THE GATE DEBT rather than imply the lane gated it.
+    # When the lane was taken over a mandated merge, the pushed head is a UNION
+    # of two sides that were each green separately and were never gated
+    # TOGETHER — the 754-kptj shape. The lane validated this push's own
+    # fragments; it did not build the union. Write that down where the
+    # coordinator's land can read it, so the debt is a fact on disk instead of
+    # an inference someone has to make from the branch topology.
+    if [ "${LANE_UNION_UNGATED:-0}" -eq 1 ]; then
+        local _um; _um="$(git rev-parse --absolute-git-dir 2>/dev/null)/tillandsias-union-ungated"
+        printf '%s %s\n' "$(git rev-parse HEAD 2>/dev/null)" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            >> "$_um" 2>/dev/null || true
+        echo "plan-only lane: this head is an UN-GATED UNION (scoped past a merge of origin/linux-next);" >&2
+        echo "plan-only lane: recorded in $_um — the coordinator's land gates it, this lane did not" >&2
     fi
     echo "${GRN}✓ local gate: plan-only lane clean (${#files[@]} fragment file(s) validated; build stamp not required for this push)${RST}" >&2
     return 0
@@ -868,6 +1130,39 @@ if [[ -f scripts/gate-stamp.sh ]]; then
             echo "${YLW}⚠ gate-stamp returned '${stamp:-<empty>}' — not blocking on it${RST}" >&2
             ;;
     esac
+fi
+
+# ORDER 1069-5sp4, SECOND HALF — A VALID STAMP CANNOT VOUCH FOR PLAN FRAGMENTS,
+# BECAUSE IT DELIBERATELY DOES NOT HASH THEM.
+#
+# I put this guard in the plan-only lane first and watched my very next
+# plan-only push bypass it. The lane is "attempted only when the stamp is
+# missing/stale" (its own header), and a plan-only change NEVER staleness the
+# stamp — gate-stamp.sh:343 excludes plan/index.d/*.yaml on purpose. So the
+# common case is: stamp valid -> accepted here -> lane never consulted -> the
+# guard never runs. MEASURED on this host: the push carrying 1070-qi2e and
+# 1071-adhj printed one "local gate: preflight clean" line and ZERO
+# "plan-only lane" lines.
+#
+# That is the same composition as the defect itself, one level down, and the
+# first fix would have looked correct while firing only in the uncommon case.
+#
+# So ask here too. The checker is self-scoping — it prints skip:no-new-packets
+# and exits 0 when the outgoing diff adds no packet-declaring fragment — so this
+# costs a fork on every push and refuses only what it should. Absence is a NOTED
+# skip, not a refusal, for the reason recorded in the lane: the branch fires only
+# in synthetic repos, and build.sh's fast refusal invokes the checker directly.
+if [[ -f scripts/check-scorable-obligation-added.sh ]]; then
+    if ! _scorable_out="$(bash scripts/check-scorable-obligation-added.sh 2>&1)"; then
+        echo "${RED}✗ a packet in this push has no scorable obligation (977-448j)${RST}" >&2
+        echo "$_scorable_out" | head -8 | sed 's/^/  /' >&2
+        echo "  Name a litmus in verifiable_closure, or say 'unscoreable: <reason>'." >&2
+        echo "  NOTE: a valid gate stamp does not cover this — the stamp excludes" >&2
+        echo "  plan/index.d/*.yaml by design (930-i6x4), so it never re-ran the check." >&2
+        exit 1
+    fi
+else
+    echo "${YLW}note: scripts/check-scorable-obligation-added.sh absent — scorable-obligation check skipped${RST}" >&2
 fi
 
 echo "${GRN}✓ local gate: preflight clean, ./build.sh --check current for this tree${RST}" >&2

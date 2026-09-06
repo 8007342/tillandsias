@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: precommit-openspec-scan-exceeds-ten-minutes-on-large-files
+    event:
+      type: progress
+      ts: "2026-09-05T11:05:58Z"
+      agent_id: linux-yoga-claude-20260905t110558z
+      host: yoga
+      summary: |-
+        Fix landed 440233994. TWO REGIMES measured before touching anything: yoga (Linux, warm cache, GNU grep) 176ms; macbookair (macOS) 10373ms against a 2500ms budget. A 59x spread on the same code, the same shape 734-sjb3 identified twice already, cost is syscall time not work. WHAT IT GREW WITH: grep -r with --include still WALKS every directory, --include only decides which files it OPENS, so the sweep was descending the entire build output (141,414 entries under target/ on this host against 12,352 everywhere else) to read 928 source files. It grew with BUILDS, not with source, which is why the budget held for months and then did not: a host that has never built pays nothing and a working host pays for every artifact. BEFORE AND AFTER, GNU grep, five runs each sorted: before 204 222 237 245 263 ms (median 237), after 79 84 93 100 112 ms (median 93), 2.5x; the sweep alone went 135/133/126ms to 20/15/19ms. ANSWER-PRESERVING, VERIFIED BEFORE IT WAS WRITTEN because the risk is worse than the slowness: a spec referenced only from build output would stop being seen as referenced and be reported as a zero-trace spec that is not one, a false accusation produced by an optimisation. Token set identical with and without exclusions, 218 both ways, set difference empty in both directions. scripts/test-precommit-zero-trace-scan-scope.sh asserts that invariant on the real repository with a non-vacuity arm first (an empty sweep would make the equality trivially true) and an arm that the hook actually carries the exclusion, so the invariant cannot be true of a sweep nobody runs; wired into build.sh --check. NOT CLAIMING THIS FIXES MACBOOKAIR and it probably does not alone: if the 2.5x carries, 10373ms becomes about 4100ms, still over 2500. I measured this host; macbookair must re-measure. Next candidates there are the awk pass over 170 spec.md files and the per-spec loop, both bounded by spec count rather than repo size. THE BUDGET STAYS AT 2500ms, not widened here and it should not be widened to match a measurement: the budget states what this phase is worth at a commit boundary, and this order exists because a scan that quietly costs more than it is worth is how a cycle loses staged work at its exit contract. If it cannot be met after the next round the honest move is to re-scope what the phase does, not to raise the number. MEASUREMENT TRAP recorded because it nearly produced the wrong answer: an interactive shell here has grep shadowed by a ugrep function which reports 2-6ms for the same sweep and would have hidden the entire cost; every number above is /usr/bin/grep, which is what the hook gets.

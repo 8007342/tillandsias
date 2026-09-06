@@ -1,0 +1,46 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-guest-provisioning-script-can-abort-partway-while-cloud-init-reports-success
+    event:
+      type: note
+      ts: "2026-09-05T20:32:31Z"
+      agent_id: linux-macuahuitl-claude-20260905t203231z
+      host: macneo
+      summary: |
+        CRITERION 4 IS UNSATISFIABLE AS FILED, AND THE REWORDING IS ACCEPTED. macneo measured it and ASKED for the change rather than making it — the substitution this packet exists to punish is editing a target after seeing the data, and they named that themselves before the coordinator could. Both versions are recorded so the change is visible rather than absorbed.
+
+          AS FILED:    cloud-init reporting `done` is no longer sufficient evidence that
+                       provisioning completed, and whatever consumes that signal says so.
+          AS MEASURED: NO host code consumes cloud-init's status. The insufficient signal
+                       actually in use is `is_provisioned()` = rootfs.img exists
+                       (vz.rs:231), consumed at 20 call sites. Whatever is to be made
+                       honest must be made honest THERE.
+
+        VERIFIED INDEPENDENTLY ON macuahuitl, counts exact:
+
+          cloud-init appears in exactly THREE files, none of them a consumer —
+            crates/tillandsias-vm-layer/src/vz.rs        the user-data script and its own
+                                                         comments at 592, 694-697, 739, 754
+            crates/tillandsias-macos-tray/src/diagnose.rs:1993   a doc comment about fstab
+            scripts/test-forge-config-trust-cross-platform-parity.sh:71   a test NAME
+          crates/tillandsias-vm-layer/src/vz.rs:231
+            pub fn is_provisioned(&self) -> bool { self.rootfs_image_path().exists() }
+          20 call sites: vz.rs 11, diagnose.rs 7, action_host.rs 2
+
+        Nothing on the host runs `cloud-init status`, parses it, or branches on it. So the packet's HARM is real and its TARGET was misidentified: nobody is fooled by cloud-init's `done`, because nobody asks cloud-init. What actually happens is that twenty decision points treat FILE EXISTENCE as completion. macneo's cold provision is the proof — rootfs.img exists, `is_provisioned()` is TRUE, the guest never reached Ready, and there is no completion record because none exists to write.
+
+        THE REWORDED CRITERION CONNECTS TO CRITERION 2 RATHER THAN COMPETING WITH IT: the completion record is precisely the fact `is_provisioned()` lacks, and a host-side reader of an image-root marker is what would let those sites distinguish a disk file from a finished provision. One design.
+
+        CRITERION 2 IS ARBITRATED TO macneo, and the deciding argument is SEQUENCING rather than precedence. macbookair independently decided to fix the missing completion record at ~20:1xZ, from evidence macneo had just sent them, and stood down unprompted when macneo flagged it. Neither host wrote anything. The completion record and the marker LOCATION are one change: a completion line written to /var/log inside the guest is unreadable in exactly the condition it exists to report, because order 272 masks sshd and its sockets and symlinks systemd-ssh-generator to /dev/null, making the control wire the only host-to-guest channel by construction. Landing the completion in the guest-only path first means moving it again and rewriting the three-state fixture with it.
+
+        THE CREDENTIAL ASYMMETRY WAS WEIGHED EXPLICITLY, at macneo's request, and did not decide it. macneo cannot push, so their work returns by hash-first relay and costs the coordinator a landing; macbookair could land directly. Routing by credential would concentrate design work on whichever hosts can push, which is a worse failure than one extra relay.
+
+        THE TWENTY BRANCHING CALL SITES ARE THEIR OWN PACKET AND MUST NOT BE ABSORBED HERE. Changing what they mean by "provisioned" is not a small edit and several gate destructive or user-visible behaviour. Slice (a) of 980-ja2m already fixed the REPORTING of that same field — `--diagnose` now says the boot artifacts are on disk rather than PROVISIONED, precisely because macneo found it was a stat() — and the branching half is different work with a different risk profile. File it at criterion 4's close with the 11/7/2 breakdown and the note that the reporting half is done.

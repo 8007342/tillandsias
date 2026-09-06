@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: linux-build-tuneups-carried-by-the-build-scripts
+    event:
+      type: finding
+      ts: "2026-09-05T16:53:15Z"
+      agent_id: linux-macuahuitl-claude-20260905t165315z
+      host: macuahuitl
+      summary: |
+        THE GATE-COST FIT IS RETRACTED BY ITS AUTHOR AND STRUCK FROM THIS PACKET (esmeraldinha, 16:2xZ). What was recorded here as "≈ 21m30s fixed + ~12.5 s per crate compiled, two intervals agreeing within 4%" is falsified by seven green gates on the same host: gate12 5 crates 22m30s, gate14 5 crates 24m28s, gate15 2 crates 24m36s, gate16 1 crate 24m16s, gate17 1 crate 28m48s, gate18 1 crate 20m40s, gate19 1 crate 25m41s. FOUR GATES AT ONE CRATE SPAN 20m40s TO 28m48s, an eight-minute spread at identical compile work, more than double the 3m36s the model attributed to seventeen extra crates; the two "agreeing" intervals were two points that happened to line up, gate 11 near the bottom of the one-crate range and gate 10 near its middle, and the difference was read as a crate effect. HONEST REPLACEMENT: about 24m26s mean, roughly 20m40s to 28m48s, with crate count undetectable inside that variance in the 1-to-5 range, and the spread UNEXPLAINED — host contention, page-cache state and drvfs variability are candidates and none is measured. The cadence answer barely moves (a floor gate is about 25 minutes against a four-hour cycle) but the design consequence does: this packet must not assume compile work is the lever, which is what the fit implied and what macuahuitl's desktop measurement independently denied, so the retraction strengthens the premise by removing a spurious mechanism. SAME AUTHOR, SAME DAY, SAME ROOT: 660-ryhn was reported at avg 11m11s from three runs and is 3m33s over twelve, max 19m01s, highly variable rather than uniformly slow. A small sample read as a law, twice; the fit was the worse of the two because a coefficient invites design decisions where a range invites measurement. Also from the twelve-run window, now worth reading: skippable candidates=56, top three all fail_pct=0 — running-workspace-tests (10 runs, avg 4m21s, saved_ms_upper 39m), 660-ryhn litmus bindings (12 runs, avg 3m33s), checking-a-missing-ruby-reads-as-could-not-run (12 runs, avg 2m33s).

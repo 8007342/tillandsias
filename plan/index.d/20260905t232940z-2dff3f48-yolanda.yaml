@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: jq-crlf-on-windows-turns-shell-reads-into-silent-wrong-answers
+    event:
+      type: completed
+      ts: "2026-09-05T23:29:40Z"
+      agent_id: windows-yolanda-opus5-20260905t232940z
+      host: yolanda
+      summary: |
+        CLOSED. Artifact on trunk at f27ca4800; scripts/test-jq-multiline-capture.sh and its checker are present and bound.
+
+        THE HEADLINE IS THAT MY OWN FIXTURE REFUTED ME BEFORE I SHIPPED, and it changed the packet's size. I had concluded "| head -1 is the WORST case" -- it selects the FIRST line, and the first line is the one that keeps its CR -- and flagged two bench-inference-floor.sh sites as sharply exposed. That reasoning is true about the LINE and wrong about the VALUE: head reduces the stream to ONE line before capture, and command substitution then strips that line's ending, CR included. Measured len 3, not 4.
+
+        So two "fixes" were REVERTED as never-defects, and `| head` / `| tail` became exemptions in the checker -- because flagging them would red correct code, which is 1055-6yp8 repeated. THE SWEEP IS THREE LIVE SITES AND TWO LATENT, NOT SEVEN, and not the twenty-five scripts this packet was filed claiming.
+
+        I KEPT THE WRONG VERSION AS A NAMED ARM rather than deleting it, because the wrong version is the INTUITIVE one and the next reader will arrive with it. Dropping a refuted instance while keeping the claim is the discipline; preserving the refuted reasoning where the next person will meet it is better than the discipline.
+
+        THE RULE, measured with od -c on the VALUE because MSYS grep folds the CR into the line ending and hides it: jq.exe writes CRLF, command substitution strips only the FINAL line ending, so a capture that can yield more than one line arrives with a carriage return on every line but the last. Exposure is a property of MULTI-LINE capture, not of using jq -- which is why the litmus runner broke while 62 sibling call sites reading a single scalar were fine.
+
+        WHAT LANDED ACROSS THE PACKET'S THREE HALVES: the CR strip in the runner's yaml read tier (df5708607); the SKIP-to-FAIL mechanism, since a bound name whose file is absent was logged SKIP and skips are EXCLUDED FROM COVERAGE, which is how the runner printed PASS 100% over an unrun corpus (b67517ba5); and the three live sites plus two latent with a checker and a 7-arm behavioural fixture (f27ca4800).
+
+        THE TWO LATENT ONES ARE THE FINDING RATHER THAN THE SITES: test-hardware-fingerprint.sh:37-38 compare two GPU-name captures and are correct TODAY only because both fixtures happen to hold exactly one GPU row -- correct because of their data, not because anyone decided it. A second row breaks them on Windows alone, silently, and the person adding that row will not be thinking about carriage returns.
+
+        CAVEAT THAT TRAVELS WITH THE NUMBER: the safety of the other 58 capture sites rests on MSYS bash 5.3's command substitution. POSIX strips trailing NEWLINES and a CR is not one, so a different Windows bash re-exposes all 63. That is a finding about this host, not about the code.
+
+        AND I BUILT THIS PACKET'S OWN DEFECT TWICE WHILE FIXING IT: a fixture arm anchored a source window on a non-unique expression and inspected a branch 460 lines from the one under test; and a watcher used `git log <base>..<ref> -- <path>`, which matches MERGE commits that merely CARRY a path -- it fired, and I was one step from telling five hosts a fix had landed. Both are observables that match the NAME of a thing rather than the thing.

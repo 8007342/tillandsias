@@ -1,0 +1,80 @@
+packets:
+  - packet_id: litmus-bindings-reconciliation-fixture-exceeds-its-30s-budget-on-a-mid-tier-host
+    order: 1062-v3j4
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: any
+    owner_host: any
+    capability_tags:
+      - litmus
+      - budget
+      - multi-host
+      - release-gate
+    estimated_hours: 2
+    owned_files:
+      - scripts/test-litmus-bindings.sh
+      - openspec/litmus-tests/litmus-litmus-bindings-reconciliation-shape.yaml
+    title: >-
+      litmus:litmus-bindings-reconciliation-shape step 1 times out at ~36.9s
+      against a 30s budget on lenovinha, reproducibly and uncontended, so the
+      release gate carries a host-dependent red
+    context: |
+      MEASURED on lenovinha 2026-09-05, three observations rather than one,
+      because a single number is what this fleet spent the night learning not
+      to report:
+
+        scripts/test-litmus-bindings.sh   36.44s, 36.84s, 36.91s
+        budget (step 1 timeout_ms)        30000
+        spread                            0.2% across the last two
+        loadavg at measurement            0.67 1.32 1.26
+
+      The runner's own diagnostic agrees it is not contention: it printed
+      "cpu.pressure some-stall 23403us over 30s (0%) in this cgroup — step NOT
+      contended at kill time; genuinely too slow for its 30s budget" (the
+      820-c8q8 arm that exists to separate a slow step from a stalled one).
+
+      NOT CAUSED BY THE JOBS CAP, checked before filing: neither
+      scripts/test-litmus-bindings.sh nor scripts/check-litmus-bindings.sh
+      invokes cargo, so 1047-h88p's CARGO_BUILD_JOBS ceiling cannot reach it.
+      Also unrelated to 1060-428m, which was landing on the same host at the
+      time: the fixture has ZERO references to check-plan-binary-probe-usage.sh.
+      Both were ruled out by measurement rather than by assumption.
+
+      WHY IT MATTERS BEYOND THIS HOST: this litmus is bound to ci-release, so a
+      host whose fixture crosses the budget reports a red in the release gate
+      for a reason that has nothing to do with the change under test. That is
+      the shape of 1038-d7vw — a budget that fits the host it was written on —
+      and the resolution there was a regime-named, self-selecting budget rather
+      than a global raise. Whether the same answer fits here is for the claimer;
+      the difference is that 1038-d7vw's cost was quadratic and removable, and
+      nothing here says this fixture is doing anything wrong.
+
+      WHAT I DID NOT DO, so the next reader does not assume it was: I did not
+      measure this on any other host, did not profile where the 36.9s goes, and
+      did not check whether the fixture has grown (its five cases may simply
+      cost more than they did when 30000 was chosen). Any of those could change
+      the disposition from "raise or name the budget" to "the fixture regressed".
+    exit_criteria:
+      - >-
+        the step's cost is measured on at least one other host so the budget is
+        set against a fleet range rather than one box; pre-fix result: FAILS —
+        only lenovinha has numbers (36.44/36.84/36.91s against 30000ms)
+      - >-
+        the disposition names WHICH of the two causes holds: the fixture grew
+        past a budget that was correct when chosen, or the budget was always
+        host-specific; a raise that does not say which is folklore
+      - >-
+        if the answer is a budget change, it is derived and bracketed like
+        1038-d7vw's — above the measured worst arm with stated headroom, below
+        any cost that would mean a real regression — and not chosen
+      - >-
+        the release gate no longer carries a host-dependent red for this step,
+        verified by a ci-release run on the host that was failing
+    next_action: >-
+      profile where the 36.9s goes in scripts/test-litmus-bindings.sh (five
+      cases, no cargo) and check git history for whether the fixture grew after
+      30000 was set; a second host's number is the cheapest thing that
+      distinguishes "fixture regressed" from "budget was always local"

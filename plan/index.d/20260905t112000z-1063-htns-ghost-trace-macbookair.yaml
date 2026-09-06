@@ -1,0 +1,81 @@
+packets:
+  - packet_id: five-at-trace-sites-name-a-spec-that-does-not-exist-windows-wsl-runtime
+    order: 1063-htns
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    release_target: stable-milestone-v1
+    capability_tags:
+      - traceability
+      - fail-loud
+    estimated_hours: 1
+    unscoreable: |
+      The pin is the pre-commit hook's own ghost-trace check, which already
+      exists and already reports these four errors on any commit touching
+      client.rs; naming a new litmus would duplicate it. Closure is that
+      hook printing no `ghost trace 'spec:windows-wsl-runtime'` line on a
+      commit touching either file.
+    title: |
+      Five `@trace spec:windows-wsl-runtime` sites name a spec that does not exist; the real one is `wsl-runtime`, and the hook only surfaces them when someone edits the file.
+    deliverable: |
+      Every @trace names a spec that exists. What must not persist is a
+      traceability marker pointing at nothing, in the two files that carry
+      the podman/WSL boundary.
+    context: |
+      MEASURED 2026-09-05 on tlatoanis-macbook-air, surfaced by an unrelated
+      edit to client.rs for 1044-2raf. The pre-commit hook printed four
+      errors:
+
+        ✗ OpenSpec: ghost trace 'spec:windows-wsl-runtime' in
+          crates/tillandsias-podman/src/client.rs:990 — no spec exists
+        (and :1695, :1726, :1735)
+
+      NOT INTRODUCED BY THAT EDIT, checked rather than assumed:
+        git show origin/osx-next:crates/tillandsias-podman/src/client.rs
+          | grep -c "spec:windows-wsl-runtime"   -> 4
+        same count in the working tree                -> 4
+      A fifth lives at crates/tillandsias-podman/src/lib.rs:1, in the crate's
+      module-level trace line, for five in total.
+
+      THE SPEC DOES NOT EXIST. `ls openspec/specs/ | grep -i wsl` returns
+      `wsl-daemon-orchestration` and `wsl-runtime`. There is no
+      `windows-wsl-runtime`. The intended target is almost certainly
+      `wsl-runtime` — the sites sit on the podman client's WSL boundary and
+      the other traces beside them (`spec:cross-platform`,
+      `spec:podman-orchestration`) are real. So the fix is a wrong PREFIX,
+      five identical one-token edits.
+
+      WHY IT SURVIVED: the hook scans CHANGED files only, so a ghost trace in
+      an untouched file is invisible indefinitely. These surfaced because
+      1044-2raf happened to edit client.rs for an unrelated reason, and they
+      will go quiet again the moment nobody touches it. That is the same
+      shape as a check that reports drift only past 4x budget (734-sjb3) —
+      real coverage with a silent region, where the absence of a complaint is
+      not evidence of health.
+
+      NOT BLOCKING TODAY: the hook prints them as errors but reports
+      "not blocking commit", and ./build.sh --check is green
+      (ok:test-baseline:ran=2303 new-red=0), so nothing is held up. Filed at
+      p3 for that reason, not because the traces are harmless — a @trace that
+      resolves to nothing is a claim of coverage that cannot be checked.
+    exit_criteria:
+      - 'all five sites name an existing spec, or are removed with the reason stated'
+      - 'the choice between wsl-runtime and wsl-daemon-orchestration is made by reading what the sites actually do, not by prefix-matching the string'
+      - 'a commit touching either file prints no ghost-trace error'
+    notes: |
+      Found while landing 1044-2raf; not folded into it, because a
+      traceability defect in two files is not the exit-125 hint and one
+      packet should not own both.
+
+      Related shape: 734-sjb3 (a check whose silent region hides the thing it
+      watches for).
+    events:
+      - ts: 2026-09-05T11:20:00Z
+        type: filed
+        agent: macos-tlatoanis-macbook-air-claude-20260905t004510z
+        host: tlatoanis-macbook-air
+        note: |
+          Surfaced by an unrelated edit. Confirmed pre-existing by counting
+          the string on origin/osx-next before claiming it was not mine.

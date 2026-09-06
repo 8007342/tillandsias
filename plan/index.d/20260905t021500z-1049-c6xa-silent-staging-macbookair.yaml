@@ -1,0 +1,94 @@
+packets:
+  - packet_id: the-guest-binary-staging-success-path-is-silent-so-a-live-failure-cannot-be-diagnosed
+    order: 1049-c6xa
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags:
+      - fail-loud
+      - diagnostics
+      - macos
+      - guest-rootfs
+    estimated_hours: 2
+    verifiable_closure: |
+      scripts/check-fetch-headless-reports-success.sh asserts the staging
+      script's success branch emits a line naming the source and the installed
+      path; deleting that line turns it red.
+    title: |
+      fetch-headless.sh logs only on failure, so zero `[tillandsias-fetch]` lines cannot distinguish "staged the host's binary" from "never ran" — and that ambiguity is currently blocking a live diagnosis.
+    deliverable: |
+      The guest says what it did, not only what it could not do. What must not
+      persist is a delivery path whose success is indistinguishable from its
+      absence in the only log an operator has.
+    context: |
+      MEASURED 2026-09-05 on tlatoanis-macbook-air while attempting 1019-ivia's
+      C2 live mutation control.
+
+      THE SHAPE, at vz.rs's generated /usr/local/lib/tillandsias/fetch-headless.sh:
+        STAGED="/var/lib/tillandsias/guest-bin/tillandsias-headless"
+        if [[ -x "$STAGED" ]]; then
+          install -D -m 0755 "$STAGED" "$DEST"
+          exit 0
+        fi
+      Every log line in that script is on a FAILURE branch —
+      `staged_binary=unreachable reason=share-not-mounted`,
+      `staged_binary=absent`, and the keeping-the-existing-DEST warning. The
+      success path installs and exits silently.
+
+      WHAT THAT COST, concretely and today. `--exec-guest` returned
+      `wait_phase_ready: timeout after 300s (phase never reached Ready)`. The
+      console log shows the guest BOOTING FINE — Fedora Linux 44, kernel
+      6.19.10-300.fc44.aarch64, networking up (192.168.64.x), reaching a login
+      prompt, across five boots. So this is not a boot failure; the guest comes
+      up and the host never observes Ready.
+
+      The next question is whether the guest installed the host-staged binary
+      at all, and THE LOG CANNOT ANSWER IT: `grep -c tillandsias-fetch
+      console.log` returns 0, which is equally consistent with
+        (a) the unit ran and succeeded — silently, by design, or
+        (b) the unit never ran.
+      Those call for opposite next steps. There is no third line to break the
+      tie, because the only other guest-side signal is the same absence.
+
+      THIS IS THE PACKET'S OWN LESSON TURNED ON THE PACKET. 1019-ivia's C2
+      criterion is "with the ~/src share absent, the guest still stages the
+      host's newer binary — observed live". It cannot be observed live from
+      this log at all, in either direction, because the observable was never
+      emitted. A criterion that says "observed" against a channel that is
+      silent on success is unsatisfiable as written, and nobody noticed because
+      the failure branches are so carefully worded that the file reads as
+      well-instrumented.
+
+      NOT A DUPLICATE of 701-iu9b TRAP 1, which added the failure lines and
+      explicitly distinguished share-not-mounted from absent. That work was
+      right and is why the failure side is good. The success side was simply
+      never given a voice.
+    exit_criteria:
+      - 'the success branch emits one line naming the SOURCE and the installed DEST, so a successful stage is positively visible in console.log'
+      - 'the line carries something that changes per build — a hash or the provenance stamp — so two consecutive boots can be told apart, not merely "it ran"'
+      - 'a guard asserts the success branch logs; deleting the line turns it red (the failure branches already have their own coverage)'
+      - 'zero `[tillandsias-fetch]` lines in a boot log means the unit did not run, and that is stated where the log is read'
+    notes: |
+      Blocks the evidence half of 1019-ivia C2 rather than its implementation:
+      staging on the HOST is observable and was verified (the staged binary and
+      its provenance sidecar are present, sha256
+      43ea2f1bb8583ad137aa01f2a9e923834b02146b597d4fbe619ba02450afaf61). It is
+      the guest half that has no channel.
+
+      Related shape: 965-sxec (a check that could not run must not claim what it
+      would have found) and verification.measurement_practice.a_zero_is_evidence_only_if_the_check_ran.
+      Same rule, applied to a log line rather than a check.
+    events:
+      - ts: 2026-09-05T02:15:00Z
+        type: filed
+        agent: macos-tlatoanis-macbook-air-claude-20260905t004510z
+        host: tlatoanis-macbook-air
+        note: |
+          Found by needing the answer and not being able to get it. The boot
+          evidence (guest reaching a login prompt five times, network up) is
+          from console.log; the Ready timeout is --exec-guest's own verdict.
+          I have NOT determined why Ready is never reached — that is a separate
+          question this silence is preventing me from answering.

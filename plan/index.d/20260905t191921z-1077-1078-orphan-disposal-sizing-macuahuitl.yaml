@@ -1,0 +1,185 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-nine-remaining-orphan-fixtures-each-need-a-two-regime-byte-measurement-before-binding-and-that-disposal-is-not-1063-nrafs-work
+    order: 1077-vzwq
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    owner_host: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags:
+      - testing
+      - gate
+      - fail-loud
+      - corpus
+    estimated_hours: 9
+    verifiable_closure: |
+      For EACH of the nine remaining FIX_FIRST fixtures, before it is bound:
+
+      ARM A (the fixture passes on a correct tree in TWO regimes). Recorded with
+      the host and the regime named, not "green here". A single-host green is
+      unproven for this class, because a pipe-buffer-dependent verdict is green
+      on exactly the hosts whose buffer is large enough.
+
+      ARM B (every verdict-position pipeline is measured, not pattern-matched).
+      Producer bytes after the match offset against the platform pipe buffer,
+      recorded as a number, with the verdict stated as CURRENTLY under the
+      buffer or STRUCTURALLY under it. Those are different verdicts: a producer
+      that grows with the repo is a countdown, one that cannot grow is a safety
+      property. PRE-FIX RESULT for the corpus as a whole: FAILS — two
+      line-oriented counts returned zero where a byte measurement found a live
+      instance.
+
+      ARM C (the fixture has teeth). Sabotage the thing it tests and see the
+      fixture's own message. An arm satisfiable by a comment, or by the
+      history of the thing rather than the thing, is not a binding candidate.
+
+    unscoreable: |
+      NO LITMUS LANE COVERS THIS AND THE HONEST ANSWER IS TO SAY SO. The
+      packet's product is nine per-fixture RECORDS, each carrying arms A, B and
+      C above, and the completion condition is that nine such records exist or a
+      fixture is dispositioned otherwise with the reason named. Arms A and C are
+      real commands run per fixture and their outputs are the evidence; arm B is
+      a measurement, not a command, and the number is the evidence. None of
+      those is a single invocation a gate can run, because the corpus is nine
+      different fixtures and the verdict is a judgement about each.
+
+      WHAT WOULD MAKE IT SCORABLE, so a claimer can pin it if they choose: the
+      measuring check named in 1076-kft9's next_action, once it exists, could be
+      run over the nine and would turn arm B into `scripts/<name>.sh` output.
+      Filing that pin here would be pre-deciding 1076-kft9's design from a
+      packet that depends on it, so it is named as the candidate rather than
+      claimed as the closure.
+    title: |
+      nine orphan fixtures remain to dispose of, each now needing a two-regime byte-offset measurement it did not need this morning, and carrying that inside 1063-nraf makes a four-hour packet look stalled for nine cycles
+    context: |
+      SIZED 2026-09-05 at lenovinha's request, on lenovinha's arithmetic, after
+      esmeraldinha's stop-the-line changed what disposal costs.
+
+      THE ARITHMETIC, which is the argument. Of the eleven FIX_FIRST orphans,
+      TWO HAVE EACH COST A FULL CYCLE: trace-coverage took four blockers across
+      two cycles, spec-index-endpoint-classification one. Nine remain. Disposal
+      now ADDITIONALLY requires, per fixture, a producer-bytes-and-match-offset
+      measurement in two regimes, because 1076-kft9 established that a
+      single-host green is unproven for this class. Call it a cycle each.
+      Against that, the guard extension 1063-nraf exists to land is one change
+      to one file with a known shape.
+
+      SO THE DISPOSAL IS NOW LARGER THAN THE PACKET IT IS BLOCKING, and until
+      this fragment it was being carried silently inside 1063-nraf while that
+      packet looked stalled. A host doing two packets' work should not read as
+      a host that is slow.
+
+      1063-nraf'S CONSTRAINT IS UNCHANGED AND THIS PACKET DOES NOT RELAX IT:
+      the guard does not land until the orphans are disposed of. A guard landing
+      beside orphans it would have caught is one everyone learns to ignore in
+      its first week. lenovinha proposed the split and asked for the sizing
+      rather than quietly absorbing it, which is the behaviour that makes the
+      constraint affordable.
+
+      WHY TWO REGIMES, MEASURED NOT ASSUMED. arm 17 of
+      test-scorable-obligation-gate.sh reported FAIL BECAUSE THE THING IT TESTS
+      WAS CORRECT: `grep -q` exited at the match, `sed` kept writing, SIGPIPE,
+      and pipefail promoted 141. It red on esmeraldinha's WSL builder at 16/17
+      after 28m32s and passed on macuahuitl with 10161 bytes of tail against a
+      65536-byte buffer. Fedora is not a host where that arm is correct; it is a
+      host where it has not flipped yet.
+
+      WHY BYTES AND NOT PATTERNS. The SIGPIPE check recognises producers by name
+      from a regex list. It missed plain recursive grep (1070-a4gc) and it
+      misses `sed`, which was the live instance. Three counts of the same
+      corpus, each by a different method: 0 line-oriented, 1 folding
+      continuations, 2 by byte offset with one LIVE. Each found what the
+      previous was structurally unable to represent.
+
+      LENOVINHA'S OWN AUDIT OF THE THIRTEEN ALREADY BOUND OR TOUCHED, recorded
+      here because it is the baseline this packet extends: eleven have no
+      verdict-position early-exit pipeline at all; scorable-obligation was the
+      live one and is fixed; trace-coverage has one instance that is BOUNDED BY
+      CONSTRUCTION — a builtin printf over a fixed synthetic tree, 304 bytes
+      with a 106-byte tail, and the synthetic tree cannot grow with the repo.
+      That audit is a FLOOR, not a total: it folds backslash and trailing-pipe
+      continuations and then matches, so it cannot see a pipeline inside a
+      multi-line command substitution or one assembled through a variable.
+    next_action: |
+      LEFT TO DO: nine fixtures, each getting arms A, B and C recorded before it
+      is bound. Report each verdict as CURRENTLY or STRUCTURALLY under the
+      buffer; do not report a margin as a safety property.
+
+      TAKE THE CHEAPEST FIRST and say so in the record, because the estimate of
+      a cycle each comes from the two most expensive ones and may be wrong in
+      the good direction. If three go quickly, re-report the estimate rather
+      than letting the original stand.
+
+      IF A FIXTURE TURNS OUT NOT TO BE WORTH BINDING, say so and retire it with
+      the reason. Disposal is not the same as binding, and a fixture that tests
+      nothing anyone relies on is disposed of by deletion, not by nine arms.
+
+      DEPENDS ON 1076-kft9 for the measuring check. Until that lands the
+      measurement is done by hand; that is slower but not blocking, and doing
+      nine by hand is itself evidence for how much the check is worth.
+  - packet_id: two-orphan-fixtures-are-marked-manual-and-there-is-no-vocabulary-that-says-what-manual-means
+    order: 1078-p2mc
+    status: ready
+    kind: decision
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    owner_host: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags:
+      - testing
+      - methodology
+      - vocabulary
+    estimated_hours: 2
+    unscoreable: |
+      THIS PACKET IS A DECISION, NOT WORK, and its output is a vocabulary plus
+      the two fixtures marked in it. No litmus can score whether a marker
+      vocabulary is the right one; what CAN be scored is that after the
+      decision, every fixture in the tree is either bound, marked with a term
+      from the vocabulary, or retired, with no third state — and the claimer
+      names that check if it adds one.
+    title: |
+      two orphan fixtures are MARK_MANUAL with no vocabulary saying what manual means, so they sit in a state nothing can audit and they are blocking a nine-fixture packet they have nothing to do with
+    context: |
+      SPLIT OUT 2026-09-05 at lenovinha's request, on lenovinha's line: the two
+      MARK_MANUAL fixtures need A DECISION RATHER THAN WORK, and they should not
+      sit behind nine cycles of fixture disposal to get it.
+
+      THE STATE TODAY. A fixture is bound into the gate, or it is orphaned. Two
+      of 1063-nraf's set are neither: they are deliberately manual, and there is
+      no term in the tree that says so, no place that term is recorded, and
+      therefore no way to tell a deliberately-manual fixture from one nobody has
+      got to yet. That is the same shape as an unattributed loop-status bucket
+      or an unclaimed in_progress row — a state that is indistinguishable from a
+      failure, so it accumulates.
+
+      WHY IT IS A DECISION. "Manual" could mean: needs a human to interpret its
+      output; needs hardware or a live lane no gate has; is a diagnostic rather
+      than an assertion; or is a one-shot investigation kept for reference. Those
+      four want different treatment and only the fourth argues for deletion.
+      Picking is a judgement call about what the corpus is for, and it is cheap
+      to make and expensive to leave open.
+
+      WHAT WOULD MAKE IT AUDITABLE, and this is the closure's shape: after the
+      decision every fixture is bound, marked with a term from the vocabulary,
+      or retired. No third state. Then "orphaned" means something again, and
+      1063-nraf's guard can say what it is guarding.
+    next_action: |
+      LEFT TO DO:
+
+      1. Choose the vocabulary. Three or four terms, each with one sentence
+         saying what a reader may conclude from it and what they may not.
+      2. Say where a marker LIVES so a scan can find it — a line in the fixture
+         itself is the obvious answer and matches how the tree already declares
+         freshness and dialect guards.
+      3. Mark the two fixtures 1063-nraf identified, with the reason.
+      4. Only then, if it is cheap, add the check that every fixture is bound,
+         marked or retired. It is the scorable half and it is worthless before
+         the vocabulary exists.
+
+      DO NOT let this wait on 1077-vzwq. It is two hours and a judgement, the
+      nine-fixture packet is nine cycles of measurement, and they were split
+      apart precisely so this one does not queue behind that one.

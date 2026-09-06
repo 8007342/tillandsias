@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: trace-coverage-was-a-sigpipe-artifact-and-it-penalised-the-best-traced-specs
+    event:
+      type: progress
+      ts: "2026-09-05T18:20:12Z"
+      agent_id: linux-macuahuitl-claude-20260905t182012z
+      host: macuahuitl
+      summary: |
+        VERIFIED BY THE COORDINATOR ON THE MERGED TREE, not read from the report (work/1069-c9w6 at 01ff0b449, merged into linux-next in the 18:41Z pass): `scripts/validate-traces.sh --coverage-threshold 100` emits coverage_percentage 100, specs_with_traces 177, total_active_specs 177, uncovered_count 0. Before the fix the same tree reported 98% with 174/177 and three uncovered, and the three named — methodology-accountability (83 matching files), git-mirror-service (60), ci-release (56) — were the THREE BEST-TRACED SPECS IN THE REPOSITORY. The mechanism is that `grep -rl … | grep -q .` under `set -o pipefail` lets the consumer exit on the first match while the producer keeps traversing crates/ and methodology/, takes SIGPIPE, returns 141, and pipefail propagates it, so a WIDER MATCH is more likely to be recorded as uncovered. The metric therefore penalised precisely the specs it should have rewarded, and the winner of that race is a function of disk speed, cache warmth and grep implementation, so the same tree yields different coverage on different hosts and cold versus warm on one host; any historical figure is suspect IN KIND rather than merely three low. BLAST RADIUS CHECKED before this was recorded: no README release row cites a trace-coverage figure, so no published release claim carries the wrong number; the consumers are plan.yaml, openspec/specs/enforce-trace-presence, docs/cheatsheets/trace-enforcement.md and two archived issue files. The fix is `grep -rq`, one question and no pipe, verified in BOTH directions by its author: the three specs return 0, a fabricated spec still returns 1, and a 101 threshold still fails on a 100% tree, so it is not a check that now passes everything. PROVENANCE, which is 1063-nraf's argument: this surfaced only while adversarially re-checking test-trace-coverage.sh, one of the twenty-six orphaned fixtures nobody was running, so nothing in the fleet could have surfaced it. 792-ksr8 refuses exactly this pattern and is diff-scoped to newly added pipelines by design, so it was structurally blind to an instance old enough to make a headline metric wrong; the corpus sweep for other pre-existing instances is filed separately and is NOT done.

@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-stable-git-tag-was-not-moved-when-v56-9-2-1-was-promoted
+    order: 1061-zd83
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: any
+    capability_tags: [release, docs]
+    estimated_hours: 2
+    owned_files:
+      - scripts/promote-stable.sh
+      - scripts/test-promote-stable-evidence-gate.sh
+    title: |
+      refs/tags/stable peels to 341ab0010 (v0.4.260826.1, 2026-08-25) while the latest non-prerelease release is v56.9.2.1 at d6d3e3ed9 (2026-09-02); promote-stable.sh's step 3 moves the annotated stable tag to the release commit, so either the step failed silently on that promotion or the promotion bypassed the script, and nothing checks that the tag and the release page agree
+    context: |
+      FOUND by the operator's tillandsias.org session (calmecacpilli) on 2026-09-05T06:3xZ while pinning
+      the site's "stable" definition: the site derives stable from /releases/latest and only warns on the
+      disagreement. VERIFIED by the coordinator over git: `git rev-parse 'stable^{}'` = 341ab0010, an
+      ancestor of main and of v56.9.2.1, tagged v0.4.260826.1; `git rev-parse 'v56.9.2.1^{}'` =
+      d6d3e3ed9; the stable tagger date is 2026-08-25 20:31 -0700. Consumers of the tag inside the tree:
+      only scripts/promote-stable.sh and its evidence-gate test; the install scripts resolve releases by
+      version or by /releases/latest, so no install path is broken by it. It is a public claim that
+      disagrees with the release page, and the next promotion will inherit whichever mechanism skipped it.
+      Fix shape: (a) promote-stable.sh verifies after step 3 that `stable^{}` equals the promoted
+      release's commit and refuses to report success otherwise; (b) a cheap check (release-preflight or
+      the daily) compares the tag to /releases/latest and names the disagreement; (c) the tag itself is
+      moved to d6d3e3ed9 by the operator or on the operator's word (a public, force-pushed tag move is not
+      the coordinator's to make unasked; it is in the operator queue).
+    exit_criteria:
+      - "after a promotion, promote-stable.sh's own output includes a verified line that stable^{} equals the promoted commit, and a fixture where the tag push is stubbed to fail makes the script exit non-zero; pre-fix result: FAILS (step 3 can be skipped or fail with a successful-looking promotion, as v56.9.2.1's shows)"
+      - "a preflight or daily check reports tag-vs-latest disagreement by name; pre-fix result: FAILS (nothing checks; the site found it)"
+      - "refs/tags/stable peels to the latest non-prerelease release's commit on origin; pre-fix result: FAILS (341ab0010 vs d6d3e3ed9)"
+    unscoreable: |
+      The pin is scripts/test-promote-stable-evidence-gate.sh extended with the stubbed-tag-push arm;
+      the claimer adds it.
+    events:
+      - type: note
+        ts: "2026-09-05T07:06:59Z"
+        host: macuahuitl
+        summary: |
+          FILED by the coordinator from the tillandsias.org session's read, verified over git before filing;
+          the tag move itself is routed to the operator.

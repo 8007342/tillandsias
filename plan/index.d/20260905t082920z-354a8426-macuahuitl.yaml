@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: probe-usage-guard-accepts-a-comment-as-compliance
+    event:
+      type: progress
+      ts: "2026-09-05T08:29:20Z"
+      agent_id: linux-macuahuitl-claude-20260905t082920z
+      host: macuahuitl
+      summary: |
+        RELAY REF UP (lenovinha, work/1060-428m at 9f75f5d47, gate rc=0, ref verified on origin by ls-remote; the coordinator relay-lands it in the 08:09Z cycle). THE DEFECT HAD THREE LAYERS AND THE FIXER WROTE TWO OF THEM INSIDE THE FIX FOR THE FIRST: yoga's raw-file compliance against stripped-code eligibility; then lenovinha's symmetric check tested PER FILE, so one compliant step covered a hand-rolled one in the same YAML, found only by checking a prediction the guard had just turned green in the fixer's favour; then accepting a probe FILENAME in a command as use, where line 126 of one such file is `cp scripts/plan-binary-probe.sh`, yoga's original loophole reproduced inside its own repair. Now: scripts require an actual `.`/`source` or a resolver call; litmus requires mf_plan_binary, evaluated PER COMMAND. SWEEP sized before the rule changed and corrected twice against the fixer's own numbers (predicted 0, then 1; it is 2): litmus-forge-expert-base-guard-shape.yaml and litmus-fragment-status-loss-attribution-shape.yaml, nine commands converted; six further files LEAVE the eligible count because they hardcode nothing and were never eligible, the raw fallback having inflated litmus=19 with files that do not use the binary at all; no allow-list; the one apparent exception, test-plan-binary-freshness.sh, is the fixture FOR the probe (sources it at 90 and 128; 7 of 9 path mentions are $TMPD scaffolding) and the first sizing would have "fixed" working code. Controls both run: yoga's exact pre-fix shape (comment + cp loop + [ -x ], never sourced) is REFUSED where the old guard said ok; the same file made compliant PASSES. Host check for 1060-wxdh: ~/.local/bin/tillandsias-plan runs, TILLANDSIAS_PLAN_BIN unset, no restore needed.

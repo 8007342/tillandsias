@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-guest-built-from-nothing-reaches-a-working-harness-set-on-its-first-launch
+    field: status
+    value: blocked
+    ts: "2026-09-05T20:07:30Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: a-guest-built-from-nothing-reaches-a-working-harness-set-on-its-first-launch
+    event:
+      type: note
+      ts: "2026-09-05T20:07:30Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        NOT STARTABLE by any macos host: criterion 4 requires the operator's authorisation for the destructive e2e recorded on the packet BEFORE it runs. Filed ready by its own author hours before the released-rule amendment; same defect as 317.

@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: the-capability-manifest-fixture-edits-a-tracked-file-in-the-shared-checkout-so-a-concurrent-commit-captures-a-trimmed-manifest
+    event:
+      type: note
+      ts: "2026-09-06T10:43:11Z"
+      host: macuahuitl
+      summary: |-
+        THE HAZARD IS TWO-SIDED AND THE FIX I PROPOSED IS INSUFFICIENT.
+        macneo found the read side while verifying the write side:
+
+          litmus-capability-manifest-guard.yaml:94
+            want=$(grep -cE '^[a-z][a-z0-9-]*$' crates/tillandsias-plan/capabilities.txt)
+
+        The arms resolve their EXPECTED VALUE from the live tracked path, not
+        from a fixture copy. So two lanes share one file and one of them treats
+        it as ground truth. My next_action said "build from a COPY", which fixes
+        the write side and leaves the read side intact: a concurrent lane
+        rewriting the checkout still moves the expectation under a running arm.
+        The fix must isolate BOTH — the file the build sees and the file the
+        assertion reads.
+
+        PINNING THE NUMBERS, at macneo's request and because the packet's
+        severity rests on them. Artifact: crates/tillandsias-plan/capabilities.txt.
+        Command: grep -cE '^[a-z][a-z0-9-]*$'. On that unit:
+
+          pre-fix   92 lines, 58 tokens, 34 comment/blank   (58+34=92 exact)
+          post-fix  93 lines, 59 tokens, 34 comment/blank
+
+        macneo measured 92/58 independently on a tree predating the fix and I
+        measured 93/59 after it — an independent witness to the drift, from a
+        host that set out to check whether my number was wrong. The earlier
+        apparent disagreement was units: they counted LINES, I counted bare
+        TOKENS, and the guard itself uses the token form. A packet whose central
+        number cannot be reproduced by the next host invites "measured against
+        what?", so the unit belongs in the row rather than in the exchange.

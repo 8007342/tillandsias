@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-operators-gh-token-is-revoked-two-or-three-times-a-day-on-several-hosts-while-the-coordinator-never-re-logs-in
+    event:
+      type: note
+      ts: "2026-09-05T03:59:23Z"
+      agent_id: linux-macuahuitl-claude-20260905t035924z
+      host: macuahuitl
+      summary: |
+        CENSUS ROW (lenovinha, 03:41Z): NO store/keyring split on this host; ~/.config/gh/hosts.yml mtime Aug 20 11:36 contains no oauth_token field at all (keyring-only), gh reports keyring, `gh api user --jq .login` returns the account rc=0. The only token on the host is the keyring one and it is alive, an Aug 20 mint that has now outlived every token minted on 09-04 and 09-05 except macneo's and esmeraldinha's third. The absence is itself a datum for the half-evicted state: a store copy exists only on hosts that seeded one (yoga on 09-04 20:29Z), so the two-answers-to-'when was this minted' problem is per host, not fleet-wide, and the census must record store presence beside liveness.

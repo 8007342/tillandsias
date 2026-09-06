@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: precommit-openspec-scan-exceeds-ten-minutes-on-large-files
+    field: status
+    value: in_progress
+    ts: "2026-09-05T08:28:13Z"
+    host: yoga
+
+events:
+  - packet_id: precommit-openspec-scan-exceeds-ten-minutes-on-large-files
+    event:
+      type: falsified
+      ts: "2026-09-05T08:28:13Z"
+      host: yoga
+      summary: |-
+        falsified 'verified' claim; evidence: macbookair 2026-09-05: pre-commit zero_trace_check measured at 10373ms against its own 2500ms budget, relayed by macuahuitl; yoga measures the same phase at 176ms, so the drift is host-regime dependent and the verified closure does not hold on macOS — status set to 'in_progress', new attempt epoch
+  - packet_id: precommit-openspec-scan-exceeds-ten-minutes-on-large-files
+    event:
+      type: note
+      ts: "2026-09-05T08:28:13Z"
+      host: yoga
+      summary: |-
+        reopened on a measured regression

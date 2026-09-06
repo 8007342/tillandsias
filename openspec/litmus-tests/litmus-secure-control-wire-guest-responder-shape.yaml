@@ -2,8 +2,9 @@
 # @trace plan/issues/secure-channel-maturity-ladder-2026-07-04.md
 #
 # The in-VM guest headless responder (vsock_server.rs) must gate the encrypted
-# control wire on the boot-time TILLANDSIAS_SECURE_CONTROL_WIRE flag: a NO-OP when
-# OFF (plaintext, opt-in flip) and FAIL-CLOSED when ON or misconfigured (a failed
+# control wire on the boot-time TILLANDSIAS_SECURE_CONTROL_WIRE flag. Since
+# 972-umik commit B an ABSENT flag means ON: plaintext is a NO-OP reachable only
+# by writing 'off', and the responder is FAIL-CLOSED when ON or misconfigured (a failed
 # handshake / plaintext peer / unknown flag value gets the connection closed, never
 # a silent downgrade). Falsifies a regression that drops the gate, makes it
 # fail-open, or serves envelopes before the handshake.
@@ -13,7 +14,7 @@ phase: pre-build
 description: >
   Pin the guest secure-control-wire responder in vsock_server.rs: flag-gated
   (TILLANDSIAS_SECURE_CONTROL_WIRE), version-bound server_handshake on HopId::HostGuest,
-  fail-closed on handshake error, and a unit test proving default-OFF + fail-closed
+  fail-closed on handshake error, and a unit test proving default-ON + fail-closed
   flag parsing.
 severity: high
 size: instant
@@ -37,10 +38,30 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: fail-closed"
 
-  - step: "the default-OFF + fail-closed flag parsing is unit-tested"
-    command: "grep -qF 'secure_control_wire_flag_defaults_off_and_fails_closed' crates/tillandsias-headless/src/vsock_server.rs && echo 'ok: fail-closed test present'"
+  # 972-umik commit B: this step used to grep for
+  # 'secure_control_wire_flag_defaults_off_and_fails_closed', a test that had
+  # already been REPLACED. The name survived only inside a doc comment
+  # explaining why it was removed, so grep -qF matched PROSE and the step went
+  # green over a test that no longer existed. Anchored on the live test name and
+  # on the asserted mode, so a silent revert of the default reds the step.
+  - step: "the default-ON reader wiring is unit-tested (the listener does not carry its own parser)"
+    command: "grep -qF 'fn secure_control_wire_reads_the_shared_reader_not_a_local_copy' crates/tillandsias-headless/src/vsock_server.rs && grep -qF 'SecureControlWireMode::On,' crates/tillandsias-headless/src/vsock_server.rs && echo 'ok: fail-closed test present'"
     timeout_ms: 3000
     expected_behavior: "ok: fail-closed test present"
+
+  # NEGATIVE CONTROL for the step above (634-39ik). A grep for a source
+  # expression is only evidence if it can fail, and the previous version of that
+  # step could not: it searched for the name of a test that had already been
+  # deleted and matched the DOC COMMENT explaining the deletion, so it was green
+  # over an absence. This step mutates a COPY -- flipping the asserted default
+  # from On back to Off, the exact regression 972-umik commit B guards -- and
+  # requires the same grep to go red on it. If this step passes, the assertion
+  # above is load-bearing; if it fails, the grep matches something that is not
+  # the assertion and the step above must not be trusted.
+  - step: "negative control: the default-ON assertion grep must FAIL on a copy whose default is flipped back to Off"
+    command: "T=$(mktemp -d); sed 's/SecureControlWireMode::On,/SecureControlWireMode::Off,/' crates/tillandsias-headless/src/vsock_server.rs > \"$T/mutated.rs\"; if grep -qF 'SecureControlWireMode::On,' \"$T/mutated.rs\"; then echo 'FAIL: the grep still matches after the default was flipped to Off -- it is not pinning the assertion'; rm -rf \"$T\"; exit 1; fi; rm -rf \"$T\"; echo 'ok: control reds on the flipped default'"
+    timeout_ms: 5000
+    expected_behavior: "ok: control reds on the flipped default"
 
 observability:
   traces:
@@ -54,7 +75,8 @@ observability:
 rollback:
   on_failure: >
     The guest secure-control-wire responder drifted. Restore maybe_secure_stream in
-    vsock_server.rs: gate on TILLANDSIAS_SECURE_CONTROL_WIRE (default OFF = no-op),
+    vsock_server.rs: gate on TILLANDSIAS_SECURE_CONTROL_WIRE (default ON since
+    972-umik commit B; an explicit 'off' is the no-op),
     run server_handshake(channel_psk(VERSION, WIRE_VERSION, HopId::HostGuest)) when
     ON, and RETURN from handle_connection on a handshake error (fail-closed) before
     reading any envelope. Keep the fail-closed parsing unit test.

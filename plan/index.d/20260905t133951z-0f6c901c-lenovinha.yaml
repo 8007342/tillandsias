@@ -1,0 +1,49 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: thirty-shell-fixtures-are-invoked-by-nothing-and-no-gate-can-see-them
+    event:
+      type: progress
+      ts: "2026-09-05T13:39:51Z"
+      agent_id: linux-lenovinha-claude-20260905t133546z
+      host: lenovinha
+      summary: |
+        SIZED ON LENOVINHA, and the numbers differ from esmeraldinha's in a way that is explained rather than waved at:
+
+            scripts/test-*.sh on disk        222   (esme 219)
+            named in build.sh                 66   (esme 62)
+            referenced NOWHERE                26   (esme 30)
+
+        Trunk advanced between the two measurements — three fixtures landed and four were wired, including two of mine — so the deltas are consistent with the corpus moving, not with a methodological disagreement. Anyone re-sizing should expect their own number and should not treat 30 as a constant.
+
+        GUARD GAP CONFIRMED, as filed: scripts/check-litmus-bindings.sh sets TESTS_DIR="$ROOT/openspec/litmus-tests" and scans only that, so 660-ryhn's bound-or-retired rule cannot see a scripts/test-*.sh fixture at all. The gap is real and is the durable half of this packet.
+
+        CLASSIFIED, because "bind or retire" is not one decision for 26 files:
+
+            LIVE-HOST (9) — reference podman/docker/curl/ollama/nvidia-smi/systemctl, so they are plausibly manual BY NATURE and the right disposition is a marker, not a caller:
+              test-secrets.sh(8) test-e2e-preflight-live-runtime.sh(4) test-podman-sync-budgets.sh(4)
+              test-spec-index-endpoint-classification.sh(4) test-litmus-steps-can-fail.sh(3)
+              test-forge.sh(2) test-git-mirror.sh(2) test-proxy.sh(2) test-check-engine-cpu-dispatch.sh(1)
+
+            PURE-SHELL (17) — no live dependency detected, so these are candidates for wiring into a caller:
+              test-build-sh-forge-check-only.sh test-check-carry-forward.sh test-chromium-framework-launch.sh
+              test-expert-accuracy-record-shape.sh test-forge-findings-persisted.sh test-git-credential-helper.sh
+              test-guest-unit-hardening.sh test-litmus-diff-scope.sh test-macos-signing-seam.sh
+              test-mcp-expert-health.sh test-metrics-log-path-agreement.sh test-plan-binary-probe.sh
+              test-scorable-obligation-gate.sh test-skills-single-source.sh test-source-slice-bounds.sh
+              test-subdomain-routing.sh test-trace-coverage.sh
+
+        The classifier is a heuristic over command names and I am labelling it as one. It says nothing about whether a pure-shell fixture PASSES on a given host, and a fixture named macos-signing-seam is unlikely to be wire-able on linux whatever its command set. Treat the split as a work ordering, not a verdict.
+
+        ONE WIRED THIS CYCLE, chosen because it is the sharpest instance and it is mine. scripts/test-expert-accuracy-record-shape.sh was orphaned while plan/index.yaml:44712 states of it: "THE NEGATIVE CONTROL, pinned by scripts/test-expert-accuracy-record-shape.sh, 6/6". The ledger recorded an enforcement that did not run, which is worse than recording none — a later reader has no reason to doubt it, and the control it names is what keeps a never-called expert reporting rate=null instead of 100%. Verified green first (ok:test-expert-accuracy-record-shape:6-passed) because wiring a red fixture trades a silent gap for a broken gate. Invoked exactly once in build.sh; orphan count 26 -> 25.
+
+        RECONCILED WITH 1041-up99, which I filed on 2026-09-05 for the same class from a narrower method (14 fixtures, .md excluded, plan/ excluded). These are NOT two defects. 1063-nraf's measurement is broader and its guard-gap finding is the part 1041-up99 lacks. I propose 1041-up99 be closed as superseded by this packet rather than worked in parallel — two hosts sweeping the same 26 files with different lists is how an allow-list gets born. That is a coordinator call and I have not acted on it.
+
+        NOT DONE, and the remaining scope is most of the packet: 25 fixtures still unreferenced, the marker vocabulary for the LIVE-HOST nine is undecided, and the guard extension (teach the bound-or-retired rule to see scripts/test-*.sh) is unwritten. The guard is the piece that stops this recurring and it should not land until enough of the 25 are disposed of, or it reds the gate on day one — the sizing-before-tightening lesson from 1060-428m applies here at ten times the scale.

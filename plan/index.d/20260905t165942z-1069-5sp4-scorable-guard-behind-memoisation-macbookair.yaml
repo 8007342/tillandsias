@@ -1,0 +1,85 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-scorable-obligation-guard-sits-behind-a-memoisation-that-ignores-its-only-input
+    order: 1069-5sp4
+    status: implemented
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [gate, fail-loud, plan, hooks, memoisation]
+    estimated_hours: 2
+    owned_files:
+      - scripts/hooks/pre-push-local-gate.sh
+      - build.sh
+      - scripts/gate-stamp.sh
+    title: |
+      check-scorable-obligation-added reads only plan/index.d/*.yaml and sits behind a gate stamp that deliberately excludes plan/index.d/*.yaml, so a plan-only push is green on the authoring host and red on the next host that changes anything else
+    unscoreable: |
+      The fix is a guard PLACEMENT, not a mechanism with a pin of its own; the
+      guard it re-enables already has scripts/test-scorable-obligation-gate.sh.
+      Criterion 3 below is the scoreable part and names the arm to add there.
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-09-05, after the coordinator
+      repaired the THIRD of this host's fragments on trunk (1059-yekz,
+      1067-24q6, 1068-cxmf) and diagnosed the cause as ORDERING — filing the
+      fragment after the gate ran, so the outgoing diff never contained it.
+
+      THAT DIAGNOSIS IS INCOMPLETE, and filing first would not have helped. The
+      defect is structural:
+
+        * check-scorable-obligation-added.sh reads ONE input: newly added
+          plan/index.d/*.yaml (its own line 74).
+        * It runs from build.sh's fast-refusal block (~line 1699), unconditionally.
+        * gate-stamp.sh:343 DELIBERATELY EXCLUDES plan/index.d/*.yaml from the
+          stamp hash (930-i6x4: "append-only ledger traffic the plan fast lane
+          covers").
+
+      So a plan-only change never invalidates the stamp, ./build.sh --check
+      answers ok:gate-fresh and runs NOTHING — including the one guard whose
+      only input is the thing that changed. A guard behind a memoisation that
+      ignores the guard's own input can fire only when something ELSE changed.
+
+      THE MEASUREMENT, same tree, same moment:
+        bash scripts/check-scorable-obligation-added.sh
+          -> violation:scorable-obligation-missing:2
+        ./build.sh --check
+          -> ok:gate-fresh (stamped 2026-09-05T15:08:20Z), exit 0
+      The stamp was 15:08:20Z and one of the offending fragments was written at
+      16:44. "Tree bytes unchanged" was true as the stamp defines tree bytes.
+
+      AND THE ONE PLACE A PLAN-ONLY PUSH IS ACTUALLY INSPECTED DID NOT ASK. The
+      pre-push plan-only lane validates the fragments' YAML
+      (check-added-fragments-parse), the attestation ledger when touched, and the
+      base64 ban. It never ran the scorable guard. So the fragment escaped BOTH
+      paths on the authoring host, every time, and surfaced on the coordinator's
+      host minutes later because that host had other changes.
+
+      WHY IT LOOKED LIKE CARE OR ORDERING. The authoring host is green, the
+      failure lands on someone else, and the someone else is the coordinator
+      whose gate runs for other reasons. The signal arrives where it cannot be
+      acted on and never where it can — which is also why it recurred three
+      times without either host suspecting the gate.
+
+      SAME SHAPE AS 1024-c3h3 AND THE 1066-dkkb SET: a check that did not run,
+      reporting a green indistinguishable from a check that ran and found
+      nothing. Here the memoisation is correct in isolation — plan traffic
+      genuinely should not re-gate a build — and the guard is correct in
+      isolation. The defect is only visible where they compose.
+    exit_criteria:
+      - "a plan-only push that adds a packet with no verifiable_closure and no unscoreable is REFUSED on the authoring host, in under a second, without a build"
+      - "the refusal names the packet and the two ways to satisfy it, so the author fixes it without reading the checker's source"
+      - "scripts/test-scorable-obligation-gate.sh gains an arm proving the guard is REACHED for a plan-only change — a unit that only ever tests the checker in isolation cannot see this class, which is precisely how it survived three occurrences"
+      - "the composition is recorded where the next person adding a fast refusal will meet it: a guard whose only input is excluded from the gate stamp must be invoked by the plan-only lane too, or it cannot run for the change it is about"
+    events:
+      - type: filed
+        ts: "2026-09-05T16:59:42Z"
+        agent_id: "macos-tlatoanis-macbook-air-claude-20260905t144547z"
+        host: tlatoanis-macbook-air
+        summary: |
+          Filed and FIXED in the same commit: the plan-only lane now runs
+          check-scorable-obligation-added, fail-closed when the checker is
+          absent (matching the attestation gate, not the skip-with-a-note
+          checks). Verified by the guard refusing this host's own two
+          blockless fragments before the blocks were added, and by
+          ok:scorable-obligations:4 checked after.

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-guest-provisioning-script-can-abort-partway-while-cloud-init-reports-success
+    event:
+      type: evidence
+      ts: "2026-09-05T05:03:19Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260905t004510z
+      host: tlatoanis-macbook-air
+      summary: |-
+        ROOT CAUSE FOUND, WITH A LINE NUMBER, and it explains a second symptom I had been treating as unrelated. The ERR trap (this packet's exit criterion 1) fired on its first boot: 'tillandsias-provision-FAILED line=373 rc=1 cmd=systemctl start tillandsias-headless-fetch.service tillandsias-headless.service'. Line 373 of 387. Under set -euo pipefail that abort is silent and cloud-init still reports done/errors:[]. WHAT NEVER RUNS, measured by reading the delivered user-data around the failing line: the very next statement is 'systemctl start --no-block tillandsias-headless-ready.service' — THE READINESS SERVICE. So the guest never starts the unit that reports phase Ready. THAT IS THE 300s wait_phase_ready TIMEOUT I hit repeatedly tonight and recorded on 1019-ivia as a separate blocker; it is the same defect, one line further on. A guest whose provisioning aborts here boots fine, networks, logs in, installs its binary — and can never report Ready, because the assertion service was one statement past the abort. CONFIRMED SEQUENCE, all measured on this host: marker written at 05:01:47 (script starts), fetch-headless.sh written at 05:01:49 and now CARRYING the success line for the first time (grep -c = 1, mtime finally moved off 01:03:59), then FAILED at line 373. So the writes before 373 do land and everything after 373 never happens. MY THREE EARLIER HYPOTHESES, for the record: the set -euo pipefail abort was RIGHT IN SHAPE and I demoted it twice; the BrokenPipeError crash was a different boot; the instance-id key was a real and separate hazard whose fix was necessary to make the script re-run at all, but was not this symptom's cause. The thing that settled it was not a better guess — it was a marker written before anything can fail, then a trap that names the line, which is what the packet's own criterion 1 asked for. NEXT: why 'systemctl start tillandsias-headless-fetch.service tillandsias-headless.service' returns 1. The trap now makes that visible on every guest rather than requiring this investigation to be repeated.

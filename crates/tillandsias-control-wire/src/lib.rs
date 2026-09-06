@@ -1128,6 +1128,10 @@ pub mod crashloop {
     pub struct CrashLoopDetector {
         window_secs: u64,
         threshold: u32,
+        /// Unix seconds at which this state was last written, when the file
+        /// carried the field (980-ja2m). `None` means the file predates it,
+        /// and a reader must then fall back to mtime and say that it did.
+        written_at: Option<u64>,
         events: VecDeque<Event>,
         last_ranked_phase: Option<VmPhase>,
         ever_ready: bool,
@@ -1145,6 +1149,7 @@ pub mod crashloop {
             Self {
                 window_secs,
                 threshold: threshold.max(1),
+                written_at: None,
                 events: VecDeque::new(),
                 last_ranked_phase: None,
                 ever_ready: false,
@@ -1163,6 +1168,13 @@ pub mod crashloop {
 
         pub fn threshold(&self) -> u32 {
             self.threshold
+        }
+
+        /// The write time the FILE carried, or `None` when it predates the
+        /// field. Never falls back to mtime here: the fallback belongs to the
+        /// caller, which must disclose that it used one (980-ja2m).
+        pub fn written_at(&self) -> Option<u64> {
+            self.written_at
         }
 
         /// Number of live (un-pruned) events currently in the window. Test/pin
@@ -1253,8 +1265,30 @@ pub mod crashloop {
         /// serde_json dep in this crate). Forward-compatible: readers ignore
         /// unknown lines.
         pub fn to_state_string(&self) -> String {
+            self.to_state_string_at(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0),
+            )
+        }
+
+        /// As `to_state_string`, with the write time supplied. 980-ja2m: the
+        /// file now carries `written_at`, so a reader can tell a fresh record
+        /// from a five-day-old one WITHOUT trusting mtime.
+        ///
+        /// MTIME IS NOT THE TRUTH and must never be treated as it. A copy, a
+        /// restore from backup, a `touch`, or an rsync manufactures a fresh
+        /// mtime on stale content; the content timestamp cannot be forged by
+        /// ordinary filesystem operations. Readers fall back to mtime only when
+        /// the file predates this field, and must SAY SO when they do.
+        ///
+        /// The line is additive and the parser ignores unknown keys, so an
+        /// older reader (windows-tray) is unaffected.
+        pub fn to_state_string_at(&self, written_at_unix: u64) -> String {
             let mut out = String::new();
             out.push_str("tillandsias-crashloop-state v1\n");
+            out.push_str(&format!("written_at {written_at_unix}\n"));
             out.push_str(&format!("window_secs {}\n", self.window_secs));
             out.push_str(&format!("threshold {}\n", self.threshold));
             out.push_str(&format!(
@@ -1292,6 +1326,9 @@ pub mod crashloop {
                     }
                     Some("ever_ready") => {
                         det.ever_ready = parts.next() == Some("1");
+                    }
+                    Some("written_at") => {
+                        det.written_at = parts.next().and_then(|v| v.parse::<u64>().ok());
                     }
                     Some("last_phase") => {
                         det.last_ranked_phase = parts.next().and_then(phase_from_slug);

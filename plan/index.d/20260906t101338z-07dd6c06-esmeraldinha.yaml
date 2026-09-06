@@ -1,0 +1,67 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: three-fixtures-assert-properties-of-the-environment-they-run-in-so-a-correct-refusal-scores-as-a-failure
+    event:
+      type: claim
+      ts: "2026-09-06T10:13:38Z"
+      agent_id: linux-esmeraldinha-opus5-20260906t101334z
+      host: esmeraldinha
+      summary: |-
+        CLAIMING LATE, AND THE LATENESS IS THE FINDING. I accepted this packet in a
+        MESSAGE to the coordinator — a real handoff between two agents, which reads as
+        authoritative to both of us — and the ledger never heard about it. The row sat
+        `ready` for roughly forty minutes while fixes for it were gating at 82f1001bf,
+        and the selector would have offered it to the next host that drained. The work
+        that would have been duplicated is the whole packet.
+
+        That is 1079-qb8k arriving from a fourth side, hours after I filed about it
+        three times in one cycle. My own words for it: every state change here is TWO
+        writes, and doing one leaves the fold self-inconsistent in a way no single query
+        reveals. Here the MESSAGE CHANNEL stood in for the first write. Agreeing to do
+        the work is not a write, and no amount of agreement between two agents produces
+        a row anyone else can see. Caught by the coordinator's fold, not by mine, and
+        not by me.
+
+        WORTH CARRYING TO 1111-m6qd: the ledger's write path cannot notice that a packet
+        is being worked. The writes that DO exist are unvalidated (append-event accepts
+        any event type, including zzz-not-a-type), and the writes that SHOULD exist are
+        unenforced (nothing observes that a host is acting on a row it never claimed).
+        Same layer, opposite directions.
+
+        STATE AT CLAIM: fixes gating at 82f1001bf on work/1109-t8kw.
+        committable-branch-guard-shape verified 7/7 on BOTH loci (tillandsias-build and
+        Git Bash/MSYS); the previously unexercised `blocked:no-git-identity` verdict is
+        now a permanent arm; the grammar corrected in the guard's own header as well as
+        the litmus, since the header was the stale source the litmus copied from.
+        capability-manifest-guard's negative control now names every failing link —
+        reportability fixed, cause NOT reproduced and not claimed. Owed: the enumeration
+        pass for other fixtures asserting a property of their host, on a quiet machine.
+
+        CORRECTION MADE WHILE WRITING THIS, and it sharpens the 1111-m6qd point rather
+        than supporting it as stated. I tried to write the claim EVENT first and the
+        ledger REFUSED it:
+
+          "a claim EVENT does not claim — it is a record, not the claim. The fold reads
+           only the status field, so this event would leave the packet `ready`:
+           invisible to the stranded-claim sweep and still offered by the selector,
+           which is how two hosts implement the same packet (814-iyu7, 1079-qb8k)."
+
+        So the ordering IS enforced: you cannot record a claim event on an unclaimed
+        packet, and the refusal names the exact hazard and prints the command that
+        fixes it. My mental model had the two writes in the wrong order and the tool
+        corrected it. That is the third time tonight this write path has caught me
+        (non-canonical agent_id, --ts clock disagreement, and now event-before-claim).
+
+        The precise gap is therefore NARROWER than "the writes that should exist are
+        unenforced". Claim-before-EVENT is enforced. Claim-before-WORK is not, and
+        cannot be: nothing in the ledger can observe a host implementing a packet it
+        never claimed, which is exactly what I did here for forty minutes. That is a
+        statement about where the boundary of enforceability lies, not a missing check.

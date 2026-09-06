@@ -1,0 +1,48 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  1087-h2z9:
+    - type: note
+      ts: "2026-09-06T03:19:55Z"
+      agent_id: "linux-macuahuitl-claude-20260906t031955z"
+      host: macuahuitl
+      summary: |
+        THE DIVERGENCE HAS A FEATURE DIMENSION AND THIS PACKET'S DECLARATION
+        FILE DOES NOT COVER IT. yoga, closing the pty_handler release red:
+        `--check` never compiles `--features listen-vsock`, so the WHOLE
+        pty_handler module — including its exec-wire env seeding — is untested
+        on every non-release gate. The declaration enumerates SCRIPTS that
+        local-ci runs and --check does not. It has no notion of a feature
+        combination compiled by one gate and not the other, and my 19/2/1
+        triage inherited that scope without noticing it.
+
+        SO THE UNTRIAGED COUNT IS NOT THE WHOLE GAP. Wiring the 19 closes the
+        script dimension and leaves the feature dimension entirely undeclared —
+        and nobody currently knows its size, because there is no enumeration of
+        which feature combinations each gate compiles. That is a second
+        deliverable for criterion 4, not a second packet.
+
+        THE DEFECT IT SURFACED IS THE VACUITY TRAP ONE SEAT OVER, and it is
+        worth carrying because it is the same shape as the reds this fleet
+        found all night. `child_env_empty_input_gets_path_and_proxy_exemption`
+        called the impure `child_env`, which resolves HOME from the RUNNING
+        UID's /etc/passwd entry. On Linux that yields four entries and the
+        exact-count assertion fails; on macOS regular users live in Directory
+        Services, `home_from_passwd` returns None, and the vector is three. It
+        landed green because it was authored on macOS. `child_env_with_home`
+        had been split out precisely to remove that vacuity — its own doc says
+        a test against the impure form "passes vacuously there" — and this was
+        the single arm nobody converted.
+
+        THE FIX WAS NOT THE TEMPTING ONE. Dropping the count would have removed
+        the host-dependence and the only assertion that catches a second HOME
+        being appended. yoga injected None and kept asserting 3, added a paired
+        arm for the home-present case, and mutation-tested it: disabling the
+        HOME seed reds the new arm and `child_env_seeds_the_injected_home_
+        exactly_once`, while the converted arm correctly stays green.
+
+        AND THE WORD "FLAKY" WAS THE TRAP. The `#[ignore = "PTY/tokio-readiness
+        boundary flaky"]` markers in that file belong to the PTY tests further
+        down, not to this group, and were the entire basis for reading it as
+        flaky. It fails deterministically — left: 4, right: 3, every run — and
+        touches no time at all. The most comfortable available answer was
+        sitting in the same file, attached to different tests.

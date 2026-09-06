@@ -1,0 +1,8 @@
+events:
+  - packet_id: jq-crlf-on-windows-turns-shell-reads-into-silent-wrong-answers
+    event:
+      type: note
+      ts: "2026-09-05T04:34:22Z"
+      host: yolanda
+      summary: |-
+        Filed from yolanda while verifying 972-umik commit B. One site fixed in df5708607 with the before/after measured (executed 1 skipped 2 -> executed 3 skipped 0); the remaining 25 jq call sites and the SKIP-should-be-FAIL half are this packet.

@@ -111,6 +111,26 @@ run_gate 0 "GATE no change passes"
 printf '#!/usr/bin/env bash\nset -uo pipefail\nif cat /etc/hosts | grep -q root; then :; fi\n' > "$repo/scripts/victim.sh"
 run_gate 1 "GATE MUTATION added unbounded-producer verdict pipeline is refused"
 
+# 2b. ORDER 1070-a4gc: a PLAIN RECURSIVE GREP is an unbounded producer too.
+# The producer list recognised `git grep` and not `grep -r`, so this exact shape
+# was invisible even when newly added — and it is not a hypothetical shape: it
+# is what made validate-traces.sh report the three best-traced specs as
+# UNCOVERED (1069-c9w6), because `grep -q` closed the pipe, the still-traversing
+# `grep -rl` took SIGPIPE, pipefail propagated 141, and the `if` took the else
+# branch. The metric was inverted and host-dependent, and this guard could not
+# see the line that did it.
+#
+# MEASURED PRE-FIX: this case passes rc=0 against the guard as it stood, which
+# is the arm having no teeth. Post-fix it is refused.
+printf '#!/usr/bin/env bash\nset -uo pipefail\nif grep -rl needle . | grep -q .; then :; fi\n' > "$repo/scripts/victim.sh"
+run_gate 1 "GATE MUTATION added recursive-grep verdict pipeline is refused (1070-a4gc)"
+
+# 2c. NEGATIVE CONTROL for 2b: a recursive grep whose output is CAPTURED first
+# is the recommended rewrite and must stay clean, or the widened producer list
+# would refuse the fix it recommends.
+printf '#!/usr/bin/env bash\nset -uo pipefail\nhits="$(grep -rl needle .)"\ncase "$hits" in *needle*) :;; esac\n' > "$repo/scripts/victim.sh"
+run_gate 0 "GATE recursive grep captured into a variable stays clean (1070-a4gc)"
+
 # 3. The recommended rewrite of the same check passes.
 printf '#!/usr/bin/env bash\nset -uo pipefail\nout="$(cat /etc/hosts)"\nif grep -q root <<<"$out"; then :; fi\n' > "$repo/scripts/victim.sh"
 run_gate 0 "GATE the here-string rewrite of the same check passes"

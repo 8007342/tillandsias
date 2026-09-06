@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: fat-spec-expert-cannot-refuse-an-out-of-corpus-question
+    field: next_action
+    value: 'REMAINING after lenovinha''s 2026-09-05 from-scratch verification (4/4 confirmed on index db8c31394b5c, every question winning its own chunk; systemd control now retrieves the systemd_is_used_not_declined correction at 0.7031): (1) the near band as a whole stays routed to 853-6gz3''s validation layer and is NOT closed here — a declined-alternatives chunk converts ANTICIPATED near misses one topic at a time, untopical nonsense is the floor''s job; (2) when adding a declined technology give it its own COLUMN-0 key, verified against the real chunker, and verify the CHUNK not just the file; (3) scores on a real build ran ~0.02-0.03 below yoga''s injected-clone figures — unexplained and not investigated, margins still clear the 0.62 floor (smallest: Terraform 0.6752); a host re-running this should expect small differences rather than byte-identity'
+    ts: "2026-09-05T03:42:10Z"
+    host: lenovinha
+
+events:
+  - packet_id: fat-spec-expert-cannot-refuse-an-out-of-corpus-question
+    event:
+      type: note
+      ts: "2026-09-05T03:42:10Z"
+      host: lenovinha
+      summary: |-
+        record what remains after the re-index verification

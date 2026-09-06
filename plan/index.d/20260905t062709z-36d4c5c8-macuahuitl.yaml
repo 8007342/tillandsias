@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: memoise-the-terminology-dictionary-check-on-a-digest-of-its-inputs
+    event:
+      type: progress
+      ts: "2026-09-05T06:27:09Z"
+      agent_id: linux-macuahuitl-claude-20260905t062709z
+      host: macuahuitl
+      summary: |
+        RELAY-LANDED BY THE COORDINATOR under pirria's authorship (06:2xZ): pirria's commit d6a71e968 (build.sh, scripts/terminology-check-memo.sh, scripts/test-terminology-check-memo.sh; +202/-8) reached this host as `git format-patch` output pasted in two halves at a line boundary (150 + 148 lines) because pirria has no credential channel and the 17299-byte patch exceeded the single-message size that failed earlier in the night; the halves were written to disk, concatenated, and compared against the sha256 pirria published before the paste (720b755b89cd4ca70bb43a4a247aa8d2d247372b280836f7baa855416497ac9a). First assembly: same byte count, DIFFERENT hash, two transcription errors on the coordinator's side found by the hash and fixed (a stray space appended after the first half's final newline by the blank-context-line normaliser, and the signature separator typed without git's trailing space); second assembly matched, and only then did `git am` run, on the merged trunk, preserving pirria's authorship and its full commit message with the three timing records. Landed in this pass with the union litmus and the gate. METHOD NOTE for the next credential-blocked host: a patch under about 20 KB travels by chat as `format-patch --stdout` in halves plus the whole-file hash published first; a torn or altered paste cannot apply.

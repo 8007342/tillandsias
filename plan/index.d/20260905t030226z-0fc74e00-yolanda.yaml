@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: control-wire-ships-unauthenticated-by-default
+    event:
+      type: finding
+      ts: "2026-09-05T03:02:26Z"
+      agent_id: windows-yolanda-claude-20260905t030226z
+      host: yolanda
+      summary: |
+        THE WINDOWS READER IS NOT THE macOS SHAPE (yolanda, read before converting): hvsocket.rs:29 verbatim `if std::env::var("TILLANDSIAS_SECURE_CONTROL_WIRE").as_deref() == Ok("on") {`, exact case-sensitive equality against the single string "on", no is_empty arm, no eq_ignore_ascii_case. It differs from macOS in BOTH directions: BLANK falls through to plaintext by omission rather than by decision (same outcome; the conversion makes it a hard refusal, as on macOS); CASE is Windows-only: macOS matched eq_ignore_ascii_case("on") so ON and On ENABLED the secure wire there, while on Windows "ON" is not Ok("on") and is PLAINTEXT, so an operator who set TILLANDSIAS_SECURE_CONTROL_WIRE=ON on a Windows host has been running an unencrypted control wire while believing it secure, and nothing said so: a security control that reads as enabled and is not, a live defect on every shipped Windows build, filed as its own finding for citation and back-port. Three changes ride in the conversion, named separately: (1) absent -> Off becomes On (the flip, the headline); (2) blank -> plaintext becomes ERROR; (3) "ON"/"On" -> PLAINTEXT becomes SECURE (Windows-only, silent until now). RULING: two commits. A = the conversion to the shared reader, which fixes (2) and (3) by construction (they cannot be split from it except by patching a reader about to be deleted), all three named in its message, back-portable alone; B = the flip to On with the plaintext-reader sabotage arm, landed only if the ratchet yolanda runs after merging origin/linux-next prints 1 of 3 before A and 0 of 3 after, read at land time and not taken from a message (yolanda's windows-next had not yet merged 311aa27d5, so the ratchet script did not exist in its tree and it refused to take "you are last" as established). Pairing test: a real Noise handshake over a duplex, psk from the production expression, a frame each way, sabotage by a flipped psk byte; the default pinned through the pure parser with an explicit VarError::NotPresent, no set_var (1002-9xmb). 1042-svey first.

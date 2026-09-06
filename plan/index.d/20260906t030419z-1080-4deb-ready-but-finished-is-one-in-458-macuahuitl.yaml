@@ -1,0 +1,49 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  1080-4deb:
+    - type: note
+      ts: "2026-09-06T03:04:19Z"
+      agent_id: "linux-macuahuitl-claude-20260906t030419z"
+      host: macuahuitl
+      summary: |
+        READY-BUT-ALREADY-FINISHED IS 1 OF 458, and the one is 964-9yyp, which
+        yolanda closed this cycle. Measured because the coordinator was about to
+        run a triage pass and would otherwise have routed hosts to finished work
+        — yolanda's third instance of this family was the selector handing them
+        a p1 their own host had implemented four days earlier.
+
+        THE MEASUREMENT TOOK THREE ATTEMPTS AND THE FIRST TWO WERE VACUOUS. Both
+        reported 0 and both were blind:
+
+          attempt 1  scanned `tillandsias-plan ready | head -80` against
+                     `plan-tool answer`. TWO faults: the ready set is 458, so
+                     80 was a 17% SAMPLE reported as a scan (the coordinator's
+                     own "never enumerate through head"), and `answer` does not
+                     return next_action at all, so the probe could not have
+                     seen the field under any circumstances.
+          attempt 2  scanned the whole fold, but entered next_action only on a
+                     BLOCK scalar (`next_action: |`). 964-9yyp's is a
+                     single-quoted INLINE scalar, so the parser never entered
+                     the field. Blind by construction for exactly the shape
+                     being looked for.
+          attempt 3  handles both scalar forms. 1 hit, which is 964-9yyp.
+
+        EACH ZERO WAS CAUGHT ONLY BY THE POSITIVE CONTROL — checking that the
+        probe could find the one instance already known to exist. Without it,
+        "0 of 458, the problem is rare" would have been reported three times,
+        and the third would have been true by luck rather than by measurement.
+        This is `a_null_result_needs_a_positive_control` catching its own author
+        three times inside one command, hours after landing it.
+
+        WHAT IS AND IS NOT MEASURED, because the number is narrower than it
+        looks. This finds packets whose next_action LITERALLY declares itself
+        finished. It does NOT find a packet that is done in the tree and whose
+        next_action does not say so — and that is how yolanda actually found
+        theirs, by reading HEAD and recognising their own work from four days
+        earlier. A text scan cannot do that; it needs the reachability check
+        macneo's third axis describes (does the ledger match what LANDED), which
+        is this packet's subject and is not answerable by grep.
+
+        SO THE HONEST STATEMENT IS: self-declaring instances are 1 in 458 and
+        that one is handled; the silent population is unmeasured and this probe
+        cannot bound it.

@@ -3355,30 +3355,6 @@ fn build_project_submenu(
     )
 }
 
-/// Build the `~/src >` submenu listing every discovered local project.
-///
-
-/// Build the `☁️ Cloud >` submenu listing every discovered cloud project.
-///
-/// Population of `state.cloud_projects` is owned by
-/// [`cloud::refresh_cloud_projects_if_stale`]. When the list is empty the
-/// placeholder text depends on whether we've ever fetched: `(loading…)`
-/// before the first fetch, `(no repos)` after a successful fetch with zero
-/// results.
-///
-/// ## Overflow handling
-///
-/// Native KSNI / GMenu indicator menus cannot scroll, so we cap the visible
-/// list at [`resolved_max_cloud_projects_in_menu`] entries. When the
-/// underlying list is longer the tail is hidden behind a final disabled-ish
-/// overflow leaf (id [`CLOUD_OVERFLOW_ID`]) whose label includes the total
-/// count. Activation is handled in the StatusNotifierItem event handler.
-///
-/// Sort order matches whatever populated `cloud_projects` (currently
-/// `gh api user/repos?sort=pushed`, i.e. newest-pushed first) so the cap
-/// trims the *tail* — stale repos — rather than the user's active work.
-///
-/// @trace spec:tray-ux, spec:remote-projects
 /// Label and clickability for the cloud-overflow row (order 591-33s6).
 ///
 /// Pure, and separated from menu construction on purpose: the built node's
@@ -3400,6 +3376,38 @@ fn cloud_overflow_row(total: usize, visible_count: usize) -> (String, bool) {
     (label, false)
 }
 
+/// Build the `☁️ Cloud >` submenu listing every discovered cloud project.
+///
+/// Population of `state.cloud_projects` is owned by
+/// [`cloud::refresh_cloud_projects_if_stale`]. When the list is empty the
+/// placeholder text depends on whether we've ever fetched: `(loading…)`
+/// before the first fetch, `(no repos)` after a successful fetch with zero
+/// results.
+///
+/// ## Overflow handling
+///
+/// Native KSNI / GMenu indicator menus cannot scroll, so we cap the visible
+/// list at [`resolved_max_cloud_projects_in_menu`] entries. When the
+/// underlying list is longer the tail is hidden behind a final disabled-ish
+/// overflow leaf (id [`CLOUD_OVERFLOW_ID`]) whose label includes the total
+/// count. Activation is handled in the StatusNotifierItem event handler.
+///
+/// Sort order matches whatever populated `cloud_projects` (currently
+/// `gh api user/repos?sort=pushed`, i.e. newest-pushed first) so the cap
+/// trims the *tail* — stale repos — rather than the user's active work.
+///
+/// This doc block spent time attached to `cloud_overflow_row`: 112ea637c
+/// inserted that function INTO THE GAP between this comment and the function
+/// it describes, and a doc comment attaches to whatever follows it. No diff
+/// hunk looks wrong when that happens. It carried a spec-trace annotation
+/// naming tray-ux and remote-projects, which is DELIBERATELY NOT RESTORED —
+/// this function is retired below, its only callers live in the `#[cfg(test)]`
+/// module, and crediting a spec to code production cannot reach relocates a
+/// false attribution rather than removing it. Both specs keep live coverage
+/// elsewhere in this file (39 and 53 annotations across the crates). The
+/// general question — how much of the trace ledger sits on unreachable items —
+/// is order 1088-e8wv. Do not re-add a spec trace here without reading it.
+///
 /// @trace dead_code — retired by order 628-p5tj convergence.
 #[allow(dead_code)]
 fn build_cloud_projects_submenu(state: &TrayUiState) -> MenuNode {

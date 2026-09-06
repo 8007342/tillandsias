@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-guest-binary-staging-success-path-is-silent-so-a-live-failure-cannot-be-diagnosed
+    event:
+      type: progress
+      ts: "2026-09-05T04:10:44Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260905t004510z
+      host: tlatoanis-macbook-air
+      summary: |-
+        FIELD CAVEAT, recorded against my own fix rather than left implicit: the success line did NOT appear in console.log on three boots tonight, on a tree and bundle carrying it, while the guest demonstrably had the current host-staged binary installed (hash match, twice, including under the 1019-ivia C2 mutation). So the guard bites in test and the emitted line has NOT been observed in the field. Two candidates, undecided and NOT to be guessed between: the fetch unit may not run on a boot whose rootfs is already provisioned (cloud-init runs first-boot only, though the 701-kgvk comment says the guest reinstalls from the staged copy on EVERY boot, so those two statements are in tension and one of them is wrong), or the unit's stderr may not reach console.log at all — note console.log carries zero 'cloud-init' lines either, which is evidence for the second. WHAT THIS MEANS FOR THE PACKET: the deliverable as filed was 'the guest says what it did', and on this evidence it still does not. The artifact comparison is what answered the question C2 needed. I am recording this rather than closing on the guard, because a landed test that asserts the line exists in the SOURCE is exactly the proxy this packet was filed about — the string is present and the operator still sees nothing. Whoever takes this next should start from the two candidates above and settle which, rather than re-deriving them.

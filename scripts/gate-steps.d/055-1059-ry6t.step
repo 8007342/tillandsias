@@ -1,0 +1,34 @@
+# Gate step 1059-ry6t — data, not code (order 1072-b7eq).
+#
+# First binding I have written as a data file rather than as an inline block in
+# build.sh, and it is the direct payoff of esme's migration: two of the seven
+# near-drops that motivated the freeze were my steps landing into that shared
+# region. Prefix 055 sits between 050 and 060 on the ten-spacing, so nothing is
+# renamed and this file conflicts with nothing.
+#
+# WHAT THE FIXTURE PINS. crates/tillandsias-windows-tray/build.rs writes an
+# EMPTY placeholder for the musl headless when it is absent, so include_bytes!
+# compiles on a host that will never package. That accommodation is deliberate
+# and it is the same one render_msix_logos makes for the MSIX logos — whose
+# comment already states the rule this asset never got: "the packaging step is
+# where absence becomes an error, because that is where it actually matters."
+#
+# So the documented local build printed `Built: …`, exited 0, and produced a
+# tray whose guest injection was a SILENT NO-OP. It does not fail at build; it
+# fails later, in a guest that behaves like an older release for no visible
+# reason — the kind of symptom this fleet then spends a night bisecting.
+#
+# MEASURED 2026-09-05: 0 bytes on esmeraldinha since 2026-08-23 and on yolanda
+# since 2026-08-22, TWO OF TWO Windows hosts checked. build.rs creates the
+# placeholder on first build and nothing replaces it, so this was the DEFAULT
+# state of a Windows dev checkout, not one stale machine. That answers the
+# question the packet deliberately left open.
+#
+# The split follows the logos precedent rather than inventing one: build.rs
+# WARNS (refusing there would break the `cargo check` accommodation), and
+# scripts/build-windows-tray.ps1 REFUSES, because that script's whole purpose is
+# to produce an installable tray.
+STEP_DESC="Checking a placeholder guest asset cannot build a silent no-op tray (1059-ry6t)"
+STEP_SCRIPT="scripts/test-tray-asset-placeholder-refused.sh"
+STEP_ERROR="the windows-tray build no longer warns or refuses on a zero-byte embedded guest binary (1059-ry6t) — see the verdict line above"
+STEP_OK="Tray guest-asset placeholder check passed"

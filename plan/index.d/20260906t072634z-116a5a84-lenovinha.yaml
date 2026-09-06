@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: scorable-obligation-guard-misreads-an-events-entry-as-a-packet-row
+    event:
+      type: note
+      ts: "2026-09-06T07:26:34Z"
+      agent_id: linux-lenovinha-claude-20260906t053519z
+      host: lenovinha
+      summary: |
+        SECOND INSTANCE, INDEPENDENTLY HIT, AND IT RAISES THE SEVERITY. macuahuitl ran
+        into this the same night without recognising it as a filed defect: they split a
+        closure fragment into two files because they believed the gate parses
+        `- packet_id:` under `status:` / `events:` as declarations. That belief is this
+        packet.
+
+        THE SPLIT THEN TRIPPED A DIFFERENT GUARD. check-fragment-closure-evidence-added
+        requires the closure rung and its evidence in the SAME fragment, so the shape
+        this defect pushes an author into is a shape another guard refuses. Two guards
+        with incompatible expectations about one fragment, and the workaround for the
+        first is a violation of the second.
+
+        That changes what this packet is. It is not only a false refusal that costs a
+        reader time — it STEERS authors into a second violation, and the author cannot
+        tell that the advice was bad, because both refusals are correct in their own
+        terms. I took the same workaround myself (splitting 1092-xwxv into packet-only
+        and events-only fragments) and it happened not to bite me only because my
+        fragment carried no closure rung.
+
+        So the fix must not merely stop the false refusal; it must leave the
+        README-documented two-channel fragment usable END TO END, closure evidence
+        included, or authors will keep being routed into the other guard.

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: guest-login-prerequisite-message-names-a-tool-the-guest-does-not-have
+    event:
+      type: progress
+      ts: "2026-09-05T05:13:55Z"
+      agent_id: linux-yoga-claude-20260905t051355z
+      host: yoga
+      summary: |-
+        Code half done, landed 5d7aa4993. The prerequisite is a FILE and the code never needed git: read_git_identity_defaults calls std::fs::read_to_string on two candidate paths and parses [user]; nothing executes a binary or checks PATH. So of the two fixes only one matches the code -- installing git in the guest would satisfy the string but not the check, and would add a package to every guest image to fix a message. Refusal now resolves and prints the paths it ACTUALLY read rather than a literal ~/.gitconfig, since managed_gitconfig_path moves with XDG_CACHE_HOME and naming a path the operator does not have is the same defect relocated. Three tests incl the file-vs-binary check: no 'git config' in the message, every searched path named, and read_git_identity_defaults must read_to_string without Command::new. Pre-fix result FAILS. Also fixed source_window, found BY that negative assertion: it tried the indented fn boundary first and fell back only when absent, so a window on a top-level fn ran to the test module thousands of lines wide; every caller asserts with contains, which an over-wide window satisfies, so it was invisible until a test asked what a window did NOT contain. All 513 bin tests pass after narrowing. Second criterion is esmeraldinha's Windows floor smoke and remains open -- a fresh guest with no ~/.gitconfig must reach a successful login by following the message alone.

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: core-symlinks-false-makes-the-skill-canonicalization-check-unrunnable-and-misdiagnosed
+    event:
+      type: note
+      ts: "2026-09-05T08:29:20Z"
+      agent_id: linux-macuahuitl-claude-20260905t082920z
+      host: macuahuitl
+      summary: |
+        COORDINATOR NOTE ON THE LANDING (yolanda's records are on windows-next and merge next pass): the packet understated the remedy; measured, `git mv <harness-entry> skills/<name>` into the existing directory exits 0 and buries the source inside the canonical skill, so following the printed remedy on a core.symlinks=false checkout deletes 75 harness entries and creates 75 strays with nothing to suggest anything went wrong. The first fixture asserted the neighbour of the damage (skills/<name>/SKILL.md survives, which it does) and passed while the damage happened; it now asserts the harness entry survives and no stray appears, and reds on the pre-fix text. Instrument reads `git ls-files -s` mode 120000 with the target from the blob, readlink only as the untracked fallback: 75 violations → ok:skills-canonical:119 entries across 5 harnesses; eleven arms, arm 4 the scorable half (a genuine harness-exclusive skill must still be refused). Performance is part of the correctness fix: two git spawns per entry was 18 s on Windows against the step's 10 s budget, a false positive's fix arriving as a timeout; one ls-files plus one cat-file --batch is 5 s; any check that reaches for git per path pays the spawn on Windows. The same worktree-vs-index defect was in the litmus corpus ('build-macos-tray is reachable from a non-Claude harness' used test -L and could never pass on Windows), fixed alongside; step 6 of that litmus stays red on purpose (yq absent, 1056-w2yy).

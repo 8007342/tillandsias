@@ -1,0 +1,23 @@
+# Gate step 1074-96z9 — data, not code (order 1072-b7eq).
+#
+# RELAYED FROM pirria, whose base predates the gate-step migration, so the
+# patch added this as an INLINE _step block in build.sh and conflicted with the
+# .step loop that replaced that region. Translating it into a file rather than
+# resolving the conflict either way is the resolution: taking pirria's side
+# would have reverted the migration, and taking trunk's side alone would have
+# silently dropped their step. Every other step named in their side is already
+# bound here, so this is the only one that needed carrying across.
+#
+# The audit that nominates steps for memoisation must be able to measure
+# whether memoisation worked. Every arm in the fixture runs twice — against the
+# shipped file and against a mutant with the fix deleted — because an arm that
+# cannot be made to red is not evidence. The negative control is the one that
+# matters: a MISS must stay inside `_run`, or the hit/miss pair would look tidy
+# while the only measurement of the step's real cost quietly disappeared.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf): a binding assembled
+# from a variable is invisible to every name-based scan.
+STEP_DESC="Checking a memo hit is observable and a miss stays profiled (1074-96z9)"
+STEP_SCRIPT="scripts/test-memo-hit-observability.sh"
+STEP_ERROR="a memo outcome stopped being measurable (1074-96z9) — see the verdict line above"
+STEP_OK="Memo-hit observability check passed"

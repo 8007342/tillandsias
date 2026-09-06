@@ -183,10 +183,19 @@ set -eu
 #     run, in the one environment where checks actually execute.
 # Both tools are packaged in Fedora, so the absence was an omission, not a
 # constraint.
+# ORDER 1042-svey - `openssl` (the CLI) IS NOT `openssl-devel`. On Fedora the
+# -devel package carries headers and pulls openssl-libs; the /usr/bin/openssl
+# COMMAND is a separate package. This list had -devel (the Rust build needs it)
+# and not the binary, so the CLI arrived only as an incidental dependency of
+# something else - present on yolanda's builder distro and absent on
+# esmeraldinha's, which is how its gate died eleven minutes in inside
+# ensure_ca_bundle with `os error 2` while the 989-ykks host-tools step had
+# passed seconds earlier. Same shape as the jq/yq omission above: packaged in
+# Fedora, so the absence was an omission rather than a constraint.
 dnf install -y \
     gcc pkg-config file cmake make \
     musl-gcc musl-devel musl-libc-static \
-    openssl-devel systemd-devel \
+    openssl openssl-devel systemd-devel \
     ruby perl-FindBin \
     procps-ng findutils diffutils \
     git curl tar xz ShellCheck awk \
@@ -243,10 +252,12 @@ done
 #
 # TILLANDSIAS_SKIP_WSL2 is exported AFTER this string, so the recursion guard
 # always wins over anything forwarded here.
-_ENV_FORWARD=""
-while IFS= read -r _w2_var; do
-    _ENV_FORWARD="${_ENV_FORWARD}export $(printf '%q' "$_w2_var")=$(printf '%q' "${!_w2_var}"); "
-done < <(compgen -v | grep '^TILLANDSIAS_' || true)
+# ORDER 891-5shq: ONE implementation, shared with the toolbox dispatch. This
+# loop stood here as a second copy of the toolbox's, which is the divergence
+# that packet's fourth criterion forbids -- a third boundary must not be able
+# to reimplement it a third time.
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-env-forward.sh"
+_ENV_FORWARD="$(tillandsias_env_forward_prefix)"
 
 # ORDER 922-curm — the TILLANDSIAS_SKIP_TOOLBOX=1 that stood here is GONE, and
 # its removal is the point rather than a tidy-up. 889-8tcb set it at this

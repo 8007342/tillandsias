@@ -1,0 +1,74 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  1004-cp6p:
+    - type: progress
+      ts: "2026-09-06T00:45:34Z"
+      agent_id: "macos-tlatoanis-macbook-air-claude-20260905t144547z"
+      host: tlatoanis-macbook-air
+      summary: |
+        FIXED, all eight criteria. The SPEC gained two columns and the verdict
+        stopped answering a question nobody asked.
+
+        SCOPE. Every entry was implicitly gate-scoped, so a Mac read
+        `ok:host-tools:macos:5 required present` and could not start the tray
+        build. The verdict was TRUE for ./build.sh --check and MISLEADING as
+        used, because the reader was about to run the platform's own build path.
+        Entries now carry gate or tray-build, and the verdict names both:
+          ok:host-tools:macos:gate:5 present; tray-build:6 present
+        A tray-build shortfall REPORTS AND DOES NOT FAIL — a host that never
+        builds the tray is not broken, and failing --check there would enforce
+        more than this packet describes. Gate scope keeps its terminal force.
+
+        KIND. A prerequisite is not always a binary. Every entry was resolved
+        with `command -v`, so a missing rustup target was invisible BY
+        CONSTRUCTION — macneo lost 166 seconds to E0463 "can't find crate for
+        core" on x86_64-unknown-linux-musl while aarch64 succeeded, an asymmetry
+        no `command -v` could ever report. rustup-target entries are resolved by
+        asking `rustup target list --installed`: ask the subsystem what it HAS,
+        do not stat a path and infer.
+
+        DECLARED AT tray-build SCOPE FOR macos: zig, cargo-zigbuild, codesign,
+        shasum, aarch64-unknown-linux-musl, x86_64-unknown-linux-musl.
+
+        THE ANTI-DRIFT ARM WAS WRONG ON ITS FIRST RUN, AND THAT WAS THE USEFUL
+        OUTCOME. It asserts every prerequisite build-macos-tray.sh invokes is
+        declared, and it initially demanded brew, cargo and xcrun. Reading each
+        site rather than trusting the grep:
+          brew:29    a PROBE — `if command -v brew && brew --prefix rustup`,
+                     with a fallback. Declaring it fails a host that has no
+                     Homebrew and does not need one.
+          xcrun:211  `|| die`, but INDENTED inside the notarization branch,
+                     which runs only when a signing identity and notary keys are
+                     set. Declaring it fails every host that builds unsigned.
+          cargo:42   a genuine unconditional prerequisite, ALREADY declared at
+                     gate scope — hence the arm accepts any scope.
+        So the arm now requires unindented AND `|| die`. check-host-tools.sh's
+        own header already warned this: "Most `command -v` sites in scripts/ are
+        probes with a fallback, and listing those would report a working host as
+        broken." A guarded prerequisite is a property of the INVOCATION, not of
+        the host.
+
+        FIXTURE 23/23, up from 17. The column shift broke three existing arms and
+        every break was informative: `_reqs` read platforms from field 2, which
+        is now `kind`, so it built an EMPTY farm and the "true absence" arm passed
+        against the real PATH — a fixture measuring the machine again.
+
+        SABOTAGE, three mechanisms, each failing a DIFFERENT count so they are
+        independent rather than one arm catching everything:
+          zig dropped from the SPEC          -> 1 red  (anti-drift)
+          tray-build routed to terminal path -> 4 red  (scope)
+          rustup-target resolved by command -v -> 1 red (kind)
+          restored -> 23/23, tree byte-identical
+
+        LIVE HERE: ok:host-tools:macos:gate:5 present; tray-build:6 present —
+        which confirms macneo's provenance claim exactly. This host builds the
+        tray only because those six were installed by hand at some point and no
+        gate ever recorded that they are prerequisites. The knowledge lived in
+        one host's disk state, which is why a second Mac discovered it by
+        failing, twice.
+
+        NOT VERIFIED: that the tray actually BUILDS on a host missing only these.
+        The declarations are asserted against what build-macos-tray.sh invokes,
+        which is a claim about agreement between a list and a script — not a
+        claim that the list is sufficient. A host with all eleven present could
+        still fail on something neither file mentions.

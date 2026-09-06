@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-guest-provisioning-script-can-abort-partway-while-cloud-init-reports-success
+    event:
+      type: progress
+      ts: "2026-09-05T05:57:49Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260905t004510z
+      host: tlatoanis-macbook-air
+      summary: |-
+        POST-FIX BOOT, and I am NOT claiming the guard is proven in the field. MEASURED: provisioning ran (marker 'tillandsias-provision-start 2026-09-05T05:57:24Z'), NO FAILED line, and tillandsias-headless-ready.service is ACTIVE — so that boot completed past line 373 and reached the readiness start, which is the outcome the packet wants. BUT THE GUARD DID NOT FIRE ON THIS RUN, because the start SUCCEEDED; the redundant-start condition is intermittent and did not occur. So what is observed is a clean boot, not the guard catching anything. The guard's behaviour is proven by its two sabotage arms in test and NOT by any field occurrence. This is the same honest position as 1049-c6xa's success line: landed, guarded, unobserved in the wild — and I am recording it that way rather than letting a green boot imply the fix was exercised. WHAT WOULD ACTUALLY PROVE IT: a boot on which the trap records the redundant-start log line ('systemctl start returned non-zero but the units are ACTIVE'). That needs the intermittent condition to recur, and each trial costs a bundle rebuild because the script only re-runs when the instance-id changes. Whoever next sees a 300s Ready timeout on macOS should read /var/log/tillandsias-provision-marker FIRST — it now answers, in one file, whether provisioning completed, where it stopped, and what systemd said at that moment.

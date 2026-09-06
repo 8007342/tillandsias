@@ -1044,6 +1044,20 @@ pub fn provision_once() -> i32 {
             Ok(()) => {
                 println!("[provision] RESULT: VM Ready \u{2014} control wire up \u{2713}");
                 tracing::info!("provision-once: VM Ready");
+                // ORDER 1004-5f7p. Record that this installation reached Ready,
+                // because in about a minute it will stop being true and nothing
+                // would otherwise remember that it ever was.
+                //
+                // `--provision-once` provisions and exits by design, so nothing
+                // holds the utility VM open and WSL2 idles the distro down.
+                // Measured on esmeraldinha: exit 0 and "VM Ready" at t+0,
+                // reachable=false by t+48s. That is CORRECT behaviour — but
+                // afterwards `--diagnose` could not tell it from a guest that
+                // never came up, since both are distro_running:false with exit
+                // 2. This record is what separates them.
+                if let Ok(Some(uuid)) = crate::installation_uuid::read_installation_uuid() {
+                    crate::wsl_lifecycle::write_guest_ready_record(&uuid.to_string());
+                }
                 0
             }
             Err(err) => {
@@ -2545,6 +2559,21 @@ struct DiagnoseReport {
     /// flag flips frequently — capturing it directly avoids the operator
     /// having to run `wsl --list --running` separately.
     distro_running: bool,
+    /// ORDER 1004-5f7p. Which of the two `distro_running: false` states this
+    /// is. Before this field they were indistinguishable: a guest that never
+    /// came up and a guest that came up and was correctly idled out by WSL2
+    /// are both `distro_running: false` with exit 2, differing only in a log
+    /// tail, so the smoke runbook's mandatory final health check read DEGRADED
+    /// for a release that had provisioned perfectly.
+    ///
+    /// `never-observed-ready` is also what an ABSENT or unreadable record
+    /// yields, and what a record belonging to a DIFFERENT installation yields.
+    /// "I could not tell" must not read as "it was fine" — that inversion is
+    /// what let a stat() mean provisioning-finished in 1082-9rub, and the
+    /// failing direction is the right one to be wrong in: it costs a
+    /// re-verification, where the other direction tells an operator that a
+    /// guest which never came up merely went idle.
+    ready_history: &'static str,
     release_tag: &'static str,
     manifest_pin_x86_64_oci_tar_xz: Option<String>,
     wire: WireReport,
@@ -2859,6 +2888,17 @@ fn collect_report() -> DiagnoseReport {
         distro: crate::wsl_lifecycle::DISTRO_NAME,
         distro_registered,
         distro_running: distro_running(),
+        ready_history: {
+            let uuid = crate::installation_uuid::read_installation_uuid()
+                .ok()
+                .flatten()
+                .map(|u| u.to_string());
+            if crate::wsl_lifecycle::guest_was_observed_ready(uuid.as_deref()) {
+                "observed-ready"
+            } else {
+                "never-observed-ready"
+            }
+        },
         release_tag: "fedora-44",
         manifest_pin_x86_64_oci_tar_xz: manifest_pin,
         wire,
@@ -2935,7 +2975,17 @@ fn print_human(r: &DiagnoseReport) {
         } else {
             "NOT registered (run --provision-once to provision)"
         },
-        if r.distro_running { ", running" } else { "" }
+        // ORDER 1004-5f7p: name WHICH not-running state this is. WSL2 idles
+        // the utility VM down about a minute after `--provision-once` exits,
+        // by design, and before this line a perfect provision and a provision
+        // that never came up printed the same thing.
+        if r.distro_running {
+            ", running"
+        } else if r.ready_history == "observed-ready" {
+            ", not running (idled out after a successful provision — expected;              re-run --provision-once or start the tray to bring it back)"
+        } else {
+            ", NOT running and never observed ready (this installation has no              record of reaching Ready — treat as a failed provision)"
+        }
     );
     println!("Release tag:  {}", r.release_tag);
     println!(
@@ -4826,6 +4876,10 @@ mod tests {
             distro: "tillandsias",
             distro_registered: false,
             distro_running: false,
+            // 1004-5f7p: the baseline is a degraded guest that never came up,
+            // which is exactly the state this field exists to distinguish from
+            // one that came up and idled out.
+            ready_history: "never-observed-ready",
             release_tag: "v0.0.0",
             manifest_pin_x86_64_oci_tar_xz: Some("abcdef123456".to_string()),
             wire: WireReport {
@@ -4862,6 +4916,7 @@ mod tests {
             "distro",
             "distro_registered",
             "distro_running",
+            "ready_history",
             "release_tag",
             "manifest_pin_x86_64_oci_tar_xz",
             "wire",
@@ -5049,8 +5104,8 @@ mod tests {
         let obj = v.as_object().expect("top-level JSON object");
         assert_eq!(
             obj.len(),
-            21,
-            "DiagnoseReport should have exactly 21 top-level keys (order 312 added `elevated`, order 323 added `wsl_platform`, windows-260719-4 added `guest_version`, order 620-duta added `guest_wiring`); got {}: {:?}",
+            22,
+            "DiagnoseReport should have exactly 22 top-level keys (order 312 added `elevated`, order 323 added `wsl_platform`, windows-260719-4 added `guest_version`, order 620-duta added `guest_wiring`, order 1004-5f7p added `ready_history`); got {}: {:?}",
             obj.len(),
             obj.keys().collect::<Vec<_>>()
         );

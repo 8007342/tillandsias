@@ -384,10 +384,12 @@ PWD_QUOTED="$(printf '%q' "$(pwd)")"
 # the whole namespace inside the toolbox. TILLANDSIAS_SKIP_TOOLBOX is
 # exported AFTER this string in both exec lines, so the recursion guard
 # always wins over anything forwarded here.
-ENV_FORWARD=""
-while IFS= read -r _tb_var; do
-    ENV_FORWARD="${ENV_FORWARD}export $(printf '%q' "$_tb_var")=$(printf '%q' "${!_tb_var}") ; "
-done < <(compgen -v | grep '^TILLANDSIAS_' || true)
+# ORDER 891-5shq: ONE implementation, shared with the WSL dispatch. The loop
+# that stood here was copied to the WSL boundary and the two then had to be
+# kept in step by hand; sharing removes the possibility rather than detecting
+# the drift.
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-env-forward.sh"
+ENV_FORWARD="$(tillandsias_env_forward_prefix)"
 
 echo "[tillandsias-builder] Re-execing inside '$TOOLBOX_NAME' toolbox..."
 

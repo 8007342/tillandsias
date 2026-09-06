@@ -1,0 +1,46 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: compaction-renders-packet-fields-in-a-different-order-than-the-fold-so-trunk-is-red
+    event:
+      type: note
+      ts: "2026-09-06T10:55:18Z"
+      host: macuahuitl
+      summary: |-
+        THE SYSTEM OF RECORD IS UNDAMAGED — swept, with controls. yolanda asked
+        for this after establishing that the defect silently EDITS peers' prose
+        in plan/index.yaml, not merely that a test was red.
+
+        THE MECHANISM, confirmed here against fragments.rs:1600. The predicate
+        accepts ten date bytes plus a T-or-space separator and IGNORES everything
+        after, so prose qualifies:
+          '2026-09-04 added 70'  -> True
+          'not a date'           -> False
+        and quote_timestamp_line splits on the first ": " and re-wraps the tail,
+        so a line inside a LITERAL BLOCK SCALAR gets quoted. That is exactly the
+        shape of the fragment that triggered this packet, and it explains the
+        divergence completely.
+
+        THE SWEEP of the compacted base, with positive controls because a zero
+        from a grep is not a finding:
+
+          plan/index.yaml                          63,445 lines
+          any quoted value  : "                     3,774   probe reads it
+          any quoted date   : "20xx-xx-xx           2,709
+          known-absent token (must be 0)                0   probe discriminates
+          MUTATION SHAPE : "date SPACE prose"           0
+          separator across all 2,709 quoted dates:  T x2709, space x0
+
+        Every quoted date in the base is a real T-separated ISO timestamp. None
+        is space-separated prose.
+
+        AND THE REASON IS THE TEST, NOT LUCK OR HARMLESSNESS. The base was last
+        compacted at 822560ae9 on 2026-09-04 13:55, BEFORE the triggering
+        fragment existed on 2026-09-06. Compaction never ran with the trigger
+        present, because the red test refused every land in that window. That is
+        exactly the claim yolanda made about what the test was standing between,
+        and it held.
+
+        RECORDED AS AN ALL-CLEAR ON PURPOSE. The next reader of this packet
+        should not have to re-derive whether the ledger was already damaged, and
+        a negative result with its controls is worth as much here as a hit would
+        have been.

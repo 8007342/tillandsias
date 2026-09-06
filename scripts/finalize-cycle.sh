@@ -77,6 +77,43 @@ scripts/meta-orchestration-worktree-guard.sh verify "$SD" || {
     exit 3
 }
 
+# ── ORDER 1115-srfr: WHAT IS THIS HOST STILL HOLDING? ───────────────────────
+#
+# Claims are cycle-scoped — a host claims one session's slice, not the packet —
+# so a claim still held by THIS host at ITS OWN finalization is unreleased by
+# definition. There is nothing to adjudicate: the host either finishes it or
+# releases it, and it is the only party that knows which.
+#
+# WHY THE EXISTING SWEEP DOES NOT COVER IT. check-stranded-in-progress.sh is a
+# FLEET sweep for a COORDINATOR: `STRANDED_HOURS` defaults to 8 and it carries
+# no host filter at all. Its advisory-never-a-gate discipline is right for what
+# it does, because a packet legitimately in flight is indistinguishable from
+# one abandoned an hour ago. This question is different and needs no judgement,
+# and the aging is what makes the sweep unable to serve as the fix: both
+# instances that produced this check (1071-adhj ~24h, 1063-nraf ~20h, the same
+# host, one day) would have surfaced eight hours later on someone else's
+# screen, when the exiting host could have resolved either in one command.
+#
+# ADVISORY ON PURPOSE, FOR NOW. This script runs on every host, and turning it
+# into a new refusal is a fleet decision rather than this order's to take
+# (1115-srfr criterion 3). If a host strands a claim again WITH this report in
+# place, that is the evidence for escalating — and the escalation is a refusal
+# naming the release command, since releasing at that point is always correct.
+#
+# ZERO HELD CLAIMS PRINTS AN AFFIRMATIVE LINE, never silence: silence is
+# indistinguishable from the check not running, which is the failure mode this
+# whole stretch of orders keeps meeting.
+# PLACED BEFORE EVERY REFUSABLE STEP, AND THAT POSITION IS THE POINT. It first
+# landed just above "derive the terminal marker", at the very end — and on its
+# own first real run this script refused at `record` (a 1110-4v4h false
+# negative) and the report never executed at all. A cycle that refuses is still
+# a cycle that is ENDING, and it is exactly the cycle most likely to leave a
+# claim behind, because its author is now debugging a refusal instead of
+# finishing an exit. A check that only runs on the happy path cannot see the
+# case it exists for.
+_step "report claims this host still holds"
+scripts/report-held-claims.sh || true
+
 # ORDER MATTERS AND I GOT IT WRONG THE FIRST TIME. `record` attests the WORK
 # head and REFUSES unless that head is already durably on the remote — so the
 # work must LAND BEFORE the record, not after. My first composition ran
@@ -97,12 +134,45 @@ scripts/meta-orchestration-worktree-guard.sh verify "$SD" || {
 _step "record the attestation (attests the now-landed WORK head)"
 rec="$(scripts/mo-full-attest.sh record 2>&1)"; rc=$?
 printf '%s\n' "$rec"
-[ "$rc" -eq 0 ] && printf '%s' "$rec" | grep -q '^MO-FULL: COMPLETE' || {
+# ACCEPT BOTH DISPOSITIONS. This tested `^MO-FULL: COMPLETE` only, so a BLOCKED
+# cycle — a documented, first-class terminal disposition (meta-orchestration
+# SKILL.md:115, and mo-full-attest.sh:258 validates it explicitly) — was reported
+# as `record-failed` AFTER `record` had already appended a perfectly good ledger
+# line. MEASURED on macuahuitl 2026-09-06T06:44:49Z: rc=0, the line written, and
+# finalize refused anyway, leaving the ledger DIRTY with an unrecorded
+# attestation. The operator's next move is to re-run `record` by hand, which
+# appends a DUPLICATE line for the same head — which is exactly what happened.
+#
+# So a blocked cycle could never complete its exit contract through this script,
+# and the failure mode punished the honest disposition: a cycle willing to say it
+# was blocked could not attest, while a cycle claiming COMPLETE sailed through.
+[ "$rc" -eq 0 ] && printf '%s' "$rec" | grep -qE '^MO-FULL: (COMPLETE|BLOCKED)' || {
     echo "refused:finalize:record-failed — the ledger line was not written; do NOT emit a marker." >&2
     exit 4
 }
 
-if ! git diff --quiet -- plan/mo-full-attestations.d 2>/dev/null; then
+# `git diff` CANNOT SEE AN UNTRACKED FILE, and a host's FIRST attestation is
+# always untracked. MEASURED on macneo 2026-09-06, its first ever MO-FULL:
+#
+#   git ls-files --error-unmatch <this host>.md  ->  1 (not tracked)
+#   git diff --name-only -- plan/mo-full-attestations.d  ->  0 lines, BLIND
+#   git status --porcelain -- plan/mo-full-attestations.d ->  1 line, sees it
+#   lenovinha.md, tracked, positive control              ->  0 (tracked)
+#
+# So the record was WRITTEN, `git diff --quiet` reported nothing to commit, the
+# commit was skipped, and this script's own post-record boundary verify then
+# refused on the file this script had just written:
+#   cmp: EOF on <boundary>/startup/status.z
+#   refused:finalize:boundary-verify-failed-post-record
+#
+# Every EXISTING host is invisible to this — their file is already tracked, so
+# `git diff` sees the append and commits it. Only a host attesting for the
+# FIRST time is affected, which is why it survived this long. It is order
+# 1080-4deb's shape exactly: the write landed in a real place, the reader
+# consulted a different place, and the answer looked correct.
+#
+# `git status --porcelain` sees tracked modifications AND untracked files.
+if [ -n "$(git status --porcelain -- plan/mo-full-attestations.d 2>/dev/null)" ]; then
     _step "commit the ledger record"
     if [ -n "${2:-}" ] && [ -r "${2}" ]; then
         git add plan/mo-full-attestations.d && git commit -q -F "$2" || {
@@ -132,6 +202,7 @@ scripts/meta-orchestration-worktree-guard.sh verify "$SD" || {
         host="$(scripts/agent-identity.sh node-name 2>/dev/null || echo unknown)" \
         cycle="$(date -u +%Y-%m-%dT%H:%MZ)" transcript="$_t"
 } >/dev/null 2>&1 || true
+
 
 _step "derive the terminal marker"
 exec scripts/mo-full-attest.sh self

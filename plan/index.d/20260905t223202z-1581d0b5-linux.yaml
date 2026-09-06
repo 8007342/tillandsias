@@ -1,0 +1,102 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-nine-remaining-orphan-fixtures-each-need-a-two-regime-byte-measurement-before-binding-and-that-disposal-is-not-1063-nrafs-work
+    event:
+      type: progress
+      ts: "2026-09-05T22:32:02Z"
+      agent_id: linux-lenovinha-claude-20260905t213827z
+      host: linux
+      summary: |
+        COMPARING AGAINST LIVE REPO CONTENT IS NOT THE DEFECT. AN UNCHOSEN THRESHOLD
+        WITH A MISDIRECTING LABEL IS.
+
+        Recorded because the first version of this finding was the weaker one, and the
+        weaker version would have caused real damage if anyone had acted on it.
+
+        What I found in test-trace-coverage.sh was an arm labelled "Status PASS when
+        coverage meets threshold" that ran the validator against the LIVE checkout at
+        --coverage-threshold 80 and required PASS. Binding it would have put an 80%
+        trace-coverage floor into --check on three hosts. I first described the class as
+        "an arm that asserts a property of the CHECKOUT rather than of the code under
+        test", and proposed a fleet sweep on that basis.
+
+        macuahuitl ran the sweep and found the case that breaks that framing:
+        test-precommit-zero-trace-scan-scope.sh:51 compares a count swept from the live
+        tree against 20, and is a DECLARED non-vacuity guard that says so in a comment —
+        if the sweep returns nothing, the comparison it protects is trivially true and
+        proves nothing. Mechanically identical to Test 6. Entirely correct.
+
+        Their distinction was that the two differ only in whether the reader was told.
+        The sharper statement, and the one that survives:
+
+          Test 6 was not bad because it compared against the live tree. It was bad
+          because NOBODY CHOSE THE NUMBER 80 AS POLICY, and its label pointed at the
+          validator.
+
+        That is why an identically shaped comparison is fine twenty lines away in
+        another file. One number was chosen, stated, and justified by what it protects.
+        The other was inherited from whatever the tree happened to contain on the day the
+        arm was written, and 80 was never a decision — it was a value that happened to
+        pass. A reader of the failing gate would have gone looking for a broken
+        validator, because the arm's name told them to.
+
+        Two consequences, both narrower than the sweep I originally proposed:
+
+          * For the DECLARED floor, the remedy is only that its failure message name the
+            real cause, so that a shrunken spec corpus does not read as a broken sweep.
+            No fix to the comparison, no removal, no fleet sweep. It is doing its job.
+          * For the SMUGGLED floor, the remedy is that it should not be there — which is
+            what the trace-coverage repair did by moving the arm onto a synthetic tree
+            that is deterministically 50% covered, so the arm asserts the implication
+            (coverage >= threshold => PASS) instead of the repository's coverage.
+
+        The general test, for whoever is wiring anything: find the number, and ask who
+        chose it and where that choice is written down. If the answer is that it was
+        whatever the tree measured at the time, it is not a threshold, it is a snapshot —
+        and a snapshot in a gate is a landmine with a timer, because it fires later, on a
+        host that changed nothing, and the red is TRUE while the diagnosis is wrong.
+
+        WHAT THE SWEEP FOUND, since I proposed it on the weaker framing and it would
+        have been fair to expect a null. Two methods ran. macuahuitl swept 87 fixtures
+        BOUND into --check for threshold-shaped flags and bare numeric comparisons: 0 of
+        the first shape, 4 of the second, 1 real. I sharded 160 script PATHS referenced
+        anywhere in the --check block — which legitimately includes libraries and tools
+        like local-ci.sh, gate-stamp.sh and plan-binary-probe.sh — across ten readers
+        tracing each compared value to its source, with independent verifiers told to
+        default to refuted: 18 candidates raised, 9 refuted, 9 confirmed, 3 high. The
+        denominators differ for a legible reason and neither is a correction of the
+        other.
+
+        The sharpest is worse than Test 6, and I verified it myself rather than
+        forwarding a verdict. test-check-credential-channel.sh:335 asserts
+        `[ "$probes" -le 3 ]` over a count taken from the live guard. That count is 3 at
+        HEAD, HEAD~10, HEAD~20 and HEAD~40. THE MARGIN IS ZERO. Test 6 was a landmine
+        with a twenty-point fuse; that one is armed, and the next legitimate probe site
+        reds the landing gate on every host with a message blaming reverify. The comment
+        directly above it describes fixing a counting bug in that very assertion — the
+        author was careful about HOW to count and never asked whether the number being
+        counted to was a decision or a snapshot.
+
+        Two independent confirmations that the framing above is the right one, not just
+        the more flattering one. First, the verifiers REFUTED macuahuitl's own
+        candidate, test-precommit-zero-trace-scan-scope.sh, on exactly these grounds:
+        the number 20 was chosen, is stated, and guards a named vacuity. Two methods
+        arriving from opposite directions at the same answer on the one case both
+        examined is the closest thing to a cross-check either sweep has. Second, the
+        sweep found an instance in a file I filed today
+        (scripts/test-freshness-regime-budget.sh), which I fixed rather than reported —
+        and the fix there was the NARROW one the distinction implies: the number was
+        chosen and only the label was wrong, so the comparison stayed and the message
+        changed.
+
+        Both sweeps stopped at --check. Nothing here says anything about --test,
+        --ci-full, the litmus corpus or the hooks, so nine is a floor over two shapes
+        and not a total.

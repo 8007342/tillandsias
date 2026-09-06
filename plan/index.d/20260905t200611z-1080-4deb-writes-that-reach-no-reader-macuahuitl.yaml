@@ -1,0 +1,133 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-ledger-has-more-than-one-place-to-look-and-every-reader-looks-in-one-so-five-writes-landed-somewhere-nothing-consults
+    order: 1080-4deb
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    owner_host: any
+    release_target: stable-milestone-v1
+    capability_tags:
+      - plan
+      - coordination
+      - fail-loud
+      - multi-host
+      - instrument
+    estimated_hours: 5
+    verifiable_closure: |
+      bash scripts/test-ledger-write-reaches-its-reader.sh exits 0, one arm per
+      instance below, each shown RED on the pre-fix tree:
+
+      ARM 1 (claim event without status). A packet carrying a `type: claim`
+      event and status `ready` is REPORTED — by the sweep, by the selector, or
+      by a dedicated check that names it. PRE-FIX: FAILS, measured — 4 such
+      packets, sweep 0 of 4, selector offered 4 of 4.
+
+      ARM 2 (blocker in prose). A packet whose only blocker statement lives in
+      a note summary or an exit criterion, with status `ready`, is REPORTED.
+      PRE-FIX: FAILS — 317 was offered 1 of 1 for two hours, 1070-qi2e still is.
+
+      ARM 3 (landed fix without status). A packet whose status is `ready` while
+      a commit whose subject names its order is an ancestor of trunk is
+      REPORTED. PRE-FIX: FAILS — 1055-e8ie read `ready` for fourteen hours
+      after 459df06fe landed criteria 1 and 3, and was routed to a host on the
+      strength of that.
+
+      ARM 4 (obligation in a correction fragment). A packet whose scorable
+      obligation arrives in a correction fragment is NOT refused for lacking
+      one. PRE-FIX: FAILS — check-scorable-obligation-added.sh inspects only
+      fragments carrying a `packets:` key, so a correction fragment adding the
+      closure is invisible to it.
+
+      NEGATIVE CONTROL, and it is the arm that decides whether this is worth
+      landing: a healthy packet — status matching its events, no blocker, no
+      landed fix — must produce NO report from any arm. A checker that flags
+      the whole ledger, or that withholds work it cannot positively confirm
+      free, empties the ready set; a host with nothing offered stops, and a
+      coordinator reading an empty queue concludes the fleet is done. That
+      failure is worse than all five instances combined.
+    title: |
+      five distinct writes today each landed in a real place that no reader consults for the question being asked, and in every case the reader's answer looked correct
+    context: |
+      COLLECTED 2026-09-05 across five hosts in one day. Filed as a class at
+      macbookair's suggestion, after that host recognised the fourth instance
+      inside its own work and named the shape before the coordinator did.
+
+      THE FIVE, each measured rather than described:
+
+      1. A CLAIM EVENT DOES NOT MOVE THE STATUS (1079-qb8k, filed separately
+         and depended on by this one). `append-event --type claim` writes an
+         event keyed by packet_id; `set-field status in_progress` is a separate
+         call and is the only thing the fold reads. Four packets held right now
+         by two Windows hosts, up to seven hours. `expire-claims --dry-run
+         --list-live` shows 0 of 4; `tillandsias-plan ready` offers 4 of 4.
+
+      2. A BLOCKER IN A NOTE SUMMARY (317). macbookair released it with an
+         accurate reason — the boundary is an orchestrated forge launch needing
+         operator-authorised credentials — written in a `note` event. The
+         SELECTOR does not read note summaries. Offered 1 of 1 for two hours;
+         0 of 1 after the coordinator moved it to `blocked`.
+
+      3. A BLOCKER IN AN EXIT CRITERION (1070-qi2e). Its criterion 4 requires
+         the operator's authorisation for a destructive macOS e2e to be
+         recorded on the packet BEFORE the run, so no macOS host can start it
+         now — and it was filed `ready`. Found by its own author, who filed it
+         hours before the rule existed.
+
+      4. A SCORABLE OBLIGATION IN A CORRECTION FRAGMENT.
+         check-scorable-obligation-added.sh inspects only fragments carrying a
+         `packets:` key, so an obligation arriving in a correction fragment is
+         invisible and the declaring fragment is refused. macbookair hit this
+         inside its own work.
+
+      5. A LANDED FIX WITHOUT A STATUS TRANSITION (1055-e8ie). 459df06fe landed
+         criteria 1 and 3 at 05:09:54Z. The packet read `ready` for fourteen
+         hours. The coordinator checked `tillandsias-plan status` before
+         dispatching — the rule adopted one cycle earlier precisely to stop
+         routing closed work — and the tool correctly reported the status while
+         the status was wrong about reality. macneo spent most of a cycle
+         re-deriving it and flagged before writing a line of code.
+
+      WHAT MAKES IT A CLASS RATHER THAN FIVE BUGS. In every one the write
+      SUCCEEDED and landed somewhere real; a reader then asked a question of a
+      different place and got an answer that looked correct. There is no error
+      anywhere: `append-event` prints ok, a selector offering a held packet is
+      indistinguishable from one offering a free packet, a sweep's list of
+      in_progress rows makes a missing packet read as unclaimed, and a note
+      summary is a perfectly good place to write prose. Absence poses as a
+      verdict at every step, which is 1024-c3h3's could-not-run shape spread
+      across a data model instead of a command.
+
+      TWO OF THE FIVE WERE FOUND BY THEIR OWN AUTHORS AND ONE BY THE HOST IT
+      COST. That is the fleet working, and it is also the argument for a
+      mechanical check: none of the three was found by the reader who was
+      misled, and the two that were self-reported were found by hosts who
+      happened to look twice.
+    next_action: |
+      LEFT TO DO:
+
+      1. DECIDE THE SHAPE BEFORE WRITING ANY OF IT, and record the choice. A
+         single consistency check over the folded plan is the obvious answer —
+         one reader, one pass, one report — but it competes with fixing each
+         write path so the inconsistency cannot arise (1079-qb8k's option (a)
+         and (b) do this for the claim case). A check tolerates the divergence
+         and reports it; a write-path fix prevents it and cannot see the rows
+         that already exist. This packet's five instances all EXIST NOW, so a
+         check is needed regardless; the question is whether the write paths
+         are fixed as well or instead.
+
+      2. Land the arms one at a time with the negative control FIRST, because
+         every other arm compares against it and is vacuous if the checker
+         reports on a healthy packet.
+
+      3. DO NOT DISPOSE OF THE EXISTING ROWS FROM THIS PACKET. The four claim
+         rows belong to yolanda and esmeraldinha and are theirs to write; 317
+         is corrected; 1070-qi2e is its author's to set; 1055-e8ie's state is
+         recorded on that packet. A class checker that also mutates is two
+         changes and only one of them is reviewable.
+
+      4. 1079-qb8k stays a separate packet and is not folded in. It has its own
+         measurement, its own corpus and a decision about the claim write path
+         that should not wait on a five-arm checker.

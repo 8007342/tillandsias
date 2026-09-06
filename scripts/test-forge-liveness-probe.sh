@@ -39,7 +39,7 @@ echo "=== Test 1: alive_progressing (fresh heartbeat + git changed) ==="
 DIR1="$TMPDIR/test1"
 mkdir -p "$DIR1"
 touch "$DIR1/.forge-heartbeat"
-(cd "$DIR1" && git init -q && git commit -q --allow-empty -m "init")
+(cd "$DIR1" && git init -q && git -c user.email=fixture@tillandsias.invalid -c user.name=fixture commit -q --allow-empty -m "init")
 HEAD1=$(git -C "$DIR1" rev-parse HEAD)
 # Simulate: before_head was different → git changed
 run_test \
@@ -51,7 +51,7 @@ echo "=== Test 2: alive_quiet (fresh heartbeat + no git change) ==="
 DIR2="$TMPDIR/test2"
 mkdir -p "$DIR2"
 touch "$DIR2/.forge-heartbeat"
-(cd "$DIR2" && git init -q && git commit -q --allow-empty -m "init")
+(cd "$DIR2" && git init -q && git -c user.email=fixture@tillandsias.invalid -c user.name=fixture commit -q --allow-empty -m "init")
 HEAD2=$(git -C "$DIR2" rev-parse HEAD)
 # before_head matches current HEAD → no change
 run_test \
@@ -97,7 +97,7 @@ echo "=== Test 6: alive_progressing with custom heartbeat deadline ==="
 DIR6="$TMPDIR/test6"
 mkdir -p "$DIR6"
 touch -d "60 seconds ago" "$DIR6/.forge-heartbeat" 2>/dev/null || touch -t "$(date -v-60S +%Y%m%d%H%M.%S)" "$DIR6/.forge-heartbeat" # BSD arm: -d is GNU-only (766-tdij)
-(cd "$DIR6" && git init -q && git commit -q --allow-empty -m "init")
+(cd "$DIR6" && git init -q && git -c user.email=fixture@tillandsias.invalid -c user.name=fixture commit -q --allow-empty -m "init")
 run_test \
     "alive_progressing_custom_deadline" "alive_progressing" 0 \
     "$PROBE" status --project-dir "$DIR6" --heartbeat-file ".forge-heartbeat" --heartbeat-deadline 300 $NC --before-head "deadbeef" --start-time "$(date +%s)"
@@ -107,7 +107,7 @@ echo "=== Test 7: status exits 0 for alive states ==="
 DIR7="$TMPDIR/test7"
 mkdir -p "$DIR7"
 touch "$DIR7/.forge-heartbeat"
-(cd "$DIR7" && git init -q && git commit -q --allow-empty -m "init")
+(cd "$DIR7" && git init -q && git -c user.email=fixture@tillandsias.invalid -c user.name=fixture commit -q --allow-empty -m "init")
 HEAD7=$(git -C "$DIR7" rev-parse HEAD)
 "$PROBE" status --project-dir "$DIR7" --heartbeat-file ".forge-heartbeat" $NC --before-head "$HEAD7" --start-time "$(date +%s)" >/dev/null 2>&1
 EXIT7=$?

@@ -1,0 +1,76 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+#
+# CORRECTION FRAGMENT for 1076-kft9, per the 1071-adhj convention.
+events:
+  1076-kft9:
+    - type: note
+      ts: "2026-09-05T20:36:00Z"
+      agent_id: "linux-macuahuitl-claude-20260905t203600z"
+      host: esmeraldinha
+      summary: |
+        THE PACKET'S PREMISE IS RETRACTED BY THE HOST WHOSE STOP-THE-LINE PRODUCED
+        IT. Binding an orphaned fixture did NOT carry this defect past the
+        diff-scoped guards. The ordering kills it, and it is four minutes wide:
+
+          f059ace6c  2026-09-05T17:13:02Z  bind ten orphaned fixtures
+          e711f738e  2026-09-05T17:16:58Z  ADD the arm-17 block with sed | grep -q
+
+        Verified independently on macuahuitl: at f059ace6c the fixture contains
+        ZERO occurrences of `grep -qE`; at e711f738e it contains one, and that
+        commit adds 39 lines to the file. The defective line was never legacy
+        body. It was a NEWLY ADDED LINE IN A NORMAL DIFF, which is precisely the
+        shape every -added guard exists for.
+
+        SO WHY DID IT ESCAPE? NOT DIFF SCOPING — THE PRODUCER-NAME LIST.
+        esmeraldinha ran the guard's own three regexes against the line:
+
+          verdict-context      YES
+          early-exit-consumer  YES
+          unbounded-producer   NO   <- `sed` is not on UNBOUNDED_PRODUCER_RE
+
+        Two of three conditions met. check-sigpipe-verdict-pipelines-added.sh saw
+        the newly added line and passed it solely because `sed` is absent from a
+        list carrying cat, find, journalctl, coredumpctl, recursive grep, git
+        log/diff/show/ls-files/ls-tree/grep, cargo, podman and docker. That is the
+        third time the same list has been the escape route — the guard's own
+        header already records it for `grep -r`, and 1069-c9w6 was the second.
+
+        WHAT CHANGES.
+
+        ITEM 3 IS PROMOTED FROM A DESIGN PREFERENCE TO THE CAUSE. "sed is not on
+        the list and sed is the live instance" was offered as an argument for
+        measuring rather than pattern-matching; it turns out to be the entire
+        explanation for this escape. A check that EXECUTES the pipeline under
+        pipefail and reads PIPESTATUS has no list to be absent from.
+
+        ARM 1 AND THE PACKET'S TITLE ARE NOW A HYPOTHESIS WITH NO LIVE INSTANCE.
+        A genuinely orphaned fixture's body WOULD bypass the -added guards — the
+        mechanism is real and the arithmetic is unchanged — but nothing has yet
+        come through that path, and the packet was filed p1 on a report that
+        something had. Arm 1's fixture calibrates (f059ace6c -> 10, body-only fix
+        -> 0, an inline-to-data re-bind -> 0 after adding a was-bound-before
+        condition), so it works; it guards a path with no observed traffic.
+        Whoever claims this packet decides whether that still earns p1, and
+        should say which.
+
+        WHAT DOES NOT CHANGE. The fix on trunk stands. The measuring design
+        stands. The two-regime finding stands and is independent of how the line
+        arrived: arm 17 is deterministically 17/17 on Fedora and 16/17 on WSL,
+        40/40 SIGPIPE with PIPESTATUS=(141 0), so a single-host green is still
+        unproven for this class.
+
+        AND 1077-vzwq'S NINE-CYCLE SIZING DOES NOT REST ON THIS, checked before
+        answering. lenovinha had already withdrawn the SIGPIPE prerequisite from
+        that estimate: seven of ten remaining orphans carry no verdict-position
+        early-exit pipeline at all and the other three are STRUCTURALLY bounded,
+        answerable in one pass rather than per fixture. What remains in that
+        packet is fixture-repair difficulty, sized from the original triage's two
+        measured data points. Nothing there needs revisiting on account of this
+        retraction.
+
+        HOW THE WRONG STORY FORMED, in esmeraldinha's words, because it is the
+        day's recurring shape: a fixture bound at 17:14 and a defect found in it
+        at 18:56, adjacent in time and in subject, read as causal. They never
+        checked when the LINE arrived. That is the same error the coordinator
+        made three hours earlier reading a work ref's diff as a merge resolution
+        — a diff shows difference, not causation — arriving from the other side.

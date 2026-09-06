@@ -1,0 +1,96 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: per-phase-accelerator-routing-policy
+    event:
+      type: progress
+      ts: "2026-09-06T04:54:19Z"
+      agent_id: linux-lenovinha-claude-20260906t033530z
+      host: lenovinha
+      summary: |
+        LOCUS-AWARE ROUTING LANDED — the blocker named in next_action (b) is closed.
+
+        THE DEFECT, restated from the code rather than the packet: phase_device_usable
+        hard-coded d.lanes contains "container", so route_phase could only ever answer
+        for one lane. On macOS that reading is ACCURATE and the answer is still wrong:
+        Metal genuinely does not cross into a forge container, the document says so
+        correctly, and routing believed it — sending both phases to the CPU on a host
+        whose GPU wins decode 1.27-1.64x and prefill 3.2-3.8x. The device state was
+        never the bug. The question was under-specified.
+
+        WHAT CHANGED (crates/tillandsias-headless/src/accel_probe.rs):
+
+        1. RoutingLocus{Container,HostNative} is now a required parameter of
+           route_phase and phase_device_usable. No default: a caller that does not
+           know its own side is asking a question with no answer. The tokens are the
+           ones DeviceRecord.lanes and EngineRecord.lanes are already spelled with, so
+           this selects among existing evidence rather than adding a vocabulary.
+
+        2. THE ENGINE IS LANE-CHECKED TOO. Previously only supported_device_classes
+           was consulted, so a container-only ollama would have qualified a device for
+           the host-native lane — the same defect one field further in. EngineRecord
+           lanes None still means every lane (850-bif2 semantics preserved literally,
+           pinned by a test).
+
+        3. EXIT CRITERION 3 SHARPENED: every Placement reason now names the lane it
+           was decided in. "no-usable-gpu-for-decode" was true and unactionable — it
+           could not distinguish a host with no GPU from a host whose GPU merely does
+           not cross a boundary, which is precisely how this defect stayed invisible.
+           It now reads no-usable-gpu-for-decode-in-container.
+
+        4. SEPARATE SOUNDNESS BUG FOUND AND FIXED IN decode_crossover_b: it paired a
+           CPU row with a GPU row regardless of MeasurementRecord.locus. A crossover
+           is a subtraction between two curves, and the locus field exists precisely
+           because this fleet measured one suite at two loci and the 5-10% hop
+           INVERTED a conclusion, two errors having cancelled. That inversion was
+           reachable inside a routing threshold where nothing downstream could see it.
+           Rows are now grouped by locus and paired only within a group; an
+           unattributed row (locus None) forms its own group rather than joining one.
+           Disagreeing loci resolve to the most conservative verdict (CpuWins beats
+           any threshold; a higher threshold beats a lower one), which is 620-ca7g's
+           floor as the standing tie-break, not a new rule.
+
+        5. accel_envelope is UNCHANGED in behaviour and grammar: it passes
+           RoutingLocus::Container explicitly, which is right for its audience (an
+           agent inside a forge, as its own doc comment states) and makes the choice a
+           decision rather than an inherited default.
+
+        EVIDENCE, with the feature set beside every count.
+          cargo test -p tillandsias-headless --features tray,listen-vsock --bin
+          tillandsias: 679 passed / 0 failed / 4 ignored. accel_probe module alone:
+          86 passed / 0 failed (81 before; 5 added).
+          Litmus, pre-build instant: accel-capability-probe PASS 2/2 executed;
+          inference-policy-router PASS 1/1 executed, 1 skipped.
+
+        NEGATIVE CONTROLS RUN, not reasoned about. Each new test was executed against
+        the pre-fix logic and observed RED:
+          - reverting the device-lane hard-code and the crossover locus key:
+            3 FAILED (a_host_native_accelerator_is_invisible_to_the_container_question
+            _and_not_to_its_own, the_crossover_never_pairs_a_cpu_row_with_a_gpu_row
+            _from_another_locus, disagreeing_loci_resolve_to_the_most_conservative
+            _threshold), 83 passed.
+          - reverting ONLY the engine-lane check: 1 FAILED
+            (a_container_only_engine_does_not_qualify_a_device_for_the_host_native
+            _lane), 85 passed.
+        A test that passes against the defect it names is not evidence, so each was
+        made to fail before being kept.
+
+        WHAT REMAINS ON THIS PACKET, unchanged and deliberately untouched:
+          (a) EXIT CRITERION 1 IS STILL FALSIFIED AS WRITTEN. "a 0.5B-class model's
+              decode is NOT sent to the iGPU on a unified-memory host" costs 21% of
+              decode throughput on the fleet's only unified-memory host. Rewriting it
+              as a consequence of the per-host measurement is an operator/author call
+              and is not a drive-by edit.
+          (b) route_phase IS STILL NOT WIRED INTO THE INFERENCE CALL PATH; only the
+              envelope renderer calls it. THE ORDERING MATTERS AND IS THE REASON THIS
+              SLICE CAME FIRST: wiring it before the locus fix would have hard-wired
+              the container answer into every call site on every host whose
+              accelerator is host-native only — shipping the measured regression
+              instead of merely computing it.

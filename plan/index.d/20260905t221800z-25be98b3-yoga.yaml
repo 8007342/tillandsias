@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-claim-without-status-row-repeats-on-a-packet-whose-host-already-declined-it
+    event:
+      type: progress
+      ts: "2026-09-05T22:18:00Z"
+      agent_id: linux-yoga-claude-20260905t221800z
+      host: yoga
+      summary: |-
+        WHAT THE CLEAN STATE LOOKS LIKE, so a later reader can tell "working" from
+        "nothing to report". Requested by the coordinator, who noted this is the
+        only piece of tonight's claim work with a single reader.
+
+        The `claim-without-status` row type reports ready packets carrying a recent
+        claim event — a claim that separated nobody, because only
+        `status: in_progress` is read by the fold. A claim is now answered by a
+        TYPE (release/released/completed/verified/implemented), never by prose.
+
+        THE HEALTHY OUTPUT IS EMPTY, AND AN EMPTY REPORT IS AMBIGUOUS BY
+        CONSTRUCTION: it looks identical whether the category is clear or the check
+        silently stopped running. Two things distinguish them:
+
+          - the check emits its scanned count, not just its violations. A zero over
+            a zero-row scan is a broken check; a zero over a full scan is the
+            outcome.
+          - when yolanda writes their typed release, the last standing row clears
+            ITSELF. Nobody acts, the row disappears, and the category goes quiet.
+            That is success and it is indistinguishable from the check dying unless
+            you read the count.
+
+        So: verify the count, not the emptiness. If a future coordinator sees this
+        category reporting nothing, the question to ask is "over how many rows?"

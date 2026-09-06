@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: fourteen-test-fixtures-are-invoked-by-no-automation-and-nothing-marks-which-are-deliberately-manual
+    field: status
+    value: obsoleted
+    ts: "2026-09-05T16:44:31Z"
+    host: lenovinha
+
+events:
+  - packet_id: fourteen-test-fixtures-are-invoked-by-no-automation-and-nothing-marks-which-are-deliberately-manual
+    event:
+      type: completed
+      ts: "2026-09-05T16:44:31Z"
+      host: lenovinha
+      summary: |-
+        status 'obsoleted' with evidence_refs: superseded by 1063-nraf: broader measurement (26 orphans on trunk vs my 14 from a narrower method excluding .md and plan/), plus the guard-gap finding mine lacked (check-litmus-bindings.sh scans only openspec/litmus-tests so 660-ryhn cannot see scripts/test-*.sh). This packet's sharpest instance, test-expert-accuracy-record-shape.sh, is wired into build.sh at work/1063-nraf a24f7931a and confirmed executing inside the gate
+  - packet_id: fourteen-test-fixtures-are-invoked-by-no-automation-and-nothing-marks-which-are-deliberately-manual
+    event:
+      type: note
+      ts: "2026-09-05T16:44:31Z"
+      host: lenovinha
+      summary: |-
+        dedupe ruling 2026-09-05, requested by me: two open packets over one class of 26 files is how an allow-list gets born

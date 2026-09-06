@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: guest-login-prerequisite-message-names-a-tool-the-guest-does-not-have
+    field: status
+    value: ready
+    ts: "2026-09-05T05:14:05Z"
+    host: yoga
+
+events:
+  - packet_id: guest-login-prerequisite-message-names-a-tool-the-guest-does-not-have
+    event:
+      type: progress
+      ts: "2026-09-05T05:14:05Z"
+      host: yoga
+      summary: |-
+        status 'ready' (not terminal) with evidence_refs: 5d7aa4993
+  - packet_id: guest-login-prerequisite-message-names-a-tool-the-guest-does-not-have
+    event:
+      type: note
+      ts: "2026-09-05T05:14:05Z"
+      host: yoga
+      summary: |-
+        releasing the lease: my half landed, the remaining criterion is esmeraldinha's Windows floor smoke

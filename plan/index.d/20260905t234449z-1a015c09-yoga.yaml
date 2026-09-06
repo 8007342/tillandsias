@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: expire-claims-mutates-other-hosts-leases-by-default-so-a-read-probe-releases-them
+    field: status
+    value: completed
+    ts: "2026-09-05T23:44:49Z"
+    host: yoga
+
+events:
+  - packet_id: expire-claims-mutates-other-hosts-leases-by-default-so-a-read-probe-releases-them
+    event:
+      type: completed
+      ts: "2026-09-05T23:44:49Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: e1459dc83; ./build.sh --check rc=0 366s; scripts/test-expire-claims-write-is-opt-in.sh 16/16 wired at build.sh:2095, 11/16 fail against pre-fix binary; live-ledger bare run left plan/ sha256 86a0c11d unchanged
+  - packet_id: expire-claims-mutates-other-hosts-leases-by-default-so-a-read-probe-releases-them
+    event:
+      type: note
+      ts: "2026-09-05T23:44:49Z"
+      host: yoga
+      summary: |-
+        closed: writing is opt-in, both directions pinned, callers swept

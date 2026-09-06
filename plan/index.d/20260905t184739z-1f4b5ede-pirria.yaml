@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-memoisation-audit-cannot-measure-its-own-effect-because-a-memo-hit-emits-no-timing-record
+    event:
+      type: claim
+      ts: "2026-09-05T18:47:39Z"
+      agent_id: linux-macuahuitl-claude-20260905t184739z
+      host: pirria
+      summary: |
+        CLAIMED FOR pirria, RECORDED BY THE COORDINATOR because pirria's credential channel reads `missing:no-credential-channel` and cannot push a claim of its own. pirria ran the preflight before starting, as 982-sguu requires, and reported the verdict rather than discovering it after the work — the whole point of moving that check to dispatch time. All work on this packet comes back by hash-verified relay, as 1005-m6rz and 1026-ps4n did. pirria is the worker; I am the transport.
+
+        pirria VERIFIED ALL THREE DEFECTS ON ITS OWN HOST BEFORE ACCEPTING THE PACKET rather than inheriting my reading, and sharpened the third. Recorded because the sharpened form is the one a claimer should work from:
+
+        (1) CONFIRMED. The archiver hit branch is `_info` and nothing else — no timing_emit under any name and no `_run`, so the step vanishes from the log on a hit. The terminology memo three hundred lines below emits terminology-check-hit and terminology-check-miss. One convention exists in the tree; the earlier step never got it, and pirria will copy it rather than invent a third.
+
+        (2) ACCEPTED AS STRUCTURAL and will be demonstrated rather than argued: the re-nomination is a property of the window, so the arm must show that pre-memo runs still inside the 7-day window nominate an already-memoised step.
+
+        (3) CONFIRMED VERBATIM, AND WORSE THAN FILED. I filed it as "skippable: does not print its window". pirria's own three lines on cachyos disagree three ways:
+
+            repeat:    window=3h steps=152 top3=...
+            recur:     window=7d runs=290 steps=130 top3=...
+            skippable: candidates=1 floor_ms=2000 min_runs=5 top3=build-preamble:runs=5:avg_ms=7157:fail_pct=0:saved_ms_upper=28629
+
+        `repeat:` says 3h, `recur:` says 7d, `skippable:` says nothing — and skippable is the ONLY one of the three whose `runs=` the audit rule instructs a coordinator to compare across hosts. Two readers on two hosts both had to read the source to find out. That is the defect stated at full strength.
+
+        ON THE NEGATIVE CONTROL, pirria's own framing, which is better than mine: the miss must stay on the `_run` path specifically, not merely emit a miss record. build.sh's 965-sxec comment already records that `_run` carries the phase timing and that a capture dropping it silently stops the step being profiled. A fix emitting a tidy hit/miss pair while lifting the work out of `_run` would satisfy arms 1 and 2 and delete the only measurement of what the step costs — the same shape as a guard that passes by never executing. It will be shown RED before ratification.
+
+        CONTEXT pirria OFFERED AND EXPLICITLY DID NOT PUT IN SCOPE, recorded because it bears on how this host's numbers should be read: its own `recur:` line shows `build-check:runs=5:fail_pct=60`, and that 60% is the gates the agent harness killed for host memory yesterday and today. So on cachyos the recurrence data is partly a record of 1026-ps4n's symptom rather than of the step's real cost. That is a live argument for the out-of-scope note on this packet: the tree digest named as 1001-q3zf's next rung would separate "this step is expensive" from "this host kept losing the step", and neither the window nor the digest belongs here.

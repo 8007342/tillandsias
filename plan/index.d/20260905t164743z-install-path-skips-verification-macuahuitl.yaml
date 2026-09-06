@@ -1,0 +1,54 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-default-install-path-skips-verification-three-ways-and-never-consumes-the-published-signature
+    order: 1068-phrh
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: any
+    capability_tags: [release, security, install]
+    estimated_hours: 4
+    owned_files:
+      - scripts/install.sh
+      - scripts/install-macos.sh
+    title: |
+      scripts/install.sh continues installing when SHA256SUMS is absent, when the asset is unlisted in it, or when sha256sum is not on PATH — three silent skips on the default path a reader is told to curl — and the cosign bundles the release publishes are consumed by no install path at all
+    context: |
+      FOUND by the operator's tillandsias.org session (calmecacpilli) while auditing the site's claims
+      against the runtime, and VERIFIED in the tree by the coordinator before filing. scripts/install.sh
+      lines 226-238: the checksum file is fetched from the same RELEASE_BASE as the asset, and each of the
+      three failure paths prints a "skipping checksum verification" line and proceeds to install —
+      SHA256SUMS not available, SHA256SUMS did not contain the asset, sha256sum not found. `say` output is
+      not a refusal: a reader following the documented curl-install gets an unverified binary and a line
+      of prose about it. Separately, `cosign` appears in scripts/verify.sh, scripts/build-sidecar.sh and
+      scripts/check-release-asset-integrity.sh and in NO install path, so the signature the release lane
+      publishes is never checked by the thing that installs. Same-channel checksums do not defend against
+      a compromised release host and never claimed to; they do catch truncation and corruption, which is
+      exactly what a silent skip discards. The site session's related findings (the macOS lane signing an
+      allow-list of three assets with no transitive integrity check, so SHA256SUMS-macos ships without a
+      bundle) belong with this one and are cited here rather than re-filed.
+      Fix shape, for the claimer to weigh: each skip becomes a refusal by default with a single named
+      override; the missing-tool case tries the platform's alternate (shasum -a 256) before refusing, the
+      way check-credential-channel.sh reads its alternate off the consumer; and the published cosign
+      bundle is consumed on at least one path, or the update-system spec records why it is not, so the
+      gap is a decision rather than an omission.
+    exit_criteria:
+      - "with SHA256SUMS absent from the release base, install REFUSES by default and names the override; pre-fix result: FAILS (prints 'SHA256SUMS not available; skipping checksum verification' and installs)"
+      - "with the asset unlisted in SHA256SUMS, install refuses; pre-fix result: FAILS (prints 'SHA256SUMS did not contain <asset>; skipping' and installs)"
+      - "with no sha256sum on PATH, install verifies through the platform alternate or refuses; pre-fix result: FAILS (prints 'sha256sum not found; skipping checksum verification' and installs)"
+      - "a healthy install with a matching checksum still succeeds unchanged; pre-fix result: passes and must keep passing"
+      - "the published cosign bundle is consumed by an install path, or openspec records the decision not to; pre-fix result: FAILS (no install path references cosign)"
+    unscoreable: |
+      The pin is a fixture driving scripts/install.sh against a stubbed RELEASE_BASE with each of the
+      three degraded cases and the healthy control; it does not exist yet and the claimer adds it, since
+      a closure may only name a test that already exists.
+    events:
+      - type: note
+        ts: "2026-09-05T16:47:43Z"
+        host: macuahuitl
+        summary: |
+          FILED by the coordinator from calmecacpilli's audit, verified in the tree first (install.sh:226-238,
+          and cosign absent from every install path). The site session holds its other three findings until
+          the operator rules on routing; this one it handed over as belonging to the release row.

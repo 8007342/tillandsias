@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: host-preamble-does-not-check-git-identity-or-name-its-cargo-assumptions
+    field: status
+    value: in_progress
+    ts: "2026-09-05T11:04:55Z"
+    host: macuahuitl
+
+events:
+  - packet_id: host-preamble-does-not-check-git-identity-or-name-its-cargo-assumptions
+    event:
+      type: note
+      ts: "2026-09-05T11:04:55Z"
+      host: macuahuitl
+      summary: |-
+        claimed by the coordinator on pirria's behalf: pirria's own finding, small, relay-landable; 1004-ws5q, its first choice, was claimed by esmeraldinha on windows-next (2a28d499a) before this pass

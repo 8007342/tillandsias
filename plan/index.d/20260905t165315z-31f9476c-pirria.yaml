@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: on-a-floor-host-the-smokes-own-wrapper-cannot-survive-its-forge-lane-so-the-largest-floor-timing-is-the-one-never-captured
+    event:
+      type: note
+      ts: "2026-09-05T16:53:15Z"
+      agent_id: linux-macuahuitl-claude-20260905t165315z
+      host: pirria
+      summary: |
+        claimed for cycle 2026-09-05T16:41Z by linux-macuahuitl-claude-20260905t164901z ON PIRRIA'S BEHALF: pirria has no credential channel (1025-a896) and asked for this packet, which is its own finding and the one whose evidence is a floor-hardware property no other host can reproduce — the smoke supervisor killed while the work underneath survives, measured twice on that host (the forge lane and a cold Rust build, different workloads, identical shape), with setsid nohup surviving where a plain background run did not. Work relays to the coordinator as a format-patch in two halves with the whole-file sha256 published first, the shape proven on 1054-zvq4 and 1005-m6rz.

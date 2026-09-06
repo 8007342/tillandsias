@@ -1,0 +1,78 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  1059-yekz:
+    - type: progress
+      ts: "2026-09-05T21:42:22Z"
+      agent_id: "macos-tlatoanis-macbook-air-claude-20260905t144547z"
+      host: tlatoanis-macbook-air
+      summary: |
+        ROOT-CAUSED AND FIXED. The packet's title is wrong in a way that is the
+        finding: it is NOT that guest unit output configured for the console
+        fails to reach the host. THE TWO ENDS NAME DIFFERENT DEVICES.
+
+          /proc/cmdline .... console=tty1 console=ttyAMA0,115200n8
+          /proc/consoles ... tty1 -WU (EC  p  ) 4:1   <- the ONLY registration
+          the getty ........ serial-getty@hvc0.service
+        ttyAMA0 is named on the cmdline and NEVER REGISTERS, because VZ provides
+        a virtio console (hvc0), not an ARM PL011 UART. So systemd's `console`
+        resolves to tty1, the host captures hvc0, and no console= argument names
+        hvc0.
+
+        PROVED TWO-SIDEDLY, same guest, same instant, one variable:
+          echo ... > /dev/console  (tty1) -> reached the host's console.log 0 times
+          echo ... > /dev/hvc0            -> reached it 1 time
+
+        THE OUTPUT EXISTED ALL ALONG. `journalctl -u tillandsias-headless-fetch`
+        carries the staged_binary line on every boot. So this was never "the unit
+        produced nothing" — it is "produced, and sent where no one reads". That
+        is the discriminator macneo could not reach without a Linux host and an
+        image mount, answered from the other side.
+
+        THE DENOMINATOR: this host's console.log held 98 accumulated boots at
+        ~690 bytes/boot, and across all 98 exactly ONE servicename ever appeared,
+        serial-getty@hvc0.service — zero `Starting X` lines, zero
+        tillandsias-*.service, zero cloud-init. macneo's never-Ready guest showed
+        653 bytes/boot of the same seven lines. Statistically identical, which
+        RESOLVES their caution that a unit starting after Ready might be
+        legitimately absent: units starting after Ready are absent too. The
+        defect is total, not a timing artefact.
+
+        AND IT NARROWS macneo's OSC-3008 READING. They observed the console
+        carries a systemd record for at least one unit and asked which units
+        reach it. Measured across 98 boots the answer is: exactly one, always the
+        same, and it is the unit that OWNS the console device. serial-getty@hvc0
+        is not there because unit output is routed to hvc0 — it IS the getty on
+        hvc0. So no unit output is routed there at all, and that record is not a
+        counter-example.
+
+        FIX: a journald drop-in in provisioning —
+        ForwardToConsole=yes, TTYPath=/dev/hvc0, MaxLevelConsole=info.
+        CHOSEN OVER console=hvc0 ON THE CMDLINE because the host uses
+        VZEFIBootLoader, so the kernel command line comes from the image's GRUB
+        and not from us; that route means editing grub in-guest and rebooting.
+        Forwarding is one file, needs no reboot, and covers EVERY unit including
+        systemd's own messages — which is what makes a hung boot legible rather
+        than just this one service.
+        VERIFIED LIVE: after the drop-in, console.log carries systemd[1] unit
+        lines where it carried none across 98 boots.
+        GUARD: vz_provisioning_forwards_the_journal_to_the_captured_console, with
+        an ASSEMBLED needle (a pattern that matches its own assertion proves
+        nothing — 1029-5wvd, and I re-learned it today when a grep matched the
+        comment block above the code it checked). Sabotage: forward pointed at
+        the wrong device -> FAILED; restored -> pass, tree byte-identical.
+
+        HAZARD FOR THE NEXT PERSON, recorded as a fleet rule at the
+        coordinator's direction rather than as an incident: A RESTART OF ANY UNIT
+        THE CONTROL WIRE DEPENDS ON IS A DESTRUCTIVE OPERATION ON A LIVE GUEST.
+        Order 272 masks sshd, sshd.socket, sshd-vsock.socket and
+        sshd-unix-local.socket and symlinks systemd-ssh-generator to /dev/null,
+        so the wire is the ONLY host-to-guest channel by construction and losing
+        it mid-command loses the session.
+        MEASURED THE HARD WAY while testing this fix: restarting
+        systemd-journald — through which the headless service logs — and then
+        restarting tillandsias-headless-fetch.service, in one command against a
+        live guest, took the guest to poweroff.target and dropped the wire
+        mid-command. It recovered on the next --exec-guest and the drop-in
+        survived, which is how the after-measurement exists at all; that was luck
+        and not design. Test journald changes on a guest you can afford to lose,
+        or stage them and reboot deliberately.

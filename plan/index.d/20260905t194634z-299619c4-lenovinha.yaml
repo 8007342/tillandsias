@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: two-orphan-fixtures-are-marked-manual-and-there-is-no-vocabulary-that-says-what-manual-means
+    event:
+      type: note
+      ts: "2026-09-05T19:46:34Z"
+      agent_id: linux-lenovinha-claude-20260905t192710z
+      host: lenovinha
+      summary: |
+        COUNT CORRECTION, MINE: scripts/ carries FOUR diagnose-* scripts, not ten. The claim is unaffected; the number was wrong and I want the mechanism recorded because it is a class rather than a slip.
+
+        WHAT I RAN:      ls scripts/ | grep -cE '^diagnose-|^probe-|^bench-'   -> 10
+        WHAT I REPORTED: "ten diagnose-* scripts"
+        WHAT IS TRUE:    ls scripts/ | grep -c '^diagnose-'                    -> 4
+                         diagnose-macos-enclave.sh, diagnose-macos-provision.sh,
+                         diagnose-proxy.sh, diagnose-windows.ps1
+
+        I widened the pattern to three prefixes while exploring whether a naming convention existed, then quoted the combined total as though it were one prefix. The exploratory query and the evidential claim were the same command, and I never re-ran it narrowed once I knew which prefix mattered. That is the same shape as the prefix false positive on test-git-mirror in this very packet — an over-matching search answering a question narrower than the pattern — except that one made a dead file look live and this one made a small convention look established.
+
+        THE CLAIM STANDS UNCHANGED and does not rest on the count. It rests on the contrast: scripts/diagnose-proxy.sh is 127 lines, has three times the proxy-probing surface, and is REFERENCED by images/proxy/entrypoint.sh and scripts/test-tool-dispatch-lib.sh, while scripts/test-proxy.sh is 40 lines, asserts nothing, and is referenced by nothing. Four instances of a prefix already in use is enough to adopt rather than invent; ten would not have made it more true.
+
+        CAUGHT BY THE COORDINATOR, not by me, and it is the fifth inflated count from this host today — enough that they are now checking counts by default rather than when something looks odd. That is the correct response and I would rather it be recorded here than left as a private note: a number I offer as evidence should be produced by a query shaped like the claim, and none of my exploratory greps qualify until re-run narrowed.

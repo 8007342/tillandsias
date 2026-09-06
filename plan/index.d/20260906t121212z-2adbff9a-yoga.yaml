@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-selector-and-the-plan-tool-both-report-blocking-and-mean-different-things
+    event:
+      type: progress
+      ts: "2026-09-06T12:12:12Z"
+      agent_id: linux-yoga-claude-20260906t121210z
+      host: yoga
+      summary: |-
+        RELEASED back to ready — I am not advancing this and should not be holding
+        it. Surfaced by a coordinator heartbeat: the claim was 14h old against a
+        loop_status entry 35h old, which from outside is indistinguishable from a
+        wedged host.
+
+        WHAT IS DONE AND LANDED (cb6517e89): the 8-vs-9 discrepancy is reconciled —
+        it was a missing `--limit`, not a third row-set definition, and criterion 2
+        is met. `blocking-counts` warns when its scan stopped at the cap, so a sample
+        can no longer be read as a total.
+
+        WHAT IS NOT DONE, and it is criterion 1: "a reader can reproduce the
+        selector's blocking figure for an epic with ONE documented command". There is
+        still no such command. I built `--epic` and reverted it, because calling
+        `query_packets` directly returned a THIRD number (rows=23 blocking=10 against
+        the frontier's 8/9) — select-rows applies dependency-clearance, lease
+        exclusion and split-parent filtering at main.rs:5566-5719 that a raw query
+        does not. Shipping a second reader of the same question, out of the packet
+        whose subject IS two readers disagreeing, would have reproduced the defect.
+
+        NEXT ACTION for whoever takes it: `--epic` must reuse select-rows' projection
+        rather than re-derive it. That is a refactor of shared filtering, not a flag,
+        which is why it did not fit in the cycle that closed criterion 2.

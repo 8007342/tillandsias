@@ -1,0 +1,73 @@
+packets:
+  - packet_id: the-landing-tool-cannot-land-on-a-platform-branch-and-retries-refusals
+    order: 1064-r8fv
+    status: in_progress
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    release_target: stable-milestone-v1
+    capability_tags:
+      - tooling
+      - fail-loud
+      - multi-host
+    estimated_hours: 3
+    verifiable_closure: |
+      bash scripts/test-land-merges-trunk.sh exits 0, and each of its two
+      defects reds independently under its own sabotage: removing the trunk
+      merge reds arm 1, and putting a bare "rejected" back into the retryable
+      pattern reds arm 3.
+
+      NEGATIVE CONTROL, and it is the one that matters: arm 2 runs the tool on
+      linux-next, where branch and trunk are the same ref, and requires the
+      merge-commit count to be UNCHANGED. Without it a fix could satisfy the
+      guard by merging something on every branch, manufacturing an empty merge
+      commit on every land — passing arm 1 while polluting the history the tool
+      exists to protect.
+    title: |
+      scripts/land-on-platform-branch.sh integrates onto origin/<branch> and never merges origin/linux-next, so on a platform branch it cannot satisfy the mandated-merge guard however many attempts it is given — and it classifies a server-side "remote rejected" as a lost race, burning a full gate per retry.
+    deliverable: |
+      A landing tool that can actually land from a platform host, and whose
+      refusal names a way forward instead of reading as a dead end.
+    context: |
+      MEASURED ON YOLANDA 2026-09-05, landing 1055-6yp8 from windows-next.
+
+      DEFECT 1 — THE WRONG REF. The tool integrates onto origin/$BRANCH. The
+      pre-push guard (scripts/hooks/pre-push-linux-next-merged.sh) requires the
+      branch to contain origin/LINUX-NEXT's head, which is a DIFFERENT ref on
+      every platform branch. So the retry loop could exhaust its attempts and
+      never satisfy the guard. Four consecutive refusals, three of them
+      blocked:linux-next-not-merged, each after a full ~23-minute gate.
+
+      The tool's own comment, forty lines above the integration, already NAMES
+      pull_merge_cadence.pre_push_gate as the reason a platform branch's
+      unpushed set carries merge commits. It read the rule correctly and then
+      integrated the wrong ref.
+
+      WHY IT SURVIVED: on linux-next $BRANCH and trunk are the same ref, so the
+      existing merge satisfies the guard and the tool works. It failed only on
+      the slow platform hosts it was written for — the file's header opens with
+      "on a slow host ./build.sh --check takes minutes".
+
+      DEFECT 2 — A REFUSAL CLASSIFIED AS A RACE, found by this order's own
+      fixture rather than by reading. The retryable test grepped for
+      "non-fast-forward|fetch first|rejected|stale info". The bare `rejected`
+      also matches `! [remote rejected] ... (pre-receive hook declined)`, a
+      SERVER-SIDE refusal that will be refused identically forever. Arm 3
+      rejects a push with a pre-receive hook and got exit 4 (attempts
+      exhausted) where the honest answer is exit 6 — the loop burning a full
+      gate run per attempt on a push that could never succeed.
+
+      This is the same shape the file's own header documents one layer down:
+      "Grepping the output for '<branch> -> <branch>' ALSO matches the
+      rejection line". A substring that appears in the failure text as well as
+      the success text cannot classify either. The retryable set is now
+      non-fast-forward, fetch first, stale info, and nothing else.
+
+      THE REFUSAL NOW NAMES THE RELAY AND DOES NOT TAKE IT. Four refusals ended
+      in a hand-rolled merge-gate-push loop because the message named no way
+      forward; `refused:land:push-failed — not a lost race, so retrying cannot
+      help` is true and reads as a dead end. It now points at
+      `git push origin HEAD:refs/heads/work/<order>`. Deliberately a HINT and
+      not an action, on macuahuitl's ruling and my own reading: a tool that
+      silently retargets a push lands work on a ref the author never looks at.

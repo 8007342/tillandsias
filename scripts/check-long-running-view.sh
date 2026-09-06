@@ -138,7 +138,7 @@ apply_fragment_status_overlay() {
     status_map=""
     if plan_binary_has "$plan_bin" query && command -v jq >/dev/null 2>&1; then
         status_map="$("$plan_bin" query --json --limit 0 2>/dev/null \
-            | jq -r '.[] | select((.packet_id // "") != "" or (.order // "") != "") | [((.order // .packet_id)|tostring), (.status // "")] | @tsv' 2>/dev/null)"
+            | jq -r '.[] | select((.packet_id // "") != "" or (.order // "") != "") | [((.order // .packet_id)|tostring), (.status // "")] | @tsv' 2>/dev/null | tr -d '')"
     fi
 
     if [ -n "$status_map" ]; then

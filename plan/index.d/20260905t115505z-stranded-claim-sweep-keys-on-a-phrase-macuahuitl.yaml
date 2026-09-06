@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: stranded-claim-sweep-keys-on-a-phrase-so-reopened-and-differently-worded-claims-read-as-unclaimed
+    order: 1065-4t7t
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: any
+    capability_tags: [plan, gate, docs]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-plan/src/main.rs
+    title: |
+      `tillandsias-plan expire-claims` recognises a live lease by the phrase "claimed for cycle <ts> by <agent>" in an event summary, so a packet reopened through `set-field --reopen-evidence` (734-sjb3), or claimed with a differently worded event ("claimed <ts> by …", lenovinha's 1047-h88p), reads as unclaimed-in-progress while a real host holds it; the sweep's needle is a sentence, not a field
+    context: |
+      FOUND twice on 2026-09-05: lenovinha's 1047-h88p claim ("claimed 2026-09-05T05:10:27Z by …") and
+      yoga's 734-sjb3 reopen (set-field --reopen-evidence, whose reason text carries no claim phrase) both
+      showed as unclaimed-in-progress in the coordinator's sweep while the hosts were working them; each
+      was repaired by appending a note event in the canonical phrase. The coordinator's own proxy claims
+      (1054-zvq4, 1005-m6rz) had to be written in that phrase to be seen. A lease should be a field the
+      status channel sets (claim host, claim ts, agent), or the sweep should accept the reopen path and any
+      event the claim command writes; a phrase in prose is a needle that rots with the first rewording, and
+      the failure mode is silent: a held packet offered to a second host.
+    exit_criteria:
+      - "a packet reopened via set-field --reopen-evidence and then worked shows as live-claim to expire-claims without a hand-written note; pre-fix result: FAILS (734-sjb3 read unclaimed-in-progress at 08:29Z and 11:04Z)"
+      - "a claim written by the claim path is recognised regardless of the summary's wording, or the claim path is the only writer and the sweep reads its field; pre-fix result: FAILS (1047-h88p, 'claimed <ts> by')"
+      - "a genuinely unclaimed in_progress packet (status flipped, no claim) still reads as unclaimed-in-progress; pre-fix result: passes and must keep passing"
+    unscoreable: |
+      The pin is the expire-claims fixture with a reopened packet and a reworded claim as arms; the
+      claimer adds both.
+    events:
+      - type: note
+        ts: "2026-09-05T11:55:04Z"
+        host: macuahuitl
+        summary: |
+          FILED by the coordinator from two hosts' hits in one day; the sweep is the coordinator's instrument
+          and a lease it cannot see is a packet it may hand to a second host.

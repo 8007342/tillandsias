@@ -54,6 +54,29 @@ if [[ ! -d "${CHEATSHEETS_DIR}" ]]; then
     exit 1
 fi
 
+# ORDER 1005-m6rz. Resolve cargo the way cycle-preflight does before assuming
+# it is on PATH, and if it is genuinely absent say so as a SKIP rather than
+# letting the shell print `cargo: command not found`.
+#
+# MEASURED on pirria-cachyos 2026-09-04: this line ran from the pre-commit hook
+# on a host with no toolchain and emitted a bare command-not-found under a
+# "validation ERRORs (non-blocking)" heading. It was the third site of the same
+# assumption after cycle-preflight (876-irn7) and host-capability-probe; the
+# registry of all of them is scripts/lib-cargo-sites.sh, which is also where the
+# next one goes.
+#
+# COULD-NOT-RUN IS NOT A VIOLATION, and that distinction is the fix. A reader
+# seeing ERROR next to a cheatsheet check reasonably concludes a cheatsheet is
+# wrong. The check did not run at all, which is a different fact and needs a
+# different word — the same lesson 965-sxec applied to the archiver's absent
+# ruby.
+# shellcheck source=scripts/lib-cargo-sites.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib-cargo-sites.sh"
+if ! cargo_resolve; then
+    echo "skip:cheatsheet-tiers:cargo-absent (no toolchain on this host; check not run)"
+    exit 0
+fi
+
 cargo build --quiet --manifest-path "${REPO_ROOT}/Cargo.toml" -p tillandsias-policy
 args=(check-cheatsheet-tiers --repo-root "${REPO_ROOT}")
 [[ "${QUIET}" == "1" ]] && args+=(--quiet)

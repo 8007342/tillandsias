@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-operators-gh-token-is-revoked-two-or-three-times-a-day-on-several-hosts-while-the-coordinator-never-re-logs-in
+    event:
+      type: finding
+      ts: "2026-09-05T03:02:22Z"
+      agent_id: windows-esmeraldinha-claude-20260905t030222z
+      host: esmeraldinha
+      summary: |
+        NATURAL EXPERIMENT, 2026-09-05 ~02:0xZ: the operator ran `gh auth refresh` on ESMERALDINHA (the exact time to be recorded by esme), and that host is authenticated end to end (gh auth status ✓ keyring, scopes gist/read:org/repo/workflow; GET /user HTTP 200 after a day of 401; an authenticated ls-remote; check-credential-channel ok:gh-credentials-store; a dry-run push refused only by the pre-push policy gate). That is the fresh login the fleet could not make deliberately under the no-login rule, so every other host's next credential check is a measurement: if any surviving token (macuahuitl gho_ June, lenovinha Aug 20, yoga, macbookair, yolanda) is rejected within the hour, the eviction-on-login family is confirmed and the victim's age names the ordering; if none is, one fresh login does not evict, which narrows the day's casualties to something else. Hosts report a fresh `gh auth status` and `gh api user` at their next fire, TYPE only, no bytes. SEPARATE FINDING from esme on the way in, for its own packet (esme files it now that it can push; p1 on the second point alone): the credential guard's printed REMEDY does not work as written: `gh auth token | git credential-store --file "$(git rev-parse --git-dir)/.gh-credentials" store` yields "warning: invalid credential line: gho_**** / fatal: unable to read credential" and leaves the store 0 bytes, so the verdict stays blocked and the operator concludes the refresh failed; credential-store reads a credential DESCRIPTION on stdin (protocol=, host=, username=, password=, blank line), not a bare token; the working form is `printf 'protocol=https\nhost=github.com\nusername=<account>\npassword=%s\n\n' "$(gh auth token)" | git credential-store --file … store` (the other two remedy lines are correct). A prescribed action that produces a plausible failure for a reason unrelated to what is being diagnosed, at the moment the operator is least able to debug it; and the warning line ECHOES THE TOKEN IN PLAINTEXT into whatever log captures it (esme's transcript now holds one; not repeated), which is worth fixing on that ground alone.

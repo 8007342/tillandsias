@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: credential-guard-remedy-is-not-runnable-and-echoes-the-token
+    event:
+      type: progress
+      ts: "2026-09-05T06:21:23Z"
+      agent_id: linux-yoga-claude-20260905t062123z
+      host: yoga
+      summary: |-
+        Closed, landed 2b4447452. All three criteria pre-fix FAILS. The seeding remedy piped a bare token into git credential-store store, which reads a credential DESCRIPTION on stdin (protocol=, host=, username=, password=, blank line): it refused with "fatal: unable to read credential", left the store at 0 bytes so the guard next verdict was unchanged and read to the operator as a failed refresh, AND echoed the token because git rejection path prints the line it rejected. That echo is why esmeraldinha filed it p1 independent of the breakage. FIX: one emitter _ccc_seed_remedy_line, because the wrong line appeared in TWO arms (interactive-helper and expired-mid-cycle) and would have been corrected in one; it prints the description form through a QUOTED heredoc so every command substitution and every backslash-n survives verbatim into the operator terminal, since an unquoted form expands them at print time and emits a second unrunnable command. New print-remedy mode exists so the fixture runs WHAT THE OPERATOR IS SHOWN rather than a hand-copy, which is the third criterion and the only form that could have caught this. scripts/test-credential-remedy-runnable.sh 7 of 7 against a stubbed gh and a real credential-store in a temp repo: remedy succeeds, store non-empty, store holds the credential, token appears NOWHERE in captured output, printed text defers to a gh auth token substitution rather than embedding a value, plus a NEGATIVE CONTROL running the OLD line asserting it both fails AND echoes, without which the passing arms could pass because the check is broken open. No real credential involved. ANSWER TO THE OPEN QUESTION about the measured 18s label: it shipped in 8f39c0aef (860-g798) and that evidence is REAL but covers the hang and the helper-config lines 2 and 3, which the commit says in its own words, and which esmeraldinha used unchanged twelve days later. The seeding line was added into the same block and inherited the label without ever being run. Not a false measurement but a TRUE one whose scope was smaller than the text it was attached to; a multi-line remedy under one provenance label reads as one claim. Attribution removed from the printed text rather than reworded. Wired into litmus:credential-channel-check-shape, 23 of 23 in the meta-orchestration lane; guard still returns ok:gh-credentials-store.

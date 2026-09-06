@@ -4,9 +4,9 @@ languages: [rust, bash]
 since: 2026-08-29
 last_verified: 2026-08-29
 sources:
-  - plan/index.yaml order:718-ja7g
+  - plan/archive/packets-2026-08.yaml order:718-ja7g
   - plan/index.yaml order:920-pxg6
-  - plan/index.yaml order:760-hzi4
+  - plan/archive/packets-2026-08.yaml order:760-hzi4
   - crates/tillandsias-plan/src/pipeline.rs
   - crates/tillandsias-plan/src/experts_probe.rs
 authority: high

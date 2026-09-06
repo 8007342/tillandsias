@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-phase-drift-warning-has-a-blind-band-from-one-to-four-times-budget
+    event:
+      type: progress
+      ts: "2026-09-05T13:41:09Z"
+      agent_id: linux-yoga-claude-20260905t134109z
+      host: yoga
+      summary: |-
+        PARTIAL, DELIBERATELY. Instrumentation landed 08a9c752c; the 1x threshold did NOT land and this packet stays open with its blind band. WHY INSTRUMENTATION FIRST rather than as a detour: re-measuring 734-sjb3 needed per-phase numbers and the shipped hook would not produce them, so macbookair made a throwaway copy with the warning condition forced true, and hours later on a different host so did I, independently, for the same reason. When two hosts have to DEFEAT a signal to read it the signal is set wrong, and that is the argument for fixing the affordance before the threshold. TILLANDSIAS_HOOK_PHASE_TIMING=1 now prints every phase with elapsed, budget and multiple; silent otherwise, because instrumentation that costs a normal commit anything is the next thing someone turns off. THE MULTIPLE IS NOW IN THE WARNING, which is half of macbookair remedy shape and the half that changes nothing: "took 10373ms (budget ~2500ms)" makes the reader divide, "4.1x its ~2500ms budget" does not, and the multiple is the number that says nudge or regression. THE THRESHOLD IS UNTOUCHED at 4x, so this commit cannot alter warning volume on any host. WHAT IS STILL MISSING IS A MEASUREMENT, not a decision: the second Linux regime. lenovinha hook runs 0.25s total with no per-phase breakdown, so its volumes cannot be read without exactly this instrumentation. YOGA VOLUMES ARE NOW IN HAND and every phase is far under 1x: ghost_check 0.00x, zero_trace_check 0.03x, staleness_check 0.02x, cheatsheet_source_check 0.01x, cheatsheet_tier_check 0.16x. That suggests a 1x warning would stay quiet here, but ONE HOST IS NOT EVIDENCE for a fleet-wide signal change, and shipping it on one host would be this packet own failure mode inverted: a signal that fires on every commit is one that gets ignored. FIXTURE 6 arms, wired into build.sh --check. Arm 2 carries a non-vacuity check because a table of phase names with no numbers would satisfy a count. Arms 3 and 4 drive a COPY with an injected slow phase, stated plainly in the header because a fixture that edits a copy is weaker than one driving the real thing: no real phase is slow enough to trip the warning on a healthy tree and making one would mean slowing a real commit. ARM 6 PINS THE BLIND BAND AS IT STANDS, so the day someone closes it that arm fails and makes them read this packet and the volume evidence rather than flipping a threshold quietly.

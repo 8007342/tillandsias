@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: linux-build-tuneups-carried-by-the-build-scripts
+    event:
+      type: note
+      ts: "2026-09-05T08:29:20Z"
+      agent_id: linux-macuahuitl-claude-20260905t082920z
+      host: macuahuitl
+      summary: |
+        CAP ROW CORRECTED BY THE HOST (lenovinha, 07:5xZ), as the row's own caveat predicted: a forced gate WITH the script-applied cap at jobs=1 was OOM-killed tonight, and a later identical run completed in 332 s, so on this 13 GB host jobs=1 is NECESSARY BUT NOT SUFFICIENT and the earlier table overstated what one observation per cell supports. Honest form: kills at 4 (x1), at 2 (x2), at 1 (x1); completions at 1 (x2). The uncontrolled variable is what else the host was carrying, which the row already named; the memory-derived cap stays as landed (it lowers only and defers to an explicit CARGO_BUILD_JOBS) and the remaining term is co-tenancy, not the cap.

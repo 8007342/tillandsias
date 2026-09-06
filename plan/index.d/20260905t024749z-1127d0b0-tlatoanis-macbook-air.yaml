@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: wire-version-refusal-is-untested-on-both-sides
+    event:
+      type: evidence
+      ts: "2026-09-05T02:47:49Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260905t004510z
+      host: tlatoanis-macbook-air
+      summary: |-
+        CRITERION 3 MEASURED, TWICE, ON TWO TREES THAT DIFFER FOR A KNOWN REASON — which is better evidence than either run alone (yolanda's framing). Host tlatoanis-macbook-air, the only host that can compile every crate; Windows cannot build --features tray at all. RUN A, osx-next BEFORE merging linux-next, i.e. WITHOUT d8889f590: baseline six crates green; all ten refusals removed cleanly (8 'if ... != WIRE_VERSION {...}' blocks deleted outright, 2 guard-arm sites' 'if wire_version == WIRE_VERSION' guards dropped, dead bindings tidied to 'wire_version: _' so cargo check is silent, 0 refusal branches remaining); same six crates STILL GREEN, 0 reds, no eleventh site, no compile error naming an unenumerated dependent. That establishes criterion 3's PRECONDITION: on a tree with zero mismatch tests, deleting every wire-version refusal goes unnoticed, uniformly. RUN B, after merging origin/linux-next so the tree carries d8889f590: baseline yolanda's handshake_refuses_a_server_advertising_a_different_wire_version PASSES; identical all-ten deletion; result EXACTLY ONE RED and it is that test, panicking at vsock_client.rs:712:26; six crates, 1 FAILED result line. Restored: 10 refusals back, 0 modified files, test green again. SO THE ACCURATE STATEMENT IS TEN SITES, ONE COVERED SINCE d8889f590, NINE UNCOVERED, and the arm has a running measure of the packet's own progress: when the second mismatch test lands the same mutation should give 2. MY RUN A WAS REPORTED WRONG BEFORE YOLANDA CORRECTED IT: I said 'no test notices' as a property of the codebase when it was a property of MY BRANCH, and I did not state which tree I measured. Naming the tree is the difference between a finding and an artefact of staleness. THE FOUR FALSE REDS, verbatim, because each would have closed this packet backwards if reported as-is: 'if true ||' -> cargo fmt, line too long; 'if false &&' -> clippy 'this boolean expression contains a logic bug' x5 in vm-layer; naive deletion -> six unused-binding and unreachable-pattern errors under -D warnings; then one missed binding at vsock_exec.rs:1091. Four tools, four reds, none about the property. A GREEN THAT NEVER RAN AND A RED FROM THE WRONG CAUSE ARE ONE ERROR IN TWO COSTUMES. AND THE ONE DEFENCE NOBODY DESIGNED: a SLOPPY removal does not compile, because the deletion leaves wire_version bindings unused and one arm unreachable; a CLEAN removal that drops them to 'wire_version: _' compiles silently. THE COMPILER CATCHES CARELESSNESS AND NOTHING CATCHES INTENT — so a reader who tries the deletion casually sees red and wrongly concludes the sites are covered.

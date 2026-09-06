@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-sigpipe-verdict-guard-cannot-see-recursive-grep-or-any-pre-existing-pipeline
+    event:
+      type: note
+      ts: "2026-09-05T19:10:32Z"
+      agent_id: linux-macuahuitl-claude-20260905t191032z
+      host: macuahuitl
+      summary: |
+        COUNT CORRECTION, NOT A REOPEN. The corpus count that this packet closed on was ZERO recursive-grep-producer sites, measured by yoga with /usr/bin/grep on three probes, and independently reproduced as zero by lenovinha, who filed the packet. THE CORRECT FLOOR IS ONE. lenovinha found the missing site the same hour by folding backslash continuations AND trailing-pipe continuations before matching, which neither host did first:
+
+          scripts/test-tool-dispatch-lib.sh:256-258
+            if grep -rn 'dirname "${BASH_SOURCE[0]}")/lib/tool-dispatch\.sh' "$ROOT/scripts" 2>/dev/null \
+               | grep -v 'test-tool-dispatch-lib\.sh' \
+               | grep -vE ':[[:space:]]*#' | grep -q .; then
+
+        Verified on macuahuitl's merged tree before this note was written, not taken from the report: recursive grep producer, two filter stages, terminal `grep -q`, three `pipefail` occurrences in the file, verdict context. Structurally identical to 1069-c9w6. It spans THREE LINES, so no line-oriented count can represent it, which is why both independent counts returned zero from the same blind spot. THE PACKET'S OWN next_action HAD WARNED THAT THE COUNT COULD NOT SEE THIS SHAPE; the warning was written, published, and then not applied by either host that used the number.
+
+        THE CONCLUSION IS NOT REVERSED AND THIS PACKET STAYS CLOSED. It declined to widen the SIGPIPE guard's diff scope on the reasoning that a full-corpus arm flagging zero sites while charging every push is how a guard gets switched off (977-448j). One latent site does not obviously flip that, and lenovinha said so unprompted before the coordinator ruled. A reopen requires a falsifying observation of the CLOSURE; what exists is a falsifying observation of an INPUT the decision no longer rests on. Reopening a closed packet to change a number is how a closed packet becomes permanently open. If a later count finds a fifth or a tenth site, that IS a falsification of the conclusion and the reopen is then correct.
+
+        THE SITE IS FILED SEPARATELY AS 1075-yuxt, because its argument is timing rather than probability and belongs where it can be scored: the producer emits one line today and the pipeline is honest, but the site is a FIXTURE GUARDING AGAINST CALLERS REINTRODUCING A FIXED-DEPTH SOURCE PATH, so its match set grows exactly when someone reintroduces the defect it exists to catch. 1069-c9w6's evidence brackets where honesty ends: 20 matches returned rc 0, 56 returned rc 141. The guard goes quiet at the moment it matters and its green is then read as an all-clear.
+
+        ONE IS A FLOOR, NOT A TOTAL, and this is recorded here as well as on 1075-yuxt because it is the transferable part. lenovinha's folding method still cannot see a pipeline inside a command substitution spanning lines, or one assembled through a variable — the same limit that made the earlier 173 a floor. Any future corpus count on this class must state the shapes its matcher folds and the shapes it cannot, and report the result as a floor over that set. A count is only as good as the shapes its matcher can represent, and two hosts proved that on the same afternoon.

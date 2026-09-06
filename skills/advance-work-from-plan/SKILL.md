@@ -28,6 +28,74 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
     (breach record 34e60965,
     `plan/issues/main-branch-direct-push-guard-2026-07-24.md`). Switch to
     your host's canonical branch or run the cycle read-only.
+
+1b. **Acquire the checkout lock — BEFORE any committable work** (orders
+    873-zcim, 1091-zh6d):
+
+    ```bash
+    TILLANDSIAS_CYCLE_HOLDER_PID=$PPID scripts/cycle-checkout-lock.sh acquire \
+        --lane prompt --source "<how this cycle was launched, one line>"
+    ```
+
+    **`TILLANDSIAS_CYCLE_HOLDER_PID=$PPID` MUST BE ON THE COMMAND LINE, in
+    YOUR shell.** It anchors liveness to the agent-harness process that spans
+    the whole cycle. Evaluated inside the script instead, `$PPID` is the tool
+    shell that invoked it — which dies the moment your tool call returns, so
+    the lock stale-reaps immediately, every later lane reads
+    `ok:checkout-lock:free`, and the verdict you got still said `acquired`.
+    Measured on yoga 2026-09-06, direct and via `bash -c`: both anchor on the
+    dying shell.
+
+    On `skip:overlap-lock-held:<holder>` **DO NOT PROCEED.** The verdict names
+    who holds the checkout (lane, pid, start, source). Report it as the cycle's
+    final output and exit — that is the designed outcome, not a failure, and it
+    is recorded outside the checkout in
+    `~/.cache/tillandsias/overlap-refusals.jsonl` so a refused-for-overlap
+    cycle is distinguishable from one that ran and found nothing. Do not retry
+    in a loop; the next scheduled fire retries on its own clock.
+
+    **WHY THIS SECTION EXISTS: it did not, and every worker host paid for it.**
+    The lock instruction lived only in `skills/meta-orchestration` — one host,
+    four-hourly — while THIS skill is the lane every host runs to drain plan
+    work. Measured on yoga 2026-09-06: a full night of cycles on one checkout,
+    eight lands, `./build.sh --check` runs of six to seven minutes, and the
+    lock taken ZERO times, because nothing here mentioned it. A sibling lane
+    firing into that checkout mid-gate produces a red with no discoverable
+    cause. Same shape as 943-7dn5, where `--emit-flow` lived in the
+    coordinator skill and the flow log was fed only when a session happened to
+    run it: **anything the worker loop must do belongs in the worker skill.**
+
+    Release at §7 Finalization, after the cycle's last commit lands:
+
+    ```bash
+    TILLANDSIAS_CYCLE_HOLDER_PID=$PPID scripts/cycle-checkout-lock.sh release
+    ```
+
+    A second agent NEVER works in a locked checkout (873-zcim criterion 4).
+    The sanctioned path for concurrent work on one host is a separate git
+    worktree or a clean temp clone.
+
+2.  **Instrument check**: `scripts/cycle-preflight.sh` must answer `ok:` before
+    you select work — selecting with an unverified instrument is the one
+    failure the loop cannot reason its way out of, because the tool it would
+    reason WITH is the stale thing. Its `<plan>` segment names which instrument
+    you are running on (order 1004-ws5q):
+
+    - `rebuilt` — cargo present, instrument built or confirmed current.
+    - `existing` — **no cargo, but a runnable binary resolved.** A legitimate
+      cycle: a host doing compile-free work keeps its slot. Before 1004-ws5q
+      preflight declared the COMPILER absent without ever looking for a
+      BINARY, and a floor-tier release smoke that compiles nothing lost a 4h
+      slot with a healthy instrument on disk (pirria, 2026-09-04).
+    - `skipped` — the build step was skipped via `CYCLE_PREFLIGHT_SKIP_BUILD=1`.
+    - `blocked:preflight:plan:cargo-absent` — no cargo AND no runnable binary.
+      Terminal: there is no instrument, so do not start the cycle.
+
+    **`CYCLE_PREFLIGHT_SKIP_BUILD=1` is for compile-free work on a host that
+    cannot compile, and nothing else.** It is not a way past a red build on a
+    host that can compile — that is a broken instrument. Since 1004-ws5q a host
+    with no cargo but a working binary gets `existing` without the variable, so
+    needing it at all should now be rare.
     **On `osx-next` / `windows-next`, merge `origin/linux-next` HERE, before the
     selector runs, not only before the push.** The selector and every
     `plan_*` read answer from the WORKTREE ledger, and on a platform branch the
@@ -213,12 +281,44 @@ automates. Canonical: `methodology/distributed-work.yaml` → `cycle_batch_triag
 1.  **Claim by flipping status, and push it BEFORE the work.**
 
     ```bash
+    scripts/check-claims-across-branches.sh <packet-id>   # FIRST. see below
     tillandsias-plan set-field <packet-id> status in_progress \
         --host "$(hostname -s)" --reason "claimed for cycle <UTC ts> by $agent_id"
     git add plan/index.d/
-    git commit -m "claim(<packet-id>): <host>"
+    git commit -m "claim(<packet-id>): <host>"   # the fragment and NOTHING else
     git push origin <active-branch>
     ```
+
+    **YOUR FOLD DOES NOT SHOW OTHER HOSTS' CLAIMS, and the gap is measured in
+    HOURS, not seconds** (1034-whsp). A claim lands on the claimant's PLATFORM
+    branch. It reaches a trunk host only when the coordinator relays that branch
+    into `linux-next`. Measured on tlatoanis-macbook-air 2026-09-05:
+
+    | | |
+    |---|---|
+    | claim push, claim-only diff, platform branch | **12.0s** |
+    | `osx-next` → `linux-next` relay gaps, last 9 | **19m – 2h02m** |
+    | time since the last relay, when this was written | **6h28m** |
+    | this host's own claims still unseen on `linux-next` | **1h55m, 2h11m** |
+
+    At that moment `origin/linux-next` folded 1034-whsp to `ready` while the
+    claiming host held it `in_progress`. A second host reading its own fold is
+    reading a state that can be hours stale, and 814-iyu7 (two hosts, 1009-gccx,
+    claims 5m14s apart) is what that costs.
+
+    So `check-claims-across-branches.sh` folds every sibling branch's ledger and
+    exits 1 with `claimed-elsewhere:<packet>:<branch>`. **One fetch, ~1s.** It is
+    NOT a lock: two hosts claiming inside the same fetch still collide, and the
+    timestamp rule below still arbitrates. It turns an hours-wide race into a
+    seconds-wide one. `blocked:` from it means STOP — it could not see the
+    siblings, which is not the same as nobody holding the packet.
+
+    **The claim commit must contain the claim fragment and NOTHING else**
+    (1034-whsp, yoga): anything else in the outgoing diff takes the push off the
+    plan-only lane and onto a full gate, ~250s instead of ~6.5s. Note that on a
+    platform branch the pre-push gate will first demand a merge of
+    `origin/linux-next`; that is expected, and the lane is merge-aware, so
+    re-push after merging rather than reaching for `--no-verify`.
 
     `$agent_id` is the §1.4 helper output (`scripts/agent-identity.sh id
     <backend>`) — if the helper refused, there is no identity to claim with, and
@@ -286,6 +386,46 @@ automates. Canonical: `methodology/distributed-work.yaml` → `cycle_batch_triag
     *continuing* is the defect, and is precisely 814-iyu7. A rejected push is a
     weaker and later signal than the timestamp — a push can succeed and still
     have lost — so do not wait for one.
+
+    **PUSH THE CLAIM ALONE, AND FIRST.** A claim is invisible to every other
+    host until it lands, so the claim commit must contain the claim fragment and
+    NOTHING else: no scaffolding, no ledger tidy-up, no scripts. Anything else in
+    the outgoing diff takes the push off the plan-only lane and onto the full
+    gate, and the window where two hosts both read `ready` is exactly that long.
+
+    MEASURED on yoga 2026-09-05, GNU grep, per push attempt:
+
+    | condition                                  | cost   |
+    |--------------------------------------------|--------|
+    | retry loop alone, no hooks                 | 18–56ms |
+    | claim-only push, gate stamp valid          | ~6.5s  |
+    | claim-only push, stamp stale (the rebase)  | ~14.1s |
+    | a push the plan-only lane REFUSES          | a full gate, ~250s |
+
+    The retry loop was never the cost. A rebase under a moving trunk invalidates
+    the stamp, so the middle row is the normal case during exactly the window
+    when collisions happen — and four attempts of it is about a minute of
+    invisibility, not the ten minutes of 1034-whsp. That incident required at
+    least one attempt on the bottom row, which the plan-only lane now prevents
+    for a claim-only diff (1056-5344, 1060-7mmm, 1013-xm63 hardened that lane on
+    2026-09-05). Keep the claim commit clean and you stay off the bottom row.
+
+    **WHEN YOU DISCOVER A LANDED DUPLICATE — you lost even if the rule says you
+    won.** The timestamp rule decides who CONTINUES, never who overwrites a
+    landed, measured result. If the other host has already landed the work:
+
+    - Concede. Do not re-land, do not revert theirs. Re-landing is the
+      duplication the rule exists to prevent, one step later.
+    - Record YOUR measurement on the packet as a second observation. Two hosts
+      measuring the same change independently is worth more than the hours it
+      cost, and it is the only salvage available.
+    - Say plainly in the event that you lost the race and on what timestamp, so
+      the next reader does not reconstruct it from commit order — which is the
+      weaker signal, and can disagree.
+
+    Yoga did exactly this on 1009-gccx: its claim was 5m14s EARLIER and it still
+    conceded, because lenovinha had landed and measured. That reading is the
+    ruling, not a courtesy.
 
 4.  **Release on exit, unconditionally.**
 
@@ -453,6 +593,22 @@ Hard rules:
   name with a probe that proves it arrived (`with-tillandsias-builder.sh bash -c
   'echo ${VAR:-UNSET}'`) before any measurement is read.
 
+- **A stamp-dependent litmus arm must declare its skip to the harness, or it is red on every merged union.** `expected_behavior` is an exact match; a test that honestly prints `skip: no warm stamp` under it reads as a wrong answer, and a merged union has by definition changed since the last gate, so the red recurs in every coordinate cycle (1036-e5w9's closure, 2026-09-05: 290/291 on the union). Split the arm: the invariance half with no precondition, which can never skip; the memo half under a `success_pattern` regex that admits the ok form and a self-naming `skip:<order>:<reason>` token; and a control that would go red if the memo were made to refuse always. Never widen the expectation until the skip passes: that is a green that asserts nothing (1041-up99).
+
+- **On Windows, name the runner beside a test count: native cargo or the gate's WSL re-exec.** A `cfg(all(test, unix))` module reports "7 passed" natively while three of its tests are broken, because the broken ones were never compiled; only the WSL re-exec runs them (972-umik commit B, 2026-09-05). Windows-native cargo output is not evidence about a unix-cfg module. And a litmus verdict from a Windows host before df5708607 (1049-s35z) is unearned: CRLF from jq.exe made bound tests unfindable, and the runner counted the skips as PASS.
+
+- **Under the relay protocol, `git pull --rebase` on linux-next fuses the two lanes.** A slow-gate host pushes gated code to `work/<order>` for the coordinator to relay-land and pushes ledger fragments directly through the plan-only lane. If both commits exist on the same local linux-next, a rebase carries the code into the "plan-only" push and the hook refuses it (`plan-only lane: not applicable — … outside plan/index.d/`), which is correct; the refusal's output offers `git push --no-verify`, which would push the violation through. Never use it. After a `work/` push, reset local linux-next to `origin/linux-next` before starting plan-only work, so the lanes never share a branch; if they already do, reset to trunk and cherry-pick the fragment commit alone after confirming the `work/` ref is safe on origin (lenovinha, 2026-09-05, 1059-pb2j).
+
+- **Relay-lane order is fetch, rebase, gate, push; and never sequence a destructive git command after a push in the same block.** Gating before the rebase invalidates the stamp and the hook refuses correctly (lenovinha, 2026-09-05). And `git push && …` is not enough when the push is refused by a hook that exits non-zero only sometimes: a `git reset --hard` placed after a push in one block ran on a refused push and discarded a commit that existed nowhere else, recovered from the reflog. Under the relay protocol a `work/` push is followed by a reset to keep the lanes apart, which makes this likelier: read the push's verdict line, then reset in a separate command.
+
+- **Ledger prose is data, and the shell will execute it if you let it.** On 2026-09-05 a host wrote an event whose prose quoted a litmus line in backticks; the write path command-substituted them and a truncated two-argument `cp` overwrote a gate instrument in the working tree, silently (1063-363b, reframed). Write every event summary to a file through a quoted heredoc and pass `--summary-file`; never an inline `--summary "…"` or an unquoted heredoc; quote a shell fragment whole or describe it in words. And report every timestamp to a peer in UTC with the Z (`date -u`, `stat --time-style=+%FT%TZ`): a bare `stat` mtime is local time and sent a pristine-clone probe eight hours from the event.
+- **A ledger-only push from a platform branch is only ledger-only if the outgoing diff says so.** The lane judges the diff against the remote, not your last commit: an unpushed set that still carries code already relayed to trunk is declined, correctly. Before a plan-only push, confirm the code is safe on origin (`git branch -r --contains <sha>`), rebuild the branch on `origin/<branch>`, re-apply only the fragments, then push (yolanda, 1055-6yp8 close, 2026-09-05). And a terminal event needs the status transition with it: a `completed` event beside status `ready` folds as ready and the packet stays claimable forever; the fragment-status-loss guard catches it, and `set-field --evidence` is the path that derives the rung from the status.
+
+- **A binding assembled from a variable is invisible to every name-based scan.** Wiring fixtures into `build.sh` with `for f in a b c; do _run bash "$DIR/test-${f}.sh"; done` runs them correctly and leaves the orphan count unchanged: the bound-or-retired guard, a `grep` for the fixture's name, and a human all fail to find the reference. A binding nobody can find is the defect the wiring was meant to fix, in a tidier form. Write the literal path once per fixture, and re-count after wiring rather than assuming it worked (lenovinha, 1063-nraf, 2026-09-05: 26 orphans stayed 26 through a loop and dropped to 15 with literal names).
+- **A green exit code is not evidence that a fixture belongs in a gate.** Of 26 orphaned fixtures, 20 passed locally and 11 of those were still unsafe to bind; an adversarial second read reversed four dispositions from the first read, every one toward caution. Run each fixture, hand the exit codes to the reader as evidence, then have a second reader attack the proposal with the burden on the proposer, and retire only on pins-nothing or duplicate-entrypoint, never on subject-is-gone.
+
+- **Never amend a landed fragment, not even to satisfy a guard — write a correction fragment.** A fragment is append-only and immutable once written, and the author may still be holding it: on 2026-09-05 the coordinator added a missing `unscoreable:` block to three landed fragments after checking origin and finding no conflict, while their author did the same on their own host; git combined both additively, each file gained two `unscoreable:` keys, the fragments stopped parsing and their events orphaned. Checking trunk is not a safeguard, because trunk is the relay-interval-stale view (1034-whsp measured 19 minutes to two hours). A correction fragment composes under the CRDT; an in-place amendment cannot. When a guard's shape forces the in-place edit — it reads the declaring fragment's bytes rather than the folded packet — that is a defect in the guard and it is filed, not worked around.
+
 ---
 
 ## 6 — Commit, Push & Checkpoint
@@ -552,13 +708,73 @@ status `ready`. The packet closes only when every agent named in
     `timing:`) alongside `verdict:` — it names the expensive, outcome-invariant
     steps this host keeps paying (order 1001-q3zf); quote `saved_ms_upper` as
     the bound it is.
+0b. **Emit this cycle's flow record — EVERY cycle, on EVERY host.** Right after
+    the metrics run above and before Finalization commits:
+    ```bash
+    scripts/cycle-metrics.sh --emit-flow \
+      host=<this-host> \
+      batch_epic=<from select-work-batch `batch: epic=`> \
+      batch_seed=<from `batch: seed=`> \
+      batch_size=<from `batch: size=`> \
+      budget=<from `batch: budget=`> \
+      claimed=<packets this cycle claimed> \
+      completed=<packets this cycle completed> \
+      filed=<new packets/issues this cycle filed> \
+      commits=<from cycle-metrics `repo: commits_this_cycle=`> \
+      plan_open=<open packet count> plan_total=<total packet count>
+    ```
+    Best-effort by construction: the emit never fails the cycle it measures
+    (`methodology/agent-observability.yaml`), so a full disk or a read-only path
+    costs a record and nothing else.
+
+    **THIS INSTRUCTION USED TO EXIST ONLY IN `skills/meta-orchestration`** — the
+    coordinator's skill, which one host runs on a schedule — and was absent
+    from THIS skill, which every worker host runs every cycle (943-7dn5). The
+    emitter shipped and passed its fixture; the CALL was never wired. Measured
+    on yoga 2026-09-06: 20 records, all from sessions that happened to run the
+    coordinator skill, newest 44h old, with 953 settled commits landed since.
+    `overhead_ratio` is what 689-zwzm gates its concurrency ramp on, and a ramp
+    gated on a metric nothing feeds either never lifts or lifts because the
+    absence reads as calm.
+
+    `scripts/check-cycle-flow-log-fresh.sh` refuses a log that no cycle has fed
+    while commits kept landing. It is bound to `litmus:cycle-flow-telemetry-shape`
+    rather than to `./build.sh --check`, because every host's log is stale today
+    and a blocking gate step would refuse the whole fleet's landings at once.
+
 1.  **Full Verification**: Run the full validation litmus on your platform to confirm zero-drift compliance.
 2.  **Close the packet — BOTH the event and the status transition.**
 
+    **LAND THE CODE FIRST, then close with the SHA the landing printed.**
+    `scripts/land-on-platform-branch.sh` fetches, integrates onto origin and
+    REWRITES your commit, so a SHA captured before it is the pre-rebase local
+    one and never exists upstream. `ok:land:<sha>` is the only SHA that exists.
+
     ```bash
+    landed="$(scripts/land-on-platform-branch.sh | sed -n 's/^ok:land:\([0-9a-f]*\):.*/\1/p')"
     tillandsias-plan set-field <packet-id> status completed \
-      --reason "<what shipped, commit SHAs, validation log paths>"
+      --evidence "$landed" \
+      --reason "<what shipped, validation log paths>"
     ```
+
+    Then commit and push the ledger fragment (step 3), which takes the
+    plan-only lane. **This inverts the old step 2/step 4 order for the CODE
+    commit only** — every other ledger write keeps the 3c ordering.
+
+    ORDER 1024-c3h3. This step used to run before the landing, and the evidence
+    refs were systematically wrong for every host that followed it: lenovinha
+    measured four of four closures citing ghosts on 2026-09-04 (5326cb97d,
+    d2ce890b2, 89f6960d2, 4aaa24ba2, while the code landed as dcc50ff27,
+    a20540d33, 42930b71c, 00549903c), and yoga's 1011-d578 cited 677c30527 the
+    same way. A reader running the obvious check
+    (`git merge-base --is-ancestor <sha> origin/<branch>`) gets NO and **cannot
+    tell "the code never landed" from "the ref was captured too early"** — two
+    conditions needing opposite responses. That is 881-29me's shape with a SHA
+    instead of a line number: cite what survives the operation.
+
+    If you cannot capture the landed SHA, cite by content the rebase preserves
+    (the commit subject, a test name, a verdict line) and say that is what you
+    did. A wrong SHA is worse than no SHA, because it looks checkable.
 
     An event alone does **not** close a packet. This step used to read *"append
     a `completed` event … or by writing an append-only fragment file setting
@@ -629,6 +845,46 @@ A successful invocation MUST NOT exit with local-only work:
 - `release.yml` is `workflow_dispatch` only — never auto-trigger. (The old `recipe-publish.yml` rootfs workflow was removed in the 2026-06 Fedora pivot.)
 - NEVER resolve cross-host plan conflicts by deletion — tombstone or supersede only.
 - When the worktree is dirty, only stage `plan/` files explicitly by path. Implementation code from a previous (uncommitted) iteration is NOT yours to touch.
+- **AND BEFORE YOU LEAVE IT ALONE, COPY IT** (orders 872-c9nd, 1102-93ng).
+  Run this the moment you find startup dirt, before refusing and before any
+  other detector:
+
+  ```bash
+  scripts/salvage-dirty-worktree.sh <slug>     # -> ok:salvaged:<ref>:<sha>
+  ```
+
+  Quote the `ok:salvaged:<ref>:<sha>` verdict in your cycle report — that ref
+  is the only durable record that the work existed.
+
+  **CHECK THE VERDICT — THERE ARE THREE, NOT TWO** (order 1103-i7xq):
+
+  | verdict | what you have |
+  |---|---|
+  | `ok:salvaged:<ref>:<sha>` | the copy is on origin; it survives a re-clone |
+  | `ok:salvaged-local:<ref>:<sha>` | the copy is in THIS repo only — the push failed. It survives a re-clone **only if someone pushes that ref**. Say so in your report and push it when the credential works: `git push origin <ref>` |
+  | `fail:salvage:<reason>` | there is **no copy**. Do not proceed to a refusal on the strength of one |
+
+  The middle row exists because the salvage used to push the commit straight
+  to origin and create no local ref, so a failed push left nothing at all — on
+  exactly the hosts most likely to strand work, the ones that cannot push.
+
+  **It cannot touch the worktree.** The script works through a temporary index
+  and git plumbing only, so it is safe to run on dirt you have just been
+  forbidden to alter. "Refuse" and "copy" are not in tension; the copy is what
+  makes the refusal survivable.
+
+  **WHY THE OTHER HALF IS NOT ENOUGH, and this skill only ever had the other
+  half:** refusing protects the work from YOU. It does not protect it from a
+  fresh clone. On 2026-08-24 three consecutive cycles refused a dirty tree,
+  each writing more careful prose about the diff than the last, and then the
+  checkout was re-cloned. Four hours of finished work was unrecoverable and the
+  untracked file's name appears in no commit on any branch. Every one of those
+  cycles obeyed the rule it had been given.
+
+  This does NOT license committing, discarding, restoring, resetting or
+  cleaning unknown dirt. Treat every recorded path as immutable sibling or
+  operator work unless the operator identifies it as disposable in the current
+  prompt. Salvage, then refuse, then report both.
 - Treat every local-only commit as volatile. If it matters, push it before
   ending; if it cannot be pushed after three retries, file a blocked event.
 

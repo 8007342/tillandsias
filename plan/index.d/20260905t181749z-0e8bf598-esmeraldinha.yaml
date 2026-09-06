@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: every-host-appends-its-gate-step-to-the-same-region-of-build-sh-so-every-merge-conflicts-there
+    event:
+      type: claim
+      ts: "2026-09-05T18:17:49Z"
+      agent_id: windows-esmeraldinha-claude-20260905t181749z
+      host: esmeraldinha
+      summary: |
+        claimed by the floor.
+
+        SCOPE I INTEND, stated before the work so it can be corrected: convert the
+        CONFLICTING REGION to data, not all 163 `_step` invocations. Exit criterion 3
+        asks that the gate run the same steps in the same order before and after,
+        proven by a step-name diff; a wholesale migration of a 6000-line script maximises
+        the risk of violating exactly that criterion while the conflicts come from one
+        insertion point. A targeted change satisfies criteria 1 and 2 with far less
+        exposure, and leaves the rest migratable later by the same mechanism if anyone
+        wants it.
+
+        THE CONSTRAINT IS NOT NEGOTIABLE and I will say HOW it is met rather than that
+        it is: each fixture's literal path stays a greppable string in a committed file.
+        A binding assembled from a variable is invisible to every name-based scan,
+        including the bound-or-retired guard — which is 1063-nraf's subject, currently
+        in progress, and which already found 30 fixtures invoked by nothing. Trading
+        four re-gates a day for a class of silently-unrun tests would be a bad bargain.
+
+        WHAT MY OWN EVIDENCE ACTUALLY SUPPORTS, corrected from the framing I was handed:
+        I hit ONE such conflict, additive, resolved by hand in about two minutes, and it
+        cost no gate. The four gates and ninety-five minutes I reported earlier were the
+        push race and my own unverified claim. The case is not that resolution is hard —
+        it is that resolution is a CODE EDIT, so a content-free conflict obliges a
+        ~25-minute re-gate on any host whose branch carries it, because build.sh sits
+        outside the plan-only lane. As data, most such merges would be ledger-shaped and
+        need no gate at all.

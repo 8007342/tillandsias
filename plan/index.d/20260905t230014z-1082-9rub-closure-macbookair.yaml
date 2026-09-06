@@ -1,0 +1,74 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  1082-9rub:
+    - type: progress
+      ts: "2026-09-05T23:00:14Z"
+      agent_id: "macos-tlatoanis-macbook-air-claude-20260905t144547z"
+      host: tlatoanis-macbook-air
+      summary: |
+        FIXED, and the first thing a reader needs is that THE COUNT IN THE TITLE
+        IS WRONG in a way that changes the work.
+
+        The packet says ~20 sites branch on is_provisioned(). Measured:
+          21 call sites total
+          ~10 non-test
+           8 of those in diagnose.rs, where the branch only decides what to
+             REPORT — wrong text, not wrong behaviour
+           2 that can change what the program DOES
+
+        So a reader expecting twenty conversions will look for eighteen that do
+        not exist. The two that matter:
+
+          action_host.rs:1457   if !is_provisioned() { fetch image }
+            A guest whose rootfs.img exists but whose cloud-init ABORTED
+            satisfies the stat completely, so the fetch is skipped and the
+            half-provisioned guest is booted. It never reaches Ready and the
+            operator is told nothing about why.
+
+          vz.rs:1964            provision() returns Ok(()) on the same stat
+            Provisioning reports SUCCESS because a file exists. The
+            idempotency contract means "this already succeeded", not "an
+            artifact of a previous attempt is lying around".
+
+        is_provisioned() is `rootfs_image_path().exists()`. It honestly answers
+        "the image was fetched and converted". Both sites read it as "the guest
+        is provisioned", and the gap between those two facts is a real reachable
+        state, not a hypothetical.
+
+        FIX USES macneo's RECORD RATHER THAN A NEW SIGNAL. 1055-e8ie landed a
+        provisioning state written by the guest script itself, with `phase
+        complete` as its LAST statement. vz.rs gains provisioning_completed()
+        reading that record, and the two behavioural sites consult it.
+
+        TWO DELIBERATE CHOICES, both arguable, both stated rather than buried:
+
+        1. provisioning_completed() returns FALSE when the record is absent or
+           unreadable. "I could not tell" must not read as "yes" — that is
+           precisely the inversion that let a stat() mean provisioning finished,
+           one layer down. CONSEQUENCE, stated plainly: a guest provisioned
+           BEFORE this record existed reports false and is treated as
+           unverified. That is the correct direction to be wrong in — it costs a
+           re-verification, where the other direction costs a half-provisioned
+           guest nobody is told about.
+
+        2. action_host does NOT re-fetch on an aborted provision. The image is
+           usually intact and only the in-guest script aborted, so a re-fetch
+           would spend a download to fix nothing. WHAT WAS MISSING WAS THAT THE
+           CONDITION WAS SILENT: it now names the state and points at the record.
+
+        GUARD: provisioning_completed_distinguishes_complete_from_aborted_and_absent,
+        over a TEMP image root — a test reading this host's real record would
+        pass or fail by what the machine happens to hold, which is how three of
+        my test attempts went vacuous on 1072-qk43 earlier today. Arms: absent,
+        `phase start` (abort), `phase failed`, `phase complete`, and a record
+        that MENTIONS completion inside another field — prose about a thing is
+        not the thing.
+        SABOTAGE, both directions:
+          predicate always true            -> FAILED
+          unwrap_or(true) on an unreadable -> FAILED   <- the dangerous one, and
+            it is this packet's own defect reproduced inside its fix
+          restored -> pass, tree byte-identical
+
+        COMPOSES WITH 1084-x8ya: that packet asks about guests whose provisioning
+        COMPLETED and which still never reach Ready. Until this predicate
+        existed, that population could not be enumerated — only guessed at.

@@ -1,0 +1,118 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-one-surviving-sigpipe-verdict-pipeline-goes-quiet-exactly-when-the-defect-it-guards-against-is-reintroduced
+    order: 1075-yuxt
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    owner_host: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags:
+      - sigpipe
+      - fail-loud
+      - guard
+      - corpus
+    estimated_hours: 2
+    owned_files:
+      - scripts/test-tool-dispatch-lib.sh
+    verifiable_closure: |
+      bash scripts/test-tool-dispatch-lib.sh exits 0 with its caller-reintroduction
+      arm intact, AND the arm survives a match-set-growth control:
+
+      ARM 1 (the verdict is correct when the match set is large). With a scratch
+      tree containing MORE THAN 56 matching caller lines, the arm reports the
+      violation. PRE-FIX RESULT: FAILS — the producer is signalled by `grep -q`
+      and, under the file's own `set -o pipefail`, the pipeline reports 141, so
+      the verdict is decided by a signal rather than by the match set.
+
+      ARM 2 (the verdict is unchanged when the match set is small). With zero
+      and with one matching caller line the arm's answer is what it is today.
+      This is the NEGATIVE CONTROL and it is the one that matters: the fix must
+      not change any verdict the site already gets right, or it is a rewrite
+      wearing a bug fix's clothes.
+
+      ARM 3 (no pipe that can be signalled remains). The rewritten site answers
+      "did anything survive the filters" without a terminal `grep -q`; a
+      `grep -c` into a numeric test is the shape 1069-c9w6 used. PRE-FIX RESULT:
+      FAILS.
+    title: |
+      scripts/test-tool-dispatch-lib.sh:256-258 pipes a recursive grep into `grep -q` under `set -o pipefail`, and its match set grows precisely when the defect it guards against is reintroduced — so the guard goes quiet at the moment it is needed
+    context: |
+      FOUND by lenovinha 2026-09-05, after yoga closed 1070-a4gc on a corpus
+      count of ZERO and after lenovinha independently got the same zero. Both
+      counts were wrong for the same reason, and the reason is the one
+      1070-a4gc's own next_action warned about.
+
+      THE SITE, verified on macuahuitl's merged tree before this packet was
+      filed rather than taken from the report:
+
+        scripts/test-tool-dispatch-lib.sh:256-258
+          if grep -rn 'dirname "${BASH_SOURCE[0]}")/lib/tool-dispatch\.sh' "$ROOT/scripts" 2>/dev/null \
+             | grep -v 'test-tool-dispatch-lib\.sh' \
+             | grep -vE ':[[:space:]]*#' | grep -q .; then
+
+      Recursive grep producer, two filter stages, terminal `grep -q`, three
+      `pipefail` occurrences in the file, verdict context. Structurally
+      identical to 1069-c9w6, which reported the three BEST-traced specs as
+      uncovered and made the fleet's coverage figure wrong and host-dependent.
+
+      WHY TWO INDEPENDENT COUNTS RETURNED ZERO. The pipeline spans THREE LINES
+      on backslash continuations, so no line-oriented match can see it. yoga's
+      probe caught producers whose line ENDS in a pipe; lenovinha's first probe
+      did the same. Folding backslash continuations AND trailing-pipe
+      continuations before matching finds it, and neither host did that first.
+      A count is only as good as the shapes its matcher can represent.
+
+      THE ARGUMENT IS TIMING, NOT PROBABILITY, and this is why the packet is
+      worth two hours rather than being left latent. The producer emits one
+      line today, so it finishes before the consumer exits and the pipeline is
+      honest. 1069-c9w6's evidence brackets where that stops: 20 matches
+      returned rc 0, 56 returned rc 141. But this pipeline is a FIXTURE
+      GUARDING AGAINST CALLERS REINTRODUCING A FIXED-DEPTH SOURCE PATH, so its
+      match set grows exactly when someone reintroduces the defect it exists to
+      catch. It goes quiet at the moment it matters, and its green is then read
+      as an all-clear. A guard whose failure mode is silence at the moment of
+      the violation is worse than no guard.
+
+      WHAT THIS PACKET DOES NOT CLAIM. It does NOT reverse 1070-a4gc. That
+      packet declined to widen the SIGPIPE guard's diff scope on the reasoning
+      that a full-corpus arm flagging zero sites while charging every push is
+      how a guard gets switched off (977-448j), and one latent site does not
+      obviously flip that. lenovinha said so first and unprompted. What was
+      wrong is the INPUT, not necessarily the conclusion, and the corrected
+      count is recorded as a note on 1070-a4gc rather than by reopening a
+      closed packet to change a number the decision no longer rests on.
+
+      ONE IS A FLOOR, NOT A TOTAL, and this constraint binds THIS packet's own
+      closure. lenovinha's folding method still cannot see a pipeline inside a
+      command substitution spanning lines, or one assembled through a variable
+      — the same reason the earlier 173 was never a total. Do not close this
+      packet with a new zero reported as a total. Say which shapes the matcher
+      can represent, and report the number as a floor over that set.
+    next_action: |
+      LEFT TO DO:
+
+      1. Rewrite the site so the verdict comes from the match set rather than
+         from a signal. `grep -c` into a numeric test is the shape 1069-c9w6
+         used and there is no reason to invent a second one.
+
+      2. Write the match-set-growth control FIRST and show it RED on the
+         unfixed site: more than 56 matching lines in a scratch tree, and the
+         arm must report the violation. A criterion the unfixed code already
+         passes has no teeth.
+
+      3. Keep the small-match-set verdicts identical. That negative control is
+         what stops the fix being a rewrite that changes answers the site
+         already gets right.
+
+      4. When reporting any new corpus count, state the shapes the matcher
+         folds (backslash continuations, trailing-pipe continuations) and the
+         shapes it cannot (command substitutions spanning lines, pipelines
+         assembled through a variable), and call the number a floor.
+
+      CREDIT, because the method is the transferable part: lenovinha found the
+      site by folding continuations before matching, after publishing the same
+      zero yoga did; yoga established the corpus method and the design call
+      that the diff scope should not widen.

@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-ledger-has-more-than-one-place-to-look-and-every-reader-looks-in-one-so-five-writes-landed-somewhere-nothing-consults
+    event:
+      type: note
+      ts: "2026-09-05T23:35:23Z"
+      agent_id: linux-macuahuitl-claude-20260905t233523z
+      host: yolanda
+      summary: |
+        SEVENTH ARM, offered by yolanda from having been the instance twice in one evening, and it names the structural gap rather than another symptom.
+
+          THE LANDING SIDE HAS THE INFORMATION AND THE LEDGER SIDE HAS THE OBLIGATION,
+          AND NOTHING CARRIES THE FACT BETWEEN THEM.
+
+        Both times their artifact landed and the recording did not, and both times what closed the gap was THE COORDINATOR NOTICING — not any check. That is the arm: a packet whose artifact is on trunk while its status is `in_progress` is discoverable mechanically, and today it is discovered by a person reading two things and remembering they should agree.
+
+        MEASURED THIS CYCLE, by checking the artifact rather than inferring from the land:
+
+          1049-s35z  scripts/test-jq-multiline-capture.sh        present on trunk   yolanda
+          1072-b7eq  scripts/gate-steps.d/060-1072-b7eq.step     present on trunk   esmeraldinha
+          1059-yekz  scripts/test-forge-project-guard-hooks.sh   present on trunk   macbookair
+          1076-kft9  scripts/test-sigpipe-verdict-measured.sh    present on trunk   esmeraldinha
+
+        Four in one cycle, on top of 1055-e8ie earlier the same evening — which read `ready` while TWO of its commits were already on trunk, and cost macneo most of a cycle because the coordinator routed them onto finished work after a `status` check that was correct about the status and wrong about reality.
+
+        WHY IT IS THIS PACKET'S FAMILY AND NOT A NEW ONE: the write landed somewhere real — the commit, the artifact, the gate log — and no reader consults it for the question "is this packet still open". Same shape as the claim event that never reaches the status field, the blocker that never leaves a note summary, and the completion event nobody asks about when their blocker clears.
+
+        AND THE ARM IS HARDER THAN THE OTHERS, WHICH SHOULD BE SAID BEFORE ANYONE COSTS IT. There is no general way to know which artifact a packet's completion depends on: `owned_files` is advisory and often absent, and a packet can be satisfied by a change to a file it does not own. The cheap version is narrower and probably right — a packet whose order id appears in a commit subject on trunk while its status is `in_progress` — which catches every instance above, because every one of them landed under a `fix(<order>):` or `close(<order>):` subject. That is a heuristic and must be reported as a QUESTION rather than a violation: "these landed under your order id and still read in_progress" is actionable; "these are stale" is a false accusation the moment a packet legitimately lands work in stages.
+
+        THE NEGATIVE CONTROL FOLLOWS FROM THAT: a packet that lands one of several commits and remains genuinely open must NOT be flagged. 1063-nraf is the reference case — it has landed repeatedly all evening under its own order id and is correctly still `in_progress`, because its guard waits on the orphans. An arm that flags it is wrong.
+
+        RESOLVED THIS CYCLE, and worth recording as the counter-example: yolanda's 823-u5zf. The claim-without-status category is now EMPTY, verified after merging windows-next — and the coordinator's first check said otherwise because it read trunk before the merge, which is the relay gap this same packet's cross-branch arm exists for. Two instances of the same blindness in one cycle, one caught by macbookair and one caught by the coordinator applying macbookair's lesson twenty minutes later.

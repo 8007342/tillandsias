@@ -1,0 +1,121 @@
+packets:
+  - packet_id: three-guards-with-real-coverage-and-a-silent-region-where-no-complaint-reads-as-health
+    order: 1066-dkkb
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags:
+      - fail-loud
+      - testing
+      - architecture
+    estimated_hours: 3
+    unscoreable: |
+      The deliverable is a RULE about how guards are written, not one
+      mechanism, so no single litmus pins it. The three instances below each
+      have their own row and their own closure; this packet's closure is that
+      the rule is stated where guard authors read it and that each instance
+      cites it. A litmus naming one of the three would pin the instance and
+      miss the pattern, which is the error the packet is about.
+    title: |
+      Three guards found in one day share a shape: real coverage with a quiet band, where the absence of a complaint reads as health and is not.
+    deliverable: |
+      Guard authors state their coverage's boundary where a reader will meet
+      it. What must not persist is a guard whose silence is indistinguishable
+      between "nothing wrong" and "outside what I look at".
+    context: |
+      OBSERVED 2026-09-05 on tlatoanis-macbook-air, three instances in one
+      day, each found by accident while doing something else. Each guard is
+      real, useful, and correct within its band.
+
+      1. THE DRIFT CHECK THAT ONLY REPORTS PAST 4x BUDGET (734-sjb3, blind
+         band filed as 1064-5hv2). run_phase warns when
+         `elapsed > budget * 4`. My zero_trace_check at 10373 ms surfaced
+         only because it was barely past 4x; a 9000 ms scan is four times
+         over budget and silent. I nearly reported "no warning, therefore
+         under budget" — absence of the warning proves under TEN SECONDS and
+         says nothing about the 2500 ms budget.
+
+      2. THE GHOST-TRACE CHECK THAT ONLY SCANS CHANGED FILES (1063-htns).
+         Five `@trace spec:windows-wsl-runtime` sites name a spec that does
+         not exist. They surfaced because an unrelated edit to client.rs made
+         the hook look at the file, and they go quiet again the moment nobody
+         edits it. Confirmed pre-existing by counting the string on
+         origin/osx-next: 4 there, 4 in the working tree.
+
+      3. THE DIALECT GUARD THAT COVERS COREUTILS FORMS BUT NOT BASH-4
+         BUILTINS (1055-6yp8, fixed in the same commit as this filing).
+         check-bash-dialect.sh refuses GNU date/du/sed forms and empty-array
+         expansion. It had NO pattern for `read -N`, `mapfile` or
+         `readarray`. It returned ok:bash-dialect-clean on a file whose
+         `read -N` cannot run on bash 3.2 — the class the file exists to
+         catch, shipped with no rule for it.
+
+      4. THE CHECK THAT ANNOUNCED IT COULD NOT RUN, ON THE OTHER STREAM
+         (1024-c3h3, reopened and fixed here). This one is the sharpest of
+         the four because it looks like the counter-example. The checker DOES
+         say it could not run — `note: tillandsias-plan not built — closure-
+         evidence gate skipped` — which is exactly the 965-sxec behaviour the
+         notes below call "related and NOT the same". But the note goes to
+         STDERR while `ok:closure-evidence:0 checked` goes to STDOUT. Every
+         caller that reads the verdict stream, and every reader scanning a
+         gate log for `ok:`/`violation:`, sees an ok line with a zero count
+         and no complaint. The disclosure was written and then routed away
+         from the people it was written for.
+
+         And it produced the failure mode this packet is about, in the purest
+         form yet: the fixture's arm 5 is a NEGATIVE control — "a SHA
+         reachable from the tip being pushed is not a ghost". A skipped gate
+         flags nothing. So arm 5 PASSED, VACUOUSLY, while three siblings went
+         red. A closure ("2 passed") rested partly on a check that never ran.
+
+         It stayed invisible on Linux for a reason worth naming separately:
+         the validator probe's fall-through finds a tillandsias-plan on the
+         host PATH, so the arms passed by measuring AMBIENT TOOLING rather
+         than the rule. Third instance of that same cwd-relative-probe defect
+         after 1058-fenk and 1060-wxdh, all three invisible on any host that
+         happens to have a copy installed.
+
+      THAT THIRD ONE HAS HAPPENED BEFORE, IN THE SAME FILE. Its own
+      empty-array note records the identical event on 2026-08-30: 776-cm74
+      shipped a construct fatal on darwin, "The gate below passed that file:
+      the class it exists to catch, with no rule for it." So this is the
+      second known occurrence in one guard, which is what makes it a pattern
+      rather than three coincidences.
+
+      WHY IT IS WORTH ITS OWN ROW. Each instance is cheap to fix and was
+      fixed. The transferable part is the SHAPE: a guard that is silent both
+      when nothing is wrong and when the thing is outside its band teaches
+      its readers to treat silence as health. Every one of the three was
+      found by someone doing unrelated work, which is the opposite of a
+      guard's job.
+    exit_criteria:
+      - 'the rule is stated where guard authors read it — a guard states the boundary of what it inspects, in its own output or its header, so a reader can tell "clean" from "not looked at"'
+      - 'each of the three instances cites the rule, so the pattern is discoverable from any one of them'
+      - 'the rule distinguishes the two silences by NAME in at least one guard verdict, as a worked example (e.g. a scan that reports what it did NOT cover, the way 965-sxec made a check that could not run say so)'
+    notes: |
+      Instances: 1064-5hv2 (drift blind band, yoga), 1063-htns (ghost traces,
+      unclaimed), 1055-6yp8 (bash-4 dialect, fixed here), 1024-c3h3 (skip
+      verdict on the wrong stream; reopened from done and fixed here).
+
+      Related, and instance 4 collapses the distinction: 965-sxec is a check
+      that could not RUN saying so; instances 1-3 are checks that DID run,
+      correctly, over less than the reader assumes. Instance 4 is BOTH — it
+      said so, on stderr, while its stdout verdict said ok. So "make the
+      check say it could not run" is necessary and NOT sufficient: the
+      statement has to land on the stream the verdict is read from, or it is
+      a comment addressed to nobody.
+
+      This is why exit criterion 3 asks for the two silences to be
+      distinguished by name IN A VERDICT rather than merely disclosed.
+    events:
+      - ts: 2026-09-05T12:20:00Z
+        type: filed
+        agent: macos-tlatoanis-macbook-air-claude-20260905t004510z
+        host: tlatoanis-macbook-air
+        note: |
+          Filed at the coordinator's instruction after the third instance in
+          one day. All three were found while doing other work; none was
+          found by the guard that owned the class.

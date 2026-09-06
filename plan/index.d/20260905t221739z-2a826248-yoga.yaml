@@ -1,0 +1,50 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-selector-and-the-plan-tool-both-report-blocking-and-mean-different-things
+    event:
+      type: progress
+      ts: "2026-09-05T22:17:39Z"
+      agent_id: linux-yoga-claude-20260905t221739z
+      host: yoga
+      summary: |-
+        CONTEXT REWRITE — this supersedes the framing above. The naming confusion
+        this packet was filed on is the SMALLER half. Lead with the trap.
+
+        THE TRAP: `select-rows`, `query` and `blocking-counts` all default to
+        --limit 20. A capped scan is well-formed output that reads exactly like a
+        complete one. MEASURED 2026-09-05: the ledger holds 469 ready packets
+        (`query --status ready --limit 100000 | grep -c .`). The default shows 20
+        and says nothing about the other 449.
+
+        THAT WAS THE 8-VS-9 GAP, and it is now RECONCILED rather than open. The
+        filed context said "I could not reproduce the exact 9 ... 6 rows and a sum
+        of 8 ... may be a third row-set definition". There is no third definition.
+        Both of my hand-sums were over a row set truncated at 20. With the flag:
+
+          select-rows --status ready --claimable-by any --release v0.5 --limit 400
+            -> 8 rows for socket-audit-master, per-packet dependents summing to 9
+
+        which is exactly the frontier's packets=8 blocking=9. Exit criterion 2 is
+        met; the selector aggregates the row set it always said it did.
+
+        LANDED: `blocking-counts` now warns when `scanned == --limit`, because
+        exactly-at-the-cap is the tell that a list is a sample. Fires at 400,
+        silent at 5000, and 469 is why.
+
+        NOT LANDED, deliberately, and this is the remaining work. An `--epic`
+        aggregate was written and reverted. It called `query_packets` directly and
+        returned rows=23 blocking=10 against the frontier's 8/9 — a THIRD number,
+        because select-rows applies dependency-clearance, lease exclusion and
+        split-parent filtering (main.rs:5566-5719) that a raw query does not.
+        Shipping a second reader of the same question, out of the packet whose
+        subject IS two readers disagreeing, would have reproduced the defect.
+        `--epic` must reuse select-rows' projection, not duplicate it. That
+        extraction is the next claimer's slice.

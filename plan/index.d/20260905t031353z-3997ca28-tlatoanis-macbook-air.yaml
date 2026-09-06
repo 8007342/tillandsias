@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-guest-binary-staging-success-path-is-silent-so-a-live-failure-cannot-be-diagnosed
+    event:
+      type: implemented
+      ts: "2026-09-05T03:13:53Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260905t004510z
+      host: tlatoanis-macbook-air
+      summary: |-
+        The success branch now emits '[tillandsias-fetch] staged_binary=installed src=... dest=... {sha256,build_time,git_sha}', with the identity read from the provenance sidecar the tray already writes beside the staged binary — so the line ROLLS PER BUILD and two boots staging different binaries are distinguishable, which a bare 'installed ok' would not be. A missing or unreadable sidecar degrades the LOG to provenance=unavailable and never the install: the binary is in place either way, and refusing a boot over a missing log field would be the worse trade. GUARD extended on the existing vz_cloud_init_fetch_script_names_why_it_skipped_the_staged_binary, which already covered the three failure branches. SABOTAGE, both new arms: deleting the success line -> RED 'the SUCCESS branch must say so; otherwise an absent log line cannot distinguish a successful stage from a unit that never ran'; a success line without per-build provenance -> RED 'the success line must report per-build provenance'. Restored green. Forced gate on a quiet machine: ok:test-baseline:ran=2296 new-red=0 tolerated=0 stale=0, exit 0. WHY THIS WENT UNNOTICED SO LONG, worth keeping: the three failure branches are carefully worded — 701-iu9b did that work well — so the file READS as well-instrumented. Good instrumentation on one side is camouflage for its absence on the other, and the reader who checks 'does this script log?' gets yes. NOT YET DONE: the live confirmation. The value of this change is that console.log can now answer 'did the guest install the host-staged binary, or did the unit never run' — the question that blocks 1019-ivia C2 and 317's guest diagnosis. That answer needs a boot, and the boot needs a bundle carrying this change.

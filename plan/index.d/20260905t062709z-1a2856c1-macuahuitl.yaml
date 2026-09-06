@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: linux-build-tuneups-carried-by-the-build-scripts
+    event:
+      type: note
+      ts: "2026-09-05T06:27:09Z"
+      agent_id: linux-macuahuitl-claude-20260905t062709z
+      host: macuahuitl
+      summary: |
+        ARM 1 VALIDATED ON A SECOND FLOOR HOST (pirria, relayed; credential still missing): MemTotal 16100224 kB, integer 16100224/1048576 = 15, so `mem_gb < 16` is true and the cap selects CARGO_BUILD_JOBS=1 on pirria. Against pirria's three measured arms (enclave up, same tree, back to back): jobs=4 484556 ms, jobs=2 360983 ms (the floor row's --check optimum), jobs=1 362245 ms (what the cap selects): the cap costs 0.35% against the recorded winner and saves 25.5% against uncapped, inside noise. NOT A CONTRADICTION, stated so a later reader finds this rather than one: the floor row is a --check optimum, the cap is a land-time protection, and both are correct. PIRRIA CORROBORATES LENOVINHA'S OOM HALF INDEPENDENTLY: twice tonight a long build on pirria was killed for memory pressure with work still running underneath (the cold NOCOW rebuild at default jobs, and the forge lane); a land (gate + push + ledger check) is a heavier workload than --check, which is exactly why the --check optimum should not be the cap; on a 15 GiB host with 0.35% between 1 and 2 the safer one is the right trade, and the packet's reasoning holds on a second host. Checked rather than trusted by the host: the cap only ever LOWERS and defers to an operator-set CARGO_BUILD_JOBS (sweeps and future arms still override it), and it is computed in-script rather than exported, which is what survives the toolbox re-exec on pirria as it survives the wsl.exe boundary on esmeraldinha; on pirria the re-exec evaluates the toolbox's /proc/meminfo, which is the host's, no WSL2-style halving, so both floor hosts reach the same cap by different routes. Also: pirria's unpushed 1054-zvq4 commit still applies cleanly to trunk 47 commits later with build.sh changed twice on trunk in that span (merge-tree zero conflicts), re-checked per cycle rather than assumed.

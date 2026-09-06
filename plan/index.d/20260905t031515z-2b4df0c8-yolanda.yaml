@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: control-wire-ships-unauthenticated-by-default
+    event:
+      type: progress
+      ts: "2026-09-05T03:15:15Z"
+      agent_id: windows-yolanda-opus5-20260905t031515z
+      host: yolanda
+      summary: |-
+        COMMIT A: hvsocket.rs converted to the shared reader. THE RATCHET GOES 1 OF 3 -> 0 OF 3, measured both ways on the same tree (stash the change: 1 of 3, naming hvsocket.rs; restore it: 0 of 3).
+
+        THREE BEHAVIOUR CHANGES, NAMED SEPARATELY because they are different KINDS and only one of them is a defect. macbookair's taxonomy, which is sharper than my original three-equal-bullets framing:
+          1. BLANK: was plaintext, now a hard refusal. A POLICY CHANGE, arriving under a rule anyone can read — blank is the shape an unfilled CI variable takes and reading it as insecure is the worst available guess. The Windows reader had no `is_empty` arm at all; blank simply was not `Ok("on")` and fell through. Same outcome the macOS readers reached by a deliberate branch, but here BY OMISSION, which is the weaker position of the two.
+          2. `ON` / `On`: was PLAINTEXT, now SECURE. A LIVE DEFECT, not a policy move. The reader tested exact case-sensitive equality against "on", so an operator who set TILLANDSIAS_SECURE_CONTROL_WIRE=ON on a Windows host ran an UNENCRYPTED control wire believing it secure — on every shipped Windows build through v56.9.5.1, with nothing reporting it. macOS accepted those spellings case-insensitively, so the same variable meant opposite things on two platforms. This is why the conversion is back-portable as A alone: a host that cannot take the default flip still needs the case fix.
+          3. INVALID values: was silently plaintext, now refused with a message naming the accepted spellings.
+        The default is UNCHANGED by this commit. Absent still means Off.
+
+        TWO READERS IN ONE FILE, and the second is the one a grep for the production call site would miss. hvsocket.rs:29 was the wrapper; hvsocket.rs:429 was an `assert_eq!(std::env::var(...), Ok("on"))` inside the #[ignore] e2e. A test that parses the variable itself is STILL A SECOND READER — it would go on accepting a spelling the production path had stopped accepting, which is the divergence this packet removes, hiding inside the test meant to prove the path works. Converted too; the ratchet counts the FILE, so it stayed listed until both were gone.
+
+        THE PAIRING TEST DRIVES THE REAL HANDSHAKE, not the parsed mode. macbookair's design and their reason for it: a conversion's real risk is not a wrong parse, it is the two ends silently disagreeing about WHICH key they are in, which no mode-value assertion can see and which stays invisible until a live guest will not talk. So: client and server built from the SAME production psk expression (WORKSPACE_VERSION, WIRE_VERSION, HopId::HostGuest) over a tokio duplex, a frame each way. It runs everywhere — no WSL, no distro, no privileges — unlike the #[ignore] e2e beside it.
+          SABOTAGE ARM RUN: flip ONE psk byte on the client -> server "noise: decrypt error", client "early eof". Exactly the signature macbookair predicted, so the arm has teeth and the green means the keys actually pair rather than the test merely running.
+
+        ONE THING I GOT WRONG AND THE GATE CAUGHT: I annotated the pairing test `@trace spec:secure-control-wire`. NO SUCH SPEC EXISTS — I invented a plausible slug. The ghost-trace ratchet refused the gate with "a spec was referenced that does not exist", which is the right outcome; removed rather than inventing a spec to match the annotation. Worth recording because a @trace to a nonexistent spec is the documentation equivalent of everything else this fleet found today: an artifact that reads as a link to authority and points at nothing.
+
+        B IS NOW MINE, by the ruling's own condition, and I read the number rather than inferring it. My first reading tonight was 2 of 3 — macbookair's conversions were on osx-next and my merge predated linux-next's 9a78d982b. After re-merging: 1 of 3 without my change, 0 of 3 with it. I am NOT flipping the default in this commit: A lands first, then the union carries every conversion, then B is landed against the TRUNK's ratchet reading 0, not this tree's.

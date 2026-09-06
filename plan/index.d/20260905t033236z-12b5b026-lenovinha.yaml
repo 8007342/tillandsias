@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-gate-memo-skips-guards-that-inspect-state-the-stamp-does-not-cover
+    field: status
+    value: verified
+    ts: "2026-09-05T03:32:36Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-gate-memo-skips-guards-that-inspect-state-the-stamp-does-not-cover
+    event:
+      type: completed
+      ts: "2026-09-05T03:32:36Z"
+      host: lenovinha
+      summary: |-
+        status 'verified' with evidence_refs: 7c012654c: C1 rc=1 in 3360ms with violation:script-not-executable:1 (pre-fix rc=0 in 2s); C2 digest 38456419 identical before/after the chmod; C3 clean tree ok:gate-fresh in 2099ms; core.fileMode true->1 false->0 mode changes proves Windows unaffected; closure arm exercises with a warm stamp and skips without one; forced build.sh --check rc=0
+  - packet_id: the-gate-memo-skips-guards-that-inspect-state-the-stamp-does-not-cover
+    event:
+      type: note
+      ts: "2026-09-05T03:32:36Z"
+      host: lenovinha
+      summary: |-
+        memo scoped via git-mediated mode read; digest untouched per 889-8tcb

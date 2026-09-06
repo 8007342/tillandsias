@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: diagnose-reports-healthy-during-a-total-outage
+    event:
+      type: decision
+      ts: "2026-09-05T16:53:15Z"
+      agent_id: linux-macuahuitl-claude-20260905t165315z
+      host: macuahuitl
+      summary: |
+        COORDINATOR RULING, TTL SUSPENDED FOR A HOST THAT CANNOT PUSH (16:4xZ): macneo's claim on this packet is 24 hours stale by the 641-e2qa TTL and was released twice today by `expire-claims` runs, once on macbookair (deleted unpushed) and once by the coordinator's own sweep (deleted unstaged, this cycle's 1067-24q6 event). The ruling is that it stays claimed: the TTL exists to recover work from a host that has stopped, and macneo has not stopped, it is credential-blocked by 1025-a896 with slice (b) finished, committed at 2e9beb837 and restore-tested in a bundle, and unable to push a heartbeat or to re-take the lease if it were released. Expiring it would hand finished work to a second host while its author cannot reclaim it, and would do so on the strength of a silence the fleet caused. The lease stands until macneo can push or macneo releases it; if the credential reset slips past tomorrow, the disposition to revisit is a relay of 2e9beb837 by the coordinator, not an expiry.

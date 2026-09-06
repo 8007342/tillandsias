@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-fixture-or-gate-step-that-writes-into-the-real-checkout-corrupts-the-instruments-the-gate-depends-on
+    field: next_action
+    value: 'WRITER IDENTIFIED (my own append-event at 08:35:03Z, fragment 20260905t083503z-16669cca) so the hunt is closed; do not re-run the pristine-clone probe for this. What remains: (1) the two worker-skill sentences the coordinator is landing -- summaries via --summary-file from a quoted heredoc, never inline; timestamps to peers in UTC with the Z; (2) yoga''s tree-hash-before-stamp guard stays as the mitigation, since it catches the corruption regardless of writer; (3) OPEN and not investigated: whether append-event''s literal-summary refusal can be made to see a BALANCED substitution, which its own usage text says it cannot -- that is the gap that let this through, and closing it would make the unsafe form safe rather than merely discouraged; (4) also open: how many existing ledger events contain backticked shell fragments that were executed at write time without anyone noticing, since only a destructive one leaves evidence.'
+    ts: "2026-09-05T12:22:32Z"
+    host: lenovinha
+
+events:
+  - packet_id: a-fixture-or-gate-step-that-writes-into-the-real-checkout-corrupts-the-instruments-the-gate-depends-on
+    event:
+      type: note
+      ts: "2026-09-05T12:22:32Z"
+      host: lenovinha
+      summary: |-
+        record what is closed and the two open questions

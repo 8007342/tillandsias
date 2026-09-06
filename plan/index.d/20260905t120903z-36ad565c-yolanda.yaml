@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: core-symlinks-false-makes-the-skill-canonicalization-check-unrunnable-and-misdiagnosed
+    event:
+      type: completed
+      ts: "2026-09-05T12:09:03Z"
+      agent_id: windows-yolanda-opus5-20260905t120903z
+      host: yolanda
+      summary: |
+        CLOSED. Landed on trunk at 15106499d, verified from origin by my own merge-base rather than from the relay message: 15106499d is an ancestor of origin/linux-next, and reading the content out of the pushed head itself, scripts/check-skill-canonicalization.sh on trunk carries the index-backed IDX_PATHS lookup and scripts/test-skill-canonicalization-remedy.sh carries the arm3a destructive-remedy assertion. macuahuitl read the fixture 11 of 11 standalone on the merged tree before the union litmus, which read 291 of 291 twice.
+
+        WHAT WAS WRONG. The check decided with [ -L "$d" ], a WORKTREE test. On a checkout with core.symlinks=false -- any Windows host without Developer Mode, and any host that cloned before enabling it -- git materialises a committed symlink as a small REGULAR FILE holding its target text. The commit is canonical; the filesystem cannot represent it. So the check reported violation:harness-exclusive-skill:75 offender(s) against a CORRECT tree: 5 harnesses times 15 skills, EVERY entry, which is the shape of an instrument failure rather than a tree that drifted. It now reads git ls-files -s mode 120000 and takes the target from the blob, with readlink as the untracked fallback: ok:skills-canonical:119 entries checked across 5 harnesses.
+
+        I UNDERSTATED THE REMEDY WHEN I FILED IT, and the fixture is what corrected me. I wrote that it "would move 75 correct entries". Measured, it does not fail -- it SUCCEEDS. Because skills/<name> already exists as a DIRECTORY, git mv <path> skills/<name> does not collide; git moves the source INTO it:
+
+          git mv .claude/skills/hello-world skills/hello-world   -> rc=0
+          ls skills/hello-world/  -> SKILL.md  hello-world
+
+        Zero exit status, no output, harness entry DELETED, stray buried inside the canonical skill. Across the 75 lines the check printed on this host, following the printed fix would delete every harness's entry and litter skills/ with 75 strays, with nothing to suggest anything went wrong. A wrong verdict costs an investigation; a wrong verdict with an authoritative remedy under it costs the tree. macuahuitl's steer to pin the remedy BEFORE touching the instrument was right, and it was right for a sharper reason than either of us had.
+
+        MY FIRST FIXTURE MISSED EXACTLY THAT, and this is the part to carry. Its arm asserted that skills/<name>/SKILL.md survived the remedy. It does survive -- so the arm PASSED while the damage happened beside it. I asserted the NEIGHBOUR of the damage instead of the damage. The arm now requires the harness entry to survive and no stray to appear, and reds on the old text.
+
+        TWO PERFORMANCE FAULTS, BOTH MINE, BOTH THE SAME LESSON. The first index-aware version called git twice per entry: 119 entries, 238 process spawns, 18s wall against the litmus step's 10s budget -- so the fix for a false positive arrived as a TIMEOUT, the same red by another route. I then reintroduced the cost through the SHAPE OF THE CALL: target="$(_index_target "$d")" forks a subshell per entry, 7.7s. One git ls-files -s, one git cat-file --batch, and the answer returned in a global: ~6s. On Windows the process spawn is the cost, and a $( ) in a per-item loop is a spawn.
+
+        AND A THIRD, CAUGHT BY THE GATE AND NOT BY ME: I wrote the lookup with declare -A. That is bash 4; macOS ships 3.2 and this check runs on every host. The 761-g36m dialect gate refused it. Rewritten with two indexed arrays paired positionally, since git cat-file --batch answers in the order it is asked: ok:bash-dialect-clean.
+
+        THE SAME DEFECT WAS IN THE LITMUS CORPUS. The step "build-macos-tray is reachable from a non-Claude harness" used test -L on the worktree, so it could not pass on this platform regardless of the tree. It asks the index too now.
+
+        LEFT RED DELIBERATELY, not worked around: step 6 of litmus:skills-canonical-and-mcp-first-shape exits 127 because yq is absent here. That is 1056-w2yy and it is not touched under this packet.
+
+        SCORABLE HALF: arm 4 requires a genuine harness-exclusive skill to be REFUSED, so a "fix" that merely stopped flagging fails it. Verified to discriminate by sabotaging the index read: arms 1a and 1b red, the rest stay green.

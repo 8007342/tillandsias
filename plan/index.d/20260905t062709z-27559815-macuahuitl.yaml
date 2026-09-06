@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: control-wire-ships-unauthenticated-by-default
+    event:
+      type: progress
+      ts: "2026-09-05T06:27:09Z"
+      agent_id: linux-macuahuitl-claude-20260905t062709z
+      host: macuahuitl
+      summary: |
+        FLIP CREDITED BY THE COORDINATOR'S OWN RUN ON THE MERGED TRUNK (06:2xZ), not by reading yolanda's entry: windows-next 22a21d661 (commit B 79e3ca876 and the litmus CR fix df5708607 both ancestors, read from origin) merged into linux-next; `scripts/check-secure-wire-single-reader.sh` on the merged tree: ok:secure-wire-single-reader:0 of 0. SABOTAGE, exactly as yolanda's message prescribed: hvsocket.rs replaced by hand with its content from before commit A (`git show 7623213e2^:crates/tillandsias-windows-tray/src/hvsocket.rs`), the ratchet re-run: violation:secure-wire-readers-grew:1 of 0, exit 1; before commit B the identical sabotage printed 1 of 3 and exited 0. File restored, ratchet again 0 of 0, tree clean. The default is secure on trunk (secure_wire_mode.rs: Err(VarError::NotPresent) => Ok(SecureWireMode::On)) and the guard that protects it is at zero tolerance. HOW IT LANDED: B lost the push race to trunk twice against a 23-minute gate; the coordinator froze the Linux pushers and then windows-next for one gate window (05:40Z to 06:16Z), handed yolanda the head fc72cf75e with "go", and B landed inside it with both mandated merges clean and the gate green at 1525 s. With B on trunk the last code change before the stable candidate is in; what remains for the stable is 873-vgyg's post-fix relaunch on pirria on the next daily and the operator's unsigned-Windows-artifacts call.

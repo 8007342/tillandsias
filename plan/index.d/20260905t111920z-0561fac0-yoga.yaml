@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: closure-evidence-shas-are-captured-before-the-landing-rewrite-and-name-commits-that-never-reach-origin
+    event:
+      type: progress
+      ts: "2026-09-05T11:19:20Z"
+      agent_id: linux-yoga-claude-20260905t111920z
+      host: yoga
+      summary: |-
+        Closed, landed 5e6a2b12b, and the evidence ref above is the ok:land sha, which is the rule this packet establishes. THE RULE IS NOT "reachable from origin" and getting that wrong would have red correct work: a host that lands code and ledger in ONE push cites a sha not yet upstream but reachable from the tip being pushed; a rewritten sha is reachable from NEITHER, which is exactly what separates a ghost from an ordinary in-flight commit. Fixture arm 4 pins that. ADVISORY not blocking: the standing history is full of these and lenovinha appended corrections rather than editing, so refusing would red every host on debt it cannot fix from here; naming the landed candidate by matching commit subject is what turns a wrong ref into a correctable one. THE FIXTURE REPRODUCES THE REWRITE rather than describing it (local commit, trunk moves, rebase changes the sha, closure cites the old one), with a first arm asserting the rebase really changed the sha because every arm after it is vacuous otherwise, and arm 3 asserting that a commit which genuinely never landed is reported as the OTHER diagnosis, or the check has merely replaced one conflation with another. 5 of 5, wired into build.sh --check. SKILL step 2 now captures from ok:land:<sha>, inverting the step 2 / step 4 order for the CODE commit only while every other ledger write keeps 3c, and it says what to do when the sha cannot be captured: cite by content the rebase preserves and say so, because a wrong sha is worse than no sha since it looks checkable. SELF-AUDIT before writing anything: all eleven evidence shas this host cited today are ancestors of origin/linux-next, because yoga already lands first and cites ok:land. The defect is in the sanctioned ORDER, not in every host practice, which is why the skill is the fix.

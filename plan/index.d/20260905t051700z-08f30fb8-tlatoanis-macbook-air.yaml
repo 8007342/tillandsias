@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-guest-provisioning-script-can-abort-partway-while-cloud-init-reports-success
+    event:
+      type: evidence
+      ts: "2026-09-05T05:17:00Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260905t004510z
+      host: tlatoanis-macbook-air
+      summary: |-
+        THE CHAIN IS COMPLETE, and the abort is a FIRST-BOOT condition rather than a permanent one — which is why it hid for so long. MEASURED on a later boot: all three units are healthy. tillandsias-headless-fetch active/exited Result=success ExecMainStatus=0; tillandsias-headless active/running Result=success; tillandsias-headless-ready active/exited Result=success. So the 'systemctl start ...' at line 373 fails only on the PROVISIONING boot, when those units are being started for the first time and something they need is not yet satisfied; every later boot starts them from WantedBy=multi-user.target without the script's help, and they come up fine. THAT IS THE WHOLE SHAPE OF TONIGHT'S CONFUSION: the FIRST boot after a re-provision aborts at 373, never runs 'systemctl start --no-block tillandsias-headless-ready.service' at 374, and therefore never reports phase Ready — the host waits 300 s and gives up. The NEXT boot has the units enabled, reaches Ready in seconds, and looks perfectly healthy. Both of my --exec-guest timeouts earlier tonight were first-boots-after-staging; every subsequent attempt succeeded. I recorded those timeouts on 1019-ivia as a blocker, then as 'resolved once staging was populated', and that second account was wrong: staging had nothing to do with it. What resolved it was simply being a second boot. SEVERITY, restated: a fresh install or any re-provision gives the operator one boot that cannot report Ready, with no error anywhere — cloud-init says done, the units eventually say success, and the only trace was the absence of a line nobody was looking for. The ERR trap now leaves that trace on every guest. STILL OPEN and now well-scoped: which dependency of tillandsias-headless-fetch/tillandsias-headless is unmet at line 373 on a first boot. The trap's rc and cmd are recorded per-guest, so the next person starts from the failing unit rather than from the symptom.

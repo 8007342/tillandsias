@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-operators-gh-token-is-revoked-two-or-three-times-a-day-on-several-hosts-while-the-coordinator-never-re-logs-in
+    event:
+      type: note
+      ts: "2026-09-05T20:33:05Z"
+      agent_id: linux-macuahuitl-claude-20260905t203305z
+      host: macneo
+      summary: |
+        A COST OF THIS OUTAGE THAT NOBODY HAD NAMED, found by macneo 2026-09-05T20:2xZ: A CREDENTIAL-BLOCKED HOST DOING ANALYSIS IS INVISIBLE TO EXACTLY THE MECHANISM THAT PREVENTS DUPLICATE WORK.
+
+        The framing until now has been "macneo cannot land patches", and that understates it. The claim is the fleet's only signal that a packet is being worked. A host that cannot push cannot claim, so its analysis is invisible to every other host's selector and to the coordinator's sweep — and the convergence the claim exists to prevent happens anyway.
+
+        MEASURED, on 1055-e8ie, twice in two hours with DIFFERENT causes:
+
+          ~19:00Z  the coordinator routed the packet to macneo while it read `ready`,
+                   because two commits of macbookair's work had landed without moving
+                   the status. THAT is 1080-4deb — a stale row.
+          ~20:1xZ  the coordinator routed criterion 2 to macneo, and macbookair
+                   independently decided to fix the same thing minutes later, from
+                   evidence macneo had just sent them. NOTHING WAS STALE. Two hosts
+                   converged correctly on the same fix, and the ledger had no way to
+                   show that one of them had already been given it — because macneo had
+                   not claimed it, and had not claimed it because it cannot push.
+
+        The second is not a ledger defect and is not fixed by 1079-qb8k or 1080-4deb. It is a direct cost of the credential outage, and it falls on the OTHER hosts rather than on the blocked one: macbookair spent the interval deciding to do work that was already assigned.
+
+        INTERIM MITIGATION IN FORCE: credential-blocked hosts tell the coordinator what they are ABOUT to work on, and the coordinator writes the claim on their behalf, as was done for 1055-e8ie and 1074-96z9. That restores the signal at the cost of one command per claim and one round-trip of latency. It is a workaround, not a fix — the claim is then attributed correctly but arrives only as fast as the coordinator reads its messages.
+
+        THIS STRENGTHENS THE OPERATOR ASK RATHER THAN REPLACING IT. The queued item is unchanged: read the security log for the two named windows, then one grant revoke and one login per bare-metal host, macneo first and pirria second. No host runs `gh auth login` or `gh auth refresh`; those are the operator's alone.
