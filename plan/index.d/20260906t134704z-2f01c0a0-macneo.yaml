@@ -1,0 +1,65 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: exec-bit-guard-cannot-see-an-invocation-written-in-prose-so-the-scripts-the-skills-name-are-unprotected
+    event:
+      type: progress
+      ts: "2026-09-06T13:47:04Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260906t104500z
+      host: macneo
+      summary: |
+        CLOSED by 7993c0a4e (macneo, osx-next): the guard is UNCHANGED, its stated
+        reason is corrected, all three pricings are recorded in the filter, and the
+        end-to-end arm that was actually missing is landed.
+
+        THE FALSE CLAUSE: exec-bits-filter.awk said backticks are excluded because
+        "all 16 occurrences in the corpus are Markdown prose inside descriptions".
+        SKILL.md:799 -- "run `scripts/finalize-cycle.sh <active-branch>`" -- is an
+        imperative execution instruction. Falsified independently by macneo and
+        lenovinha. One instance drops; the other fifteen stand.
+
+        PRICED THREE WAYS on the 2026-09-06 corpus (1003 caller files, 564
+        candidates, every script promoted so latent noise fires):
+          bare backtick              119 occurrences; flagged paths 159 -> 184, +25
+          imperative verb, unbounded   6 matches, substring-contaminated:
+                                     "Specifi[call]y" matches, as do runtime,
+                                     running, callers, recall
+          imperative verb, bounded     3 matches, 2 genuine, 1 false positive, and
+                                     misses "after running `...`" (run+n)
+          LIVE EXPOSURE, all three:  ZERO
+
+        THE ANCHOR FAILED ON ITS OWN TERMS: a rule that recognises `run X` but not
+        `running X` is a convention with a spelling test, and the next author writes
+        the gerund. It protects two sites, not a class -- the same objection that
+        defeated the prose-conversion close, with eight changed to two.
+
+        STATED AS A CONTRACT, NOT ENFORCEMENT: an invocation you want protected must
+        appear in a form the guard sees. A backticked mention is legitimate prose and
+        is deliberately unprotected.
+
+        THE MISSING ARM, and why it is the durable output. The first patch widened the
+        grep SWEEP and left the awk FILTER narrow, so hits were discarded and the
+        guard's behaviour did not change. Three arms and a verified sabotage passed
+        over it because every one compared REGEXES rather than running the guard.
+        test-exec-bits-guard-end-to-end.sh drives the whole guard in a scratch repo:
+        arm1 refuses a genuinely non-executable script; arm2 is the control that it
+        passes once the bit is restored; arm3 asserts the contract as a priced
+        non-goal. Arm 2 caught a defect in its own harness on first run. Sabotage:
+        the harness REFUSES rather than reporting a false pass.
+
+        PROCESS DEVIATION, RECORDED RATHER THAN OMITTED: macneo did this work without
+        holding a claim on 1116-vps5. macuahuitl routed it and lenovinha owns the
+        filing; macneo declined to claim while the filter question was open and then
+        did not claim once it was decided. The work is landed and attributed; the
+        claim step was skipped and that is the deviation.
+
+        Premise falsified by macneo and lenovinha independently; ruling withdrawn and
+        re-decided on evidence by macuahuitl; verb anchor proposed by lenovinha and
+        priced by macneo.
