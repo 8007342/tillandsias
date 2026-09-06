@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-capability-manifest-fixture-edits-a-tracked-file-in-the-shared-checkout-so-a-concurrent-commit-captures-a-trimmed-manifest
+    event:
+      type: claim
+      ts: "2026-09-06T13:47:16Z"
+      agent_id: linux-esmeraldinha-opus5-20260906t134710z
+      host: esmeraldinha
+      summary: |-
+        CLAIMED BY esmeraldinha, and claimed BEFORE the work this time. The last two
+        rows I worked I touched before the ledger heard, so this one is deliberate.
+
+        TAKING IT AS ITS OWN SLICE rather than folding into 1109-t8kw, for two reasons.
+        1109 is being landed right now, so pushing more to that ref would race the land.
+        And 1114 is a different defect: 1109 is fixtures asserting properties of their
+        environment; this is a fixture MUTATING a tracked file in the shared checkout.
+
+        A REACHABLE CORRUPTION PATH ON WINDOWS HOSTS, not named in the filing. Step 1
+        runs under `set -e`, and between trimming the tracked manifest and restoring it
+        there is a `cp $F/target/release/tillandsias-plan $F/bin`. On a locus where the
+        built artefact is `tillandsias-plan.exe` that cp FAILS, `set -e` exits
+        immediately, and the restore never runs — leaving crates/tillandsias-plan/
+        capabilities.txt permanently trimmed in a shared checkout. That is the same
+        locus-native artefact-name defect as 1030-i2p8, arriving as a corruption rather
+        than a missed build. So the ~40s concurrency window is the smaller half; the
+        larger half is that an ordinary failure inside the window is unrecoverable.
+
+        The restore must therefore survive `set -e`, INT and TERM, which is what a trap
+        gives and what an if/else on the build's exit status cannot.
