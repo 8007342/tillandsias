@@ -201,14 +201,58 @@ fi
 # this repo would actually run. `./build.sh --check` does not run that policy
 # but `--ci-full` does, which is how this reached linux-next green and then
 # failed the e2e's build gate (found 2026-08-18).
-run_mock image_inspect_bare image inspect localhost/tillandsias-git:0.0.0-fixture
-if [ "$rc" -eq "$REFUSAL_EXIT" ] && [ ! -s "$out_file" ] \
-   && grep -q 'REFUSED: unrecognized image inspect form' "$err_file"; then
-    pass "bare-image-inspect-refused"
+#
+# THE CONTRACT CHANGED (order 1073-dqtx) AND THIS ARM CHANGED WITH IT. The bare
+# form is no longer refused, because it is not one question but two, and the
+# mock can answer the second honestly:
+#
+#   `image inspect <tag> --format X` asks for a FIELD. Still replayed by the
+#     handled arm below; still the only form that produces stdout.
+#   `image inspect <tag>` with stdout DISCARDED asks whether the layers can be
+#     touched at all. verify-image-usable.sh:62 uses exactly this form on
+#     purpose: `image exists`, a size in `images` and `image tree` ALL return
+#     success over an image whose overlay layer is missing, so only inspect
+#     reaches the truth. That caller reads the rc and throws stdout away.
+#
+# So the arm answers with an rc and emits NO payload — never an invented one.
+# BOTH DIRECTIONS ARE ASSERTED HERE: an arm that only checked the usable side
+# would pass identically against a mock that exits 0 for everything, which is
+# the permissive tail 797-p2xa removed.
+bare_tag='localhost/tillandsias-git:0.0.0-fixture'
+bare_key="$(printf '%s' "$bare_tag" | sed 's|/|__slash__|g; s|:|__colon__|g')"
+
+run_mock image_inspect_bare image inspect "$bare_tag"
+if [ "$rc" -eq 0 ] && [ ! -s "$out_file" ]; then
+    pass "bare-image-inspect-answers-rc-with-no-payload"
 else
-    bad "'image inspect' without --format not refused (rc=$rc)" \
+    bad "bare 'image inspect' should exit 0 with no payload (rc=$rc)" \
         "stdout: $(cat "$out_file")" "stderr: $(cat "$err_file")"
 fi
+
+mkdir -p "$tmp/state/images"
+printf 'mock-build-id\n' >"$tmp/state/images/$bare_key"
+export LITMUS_PODMAN_STATEFUL_IMAGES=1
+run_mock image_inspect_present image inspect "$bare_tag"
+if [ "$rc" -eq 0 ] && [ ! -s "$out_file" ]; then
+    pass "bare-image-inspect-usable-when-image-present"
+else
+    bad "bare 'image inspect' on a PRESENT image should exit 0 (rc=$rc)" \
+        "stdout: $(cat "$out_file")" "stderr: $(cat "$err_file")"
+fi
+
+# THE ARM THAT GIVES THE OTHER THREE THEIR MEANING: a missing image must be
+# UNUSABLE, with podman's own 125, or verify-image-usable.sh cannot tell a
+# broken layer from a good one and 1073-dqtx's whole finding is unobservable
+# under the mock.
+rm -f "$tmp/state/images/$bare_key"
+run_mock image_inspect_absent image inspect "$bare_tag"
+if [ "$rc" -eq 125 ] && [ ! -s "$out_file" ]; then
+    pass "bare-image-inspect-unusable-when-image-absent"
+else
+    bad "bare 'image inspect' on an ABSENT image should exit 125 (rc=$rc)" \
+        "stdout: $(cat "$out_file")" "stderr: $(cat "$err_file")"
+fi
+unset LITMUS_PODMAN_STATEFUL_IMAGES
 
 # CONTROL for the two above: the handled inner arms must still answer, or the
 # nested refusals would be passing on a mock that refuses all nesting.
