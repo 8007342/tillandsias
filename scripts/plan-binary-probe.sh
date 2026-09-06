@@ -280,7 +280,20 @@ ensure_fresh_plan_binary() {
             break
         done
         if [ -n "$_pbp_built" ]; then
-            bin="$_pbp_built"
+            # Prefer the RESOLVER'S SPELLING of that same file. Callers treat
+            # this return value as a path and 851-cduu pins its form — it
+            # expects ./target/release/tillandsias-plan, and returning the
+            # constructed ${CARGO_TARGET_DIR:-target}/... spelling reds it with
+            # "expected ./target/..., got target/...". The two are the same
+            # FILE; only the string differs. What must agree is the artefact,
+            # which readlink -f settles; the string should stay the one every
+            # other caller already sees.
+            if _pbp_r="$(resolve_plan_binary 2>/dev/null)" \
+               && [ "$(readlink -f "$_pbp_r" 2>/dev/null)" = "$(readlink -f "$_pbp_built" 2>/dev/null)" ]; then
+                bin="$_pbp_r"
+            else
+                bin="$_pbp_built"
+            fi
         else
             bin="$(resolve_plan_binary)" || return 1
         fi
