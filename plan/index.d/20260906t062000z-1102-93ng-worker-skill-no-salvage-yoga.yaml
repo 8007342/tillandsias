@@ -1,0 +1,74 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-worker-skill-forbids-touching-startup-dirt-and-never-says-to-copy-it-first
+    order: 1102-93ng
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [skills, salvage, multi-host, data-loss]
+    estimated_hours: 2
+    owned_files:
+      - skills/advance-work-from-plan/SKILL.md
+    title: |
+      the worker skill carries the REFUSAL half of the dirty-start rule and not the SALVAGE half, so every worker host is told not to touch uncommitted work and never told to copy it first — which is how four hours of finished work left no trace on any branch
+    context: |
+      MEASURED on yoga 2026-09-06:
+
+        grep -c salvage-dirty-worktree skills/meta-orchestration/SKILL.md      -> 3
+        grep -c salvage               skills/advance-work-from-plan/SKILL.md   -> 1
+
+      and that single worker hit is line 421, "it is the only salvage
+      available", an aside in an unrelated context. The instruction is absent.
+
+      THE WORKER SKILL HAS EXACTLY HALF THE RULE, which is worse than having
+      none of it. Line 847 says: "When the worktree is dirty, only stage plan/
+      files explicitly by path. Implementation code from a previous
+      (uncommitted) iteration is NOT yours to touch." So a worker host is told
+      to leave the dirt alone — and never told to make a copy of it.
+
+      The coordinator skill states why that is not enough, at :751:
+      "Refusing protects the work from YOU; it does not protect it from a fresh
+      clone, and on 2026-08-24 a fresh clone is exactly what took it."
+
+      WHAT IT COST, from 872-c9nd: three consecutive cycles refused a dirty
+      tree, each writing more detailed prose about the diff than the last, and
+      then the checkout was replaced by a fresh clone. Four hours of finished
+      work was unrecoverable; the untracked file's name appears in no commit on
+      any branch. Every cycle behaved correctly under the half-rule it had.
+
+      WHY THE SALVAGE IS SAFE TO RUN UNDER THE REFUSAL, which is the point that
+      makes the two halves compatible rather than contradictory:
+      scripts/salvage-dirty-worktree.sh uses a temporary index and plumbing
+      only. It cannot touch the worktree, so it is safe on dirt you have just
+      been forbidden to alter. Refuse AND copy is not a conflict; it is the
+      whole instruction.
+
+      THIRD INSTANCE OF THE SAME SPLIT, and the reason to sweep rather than
+      wait: 943-7dn5 (--emit-flow in the coordinator skill, absent from the
+      worker skill, telemetry fed only when a session happened to run the
+      coordinator) and 1091-zh6d (the checkout lock, same two files, same
+      direction). Coordinator-only instructions that the worker loop must also
+      follow are a class. check-credential-channel is a fourth, taken by
+      macuahuitl.
+    exit_criteria:
+      - "skills/advance-work-from-plan tells a worker host to run scripts/salvage-dirty-worktree.sh BEFORE refusing on startup dirt, and says why it is safe to run on dirt it may not alter; pre-fix result: FAILS (one incidental 'salvage' mention, no instruction)"
+      - "the section is written as an action at the moment of refusal, not as background — a host reading the refusal rule must reach the salvage without leaving that paragraph; pre-fix result: FAILS (the refusal at line 847 stands alone)"
+      - "the salvage verdict is named so a host knows what success looks like (ok:salvaged:<ref>:<sha>) and can cite it; pre-fix result: FAILS"
+      - "NEGATIVE CONTROL: the refusal itself is NOT weakened — the section must not read as permission to commit, discard, restore, reset or clean unknown dirt, which is the failure mode that would trade one data-loss shape for a worse one"
+    unscoreable: |
+      Prose in a skill file; the pin is the grep-countable presence of the
+      instruction plus its verdict string, which is what the next audit of this
+      class will measure.
+    events:
+      - type: filed
+        ts: "2026-09-06T06:20:00Z"
+        agent_id: "linux-yoga-claude-20260906t072942z"
+        host: yoga
+        summary: |
+          Filed by yoga, third instance of the coordinator/worker instruction
+          split, after macuahuitl swept for it at yoga's suggestion. Split with
+          macuahuitl, who took check-credential-channel because it interacts
+          with the credential-probe design.
