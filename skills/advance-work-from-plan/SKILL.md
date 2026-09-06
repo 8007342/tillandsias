@@ -845,6 +845,43 @@ A successful invocation MUST NOT exit with local-only work:
 - `release.yml` is `workflow_dispatch` only — never auto-trigger. (The old `recipe-publish.yml` rootfs workflow was removed in the 2026-06 Fedora pivot.)
 - NEVER resolve cross-host plan conflicts by deletion — tombstone or supersede only.
 - When the worktree is dirty, only stage `plan/` files explicitly by path. Implementation code from a previous (uncommitted) iteration is NOT yours to touch.
+- **AND BEFORE YOU LEAVE IT ALONE, COPY IT** (orders 872-c9nd, 1102-93ng).
+  Run this the moment you find startup dirt, before refusing and before any
+  other detector:
+
+  ```bash
+  scripts/salvage-dirty-worktree.sh <slug>     # -> ok:salvaged:<ref>:<sha>
+  ```
+
+  Quote the `ok:salvaged:<ref>:<sha>` verdict in your cycle report — that ref
+  is the only durable record that the work existed.
+
+  **CHECK THE VERDICT. THE SALVAGE PUSHES, AND A PUSH CAN FAIL.** Measured on
+  yoga 2026-09-06: the success path writes the ref to ORIGIN
+  (`ok:salvaged:refs/heads/salvage/<host>/<date>-<slug>:<sha>`, and the
+  untracked file is in that tree), but a failed push prints
+  `fail:salvage:push:...` and leaves **no local salvage ref at all** — so a
+  host that cannot push has no copy, which is exactly the situation this
+  guards against. If you see `fail:salvage:`, say so in the cycle report and
+  treat the dirt as unprotected: do not report a salvage you did not get.
+
+  **It cannot touch the worktree.** The script works through a temporary index
+  and git plumbing only, so it is safe to run on dirt you have just been
+  forbidden to alter. "Refuse" and "copy" are not in tension; the copy is what
+  makes the refusal survivable.
+
+  **WHY THE OTHER HALF IS NOT ENOUGH, and this skill only ever had the other
+  half:** refusing protects the work from YOU. It does not protect it from a
+  fresh clone. On 2026-08-24 three consecutive cycles refused a dirty tree,
+  each writing more careful prose about the diff than the last, and then the
+  checkout was re-cloned. Four hours of finished work was unrecoverable and the
+  untracked file's name appears in no commit on any branch. Every one of those
+  cycles obeyed the rule it had been given.
+
+  This does NOT license committing, discarding, restoring, resetting or
+  cleaning unknown dirt. Treat every recorded path as immutable sibling or
+  operator work unless the operator identifies it as disposable in the current
+  prompt. Salvage, then refuse, then report both.
 - Treat every local-only commit as volatile. If it matters, push it before
   ending; if it cannot be pushed after three retries, file a blocked event.
 
