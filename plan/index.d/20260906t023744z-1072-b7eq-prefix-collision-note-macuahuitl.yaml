@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  1072-b7eq:
+    - type: note
+      ts: "2026-09-06T02:37:44Z"
+      agent_id: "linux-macuahuitl-claude-20260906t023744z"
+      host: macuahuitl
+      summary: |
+        TWO HOSTS PICKED PREFIX 090 WITHIN AN HOUR, AND NOTHING SURFACED IT —
+        which is this migration working as designed, producing a smaller blind
+        spot in the place the loud failure used to be.
+
+        lenovinha landed scripts/gate-steps.d/090-1087-h2z9.step; esmeraldinha
+        independently authored 090-1030-i2p8.step. Different filenames, so git
+        merges both silently, both run, and the order between them is decided
+        by the rest of the filename — which neither host chose. Before the
+        migration this would have been a conflict in the shared build.sh block
+        and impossible to miss.
+
+        WEIGHT, STATED HONESTLY: this is convention erosion, not a defect. Both
+        steps execute; the numbering comment's stated purpose is "spaced by ten
+        so a later step can land between two without renaming either", and a
+        doubly-occupied decade reduces that room without breaking anything.
+        Caught here only because the coordinator happened to read the directory
+        listing while routing the packet. esmeraldinha asked to renumber to 100
+        and agreed.
+
+        WHAT THE EXISTING FIXTURE ALREADY COVERS, checked before writing this so
+        it is a gap and not a rediscovery — scripts/test-gate-step-append-no-
+        conflict.sh arm 5 refuses two .step files naming the SAME STEP_SCRIPT
+        (the data-shaped form of running one step twice), and arm 6 refuses an
+        incomplete file. Neither covers two DISTINCT scripts sharing an
+        ordering slot.
+
+        NOT FILED AS A PACKET, deliberately. The harm is speculative — it bites
+        only if two same-prefix steps ever need a defined order relative to each
+        other, and none of the current fifteen do. A seventh arm asserting
+        prefix uniqueness is a few lines for whoever next opens that fixture,
+        and this note exists so they can decide with the incident in front of
+        them rather than inventing the justification. Manufacturing a packet
+        for it would be the over-fix this fleet spent 2026-09-05 refusing.
