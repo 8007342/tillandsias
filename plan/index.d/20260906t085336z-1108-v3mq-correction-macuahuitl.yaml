@@ -1,0 +1,61 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Correction fragment per 1071-adhj: the declaring row's next_action prescribes a
+# heuristic that decays, and asserts an exit-code meaning it did not verify.
+events:
+  - packet_id: fail-pct-counts-three-different-events-as-one-so-a-healthy-gate-and-a-crashing-one-report-the-same-number
+    event:
+      type: note
+      ts: "2026-09-06T08:53:36Z"
+      host: macuahuitl
+      summary: |-
+        THE next_action's DURATION HEURISTIC HAS A HALF-LIFE, and pirria caught
+        it before anyone implemented it. I wrote "duration against the step's own
+        median is a workable discriminator" for separating a correct early
+        refusal from a full run that found a defect. Measured against their own
+        1074-96z9 records:
+
+          archiver-check-miss   134,445 ms  exit=0   full run
+          archiver-check-hit        642 ms  exit=0   memo hit
+          terminology-check-hit      55 ms  exit=0
+          my refusal cluster       ~660 ms  exit!=0
+
+        A memoised HIT is 642 ms. The refusal cluster is 660 ms. Eighteen
+        milliseconds apart, and the hit is a completely legitimate success.
+
+        Today exit code still separates them, so the heuristic would pass its
+        tests. The failure is in the future and is caused by the fleet
+        SUCCEEDING: memoisation is what 1074-96z9 exists to encourage, and as
+        hits come to dominate a step's population its MEDIAN drags from ~134 s
+        toward ~642 ms — the very quantity the heuristic measures against. Once
+        the median sits beside the refusal cluster, "much shorter than median"
+        separates nothing. A classifier that is correct until the system improves,
+        and then silently is not.
+
+        SO THE FALLBACK CLAUSE IS THE OPERATIVE ONE. Every timing record is
+        exactly ts, host, step, phase, duration_ms, exit — no field distinguishes
+        "refused before starting" from "ran and found a defect". The reporter
+        cannot tell them apart from the log it has, so the LOG needs the
+        distinction, and my next_action buried that as a conditional.
+
+        pirria's design instead: put the distinction where it is KNOWN. The gate
+        already knows it refused before starting — that is what its blocked: and
+        refused: verdicts say on stdout. An outcome field carrying
+        passed / defect / refused / incomplete costs one argument at each
+        timing_emit call site and requires no inference. Duration then measures
+        COST, which is what it is for, and never doubles as a classifier.
+
+        AND THE RENAME IS NOT A PLACEHOLDER. Renaming fail_pct to
+        nonzero_exit_pct is the accurate name for the quantity that exists today,
+        independent of what the log later carries. It should land first and on
+        its own.
+
+        exit=101 IS NOT VERIFIED AS A PANIC and my declaring row says it is. 101
+        is Rust's panic exit AND cargo's exit for a failed build, and at a 2.7 s
+        average across 1.5-4.7 s "did not compile" fits at least as well. If so it
+        is a FOURTH event under the same number rather than the one
+        genuinely-wrong slice — which strengthens the packet and weakens my
+        claim to have characterised it. Whoever takes this must check before
+        asserting either.
+
+        pirria declined the packet rather than adding a fourth to their relay
+        queue, and said so plainly. It is unclaimed.
