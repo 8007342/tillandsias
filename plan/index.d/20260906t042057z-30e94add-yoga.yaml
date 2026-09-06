@@ -1,0 +1,76 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: story-shaped-eager-work-packets
+    event:
+      type: progress
+      ts: "2026-09-06T04:20:57Z"
+      agent_id: linux-yoga-claude-20260906t042057z
+      host: yoga
+      summary: |-
+        PARTIAL SLICE — criterion 1 delivered, criteria 2 and 3 untouched. Status
+        returns to ready; this is one cycle's vertical slice, not the packet.
+
+        DELIVERED: `tillandsias-plan forgotten`, the deterministic projection the
+        other three criteria sit on. Rows are order, packet_id, age_days, leased,
+        blocking. Milestones excluded — 15 ready ones would otherwise head the list,
+        and a projection whose top rows are all un-actionable teaches people to stop
+        reading it.
+
+        THE PACKET'S THIRD INPUT DOES NOT EXIST IN THE LEDGER, and that is the
+        finding this slice turned up. "Age since last event" is undefined for
+        essentially every candidate: MEASURED 2026-09-06, 461 of 461 ready packets
+        carry NO events at all. Ranking by it alone produced an alphabetical list of
+        eventless packets — deterministic and useless.
+
+        The ORDER TOKEN carries the missing signal. next-order mints monotonically
+        (581-k3f9), so a lower order was filed longer ago. Eventless packets are
+        ranked oldest-order-first, which surfaces 151, 375-379, 481 instead of
+        whatever begins with 'a'. That is a substitute for the packet's stated input,
+        so it is named here rather than folded in silently.
+
+        CRITERION 4 IS MET MORE STRONGLY THAN ASKED. The criterion says "the same
+        seed yields the same set". This projection takes NO seed: the order is total
+        (eventless-then-evented, order asc / age desc, blocking asc, packet_id), so
+        the same ledger yields the same list on every host and every run, and
+        reproducibility does not depend on remembering to record a seed. A seed
+        belongs to the SAMPLING layer above this. Pinned by a unit test that sorts a
+        shuffled and a rotated copy of the same input and asserts all three agree —
+        which is what rules out fragment order, and therefore host order, reaching
+        the ranking. 5 unit tests, on `forgotten_sort` split out for exactly the
+        reason `child_env_with_home` and `expire_claim_candidates` are.
+
+        EVIDENCE TOWARD CRITERION 3, STOPPING SHORT OF CLAIMING IT. Four of the top
+        rows — catalog-multi-service-compose (376), one-prompt-public-share-flow
+        (379), npu-device-passthrough (481), model-lifecycle-mcp-surface (519) — are
+        `status: ready`, `pickup_role: linux`, return EMPTY from `blocked-by`, and
+        appear in NO select-rows projection: not `--claimable-by linux`, not
+        `--claimable-by any`, not even unfiltered (350 rows of 446 ready). So the
+        selector never offers them to this host.
+
+        I checked this twice because the first check was confounded: I used
+        `--claimable-by any`, which filters TO role `any` rather than meaning "any
+        role", so my initial eight included packets excluded by role rather than by
+        neglect. The four above survive the corrected check.
+
+        A HYPOTHESIS FOR THE NEXT CLAIMER, NOT A CONCLUSION: npu-device-passthrough
+        carries no `exit_criteria`, no `unscoreable` and no `verifiable_closure`
+        block at all. If select-rows requires a scoreable pin (977-448j), then the
+        forgotten set is dominated by UNSHAPED packets — filed without criteria and
+        therefore invisible to a selector that cannot score them. That would make
+        "the tail that never gets done" a shaping problem rather than a ranking one,
+        and it is testable by reading the select-rows filter. I have correlation on
+        one packet, not the mechanism.
+
+        NEXT ACTION: criterion 2 (story-shaped questions routed through this
+        projection, cited envelopes, degrading to the deterministic list when no
+        inference endpoint answers) and criterion 3 (file the resulting packets).
+        Consider also emitting a `shaped=yes|no` column, which the hypothesis above
+        suggests is the discriminator that matters most.
