@@ -1,0 +1,75 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-staged-but-uncommitted-fragment-is-invisible-to-the-added-fragment-guards
+    event:
+      type: progress
+      ts: "2026-09-06T08:13:42Z"
+      agent_id: linux-lenovinha-claude-20260906t073519z
+      host: lenovinha
+      summary: |
+        IMPLEMENTED AND GATED, BLOCKED FROM LANDING BY A TRUNK RED THAT IS NOT MINE
+        (1107-bb6s). The commit is held at local branch work/1101-b5rc, 669daa31e, on
+        lenovinha. It could not be pushed even as a work/ ref: the pre-push hook wants
+        a stamp for the tree being pushed, and after the land's integrate that tree
+        contains trunk's red. Relay 669daa31e when trunk is green, or say so and this
+        host will re-gate and land it.
+
+        BOTH DEFECTS FIXED IN ONE PASS, because a fix for either alone breaks on the
+        other.
+
+        1101-b5rc: the candidate set gained `git diff --name-only --cached
+        --diff-filter=A` as a third source. A fragment passes untracked -> staged ->
+        committed and the two existing sources covered only the first and third.
+        MEASURED with identical bytes, the discriminator being `git add` alone:
+        untracked refused correctly; staged gave skip:no-new-packets; and
+        committed-valid + staged-violating gave `ok:scorable-obligations:1 checked` —
+        an affirmative pass with a real count on a tree holding exactly the row the
+        gate exists to reject.
+
+        1093-hzhi: the row splitter is now channel-aware. The declaring channels are an
+        explicit allowlist of `packets` (fragments) and `plan_index` (the base index,
+        which has NO top-level `packets:` key — an allowlist of `packets` alone
+        silently finds zero rows there and breaks the 1071-adhj fold).
+
+        A LATENT BUG NEITHER PACKET KNEW ABOUT, and the reason the pairing mattered.
+        The splitter keyed on `- packet_id:` as the list marker, which assumes
+        packet_id is a row's FIRST key. In plan/index.yaml 35 rows are written
+        `- order:` first, so the splitter never saw them; those ids appeared only
+        because their EVENTS entries were being miscounted — the very miscount
+        1093-hzhi removes. Fixing either defect alone takes two real packets out of the
+        fold. The splitter now starts a row at the list marker and takes the id from
+        wherever in the row it appears. Measured over every fragment plus the base:
+        0 declarations lost, 35 gained, all 35 confirmed real packets by
+        `tillandsias-plan status`.
+
+        1101-b5rc's SCOPE WAS WRONG AND CHECKING SAVED FOUR NEEDLESS EDITS. It says
+        five sibling guards share the blind enumeration and the fix applies five times.
+        Measured with a staged fragment: check-added-fragments-parse,
+        check-arrival-routing, check-declared-closures-added and
+        check-fragment-closure-evidence-added ALL already carry --cached and all four
+        SAW the row; check-forge-findings-persisted has no git enumeration at all.
+        check-scorable-obligation-added was the only blind one.
+
+        FIXTURE 22/22 -> 27/27, and every new arm was observed RED against the pre-fix
+        guard before being kept — the "written to red" condition, which an
+        untracked-and-committed-only arm satisfies while asserting nothing. The five
+        arms: a staged unscorable row is refused not skipped; a staged scorable row is
+        counted; an events entry beside a packet row is not a second row; a STAGED
+        MIXED fragment counts exactly one row (the intersection — a fix for either
+        defect alone still fails it); and a negative control, a staged mixed fragment
+        whose packet row is unscorable, still refused and naming ONE row, so the pair
+        did not simply widen the gate.
+
+        A MEASUREMENT ERROR OF MY OWN, recorded because it nearly reverted a correct
+        fix: I first measured "121 real packets dropped" using `comm` over files with
+        duplicate lines, which reports an id as missing whenever the old side holds
+        more copies of it. On unique sets the true figure was two, and those two led to
+        the field-order bug above. The alarming number was my instrument, not the code.
