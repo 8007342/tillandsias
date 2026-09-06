@@ -703,6 +703,49 @@ verification:
           scanner cannot distinguish an assertion from a mention and should not
           have to; the discipline belongs on the author. Assemble the needle at
           runtime — in fixtures, in assertions, and in the comments about both.
+      - id: a_measurement_row_must_carry_the_input_as_the_tool_received_it
+        kind: judgment
+        rule: >
+          A MEASUREMENT REPORTED WITHOUT THE INPUT AS THE TOOL ACTUALLY RECEIVED
+          IT IS PROSE, NOT DATA. When a probe's input passes through a shell, a
+          loop, a heredoc or a quoting layer before reaching the thing under
+          test, the input NAMED in the report and the input MEASURED can differ
+          silently — every number is real and the label on it is wrong. Print
+          the input as the caller held it, in the same output as the number, or
+          the row cannot be checked by anyone including its author.
+          Corollary: when a new measurement contradicts an earlier one, SUSPECT
+          THE HARNESS BEFORE THE SUBJECT. Each instance below was caught by a
+          contradiction with a prior row, never by inspecting the apparatus.
+        earned_by: >
+          Three instances in one investigation, 2026-09-06, two hosts, one
+          shape, different mechanisms every time. (1) A matrix generalised past
+          a row it already contained: `escaped \$ func=1 real=1` was measured an
+          hour before the rule "any $ not at end-of-pattern returns 0" was
+          written without the UNESCAPED qualifier. (2) A probe written inside a
+          double-quoted echo escaped the dollar it was testing, so `\$b` reached
+          grep — a literal, not an anchor — and matched; it was reported as `$b`
+          and became a false refinement that made the defect look smaller.
+          (3) An eval-based loop re-quoted the patterns it passed, reporting
+          escaped `\$b` as 0/0 where the direct call gives 2/2.
+          A FOURTH, from the same hour and the same pair of hosts: `-E` was
+          entered in a mitigation table as func 1 / real 1 CORRECT, measured
+          with an ESCAPED pattern — escaping was measured and labelled `-E`.
+          A FIFTH, and the one whose mechanism is furthest from the others: a
+          `sed` DISPLAY PREFIX was read as file content, so an anchor was built
+          from two spaces the reader's own formatting had added. It matched
+          nothing and threw. Five independent mechanisms — a generalisation
+          past an existing row, a shell-escaped probe, an eval-requoted loop, a
+          mislabelled table entry, and a display artefact mistaken for data —
+          producing one shape, which is what makes the rule general rather than
+          a note about quoting.
+        rule_general_form: >
+          THE APPARATUS IS PART OF THE MEASUREMENT. A row is trustworthy only
+          when it carries what the tool received, not what the author intended
+          to send. And a mitigation that AGREES AT ZERO is not a mitigation: in
+          the same investigation, `-E` made both engines return 0 and sat in the
+          table beside escaping and `-F`, which return the right number. A row
+          that agrees on nothing looks like a remedy and is the same silence it
+          claims to escape.
       - id: an_explanation_offered_before_the_evidence_disarms_the_detector
         kind: judgment
         rule: >
