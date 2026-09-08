@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: ghost-trace-ephemeral-guarantee-spec-and-litmus-closure
+    field: status
+    value: completed
+    ts: "2026-09-08T23:00:14Z"
+    host: macuahuitl
+
+events:
+  - packet_id: ghost-trace-ephemeral-guarantee-spec-and-litmus-closure
+    event:
+      type: completed
+      ts: "2026-09-08T23:00:14Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: eaeef8d62f6eca51e69593810bf1a788a7985144; bash scripts/hooks/pre-commit-openspec.sh --ci-mode: 0 blocking errors
+  - packet_id: ghost-trace-ephemeral-guarantee-spec-and-litmus-closure
+    event:
+      type: note
+      ts: "2026-09-08T23:00:14Z"
+      host: macuahuitl
+      summary: |-
+        CI trace blocker resolved by authoritative runtime trace annotations.
