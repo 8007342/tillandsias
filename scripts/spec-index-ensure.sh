@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @trace spec:forge-environment-discoverability
+# @trace spec:forge-environment-discoverability, spec:ephemeral-guarantee
 #
 # spec-index-ensure.sh — build the spec RAG index so `spec_answer` can answer
 # on a DEV host (orders 552 and 760-hzi4), into the DURABLE tier (801-a2by).

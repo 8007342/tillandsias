@@ -5,6 +5,7 @@
 # It must NOT contain `exit` or `exec` statements.
 #
 # Location in image: /usr/local/lib/tillandsias/lib-common.sh
+# @trace spec:ephemeral-guarantee
 
 set -euo pipefail
 
