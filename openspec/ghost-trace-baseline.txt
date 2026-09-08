@@ -7,8 +7,3 @@
 # browser-isolation-core x5, container-health -> podman-idiomatic-patterns x4, ... and
 # docs examples that spelled real annotations with made-up ids now cite real specs).
 # The baseline may only shrink from here; what remains is listed with its reason.
-# ephemeral-guarantee: three litmus tests (forge-experts-ephemerality-shape,
-#   forge-experts-teardown-ephemeral, init-log-cleanup) declare it as their OWN spec and
-#   bind under it; the spec FILE is owed — writing it (or re-homing the three) is a spec
-#   decision, not a cleanup. Every other trace to it now names the test's real spec.
-ephemeral-guarantee
