@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-ledger-has-more-than-one-place-to-look-and-every-reader-looks-in-one-so-five-writes-landed-somewhere-nothing-consults
+    field: status
+    value: blocked
+    ts: "2026-09-10T07:26:05Z"
+    host: forge
+
+events:
+  - packet_id: the-ledger-has-more-than-one-place-to-look-and-every-reader-looks-in-one-so-five-writes-landed-somewhere-nothing-consults
+    event:
+      type: note
+      ts: "2026-09-10T07:26:05Z"
+      host: forge
+      summary: |-
+        verify gate cannot run in this forge (openssl missing at host-tools gate-scope, no /nix mount, no root, not on brew allowlist; forge is CA-exempt so openssl is unnecessary by design) so code cannot be pushed; ARM 1 implemented and verified (9 assertions green, gate step written) but ONLY landed at salvage ref refs/heads/salvage/unknown/20260910-1080-4deb-arm1:94f12eeb; next action: a host that can pass its gate fetches that ref and lands 110-1080-4deb + test change, then re-checks the closure
