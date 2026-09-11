@@ -223,7 +223,15 @@ if (-not (Test-Path $exe)) { throw "expected binary not found: $exe" }
 # Windows dev checkout produced a non-injecting tray.
 $assetDir = Join-Path $RepoRoot "crates\tillandsias-windows-tray\assets"
 $missing = @()
-foreach ($arch in @('x86_64', 'aarch64')) {
+# CHECK EXACTLY THE ARCH THE BUILD EMBEDS. The staging loop above (order 282)
+# copies only $hostGuestArch and deliberately RESETS the other arch's asset to
+# the zero-byte placeholder so a stale copy cannot bloat the exe; a check that
+# demands both arches therefore fails by construction on every host and every
+# runner. MEASURED 2026-09-11: release run 34649585604, Windows job
+# 103439175869 — x86_64 staged (14,550,224 bytes), aarch64 reset to 0 by the
+# loop above, throw here; no Windows tray shipped for v56.9.11.1. The check
+# keeps its 1059-ry6t teeth for the arch that is actually embedded.
+foreach ($arch in @($hostGuestArch)) {
     $asset = Join-Path $assetDir "tillandsias-headless-$arch-unknown-linux-musl"
     if ((-not (Test-Path $asset)) -or ((Get-Item $asset).Length -eq 0)) { $missing += $asset }
 }
