@@ -105,6 +105,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "pipeline",
     "query",
     "ready",
+    "forgotten",
     "select-rows",
     "split-parents",
     "experts-probe",
@@ -262,7 +263,8 @@ const USAGE: &str = concat!(
     "                                     the base. Exit 1 only for an unresolvable id; an\n",
     "                                     existing packet with no events prints nothing and\n",
     "                                     exits 0, which is what a stranded claim looks like.\n",
-    "           expire-claims [--ttl-hours N] [--dry-run] [--list-live] [--now-epoch S] [--host H]\n",
+    "           expire-claims [--ttl-hours N] [--write] [--dry-run] [--list-live] [--now-epoch S] [--host H]\n",
+    "                         (default DRY-RUN: writing requires --write; 1067-24q6)\n",
     "                                     ORDER 672-bz7u. Return stranded in_progress claims to\n",
     "                                     ready: any packet whose LAST recorded event activity is\n",
     "                                     older than the TTL (default 24h) gets a status fragment\n",
@@ -313,6 +315,15 @@ const USAGE: &str = concat!(
     "                                     packets each id blocks, counted over EVERY ready packet\n",
     "                                     rather than one role's, because a packet in another column\n",
     "                                     is frequently the thing this one waits on.\n",
+    "           forgotten [--limit N] [--min-age-days N] [--now-epoch S]\n",
+    "                                     ORDER 718-jqt5. READY packets the fleet has stopped\n",
+    "                                     noticing, as TSV: order, packet_id, age_days, leased,\n",
+    "                                     blocking. Eventless first (oldest ORDER first, since\n",
+    "                                     next-order mints monotonically), then stalest, then\n",
+    "                                     fewest dependents — a leaf is what a residual-maximising\n",
+    "                                     selector never reaches. Milestones excluded: they are\n",
+    "                                     containers, not claimable work. Total order, no seed:\n",
+    "                                     the same ledger yields the same list on every host.\n",
     "           select-rows [--claimable-by R] [--release V] [--limit N]\n",
     "                                     ORDER 632-retq. The batch selector's projection, as TSV:\n",
     "                                     rank, release_target, order, packet_id, urgency, release.\n",
@@ -5434,6 +5445,220 @@ fn main() {
                 emit(&line(&ledger, p));
             }
         }
+        "forgotten" => {
+            // ORDER 718-jqt5 criterion 1. THE DETERMINISTIC HALF of the
+            // story-shaped query surface: which ready packets has the fleet
+            // stopped noticing?
+            //
+            // "Forgotten" is a property of the LEDGER, not a judgement, which is
+            // why it belongs here and not in a prompt. The packet's framing is
+            // explicit that inference should PHRASE and CLUSTER the result and
+            // never decide it — otherwise the entropy stops being reproducible
+            // and a batch stops being replayable from its seed.
+            //
+            // Three inputs, each computable exactly:
+            //   age_days   days since the packet's newest event (never = oldest)
+            //   leased     has anything ever claimed it
+            //   blocking   how many ready packets depend on it
+            //
+            // WHY MINIMAX MISSES THESE. The selector scores epics by
+            // `2*urgency + 1.5*blocking + neglect`, so a packet with NO
+            // dependents contributes almost nothing to its epic's residual and
+            // is never the reason an epic wins. Low blocking weight is not a
+            // sign of low value — it is a sign of being a leaf, and leaves are
+            // exactly what a residual-maximising selector never reaches.
+            //
+            // A SEPARATE PROJECTION FROM select-rows, DELIBERATELY, and stated
+            // because the opposite mistake is the one this fleet keeps making
+            // (1081-gynk): select-rows answers "what may I pick", filtered to
+            // dependency-clear and unleased. This answers "what has nobody
+            // touched", which must INCLUDE packets select-rows filters out —
+            // a blocked or leased-then-abandoned packet is more forgotten, not
+            // less. Two questions, two projections, and neither is the other's
+            // subset.
+            // Parsed locally rather than through parse_query_options: this
+            // subcommand needs --min-age-days and --now-epoch, and neither
+            // belongs on the shared struct every other query arm reads.
+            let mut limit: usize = 20;
+            let mut min_age_days: i64 = 0;
+            let mut now: i64 = now_epoch();
+            let mut i = 1;
+            while i < args.len() {
+                let need = |i: usize| -> String {
+                    match args.get(i + 1) {
+                        Some(v) => v.clone(),
+                        None => {
+                            eprintln!("error: {} needs a value", args[i]);
+                            std::process::exit(2);
+                        }
+                    }
+                };
+                match args[i].as_str() {
+                    "--limit" => {
+                        limit = need(i).parse().unwrap_or_else(|_| {
+                            eprintln!("error: --limit needs a non-negative integer");
+                            std::process::exit(2);
+                        });
+                        i += 1;
+                    }
+                    "--min-age-days" => {
+                        min_age_days = need(i).parse().unwrap_or_else(|_| {
+                            eprintln!("error: --min-age-days needs an integer");
+                            std::process::exit(2);
+                        });
+                        i += 1;
+                    }
+                    "--now-epoch" => {
+                        now = need(i).parse().unwrap_or_else(|_| {
+                            eprintln!("error: --now-epoch needs unix seconds");
+                            std::process::exit(2);
+                        });
+                        i += 1;
+                    }
+                    other => {
+                        eprintln!("error: unknown forgotten flag '{other}'");
+                        std::process::exit(2);
+                    }
+                }
+                i += 1;
+            }
+
+            // Dependents, counted over EVERY ready packet — the same edge set
+            // blocking-counts uses, for the same reason it does not fold into
+            // select-rows.
+            let mut dependents: std::collections::BTreeMap<String, usize> =
+                std::collections::BTreeMap::new();
+            for p in query_packets(&ledger, Some("ready"), None, None, None, &[], usize::MAX) {
+                if let Some(deps) = p.get("depends_on").and_then(serde_yaml::Value::as_sequence) {
+                    for d in deps {
+                        let key = match d {
+                            serde_yaml::Value::String(s) => s.clone(),
+                            serde_yaml::Value::Number(n) => n.to_string(),
+                            _ => continue,
+                        };
+                        *dependents.entry(key).or_insert(0) += 1;
+                    }
+                }
+            }
+
+            // (age_days, order_num, blocking, order, packet_id, leased)
+            let mut rows: Vec<ForgottenRow> = Vec::new();
+            for p in query_packets(&ledger, Some("ready"), None, None, None, &[], usize::MAX) {
+                let id = ledger.id_of(p).to_string();
+                let order = p
+                    .get("order")
+                    .map(|o| match o {
+                        serde_yaml::Value::Number(n) => n.to_string(),
+                        serde_yaml::Value::String(s) => s.clone(),
+                        _ => "?".to_string(),
+                    })
+                    .unwrap_or_else(|| "?".to_string());
+
+                // MILESTONES ARE CONTAINERS, NOT FORGOTTEN WORK. A milestone
+                // holds criteria and is never claimed for implementation
+                // (ambitious_milestone_reduction.milestone_packet_semantics);
+                // its children are. MEASURED: 15 ready milestones would
+                // otherwise sit in this list, and every one of them is a row a
+                // reader must learn to skip. Excluded here rather than left for
+                // the caller, because a projection whose top rows are all
+                // un-actionable teaches people to stop reading it.
+                if p.get("kind").and_then(serde_yaml::Value::as_str) == Some("milestone") {
+                    continue;
+                }
+
+                let mut newest: Option<i64> = None;
+                let mut leased = false;
+                if let Some(evs) = p.get("events").and_then(serde_yaml::Value::as_sequence) {
+                    for ev in evs {
+                        if let Some(ts) = ev.get("ts").and_then(serde_yaml::Value::as_str)
+                            && let Some(e) = answer::iso8601_to_epoch(ts)
+                            && newest.is_none_or(|cur| e > cur)
+                        {
+                            newest = Some(e);
+                        }
+                        let ty = ev.get("type").and_then(serde_yaml::Value::as_str);
+                        if ty == Some("claim") {
+                            leased = true;
+                        }
+                        // The claim CONVENTION is a note whose summary says so
+                        // (943-unii): a `claim` type is the audit record, and
+                        // plenty of real claims are notes. Both count as "someone
+                        // has had hands on this".
+                        if let Some(sum) = ev.get("summary").and_then(serde_yaml::Value::as_str)
+                            && sum.contains("claimed for cycle")
+                        {
+                            leased = true;
+                        }
+                    }
+                }
+                // MEASURED 2026-09-06: 461 of 461 ready packets carry NO events
+                // at all, so "age since last event" is undefined for essentially
+                // the whole ledger and cannot rank anything on its own. That is
+                // a finding about the ledger, not a gap in the query — most
+                // packets are declared and never touched again until claimed.
+                //
+                // The ORDER TOKEN carries the missing signal. next-order mints
+                // monotonically (581-k3f9), so a lower order number is a packet
+                // filed longer ago; order 491 predates 1085 by construction.
+                // Eventless packets are therefore ranked oldest-first by order,
+                // which surfaces the genuinely ancient ones instead of the
+                // alphabetically unlucky.
+                let age_days = newest.map(|e| (now - e) / 86_400);
+                let order_num: i64 = order
+                    .chars()
+                    .take_while(|c| c.is_ascii_digit())
+                    .collect::<String>()
+                    .parse()
+                    .unwrap_or(i64::MAX);
+                let blocking = dependents.get(&id).copied().unwrap_or(0);
+                // --min-age-days filters on a MEASURED age; an eventless
+                // packet has no age to compare, and dropping it would hide the
+                // most-forgotten rows behind a flag meant to narrow the list.
+                if let Some(a) = age_days
+                    && a < min_age_days
+                {
+                    continue;
+                }
+                rows.push((age_days, order_num, blocking, order, id, leased));
+            }
+
+            // TOTAL ORDER, so the same ledger yields the same list on every host
+            // and every run (criterion 4's negative control depends on it):
+            // most-neglected first, then fewest dependents, then packet_id as
+            // the tiebreak — never insertion order, which is fragment-order and
+            // therefore host-dependent.
+            forgotten_sort(&mut rows);
+
+            let mut shown = 0usize;
+            for (age_days, _order_num, blocking, order, id, leased) in &rows {
+                if shown >= limit {
+                    break;
+                }
+                let age = match age_days {
+                    Some(a) => a.to_string(),
+                    None => "no-events".to_string(),
+                };
+                emit(&format!(
+                    "forgotten\t{order}\t{id}\tage_days={age}\tleased={}\tblocking={blocking}",
+                    if *leased { "yes" } else { "no" }
+                ));
+                shown += 1;
+            }
+            if shown == limit && rows.len() > shown {
+                emit(&format!(
+                    "  (stopped at --limit {}: {} row(s) match — this is a SAMPLE, not every \
+                     forgotten packet)",
+                    limit,
+                    rows.len()
+                ));
+            }
+            emit(&format!(
+                "summary: forgotten={} shown={} min_age_days={}",
+                rows.len(),
+                shown,
+                min_age_days
+            ));
+        }
         "blocking-counts" => {
             // ORDER 632-retq (rung 2). How many READY packets each id blocks.
             //
@@ -5453,6 +5678,7 @@ fn main() {
             };
             let mut counts: std::collections::BTreeMap<String, usize> =
                 std::collections::BTreeMap::new();
+            let mut scanned = 0usize;
             for p in query_packets(
                 &ledger,
                 Some("ready"),
@@ -5462,6 +5688,7 @@ fn main() {
                 &[],
                 options.limit,
             ) {
+                scanned += 1;
                 if let Some(deps) = p.get("depends_on").and_then(serde_yaml::Value::as_sequence) {
                     for d in deps {
                         let key = match d {
@@ -5475,6 +5702,16 @@ fn main() {
             }
             for (id, n) in counts {
                 emit(&format!("{id}	{n}"));
+            }
+            // ORDER 1081-gynk: SAY WHEN THE SCAN WAS CAPPED. Exactly-at-the-cap
+            // is the tell that a list is a SAMPLE, and this output is
+            // well-formed either way — nothing else would say so.
+            if scanned == options.limit {
+                emit(&format!(
+                    "  (scan stopped at --limit {}: this is a SAMPLE, not every ready packet — \
+                     pass --limit <n> to scan further)",
+                    options.limit
+                ));
             }
         }
         "select-rows" => {
@@ -6111,6 +6348,57 @@ fn main() {
                 );
                 std::process::exit(1);
             }
+            // ORDER 1079-qb8k: A CLAIM EVENT IS NOT A CLAIM.
+            //
+            // `append-event --type claim` records an event; `set-field status
+            // in_progress` is a SEPARATE call and is the only thing the fold
+            // reads. Hosts do one. The two instruments then disagree in the
+            // worst direction — the sweep sees no lease and the selector still
+            // offers the packet, so a held packet is handed to a second host,
+            // which is 814-iyu7 arriving through a write that never lands.
+            //
+            // REMEDY (b), CHOSEN ON MEASUREMENT rather than on the argument.
+            // The packet offered three. Fleet-wide there are 43 packets
+            // carrying a claim event, and their CURRENT statuses are: 24 ready,
+            // 6 completed, 4 obsoleted, 4 blocked, 3 in_progress, 2 pending.
+            //
+            //   (a) make the claim event transition the status — 16 of those 43
+            //       sit at a status this tool must never overwrite (completed,
+            //       obsoleted, blocked, pending), so one subcommand doing two
+            //       things has to grow a table of exceptions immediately.
+            //   (c) make the readers honour claim events — of the 24 `ready`
+            //       rows, only 4 have a claim event under 24h old; 20 are stale
+            //       history (15 older than a week). A reader honouring them
+            //       would treat 20 released packets as held and empty the ready
+            //       set, which the packet itself names as worse than the defect.
+            //   (b) refuse, and name the missing write. No hidden behaviour, no
+            //       exception table, and it enforces exactly the order the
+            //       worker skill already documents: claim with set-field, THEN
+            //       add the narrative event.
+            //
+            // So this refusal breaks nothing the skill sanctions: the optional
+            // narrative claim event is written AFTER the status moves, and at
+            // that point the packet is in_progress and this passes.
+            if etype.as_str() == "claim" {
+                let st = ledger
+                    .resolve(reference)
+                    .and_then(|p| tillandsias_plan::str_field(p, "status"))
+                    .unwrap_or("");
+                if st != "in_progress" {
+                    eprintln!(
+                        "error: a claim EVENT does not claim {target} — it is a record, not the \
+                         claim. The fold reads only the status field, so this event would leave \
+                         the packet `{st}`: invisible to the stranded-claim sweep and still \
+                         offered by the selector, which is how two hosts implement the same \
+                         packet (814-iyu7, 1079-qb8k).\n\
+                         \n\
+                         Claim it first, then this event will be accepted:\n\
+                         \x20 tillandsias-plan set-field {target} status in_progress \\\n\
+                         \x20     --host <host> --evidence <ref> --reason \"claimed for cycle <ts> by <agent>\""
+                    );
+                    std::process::exit(1);
+                }
+            }
             // 772-4se9: identity resolves AFTER the ref so an unresolvable
             // reference still reports as such (pinned by
             // litmus:append-event-rejects-unknown-flags-shape), but BEFORE
@@ -6616,8 +6904,23 @@ fn main() {
             // automatically. Lives HERE and not in bash because the claim age
             // is only knowable from the folded ledger, and grepping for it
             // shell-side is the brittle parsing 456 eliminated.
+            // ORDER 1067-24q6 — THE DEFAULT IS THE FIX. This used to be
+            // `let mut dry_run = false`, i.e. bare `expire-claims` WROTE.
+            // Three independent hosts released another host's lease in one
+            // day by running it to look: tlatoanis-macbook-air 14:49Z (bare),
+            // macuahuitl 16:41Z (`--list-live`, a flag whose name says list),
+            // yoga 17:5xZ (bare, while reading for 1034-whsp). Each caught it
+            // only by checking `git status` afterwards; the claim recipe every
+            // cycle runs is `git add plan/index.d/`, which would have
+            // published the release with nothing in the commit naming it.
+            //
+            // The victim is BY CONSTRUCTION another host, so the runner sees
+            // nothing wrong and the affected party is not present to object.
+            // Writing is now opt-in; `--dry-run` stays accepted so existing
+            // callers keep working and keep meaning what they say.
             let mut ttl_hours: i64 = 24;
-            let mut dry_run = false;
+            let mut write = false;
+            let mut dry_run_flag = false;
             let mut list_live = false;
             let mut now_epoch: Option<i64> = None;
             let mut host = resolve_writer_host();
@@ -6634,7 +6937,8 @@ fn main() {
                             }
                         };
                     }
-                    "--dry-run" => dry_run = true,
+                    "--dry-run" => dry_run_flag = true,
+                    "--write" | "--apply" => write = true,
                     "--list-live" => list_live = true,
                     "--now-epoch" => {
                         i += 1;
@@ -6667,6 +6971,15 @@ fn main() {
                 eprintln!("error: --ttl-hours must be >= 1 (got {ttl_hours})");
                 std::process::exit(2);
             }
+            // Asking for both is not a preference to resolve, it is a caller
+            // that does not know which it wants. Refuse rather than pick.
+            if write && dry_run_flag {
+                eprintln!(
+                    "error: --write and --dry-run are contradictory; pass one (default is dry-run)"
+                );
+                std::process::exit(2);
+            }
+            let dry_run = !write;
             let now = now_epoch.unwrap_or_else(|| {
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
@@ -6789,8 +7102,136 @@ fn main() {
                     emit(&format!(
                         "unclaimed-in-progress\t{order}\t{pid}\t-\t-\t{last}"
                     ));
+                    // ORDER 1065-4t7t: SAY WHICH KIND OF UNCLAIMED THIS IS.
+                    // A row whose in_progress came from the BASE index has no
+                    // claimant to name and never will: compaction folds the
+                    // status entry into plan/index.yaml and the (host, ts) that
+                    // set it is not carried forward, so this sweep will report
+                    // it unclaimed forever. That is not a stranded claim and
+                    // chasing it as one wastes the reader's time — the place to
+                    // look is compaction, not the sweep. A row that simply has
+                    // no lease yet reads identically without this line, which
+                    // is exactly the confusion worth removing at the point of
+                    // output rather than in a packet nobody re-reads.
+                    if ledger.status_lease_of(pid).is_none() {
+                        emit(
+                            "  (no claimant recorded: its in_progress status is in the base index, \
+                             where compaction did not carry the claiming host and ts forward — \
+                             this row cannot become attributed, see 1065-4t7t)",
+                        );
+                    }
                     unclaimed += 1;
                 }
+                // ── ORDER 1079-qb8k: REPORT THE DISAGREEMENT, DO NOT RESOLVE IT ──
+                //
+                // A packet can carry a `claim` EVENT while its status never
+                // moved, because those are two writes and hosts do one. The two
+                // instruments then disagree in the worst direction: this sweep
+                // sees no lease and the selector still offers the packet, so a
+                // held packet is handed to a second host.
+                //
+                // NOT SILENTLY RESOLVED IN EITHER DIRECTION. Transitioning the
+                // packet here would rewrite another host's authorship from this
+                // one; treating the event as a lease would remove it from the
+                // ready set on the strength of a write the fold does not read.
+                // Both are the tool deciding what a host meant. It says what it
+                // sees instead.
+                //
+                // AGED, AND THE AGE IS THE WHOLE POINT. Measured fleet-wide on
+                // 2026-09-05: 43 packets carry a claim event, 24 of them are
+                // currently `ready`, and of those only FOUR have a claim event
+                // under 24h old — 15 are older than a week. Reporting all 24
+                // would bury the four live ones under twenty released packets
+                // and make the row worthless, which is the same shape as a
+                // guard that flags the whole corpus.
+                let mut claim_no_status = 0usize;
+                for p in query_packets(&ledger, Some("ready"), None, None, None, &[], usize::MAX) {
+                    let Some(pid) = str_field(p, "packet_id") else {
+                        continue;
+                    };
+                    let Some(seq) = p.get("events").and_then(serde_yaml::Value::as_sequence) else {
+                        continue;
+                    };
+                    // ORDER 1082-k3wp: A CLAIM CAN BE ANSWERED BY SAYING SO, and the
+                    // answer must be a TYPE rather than a sentence.
+                    //
+                    // yolanda claimed 823-u5zf, then deliberately did NOT set it
+                    // in_progress because the remaining half needs an observed
+                    // interactive launch on the operator's machine that no agent
+                    // can perform — and a FALSE HOLD is the worse half of this
+                    // defect: a missing transition makes every host see a free
+                    // packet that is held, while a false hold makes every host
+                    // skip a packet that is free. They were right, and this row
+                    // told them they owed a transition anyway, every cycle.
+                    //
+                    // WHY A TYPED EVENT AND NOT THE PROSE. yolanda's release says
+                    // "RELEASED, and deliberately NOT set to in_progress"; an
+                    // earlier note says "I AM NOT CLAIMING IT". Both are
+                    // unambiguous to a reader and neither is a signal. Matching
+                    // either would be a string check on prose, which is the
+                    // exact family this fleet spent 2026-09-05 filing — a guard
+                    // matching a doc comment, a lane pinning a quoting style, a
+                    // sweep keyed on "claimed for cycle". Event types are
+                    // free-form strings today (no whitelist), so `--type release`
+                    // is writable with no new machinery.
+                    //
+                    // Closure types answer it too: a packet that reached
+                    // completed/verified/implemented is not owing a claim
+                    // transition, whatever its status field says.
+                    let answered = seq.iter().any(|ev| {
+                        matches!(
+                            ev.get("type").and_then(serde_yaml::Value::as_str),
+                            Some("release" | "released" | "completed" | "verified" | "implemented")
+                        )
+                    });
+                    if answered {
+                        continue;
+                    }
+                    let mut newest: Option<(&str, &str)> = None; // (ts, host)
+                    for ev in seq {
+                        if ev.get("type").and_then(serde_yaml::Value::as_str) != Some("claim") {
+                            continue;
+                        }
+                        let Some(ts) = ev.get("ts").and_then(serde_yaml::Value::as_str) else {
+                            continue;
+                        };
+                        if ts <= cutoff.as_str() {
+                            continue;
+                        }
+                        let host = ev
+                            .get("host")
+                            .and_then(serde_yaml::Value::as_str)
+                            .unwrap_or("-");
+                        if newest.is_none_or(|(cur, _)| ts > cur) {
+                            newest = Some((ts, host));
+                        }
+                    }
+                    if let Some((ts, host)) = newest {
+                        let order = p
+                            .get("order")
+                            .and_then(|v| match v {
+                                serde_yaml::Value::String(s) => Some(s.clone()),
+                                serde_yaml::Value::Number(n) => Some(n.to_string()),
+                                _ => None,
+                            })
+                            .unwrap_or_else(|| "?".into());
+                        emit(&format!(
+                            "claim-without-status\t{order}\t{pid}\t{host}\t{ts}\t-"
+                        ));
+                        claim_no_status += 1;
+                    }
+                }
+                if claim_no_status > 0 {
+                    emit(&format!(
+                        "  ({claim_no_status} packet(s) carry a recent claim EVENT but status \
+                         `ready`: the claiming host owes either `set-field <id> status \
+                         in_progress` or, if it decided NOT to hold the packet, \
+                         `append-event <id> release \"<why>\"` — a typed release, because prose \
+                         saying so is not a signal any reader can act on (1082-k3wp). Not \
+                         transitioned here — that would rewrite their authorship (1079-qb8k))"
+                    ));
+                }
+
                 // THE PARTITION, STATED SO IT CAN BE FALSIFIED. Every in_progress
                 // packet lands in exactly one bucket, and this line lets a reader
                 // — or a fixture — check that against the summary's count instead
@@ -6812,6 +7253,19 @@ fn main() {
                         in_progress.len()
                     ));
                 }
+            }
+            // ORDER 1067-24q6 criterion 2: THE OPT-IN NAMES ITSELF. A reader
+            // who runs this and sees rows must be able to learn how to act on
+            // them without leaving the terminal — and, more importantly, must
+            // be told that nothing has happened yet. The old output's only
+            // mention of its mode was `mode=write` in the summary, printed
+            // AFTER the mutation.
+            if dry_run && !expired.is_empty() {
+                emit(&format!(
+                    "  ({} claim(s) above WOULD be returned to ready; nothing has been written. \
+                     Re-run with --write to apply.)",
+                    expired.len()
+                ));
             }
             if !dry_run && !expired.is_empty() {
                 let compact = loop_status::iso_to_compact(&now_iso);
@@ -6881,6 +7335,45 @@ fn main() {
     log_cli_usage(&subcommand, "answered", start_time.elapsed().as_millis());
 }
 
+/// ORDER 718-jqt5. One `forgotten` row: (age_days, order_num, blocking,
+/// order, packet_id, leased).
+type ForgottenRow = (Option<i64>, i64, usize, String, String, bool);
+
+/// The TOTAL ORDER for `forgotten`, split out so it can be tested without a
+/// ledger — the same reason `child_env_with_home` and `expire_claim_candidates`
+/// are split out.
+///
+/// Determinism is the point, and it is stronger than the packet's criterion
+/// asked for. 718-jqt5's negative control says "the same seed yields the same
+/// set". This projection takes NO seed: the order is total, so the same ledger
+/// yields the same list on every host and every run, and reproducibility does
+/// not depend on remembering to record a seed. A seed belongs to the SAMPLING
+/// layer above this (which epics to spread across), not to the projection.
+///
+/// The rules, in order:
+///   1. eventless packets first — nothing has ever happened to them;
+///   2. within those, LOWEST ORDER first: `next-order` mints monotonically
+///      (581-k3f9), so a lower number was filed longer ago;
+///   3. within evented packets, GREATEST age first;
+///   4. then fewest dependents, because a leaf is what a residual-maximising
+///      selector never reaches;
+///   5. then packet_id — never insertion order, which is fragment order and
+///      therefore differs between hosts.
+fn forgotten_sort(rows: &mut [ForgottenRow]) {
+    rows.sort_by(|a, b| {
+        let bucket = |r: &ForgottenRow| if r.0.is_none() { 0u8 } else { 1u8 };
+        bucket(a)
+            .cmp(&bucket(b))
+            .then_with(|| match (a.0, b.0) {
+                (None, None) => a.1.cmp(&b.1),
+                (Some(x), Some(y)) => y.cmp(&x),
+                _ => std::cmp::Ordering::Equal,
+            })
+            .then(a.2.cmp(&b.2))
+            .then(a.4.cmp(&b.4))
+    });
+}
+
 /// ORDER 672-bz7u. The candidate selection for `expire-claims`, split out so
 /// the policy is unit-testable without a filesystem: given the folded ledger
 /// and a cutoff timestamp, partition every `in_progress` packet into
@@ -6905,14 +7398,32 @@ type HeldClaim<'a> = (String, &'a str, String);
 /// would NOT expire (newest event activity at or after the cutoff) AND whose
 /// claim itself is younger than the TTL, with the claiming host and claim ts.
 ///
-/// OWNERSHIP COMES FROM THE CLAIM EVENT, NEVER THE NEWEST EVENT. Any host may
-/// append a note to a claimed row (freshness audits do), so "host of the
-/// newest event" is last-toucher attribution — the wrong host. The claim
-/// convention is machine-recognizable: the skill's claim recipe records a
-/// `claimed for cycle <ts>` summary via set-field --reason, so the claim
-/// event is the NEWEST event whose summary starts with that prefix. A row
-/// with no such event yields no live-claim row at all: an owner the ledger
-/// cannot name is not this host (fail closed), and the detector must refuse.
+/// OWNERSHIP COMES FROM THE STATUS CHANNEL, NOT FROM EVENT PROSE (1065-4t7t).
+///
+/// This used to recognise a live claim ONLY by finding an event whose summary
+/// began "claimed for cycle". That is a sentence, so a lease recorded any other
+/// way was invisible and the packet read as claimable while a host was working
+/// it. Four instances on 2026-09-05: a claim written "claimed <ts> by", a
+/// reopen through `set-field` whose reason carried no such sentence, two proxy
+/// claims that had to be phrased exactly to be seen, and order 317 called
+/// unclaimed-in-progress while another host was mid-run on it. That is
+/// 814-iyu7's duplication arriving through the INSTRUMENT rather than the
+/// selector.
+///
+/// THE LEASE WAS ALREADY THERE. Every `set-field <id> status in_progress`
+/// writes a status entry carrying `ts` and `host`, and the fold already records
+/// which entry won (`FoldProvenance::lww_wins` -> `Ledger::status_lease_of`).
+/// The authoritative claimant and claim time were present the whole time; only
+/// this function was reading the wrong channel.
+///
+/// The event-text path REMAINS as a fallback, widened to accept what the claim
+/// command actually writes rather than one sentence. It is a fallback and not
+/// the primary because prose is the thing that failed.
+///
+/// Any host may append a note to a claimed row (freshness audits do), so "host
+/// of the newest event" would be last-toucher attribution — the wrong host. A
+/// row with no lease and no claim event yields no live-claim row: an owner the
+/// ledger cannot name is not this host (fail closed).
 ///
 /// Rows are `(order, packet_id, claim_host, claim_ts, last_activity_ts)`.
 type LiveClaim<'a> = (String, &'a str, String, String, String);
@@ -6955,7 +7466,13 @@ fn live_claims<'a>(ledger: &'a Ledger, cutoff_iso: &str) -> Vec<LiveClaim<'a>> {
                 let is_claim = ev
                     .get("summary")
                     .and_then(serde_yaml::Value::as_str)
-                    .is_some_and(|s| s.trim_start().starts_with("claimed for cycle"));
+                    .is_some_and(|s| {
+                        // WIDENED (1065-4t7t): "claimed for cycle", "claimed
+                        // <ts> by" and "claim(<id>)" all say the same thing to
+                        // a reader and said nothing to the old prefix test.
+                        let t = s.trim_start();
+                        t.starts_with("claimed") || t.starts_with("claim(")
+                    });
                 if is_claim {
                     let host = ev
                         .get("host")
@@ -6967,8 +7484,23 @@ fn live_claims<'a>(ledger: &'a Ledger, cutoff_iso: &str) -> Vec<LiveClaim<'a>> {
                 }
             }
         }
-        let (Some(last), Some((claim_host, claim_ts))) = (last_ts, claim) else {
-            continue;
+        // THE STATUS CHANNEL FIRST. Its (host, ts) is the entry that actually
+        // set in_progress, which is what a lease is.
+        let lease = ledger
+            .status_lease_of(pid)
+            .filter(|(h, t)| !h.is_empty() && !t.is_empty());
+        let (claim_host, claim_ts) = match (lease, claim) {
+            (Some((h, t)), _) => (h, t),
+            (None, Some((h, t))) => (h, t),
+            (None, None) => continue,
+        };
+        // `last_ts` still comes from events: it answers "has anything happened
+        // here recently", which the status entry cannot. A row whose only
+        // record is the claim itself takes the claim ts as its last activity
+        // rather than being dropped for having no events.
+        let last = match last_ts {
+            Some(l) if l > claim_ts => l,
+            _ => claim_ts,
         };
         // Both halves of "young enough": the reaper would not expire the row,
         // and the claim itself is inside the TTL. A stale claim kept alive by
@@ -7045,7 +7577,13 @@ fn expire_claim_candidates<'a>(
                 let is_claim = ev
                     .get("summary")
                     .and_then(serde_yaml::Value::as_str)
-                    .is_some_and(|s| s.trim_start().starts_with("claimed for cycle"));
+                    .is_some_and(|s| {
+                        // WIDENED (1065-4t7t): "claimed for cycle", "claimed
+                        // <ts> by" and "claim(<id>)" all say the same thing to
+                        // a reader and said nothing to the old prefix test.
+                        let t = s.trim_start();
+                        t.starts_with("claimed") || t.starts_with("claim(")
+                    });
                 if !is_claim {
                     continue;
                 }
@@ -7289,6 +7827,107 @@ fn read_prose_source(path: &str) -> std::io::Result<String> {
 
 #[cfg(test)]
 mod tests {
+    use super::{ForgottenRow, forgotten_sort};
+
+    fn row(age: Option<i64>, order: i64, blocking: usize, id: &str) -> ForgottenRow {
+        (
+            age,
+            order,
+            blocking,
+            order.to_string(),
+            id.to_string(),
+            false,
+        )
+    }
+
+    /// ORDER 718-jqt5 criterion 1. Eventless packets come FIRST — nothing has
+    /// ever happened to them — and within that bucket the LOWEST order wins,
+    /// because next-order mints monotonically so a lower number was filed
+    /// longer ago (581-k3f9).
+    #[test]
+    fn forgotten_puts_eventless_packets_first_oldest_order_first() {
+        let mut rows = vec![
+            row(Some(3), 900, 0, "recent-event"),
+            row(None, 1085, 0, "new-and-untouched"),
+            row(None, 151, 0, "ancient-and-untouched"),
+        ];
+        forgotten_sort(&mut rows);
+        let ids: Vec<&str> = rows.iter().map(|r| r.4.as_str()).collect();
+        assert_eq!(
+            ids,
+            vec!["ancient-and-untouched", "new-and-untouched", "recent-event"]
+        );
+    }
+
+    /// Among packets that DO have events, the stalest ranks first. Without this
+    /// the bucket rule above could be satisfied by ignoring age entirely.
+    #[test]
+    fn forgotten_ranks_evented_packets_by_descending_age() {
+        let mut rows = vec![
+            row(Some(2), 100, 0, "fresh"),
+            row(Some(90), 900, 0, "stale"),
+            row(Some(30), 500, 0, "middling"),
+        ];
+        forgotten_sort(&mut rows);
+        let ids: Vec<&str> = rows.iter().map(|r| r.4.as_str()).collect();
+        assert_eq!(ids, vec!["stale", "middling", "fresh"]);
+    }
+
+    /// A LEAF is what a residual-maximising selector never reaches: the epic
+    /// score weights `blocking` at 1.5, so a packet nothing depends on barely
+    /// moves its epic and is never the reason one wins. Fewest dependents
+    /// first, at equal age.
+    #[test]
+    fn forgotten_prefers_the_leaf_at_equal_age() {
+        let mut rows = vec![
+            row(None, 200, 7, "blocks-many"),
+            row(None, 200, 0, "blocks-nothing"),
+        ];
+        forgotten_sort(&mut rows);
+        assert_eq!(rows[0].4, "blocks-nothing");
+    }
+
+    /// THE NEGATIVE CONTROL 718-jqt5 ASKS FOR, and it is stronger than the
+    /// criterion. The criterion says "the same seed yields the same set"; this
+    /// projection takes no seed, so the order is total and the same input
+    /// yields the same output regardless of how it arrived. Shuffling the input
+    /// must change nothing — which is what rules out insertion order (fragment
+    /// order, and therefore host-dependent) leaking into the ranking.
+    #[test]
+    fn forgotten_is_reproducible_without_a_seed() {
+        let build = || {
+            vec![
+                row(None, 500, 1, "e"),
+                row(Some(10), 100, 0, "a"),
+                row(None, 200, 0, "c"),
+                row(Some(10), 900, 0, "b"),
+                row(None, 200, 3, "d"),
+            ]
+        };
+        let mut first = build();
+        forgotten_sort(&mut first);
+
+        let mut shuffled = build();
+        shuffled.reverse();
+        forgotten_sort(&mut shuffled);
+        assert_eq!(first, shuffled, "input order must not reach the ranking");
+
+        let mut rotated = build();
+        rotated.rotate_left(3);
+        forgotten_sort(&mut rotated);
+        assert_eq!(first, rotated);
+    }
+
+    /// Equal age AND equal blocking must still be a total order, or two hosts
+    /// can print the same set in different sequences and a batch stops being
+    /// replayable.
+    #[test]
+    fn forgotten_breaks_full_ties_on_packet_id() {
+        let mut rows = vec![row(None, 300, 0, "zeta"), row(None, 300, 0, "alpha")];
+        forgotten_sort(&mut rows);
+        assert_eq!(rows[0].4, "alpha");
+    }
+
     use super::*;
     use answer::{Citation, CitationKind, Confidence, Envelope, Freshness};
     use std::collections::BTreeMap;
@@ -7610,6 +8249,226 @@ mod tests {
     /// any host may note on a claimed row), a claim-less in_progress row
     /// yields nothing, and both the activity AND the claim itself must be
     /// inside the TTL.
+    /// ORDER 1082-k3wp. A CLAIM IS ANSWERED BY A TYPE, NOT BY A SENTENCE.
+    ///
+    /// yolanda claimed 823-u5zf and then deliberately did NOT set it
+    /// in_progress: the remaining half needs an observed interactive launch on
+    /// the operator's machine, which no agent can perform. A FALSE HOLD is the
+    /// worse half of 1079-qb8k's defect — a missing transition makes every host
+    /// see a free packet that is held, a false hold makes every host skip a
+    /// packet that is free — so declining was right, and the sweep told them
+    /// they owed a transition anyway, every cycle.
+    ///
+    /// THE PROSE ARM IS THE POINT. yolanda's release reads "RELEASED, and
+    /// deliberately NOT set to in_progress" and an earlier note reads "I AM NOT
+    /// CLAIMING IT". Both are unambiguous to a reader and neither is a signal.
+    /// Honouring either would be a string check on prose — a guard matching a
+    /// doc comment, a lane pinning a quoting style, a sweep keyed on "claimed
+    /// for cycle". This asserts prose is NOT enough, which is the design
+    /// decision rather than an omission.
+    #[test]
+    fn a_claim_is_answered_by_a_typed_release_and_never_by_prose() {
+        let raw = concat!(
+            "packets:\n",
+            // Claimed, nothing since: still owed. REPORTED.
+            "  - packet_id: owed\n    order: 1\n    title: \"o\"\n    status: ready\n    desired_release: v0.5\n",
+            "    events:\n      - type: claim\n        ts: \"2026-08-10T00:00:00Z\"\n        host: hosta\n",
+            "        summary: claimed for cycle\n",
+            // Claimed then TYPED release: answered. SILENT.
+            "  - packet_id: released\n    order: 2\n    title: \"r\"\n    status: ready\n    desired_release: v0.5\n",
+            "    events:\n      - type: claim\n        ts: \"2026-08-10T00:00:00Z\"\n        host: hostb\n",
+            "        summary: claimed for cycle\n",
+            "      - type: release\n        ts: \"2026-08-10T08:00:00Z\"\n        host: hostb\n",
+            "        summary: needs an operator-observed launch; no agent can move it\n",
+            // Claimed then a NOTE that SAYS released: still owed. PROSE IS NOT A SIGNAL.
+            "  - packet_id: prose\n    order: 3\n    title: \"p\"\n    status: ready\n    desired_release: v0.5\n",
+            "    events:\n      - type: claim\n        ts: \"2026-08-10T00:00:00Z\"\n        host: hostc\n",
+            "        summary: claimed for cycle\n",
+            "      - type: note\n        ts: \"2026-08-10T08:00:00Z\"\n        host: hostc\n",
+            "        summary: RELEASED, and deliberately NOT set to in_progress\n",
+            // Claimed then completed: a closure answers it too. SILENT.
+            "  - packet_id: closed\n    order: 4\n    title: \"c\"\n    status: ready\n    desired_release: v0.5\n",
+            "    events:\n      - type: claim\n        ts: \"2026-08-10T00:00:00Z\"\n        host: hostd\n",
+            "        summary: claimed for cycle\n",
+            "      - type: completed\n        ts: \"2026-08-10T09:00:00Z\"\n        host: hostd\n",
+            "        summary: shipped\n",
+        );
+        let ledger = Ledger::parse(raw, Default::default()).expect("synthetic ledger parses");
+        let cutoff = "2026-08-09T00:00:00Z";
+        let mut reported: Vec<&str> = Vec::new();
+        for p in query_packets(&ledger, Some("ready"), None, None, None, &[], usize::MAX) {
+            let Some(pid) = str_field(p, "packet_id") else {
+                continue;
+            };
+            let Some(seq) = p.get("events").and_then(serde_yaml::Value::as_sequence) else {
+                continue;
+            };
+            let answered = seq.iter().any(|ev| {
+                matches!(
+                    ev.get("type").and_then(serde_yaml::Value::as_str),
+                    Some("release" | "released" | "completed" | "verified" | "implemented")
+                )
+            });
+            if answered {
+                continue;
+            }
+            if seq.iter().any(|ev| {
+                ev.get("type").and_then(serde_yaml::Value::as_str) == Some("claim")
+                    && ev
+                        .get("ts")
+                        .and_then(serde_yaml::Value::as_str)
+                        .is_some_and(|ts| ts > cutoff)
+            }) {
+                reported.push(pid);
+            }
+        }
+        assert_eq!(
+            reported,
+            vec!["owed", "prose"],
+            "a TYPED release or a closure answers the claim; a note that SAYS \
+             released does not, because a reader cannot act on prose and this \
+             fleet spent a day removing exactly that kind of match"
+        );
+    }
+
+    /// ORDER 1079-qb8k. A CLAIM EVENT IS NOT A CLAIM, AND THE TOOL SAYS SO
+    /// RATHER THAN DECIDING WHAT THE HOST MEANT.
+    ///
+    /// `append-event --type claim` records an event; `set-field status
+    /// in_progress` is a separate call and is the only thing the fold reads.
+    /// Hosts do one, and then the sweep sees no lease while the selector still
+    /// offers the packet — a held packet handed to a second host.
+    ///
+    /// THE NEGATIVE CONTROL IS THE ARM THAT MATTERS, and the packet says so: a
+    /// ready packet with NO claim event must stay out of this report and stay
+    /// in the ready set. A fix that empties the ready set to be safe is worse
+    /// than the defect, because a host with nothing offered stops and a
+    /// coordinator reading an empty queue concludes the fleet is done.
+    ///
+    /// AGE IS LOAD-BEARING. Measured fleet-wide: 43 packets carry a claim
+    /// event, 24 are currently `ready`, and only 4 of those have one under 24h
+    /// old. Reporting all 24 would bury the live ones under twenty released
+    /// packets.
+    #[test]
+    fn a_claim_event_without_a_status_is_reported_but_not_resolved() {
+        let raw = concat!(
+            "packets:\n",
+            // Recent claim event, status never moved: the defect. REPORTED.
+            "  - packet_id: held\n    order: 1\n    title: \"h\"\n    status: ready\n    desired_release: v0.5\n",
+            "    events:\n      - type: claim\n        ts: \"2026-08-10T00:00:00Z\"\n        host: hosta\n",
+            "        summary: claimed for cycle 2026-08-10T00:00Z\n",
+            // A claim event OLDER than the cutoff: released history, not a lease.
+            "  - packet_id: stale\n    order: 2\n    title: \"s\"\n    status: ready\n    desired_release: v0.5\n",
+            "    events:\n      - type: claim\n        ts: \"2026-07-01T00:00:00Z\"\n        host: hostb\n",
+            "        summary: claimed for cycle 2026-07-01T00:00Z\n",
+            // NO claim event: the negative control. Must not appear at all.
+            "  - packet_id: plain\n    order: 3\n    title: \"p\"\n    status: ready\n    desired_release: v0.5\n",
+            "    events:\n      - type: note\n        ts: \"2026-08-10T00:00:00Z\"\n        host: hostc\n",
+            "        summary: just a note\n",
+        );
+        let ledger = Ledger::parse(raw, Default::default()).expect("synthetic ledger parses");
+        let cutoff = "2026-08-09T00:00:00Z";
+        let mut reported: Vec<(&str, String)> = Vec::new();
+        for p in query_packets(&ledger, Some("ready"), None, None, None, &[], usize::MAX) {
+            let Some(pid) = str_field(p, "packet_id") else {
+                continue;
+            };
+            let Some(seq) = p.get("events").and_then(serde_yaml::Value::as_sequence) else {
+                continue;
+            };
+            for ev in seq {
+                if ev.get("type").and_then(serde_yaml::Value::as_str) != Some("claim") {
+                    continue;
+                }
+                let Some(ts) = ev.get("ts").and_then(serde_yaml::Value::as_str) else {
+                    continue;
+                };
+                if ts <= cutoff {
+                    continue;
+                }
+                let host = ev
+                    .get("host")
+                    .and_then(serde_yaml::Value::as_str)
+                    .unwrap_or("-");
+                reported.push((pid, host.to_string()));
+            }
+        }
+        assert_eq!(
+            reported,
+            vec![("held", "hosta".to_string())],
+            "only the RECENT claim-without-status is reported: `stale` is released \
+             history and `plain` has no claim event at all — reporting either would \
+             remove work nobody holds from the ready set"
+        );
+        // AND IT IS NOT RESOLVED: the status is untouched by the report.
+        assert_eq!(
+            ledger.resolve("held").and_then(|p| str_field(p, "status")),
+            Some("ready"),
+            "the report must not transition the packet — that would rewrite the \
+             claiming host's authorship from another host"
+        );
+    }
+
+    /// ORDER 1065-4t7t. THE LEASE IS THE STATUS ENTRY, NOT A SENTENCE.
+    ///
+    /// A packet claimed through `set-field` carries a status entry with `ts`
+    /// and `host`, and that is the authoritative claimant whatever the reason
+    /// text says. Before this, recognition required an event summary opening
+    /// "claimed for cycle", so a lease worded any other way was invisible and
+    /// the row read as claimable while a host was working it.
+    ///
+    /// Measured on the live ledger the day this landed: the sweep went from
+    /// live=3/unclaimed=2 to live=4/unclaimed=1 with no ledger change, and
+    /// order 317 stopped being reported unclaimed while tlatoanis-macbook-air
+    /// was mid-run on it.
+    #[test]
+    fn a_status_entry_is_a_lease_whatever_the_reason_text_says() {
+        // Same temp-dir idiom the sibling fold tests use; no dev-dependency.
+        let dir = std::env::temp_dir().join(format!("tilland-lease-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("tempdir");
+        let index = dir.join("index.yaml");
+        std::fs::write(
+            &index,
+            concat!(
+                "packets:\n",
+                "  - packet_id: leased\n    order: 9\n    title: \"l\"\n    status: ready\n    desired_release: v0.5\n",
+            ),
+        )
+        .expect("write base");
+        let frag_dir = dir.join("index.d");
+        std::fs::create_dir_all(&frag_dir).expect("frag dir");
+        // A claim whose event prose says NOTHING a prefix test would match.
+        std::fs::write(
+            frag_dir.join("20260810t000000z-a-hosta.yaml"),
+            concat!(
+                "status:\n",
+                "  - packet_id: leased\n    field: status\n    value: in_progress\n",
+                "    ts: \"2026-08-10T00:00:00Z\"\n    host: hosta\n",
+                "events:\n",
+                "  - packet_id: leased\n    event:\n      type: progress\n",
+                "      ts: \"2026-08-10T00:00:00Z\"\n      host: hosta\n",
+                "      summary: reopened after a falsifying observation\n",
+            ),
+        )
+        .expect("write fragment");
+
+        let ledger = Ledger::load_with_fragments(&index).expect("folded ledger loads");
+        assert_eq!(
+            ledger.status_lease_of("leased"),
+            Some(("hosta", "2026-08-10T00:00:00Z")),
+            "the winning status entry's (host, ts) IS the lease"
+        );
+        let live = live_claims(&ledger, "2026-08-09T00:00:00Z");
+        assert_eq!(
+            live.len(),
+            1,
+            "a set-field claim must be seen even with no claim sentence: {live:?}"
+        );
+        assert_eq!(live[0].2, "hosta", "and it must name the claiming host");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn live_claims_name_the_claiming_host_and_fail_closed_without_one() {
         let raw = concat!(
@@ -7621,6 +8480,12 @@ mod tests {
             "        summary: claimed for cycle 2026-08-10T00:00Z\n",
             "      - type: note\n        ts: \"2026-08-10T02:00:00Z\"\n        host: hostb\n",
             "        summary: drive-by freshness note from another host\n",
+            // ORDER 1065-4t7t: lenovinha's phrasing. "claimed <ts> by <agent>"
+            // was invisible to the old prefix test and is a lease to a reader.
+            "  - packet_id: worded\n    order: 6\n    title: \"w\"\n    status: in_progress\n    desired_release: v0.5\n",
+            "    events:\n",
+            "      - type: note\n        ts: \"2026-08-10T00:00:00Z\"\n        host: hostc\n",
+            "        summary: claimed 2026-08-10T00:00Z by linux-hostc-claude\n",
             // in_progress with events but NO claim-convention event: no row.
             "  - packet_id: unowned\n    order: 2\n    title: \"u\"\n    status: in_progress\n    desired_release: v0.5\n",
             "    events:\n      - type: progress\n        ts: \"2026-08-10T00:00:00Z\"\n        host: hosta\n",
@@ -7647,15 +8512,29 @@ mod tests {
         let live = live_claims(&ledger, "2026-08-09T00:00:00Z");
         assert_eq!(
             live,
-            vec![(
-                "1".to_string(),
-                "owned",
-                "hosta".to_string(),
-                "2026-08-10T00:00:00Z".to_string(),
-                "2026-08-10T02:00:00Z".to_string(),
-            )],
-            "only the freshly-claimed row is live, owned by the CLAIMING host, \
-             with claim ts and newest-activity ts both reported"
+            vec![
+                (
+                    "1".to_string(),
+                    "owned",
+                    "hosta".to_string(),
+                    "2026-08-10T00:00:00Z".to_string(),
+                    "2026-08-10T02:00:00Z".to_string(),
+                ),
+                // ORDER 1065-4t7t: recognised now, invisible before. This is
+                // lenovinha's real phrasing on 1047-h88p, which the old prefix
+                // test did not match — the packet then read as claimable while
+                // that host was working it.
+                (
+                    "6".to_string(),
+                    "worded",
+                    "hostc".to_string(),
+                    "2026-08-10T00:00:00Z".to_string(),
+                    "2026-08-10T00:00:00Z".to_string(),
+                ),
+            ],
+            "freshly-claimed rows are live and owned by the CLAIMING host, \
+             whatever wording the claim used, with claim ts and \
+             newest-activity ts both reported"
         );
     }
 

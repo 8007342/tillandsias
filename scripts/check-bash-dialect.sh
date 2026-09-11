@@ -90,6 +90,27 @@ GNUDU_EXEMPT='# gnu-du: ok'
 PAT_GNUSED='(^|[^A-Za-z0-9_])sed[^|;&()]*\\[SsWwBbDd]'
 GNUSED_EXEMPT='# gnu-sed: ok'
 
+# BASH-4 BUILTINS AND BUILTIN OPTIONS (761-g36m extension, 2026-09-05).
+# `mapfile`/`readarray` and `read -N` do not exist in bash 3.2. Unlike the
+# GNU-sed class these FAIL LOUDLY on darwin — "read: -N: invalid option" —
+# but loudly in the wrong place: the script carries on with an empty
+# variable and reports a VIOLATION against a healthy tree, so the operator
+# reads a real-looking verdict rather than a dialect error.
+#
+# MEASURED 2026-09-05 on tlatoanis-macbook-air: 1055-6yp8's
+# check-skill-canonicalization.sh:104 used `IFS= read -r -N "$osize"`. On
+# bash 3.2.57 it printed the invalid-option error three times and returned
+# violation:skill-canonicalization-remedy against a canonical checkout,
+# failing arm1-committed-symlink-is-not-a-violation and BLOCKING EVERY PUSH
+# FROM THIS HOST. THIS GATE PASSED THAT FILE — ok:bash-dialect-clean — which
+# is the second time the class this file exists to catch shipped with no rule
+# for it (see the empty-array note below for the first).
+#
+# `read -n` IS bash 3.2 and is the correct replacement for this data; it is
+# deliberately NOT flagged. Only the bash-4 forms are.
+PAT_BASH4='(^|[^A-Za-z0-9_])(mapfile|readarray)([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])read([[:space:]]+-[A-Za-z]*)*[[:space:]]+-[A-Za-z]*N'
+BASH4_EXEMPT='# bash4: ok'
+
 # EMPTY-ARRAY EXPANSION UNDER `set -u` (761-g36m extension, 2026-08-30).
 # Not a bash-4-ism: `"${arr[@]}"` parses in both dialects. It is a SEMANTIC
 # divergence, the same family as the GNU date/du/sed rules above — bash 3.2
@@ -290,6 +311,27 @@ for f in $SCAN_FILES; do
   if [ -n "$gnused_bad" ]; then
     echo "[check-bash-dialect] UNEXEMPTED GNU-sed class in '$f' (BSD sed does not implement \\S \\s \\w \\b \\d and does NOT error — the substitution silently leaves the input unchanged, so the consumer gets the whole line; see 803-bqte):" >&2
     printf '%s' "$gnused_bad" | head -3 >&2
+    unguarded=$((unguarded + 1))
+  fi
+
+  # bash-4 builtins / builtin options. No `set -u` precondition: these are
+  # absent from 3.2 unconditionally.
+  bash4_bad=""
+  _b4="$(code_of "$f" | grep -nE "$PAT_BASH4" || true)"
+  if [ -n "$_b4" ]; then
+    while IFS= read -r _h; do
+      [ -n "$_h" ] || continue
+      _ln="${_h%%:*}"
+      if sed -n "${_ln}p" "$f" | grep -qF "$BASH4_EXEMPT"; then
+        continue
+      fi
+      bash4_bad="${bash4_bad}${_h}
+"
+    done <<< "$_b4"
+  fi
+  if [ -n "$bash4_bad" ]; then
+    echo "[check-bash-dialect] UNEXEMPTED bash-4 builtin in '$f' (mapfile/readarray/read -N do not exist in bash 3.2; darwin errors and then reports a violation against a healthy tree; see 1055-6yp8):" >&2
+    printf '%s' "$bash4_bad" | head -3 >&2
     unguarded=$((unguarded + 1))
   fi
 

@@ -43,7 +43,14 @@ critical_path:
   - step: "build-macos-tray is reachable from a non-Claude harness"
     # The concrete defect: a macOS BUILD skill that only Claude-harness agents
     # could see, so what a host could do depended on which harness launched it.
-    command: "test -L .opencode/skills/build-macos-tray || test -L .codex/skills/build-macos-tray || test -L .gemini/skills/build-macos-tray || { echo 'FAIL: build-macos-tray still reachable only from .claude'; exit 1; }; echo 'ok: cross-harness'"
+    # ORDER 1055-6yp8: ask the INDEX, not the worktree. `test -L` answers false
+    # for a committed symlink on any checkout with core.symlinks=false (Windows
+    # without Developer Mode), so this step failed on a correct tree and could
+    # not pass on that platform at all -- the same defect that made
+    # check-skill-canonicalization.sh report all 75 entries as violations. Mode
+    # 120000 in `git ls-files -s` is what "is a symlink" means here; the -L
+    # fallback still covers an untracked path.
+    command: "for h in .opencode .codex .gemini; do p=\"$h/skills/build-macos-tray\"; if [ \"$(git ls-files -s -- \"$p\" 2>/dev/null | awk 'NR==1{print $1}')\" = '120000' ] || [ -L \"$p\" ]; then echo 'ok: cross-harness'; exit 0; fi; done; echo 'FAIL: build-macos-tray still reachable only from .claude'; exit 1"
     timeout_ms: 5000
     expected_behavior: "ok: cross-harness"
 

@@ -16,7 +16,7 @@ use std::io::{Read, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
@@ -1877,6 +1877,7 @@ impl TrayService {
     ///
     /// @trace spec:tray-ux, spec:remote-projects
     /// @trace plan/issues/clone-tray-ux-not-refreshed-2026-06-18.md
+    #[allow(dead_code)]
     fn refresh_local_projects(&self) {
         let projects = discover_projects();
         self.with_state(|state| {
@@ -2392,6 +2393,7 @@ fn terminal_present(candidate: &str) -> bool {
     false
 }
 
+#[allow(dead_code)]
 fn launch_project_action(
     project: ProjectEntry,
     kind: LaunchKind,
@@ -2566,6 +2568,7 @@ fn try_build_forge_image_on_demand(service: &Arc<TrayService>, snapshot: &TrayUi
     }
 }
 
+#[allow(dead_code)]
 fn handle_launch_project(service: Arc<TrayService>, project: ProjectEntry, kind: LaunchKind) {
     let snapshot = service.snapshot();
     let version = snapshot.version.clone();
@@ -2668,18 +2671,13 @@ fn handle_launch_project(service: Arc<TrayService>, project: ProjectEntry, kind:
     }
 }
 
-/// Launch a cloud-side (GitHub-sourced) project: idempotent clone into
-/// `~/src/<name>` then attach via `handle_launch_project`.
+/// Launch a cloud-side (GitHub-sourced) project: fully ephemeral launch
+/// directly via `tillandsias --cloud <repo_id> --<agent>`.
 ///
-/// Flow:
-/// 1. If `~/src/<name>` does not exist, clone it from the project's repo URL
-///    (derived from the cloud `ProjectEntry`'s path or display name).
-/// 2. If it does exist, run `git fetch` to refresh remote state. This is
-///    best-effort — failure does not block the launch.
-/// 3. Hand the resulting on-disk path to the standard `launch_project_action`
-///    via `handle_launch_project` so all four interactive launch kinds
-///    (Claude / Codex / OpenCode / Maintenance) flow through the same
-///    enclave + terminal pipeline.
+/// Under the cloud-only ephemeral forge architecture, the host filesystem is
+/// NEVER touched (`~/src/<project>` is never created or modified). The git
+/// mirror seeds directly from GitHub upstream, and the forge clones from the
+/// mirror into RAM-backed tmpfs.
 ///
 /// @trace spec:remote-projects, spec:tray-ux, spec:browser-isolation-tray-integration
 fn handle_launch_cloud_project(service: Arc<TrayService>, cloud: ProjectEntry, kind: LaunchKind) {
@@ -2726,137 +2724,70 @@ fn handle_launch_cloud_project(service: Arc<TrayService>, cloud: ProjectEntry, k
     if service
         .task_executor
         .spawn_task(move || {
-            // Resolve target on-disk path: ~/src/<name>. The cloud entry's
-            // `path` is the planned clone destination if the menu agent
-            // populated it; otherwise we synthesize the default.
-            let target_path = if cloud.path.as_os_str().is_empty() {
-                let Ok(home) = std::env::var("HOME") else {
-                    eprintln!("error: HOME not set; cannot resolve clone target");
-                    return;
-                };
-                PathBuf::from(home).join("src").join(&cloud.name)
+            let repo_id = if let Some(ref nwo) = cloud.full_name {
+                nwo.clone()
             } else {
-                cloud.path.clone()
-            };
-
-            // Ground-truth gate (fresh-checkout invariant, 2026-07-20): a
-            // bare `exists()` accepted empty/partial/broken checkouts — the
-            // operator deleted ~/src/<project>, relaunched from the cloud
-            // icon, and the agent landed on an invalid tree
-            // (plan/issues/forge-launch-must-guarantee-fresh-checkout-idempotency-2026-07-20.md).
-            // Quarantine anything invalid (rename aside, never delete — the
-            // dir may hold user data) so the clone below re-materializes a
-            // real checkout; refuse the launch loudly if even that fails.
-            // 997-e4v2: only a TRUTHFUL "this is not a checkout" may rename the
-            // user's directory. An unanswerable question refuses the launch and
-            // leaves the tree alone.
-            if target_path.exists()
-                && let verdict = crate::classify_git_checkout(&target_path)
-                && verdict != crate::CheckoutVerdict::Valid
-            {
-                if let crate::CheckoutVerdict::Indeterminate(why) = &verdict {
-                    eprintln!(
-                        "error: cloud launch refused for '{}': cannot evaluate the checkout at {}: {why}. Leaving it untouched.",
-                        cloud.name,
-                        target_path.display()
-                    );
-                    let _ = futures::executor::block_on(service_for_emit.set_status(
-                        format!("🥀 Cannot evaluate checkout for {}: not touched", cloud.name),
-                        TrayIconState::Dried,
-                        None,
-                    ));
-                    return;
-                }
-                match crate::quarantine_invalid_checkout(&target_path) {
-                    Ok(aside) => eprintln!(
-                        "[tillandsias] cloud: {} was not a valid git checkout; moved aside to {} and re-cloning",
-                        target_path.display(),
-                        aside.display()
-                    ),
-                    Err(err) => {
-                        eprintln!("error: cloud launch refused for '{}': {err}", cloud.name);
-                        let _ = futures::executor::block_on(service_for_emit.set_status(
-                            format!("🥀 Invalid checkout for {}: cannot repair", cloud.name),
-                            TrayIconState::Dried,
-                            None,
-                        ));
-                        return;
-                    }
-                }
-            }
-
-            // Step 1: clone if missing, fetch if present.
-            if !target_path.exists() {
-                // The cloud entry doesn't carry the owner directly — discover
-                // from the cached GitHub project list. The user contract
-                // example (`8007342/forge`) lives in that cache.
-                //
-                // IMPORTANT: prefer `GitHubProject::nwo()` (`owner/name`).
-                // `project.url` is the *API* URL from `gh api user/repos`
-                // (`https://api.github.com/repos/<owner>/<name>`) and is NOT
-                // a valid argument to `gh repo clone` — passing it produces
-                // `invalid path: /repos/<owner>/<name>`.
-                // @trace spec:remote-projects
                 let projects = remote_projects::discover_github_projects();
-                let repo_id = projects
+                projects
                     .iter()
                     .find(|p| p.name == cloud.name)
                     .map(|p| p.nwo())
-                    .unwrap_or_else(|| {
-                        // Fallback: best-effort guess so empty owner cases at
-                        // least surface a sane git error.
-                        cloud.name.clone()
-                    });
+                    .unwrap_or_else(|| cloud.name.clone())
+            };
 
-                let _ = futures::executor::block_on(service_for_emit.set_status(
-                    format!("⏳ Cloning {} ...", cloud.name),
-                    TrayIconState::Building,
-                    None,
-                ));
-                if let Err(err) = remote_projects::clone_project_from_github(&repo_id, &target_path)
-                {
-                    eprintln!("error: cloud clone failed for '{}': {}", cloud.name, err);
-                    let _ = futures::executor::block_on(service_for_emit.set_status(
-                        format!("🥀 Clone failed: {}", cloud.name),
-                        TrayIconState::Dried,
-                        None,
-                    ));
+            let current_exe = match std::env::current_exe() {
+                Ok(exe) => exe,
+                Err(err) => {
+                    eprintln!("error: failed to resolve Tillandsias executable: {err}");
                     return;
                 }
-
-                // Clone succeeded on disk. Clear the "⏳ Cloning …" status and
-                // re-scan ~/src so the freshly cloned checkout appears in the
-                // 🏠 ~/src submenu without a tray restart. Without this the tray
-                // stays stuck on "Cloning …" and the local list goes stale —
-                // see plan/issues/clone-tray-ux-not-refreshed-2026-06-18.md.
-                // @trace spec:tray-ux, spec:remote-projects
+            };
+            let mode_flag = match kind {
+                LaunchKind::Claude => "--claude",
+                LaunchKind::Codex => "--codex",
+                LaunchKind::OpenCode => "--opencode",
+                LaunchKind::Antigravity => "--antigravity",
+                LaunchKind::Maintenance => "--bash",
+                LaunchKind::OpenCodeWeb => "--opencode-web",
+                LaunchKind::Observatorium => "--observatorium",
+            };
+            let mut argv = vec![
+                current_exe.display().to_string(),
+                "--cloud".to_string(),
+                repo_id.clone(),
+                mode_flag.to_string(),
+            ];
+            if snapshot.debug {
+                argv.push("--debug".to_string());
+            }
+            let title = format!(
+                "Tillandsias - {} ({})",
+                cloud.name,
+                mode_flag.trim_start_matches("--")
+            );
+            eprintln!(
+                "[tillandsias] tray: launching cloud project '{}' via {mode_flag} (repo={repo_id})",
+                cloud.name
+            );
+            let _ = futures::executor::block_on(service_for_emit.set_status(
+                format!("⏳ Launching {} ...", cloud.name),
+                TrayIconState::Building,
+                None,
+            ));
+            if let Err(err) = launch_in_terminal(&title, &argv[0], &argv[1..]) {
+                eprintln!("error: cloud launch failed for '{}': {err}", cloud.name);
                 let _ = futures::executor::block_on(service_for_emit.set_status(
-                    format!("✓ Cloned {}", cloud.name),
-                    TrayIconState::Mature,
+                    format!("🥀 Launch failed: {err}"),
+                    TrayIconState::Dried,
                     None,
                 ));
-                service_for_emit.refresh_local_projects();
-                let _ = futures::executor::block_on(service_for_emit.rebuild_after_state_change());
-            } else {
-                // Best-effort refresh — git fetch is non-fatal if it fails.
-                let _ = Command::new("git")
-                    .arg("-C")
-                    .arg(&target_path)
-                    .arg("fetch")
-                    .stdin(Stdio::null())
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .status();
+                return;
             }
-
-            // Step 2: hand off to the standard local launch flow so all four
-            // interactive kinds flow through `launch_forge_agent`.
-            let entry = ProjectEntry {
-                name: cloud.name.clone(),
-                path: target_path,
-                full_name: cloud.full_name.clone(),
-            };
-            handle_launch_project(service_for_emit.clone(), entry, kind);
+            let _ = futures::executor::block_on(service_for_emit.set_status(
+                format!("✓ Launched {}", cloud.name),
+                TrayIconState::Mature,
+                None,
+            ));
         })
         .is_err()
     {
@@ -3355,30 +3286,6 @@ fn build_project_submenu(
     )
 }
 
-/// Build the `~/src >` submenu listing every discovered local project.
-///
-
-/// Build the `☁️ Cloud >` submenu listing every discovered cloud project.
-///
-/// Population of `state.cloud_projects` is owned by
-/// [`cloud::refresh_cloud_projects_if_stale`]. When the list is empty the
-/// placeholder text depends on whether we've ever fetched: `(loading…)`
-/// before the first fetch, `(no repos)` after a successful fetch with zero
-/// results.
-///
-/// ## Overflow handling
-///
-/// Native KSNI / GMenu indicator menus cannot scroll, so we cap the visible
-/// list at [`resolved_max_cloud_projects_in_menu`] entries. When the
-/// underlying list is longer the tail is hidden behind a final disabled-ish
-/// overflow leaf (id [`CLOUD_OVERFLOW_ID`]) whose label includes the total
-/// count. Activation is handled in the StatusNotifierItem event handler.
-///
-/// Sort order matches whatever populated `cloud_projects` (currently
-/// `gh api user/repos?sort=pushed`, i.e. newest-pushed first) so the cap
-/// trims the *tail* — stale repos — rather than the user's active work.
-///
-/// @trace spec:tray-ux, spec:remote-projects
 /// Label and clickability for the cloud-overflow row (order 591-33s6).
 ///
 /// Pure, and separated from menu construction on purpose: the built node's
@@ -3400,6 +3307,38 @@ fn cloud_overflow_row(total: usize, visible_count: usize) -> (String, bool) {
     (label, false)
 }
 
+/// Build the `☁️ Cloud >` submenu listing every discovered cloud project.
+///
+/// Population of `state.cloud_projects` is owned by
+/// [`cloud::refresh_cloud_projects_if_stale`]. When the list is empty the
+/// placeholder text depends on whether we've ever fetched: `(loading…)`
+/// before the first fetch, `(no repos)` after a successful fetch with zero
+/// results.
+///
+/// ## Overflow handling
+///
+/// Native KSNI / GMenu indicator menus cannot scroll, so we cap the visible
+/// list at [`resolved_max_cloud_projects_in_menu`] entries. When the
+/// underlying list is longer the tail is hidden behind a final disabled-ish
+/// overflow leaf (id [`CLOUD_OVERFLOW_ID`]) whose label includes the total
+/// count. Activation is handled in the StatusNotifierItem event handler.
+///
+/// Sort order matches whatever populated `cloud_projects` (currently
+/// `gh api user/repos?sort=pushed`, i.e. newest-pushed first) so the cap
+/// trims the *tail* — stale repos — rather than the user's active work.
+///
+/// This doc block spent time attached to `cloud_overflow_row`: 112ea637c
+/// inserted that function INTO THE GAP between this comment and the function
+/// it describes, and a doc comment attaches to whatever follows it. No diff
+/// hunk looks wrong when that happens. It carried a spec-trace annotation
+/// naming tray-ux and remote-projects, which is DELIBERATELY NOT RESTORED —
+/// this function is retired below, its only callers live in the `#[cfg(test)]`
+/// module, and crediting a spec to code production cannot reach relocates a
+/// false attribution rather than removing it. Both specs keep live coverage
+/// elsewhere in this file (39 and 53 annotations across the crates). The
+/// general question — how much of the trace ledger sits on unreachable items —
+/// is order 1088-e8wv. Do not re-add a spec trace here without reading it.
+///
 /// @trace dead_code — retired by order 628-p5tj convergence.
 #[allow(dead_code)]
 fn build_cloud_projects_submenu(state: &TrayUiState) -> MenuNode {

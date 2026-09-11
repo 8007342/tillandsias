@@ -97,6 +97,43 @@ Hard rules:
    litmus greps for this marker; a smoke run that exits without it is a
    failure by definition.
 
+## Sub-agent and token budget (operator directive 2026-09-11; packet 1119-6wn6)
+
+Sub-agents spend the same rate-limited pool as the main loop, and that pool
+ran out a week early last month. This checkout's 2026-09-06 cycle died
+mid-finalization for the same reason, with two finished fragments sitting
+uncommitted for five days. MEASURED on macuahuitl 2026-09-11: one read-only
+reconciliation Workflow of 42 agents at the main model's tier spent 4,480,590
+tokens in 21 minutes — roughly twenty times the main context of the entire
+cycle. The output was good; the price was invisible until the operator asked.
+
+The loop has `timing:`, `recur:` and `skippable:` for CPU seconds and nothing
+for tokens, so an expensive repeatable delegation cannot be seen the way the
+low-end hosts made the CPU bottlenecks visible. Until the counter in
+1119-6wn6 lands and replaces these rules with numbers:
+
+- **Count.** At most 8 sub-agents per full cycle by default, at most 3 running
+  at once. A Workflow (fan-out orchestration) only when the invoking prompt
+  opts in ("ultracode", "use a workflow"), and then at most 15 agents.
+- **Tier by task class, and pass `model` and `effort` explicitly every time.**
+  Lookups, greps, "does commit X exist / touch file Y", ancestry and existence
+  checks: haiku, effort low. Summarising a diff or a fragment, drafting event
+  prose: sonnet, effort medium. Judgment (a verdict on a packet, a review
+  finding, a design choice): opus, effort medium — high only when the error is
+  unrecoverable. The main model's tier is for the main loop, never for
+  refuters or fan-out.
+- **Refuters.** At most one per verdict, one tier below the verdict's author.
+  Prefer one agent with a schema over N parallel ones when the items are cheap.
+- **Never delegate a read an expert answers.** `plan_status`, `plan_answer`,
+  `methodology_ask` and the project-info tools cost nothing next to an agent.
+- **Report it.** Until `scripts/cycle-metrics.sh --emit-tokens` exists, the
+  handoff carries a hand-attested `tokens:` line from what the harness reports:
+  main-context tokens spent, sub-agent tokens, agent count by model. A cycle
+  that spawned nothing writes `subagent_tokens=0 agents=0`. Only the agent can
+  observe these numbers, so this is an attestation (the `check-mcp-surface.sh`
+  shape), and an unmeasured spend is the order-531 shape one level up: it
+  reads as free and is not.
+
 ## Full-Mode Terminal Attestation (order 614-2gqx)
 
 Smoke mode has a machine-grepped verdict (`MO-SMOKE:`); full mode did not, so
@@ -596,6 +633,30 @@ filing — not the prompt.
    selector, every ledger write and every closure check goes through) and
    re-establishes the dev inference endpoint. Both are idempotent; the common
    path costs a no-op `cargo build` and one HTTP round trip, measured at ~2.8s.
+
+   **The `<plan>` segment names WHICH instrument the cycle is running on, and
+   `existing` is a legitimate verdict** (order 1004-ws5q):
+
+   | verdict | meaning |
+   |---|---|
+   | `rebuilt` | cargo was present and the instrument was built or confirmed current |
+   | `existing` | **no cargo on this host, but a runnable binary resolved** — the cycle proceeds on it |
+   | `skipped` | the build step was skipped by `CYCLE_PREFLIGHT_SKIP_BUILD=1` |
+   | `blocked:preflight:plan:cargo-absent` | no cargo AND no runnable binary — no instrument, and the cycle must not start |
+
+   `existing` exists because the old order of checks was backwards: preflight
+   declared the COMPILER absent before ever looking for a BINARY, so a host
+   doing compile-free work lost its whole slot with a healthy instrument on
+   disk. Measured on pirria 2026-09-04, where a floor-tier release smoke —
+   which compiles nothing — was refused a 4h slot.
+
+   **`CYCLE_PREFLIGHT_SKIP_BUILD=1` is for compile-free work on a host that
+   cannot compile, and nothing else.** It is NOT a way past a red build on a
+   host that can compile: that is a broken instrument, and selecting work with
+   one is the failure this whole step exists to prevent. Since 1004-ws5q a host
+   with no cargo but a working binary no longer needs the variable at all —
+   preflight answers `existing` on its own — so reaching for it should now be
+   rare enough to be worth a second thought.
 
    It rebuilds the INSTRUMENT, not the product: `./build.sh --check` already
    compiles what it validates, and rebuilding everything on a schedule is a

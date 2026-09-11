@@ -253,10 +253,48 @@ fi
 # shape in this suite's history; the rule stays "assert the behaviour, not the
 # string", and where a string check is genuinely wanted it must exclude the
 # place the string is a specimen rather than a defect.
-if grep -rn 'dirname "${BASH_SOURCE\[0\]}")/lib/tool-dispatch\.sh' "$ROOT/scripts" 2>/dev/null \
+# ORDER 1075-yuxt. CAPTURE FIRST, THEN TEST -- this was a pipeline ending in
+# `grep -q` under `set -o pipefail`, and it went QUIET EXACTLY WHEN THE DEFECT
+# WAS PRESENT.
+#
+# `grep -q` exits on its first match. Under pipefail, the upstream stages then
+# die of SIGPIPE (141) and the PIPELINE's status is 141 even though the final
+# grep returned 0 for MATCHED. The `if` therefore took the else branch and
+# printed "no caller carries the fixed-depth source path" while the callers
+# were there.
+#
+# MEASURED ON YOLANDA 2026-09-05 (drvfs/ntfs checkout), PIPESTATUS not rc,
+# because rc alone cannot tell "no match" from "the producer died":
+#
+#     matches   producer output   PIPESTATUS        verdict
+#        1      (real tree)       [0 1 1 1]         correct: no caller
+#       40      ~4 KB             [0 0 0 0]         correct: caller found
+#     1000      112,896 bytes     [0 0 0 0]         correct: caller found
+#     2000      226,896 bytes     [141 141 141 0]   SILENT: reported all-clear
+#    20000      568,896 bytes     [141 141 141 0]   SILENT, 10 runs of 10
+#
+# Note the last column of PIPESTATUS is 0 in the failing rows: the consumer
+# MATCHED. The verdict was inverted by the producers' corpses, not by the test.
+#
+# THE TRIGGER IS THE SIZE OF THE MATCH SET, NOT THE SLOWNESS OF THE SCAN, and
+# that distinction is measured rather than assumed: the real 547-entry tree on
+# this drvfs checkout is a slow scan with a two-line output and it is clean
+# 10/10, because a producer that has finished WRITING never receives SIGPIPE.
+# Do not read the threshold above as a safety margin -- a sibling model that
+# quoted byte margins as a safety property was falsified the same evening. It
+# is one host's measurement of where this pipeline flips, offered as evidence
+# that it flips at all.
+#
+# WHY THAT IS THE WORST POSSIBLE FAILURE MODE HERE: this guard's match set is
+# EMPTY in the healthy tree and grows only when someone reintroduces the
+# fixed-depth source path across callers. A small reintroduction still fires; a
+# widespread one goes silent. The check is loudest when nothing is wrong and
+# mute when everything is.
+matches="$(grep -rn 'dirname "${BASH_SOURCE\[0\]}")/lib/tool-dispatch\.sh' "$ROOT/scripts" 2>/dev/null \
    | grep -v 'test-tool-dispatch-lib\.sh' \
-   | grep -vE ':[[:space:]]*#' | grep -q .; then
-    bad "a caller reintroduced the fixed-depth source path"
+   | grep -vE ':[[:space:]]*#' || true)"
+if [ -n "$matches" ]; then
+    bad "a caller reintroduced the fixed-depth source path ($(printf '%s\n' "$matches" | grep -c .) site(s))"
 else
     ok "no caller carries the fixed-depth source path"
 fi

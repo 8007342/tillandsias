@@ -614,10 +614,89 @@ const DEFAULT_CHILD_PATH: &str = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/
 ///
 /// @trace plan/issues/macos-tray-github-login-blank-terminal-2026-06-21.md,
 ///        plan/issues/optimization-macos-vz-idiomatic-exec-layer-2026-06-21.md
+/// The child's HOME, read from the passwd database rather than assumed.
+///
+/// ORDER 1072-qk43. `child_env` seeded PATH, no_proxy and NO_PROXY and NOT HOME,
+/// so every `--exec-guest` command ran with HOME unset while USER, whoami and id
+/// all reported root. That environment is INCONSISTENT, not minimal, and the
+/// loud half was the cheap half:
+///
+///   * LOUD: any `set -u` script dies at its first $HOME reference. Measured on
+///     tlatoanis-macbook-air 2026-09-05 — the project's own build script:
+///     "scripts/build-image.sh: line 40: HOME: unbound variable", exit 1 in 0s.
+///   * SILENT, and the reason this is p1: the login profile prepends
+///     "$HOME/.local/bin", which with HOME unset expands to "/.local/bin" — a
+///     real absolute path that does not exist. Nothing errors and nothing warns,
+///     so a tool that WOULD resolve under a correct HOME is simply not found.
+///     An environment fault wearing a missing-tool's clothes, which is
+///     1004-x9ua's class arriving from the other side.
+///
+/// A CALLER-SIDE EXPORT CANNOT REPAIR IT, which is why the fix must be here:
+/// re-running with `export HOME=/root` as the first statement still yields
+/// PATH=/.local/bin:..., because the login shell computes PATH before the
+/// export runs. There is no workaround available to a caller.
+///
+/// READ, NOT ASSUMED. The guest's PTY children run as root today, so "/root"
+/// would be right today; hardcoding it is the shape that protects whoever
+/// remembers. passwd is the actual source of truth and costs one small read.
+/// The PURE half, split out so it is testable on every host.
+///
+/// It has to be pure or it cannot be tested where it matters. macOS keeps
+/// regular users in Directory Services, not /etc/passwd, so a dev host's
+/// lookup legitimately returns None for its own uid — which means a test
+/// written against the impure function passes vacuously there. MEASURED: the
+/// first version of this test survived deleting the entire HOME seed, because
+/// its "no home found" branch was satisfied by the dev host's own uid.
+fn home_from_passwd(passwd: &str, uid: u32) -> Option<String> {
+    for line in passwd.lines() {
+        let f: Vec<&str> = line.split(':').collect();
+        // name:passwd:uid:gid:gecos:home:shell
+        if f.len() >= 6 && f[2].parse::<u32>().ok() == Some(uid) && !f[5].is_empty() {
+            return Some(f[5].to_string());
+        }
+    }
+    // Fallback only for root, whose home is fixed by convention on every distro
+    // the guest is built from. For any other uid, seeding a GUESSED home would
+    // be worse than none: a wrong HOME points caches and dotfiles at a directory
+    // the child may not own, and that failure is quieter than the one above.
+    (uid == 0).then(|| "/root".to_string())
+}
+
+fn default_child_home() -> Option<String> {
+    // libc, not nix::unistd::geteuid: that needs nix's "user" feature, which
+    // this crate does not enable. geteuid() cannot fail and touches no memory.
+    let uid = unsafe { libc::geteuid() };
+    let passwd = std::fs::read_to_string("/etc/passwd").unwrap_or_default();
+    home_from_passwd(&passwd, uid)
+}
+
 fn child_env(provided: &[(String, String)]) -> Vec<(String, String)> {
-    let mut out: Vec<(String, String)> = Vec::with_capacity(provided.len() + 3);
+    child_env_with_home(provided, default_child_home())
+}
+
+/// The seeding logic, with the host lookup INJECTED so it can be tested off the
+/// guest.
+///
+/// ORDER 1072-qk43, and this split is the third attempt at giving the arm teeth.
+/// Asserting against `child_env` directly is vacuous on any host whose passwd
+/// has no entry for its own uid — macOS keeps regular users in Directory
+/// Services — so the test's body simply never ran there and SURVIVED deleting
+/// the seed twice: once through a "no home found" branch, once through an
+/// `is_some()` guard. Injecting the home is what makes the mutation observable.
+fn child_env_with_home(
+    provided: &[(String, String)],
+    home: Option<String>,
+) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = Vec::with_capacity(provided.len() + 4);
     if !provided.iter().any(|(k, _)| k == "PATH") {
         out.push(("PATH".to_string(), DEFAULT_CHILD_PATH.to_string()));
+    }
+    // Seed HOME when the caller did not. Caller-provided HOME still wins,
+    // exactly like PATH.
+    if !provided.iter().any(|(k, _)| k == "HOME")
+        && let Some(home) = home
+    {
+        out.push(("HOME".to_string(), home));
     }
     out.extend(provided.iter().cloned());
 
@@ -1721,6 +1800,98 @@ mod tests {
 
     /// A cleared env with no caller PATH gets the sane default seeded, so
     /// bare-name argv[0] resolves instead of failing ENOENT (blank-terminal bug).
+    /// ORDER 1072-qk43. The child MUST get a HOME — asserted over the PURE
+    /// lookup so the arm has teeth on every host.
+    ///
+    /// The first version of this test asserted against `child_env` directly and
+    /// SURVIVED DELETING THE ENTIRE SEED: on macOS the passwd lookup returns
+    /// None for the dev host's own uid (regular users live in Directory
+    /// Services), so the "no home" branch was satisfied by the machine rather
+    /// than the code. A guard exercised only where it cannot fail is verified
+    /// nowhere — the exact class this packet is about.
+    #[test]
+    fn home_from_passwd_finds_the_uids_home() {
+        let passwd = "root:x:0:0:root:/root:/bin/bash\n\
+                      forge:x:1000:1000::/home/forge:/bin/bash\n";
+        assert_eq!(home_from_passwd(passwd, 0).as_deref(), Some("/root"));
+        assert_eq!(
+            home_from_passwd(passwd, 1000).as_deref(),
+            Some("/home/forge")
+        );
+    }
+
+    /// The guest runs its PTY children as root, so the root fallback is what
+    /// actually fires there. It must survive an unreadable or empty passwd.
+    #[test]
+    fn home_from_passwd_falls_back_to_root_for_uid_zero_only() {
+        assert_eq!(home_from_passwd("", 0).as_deref(), Some("/root"));
+        // A NON-root uid with no entry gets NOTHING, deliberately: a guessed
+        // home is quieter and worse than an absent one.
+        assert_eq!(home_from_passwd("", 4242), None);
+    }
+
+    /// An entry with an EMPTY home field must not be accepted — that is how the
+    /// phantom "/.local/bin" was produced in the first place, from a HOME that
+    /// expanded to nothing.
+    #[test]
+    fn home_from_passwd_rejects_an_empty_home_field() {
+        assert_eq!(home_from_passwd("svc:x:7:7:::/sbin/nologin\n", 7), None);
+    }
+
+    /// The seed reaches child_env. Paired with the pure arms above, this is the
+    /// wiring assertion: with a home available, HOME is present exactly once.
+    /// The seed reaches the environment. INJECTED home, so this fails on every
+    /// host when the seed is removed — the previous two versions did not.
+    #[test]
+    fn child_env_seeds_the_injected_home_exactly_once() {
+        let out = child_env_with_home(
+            &[("TERM".to_string(), "dumb".to_string())],
+            Some("/root".to_string()),
+        );
+        let homes: Vec<&str> = out
+            .iter()
+            .filter(|(k, _)| k == "HOME")
+            .map(|(_, v)| v.as_str())
+            .collect();
+        assert_eq!(
+            homes,
+            vec!["/root"],
+            "HOME must be seeded exactly once from the resolved home"
+        );
+    }
+
+    /// And with NO home resolvable, nothing is invented — the child gets no
+    /// HOME rather than a guessed one.
+    #[test]
+    fn child_env_invents_no_home_when_none_resolves() {
+        let out = child_env_with_home(&[("TERM".to_string(), "dumb".to_string())], None);
+        assert!(
+            !out.iter().any(|(k, _)| k == "HOME"),
+            "a guessed HOME is quieter and worse than an absent one"
+        );
+    }
+
+    /// A caller-provided HOME must WIN, exactly as PATH does. Without this the
+    /// seed could silently override a forge launch that sets HOME=/home/forge.
+    #[test]
+    fn child_env_does_not_override_a_provided_home() {
+        let out = child_env_with_home(
+            &[("HOME".to_string(), "/home/forge".to_string())],
+            Some("/root".to_string()),
+        );
+        let homes: Vec<&str> = out
+            .iter()
+            .filter(|(k, _)| k == "HOME")
+            .map(|(_, v)| v.as_str())
+            .collect();
+        assert_eq!(
+            homes,
+            vec!["/home/forge"],
+            "a caller's HOME must be the only HOME — a duplicate lets the \
+             seeded value win or lose depending on env iteration order"
+        );
+    }
+
     #[test]
     fn child_env_seeds_default_path_when_absent() {
         let out = child_env(&[("TERM".to_string(), "dumb".to_string())]);
@@ -1746,9 +1917,25 @@ mod tests {
     }
 
     /// Empty env still yields a usable PATH + proxy-exemption vars.
+    ///
+    /// INJECTED HOME, like every other arm in this group, and the exact-count
+    /// assertion is why it has to be. This test called the impure `child_env`
+    /// and asserted `out.len() == 3`, which made it the ONE assertion in the
+    /// file sensitive to the host's /etc/passwd: `default_child_home()` looks
+    /// up the running uid, so on any host with a passwd entry for itself the
+    /// vector is 4 (PATH, HOME, no_proxy, NO_PROXY) and the test fails.
+    ///
+    /// MEASURED 2026-09-06 on yoga: `left: 4, right: 3`, deterministic, every
+    /// run. It passed on the macOS host that added the HOME seed (1072-qk43)
+    /// because macOS keeps regular users in Directory Services rather than
+    /// /etc/passwd, so the lookup returns None there — the same vacuity the
+    /// `child_env_with_home` split was introduced to remove, surviving in the
+    /// one arm that was not converted. It is a HOST-DEPENDENT failure, not a
+    /// flaky one; nothing here touches time, and the `#[ignore]` flakiness
+    /// notes further down belong to the PTY tests, not to this group.
     #[test]
     fn child_env_empty_input_gets_path_and_proxy_exemption() {
-        let out = child_env(&[]);
+        let out = child_env_with_home(&[], None);
         let path = out
             .iter()
             .find(|(k, _)| k == "PATH")
@@ -1756,7 +1943,23 @@ mod tests {
         assert_eq!(path, Some(DEFAULT_CHILD_PATH));
         assert!(out.iter().any(|(k, _)| k == "no_proxy"));
         assert!(out.iter().any(|(k, _)| k == "NO_PROXY"));
-        assert_eq!(out.len(), 3);
+        assert_eq!(out.len(), 3, "PATH + no_proxy + NO_PROXY, and no HOME");
+    }
+
+    /// The paired arm, and the reason the fix is not merely "drop the count".
+    /// With a home resolvable the empty-input case must yield FOUR — the count
+    /// is the only assertion that would catch a second HOME being appended, and
+    /// deleting it to make the host-dependence go away would delete that too.
+    #[test]
+    fn child_env_empty_input_with_a_home_seeds_exactly_one() {
+        let out = child_env_with_home(&[], Some("/root".to_string()));
+        let homes: Vec<&str> = out
+            .iter()
+            .filter(|(k, _)| k == "HOME")
+            .map(|(_, v)| v.as_str())
+            .collect();
+        assert_eq!(homes, vec!["/root"]);
+        assert_eq!(out.len(), 4, "PATH + HOME + no_proxy + NO_PROXY");
     }
 
     /// End-to-end smoke: open a PTY for `echo hi`, observe the `hi\r\n`

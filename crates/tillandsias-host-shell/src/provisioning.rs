@@ -164,7 +164,20 @@ mod tests {
     async fn spawn_handshake_responder(path: std::path::PathBuf) -> tokio::task::JoinHandle<()> {
         let listener = UnixListener::bind(&path).expect("bind");
         tokio::spawn(async move {
-            let (mut stream, _addr) = listener.accept().await.expect("accept");
+            let (stream, _addr) = listener.accept().await.expect("accept");
+            // ORDER 972-umik COMMIT B: Noise first, because the default is now
+            // On and ensure_vm_provisioned reaches this socket through
+            // connect_with_handshake. The frames below stay hand-rolled and
+            // UNBOUNDED per order 828-r2ek — encrypting the transport does not
+            // make this a bounded peer, and it must not become one.
+            let psk = tillandsias_secure_channel::channel_psk(
+                crate::version(),
+                WIRE_VERSION,
+                tillandsias_secure_channel::HopId::HostGuest,
+            );
+            let mut stream = tillandsias_secure_channel::server_handshake(stream, &psk)
+                .await
+                .expect("responder server handshake (the default is On)");
             let mut len_buf = [0u8; 4];
             stream.read_exact(&mut len_buf).await.expect("read len");
             let len = u32::from_be_bytes(len_buf) as usize;

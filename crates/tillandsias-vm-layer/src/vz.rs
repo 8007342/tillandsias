@@ -150,6 +150,13 @@ mod vm_handle {
     unsafe impl Sync for HostListenerHandle {}
 }
 
+/// virtio-fs tag for the provisioning-state share (order 1055-e8ie). The guest
+/// mounts it by this name; the host reads the directory directly.
+pub const PROVISION_STATE_SHARE_TAG: &str = "provision-state";
+
+/// Where the guest mounts that share.
+pub const PROVISION_STATE_GUEST_DIR: &str = "/var/lib/tillandsias/provision";
+
 impl VzRuntime {
     /// Construct a runtime handle. Does NOT touch the host yet.
     pub fn new(guest_cid: u32, image_root: PathBuf) -> Self {
@@ -226,10 +233,75 @@ impl VzRuntime {
         self.image_root.join("console.log")
     }
 
-    /// True if a previous provisioning has produced the disk image. Used by
-    /// `provision` for the idempotency short-circuit.
+    /// True if the rootfs disk image FILE EXISTS. Used by `provision` for the
+    /// idempotency short-circuit.
+    ///
+    /// READ THE NAME NARROWLY (order 1055-e8ie, criterion 4). This is a
+    /// `stat()` and nothing more. It does NOT mean the provisioning script ran,
+    /// that it completed, or that the guest works — only that a file is on
+    /// disk. The packet was filed against cloud-init reporting `done` while
+    /// provisioning had aborted; MEASURED while closing it, nothing in this
+    /// tree consumes cloud-init's status at all, and THIS is the insufficient
+    /// signal actually in use.
+    ///
+    /// MEASURED on macneo 2026-09-05: a cold provision produced rootfs.img, so
+    /// this returned true, on a guest that never reached Ready. The disk file
+    /// and a working guest are different facts and this function only sees the
+    /// first.
+    ///
+    /// FOR "DID PROVISIONING FINISH", READ THE PROVISION RECORD INSTEAD —
+    /// `provision_state_path()`, written by the guest to a host-visible share
+    /// with start/complete/failed phases. That is the signal that can answer
+    /// the question this one is often mistaken for.
+    ///
+    /// The ~20 call sites that BRANCH on this are deliberately unchanged here:
+    /// altering what they mean is a behavioural change with its own risk
+    /// profile and is filed separately. This documents the fact; it does not
+    /// move it.
     pub fn is_provisioned(&self) -> bool {
         self.rootfs_image_path().exists()
+    }
+
+    /// Did the guest's provisioning script record its own COMPLETION?
+    ///
+    /// ORDER 1082-9rub. `is_provisioned()` above is a stat() of rootfs.img and
+    /// answers "the image was fetched and converted". Two branch sites read it
+    /// as "the guest is provisioned", and the gap between those two facts is a
+    /// real, reachable state: a guest that booted, created its rootfs, and then
+    /// ABORTED during cloud-init. rootfs.img is present; nothing was provisioned.
+    ///
+    /// This asks the question those sites meant to ask. The record is written by
+    /// the provisioning script itself (1055-e8ie) with `phase complete` as its
+    /// LAST statement, so a start with no completion is a positive signal of an
+    /// abort rather than an absence of information.
+    ///
+    /// RETURNS FALSE WHEN THE FILE IS ABSENT OR UNREADABLE, deliberately. The
+    /// callers use this to decide whether to trust an existing image, and "I
+    /// could not tell" must not read as "yes" — that is the whole defect this
+    /// packet is about, one layer down. A guest provisioned before this record
+    /// existed will therefore report false and be treated as unverified, which
+    /// is the correct conservative answer for a signal that cannot be
+    /// reconstructed after the fact.
+    pub fn provisioning_completed(&self) -> bool {
+        std::fs::read_to_string(self.provision_state_path())
+            .map(|t| t.lines().any(|l| l.trim() == "phase complete"))
+            .unwrap_or(false)
+    }
+
+    /// Host-side directory shared into the guest so the provisioning script can
+    /// report its own outcome where the host can read it (order 1055-e8ie).
+    ///
+    /// Lives under the image root beside `heartbeat.state` and
+    /// `crashloop.state`, so a destroy that resets the guest also resets the
+    /// record — a marker surviving the guest it describes would be the stale
+    /// -state defect this packet is about.
+    pub fn provision_state_dir(&self) -> PathBuf {
+        self.image_root.join("provision")
+    }
+
+    /// The file the guest writes and the host reads.
+    pub fn provision_state_path(&self) -> PathBuf {
+        self.provision_state_dir().join("provision.state")
     }
 
     /// Intentional EPHEMERAL RESET, macOS wipe half (windows-260717-4):
@@ -578,14 +650,47 @@ impl VzRuntime {
         // 1. Write user-data
         let user_data_content = provision_user_data(secure_control_wire);
 
+        // 1055-e8ie. THE PROVISIONING SCRIPT IS PART OF THE INSTANCE IDENTITY.
+        //
+        // cloud-init runs a shebang user-data ONCE PER INSTANCE-ID. The id used
+        // to be keyed on the guest BINARY fingerprint alone, so a change to
+        // this script did not move it, the per-instance semaphore stayed
+        // satisfied, and the new user-data was delivered to the guest and never
+        // executed.
+        //
+        // MEASURED 2026-09-05: after landing a change to fetch-headless.sh, the
+        // guest's copy still had mtime 01:03:59 and lacked the new line, while
+        // /var/lib/cloud/instances/<id>/user-data.txt.i — written that boot —
+        // contained it, cloud-init reported `status: done, errors: []`, and the
+        // config_scripts_user semaphore for that id already existed. Rebuilding
+        // produced a byte-identical guest binary (sha 2469469454b2… both
+        // times), which is exactly why the id did not move: a HOST-side change
+        // cannot move a GUEST-binary fingerprint.
+        //
+        // So every host-side fix to guest provisioning — this script, the
+        // systemd units, the fstab lines — was invisible on an existing guest
+        // unless the guest binary happened to change in the same release.
+        // Hashing the rendered user-data makes the id change BY CONSTRUCTION
+        // when the thing it provisions changes.
+        //
+        // ONE RE-PROVISION IS EXPECTED when this lands: every existing guest
+        // sees a new id once and re-runs the per-instance script. That is the
+        // fix working, not a regression — and it is how those guests finally
+        // receive the artifacts they have been missing.
+        let user_data_fingerprint = {
+            use sha2::{Digest, Sha256};
+            format!("{:x}", Sha256::digest(user_data_content.as_bytes()))
+        };
+
         std::fs::write(temp_dir.join("user-data"), user_data_content)
             .map_err(|e| format!("failed to write user-data: {e}"))?;
 
         // 2. Write meta-data
         let meta_data_content = format!(
-            "instance-id: tillandsias-vm-secure-{secure_control_wire}-{guest_binary_fingerprint}\n\
+            "instance-id: tillandsias-vm-secure-{secure_control_wire}-{guest_binary_fingerprint}-{}\n\
 local-hostname: tillandsias-vm
-"
+",
+            &user_data_fingerprint[..16]
         );
 
         std::fs::write(temp_dir.join("meta-data"), meta_data_content)
@@ -655,6 +760,44 @@ fn home_src_dir() -> std::path::PathBuf {
 /// gets read by a human is one of those signals.
 fn provision_user_data(secure_control_wire: &str) -> String {
     r#"#!/bin/bash
+# 1055-e8ie. THIS SCRIPT MUST SAY WHERE IT DIED.
+#
+# It is `set -euo pipefail`, so any failing command aborts it silently, and
+# cloud-init does NOT surface a user-script failure as a cloud-init error —
+# `cloud-init status` still reports `done, errors: []`. MEASURED: a guest ran
+# a fetch-headless.sh from hours earlier while that boot's user-data carried
+# the current one, cloud-init reported success, and modules:final completed in
+# 0.01 s. The script starts (marker below) and does not reach its writes.
+#
+# The trap records the failing LINE where the host can read it after the fact,
+# which is the difference between "provisioning is broken somewhere" and a
+# line number.
+# ORDER 1055-e8ie. The record goes to a HOST-VISIBLE share, not to /var/log.
+#
+# The first version of this marker wrote inside the guest and its comment said
+# "where the host can read it after the fact". Nothing could: order 272 makes
+# the control wire the only host<->guest channel and masks every sshd surface,
+# so when provisioning fails there is no way in, and macOS cannot mount the
+# guest's ext4. MEASURED on macneo 2026-09-05: recovering that marker took
+# grepping the raw disk image. A record readable only from inside the guest is
+# unreadable in exactly the condition it exists to report.
+#
+# THREE STATES, NOT TWO. The earlier marker recorded a start and a failure and
+# no completion, so "ran to completion", "died without the ERR trap firing"
+# (set -e has many such contexts) and "died before the write reached disk" were
+# ONE artefact: a start line and nothing else. Absence of failure is not
+# evidence of success, which is the packet's own headline one layer down. The
+# completion line below is what makes start-without-completion a POSITIVE
+# signal of an abort.
+#
+# The timestamp is INSIDE the file (980-ja2m): mtime is a property of the
+# filesystem, not of the event, and a copy or a touch forges it.
+mkdir -p __PROVISION_STATE_GUEST_DIR__
+mount -t virtiofs __PROVISION_STATE_SHARE_TAG__ __PROVISION_STATE_GUEST_DIR__ 2>/dev/null || true
+PROV_STATE=__PROVISION_STATE_GUEST_DIR__/provision.state
+{ echo "tillandsias-provision-state v1"; echo "written_at $(date -u +%s)"; echo "written_at_iso $(date -u +%FT%TZ)"; echo "phase start"; } > "$PROV_STATE" 2>/dev/null || true
+echo "tillandsias-provision-start $(date -u +%FT%TZ)" > /var/log/tillandsias-provision-marker
+trap 'rc=$?; { echo "tillandsias-provision-FAILED line=$LINENO rc=$rc cmd=$BASH_COMMAND $(date -u +%FT%TZ)"; echo "--- systemd state at failure ---"; systemctl --no-pager --failed 2>&1 | head -20; systemctl status tillandsias-headless-fetch.service tillandsias-headless.service --no-pager 2>&1 | head -40; } >> /var/log/tillandsias-provision-marker; { echo "tillandsias-provision-state v1"; echo "written_at $(date -u +%s)"; echo "written_at_iso $(date -u +%FT%TZ)"; echo "phase failed"; echo "line $LINENO"; echo "rc $rc"; echo "cmd $BASH_COMMAND"; } > "$PROV_STATE" 2>/dev/null || true' ERR
 set -euo pipefail
 
 # Order 272 (guest-ssh-backdoor-closure): the secure control wire is the
@@ -747,6 +890,27 @@ DEST="/usr/local/bin/tillandsias-headless"
 STAGED="/var/lib/tillandsias/guest-bin/tillandsias-headless"
 if [[ -x "$STAGED" ]]; then
   install -D -m 0755 "$STAGED" "$DEST"
+  # 1049-c6xa. SAY SO. Every other line in this script is on a failure branch,
+  # so a boot log with no [tillandsias-fetch] line was equally consistent with
+  # "staged and succeeded" and "never ran" — and those call for opposite next
+  # steps. That ambiguity blocked a live diagnosis: a guest that booted fine
+  # (Fedora 44, network up, login prompt) never reached Ready, and the log
+  # could not say whether the host-staged binary had been installed at all.
+  #
+  # The identity comes from the provenance sidecar the tray writes beside the
+  # binary, so the line CHANGES PER BUILD rather than merely proving the unit
+  # ran: two consecutive boots staging different binaries are distinguishable,
+  # which "installed ok" alone would not be. Missing or unreadable sidecar
+  # degrades to `provenance=unavailable` rather than failing the install —
+  # the binary is in place either way and refusing the boot over a missing
+  # log field would be the worse trade.
+  PROV="${STAGED}.provenance.json"
+  if [[ -r "$PROV" ]]; then
+    prov="$(tr -d ' \n\t' < "$PROV")"
+  else
+    prov="provenance=unavailable"
+  fi
+  echo "[tillandsias-fetch] staged_binary=installed src=$STAGED dest=$DEST $prov" >&2
   exit 0
 fi
 # 701-iu9b TRAP 1. Say WHY the staged binary was not used, and distinguish the
@@ -803,6 +967,50 @@ else
 fi
 EOF
 chmod 0755 /usr/local/lib/tillandsias/headless-preflight.sh
+
+# ORDER 1059-yekz. FORWARD THE JOURNAL TO THE DEVICE THE HOST ACTUALLY READS.
+#
+# Every unit below already sets StandardOutput=journal+console, and NONE of that
+# output has ever reached the host's console.log. The units are not at fault and
+# neither is the host capture; the two ends name DIFFERENT DEVICES.
+#
+# MEASURED in a running guest 2026-09-05:
+#   /proc/cmdline .... console=tty1 console=ttyAMA0,115200n8
+#   /proc/consoles ... tty1 -WU (EC p) 4:1     <- tty1 is the ONLY registration
+#   the getty ........ serial-getty@hvc0.service
+# ttyAMA0 is named on the cmdline and never registers, because VZ provides a
+# VIRTIO console (hvc0), not an ARM PL011 UART. So `console` resolves to tty1,
+# while the host captures hvc0 — which no console= argument names.
+#
+# PROVED WITH A TWO-SIDED WRITE, same guest, same instant, one variable:
+#   echo ... > /dev/console  (tty1) -> reached the host's console.log 0 times
+#   echo ... > /dev/hvc0            -> reached it 1 time
+#
+# AND THE OUTPUT EXISTED ALL ALONG — `journalctl -u tillandsias-headless-fetch`
+# carries the staged_binary line for every boot. So this was never "the unit
+# produced nothing"; it was "the unit produced it and it went somewhere no one
+# reads", which are different defects with different fixes.
+#
+# WHY journald FORWARDING RATHER THAN console=hvc0 ON THE CMDLINE. The host uses
+# VZEFIBootLoader, so the kernel command line comes from the image's GRUB and not
+# from us; changing it means editing grub in the guest and rebooting. Forwarding
+# the journal is one file, needs no reboot, and covers EVERY unit rather than the
+# two we happen to own — including systemd's own messages, which is what makes a
+# hung boot legible at all.
+#
+# MEASURED BEFORE AND AFTER on this host: console.log carried 0 systemd unit
+# lines across 98 accumulated boots (~690 bytes/boot, only the getty's OSC 3008
+# record and the login banner — statistically identical to the 653 bytes macneo
+# captured on a guest that never reached Ready). With this drop-in it carries
+# systemd[1] unit output.
+mkdir -p /etc/systemd/journald.conf.d
+cat > /etc/systemd/journald.conf.d/99-tillandsias-console.conf << 'EOF'
+[Journal]
+ForwardToConsole=yes
+TTYPath=/dev/hvc0
+MaxLevelConsole=info
+EOF
+systemctl restart systemd-journald || true
 
 # Write tillandsias-headless-fetch.service
 cat > /etc/systemd/system/tillandsias-headless-fetch.service << 'EOF'
@@ -899,12 +1107,147 @@ __READY_UNIT__EOF
 # Reload and enable services
 systemctl daemon-reload
 systemctl enable tillandsias-headless-fetch.service tillandsias-headless.service tillandsias-headless-ready.service
-systemctl start tillandsias-headless-fetch.service tillandsias-headless.service
+# 1055-e8ie. A START THAT FAILS AGAINST UNITS THAT ARE ALREADY RUNNING MUST
+# NOT KILL PROVISIONING. Under `set -e` this line aborted the whole script and
+# everything below it — including the readiness start on the next line — never
+# ran, so the guest could not report phase Ready and the host waited 300 s.
+# MEASURED: on the failing boot BOTH units had already reached active seconds
+# earlier (fetch Starting->Finished, headless Starting->Started with preflight
+# all ok) and this start still returned 1.
+#
+# On a FIRST provision the units are not enabled at boot, so this start is
+# what brings them up and a genuine failure here must still be fatal. On a
+# RE-provision they were enabled already, systemd started them from
+# WantedBy=multi-user.target, and this start races that.
+#
+# So: try, and on failure ASK WHETHER THEY ARE ACTUALLY RUNNING. Active means
+# the start was redundant — say so and continue. Not active means a real
+# failure — report it and let `set -e` stop us. This distinguishes the two
+# instead of treating them alike, which is what the silent abort did.
+if ! systemctl start tillandsias-headless-fetch.service tillandsias-headless.service; then
+  if systemctl is-active --quiet tillandsias-headless.service; then
+    echo "[tillandsias-provision] systemctl start returned non-zero but the units are ACTIVE — redundant start, continuing (1055-e8ie)" >&2
+  else
+    echo "[tillandsias-provision] FATAL: units are not active after an explicit start (1055-e8ie)" >&2
+    systemctl status tillandsias-headless-fetch.service tillandsias-headless.service --no-pager >&2 || true
+    false
+  fi
+fi
 # Started last and NOT waited on: it is an assertion about the daemon, so it
 # must not gate the provisioning that produced the daemon.
 systemctl start --no-block tillandsias-headless-ready.service
+
+# ORDER 1055-e8ie. THE COMPLETION RECORD — the last statement of the script.
+#
+# This is what makes start-without-completion mean something. Without it the
+# three states below are ONE artefact, a start line and nothing else:
+#   the script ran to completion
+#   the script died without the ERR trap firing (set -e has many such
+#     contexts: conditions, && chains, subshell edges)
+#   the script died and the trap fired but the write did not reach disk
+# Absence of failure is not evidence of success. MEASURED on macneo
+# 2026-09-05: a guest that never reached Ready, whose marker showed a start at
+# 19:35:18Z and no failure, and which could not be told apart from a guest
+# that provisioned perfectly.
+#
+# ORDER 1084-x8ya. THE GUEST HASHES ITS OWN BINARY AND TELLS THE HOST.
+#
+# The question that host could not ask: does the binary the guest is actually
+# RUNNING match the one the host staged. Every host-side path to it is closed —
+# order 272 masks every sshd surface, `--exec-guest` rides the control wire
+# that is down in exactly this failure, and macOS cannot mount the guest's
+# ext4. Scanning the raw disk image cannot answer it either: version strings do
+# not discriminate (the current binary carries five copies of the OLD version
+# string) and 79e3ca876, which flipped the wire to encrypted-by-default, adds
+# no string literal that reaches the shipped artefact at all. A change that
+# flips a default cannot be dated by scanning for strings.
+#
+# So the guest reports it, over the one channel that survives a dead wire: the
+# provision-state share. A sha256 the host can compare against the staged
+# provenance answers version skew in one line, and it costs one hash of a
+# ~13 MB file at the very end of provisioning.
+#
+# ABSENT IS RECORDED AS ABSENT. If the binary is not there, that is the answer
+# and it must not be silently omitted — an omitted field reads as "not
+# measured" and this one would be the whole finding.
+GUEST_BIN_SHA=absent
+if [ -r /usr/local/bin/tillandsias-headless ]; then
+  GUEST_BIN_SHA="$(sha256sum /usr/local/bin/tillandsias-headless 2>/dev/null | cut -d' ' -f1)"
+  [ -n "$GUEST_BIN_SHA" ] || GUEST_BIN_SHA=unreadable
+fi
+
+# ORDER 1084-x8ya CRITERION 3. WHETHER THE DAEMON IS RUNNING, RECORDED HERE
+# BECAUSE THE HOST CANNOT ASK.
+#
+# The handshake fails with `noise: input error`, which is snow's SIZE error
+# (Error::Input) and not its crypto error (Error::Decrypt / Error::Dh). A
+# response too short to hold the ephemeral key is what an ABSENT or CLOSED
+# listener produces, so "is anything listening" became the live question and
+# the host has no way to ask it: order 272 makes the wire the only channel and
+# the wire is the thing that is down.
+#
+# `is-active` EXITS NON-ZERO FOR A UNIT THAT IS NOT ACTIVE, which is a normal
+# answer and not an error. `|| true` keeps it from tripping `set -e` and the
+# ERR trap, which would convert this diagnostic into the abort it exists to
+# explain.
+#
+# INACTIVE IS NOT FAILED, AND THIS RECORD MUST NOT CONFLATE THEM. The literal
+# systemctl word is written verbatim — active, inactive, activating, failed —
+# because collapsing them is exactly the loss that cost this packet eight
+# hours. `tillandsias-headless-ready.service` in particular was started
+# `--no-block` a few lines above, so `activating` or `inactive` for it AT THIS
+# INSTANT is EXPECTED and says nothing is wrong.
+HEADLESS_STATE="$(systemctl is-active tillandsias-headless.service 2>/dev/null || true)"
+[ -n "$HEADLESS_STATE" ] || HEADLESS_STATE=unknown
+
+# `inactive` IS TWO STATES AND is-active CANNOT TELL THEM APART. A unit that
+# NEVER STARTED and one that started, bound 42420 and DIED both print
+# `inactive`. Recording only that word reproduces, one level down and inside
+# the instrument built to expose it, the exact conflation this packet exists to
+# punish.
+#
+# THE DISTINCTION IS THE POINT, not tidiness. `noise: input error` is snow's
+# SIZE error, which is what an absent OR closed listener produces — so "did the
+# daemon die" and "did it never run" are different explanations of the same
+# handshake failure, and this field exists to say which.
+#
+# These four survive the exit that `is-active` forgets:
+#   ExecMainStartTimestamp  EMPTY means it never started. Non-empty means it
+#                           ran, whatever it says now.
+#   ExecMainStatus          the exit code it died with.
+#   Result                  systemd's own verdict (success, exit-code, signal,
+#                           timeout...).
+#   NRestarts               whether it flapped rather than simply stopping.
+# Recorded VERBATIM and uninterpreted, same rule as the state word. Empty is
+# written as `empty` rather than omitted: an omitted field reads as
+# "not measured", and here the empty value IS the finding.
+_show() {
+  v="$(systemctl show -p "$1" --value tillandsias-headless.service 2>/dev/null || true)"
+  [ -n "$v" ] || v=empty
+  printf '%s' "$v"
+}
+HEADLESS_START_TS="$(_show ExecMainStartTimestamp)"
+HEADLESS_EXIT_STATUS="$(_show ExecMainStatus)"
+HEADLESS_RESULT="$(_show Result)"
+HEADLESS_NRESTARTS="$(_show NRestarts)"
+READY_STATE="$(systemctl is-active tillandsias-headless-ready.service 2>/dev/null || true)"
+[ -n "$READY_STATE" ] || READY_STATE=unknown
+
+# A BOUNDED excerpt, prefixed per line so a multi-line value cannot be mistaken
+# for further records by anything parsing this file line-wise.
+HEADLESS_LOG="$(journalctl -u tillandsias-headless.service -n 20 --no-pager 2>/dev/null | sed 's/^/log /' || true)"
+
+# Written LAST on purpose. Anything after it could fail while the record says
+# complete, which would be a fresh instance of this packet's defect.
+{ echo "tillandsias-provision-state v1"; echo "written_at $(date -u +%s)"; echo "written_at_iso $(date -u +%FT%TZ)"; echo "phase complete"; echo "guest_binary_sha256 $GUEST_BIN_SHA"; echo "headless_service_state $HEADLESS_STATE"; echo "headless_exec_main_start_timestamp $HEADLESS_START_TS"; echo "headless_exec_main_status $HEADLESS_EXIT_STATUS"; echo "headless_result $HEADLESS_RESULT"; echo "headless_nrestarts $HEADLESS_NRESTARTS"; echo "ready_service_state $READY_STATE"; echo "ready_service_state_note started --no-block; not-yet-active here is EXPECTED"; [ -n "$HEADLESS_LOG" ] && printf '%s\n' "$HEADLESS_LOG"; } > "$PROV_STATE" 2>/dev/null || true
 "#
     .replace("__SECURE_CONTROL_WIRE__", secure_control_wire)
+    // ORDER 1055-e8ie. Substituted rather than interpolated: this script is a
+    // raw string, so a `{}`-style placeholder would ship literally into the
+    // guest. Caught before it shipped by checking how the existing parameter
+    // is substituted rather than assuming format!.
+    .replace("__PROVISION_STATE_GUEST_DIR__", PROVISION_STATE_GUEST_DIR)
+    .replace("__PROVISION_STATE_SHARE_TAG__", PROVISION_STATE_SHARE_TAG)
     .replace("__READY_SCRIPT__", crate::readiness::READY_SCRIPT)
     .replace(
         "__VSOCK_LOOPBACK_SNIPPET__",
@@ -1731,7 +2074,13 @@ impl VmRuntime for VzRuntime {
     async fn provision(&self, _manifest: &ProvisionManifest) -> Result<(), VmError> {
         // Idempotency short-circuit per
         // vm-provisioning-lifecycle.provision.idempotency@v1.
-        if self.is_provisioned() {
+        //
+        // ORDER 1082-9rub: idempotency means "this already SUCCEEDED", not "a
+        // file from a previous attempt is lying around". is_provisioned() is a
+        // stat() of rootfs.img, so on its own it returns Ok(()) — reporting
+        // provisioning success — for a guest whose image was created and whose
+        // cloud-init then aborted. Require the guest's own completion record.
+        if self.is_provisioned() && self.provisioning_completed() {
             return Ok(());
         }
         // The legacy tarball import path never existed on macOS: this trait
@@ -1896,6 +2245,47 @@ impl VmRuntime for VzRuntime {
             tag: "home-src".to_string(),
             read_only: false,
         }];
+
+        // ORDER 1055-e8ie. THE ONLY GUEST->HOST CHANNEL THAT SURVIVES A DEAD
+        // WIRE.
+        //
+        // The provisioning script records start/complete/failed here. It has to
+        // be a SHARE and not a path inside the guest, because the question the
+        // record answers — did provisioning finish — is asked precisely when
+        // the guest cannot be reached. Order 272 makes the secure control wire
+        // the only host<->guest channel and masks every sshd surface, so when
+        // provisioning fails there is no way in: `--exec-guest` rides the wire
+        // that is down, and macOS cannot mount the guest's ext4. MEASURED on
+        // macneo 2026-09-05: a guest that never reached Ready, whose marker was
+        // readable only by grepping the raw disk image from the host.
+        //
+        // The first version of this marker (459df06fe) wrote to /var/log inside
+        // the guest and its comment said "where the host can read it after the
+        // fact". Nothing could: `grep -rn provision-marker` found no reader
+        // anywhere in the tree. A record in the guest is not host-readable on
+        // this platform, and writing one there is the packet's own defect
+        // repeated one layer along.
+        //
+        // Same create-before-config discipline and same graceful degrade as the
+        // two shares below: VZ refuses to validate a share whose source
+        // directory is missing, and a VM that boots without this share is
+        // degraded — provisioning still runs, the host just cannot tell whether
+        // it finished — which is strictly better than refusing to start.
+        let provision_state = self.provision_state_dir();
+        match std::fs::create_dir_all(&provision_state) {
+            Ok(()) => shares.push(boot::VzShare {
+                host_dir: provision_state,
+                tag: PROVISION_STATE_SHARE_TAG.to_string(),
+                read_only: false,
+            }),
+            Err(err) => eprintln!(
+                "[tillandsias-vz] WARNING: could not create the provisioning-state directory {} \
+                 ({err}). Booting WITHOUT the provision-state share — provisioning will run, but \
+                 the host will not be able to tell a completed provision from an aborted one \
+                 (order 1055-e8ie).",
+                self.provision_state_dir().display()
+            ),
+        }
 
         // ORDER 1019-ivia: the guest binary is staged HERE, not under ~/src.
         // Same create-before-config discipline as the model cache below — VZ
@@ -2719,6 +3109,118 @@ mod tests {
         );
     }
 
+    /// 1055-e8ie criterion 4. The insufficient signal must SAY it is
+    /// insufficient.
+    ///
+    /// The criterion as filed named cloud-init's `done` as the thing to
+    /// correct. Measured while closing the packet: NOTHING in this tree
+    /// consumes cloud-init's status — it appears only in this script, one doc
+    /// comment, and a test name — so there was no consumer to make honest. The
+    /// signal actually in use is `is_provisioned()`, a stat() of rootfs.img,
+    /// branched on at ~20 call sites. The criterion was reworded to name it,
+    /// with both versions recorded on the packet so the change is visible
+    /// rather than absorbed.
+    ///
+    /// This pins the DOCUMENTED limitation, not the behaviour: the twenty
+    /// branches are a separate packet. What must not silently return is a
+    /// function whose name implies completion and whose doc does not say it
+    /// measures a file.
+    /// ORDER 1082-9rub. The predicate must distinguish the three states the
+    /// guest can actually be in, and must not treat "I could not tell" as yes.
+    ///
+    /// These use a temp image root rather than the real one: a test that reads
+    /// this host's actual provision record would pass or fail according to what
+    /// the machine happens to hold, which is the shape that made three of my
+    /// test attempts vacuous earlier today on a different packet.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn provisioning_completed_distinguishes_complete_from_aborted_and_absent() {
+        let tmp =
+            std::env::temp_dir().join(format!("tillandsias-1082-9rub-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let rt = VzRuntime::new(3, tmp.clone());
+
+        // ABSENT: no record at all. Must be false — an unreadable signal is not
+        // a completed provision, and reading it as one is this packet's defect.
+        assert!(
+            !rt.provisioning_completed(),
+            "no record must not read as completed"
+        );
+
+        std::fs::create_dir_all(rt.provision_state_dir()).unwrap();
+
+        // ABORTED: the script started and never reached its last statement.
+        // This is the state a present rootfs.img hides.
+        std::fs::write(
+            rt.provision_state_path(),
+            "tillandsias-provision-state v1\nwritten_at 1\nphase start\n",
+        )
+        .unwrap();
+        assert!(
+            !rt.provisioning_completed(),
+            "a start with no completion is an ABORT, not a success"
+        );
+
+        // FAILED: the ERR trap fired.
+        std::fs::write(
+            rt.provision_state_path(),
+            "tillandsias-provision-state v1\nwritten_at 2\nphase failed\nrc 1\n",
+        )
+        .unwrap();
+        assert!(
+            !rt.provisioning_completed(),
+            "a failure must not read as completed"
+        );
+
+        // COMPLETE: the positive half. Without this the predicate could simply
+        // return false always and every arm above would still pass.
+        std::fs::write(
+            rt.provision_state_path(),
+            "tillandsias-provision-state v1\nwritten_at 3\nphase complete\n",
+        )
+        .unwrap();
+        assert!(
+            rt.provisioning_completed(),
+            "the script's own completion record must be believed"
+        );
+
+        // A record that MENTIONS completion in another field must not count —
+        // the guard scans the phase line, not the text (the quoted-history
+        // lesson: prose about a thing is not the thing).
+        std::fs::write(
+            rt.provision_state_path(),
+            "tillandsias-provision-state v1\nphase start\ncmd echo phase complete\n",
+        )
+        .unwrap();
+        assert!(
+            !rt.provisioning_completed(),
+            "a completion string inside another field is not a completion record"
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn is_provisioned_documents_that_it_only_stats_a_file() {
+        let source = include_str!("vz.rs");
+        let decl = "pub fn is_provisioned(&self) -> bool {";
+        let idx = source.find(decl).expect("is_provisioned must exist");
+        let doc = &source[idx.saturating_sub(1600)..idx];
+        assert!(
+            doc.contains("does NOT mean the provisioning script ran"),
+            "is_provisioned's doc must state what it does not measure (1055-e8ie)"
+        );
+        assert!(
+            doc.contains("provision_state_path()"),
+            "the doc must point at the signal that CAN answer 'did provisioning \
+             finish', or a reader is left with only the insufficient one"
+        );
+        assert!(
+            doc.contains("stat()"),
+            "the doc must name the measurement it actually performs"
+        );
+    }
+
     /// 2026-07-11: the raw disk MUST be grown past the ~5 GB Fedora Cloud
     /// default before first boot, or the forge-base image build runs the
     /// root filesystem out of space and every agent attach dies with a
@@ -3220,6 +3722,155 @@ mod tests {
     /// the staged binary exists and is invisible (retry / check the share); a
     /// genuinely absent staged file means nothing was ever staged (run the .app
     /// bundle — 701-kgvk).
+    /// 1055-e8ie. A REDUNDANT START MUST NOT KILL PROVISIONING.
+    ///
+    /// The script is `set -e`, so `systemctl start` returning non-zero aborted
+    /// it and the readiness start on the NEXT line never ran — the guest then
+    /// could not report phase Ready and the host waited 300 s. Measured: on the
+    /// failing boot both units were already active seconds earlier and the
+    /// start still returned 1.
+    ///
+    /// The fix must keep a GENUINE failure fatal (on a first provision this
+    /// start is what brings the units up), so it asks whether they are running
+    /// rather than swallowing the status. This asserts both halves: the
+    /// is-active check exists, and the not-active branch still fails.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn vz_redundant_unit_start_does_not_abort_provisioning() {
+        let script = provision_user_data("off");
+
+        assert!(
+            script.contains("if ! systemctl start tillandsias-headless-fetch.service"),
+            "the start must be guarded, not bare — a bare start aborts the \
+             script under set -e (1055-e8ie)"
+        );
+        assert!(
+            script.contains("systemctl is-active --quiet tillandsias-headless.service"),
+            "the guard must ask whether the units are ACTUALLY running before \
+             deciding the start's failure mattered (1055-e8ie)"
+        );
+        // The not-active branch must still stop provisioning. Without this the
+        // fix degrades into `|| true` and a real failure ships silently, which
+        // is the defect with a different sign.
+        let tail = script
+            .split("units are not active after an explicit start")
+            .nth(1)
+            .expect("the fatal branch must exist");
+        assert!(
+            tail.contains("false"),
+            "a genuine start failure must remain fatal (1055-e8ie)"
+        );
+    }
+
+    /// 1055-e8ie. THE INSTANCE-ID MUST MOVE WHEN THE PROVISIONING SCRIPT MOVES.
+    ///
+    /// cloud-init runs a shebang user-data once per instance-id. Keyed on the
+    /// guest BINARY alone, a host-side change to this script left the id
+    /// unchanged, so the per-instance semaphore stayed satisfied and the new
+    /// user-data was delivered and never executed — measured live: the guest
+    /// kept a fetch-headless.sh from hours earlier while that boot's
+    /// user-data.txt.i carried the new content and cloud-init reported done.
+    ///
+    /// This asserts the PROPERTY rather than the format: two different rendered
+    /// scripts must not produce the same identity component. A test that
+    /// pinned the id string would pass while the id was still blind to the
+    /// script, which is the defect.
+    ///
+    /// GATED because it calls `provision_user_data`, which is macos-only. The
+    /// rule is stated at that function's test shim — "an ungated #[cfg(test)]
+    /// here breaks every Linux/Windows `cargo test` build" — and I wrote this
+    /// test ungated anyway. My gate is green on macOS and STRUCTURALLY CANNOT
+    /// see this class; the pre-build union litmus cannot either, because it
+    /// never compiles. Only the gate on the merged union catches it, which is
+    /// where macuahuitl found it (E0425 at vz.rs, tillandsias-vm-layer lib
+    /// tests, Linux).
+    /// ORDER 1059-yekz. Provisioning must forward the journal to the device the
+    /// HOST reads, or unit output goes to a console nobody consumes.
+    ///
+    /// MEASURED before this landed: console.log carried ZERO systemd unit lines
+    /// across 98 accumulated boots on a healthy guest — ~690 bytes/boot of getty
+    /// OSC record and login banner, statistically identical to the 653 bytes
+    /// macneo captured on a guest that never reached Ready. The units already
+    /// said StandardOutput=journal+console; `console` resolves to tty1 while the
+    /// host captures hvc0.
+    ///
+    /// THE NEEDLE IS ASSEMBLED rather than written literally: a test whose
+    /// pattern also matches its own assertion proves nothing, which is the
+    /// vacuous-pin lesson from 1029-5wvd and one I re-learned today when a grep
+    /// matched the comment block above the code it was checking.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn vz_provisioning_forwards_the_journal_to_the_captured_console() {
+        let script = provision_user_data_for_test();
+        let forward = concat!("ForwardTo", "Console=yes");
+        let device = concat!("TTYPath=/dev/", "hvc0");
+        assert!(
+            script.contains(forward),
+            "provisioning must enable journal console forwarding — without it \
+             every unit's journal+console output stops at tty1"
+        );
+        assert!(
+            script.contains(device),
+            "the forward must name hvc0: that is the device the host captures. \
+             Measured two-sidedly — a write to /dev/console (tty1) reached the \
+             host 0 times, a write to /dev/hvc0 reached it 1 time"
+        );
+        // NEGATIVE HALF: naming the device is useless if the units stopped
+        // asking for console output at all, so pin that they still do.
+        let std_console = concat!("StandardOutput=journal", "+console");
+        assert!(
+            script.contains(std_console),
+            "the units must still request console output; forwarding alone \
+             carries only what something asks to send"
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn vz_instance_id_changes_when_the_provisioning_script_changes() {
+        use sha2::{Digest, Sha256};
+
+        let off = provision_user_data("off");
+        let on = provision_user_data("on");
+        assert_ne!(
+            off, on,
+            "the two renderings must differ, or this test proves nothing"
+        );
+
+        let fp = |s: &str| format!("{:x}", Sha256::digest(s.as_bytes()))[..16].to_string();
+        assert_ne!(
+            fp(&off),
+            fp(&on),
+            "the user-data fingerprint must distinguish two different rendered \
+             provisioning scripts; if it does not, a script change cannot move \
+             the instance-id and cloud-init will never re-run it (1055-e8ie)"
+        );
+
+        // And the id must actually CARRY it. Without this the fingerprint can
+        // be computed, be perfectly distinguishing, and never reach meta-data —
+        // which is the state this packet found, one layer down.
+        //
+        // THE NEEDLE IS ASSEMBLED, NOT WRITTEN. A literal here appears in this
+        // file too, so `source.contains(<literal>)` matches THE ASSERTION'S OWN
+        // TEXT and passes whatever the format string does. The first draft of
+        // this test did exactly that: reverting the id to its pre-fix form
+        // compiled cleanly and the test stayed green. Same self-match the
+        // 980-ja2m class guard was built to avoid, rediscovered here by
+        // sabotage rather than by care.
+        let source = include_str!("vz.rs");
+        let needle = format!(
+            "{}-{}-{}",
+            "instance-id: tillandsias-vm-secure-{secure_control_wire}",
+            "{guest_binary_fingerprint}",
+            "{}\\n"
+        );
+        assert!(
+            source.contains(&needle),
+            "the rendered user-data fingerprint must be part of the instance-id \
+             itself, not merely computed beside it (1055-e8ie)"
+        );
+    }
+
     #[test]
     fn vz_cloud_init_fetch_script_names_why_it_skipped_the_staged_binary() {
         let source = include_str!("vz.rs");
@@ -3237,6 +3888,30 @@ mod tests {
             script.contains("staged_binary=absent"),
             "a genuinely absent staged binary must be distinguishable from an unreachable one"
         );
+        // 1049-c6xa: THE SUCCESS BRANCH MUST SPEAK TOO. The three failure
+        // branches above were carefully worded, which is exactly why nobody
+        // noticed the success path said nothing — the file READS as
+        // well-instrumented. A boot log with no [tillandsias-fetch] line was
+        // equally consistent with "staged and succeeded" and "never ran".
+        assert!(
+            script.contains("staged_binary=installed"),
+            "the SUCCESS branch must say so; otherwise an absent log line cannot \
+             distinguish a successful stage from a unit that never ran (1049-c6xa)"
+        );
+        // ...and it must carry something that ROLLS PER BUILD, or it proves
+        // only that the unit ran, not WHICH binary landed. The tray writes a
+        // provenance sidecar beside the staged file for exactly this.
+        assert!(
+            script.contains("provenance.json"),
+            "the success line must report per-build provenance, so two boots \
+             staging different binaries are distinguishable (1049-c6xa)"
+        );
+        assert!(
+            script.contains("provenance=unavailable"),
+            "a missing sidecar must degrade the LOG, never the install — the \
+             binary is in place either way (1049-c6xa)"
+        );
+
         assert!(
             script.contains("findmnt"),
             "probe the mount with findmnt, which is verified present in this guest — under \

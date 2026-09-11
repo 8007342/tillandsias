@@ -136,7 +136,28 @@ _nix_builder_image_exists() {
 
 _nix_builder_ensure_image() {
     if _nix_builder_image_exists; then
-        return 0
+        # ORDER 1073-dqtx: EXISTENCE IS NOT USABILITY. `image exists` returns 0
+        # over an image whose overlay layer is missing from storage — measured,
+        # along with `podman images` showing a plausible size and `image tree`
+        # returning 0. Only inspect and run touch the layers. Without this, a
+        # broken builder image is "ensured" and then used, and the failure
+        # surfaces later as a faccessat error from whatever ran inside it.
+        #
+        # Inherits build-image.sh's check rather than re-deriving one: two
+        # readers of the same question drift apart (1081-gynk).
+        local _verify="$(dirname "${_NB_SELF}")/verify-image-usable.sh"
+        if [[ -x "$_verify" ]]; then
+            "$_verify" "$_NB_IMAGE_NAME" >/dev/null
+            local _rc=$?
+            if [[ $_rc -ne 0 ]]; then
+                echo "[nix-builder] '$_NB_IMAGE_NAME' exists but is NOT usable — rebuilding without cache (1073-dqtx)" >&2
+                podman rmi -f "$_NB_IMAGE_NAME" >/dev/null 2>&1 || true
+            else
+                return 0
+            fi
+        else
+            return 0
+        fi
     fi
     local containerfile
     containerfile="$_NB_REPO_ROOT/images/builder/Containerfile"

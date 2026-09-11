@@ -4,7 +4,7 @@ languages: [bash]
 since: 2026-08-26
 last_verified: 2026-08-26
 sources:
-  - plan/index.yaml order:799-tb7q
+  - plan/archive/packets-2026-08.yaml order:799-tb7q
   - plan/index.yaml order:914-ahsy
   - scripts/lib/tool-dispatch.sh
   - scripts/test-tool-dispatch-lib.sh

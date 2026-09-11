@@ -1883,12 +1883,14 @@ mod tests {
     fn secure_control_wire_reads_the_shared_reader_not_a_local_copy() {
         use std::env::VarError;
         use tillandsias_control_wire::secure_wire_mode::parse_secure_wire_mode;
-        // The default is STILL plaintext: the flip is atomic across six
-        // readers and lands with the last of them, not the first (972-umik).
+        // THE DEFAULT IS NOW SECURE (972-umik commit B). It flipped in the
+        // commit that landed after the last of the six readers was converted,
+        // which is why this listener may assert On today and could not before:
+        // flipping it alone left every client refused (e6a80609f).
         assert_eq!(
             parse_secure_wire_mode(Err(VarError::NotPresent)).unwrap(),
-            SecureControlWireMode::Off,
-            "flipping the listener alone left every client refused (e6a80609f)"
+            SecureControlWireMode::On,
+            "an absent variable must now mean an ENCRYPTED listener"
         );
         // Only an explicit, exact opt-out disables it.
         assert_eq!(

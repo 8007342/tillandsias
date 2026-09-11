@@ -125,7 +125,17 @@ Write-Check 'distro registered ' $report.distro_registered $report.distro
 if (-not $report.distro_registered) { $failures++ }
 # distro_running flips frequently because WSL2 idles VMs down; it's NOT a
 # failure when false. Surface as informational.
-$runDetail = if ($report.distro_running) { 'yes (VM up)' } else { 'no (idled -- normal when no tray session keepalives the VM)' }
+# ORDER 1004-5f7p: 'no (idled)' was asserted rather than known. A guest that
+# NEVER came up printed the same line as one that came up and was correctly
+# idled out, so this script told the operator "normal" for a failed provision.
+# ready_history is the record that separates them.
+$runDetail = if ($report.distro_running) {
+    'yes (VM up)'
+} elseif ($report.ready_history -eq 'observed-ready') {
+    'no (idled out after a successful provision -- expected)'
+} else {
+    'no, AND never observed ready -- this installation has no record of reaching Ready; treat as a failed provision'
+}
 Write-Check 'distro running    ' $true $runDetail
 
 Write-Host "`nRecipe / artifact:"

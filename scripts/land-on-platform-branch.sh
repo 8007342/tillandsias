@@ -34,6 +34,7 @@
 set -uo pipefail
 
 BRANCH="${1:-$(git rev-parse --abbrev-ref HEAD)}"
+TRUNK="${TILLANDSIAS_TRUNK_BRANCH:-linux-next}"
 ATTEMPTS="${2:-4}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 1
@@ -86,11 +87,155 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
     fi
     [ "$_integrated" -eq 1 ] || { echo "refused:land:not-integrated" >&2; exit 2; }
 
-    echo "land: attempt $attempt — gate (./build.sh --check)"
-    if ! ./build.sh --check >/dev/null 2>&1; then
-        echo "refused:land:gate-failed — run ./build.sh --check to see why" >&2
+    # ORDER 1064-r8fv: MERGE TRUNK TOO, or this tool cannot land on a platform
+    # branch AT ALL.
+    #
+    # Everything above integrates onto origin/$BRANCH. The pre-push guard
+    # (scripts/hooks/pre-push-linux-next-merged.sh) requires the branch to
+    # contain origin/LINUX-NEXT's current head, which is a DIFFERENT ref on
+    # every platform branch — so the loop could retry to exhaustion and never
+    # satisfy it. The comment forty lines above already names
+    # pull_merge_cadence.pre_push_gate as the reason the unpushed set carries
+    # merge commits; the code read the rule and then integrated the wrong ref.
+    #
+    # MEASURED ON YOLANDA 2026-09-05: four consecutive refusals landing
+    # 1055-6yp8 from windows-next, three of them
+    # blocked:linux-next-not-merged, with the tool reporting
+    # `refused:land:push-failed — not a lost race, so retrying cannot help`.
+    # That verdict is TRUE and it is the wrong shape: the cause was fixable in
+    # one command, and "retrying cannot help" reads as a dead end rather than
+    # "merge trunk and come back".
+    #
+    # WHY IT WENT UNNOTICED: on linux-next itself $BRANCH and linux-next are the
+    # same ref, so the merge above already satisfies the guard and the tool
+    # works. It fails only where it was needed most — the slow platform hosts it
+    # was written for.
+    if [ "$BRANCH" != "$TRUNK" ]; then
+        git fetch -q origin "$TRUNK" || { echo "land:fetch-failed:$TRUNK" >&2; exit 4; }
+        if git merge-base --is-ancestor "origin/$TRUNK" HEAD 2>/dev/null; then
+            echo "land: attempt $attempt — origin/$TRUNK already contained"
+        else
+            echo "land: attempt $attempt — merging origin/$TRUNK (mandated before every non-$TRUNK push)"
+            if ! git merge --no-edit "origin/$TRUNK" >/dev/null 2>&1; then
+                git merge --abort >/dev/null 2>&1
+                echo "refused:land:trunk-merge-conflict — resolve origin/$TRUNK by hand" >&2
+                exit 2
+            fi
+        fi
+    fi
+
+    # ORDER 1056-5344. The plan-only lane may accept a push whose head is a
+    # UNION of two separately-green sides that were never gated together, and
+    # it records that debt in .git/tillandsias-union-ungated. This gate is what
+    # pays it. The gate below is therefore MANDATORY whenever that marker
+    # exists — asserted rather than assumed, because the whole point of writing
+    # the debt down is that a future "skip the gate when nothing changed"
+    # shortcut must not silently inherit it.
+    _um="$(git rev-parse --absolute-git-dir 2>/dev/null)/tillandsias-union-ungated"
+    if [ -s "$_um" ]; then
+        echo "land: head carries un-gated union debt ($(wc -l < "$_um" | tr -d ' ') record(s)); the gate below is mandatory (1056-5344)"
+    fi
+
+    # ORDER 1033-iycs: CAPTURE THE GATE, AND NAME WHAT FAILED.
+    #
+    # This line read `./build.sh --check >/dev/null 2>&1` and the refusal was
+    # four words plus "run ./build.sh --check to see why" — no step, no reason,
+    # no log. In THIS FILE, whose header (lines 14-24) records that discarding
+    # the PUSH's output reported LANDED for a refused push. The lesson was
+    # applied to the push call and not to the gate call two lines above it.
+    #
+    # WHY "RE-RUN IT" IS NOT A REMEDY. macbookair hit this landing 997-e4v2 on
+    # osx-next: the standalone re-run on the same commit graph, no edits
+    # between, returned GATE_EXIT=0 and the retry landed clean. So the remedy
+    # text re-runs a DIFFERENT invocation against a tree this script's own
+    # integrate step may have moved, and the one instance became irreproducible
+    # by construction. Whether the gate is non-deterministic — 1022-y7kc cause 8,
+    # 765-tkq2 memoisation — cannot be asked until a refusal carries its
+    # evidence, and "re-run it" hides how often this happens.
+    #
+    # PER ATTEMPT, because the loop runs the gate up to $ATTEMPTS times against
+    # different trees; one log overwritten each pass would answer the wrong
+    # question. Under $GIT_DIR so it survives the worktree and is not something
+    # a later `git clean` removes.
+    _gate_log="$(git rev-parse --absolute-git-dir 2>/dev/null)/tillandsias-land-gate-attempt-${attempt}.log"
+    echo "land: attempt $attempt — gate (./build.sh --check, log: $_gate_log)"
+    if ! ./build.sh --check > "$_gate_log" 2>&1; then
+        # The FIRST failing step, not the last line: build.sh prints its verdict
+        # after the failure, so a tail shows the summary and not the cause. The
+        # error line is what the reader needs and it is what a re-run would have
+        # shown them minutes later.
+        # ANCHORED, AND `ok` ROWS EXCLUDED. The first cut matched `violation:`
+        # and `refused:` ANYWHERE in a line, and the gate is full of fixtures
+        # whose EXPECTED output contains those tokens — the very first real
+        # refusal this fix caught named
+        # `ok   no evidence at all -> refused:no-evidence:...`, a passing arm,
+        # as the cause. A marker inside an `ok` row is a fixture quoting the
+        # verdict it asserts, not a failure.
+        #
+        # SEVERITY COMES FROM THE COLOUR, AND STRIPPING IT FIRST THREW THAT
+        # AWAY. Second instance, macuahuitl 2026-09-05: this named
+        # `[build] standing declared-closure debt: violation:...` — a `_warn`,
+        # advisory by design under 885-92iu, whose own comment says it refuses
+        # nothing. The real failure was ~60 lines further down (a fixture's
+        # `FAIL: expected measured-clean`). The advisory clears both earlier
+        # defences: it is anchored at column zero once ANSI is stripped, and it
+        # is not an `ok` row. It contains `violation:` because it is CORRECTLY
+        # REPORTING A VIOLATION COUNT THAT IS NOT A GATE FAILURE.
+        #
+        # Anchoring and the `ok` exclusion were both attempts to rebuild, by
+        # pattern, information deleted one line earlier: build.sh's `_error` is
+        # RED (0;31) and `_warn` is YELLOW (0;33), so the log already says which
+        # lines are failures. Match `[build]` lines on SEVERITY and the whole
+        # class disappears rather than being enumerated.
+        #
+        # Fixture output (`FAIL:`, bare `violation:`) is NOT coloured by
+        # build.sh — it is the fixture's own stdout — so the text heuristic
+        # still owns those lines. Two rules for two sources, not one rule
+        # stretched over both.
+        _fallback_note=""
+        if grep -qa "$(printf '\033\[')" "$_gate_log" 2>/dev/null; then
+            _first_fail="$(awk '
+                # A [build] line is a failure only if _error painted it red.
+                # Strip the escapes for DISPLAY once severity has been read off
+                # them — the reader wants the sentence, not the colour bytes.
+                /^\033\[0;31m\[build\]/ {
+                    line = $0
+                    gsub(/\033\[[0-9;]*m/, "", line)
+                    print line
+                    exit
+                }
+                /^\033\[0;3[23]m\[build\]/ { next }   # _warn / _info: advisory
+                {
+                    line = $0
+                    gsub(/\033\[[0-9;]*m/, "", line)
+                    if (line ~ /^ok[: \t]/) next
+                    if (line ~ /^(FAIL[: ]|violation:|refused:)/) { print line; exit }
+                }
+            ' "$_gate_log" 2>/dev/null | cut -c1-200)"
+        else
+            # NO COLOUR IN THE LOG (piped through a stripper, TERM=dumb, NO_COLOR,
+            # a CI that filters escapes). Severity is genuinely unavailable, so
+            # fall back to the text heuristic — and SAY SO, because an unnamed
+            # fallback that silently answers a weaker question is the
+            # could-not-run-reported-as-clean shape of 1024-c3h3.
+            _fallback_note="  (log carries no colour, so severity was unavailable; matched by text — an advisory line quoting a violation count can appear here)"
+            _first_fail="$(grep -m1 -E '^(FAIL[: ]|violation:|refused:|\[build\] .*(refused|failed|violation))' \
+                "$_gate_log" 2>/dev/null | cut -c1-200)"
+        fi
+        echo "refused:land:gate-failed — the gate refused; its output is at $_gate_log" >&2
+        if [ -n "$_first_fail" ]; then
+            echo "  first failing line: $_first_fail" >&2
+            [ -n "$_fallback_note" ] && echo "$_fallback_note" >&2
+        else
+            echo "  (no violation/refusal line matched; read the log — the gate may have died rather than refused)" >&2
+        fi
+        echo "  Do NOT re-run ./build.sh --check to diagnose this: it is a DIFFERENT" >&2
+        echo "  invocation against a tree this script's integrate step may have moved," >&2
+        echo "  which is how the 997-e4v2 instance became irreproducible (1033-iycs)." >&2
         exit 3
     fi
+    # The gate just built this exact tree, union included, so the debt is paid.
+    if [ -s "$_um" ]; then rm -f "$_um"; fi
 
     echo "land: attempt $attempt — push"
     # No pipeline: the exit status must be git push's own. KEEP THE OUTPUT — an
@@ -112,9 +257,51 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
             echo "    scripts/land-on-platform-branch.sh $BRANCH" >&2
             rm -f "$_plog"; exit 5
         fi
-        if ! grep -qiE "non-fast-forward|fetch first|rejected|stale info" "$_plog"; then # sigpipe-ok: safe pipeline
+        # RETRYING ONLY HELPS A LOST RACE, and "rejected" alone does not mean
+        # one. ORDER 1064-r8fv: this pattern used to carry a bare `rejected`,
+        # which also matches `! [remote rejected] ... (pre-receive hook
+        # declined)` — a server-side REFUSAL that will be refused identically
+        # forever. Found by this order's own fixture, whose arm 3 rejects a push
+        # with a pre-receive hook and got exit 4 (attempts exhausted) where the
+        # honest answer is exit 6: the loop burned a full gate run per attempt
+        # on a push that could never succeed. That is the same shape the header
+        # of this file warns about — matching a substring that appears in the
+        # rejection line too — one layer down.
+        #
+        # A lost race says so specifically: non-fast-forward, fetch first,
+        # stale info, or CANNOT LOCK REF.
+        #
+        # THE FOURTH PHRASING WAS MISSING AND IT IS THE ONE A BUSY TRUNK
+        # PRODUCES. Measured on macuahuitl 2026-09-06, twice consecutively:
+        #   ! [remote rejected] linux-next -> linux-next (cannot lock ref
+        #     'refs/heads/linux-next': is at 405cae043 but expected 82cef6251)
+        # That is a lost race stated as precisely as any of the three above —
+        # the remote moved between the negotiation and the ref update — and
+        # retrying is exactly what fixes it. Instead the loop refused as
+        # non-retryable and told a coordinator to relay its own trunk work to a
+        # work/ ref, which needs a trunk host to merge: self-defeating on the
+        # one host that IS the trunk host.
+        #
+        # 1064-r8fv correctly NARROWED a bare `rejected` that also matched
+        # pre-receive refusals, and then enumerated three race phrasings as
+        # though they were all of them. Narrowing a pattern is not the same as
+        # enumerating what it must still cover.
+        if ! grep -qiE "non-fast-forward|fetch first|stale info|cannot lock ref" "$_plog"; then # sigpipe-ok: safe pipeline
             echo "refused:land:push-failed — not a lost race, so retrying cannot help:" >&2
             sed -n '1,6p' "$_plog" >&2
+            # ORDER 1064-r8fv. NAME THE LANE, DO NOT TAKE IT. A refusal that
+            # says only "retrying cannot help" reads as a dead end; four
+            # consecutive refusals on yolanda ended in a hand-rolled loop
+            # because the message named no way forward. It is deliberately a
+            # HINT and not an action: this tool must never retarget a push on
+            # its own — work landed on a ref the author did not look at is the
+            # failure mode this fleet spends its time removing, and the choice
+            # of lane belongs to whoever is watching.
+            echo "  If this is a gate or merge policy your host cannot satisfy, push the" >&2
+            echo "  GATED tree to a relay ref and ask a trunk host to merge it:" >&2
+            echo "      git push origin HEAD:refs/heads/work/<order>" >&2
+            echo "  That ref matches no platform pattern, so the mandated-merge guard" >&2
+            echo "  does not apply; the local gate stamp still does." >&2
             rm -f "$_plog"; exit 6
         fi
     fi

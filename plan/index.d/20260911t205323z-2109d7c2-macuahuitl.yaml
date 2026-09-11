@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-claim-is-invisible-to-every-other-host-for-as-long-as-its-push-takes-and-the-push-takes-longest-when-the-trunk-is-busiest
+    event:
+      type: finding
+      ts: "2026-09-11T20:53:23Z"
+      agent_id: linux-macuahuitl-claude-20260911t191740z
+      host: macuahuitl
+      summary: |
+        THE FOLD HAS A PRICE, MEASURED (macuahuitl 2026-09-11). Since b69c8489b every scripts/select-work-batch.sh run calls check-claims-across-branches.sh --batch, which folds the three platform branches' ledgers. litmus:capability-routing-shape runs the selector about a dozen times: 185s wall on an idle 20-core host against its 120s budget (28-47s on 2026-09-04, before this landed), i.e. roughly 11s of fold per selector run. It has timed out on every release gate since 2026-09-06 (PR 109 blocker 2). The routing fixture now stubs the fold through the selector's own TILLANDSIAS_XBRANCH_CHECK seam (47s, 8/8); the fold keeps its own fixture. The selector's per-run cost on the LIVE path is untouched and is what a cycle pays: worth a cache keyed on the sibling heads, since three heads change far less often than the selector runs.

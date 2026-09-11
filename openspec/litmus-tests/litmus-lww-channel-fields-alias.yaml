@@ -1,3 +1,4 @@
+# freshness: auditor=linux-lenovinha-claude-20260905t033623z date=2026-09-05 verdict=updated scope=audited the 642-fedr closure litmus; subject live (fields channel in answer.rs/fragments.rs), fixture present and driven by this spec, 5/5 PASS. ONE DEFECT FIXED: the arm titled 'MUTATION: with the alias removed the fixture must FAIL' removes nothing and re-runs nothing — it is a grep for a literal source string, the misnamed-arm shape of 1029-5wvd and 1033-ev5r. Renamed to SOURCE PIN with its real value, its brittleness, and why a true mutation needs a rebuild it cannot afford at 10s.
 # @trace spec:spec-traceability
 # @trace order:642-fedr
 #
@@ -38,7 +39,34 @@ critical_path:
     timeout_ms: 60000
     expected_behavior: "ok: scenarios-pass"
 
-  - step: "MUTATION: with the alias removed from the reader, the fixture must FAIL — otherwise it is asserting nothing about the alias at all"
+  # FRESHNESS AUDIT 2026-09-05 (lenovinha): THIS ARM WAS MISNAMED AND THE NAME
+  # CLAIMED MORE THAN THE COMMAND DOES. It read "MUTATION: with the alias
+  # removed from the reader, the fixture must FAIL — otherwise it is asserting
+  # nothing about the alias at all". It removes nothing, re-runs nothing, and
+  # observes no failure: it is a `grep -q` for a literal source string. That is
+  # the shape this fleet catalogued on 2026-08-25 and hit twice more since
+  # (1029-5wvd, a mutation that silently failed to apply; 1033-ev5r, a sabotage
+  # arm whose text could not reach the branch it claimed to test) — an arm whose
+  # TITLE asserts a property its command never exercises.
+  #
+  # RENAMED RATHER THAN DELETED, because what it actually does has real if
+  # smaller value: it is a sub-second tripwire against the alias being dropped
+  # from the reader in a refactor, and it fails fast and locally where the
+  # behavioural arm above it needs the whole fixture. Keeping it while calling
+  # it a mutation was the defect; keeping it as what it is costs nothing.
+  #
+  # A REAL MUTATION IS NOT RUN HERE, and this is the honest reason: the alias
+  # lives in Rust (crates/tillandsias-plan/src/fragments.rs), so removing it and
+  # re-running the fixture needs a rebuild — minutes, against this step's 10s
+  # budget. Step 1 above is the behavioural cover; this is the cheap pin beside
+  # it. If someone wants the true mutation, it belongs in a fixture that can
+  # afford a rebuild, not in an instant-phase litmus step.
+  #
+  # KNOWN BRITTLENESS, stated so a future red is read correctly: the pattern is
+  # an EXACT source spelling. A rustfmt change or a refactor to a slice constant
+  # would fail this while the behaviour is intact — that is a false red, and the
+  # response is to update the pattern, not to assume the alias was dropped.
+  - step: "SOURCE PIN: the reader still names both channels (fast tripwire; step 1 is the behavioural cover)"
     command: "bash -c 'f=crates/tillandsias-plan/src/fragments.rs; grep -q \"for channel in \\[\\\"fields\\\", \\\"status\\\"\\]\" \"$f\" && echo \"ok: reader-reads-both-channels\" || { echo \"FAIL: lww_entries no longer reads both channels\"; exit 1; }'"
     timeout_ms: 10000
     expected_behavior: "ok: reader-reads-both-channels"

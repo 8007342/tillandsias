@@ -156,10 +156,37 @@ while IFS= read -r raw; do
     [[ -z "$raw" ]] && continue
     # rg output: <file>:<lineno>:<match-text>
     # When we replaced with $1 the match-text may contain comma-separated paths.
-    file="${raw%%:*}"
-    rest="${raw#*:}"
-    lineno="${rest%%:*}"
-    match="${rest#*:}"
+    # ORDER 1087-h2z9 (windows). DO NOT SPLIT ON THE FIRST COLON. rg emits
+    # `<file>:<line>:<match>`, and on Windows `<file>` begins `C:/`, so the
+    # drive-letter colon shifts every field by one:
+    #
+    #   file   = "C"
+    #   lineno = "/Users/.../claude-code.md"
+    #   match  = "95:agents/openspec.md"      <- resolve_target sees THIS
+    #
+    # Every reference then fails to resolve. Measured on yolanda 2026-09-06:
+    # 491 of 577 reported broken, against 3 on a Linux host, and the targets of
+    # the 488 extra all EXIST.
+    #
+    # AND THE REPORT HIDES IT. The broken line is printed as
+    # "${file}:${lineno}: ${path}", which REASSEMBLES the mis-split fields into
+    # a string that reads exactly like a correct report — a plausible path, a
+    # plausible line number, a plausible target. Nothing in the output says the
+    # parse went wrong, which is why this survived in a check nothing runs.
+    #
+    # Anchor on the LINE NUMBER instead: `:<digits>:` occurs once, after the
+    # path, on every platform. A drive letter is never followed by digits and a
+    # colon.
+    # Parse from the RIGHT, with parameter expansion only. A bash regex
+    # anchored as ^(.+):([0-9]+):(.*)$ is correct and BACKTRACKS CATASTROPHICALLY
+    # on these lines — measured here: the check went from ~0.3s to still running
+    # after seven minutes. The match text is a .md path list produced by
+    # [A-Za-z0-9_./-]+, so it can never contain a colon; the last two colons are
+    # therefore always the field separators, whatever the path prefix looks like.
+    match="${raw##*:}"
+    _rest="${raw%:*}"
+    lineno="${_rest##*:}"
+    file="${_rest%:*}"
 
     # Split on commas to handle `@cheatsheet foo.md, bar.md` lists.
     IFS=',' read -ra paths <<<"$match"

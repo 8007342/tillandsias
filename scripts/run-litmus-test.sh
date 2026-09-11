@@ -256,10 +256,36 @@ fi
 # nothing) when the tier is unavailable or the file does not load, so callers
 # fall through to the next tier. A `blocked:` verdict from yaml-json lands on
 # stdout INTO jq, which then fails — the fallback engages either way.
+#
+# CARRIAGE RETURNS ARE STRIPPED, and that is not defensive tidying -- it is the
+# fix for a defect that made this runner report success without running.
+# jq.exe on Windows writes CRLF, so every value read through this tier arrived
+# with a trailing carriage return. Reproduce in two lines: pipe a one-key JSON
+# object through `jq -r` and dump the result with `od -c`; the value is followed
+# by CR and LF, not LF alone.
+#
+# Measured on yolanda 2026-09-04. Test names became "litmus:<name>" plus a CR,
+# the lookup asked for a file whose name ended in CR before ".yaml", the file
+# was NOT FOUND, and the test was logged SKIP. Skips are EXCLUDED FROM COVERAGE,
+# so the run then printed PASS 100% (1/1 executed) having skipped the tests it
+# was invoked to run. A gate that answers PASS while executing almost nothing is
+# worse than a gate that is down, because nobody goes looking for it.
+#
+# It is not only the names: phase, host_kind and size come through here too, so
+# a comparison against "pre-build" was really a comparison against "pre-build"
+# plus a CR, and the phase and size filters were silently wrong on Windows in
+# the same invisible direction.
+#
+# THIS IS ONE SITE OF A CLASS. 26 scripts under scripts/ pipe `jq -r` into shell
+# values and every one of them is exposed on a Windows host; filed separately
+# rather than swept here, because a sweep I cannot verify per-site is how a real
+# fix becomes a claim.
 _yaml_jq() {
     [[ -n "$LITMUS_PLAN_BIN" ]] || return 1
     command -v jq &>/dev/null || return 1
-    "$LITMUS_PLAN_BIN" yaml-json "$1" 2>/dev/null | jq -r "$2" 2>/dev/null
+    local out
+    out="$("$LITMUS_PLAN_BIN" yaml-json "$1" 2>/dev/null | jq -r "$2" 2>/dev/null)" || return 1
+    printf '%s\n' "${out//$'\r'/}"
 }
 export TILLANDSIAS_NO_SINGLETON=1
 export LITMUS_PODMAN_CALLS_FILE="${LITMUS_PODMAN_CALLS_FILE:-$PROJECT_ROOT/target/litmus-podman/calls.log}"
@@ -499,7 +525,8 @@ yaml_get() {
     if v="$(_yaml_jq "$file" "$path")"; then
         echo "$v"
     elif command -v yq &>/dev/null; then
-        yq eval "$path" "$file" 2>/dev/null || echo ""
+        yq eval "$path" "$file" 2>/dev/null | tr -d "
+" || echo ""
     elif command -v jq &>/dev/null; then
         # Simple fallback for yq-style paths (not perfect but functional)
         grep -E "^${path//./\\.}:" "$file" 2>/dev/null | cut -d':' -f2- | xargs || echo ""
@@ -1558,14 +1585,33 @@ run_tests_for_spec() {
         # Convert colon to hyphen for file lookup (litmus:ephemeral-guarantee -> litmus-ephemeral-guarantee)
         local test_file="${LITMUS_TESTS_DIR}/${test_name//:/-}.yaml"
 
+        # A BOUND NAME WITH NO FILE IS A CORPUS-INTEGRITY ERROR, NOT A SKIP
+        # (order 1049-s35z). It used to be logged SKIP, and skips are EXCLUDED
+        # FROM COVERAGE, so a run that could not find the tests it was invoked
+        # to run still printed PASS. Measured on yolanda 2026-09-04, before the
+        # CR fix that caused it: two of three bound tests unfindable, and the
+        # verdict was
+        #     Total: 3 (executed: 1, skipped: 2)
+        #     Pass Rate: 100% (1/1 executed)
+        #     Status: [PASS]
+        #
+        # The CR was one cause; this is the MECHANISM that turned it into a
+        # green, and it would have turned the next cause into one too. A gate
+        # that answers PASS while executing a third of its corpus is worse than
+        # a gate that is down, because nobody goes looking for it.
+        #
+        # SAFE TO FAIL CLOSED, measured rather than assumed: all 476 names bound
+        # in litmus-bindings.yaml resolve to a file on disk today, so this
+        # refuses nothing that currently exists. A test file is tracked in the
+        # repo, so absence means the binding and the corpus disagree — which is
+        # exactly what a human needs told, on any platform.
         if [[ ! -f "$test_file" ]]; then
+            log_test_result "$spec_id" "$test_name" "FAIL" "Test file not found (bound in litmus-bindings.yaml; corpus and bindings disagree)"
+            printf '@trace spec:%s\n' "$spec_id" >&2
             if should_fail_fast_for_spec "$spec_id"; then
-                log_test_result "$spec_id" "$test_name" "FAIL" "Test file not found"
-                printf '@trace spec:%s\n' "$spec_id" >&2
                 return 21
             fi
-            log_test_result "$spec_id" "$test_name" "SKIP" "Test file not found"
-            spec_skipped=1
+            spec_failed=1
             test_count=$((test_count+1))
             continue
         fi
@@ -2106,6 +2152,46 @@ main() {
 
     if ! validate_environment; then
         exit 3
+    fi
+
+    # ORDER 871-wrmv: STAGE THE ROUTER SIDECAR BEFORE ANY STEP COMPILES RUST.
+    #
+    # `images/router/tillandsias-router-sidecar` is a BUILD ARTIFACT, gitignored
+    # and never committed (710-w9kc), and tillandsias-headless/build.rs
+    # hard-panics when it is absent. 29 litmus files invoke cargo against that
+    # crate, so on a fresh clone — or any host whose target/ was wiped — each of
+    # them fails for a reason that has nothing to do with what it tests.
+    #
+    # THIS IS WHY IT MATTERS BEYOND ONE RED TEST. 865-n8vq's ledger of seven
+    # release blockers is only as trustworthy as its causes, and at least one of
+    # those entries was an unstaged artifact on the running host rather than a
+    # trunk defect. A gate that reports environmental failures as code failures
+    # makes every entry in its own list less believable.
+    #
+    # ONCE PER RUN, NOT PER STEP. Patching 29 files would leave the 30th, and
+    # the packet's own criterion offers the runner preflight as the alternative.
+    # build.sh already stages before every compiling dispatch
+    # (_stage_router_sidecar_if_compiling); this is the same call for the lane
+    # that had none.
+    #
+    # SKIPPED WHEN ALREADY PRESENT, so the common case costs one `[[ -f ]]`.
+    # NON-FATAL BY DESIGN: a host that cannot build the sidecar (no rust
+    # toolchain) must still run the many litmus specs that never touch cargo,
+    # so a staging failure is NAMED and the run continues — the affected steps
+    # then fail with build.rs's own diagnostic, which already tells the reader
+    # exactly what to do. Refusing the whole run here would trade 29 confusing
+    # failures for a total outage on hosts that have no stake in them.
+    if [[ ! -f "$PROJECT_ROOT/images/router/tillandsias-router-sidecar" ]]; then
+        if [[ -f "$PROJECT_ROOT/scripts/build-sidecar.sh" ]]; then
+            log_info "Staging router sidecar (build artifact, absent — 871-wrmv)..."
+            if bash "$PROJECT_ROOT/scripts/build-sidecar.sh" >/dev/null 2>&1; then
+                log_info "Router sidecar staged"
+            else
+                log_warn "could not stage images/router/tillandsias-router-sidecar (871-wrmv) — steps that compile tillandsias-headless will fail with build.rs's missing-asset panic, which is an ENVIRONMENT fault and not a code defect"
+            fi
+        else
+            log_warn "images/router/tillandsias-router-sidecar is absent and scripts/build-sidecar.sh is missing (871-wrmv) — steps compiling tillandsias-headless will panic on the missing asset"
+        fi
     fi
 
     if [[ $LIST_ONLY -eq 1 ]]; then
