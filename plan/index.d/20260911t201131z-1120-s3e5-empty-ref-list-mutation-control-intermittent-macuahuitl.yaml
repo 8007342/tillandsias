@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by the macuahuitl coordinator on 2026-09-11 after append-event refused
+# the archived 877-mynm ("events belong on live packets ... file a new packet
+# citing the-plan-only-lane-cannot-see-its-own-stdin-under-the-composed-hook").
+packets:
+  - packet_id: the-empty-ref-list-mutation-control-accepts-inside-the-gate-and-refuses-standalone-so-a-land-can-be-refused-by-a-fixture-nobody-can-reproduce
+    order: 1120-s3e5
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [gate, fixture, pre-push, intermittent, flaky]
+    estimated_hours: 2
+    owned_files:
+      - scripts/test-pre-push-empty-ref-list.sh
+    title: |
+      Arm 8 of scripts/test-pre-push-empty-ref-list.sh (the mutation control from 877-mynm) accepted an empty ref list inside ./build.sh --check on macuahuitl and refused it twice standalone on the same tree minutes later, so the land was refused by a fixture whose failure no standalone run can reproduce and whose output names neither the stamp path it read nor the environment it ran in
+    context: |
+      INTERMITTENT INSIDE THE GATE, GREEN STANDALONE — macuahuitl 2026-09-11, one observation, filed before re-running so the re-run cannot launder it.
+      
+      scripts/land-on-platform-branch.sh linux-next (attempt 1, TILLANDSIAS_SKIP_VERSION_BUMP=1 TILLANDSIAS_FORCE_CHECK=1, tree c386e3c15) refused on the gate step "Checking the pre-push empty-ref-list fixture (877-mynm)": 10 passed, 1 failed —
+      
+          FAIL: mutation control did not reproduce the pre-fix behaviour (rc=0)
+          ok: BISTABILITY: arm 7's premise holds under controlled stamp absence (rc=1)
+      
+      Arm 8 strips the ORDER 877-mynm early-accept block from scripts/hooks/pre-push-local-gate.sh and feeds the mutant an empty ref list; it must REFUSE. Inside the gate it ACCEPTED. The same fixture, same tree, run twice standalone minutes later — bare, and under the land's exact environment — passed 11/11 both times. Arm 9 (controlled stamp absence) passed in the gate run, so the mutant refuses when the stamp it reads is absent; the only way arm 8 accepts is that the stamp the mutant READ was not the one hold_ambient_stamp REMOVED ($(git -C "$ROOT" rev-parse --absolute-git-dir)/tillandsias-gate-stamp). Under ./build.sh --check the two resolutions may differ (build.sh exports git environment the standalone run does not) — HYPOTHESIS, NOT MEASURED. The 2026-08-25T01:42 intermittent this packet's criterion 7 closed had the same fixture and a different message.
+      
+      What would settle it: run the fixture from inside the gate with `env | grep -E '^GIT_'` and the resolved stamp path printed beside arm 8's rc. Not done this cycle (a release cut is in flight). Six green gate runs of this step on this host 2026-09-06 (timing log) and none red until today; nothing on trunk touched the guard or the fixture since 76df6b76c.
+      Cites the-plan-only-lane-cannot-see-its-own-stdin-under-the-composed-hook
+      (877-mynm, archived) as the packet that shipped the fixture.
+    exit_criteria:
+      - "arm 8 prints, on failure, the stamp path the mutant guard resolved and whether a file existed there, plus the GIT_* environment it ran under, so an in-gate red is diagnosable from the gate log alone; pre-fix result: FAILS (the line is 'mutation control did not reproduce the pre-fix behaviour (rc=0)' and nothing else)"
+      - "the in-gate versus standalone divergence is explained and closed: either the fixture holds the stamp path the guard actually reads under ./build.sh --check, or the guard resolves the same path in both contexts; pre-fix result: FAILS (one in-gate red against two standalone greens on c386e3c15, 2026-09-11)"
+      - "NEGATIVE CONTROL: with the early accept stripped, arm 8 still refuses in ten consecutive in-gate runs, and with the early accept present arm 6 still accepts"
+    events:
+      - type: filed
+        ts: "2026-09-11T20:08:17Z"
+        agent_id: "linux-macuahuitl-claude-20260911t191740z"
+        host: macuahuitl
+        summary: |
+          Filed before the re-run so the re-run cannot launder the observation.
+          One observation on one host; the standalone runs are the control.

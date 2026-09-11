@@ -77,3 +77,4 @@ one of those packets should fill in its row from what they actually know.
 
 The gate therefore checks MEMBERSHIP, not rendering. Which orders appear is
 derivable and is what rotted; the prose is editorial and stays hand-written.
+| 1087-h2z9 | `the-gate-every-host-must-pass-is-blind-to-nine-defects-the-release-gate-sees-once-a-day` | ready (lenovinha's slice on origin/work/1087-h2z9, 2026-09-05, unmerged; PR #109 tracks the release-gate reds it names) | — | not yet recorded |
