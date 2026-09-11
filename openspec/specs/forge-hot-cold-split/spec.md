@@ -16,7 +16,7 @@ mount the following paths as kernel tmpfs at container start time:
 | Path | Size cap | mode |
 |------|----------|------|
 | `/opt/cheatsheets` | 8 MB | 0755 |
-| `/home/forge/src` | `compute_hot_budget()` MB (per-launch) | 0755 |
+| `/home/forge/src` | `compute_hot_budget()` MB (per-launch) | 0777 |
 | `/tmp` | 256 MB | 01777 |
 | `/run/user/1000` | 64 MB | 0700 |
 
