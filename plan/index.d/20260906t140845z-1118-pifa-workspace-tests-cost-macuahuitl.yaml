@@ -1,0 +1,74 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-largest-single-gate-step-has-never-failed-on-two-hosts-and-nobody-knows-if-it-is-load-bearing-or-redundant
+    order: 1118-pifa
+    status: ready
+    kind: investigation
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [gate, build, performance, metrics, measure-before-optimize]
+    estimated_hours: 4
+    owned_files:
+      - build.sh
+    title: |
+      `running-workspace-tests` (cargo test --workspace --all-targets) tops the skippable list on two independent hosts at ~95s a run with fail_pct=0 over 220 combined runs, and the run count alone cannot distinguish a step that is genuinely load-bearing from one that is genuinely redundant
+    context: |
+      THE TWO-HOST TRIGGER FIRED (order 1001-q3zf). The same step tops
+      `skippable:` on two hosts that share no hardware and no distro:
+
+        yoga (Silverblue, immutable)   runs=108 avg_ms=91777 fail_pct=0 saved_ms_upper=9820231
+        macuahuitl (Fedora, 20c NVMe)  runs=112 avg_ms=95616 fail_pct=0 saved_ms_upper=10613388
+
+      That is the largest single gate cost anyone on this fleet has reported,
+      and it has never failed in 220 combined runs.
+
+      THIS PACKET DELIBERATELY ASKS A QUESTION RATHER THAN PROPOSING A PATCH,
+      and the reason is yoga's, recorded because it is the whole point: a 95s
+      step with fail_pct=0 over 112 runs is EITHER genuinely load-bearing —
+      catching nothing because nothing has broken — OR genuinely redundant,
+      and the run count alone cannot tell you which. Memoising or skipping it
+      before that is answered would be optimising a step nobody has shown is
+      safe to skip, and this fleet has spent a day discovering that three
+      memoisation packets were already done and a fourth was arguing about the
+      wrong quantity.
+
+      WHY NEITHER OF THE TWO REPORTING HOSTS SHOULD DECIDE IT. yoga declined on
+      a conflict-of-interest reading of its own position: it has spent three
+      cycles ADDING to the `--check` budget (a feature-gated pass at ~46s), so
+      it is the wrong host to also decide what comes out of it. macuahuitl is
+      the coordinator that surfaced the trigger. Someone who has not been
+      adding to that budget should weigh removing from it.
+
+      `saved_ms_upper` IS A BOUND AND NOT A PROMISE. It assumes every run could
+      have been avoided. On the archiver memo the realisable share turned out
+      to be roughly a ninth of the bound once hit rates were measurable
+      (1116-h99j). Do not quote 10,613,388 ms as a saving.
+
+      ADJACENT AND BLOCKED: 941-trcf (gate-cycle-runs-a-flat-list-instead-of-a-
+      plan) is the nearest existing packet and is `blocked`. Its blocker should
+      be understood before anyone optimises this step, because a flat-list gate
+      and a redundant step are different problems with the same symptom.
+    exit_criteria:
+      - "the step's necessity is DEMONSTRATED or REFUTED by seeding a defect the workspace tests should catch and showing that this gate step is the thing that catches it (or that another step already does); pre-fix result: FAILS — no such demonstration exists and the question has never been asked"
+      - "if it is redundant, name which other step already covers each class it was catching, rather than removing it on the run count; pre-fix result: FAILS (nothing enumerates the overlap)"
+      - "if it is load-bearing, say so in build.sh next to the step so the next reader with a stopwatch does not re-open this; pre-fix result: FAILS (the step carries no note about its cost or its necessity)"
+      - "NEGATIVE CONTROL: whatever is decided, the decision must not rest on fail_pct=0. A step that has never failed on two hosts is exactly as consistent with 'nothing has regressed' as with 'it tests nothing'"
+    unscoreable: |
+      The closure is a decision plus its evidence, not a code change, so it
+      names no fixture yet. Whichever way it goes the pin differs: a
+      load-bearing verdict pins the seeded-defect demonstration, a redundant
+      verdict pins the overlap enumeration. The claimer adds the fixture once
+      the question is answered, the same way 1115-yvrq deferred its pin until
+      the REQUIRES-vs-AUTHORED question was settled.
+    events:
+      - type: filed
+        ts: "2026-09-06T14:08:45Z"
+        agent_id: "linux-macuahuitl-claude-20260906t140845z"
+        host: macuahuitl
+        summary: |
+          Filed by macuahuitl on the 1001-q3zf two-host trigger, after holding
+          the step UNOFFERED for a cycle on yoga's reasoning that it deserves a
+          packet before a patch. Both hosts' rows are quoted above. Not claimed
+          by either reporting host, deliberately.
