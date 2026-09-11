@@ -1,0 +1,22 @@
+# Gate step 1080-4deb — data, not code (order 1072-b7eq).
+#
+# The packet whose name is its thesis: FIVE WRITES IN ONE DAY each landed in a
+# real place and were invisible to the reader asking the question they
+# answered. append-event prints ok, a selector offering a held packet looks
+# exactly like one offering a free packet, a note summary is a fine place for
+# prose. This step runs the fixture test that holds the arms against a real
+# plan binary: the negative control FIRST (a checker that fires on healthy
+# packets empties the ready set, and a host with nothing offered stops), then
+# each arm. A script nobody calls is not a mechanism — wiring it here is what
+# turns the test into the guard the packet is named for.
+#
+# The fixture resolves its own plan binary through the shared probe
+# (scripts/plan-binary-probe.sh), so no host-specific target/ path appears in
+# either file; a host with no runnable binary exits 2 (refused:no-plan-binary)
+# rather than asserting a verdict it cannot make.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking every packet that carries a claim or landed fix is visible to the reader (1080-4deb)"
+STEP_SCRIPT="scripts/test-ledger-write-reaches-its-reader.sh"
+STEP_ERROR="a write still lands where no reader consults it — see the verdict line above (1080-4deb)"
+STEP_OK="Ledger-write-reaches-its-reader check passed"

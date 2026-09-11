@@ -261,6 +261,11 @@ tray_present=0
 while IFS='|' read -r tool kind scope platforms prover expect why remedy; do
     [ -n "$tool" ] || continue
     case ",$platforms," in *",$PLATFORM,"*) ;; *) continue ;; esac
+    # Forge is CA-exempt by design (crates/tillandsias-headless/src/main.rs:
+    # ensure_ca_bundle early-returns on forge) so openssl CLI is not needed.
+    if [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ] && [ "$tool" = "openssl" ]; then
+        continue
+    fi
     if have_kind "$kind" "$tool"; then
         if [ "$scope" = tray-build ]; then
             tray_present=$((tray_present + 1))

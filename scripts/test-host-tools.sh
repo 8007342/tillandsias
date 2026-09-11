@@ -495,6 +495,17 @@ for _bogus in os mac inux; do
     fi
 done
 
+# 8. FORGE EXEMPTION FOR OPENSSL (order forge-openssl-gate-scope / 1080-4deb)
+#    A forge environment lacks openssl and does not need it (ensure_ca_bundle
+#    early-returns on forge). Assert check-host-tools does not require openssl
+#    when TILLANDSIAS_HOST_KIND=forge.
+_forge_out="$(TILLANDSIAS_HOST_KIND=forge "$CHECK" --platform linux 2>/dev/null)"
+if printf '%s' "$_forge_out" | grep -q "openssl"; then
+    check FAIL "forge host kind does not require openssl" "out=[$_forge_out]"
+else
+    check ok "forge host kind is exempt from openssl requirement"
+fi
+
 total=$((pass + fail))
 [ "$unverified" -gt 0 ] && printf 'note: %d required entr(y/ies) have no cheap prover; the gate itself is their evidence\n' "$unverified"
 if [ "$fail" -eq 0 ]; then

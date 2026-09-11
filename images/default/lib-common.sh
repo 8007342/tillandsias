@@ -5,6 +5,7 @@
 # It must NOT contain `exit` or `exec` statements.
 #
 # Location in image: /usr/local/lib/tillandsias/lib-common.sh
+# @trace spec:ephemeral-guarantee
 
 set -euo pipefail
 
@@ -4488,8 +4489,8 @@ quietly.
 
 ## Skills
 
-Available skills are under \`.claude/skills/\` (Claude Code) or \`.opencode/skills/\` (OpenCode).
-Key skills: \`meta-orchestration\`, \`advance-work-from-plan\`, \`merge-to-main-and-release\`.
+Available skills are under \`.claude/skills/\` (Claude Code), \`.codex/skills/\` (Codex), \`.gemini/skills/\` (Antigravity), or \`.opencode/skills/\` (OpenCode).
+Key skills: \`/forge-quick-intro\`, \`meta-orchestration\`, \`advance-work-from-plan\`, \`merge-to-main-and-release\`.
 
 ## Tooling actually present here — check this before reaching for something
 

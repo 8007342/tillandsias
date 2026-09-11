@@ -16,6 +16,17 @@
   and a long addendum is one nobody finishes.
 -->
 
+## Forge quick intro & ephemeral workspace
+
+- **Quick start**: Invoke `/forge-quick-intro` to bootstrap awareness of all
+  pre-installed tools, compilers, and browsers with minimal token overhead.
+- **Ephemeral RAM tmpfs**: The project workspace (`/home/forge/src/<project>`) is
+  mounted exclusively in RAM tmpfs (`mode=0777`). Host disks are NEVER touched
+  (`HOST/src/<anything>` is never created) — architecture is strictly:
+  `CLOUD > PROJECT > AGENT -> GIT_MIRROR > FORGE`.
+- **Ephemeral lifecycle**: Any uncommitted or unpushed work dies with container
+  teardown. Always commit and push before exiting (see below).
+
 ## Project status: ask, don't grep
 
 Primary path: the forge-plan MCP tools (`plan_answer "what is the current
