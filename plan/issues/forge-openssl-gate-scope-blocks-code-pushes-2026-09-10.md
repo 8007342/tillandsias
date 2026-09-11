@@ -86,3 +86,10 @@ ARM 1 is implemented and verified locally (9 assertions green, gate step
 `110-1080-4deb` written) but stranded at
 `refs/heads/salvage/unknown/20260910-1080-4deb-arm1:94f12eeb7b2bacdc8b86e81fa43cccbb1810beda`.
 It reads `blocked`; next claimer should fetch that ref and land the change.
+
+## Resolution (2026-09-10)
+
+Resolved on `macuahuitl`:
+1. `scripts/check-host-tools.sh` is now forge-aware and skips the `openssl` gate-scope requirement when `TILLANDSIAS_HOST_KIND == "forge"`, mirroring the CA-exempt behavior in `ensure_ca_bundle`.
+2. `scripts/test-host-tools.sh` added an arm verifying the forge openssl exemption.
+3. The stranded ARM 1 implementation for 1080-4deb was fetched from `refs/heads/salvage/unknown/20260910-1080-4deb-arm1:94f12eeb` (`scripts/gate-steps.d/110-1080-4deb.step` and `scripts/test-ledger-write-reaches-its-reader.sh`) and passed all 9 assertions and the full local gate. Status moved back to `ready`.
