@@ -72,3 +72,4 @@ scripts/test-spec-index-durable-tier-demotion.sh untriaged nobody decided
 scripts/test-spec-index-repo-relative-rung.sh  untriaged  nobody decided
 scripts/validate-spec-cheatsheet-binding-fast.sh untriaged nobody decided
 scripts/validate-traces.sh                     untriaged  reached indirectly via test-trace-coverage.sh, but not run directly
+scripts/check-deslop-sweep-health.sh  excluded   829-dkuc: the de-slop sweep's ritual detector, a REPORT over plan/deslop-sweeps.d (exit 0 whatever it finds); release-tier because a sweep is a once-per-200-orders event, not a per-land property — wired into scripts/local-ci.sh 2026-09-11 after audit-guard-activation flagged it orphaned

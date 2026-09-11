@@ -1345,6 +1345,22 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
         archive_check_log "tray-string-corpus-drift" "skipped"
     fi
 
+    # 829-dkuc: the de-slop sweep's own ritual detector. A REPORT, not a gate:
+    # it reads plan/deslop-sweeps.d/*.md and prints ok:/unknown:/red: with the
+    # rules it could and could not evaluate, exiting 0 either way (the sweep
+    # protocol, criteria 4+, is what may later turn red: into a refusal).
+    # Wired here because it shipped on 2026-09-06 (3b16c92b6) invoked by
+    # nothing and the activation audit flagged it on the 2026-09-11 release
+    # gate — an unwired guard is inert, the 599-4wzr class.
+    if [[ -f "scripts/check-deslop-sweep-health.sh" ]]; then
+        bash scripts/check-deslop-sweep-health.sh 2>&1 | tee /tmp/deslop-sweep-health.log || true
+        log_pass "De-slop sweep health reported (829-dkuc, informational)"
+        archive_check_log "deslop-sweep-health" "pass" /tmp/deslop-sweep-health.log
+    else
+        log_fail_missing_guard "deslop-sweep-health" "scripts/check-deslop-sweep-health.sh"
+        archive_check_log "deslop-sweep-health" "skipped"
+    fi
+
     if [[ -f "scripts/check-cheatsheet-frontmatter.sh" ]]; then
         if bash scripts/check-cheatsheet-frontmatter.sh 2>&1 | tee /tmp/cheatsheet-frontmatter.log; then
             log_pass "Cheatsheet frontmatter valid"

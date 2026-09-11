@@ -1,0 +1,79 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by the macuahuitl coordinator on 2026-09-11 on the operator's ask to
+# evaluate the agent-commit format (github.com/AngelCodes95/agent-commit).
+packets:
+  - packet_id: a-commit-links-to-its-packet-only-through-subject-prose-so-115-of-727-commits-in-a-week-cite-no-order-and-a-whole-cycles-work-went-untraced
+    order: 1121-g47q
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [git, commits, ledger, trace, tooling, hooks]
+    estimated_hours: 4
+    verifiable_closure: bash scripts/test-commit-agent-context.sh
+    owned_files:
+      - scripts/hooks/commit-msg-agent-context.sh
+      - scripts/test-commit-agent-context.sh
+      - scripts/install-hooks.sh
+    title: |
+      Adopt the agent-commit trailer (a single-line Agent-Context JSON with refs naming the ledger order and packet_id) as the machine-readable commit-to-packet link, generated from the live claim and reported advisory by a commit-msg hook, so a commit like 440cde994 cannot land a cycle's work with no order anywhere in its bytes
+    context: |
+      THE ASK (operator, 2026-09-11): a friend's tool, "npx agent-commit",
+      populates commit messages; see if we can use some of it or enhance
+      something like it, "ensuring commit messages are good".
+
+      WHAT IT IS (read from the npm README and SPEC.md v0.2, not run). A
+      format, not a generator: an ordinary subject line plus an OPTIONAL
+      single-line git trailer, Agent-Context: {json}, with a shared vocabulary
+      of fields — why (a rejected alternative, the real cause), touches,
+      breaking (only when true), refs (the tracker's short id form). Reading
+      it back needs only git: git log --format='%(trailers:key=Agent-Context,
+      valueonly)'. The npm CLI adds init (writes an AGENTS.md block), log/show
+      filters, an advisory check (distinguishes no-trailer from a MISPLACED
+      trailer after a squash), and merge-draft. Nothing enforces anything by
+      default; the spec says so deliberately. Their "writing it safely" section
+      is our 971-7muc lesson verbatim: quoted heredoc, never shell-interpolated
+      JSON in argv.
+
+      WHAT THIS REPO ALREADY HAS, measured 2026-09-11 over the last 7 days:
+      727 non-merge commits; 612 carry an order token in the SUBJECT
+      (fix(1080-4deb): ...), 115 do not. Trailers in use: Co-Authored-By 689,
+      Claude-Session 680, MO-FULL 12, Generated-By 8, FIX 8, Verified 7. No
+      commit-msg hook exists (scripts/hooks has pre-commit-openspec, four
+      pre-push guards, two post-commit refreshers). The packet-to-commit
+      direction exists (evidence_refs on closures, 650-dq6u); the
+      commit-to-packet direction is subject prose only — and 440cde994, an
+      entire antigravity cycle's host-checkout elimination, carried no order,
+      no @trace header and no event, which is why 776-jcf3 had to be evented
+      by the coordinator five days later and 1119-w2rj's defects were found by
+      a review rather than a claim.
+
+      WHAT TO TAKE, AND WHAT NOT TO. Take the trailer and the field vocabulary:
+      refs carries [order, packet_id] (the ledger's own short and long ids —
+      the spec asks for the tracker's form, consistently), touches the owned
+      files, why the thing the diff cannot say. Do NOT take the npm dependency:
+      reading needs only git, the forge image has no node contract, and a
+      generator belongs beside the claim, not in a separate tool — the agent
+      that ran set-field status in_progress already knows the order and the
+      packet_id. Do NOT make it blocking: the spec is right that an unverified
+      trailer is a claim, and a hook that refuses commits is how --no-verify
+      becomes a habit (the pre-push lesson). Squash-merge handling is moot
+      here (main merges with --merge, order 476) but the MISPLACED detection
+      is worth copying into the check.
+    exit_criteria:
+      - "a generator (tillandsias-plan or a script) emits a one-line Agent-Context trailer from the live claim — refs=[<order>, <packet_id>], touches from the staged diff intersected with owned_files, why left empty for the agent to fill — written through a file, never argv; pre-fix result: FAILS (nothing generates one)"
+      - "an ADVISORY commit-msg hook, installed by scripts/install-hooks.sh, reports when a commit touching a claimed packet's owned_files carries neither a trailer refs entry nor a subject order token, and never blocks the commit; pre-fix result: FAILS (no commit-msg hook exists)"
+      - "a check mode lists commits since <ref> as traced-by-trailer, traced-by-subject-only, MISPLACED (trailer text present but not parsed as a trailer) or untraced, and the 2026-09-11 baseline (115 untraced of 727) is recorded as its first run; pre-fix result: FAILS"
+      - "NEGATIVE CONTROL: a commit with a subject order token and no trailer is reported subject-only, never untraced; a commit whose refs name an order the ledger does not know is reported, not silently accepted"
+      - "the convention is named in methodology (the trailer is the commit-to-packet link, evidence_refs is the packet-to-commit link) with credit to the agent-commit spec v0.2, so a future host does not re-derive the field names"
+    events:
+      - type: filed
+        ts: "2026-09-11T20:53:23Z"
+        agent_id: "linux-macuahuitl-claude-20260911t191740z"
+        host: macuahuitl
+        summary: |
+          Filed from a read-only look at the package (npm view; SPEC.md v0.2)
+          and a 7-day measurement of this repo's own commits. The CLI was not
+          executed. The 115/727 number is the pre-fix baseline for criterion 3.
