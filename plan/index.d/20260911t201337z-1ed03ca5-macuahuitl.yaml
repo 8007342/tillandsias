@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-empty-ref-list-mutation-control-accepts-inside-the-gate-and-refuses-standalone-so-a-land-can-be-refused-by-a-fixture-nobody-can-reproduce
+    field: verifiable_closure
+    value: bash scripts/test-pre-push-empty-ref-list.sh
+    ts: "2026-09-11T20:13:37Z"
+    host: macuahuitl
+
+events:
+  - packet_id: the-empty-ref-list-mutation-control-accepts-inside-the-gate-and-refuses-standalone-so-a-land-can-be-refused-by-a-fixture-nobody-can-reproduce
+    event:
+      type: note
+      ts: "2026-09-11T20:13:37Z"
+      host: macuahuitl
+      summary: |-
+        scorable obligation: the fixture itself, run in-gate ten times (977-448j)

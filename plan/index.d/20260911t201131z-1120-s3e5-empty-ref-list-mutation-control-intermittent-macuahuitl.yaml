@@ -13,6 +13,7 @@ packets:
     pickup_role: linux
     capability_tags: [gate, fixture, pre-push, intermittent, flaky]
     estimated_hours: 2
+    verifiable_closure: bash scripts/test-pre-push-empty-ref-list.sh
     owned_files:
       - scripts/test-pre-push-empty-ref-list.sh
     title: |
