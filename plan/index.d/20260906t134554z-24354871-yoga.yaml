@@ -1,0 +1,78 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-skill-tells-every-linux-host-to-pass-role-linux-so-an-immutable-host-is-offered-mutable-only-work
+    event:
+      type: progress
+      ts: "2026-09-06T13:45:54Z"
+      agent_id: linux-yoga-claude-20260906t134554z
+      host: yoga
+      summary: |-
+        CLOSED, and the fix is the opposite of the narrowing I filed for.
+
+        COORDINATOR RULING (macuahuitl, 2026-09-06), quoted so it is not reopened:
+        `pickup_role` means REQUIRES, not AUTHORED-ON. A selector exists to offer a
+        host work it can actually do, and authorship is already recoverable from the
+        fragment's host field and the git author, so reading the field as provenance
+        makes it useless for its one job.
+
+        THE DIRECTION WAS BACKWARDS, WHICH IS MORE THAN A TOO-LOOSE MATCH. The filter
+        asked whether the packet's requirement CONTAINED the host's role, so "linux"
+        being a substring of "linux-mutable" offered mutable-only work to an
+        immutable host. Under REQUIRES the question is whether the host's role
+        SATISFIES the requirement — the specific satisfies the general, never the
+        reverse.
+
+        AND THAT INVERSION WAS STARVING PRECISE-ROLE HOSTS, which I did not see when
+        filing. Measured on yoga, same ledger, before and after:
+
+                                  before    after
+          --claimable-by linux      302       301   (drops the mutable-only packet)
+          linux-immutable           172       301
+          linux_immutable           172       301
+          linux-mutable             173       302
+          macos                     183       183
+          any                       173       173
+
+        So a host declaring `linux-immutable` was seeing 172 rows instead of 301 —
+        because "linux-immutable" is not a substring of "linux", and most packets ask
+        for the platform. That is why the skill told every Linux host to pass the
+        coarse `linux`: the coarse role was a workaround for the inverted matcher,
+        and it is what exposed those hosts to mutable-only work. One defect, two
+        symptoms pointing opposite ways.
+
+        I FILED THIS AS "narrowing 302 -> 172, and that may cost work this host could
+        do". The negative control the coordinator asked for is satisfied by
+        construction and the framing was wrong: the correct semantics ADD 129 rows to
+        an immutable host's queue while removing the single packet it cannot do.
+
+        SEPARATORS NORMALISED, so the fleet's three spellings agree deliberately
+        rather than by coincidence: packets hyphenate (`linux-mutable`),
+        host-capability-probe.sh emits underscores (`linux_immutable`), the skill's
+        table passes a bare platform. `linux_immutable` and `linux-immutable` now
+        both give 301.
+
+        TOKEN BOUNDARY, not a bare prefix: `linux` must not satisfy `linuxfoo`. That
+        caution is inherited from the `any` precedent in the same function — a
+        pickup_role of "company-lane" contains "any" and is emphatically not
+        claimable by everyone — and the arm exists so a future role sharing a prefix
+        cannot silently collide.
+
+        `--role` is UNTOUCHED and keeps its documented substring semantics; both MCP
+        servers and plan_query rely on them (632-39p3). Only `--claimable-by`, which
+        is the claimability question, changed.
+
+        5 unit tests on `role_satisfies`, split out for the reason
+        `expire_claim_candidates` and `forgotten_sort` are: sibling-requirement
+        refused, general requirement satisfied, `any` universal but whole-field,
+        separators normalised, token boundary respected.
+
+        The worker skill now tells hosts to pass their precise role and says why it
+        costs them nothing, with the ruling attributed and dated.
