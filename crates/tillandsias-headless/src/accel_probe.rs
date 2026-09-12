@@ -279,7 +279,30 @@ pub struct MeasurementRecord {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 // @trace spec:accel-capability-probe
 pub struct HostInfo {
-    pub is_battery_present: bool,
+    /// Does this host have a battery — `Some(true)`/`Some(false)` when something
+    /// LOOKED, `None` when nothing could (order 803-r8u4).
+    ///
+    /// THIS WAS A `bool`, AND A BARE `bool` HERE CANNOT BE HONEST. Only the
+    /// Linux `/sys/class/power_supply` scan ever wrote it; every other host
+    /// kept the `false` initializer and serialised it as a confident denial.
+    /// The absent probe and the real answer "no battery" were the same byte.
+    ///
+    /// MEASURED, and this is the field evidence the fleet already holds: the
+    /// first macOS capability row (macneo, relayed by macuahuitl onto 657-zm2n
+    /// 2026-09-04) reads `is_battery_present false` — from a MacBook, which has
+    /// a battery. Nothing on that host had looked. The row was not
+    /// under-annotated, it was WRONG, and no consumer could see it.
+    ///
+    /// This matters beyond tidiness because the inference policy router
+    /// suspends background work on battery (spec inference-policy-router,
+    /// ADAPT-2). A laptop that reports `false` because nobody probed it is a
+    /// laptop the router will never throttle.
+    ///
+    /// `serde(default)` so a document filed before this field was optional —
+    /// including the fixtures under `scripts/fixtures/hardware-fingerprint/` —
+    /// still deserialises.
+    #[serde(default)]
+    pub is_battery_present: Option<bool>,
     pub kernel_release: String,
 
     /// WHICH MACHINE this document describes (order 808-43mw).
@@ -659,14 +682,52 @@ fn enumerate_npus_checked() -> Option<Vec<DeviceRecord>> {
     }
 }
 
+/// Physical RAM in GiB on macOS, or `None` when the query did not answer.
+///
+/// ORDER 803-r8u4 / 803-rbqf. `enumerate_cpu`'s macOS arm set cores, vendor and
+/// a CPU name and then left `ram_gb` at its `None` initializer, so every macOS
+/// capability document filed `system_ram_gb: null` — visible in the fleet's
+/// first macOS row (macneo, relayed onto 657-zm2n 2026-09-04). The Linux and
+/// Windows arms both answer this; only macOS did not.
+///
+/// It is a FUNCTION rather than an inline block because two records need the
+/// number. On Apple silicon the GPU has no memory of its own — `memory_model`
+/// is `unified` — so physical RAM IS the Metal device's memory budget, and the
+/// device record that omits it cannot be reasoned about by a consumer that
+/// declines to sum unified budgets.
+///
+/// MEASURED on tlatoanis-macbook-air (Apple M5) 2026-09-12:
+/// `sysctl -n hw.memsize` -> `17179869184` -> 16.00 GiB.
+///
+/// GiB, not GB, matching the Windows arm's divisor: both divide by 1024^3.
+#[cfg(target_os = "macos")]
+fn macos_system_ram_gb() -> Option<f64> {
+    let out = Command::new("sysctl")
+        .args(["-n", "hw.memsize"])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    String::from_utf8_lossy(&out.stdout)
+        .trim()
+        .parse::<u64>()
+        .ok()
+        .filter(|b| *b > 0)
+        .map(|b| b as f64 / (1024.0 * 1024.0 * 1024.0))
+}
+
 // @trace spec:accel-capability-probe
 fn enumerate_cpu() -> DeviceRecord {
     let mut flags = Vec::new();
     let physical_cores;
     let logical_cores;
-    // Only the Linux probe mutates these defaults incrementally; the macOS arm
-    // overwrites them wholesale, so off-Linux the initializers are never read.
-    #[cfg_attr(not(target_os = "linux"), allow(unused_mut))]
+    // The Linux probe mutates these defaults incrementally; the macOS and
+    // Windows arms overwrite them wholesale, so off-Linux the initializers for
+    // name and vendor are never read.
+    // macOS and Windows overwrite this wholesale, matching `cpu_name`/`vendor`
+    // below; only the Linux arm reads the initializer.
+    #[cfg_attr(not(target_os = "linux"), allow(unused_mut, unused_assignments))]
     let mut ram_gb = None;
     #[cfg_attr(not(target_os = "linux"), allow(unused_mut, unused_assignments))]
     let mut cpu_name = "Host CPU".to_string();
@@ -724,6 +785,11 @@ fn enumerate_cpu() -> DeviceRecord {
         vendor = "apple".to_string();
         cpu_name = "Apple Silicon CPU".to_string();
         flags.push("neon".to_string());
+        // ORDER 803-r8u4: this arm used to stop above, leaving `system_ram_gb`
+        // null on every macOS row. A failed query leaves it null exactly as
+        // before, so the absent case is unchanged and only the measurable one
+        // moves.
+        ram_gb = macos_system_ram_gb();
     }
 
     // ORDER 805-r98w / NPU parity, 2026-09-02. Native Windows used to fall
@@ -2424,15 +2490,44 @@ fn enumerate_gpus() -> Vec<DeviceRecord> {
             fw_version: None,
             driver: None,
             usable: true,
-            unusable_reason: None,
+            // ORDER 803-rbqf: A DEVICE EXCLUDED BY LANE MUST NAME THE
+            // OBSTRUCTION. This record dropped the `container` lane silently,
+            // so a consumer reading it saw a device that simply was not offered
+            // there and had no way to learn why. The AMD arm already set the
+            // precedent with `container-lane-unverified`: the field carries the
+            // reason for a LANE restriction, not only for `usable: false`.
+            //
+            // The obstruction here is structural rather than unverified, and
+            // that is worth stating in the string. The container on a macOS
+            // host runs inside the linux-aarch64 VZ guest, and Metal does not
+            // cross that boundary — there is no passthrough to enable and no
+            // launcher flag that would change the answer.
+            unusable_reason: Some("metal-not-reachable-from-linux-aarch64-guest".to_string()),
             policy_unscheduled: None,
             lanes: vec!["host-native".to_string()],
             memory_bandwidth_gbps: None,
             memory_bandwidth_source: "unknown".to_string(),
             cpu_flags: None,
             cpu_cores: None,
-            system_ram_gb: None,
-            memory_model: None,
+            // ORDER 803-r8u4 / 803-rbqf. Apple silicon has ONE memory budget.
+            // `memory_model: None` meant "the classifier could not decide", and
+            // a consumer must decline to sum on `None` exactly as on `unified` —
+            // so the routing behaviour happened to be right while the recorded
+            // fact was missing. 793-qr4t's unified-memory criterion is
+            // "demonstrable on Apple silicon and nowhere else", and it was not
+            // demonstrable here, because the one platform that can show it
+            // filed no evidence.
+            //
+            // This is the only arm in this function that may assert `unified`
+            // from the platform rather than from device evidence, and it is not
+            // the `cfg`-derived-capability mistake 1090-8nh4 removed: that arm
+            // claimed a RUNTIME accelerator tier from a COMPILE-TIME fact, and
+            // was compiled out in the guest where the answer mattered. This code
+            // only ever executes on a real macOS host, and "Apple silicon shares
+            // DRAM between CPU and GPU" is an architectural invariant of every
+            // machine that can run it, not a measurement standing in for one.
+            system_ram_gb: macos_system_ram_gb(),
+            memory_model: Some("unified".to_string()),
         });
     }
 
@@ -2936,23 +3031,61 @@ fn enumerate_npus() -> Vec<DeviceRecord> {
 
 // @trace spec:accel-capability-probe
 fn enumerate_host() -> HostInfo {
-    // Only the Linux power-supply scan can flip this; other hosts keep false.
-    #[cfg_attr(not(target_os = "linux"), allow(unused_mut))]
-    let mut battery = false;
+    // ORDER 803-r8u4. `None` IS THE STARTING POSITION, not `Some(false)`.
+    //
+    // A host with no arm below has not looked, and the only truthful thing it
+    // can say is that it does not know. The old initializer was `false`, which
+    // is a different claim — "this machine has no battery" — and every non-Linux
+    // host made it without evidence.
+    #[cfg_attr(not(any(target_os = "linux", target_os = "macos")), allow(unused_mut))]
+    // The macOS arm answers in one expression rather than accumulating, so the
+    // `None` initializer it replaces is never read there.
+    #[cfg_attr(target_os = "macos", allow(unused_assignments))]
+    let mut battery: Option<bool> = None;
 
     #[cfg(target_os = "linux")]
     {
+        // A READABLE directory with no battery in it IS evidence of absence, so
+        // this arm distinguishes the two outcomes the old code could not: the
+        // scan that ran and found nothing answers `Some(false)`, while a
+        // directory that could not be read at all leaves `None`.
         if let Ok(entries) = fs::read_dir("/sys/class/power_supply") {
+            let mut found = false;
             for entry in entries.flatten() {
                 let type_path = entry.path().join("type");
                 if let Ok(t) = fs::read_to_string(type_path)
                     && t.trim().eq_ignore_ascii_case("battery")
                 {
-                    battery = true;
+                    found = true;
                     break;
                 }
             }
+            battery = Some(found);
         }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        // `pmset -g batt` names an internal battery when one is present. MEASURED
+        // on tlatoanis-macbook-air (Apple M5) 2026-09-12:
+        //
+        //   Now drawing from 'AC Power'
+        //    -InternalBattery-0 (id=23068771)\t80%; AC attached; not charging
+        //
+        // A desktop Mac prints the header and no `-InternalBattery-` line, which
+        // is why the marker is the battery row rather than the exit status: the
+        // command succeeds on both, and only the row separates them. A pmset
+        // that fails to run leaves `None`, because then nothing looked.
+        //
+        // NOT KEYED ON "AC Power"/"Battery Power" — that is the CHARGING state,
+        // which changes when someone unplugs the machine. The question here is
+        // whether the hardware exists.
+        battery = Command::new("pmset")
+            .args(["-g", "batt"])
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).contains("InternalBattery"));
     }
 
     let kernel = Command::new("uname")
@@ -4792,7 +4925,7 @@ mod tests {
             engines: Vec::new(),
             measurements: Vec::new(),
             host: HostInfo {
-                is_battery_present: false,
+                is_battery_present: Some(false),
                 kernel_release: "test".to_string(),
                 host_id: "test-host".to_string(),
                 host_id_source: "input".to_string(),
@@ -5611,29 +5744,134 @@ mod tests {
         }
     }
 
+    /// ORDER 803-rbqf. WHAT THIS TEST USED TO BE, and why it proved nothing:
+    ///
+    ///     let metal_device = DeviceRecord { ... lanes: vec!["host-native"] ... };
+    ///     assert!(!metal_device.lanes.contains(&"container".to_string()));
+    ///
+    /// It built its own `DeviceRecord` literal and asserted on THAT. The
+    /// production arm in `enumerate_gpus` was never called, so the test was a
+    /// tautology over a value the test itself had just written: if the real
+    /// macOS arm started advertising `container` tomorrow, this test would stay
+    /// green, because the literal it inspects is not the code that ships.
+    ///
+    /// A guard assembled only from what its author already believed inherits
+    /// every omission in that belief. The fix is not a stronger assertion, it
+    /// is a different SUBJECT — the probe's output instead of the test's input.
+    ///
+    /// Split in two because the subject is only observable on one platform:
+    /// this arm runs the real probe where it exists, and
+    /// [`the_macos_arm_cannot_advertise_the_container_lane`] pins the same
+    /// clause by source everywhere else, so a Linux CI run still refuses the
+    /// regression.
     #[test]
-    // @trace spec:accel-capability-probe
+    #[cfg(target_os = "macos")]
+    // @trace order:803-rbqf, spec:accel-capability-probe
     fn test_macos_metal_lane_isolation() {
-        let metal_device = DeviceRecord {
-            device_class: "gpu".to_string(),
-            vendor: "apple".to_string(),
-            name: "Apple Metal GPU".to_string(),
-            device_node: None,
-            fw_version: None,
-            driver: None,
-            usable: true,
-            unusable_reason: None,
-            policy_unscheduled: None,
-            lanes: vec!["host-native".to_string()],
-            memory_bandwidth_gbps: None,
-            memory_bandwidth_source: "unknown".to_string(),
-            cpu_flags: None,
-            cpu_cores: None,
-            system_ram_gb: None,
-            memory_model: None,
-        };
-        assert!(!metal_device.lanes.contains(&"container".to_string()));
-        assert!(metal_device.lanes.contains(&"host-native".to_string()));
+        let gpus = enumerate_gpus();
+        let metal = gpus
+            .iter()
+            .find(|d| d.vendor == "apple")
+            .expect("the macOS arm must enumerate an Apple GPU on a macOS host");
+
+        // PROBE-7, asserted against what the probe actually emitted.
+        assert!(
+            !metal.lanes.contains(&"container".to_string()),
+            "PROBE-7: Metal must not be offered on the container lane: {:?}",
+            metal.lanes
+        );
+        assert!(
+            metal.lanes.contains(&"host-native".to_string()),
+            "Metal is reachable host-native: {:?}",
+            metal.lanes
+        );
+
+        // 803-rbqf: the lane exclusion must NAME its obstruction.
+        assert!(
+            metal.unusable_reason.is_some(),
+            "a device excluded by lane must say why it is excluded"
+        );
+
+        // 803-r8u4: unified memory, and a budget to go with it.
+        assert_eq!(
+            metal.memory_model.as_deref(),
+            Some("unified"),
+            "Apple silicon shares one memory budget"
+        );
+        assert!(
+            metal.system_ram_gb.unwrap_or(0.0) > 0.0,
+            "unified memory is only a budget if the budget is recorded"
+        );
+    }
+
+    /// ORDER 803-r8u4, the host-fact half. Runs the REAL `enumerate_host` and
+    /// `enumerate_cpu` on a macOS host and refuses the two nulls the fleet's
+    /// first macOS capability row filed (macneo, relayed onto 657-zm2n
+    /// 2026-09-04: `system_ram_gb null, is_battery_present false`).
+    ///
+    /// It asserts `is_some()` rather than `Some(true)` ON PURPOSE. A Mac mini
+    /// has no battery and must be free to answer `Some(false)`; what is being
+    /// refused is `None`, which now means "nothing looked" and was the true
+    /// state of every macOS host before this arm existed. Pinning `true` here
+    /// would pass on this laptop and red on a desktop Mac for being correct.
+    ///
+    /// MEASURED on tlatoanis-macbook-air (Apple M5) 2026-09-12:
+    /// `is_battery_present: true`, `system_ram_gb: 16.0`.
+    #[test]
+    #[cfg(target_os = "macos")]
+    // @trace order:803-r8u4, spec:accel-capability-probe
+    fn macos_host_facts_are_measured_not_defaulted() {
+        assert!(
+            enumerate_host().is_battery_present.is_some(),
+            "macOS must LOOK for a battery; None means nothing did (803-r8u4)"
+        );
+        let cpu = enumerate_cpu();
+        assert!(
+            cpu.system_ram_gb.unwrap_or(0.0) > 0.0,
+            "macOS must report physical RAM; null was the pre-803-r8u4 answer"
+        );
+    }
+
+    /// The source-level half of [`test_macos_metal_lane_isolation`], so the
+    /// clause is guarded on hosts that cannot run the macOS arm (order
+    /// 803-rbqf). Same technique, and for the same reason, as 1090-8nh4's
+    /// source assertion on `detect_inference_tier`: the fleet lands through
+    /// Linux hosts, and a macOS-only test is no guard at all on the branch
+    /// where most commits arrive.
+    #[test]
+    // @trace order:803-rbqf, spec:accel-capability-probe
+    fn the_macos_arm_cannot_advertise_the_container_lane() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/accel_probe.rs"));
+
+        // ANCHOR FIRST. A scan that silently finds nothing is a guard that
+        // never fires, and it looks exactly like a guard that passes.
+        let marker = "PROBE-7: macOS Metal is host-native ONLY";
+        let start = source
+            .find(marker)
+            .expect("the macOS arm's PROBE-7 marker moved; re-anchor this guard");
+        let arm = &source[start..];
+        let end = arm
+            .find("});")
+            .expect("could not find the end of the macOS DeviceRecord literal");
+        let arm = &arm[..end];
+
+        assert!(
+            !arm.contains("\"container\""),
+            "the macOS GPU arm names the container lane; Metal does not cross \
+             the linux-aarch64 guest boundary (PROBE-7, 803-rbqf)"
+        );
+        assert!(
+            arm.contains("\"host-native\""),
+            "the macOS GPU arm must still offer the host-native lane"
+        );
+        assert!(
+            arm.contains("unusable_reason: Some("),
+            "a lane-excluded device must name its obstruction (803-rbqf)"
+        );
+        assert!(
+            arm.contains("memory_model: Some(\"unified\""),
+            "Apple silicon is unified memory (803-r8u4)"
+        );
     }
 
     // ---- order 808-43mw: host identity and measurement labelling ----
@@ -5710,7 +5948,7 @@ mod tests {
     fn kernel_release_does_not_distinguish_two_wsl2_hosts() {
         let shared = "6.18.33.2-microsoft-standard-WSL2".to_string();
         let a = HostInfo {
-            is_battery_present: false,
+            is_battery_present: Some(false),
             kernel_release: shared.clone(),
             host_id: "yolanda".to_string(),
             host_id_source: "node-name".to_string(),
@@ -5799,7 +6037,7 @@ mod tests {
     #[test]
     fn a_wsl2_row_cannot_yet_say_its_machine_is_windows() {
         let guest_row = HostInfo {
-            is_battery_present: true,
+            is_battery_present: Some(true),
             kernel_release: "6.18.33.2-microsoft-standard-WSL2".to_string(),
             host_id: "yolanda".to_string(),
             host_id_source: "node-name".to_string(),
@@ -5845,7 +6083,7 @@ mod tests {
                 model_params_b: None,
             }],
             host: HostInfo {
-                is_battery_present: true,
+                is_battery_present: Some(true),
                 kernel_release: "6.18.33.2-microsoft-standard-WSL2".to_string(),
                 host_id: host.to_string(),
                 host_id_source: "node-name".to_string(),

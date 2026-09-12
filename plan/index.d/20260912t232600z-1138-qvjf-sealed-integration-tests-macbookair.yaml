@@ -1,0 +1,133 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: thirty-seven-integration-tests-import-only-std-and-cannot-reach-the-code-they-are-named-for
+    order: 1138-qvjf
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [fail-loud, gate, test-validity]
+    estimated_hours: 5
+    owned_files:
+      - crates/tillandsias-headless/tests
+      - scripts
+    unscoreable: |
+      UNPINNABLE UNTIL THE GUARD EXISTS. The closure is "no test file is sealed
+      off from the code it names", and the mechanism that would assert it is
+      this packet's own deliverable — there is nothing in the tree today whose
+      exit code answers the question. Declaring a litmus that does not exist
+      would name an unresolvable pin, which is 1068-cxmf's defect.
+
+      WHAT MAKES A SLICE SCORABLE: land the guard first, with BOTH arms proven
+      against real history — it must name the five files listed below on the
+      tree before the fix and name none after. Then each converted file is
+      scorable against it. Do not pin "the count is 37": the number legitimately
+      moves as tests are added, and a literal-total pin breaks on the next
+      honest commit.
+    verifiable_closure: ""
+    title: |
+      thirty-seven integration tests in tillandsias-headless import only std and never subprocess the binary, so they exercise mocks defined in their own files while their names claim coverage of deadlock handling, lifecycle guards, cache peer routing and network validation
+    context: |
+      FOUND on macbookair 2026-09-12 while fixing a single tautological test
+      (803-rbqf: `test_macos_metal_lane_isolation` built its own DeviceRecord
+      literal and asserted on that literal, never calling `enumerate_gpus`).
+      Asking whether that shape recurred turned up a structural version of it.
+
+      THE ROOT CAUSE IS THE CRATE LAYOUT, and it is worth stating first because
+      it means no author was careless. `tillandsias-headless` declares
+      `[[bin]] name = "tillandsias"` and NO `[lib]`. `cargo test -p
+      tillandsias-headless --lib` answers "no library targets found in package".
+      A Rust integration test under `tests/` cannot `use` a binary-only crate —
+      there is no importable target. So a file placed there has exactly two
+      honest routes to production behaviour: subprocess the built binary via
+      `CARGO_BIN_EXE_*`, or import a DIFFERENT crate that holds the logic
+      (`tillandsias_core`, and so on). A file that does neither can only test
+      what it defines inside itself, and it will compile and pass forever.
+
+      MEASURED across all 12 files in crates/tillandsias-headless/tests/:
+        5 subprocess the binary — legitimate e2e:
+            e2e_user_flow.rs, proxy_cache_policy.rs, signal_handling.rs,
+            singleton_coexistence.rs, vsock_listener_e2e.rs
+        2 import a real crate — legitimate:
+            error_recovery.rs (tillandsias_core::cache_validation),
+            vault_approle_provisioning.rs
+        5 do NEITHER. Their complete set of use-statements, deduplicated across
+        all five files, is: std::fs, std::sync::Arc, std::sync::Mutex,
+        std::thread, std::time::Duration, std::time::Instant. Nothing else.
+            cache_peer_routing.rs            10 tests
+            network_validation.rs             8 tests
+            rapid_project_switch.rs           4 tests
+            rapid_project_switch_v2.rs        9 tests
+            stress_concurrent_operations.rs   6 tests
+                                             37 tests
+
+      TWO SAMPLED AND CONFIRMED, chosen because their names make the strongest
+      claims:
+        * stress_concurrent_operations.rs::test_stress_deadlock_detection locks
+          an `Arc<Mutex<MockProject>>` where `MockProject` is a struct declared
+          at line 58 OF THAT FILE, and asserts the whole thing finished inside
+          45 seconds. It can only ever measure std::sync::Mutex. No production
+          locking path can regress it.
+        * rapid_project_switch_v2.rs::test_lifecycle_state_guards_enforce_transitions
+          drives `ProjectWithLifecycle` and `LifecycleState`, both declared at
+          line 482 onward of that file, through `try_attach` and
+          `can_start_project` — also defined there. It is a self-built state
+          machine asserting on itself. The name claims the real lifecycle guard.
+
+      A THIRD FLAVOUR, same root, filed here rather than separately because the
+      fix is the same conversation: two tests are VACUOUS rather than mocked.
+      error_recovery.rs::test_low_disk_space_detection creates a TempDir and
+      asserts the TempDir exists, with the comments "On Unix, we'd use statvfs
+      to check available space" and "Here we just verify the path is
+      accessible". logging's test_breaking_change_detection_baseline reads five
+      struct fields into `_` bindings and admits in a comment that the actual
+      guard is compilation. Neither is a mock; both are a test name doing the
+      work the body does not.
+
+      WHY THIS MATTERS MORE THAN THE COUNT. These 37 are inside the 507 that
+      report green on every host, every cycle, and they are the tests whose
+      names a reader scans to decide an area is covered. A green suite that
+      includes tests which cannot fail for a production reason does not
+      overstate coverage by 37 tests — it removes the reader's ability to tell
+      which of the 507 mean anything. That is the same defect as 803-rbqf's
+      single tautology, at file scale.
+    deliverable: |
+      A GUARD FIRST, because without it this recurs the next time someone adds
+      a file under tests/. It must refuse a `tests/*.rs` that neither imports a
+      `tillandsias*` crate nor references `CARGO_BIN_EXE`, and it must be proven
+      on real history: red on the pre-fix tree naming exactly the five files
+      above, green after. A guard built only from the instances its author
+      already found inherits every instance they did not; state the rule, do not
+      enumerate the files.
+
+      THEN, PER FILE, one of three dispositions — and the third is a legitimate
+      answer, not a defeat:
+        1. wire it to the real code (subprocess the binary, or import the crate
+           that actually owns the logic);
+        2. delete it, if what it asserts is std's behaviour rather than ours;
+        3. keep it and RENAME it so the name stops claiming coverage it does not
+           have, with a comment saying what it does cover.
+      Whichever is chosen, say why in the commit. Do not convert all five in one
+      pass without reading what each was trying to assert; some of these
+      encode real intent that was never wired up, and that intent is worth
+      keeping as a packet even when the test is deleted.
+    next_action: >
+      Write the guard and prove both its arms against real history before
+      converting anything — an unproven guard here would be the same class of
+      defect as the tests it polices. Then take
+      stress_concurrent_operations.rs and rapid_project_switch_v2.rs first:
+      they are the two sampled above, their names make the largest claims, and
+      whichever disposition they take will set the pattern for the other three.
+      Consider whether tillandsias-headless should grow a `[lib]` target — that
+      is the change that would make route 1 available at all, and it is a
+      bigger decision than this packet should take alone.
+    provenance: |
+      Filed by macbookair (macos) 2026-09-12, found while closing 803-rbqf in
+      crates/tillandsias-headless/src/accel_probe.rs. Every count above measured
+      on this host at that cycle's tree by grepping use-statements and
+      CARGO_BIN_EXE references across all 12 files; the two sampled tests were
+      read in full and their mock definitions located in their own files.
+      Cited by symbol and by file, not by line, except where a local struct's
+      declaration line is the evidence.
