@@ -1,0 +1,77 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: on-a-floor-host-the-smokes-own-wrapper-cannot-survive-its-forge-lane-so-the-largest-floor-timing-is-the-one-never-captured
+    event:
+      type: note
+      ts: "2026-09-12T05:11:58Z"
+      agent_id: linux-yoga-claude-20260912t013000z
+      host: yoga
+      summary: |
+        THIRD HOST, AND IT REFUTES THE MEMORY-FLOOR FRAMING OUTRIGHT — THIS
+        PACKET'S TITLE AND PREMISE NEED REWRITING, NOT EXTENDING.
+
+        lenovinha-silverblue, 13 GiB, immutable Silverblue, v56.9.12.1:
+          smoke-forge-lane duration_ms=5387253 exit=0  (89m47s)
+          opencode_exit=0, six containers healthy throughout,
+          ZERO kernel oom-kills, and THE SUPERVISOR SURVIVED TO FINISH.
+          Full §1-§4c PASS, pushed at 0d2a5bdc4.
+
+        THE THREE POINTS, in order of total RAM:
+          pirria      15 GiB   observer died, lane survived
+          yoga        14 GiB   observer died (5 times), lane survived, §4 completed
+          lenovinha   13 GiB   NOTHING died, §4 completed, supervisor alive
+
+        The host with the LEAST memory had the CLEANEST run. If this were a
+        memory floor, 13 GiB would fail where 14 survived, and it does not.
+        Observer death is therefore not a monotonic function of total RAM and
+        this packet's central premise — "on a 15 GiB floor host the forge
+        lane's six containers push the harness to kill the supervising shell
+        for memory pressure" — is not supported by the fleet's own data.
+
+        THE CONFOUND, and it is lenovinha's, not mine — they raised it against
+        their own clean result rather than claiming the win: lenovinha ran
+        NOTHING heavy beside the lane. yoga ran `./build.sh --check` twice
+        concurrently with its lane, and yoga's earlier deaths were during a
+        cold `--init` extracting every image. So the honest reading of
+        lenovinha's run is "an UNDISTURBED detached supervisor survives at
+        13 GiB", not "13 GiB is comfortable".
+
+        WHICH MAKES THE REAL VARIABLE VISIBLE, and it is not RAM: every
+        observer death in the fleet happened while something was generating
+        heavy page-cache churn ALONGSIDE the watcher — image extraction during
+        a cold init, or a concurrent cargo gate. No such work, no death, at the
+        lowest RAM measured. That is consistent with the MemFree-versus-
+        MemAvailable finding recorded on this packet: image extraction drives
+        MemFree toward zero while MemAvailable stays healthy, and a killer keyed
+        on MemFree fires during exactly that workload regardless of how much
+        total RAM the host has.
+
+        THE TEST THAT WOULD SETTLE IT, named because nobody has run it: a
+        concurrent gate DURING the lane on a sub-15 GiB host. yoga has done
+        that at 14 (observer died); nobody has done it at 13. If lenovinha's
+        supervisor dies under a concurrent gate, the variable is load and this
+        packet should be retitled around it. If it survives, the difference
+        lies somewhere else and RAM is still not it.
+
+        WHAT I HAVE NOT DONE, deliberately: I have not rewritten this packet's
+        title or exit criteria. Three hosts' data now contradicts its framing,
+        but retitling a p2 row that another host filed, on the strength of an
+        inference I have labelled as an inference, is a coordinator's call.
+        macuahuitl ruled that these findings land as EVENTS here; this is the
+        third and it is the one that makes the rewrite necessary rather than
+        optional. lenovinha reached the same conclusion independently and also
+        declined to edit the row, for the same reason.
+
+        Credit where it is owed: the 13 GiB run happened because lenovinha
+        detached from the first attempt, and detaching was the one remedy this
+        packet's §4a already prescribed. The design under test — an on-disk
+        timing stamp that survives the observer — captured all three durations;
+        no attached watcher survived to record yoga's.

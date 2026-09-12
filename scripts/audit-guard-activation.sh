@@ -67,6 +67,13 @@ surfaces=(
   openspec/litmus-tests
   .github/workflows
   scripts/install-hooks.sh
+  # skills/ is the CANONICAL tree; .claude/skills and the other runtime dirs are
+  # symlink farms onto it. A Windows checkout materialises those symlinks as
+  # 40-byte text files (core.symlinks=false), and BSD grep -R does not descend
+  # symlinked directories, so on both regimes an invoker that lives only in a
+  # skill read as absent and five wired guards became "orphans" (yolanda and
+  # macbookair, 2026-09-12). The canonical tree is real files everywhere.
+  skills
   .claude/skills
   methodology.yaml
   methodology
@@ -141,7 +148,30 @@ find_invoker() { # find_invoker <basename>
     # and the auditor could not see it — a false accusation that blocks a gate
     # is worse than no audit, because the fix it demands is to re-wire something
     # that is already wired.
-    hit="$(grep -Rl -- "$name" "$s" 2>/dev/null \
+    # `find -L`, NOT `grep -R` — THE -R FIX ABOVE IS GNU-SPECIFIC AND THE
+    # SAME FALSE ACCUSATION RECURRED ON macOS (1087-h2z9, 2026-09-12).
+    # GNU grep's -R follows symlinks found during traversal, so the 801-qasc
+    # fix worked where it was measured. BSD grep (/usr/bin/grep on macOS,
+    # 2.6.0-FreeBSD) does NOT descend into symlinked SUBDIRECTORIES during
+    # traversal — it will read a symlinked FILE named directly on the command
+    # line, which is exactly why spot-checks pass and the sweep does not.
+    # MEASURED: .claude/skills holds 11 real directories and 15 symlinks;
+    # `/usr/bin/grep -Rl . .claude/skills` reads exactly 11 files, all of them
+    # the real openspec-* dirs, and skips all 15 symlinked skills. Five guards
+    # invoked only from meta-orchestration/ and coordinate-multihost-work/ were
+    # reported ORPHAN while correctly wired, failing ./build.sh --check and
+    # refusing every macOS land.
+    #
+    # AND THE TRAP THAT HID IT, which is why "measured green" was true and
+    # useless simultaneously: a host may carry ugrep (or ripgrep) as `grep` on
+    # the interactive PATH, and ugrep -Rl DOES follow the symlinks. So running
+    # this auditor BY HAND in a login shell PASSES while the identical script
+    # invoked from a child bash resolving /usr/bin/grep FAILS — the verdict
+    # depended on which grep the invoking shell exported, so both readings were
+    # correct on ONE machine. `find -L` removes that dependency: it follows
+    # symlinks on BSD and GNU alike and does not care which grep is on PATH.
+    hit="$(find -L "$s" -type f -print0 2>/dev/null \
+            | xargs -0 grep -l -- "$name" 2>/dev/null \
             | grep -vE "scripts/${name}$|scripts/audit-guard-activation.sh$" \
             | head -1)"
     if [ -n "$hit" ]; then printf '%s' "$hit"; return 0; fi

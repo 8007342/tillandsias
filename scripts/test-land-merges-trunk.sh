@@ -71,6 +71,15 @@ build_origin() { # $1 = work dir
     git -C "$w/seed" add trunk-only.txt >/dev/null 2>&1
     git -C "$w/seed" commit -qm "trunk advances"
     git init -q --bare "$w/origin"
+    # HERMETIC HOOKS (forge carve-out, 5c0f0751e pattern): the forge sets
+    # `core.hooksPath` GLOBALLY, and a global hooksPath REPLACES every repo's
+    # local hooks dir — so without this the fixture's ARM-3 pre-receive hook
+    # never fires, the refused push SUCCEEDS (rc=0), and arm3 reports "the
+    # tool claimed success on a refused push" for a tool that never saw the
+    # refusal. Point the bare origin's hooksPath back at its own dir. On a
+    # host with no global override this is a harmless restatement of the
+    # default. Relative to the bare repo root, so `hooks` resolves there.
+    git -C "$w/origin" config core.hooksPath hooks
     git -C "$w/seed" remote add origin "$w/origin"
     git -C "$w/seed" push -q origin linux-next windows-next
 }

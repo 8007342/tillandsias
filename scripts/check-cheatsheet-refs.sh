@@ -108,6 +108,11 @@ collect_refs() {
     # `--only-matching` so the printed line is just the captured paths — not
     # the whole prose line. Without -o, ripgrep --replace leaves the rest of
     # the line intact and our comma-split treats the prose as bad refs.
+    # The trailing `.` is the PATH OPERAND and it is load-bearing: with none,
+    # ripgrep reads stdin, and under a piped stdin that never closes it blocks
+    # forever — the gate sat 43 min with no verdict on macOS (macbookair, FIFO
+    # control, 2026-09-12) and `|| true` cannot help because rg never returns.
+    # `< /dev/null` does not reproduce it (EOF); only a pipe does.
     $RG --no-heading --line-number --no-messages --only-matching \
         --glob 'cheatsheets/**/*.md' \
         --glob 'src-tauri/src/**/*.rs' \
@@ -115,6 +120,7 @@ collect_refs() {
         --glob 'images/default/**/Containerfile*' \
         '@cheatsheet[[:space:]]+([A-Za-z0-9_./-]+\.md(?:[[:space:]]*,[[:space:]]*[A-Za-z0-9_./-]+\.md)*)' \
         --replace '$1' \
+        . \
         || true
 
     # 2. `## See also` bullets inside cheatsheets. Match either form:

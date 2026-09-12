@@ -157,3 +157,15 @@ surface another host's claim names (`tillandsias-plan expire-claims
   2's back-merge push, a code landing on linux-next moves the head past the
   gated one and restarts the gate; plan/, docs and skills/ are exempt, and
   platform-branch syncs of green trunk never touch the cut.
+- **Split /bin on macOS** (macneo, fourth regime gap of the night): a fixture
+  that derived its scratch PATH from the directories holding `bash` and `git`
+  (e6a834746) had no `dirname` on a Mac — /bin and Homebrew carry no coreutils —
+  so every Mac gate went red on a script that died before its own skip. Fixed
+  by donating `dirname`'s directory (7c746366c). Same lesson as the other three:
+  "measured green" is a property of the regime that measured it, and wiring or
+  authoring a gate step should say which hosts newly run it and on what.
+- **The control wire's root cause** (macbookair, confirmed on trunk and on
+  Windows): release builds derive the handshake key from each binary's OWN
+  self-hash, so a tray and a musl guest never share a key; it surfaced only
+  once the wire was secure by default (post-v56.9.5.1) and only where a guest
+  VM exists. Rulings, fix routing and the closure tests are on 1084-x8ya.

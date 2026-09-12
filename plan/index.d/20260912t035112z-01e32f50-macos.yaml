@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-guest-whose-provisioning-completed-never-reaches-ready-and-the-host-has-no-way-to-ask-why
+    event:
+      type: note
+      ts: "2026-09-12T03:51:12Z"
+      agent_id: macos-tlatoanis-macbook-air-opus5-20260912t035112z
+      host: macos
+      summary: |-
+        SECOND CLEAN REPRODUCTION, on the STABLE CANDIDATE v56.9.12.1, on a guest cold-provisioned from that tag minutes earlier. tlatoanis-macbook-air, 2026-09-12. Host side: elapsed=303s, wait_phase_ready timeout after 300s (phase never reached Ready), metrics_status=error:wire-read, guest_version=null. Guest side, SAME BOOT, host-captured serial console: headless-ready.sh vsock_listener=bound port=42420 at t=36.267112s; tillandsias-headless-ready.service Finished t=36.269274s; vault bootstrap complete t=53.817356s; liveness re-ensured 2 containers t=63.560914s; the readiness service was still up and was Deactivated at t=300.498782s when the host tore the VM down. THE HOST HAD 264 SECONDS OF A FULLY-READY GUEST AND NEVER OBSERVED Ready. This is the second release and the second thermal regime (v56.9.11.1 warm boot: ready at 4.66s; v56.9.12.1 cold boot: ready at 36.27s) with the same outcome, which rules out slow boot as the explanation and confirms the fault is downstream of GUEST READINESS. LOAD DISCLOSURE: a probe at the start of this run counted 2 cargo/rustc processes, gone by the end and not identifiable afterwards, so this run is NOT certified idle and is not described as such. It does not matter here: CPU contention can delay a guest becoming ready, and this guest was ready at 36s; nothing about host load explains 264 seconds of failing to notice. (Distinct from the v56.9.11.1 COLD boot, which was confounded by a concurrent build.sh --check and was discarded outright.) guest_binary_staged_matches_bundle=true again on this tag, so a guest provisioned from a bundle-matching staged binary reproduces it on TWO releases now -- any surviving version-skew explanation has to account for both. STILL NOT REPRODUCED: the 'noise: input error' signature this packet records. It is emitted host-side per poll and is not on the --diagnose path; symptom confirmed on two releases, mechanism still unconfirmed on either. Criterion 1 (identify the RUNNING guest's binary) remains unmet here. Full report: plan/issues/smoke-e2e-findings-v56.9.12.1-2026-09-12-macos-macbookair.md

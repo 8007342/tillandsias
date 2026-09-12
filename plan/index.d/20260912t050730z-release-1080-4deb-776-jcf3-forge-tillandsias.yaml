@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: forge-tillandsias cycle finalization (order 636-9m79 form).
+status:
+  - packet_id: retire-host-src-checkout-behind-proven-transparent-push
+    field: status
+    value: ready
+    ts: "2026-09-12T05:07:30Z"
+    host: forge-tillandsias
+  - packet_id: the-ledger-has-more-than-one-place-to-look-and-every-reader-looks-in-one-so-five-writes-landed-somewhere-nothing-consults
+    field: status
+    value: ready
+    ts: "2026-09-12T05:07:30Z"
+    host: forge-tillandsias
+
+events:
+  - packet_id: retire-host-src-checkout-behind-proven-transparent-push
+    event:
+      type: release
+      ts: "2026-09-12T05:07:30Z"
+      host: forge-tillandsias
+      summary: |-
+        released on cycle exit per forge rule (unfinished -> ready). This
+        cycle banked the in-forge half of criterion 1: 349-pattern probe
+        branch probe/776-jcf3-linux-forge-20260912 at
+        6e8ad86970d36ade02d3029df2bd5e0a0f7b6be8 pushed through the enclave
+        mirror with upstream relay verified; linux-next advanced
+        a53e4748a..cb4741b67 (3 commits, all pushed). Upstream ls-remote +
+        host-side deletion commands are in the 05:06:30Z event; a host must
+        verify externally and reply before criterion 1 is banked.
+  - packet_id: the-ledger-has-more-than-one-place-to-look-and-every-reader-looks-in-one-so-five-writes-landed-somewhere-nothing-consults
+    event:
+      type: release
+      ts: "2026-09-12T05:07:30Z"
+      host: forge-tillandsias
+      summary: |-
+        released on cycle exit per forge rule (unfinished -> ready). Live-lane
+        ARM 3 landed and MEASURED (46/383 ready-but-landed on origin/linux-next);
+        next_action refreshed (salvage branch deletion + 46-hit sweep await a
+        host).
