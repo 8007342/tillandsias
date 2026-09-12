@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: two-timing-logs-on-one-host-so-every-recurrence-count-is-a-partition-presenting-as-a-total
+    field: next_action
+    value: 'Landed as 68d404947. Nothing left for this packet. The falsified-premise correction in the closing event is the part to carry forward: the sourcing stub never wrote the split; the gate''s own fixtures did, through the documented no-checkout fallback. If a second timing log reappears on any host, the reader guard will name it and the remedy; the open question is whether any writer OTHER than the eleven fixed fixtures reaches the shared path, which was not verified.'
+    ts: "2026-09-12T06:07:42Z"
+    host: pirria
+
+events:
+  - packet_id: two-timing-logs-on-one-host-so-every-recurrence-count-is-a-partition-presenting-as-a-total
+    event:
+      type: note
+      ts: "2026-09-12T06:07:42Z"
+      host: pirria
+      summary: |-
+        closing 1096-p3tn

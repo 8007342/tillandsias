@@ -1,0 +1,57 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: two-timing-logs-on-one-host-so-every-recurrence-count-is-a-partition-presenting-as-a-total
+    event:
+      type: completed
+      ts: "2026-09-12T06:07:38Z"
+      agent_id: linux-pirria-claude-20260912t022150z
+      host: pirria
+      summary: |-
+        LANDED as 68d404947 on origin/linux-next, 2026-09-12, by pirria-cachyos. Verified: 68d404947 is origin/linux-next's head; origin carries the reader guard and all eleven fixture writers.
+
+        FALSIFIED PREMISE — THIS PACKET'S STATED CAUSE WAS WRONG, and the correction matters more than the fix. The packet blamed cycle-metrics.sh:249-252: metrics-log-path.sh sourced best-effort with `|| true`, and on failure a stub returning /tmp/<name>. THAT STUB NEVER WROTE A LINE OF THE SPLIT. The second log is manufactured DETERMINISTICALLY, on every gate run, on every host, by the gate's own fixtures — through the DOCUMENTED no-checkout fallback working exactly as designed.
+
+        CAUGHT IN THE ACT, 2026-09-12, with an ls -l before/after bracketing one ./build.sh --check (the control macuahuitl asked for). /tmp/tillandsias-timing.jsonl ABSENT at 05:22:36Z, PRESENT at 05:27:05Z. The artifact, preserved this time before anything touched it, nine records:
+            {"ts":"2026-09-12T05:26:56Z","host":"toolbx","step":"litmus:kill-adjudicator-probe","phase":"pre-build","duration_ms":2026,"exit":124}
+            {"ts":"2026-09-12T05:26:59Z","host":"toolbx","step":"litmus:kill-adjudicator-probe","phase":"pre-build","duration_ms":2030,"exit":124}
+            {"ts":"2026-09-12T05:27:01Z","host":"toolbx","step":"litmus:kill-adjudicator-probe","phase":"pre-build","duration_ms":2023,"exit":124}
+            {"ts":"2026-09-12T05:27:05Z","host":"toolbx","step":"litmus:retired-phase-live","phase":"all","duration_ms":20,"exit":0}
+            {"ts":"2026-09-12T05:27:05Z","host":"pirria","step":"litmus-suite","phase":"all","duration_ms":68,"exit":0}
+            {"ts":"2026-09-12T05:27:05Z","host":"toolbx","step":"litmus:retired-phase-retired","phase":"retired","duration_ms":23,"exit":1}
+            {"ts":"2026-09-12T05:27:05Z","host":"toolbx","step":"litmus:stdin-eater","phase":"pre-build","duration_ms":23,"exit":0}
+            {"ts":"2026-09-12T05:27:05Z","host":"toolbx","step":"litmus:stdin-second","phase":"pre-build","duration_ms":26,"exit":0}
+            {"ts":"2026-09-12T05:27:05Z","host":"pirria","step":"litmus-suite","phase":"pre-build","duration_ms":122,"exit":0}
+        `host` reads toolbx and pirria — the REAL host names, not "fixture". That is why six days of looking at this file never revealed it: the records are indistinguishable from data by eye.
+
+        MECHANISM: scripts/test-litmus-stdin-does-not-eat-the-spec-list.sh:73 does `cd "$tmp"` into a scratch dir that is not a git checkout, then runs run-litmus-test.sh without naming a log. metrics_default_log correctly finds no .git there and returns its documented /tmp fallback. ELEVEN fixtures had that shape.
+
+        IT RETRO-FITS THIS PACKET'S OWN 2026-09-06 EVIDENCE EXACTLY, which is the strongest confirmation available: "steps only in /tmp: 6, steps only in .cache: 160, archiver-check-* in /tmp: 0, spans OVERLAP, BOTH files carry both hosts". Six distinct fixture litmus steps; a real log's 160; no archiver-check records in the fixture file because fixtures never run the archiver; overlapping spans because the gate runs while the real cycle does; both hosts in both files because the gate runs on the host and in the toolbox. Every clause of the original observation is explained by fixture debris, and none of it required a sourcing failure.
+
+        WRITER FIX (the real one). All eleven fixtures now export TILLANDSIAS_TIMING_LOG to ${TMPDIR:-/tmp}/tillandsias-timing-FIXTURES.jsonl — deliberately NOT the shared basename, so no reader can mistake debris for data and the new guard cannot trip on it. metrics-log-path.sh's contract blesses exactly this: an explicit TILLANDSIAS_*_LOG always wins, so a fixture that names its log keeps working. COORDINATOR GRANTED SCOPE over scripts/test-litmus-*.sh and test-bound-litmus-is-runnable.sh for this commit; they are outside this packet's owned_files.
+
+        CONTROL, run twice, and it is a POSITIVE control rather than a bare absence. After a full ./build.sh --check with /tmp cleared beforehand:
+            /tmp/tillandsias-timing.jsonl        ABSENT
+            /tmp/tillandsias-timing-FIXTURES.jsonl   15 records, 15 of them "step":"litmus
+        An absence alone would be consistent with the fixtures never having run. The FIXTURES file proves they ran, wrote, and wrote elsewhere. Repeated on the landing gate: shared log still absent, FIXTURES file grown.
+
+        READER FIX, and it is the load-bearing half. A second live timing log is refused with `violation:metrics-log-split:<a>=<n>:<b>=<n>` and exit 2 instead of silently halving the numbers. Load-bearing because the writer fix cannot be assumed complete: the fallback is correct and any future caller that runs from a non-checkout without naming a log re-creates the split. The guard is what keeps a partition from being published as a total regardless of who writes it.
+
+        FIRES ONLY ON A DEFAULTED PATH. metrics-log-path.sh's contract is that an explicit TILLANDSIAS_*_LOG always wins so "every fixture that names its own log keeps working untouched", and every fixture sets it — an unconditional guard would red the whole suite on a state the fixtures construct deliberately. Arm 9b is the control that pins that exemption.
+
+        A CORRECT GUARD, LANDED ALONE, WOULD HAVE BROKEN THE FLEET — recorded because it nearly happened. Every host that gated before this landed already has a /tmp/tillandsias-timing.jsonl, and tmpfs keeps it until reboot, so the guard's first firing is GUARANTEED and SIMULTANEOUS across every host at land time, not probabilistic later. Blast radius 100%. Rejected remedy: narrowing "live" by mtime. That would have the guard decide a second log it CAN see is not really one — a reader concluding "this probably does not matter" about data it cannot interpret, which is the same class this packet exists to close; and it fails on the facts anyway, since the debris is minutes old. Chosen remedy: refuse on existence, once, with the fix stated verbatim — the grep/wc comparison that distinguishes pure fixture debris from a mixed file, `rm` if they match, and an explicit "if they DIFFER, real records are mixed in, do not delete blindly" so no host deletes real records on this packet's say-so.
+
+        THE STUB REFUSAL IS LAZY, and that correction cost a red gate. An unsourceable rule file now refuses rather than substituting /tmp — but only when something must actually be DEFAULTED. Refusing at source time broke test-memo-hit-observability arm 3 (gate rc=1, "FAIL ARM 3 MUTANT: produced no skippable line at all — mutant is invalid, not red"): that fixture sed-mutates a COPY of cycle-metrics.sh into a scratch dir, so the rule file is not beside it, but it DOES set TILLANDSIAS_TIMING_LOG. It had already answered the question and was refused anyway. Same error in shape as refusing a correctly-anchored CLAUDE_PID path in 1098-q7bk, made by the same host on the same night: refusing a CORRECT invocation, which is worse than the bug because it teaches people around the check. VERIFIED BOTH DIRECTIONS after the fix: copied script + logs named -> works, prints skippable; copied script + nothing named -> refused, rc=2.
+
+        FIXTURE ARMS LIVE OUTSIDE THIS PACKET'S owned_files deliberately: they are in scripts/test-metrics-log-path-agreement.sh because that fixture owns the path-rule contract, and a verifiable_closure written as a manual procedure that nothing executes is exactly the standing debt 885-92iu refuses. Arms 8 (refusal), 8b (mutation control reconstructing the old stub and asserting it silently accepts), 9 (split refusal), 9b (explicit-log control). 8 arms -> 12, 12 passed 0 failed. test-memo-hit-observability 12 passed 0 failed.
+
+        /tmp IS VOLATILE, which retires this packet's "decide whether to merge the two files or declare /tmp historical". pirria measured 99 records in /tmp on 2026-09-06; the file was GONE by 2026-09-12, cleared by a reboot, taking 1074-96z9's archiver-check hit/miss records with it. On this host there was nothing left to merge — the reboot decided. Elsewhere, "declare historical" means accepting the file will vanish, not keeping it. NOT auto-merged: reconciling overlapping spans is an operator judgement about which records are authoritative, and a reader that happens to notice a split is the wrong actor to make it.
+
+        WHAT I DID NOT DO, stated so nobody assumes otherwise: I did not verify that the eleven fixtures are the ONLY writers reaching the shared path. They are the ones I caught and fixed, and the control shows a full gate no longer pollutes — but any future non-checkout caller that does not name its log will re-create the split, which is why the reader guard matters more than the writer list. 1125-92xa covers the Rust CLI writer, which is a separate participant on a separate path.
