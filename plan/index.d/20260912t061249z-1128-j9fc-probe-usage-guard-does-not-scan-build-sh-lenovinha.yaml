@@ -73,10 +73,12 @@ packets:
       see is the edge of its own population, and nothing enumerates the
       populations.
     exit_criteria:
-      - "a hardcoded target/release/tillandsias-plan path planted in build.sh is REFUSED by scripts/check-plan-binary-probe-usage.sh; pre-fix result: FAILS (ok:21 eligible of 990 scanned, rc=0, measured 2026-09-12)"
+      - "the population includes the gate entry points — repo-root *.sh AND scripts/gate-steps.d/*.step, the latter being a surface no `-name '*.sh'` walk can ever match; pre-fix result: FAILS (build.sh unscanned, ok:21 eligible of 990 scanned)"
+      - "NOT SATISFIABLE BY THIS ROW, and re-scoped rather than left to fail silently: refusing a hardcoded site inside build.sh needs SITE-level compliance, which this row does not deliver. Measured by yoga: with the population widened, build.sh becomes eligible (entry=1/50) and STILL passes with the hardcoded construct planted, because compliance is a FILE-level test — build.sh sources the probe once, legitimately, at :2915, and that single correct use excuses every hardcoded claim elsewhere in the file. Split to the follow-on row below."
       - "the decision is NAMED: either build.sh joins the scanned population, or it gets a narrower rule, with build.sh's existing legitimate references read first rather than assumed away"
       - "NEGATIVE CONTROL: build.sh's pre-existing references still pass, so the fix does not trade a blind spot for a false red that gets the guard switched off"
       - "the verdict line states its population, so a future reader can tell what was scanned without reading the script — the omission the guard's own header says went unnoticed on every windows cycle"
+      - "FOLLOW-ON, not this row: site-level compliance with a STATED legitimate-construct theory. Blast radius measured by yoga before proposing it — all 8 currently-eligible scripts/ files carry BOTH a hardcoded path and a probe call, so a site-level rule with no legitimate-construct theory reds every one of them, including scripts/test-plan-binary-probe.sh, which constructs hardcoded paths BECAUSE IT TESTS THE PROBE (hardcoded=4, probe=4; spot-confirmed independently on lenovinha alongside test-fragment-status-loss.sh 2/2 and test-pre-push-issue-capture-lane.sh 4/9). Same false-red shape as the MCP servers, different surface."
     events:
       - type: filed
         ts: "2026-09-12T06:12:49Z"
