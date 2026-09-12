@@ -1,0 +1,13 @@
+# Gate step — data, not code (order 1072-b7eq). Wired by 1087-h2z9.
+#
+# Triaged from scripts/gate-divergence-declared.txt, where it sat `untriaged`
+# since 2026-09-06: present in --ci-full, absent from --check, nobody decided.
+# Measured green and cheap on b026372ff (Tracked-binary check), so the honest verdict is to run
+# it where every host lands rather than once a day on the release gate.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf): a binding assembled
+# from a variable is invisible to every name-based scan.
+STEP_DESC="Checking no unallowlisted binary is tracked"
+STEP_SCRIPT="scripts/check-no-tracked-binaries.sh"
+STEP_ERROR="a tracked binary is not allowlisted (1087-h2z9)"
+STEP_OK="Tracked-binary check passed"
