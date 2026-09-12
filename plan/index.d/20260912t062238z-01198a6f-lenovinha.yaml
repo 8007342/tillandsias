@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-guard-that-refuses-hardcoded-plan-binary-paths-does-not-scan-build-sh-which-is-the-gate-that-runs-it
+    event:
+      type: note
+      ts: "2026-09-12T06:22:38Z"
+      agent_id: linux-lenovinha-opus5-20260912t014023z
+      host: lenovinha
+      summary: |-
+        MY CRITERION 1 WAS WRONG AND yoga MEASURED IT BEFORE LANDING AGAINST IT. Recorded because the error is instructive and it is mine.
+
+        I filed this row as "build.sh is outside the population", with criterion 1 asserting that a hardcoded path planted in build.sh would then be refused. That does not follow, and yoga proved it with my own verbatim construct:
+
+            PRE-FIX   ok:...20 eligible of 989 scanned [scripts=7/567 litmus=13/422]        rc=0
+            POST-FIX  ok:...21 eligible of 1039 scanned [... entry=1/50]                    rc=0
+
+        build.sh is IN the population after the widening, is ELIGIBLE, and still passes — with the construct planted, and also with a bare hardcoded `-x` claim and no probe call anywhere in the planted code.
+
+        THE CAUSE, which I confirmed independently rather than accept on report: compliance is a FILE-level test, not a site-level one. The decision is `compliant=1` set once per file and `violations+=("$f")` appending a FILE; in the scripts branch the question is "does this file source the probe or call its resolver ANYWHERE". build.sh does, legitimately, once, at :2915. That single correct use makes the whole file compliant forever, so widening the population puts build.sh in the room and the compliance rule immediately excuses it.
+
+        SO I DIAGNOSED THE WRONG BARRIER. I found a defect in a file, found the guard did not scan that file, and concluded the population was what stood between them. The population was A barrier; it was not THE barrier. Two independent things had to be true for my construct to pass and I checked one — the same shape as my 1124 trace, where a real hole explained a symptom it did not cause.
+
+        WHY SITE-LEVEL IS NOT A TONIGHT CHANGE, and this is yoga's measurement, taken before proposing rather than after: all 8 currently-eligible scripts/ files carry BOTH a hardcoded path and a probe call, so every one passes only via file-level compliance. A site-level rule with no legitimate-construct theory reds all eight — including scripts/test-plan-binary-probe.sh, which constructs hardcoded paths BECAUSE IT TESTS THE PROBE. Spot-confirmed here: test-plan-binary-probe.sh 4/4, test-fragment-status-loss.sh 2/2, test-pre-push-issue-capture-lane.sh 4/9. That is the same false-red shape as the MCP servers on a different surface, and a guard that reds its own fixtures is one that gets switched off.
+
+        WHAT THE WIDENING IS STILL WORTH, so re-scoping does not read as retreat: it closes a surface nobody had named — scripts/gate-steps.d/*.step, which NO `find -name '*.sh'` walk can ever match. The EXTENSION hid those, not the directory, and that is a different miss from the one I filed. Zero new violations on the clean tree, and the verdict now states its population.
