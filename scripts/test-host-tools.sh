@@ -44,7 +44,15 @@ farm() {
     for t in git jq cargo rustc rustup gh timeout gtimeout pkg-config curl shasum sha256sum \
              plutil codesign xcrun podman python3 ruby awk sed grep tar gzip xz find sort head \
              tail wc basename dirname mktemp chmod cp mv rm ln ls cat printf date hostname \
-             uname id stat openssl ssh-keygen nc pgrep lsof file diff comm tr cut env bash sh; do
+             uname id stat openssl ssh-keygen nc pgrep lsof file diff comm tr cut env bash sh \
+             rg; do
+        # ORDER 1129-xm5z — `rg` joins this list for the same reason openssl did:
+        # it is a GATE-SCOPED required tool, so an arm that farms a PATH without
+        # it makes check-host-tools.sh report missing:host-tools:linux:gate:rg
+        # and every unrelated arm goes red on a shortfall it never meant to
+        # create. MEASURED: adding the rg row without this line took the fixture
+        # from 21/21 to 2/22 red on a Linux host, both failures in the
+        # 1004-cp6p tray-build arms, neither of which is about rg.
         for skip in "$@"; do [ "$t" = "$skip" ] && continue 2; done
         p="$(command -v "$t" 2>/dev/null)" && ln -sf "$p" "$dir/$t" 2>/dev/null
     done
