@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-pre-push-plan-only-lane-skips-the-fragment-schema-and-status-loss-guards-when-the-plan-binary-is-absent-and-calls-it-a-lane-note
+    field: status
+    value: verified
+    ts: "2026-09-12T05:54:51Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-pre-push-plan-only-lane-skips-the-fragment-schema-and-status-loss-guards-when-the-plan-binary-is-absent-and-calls-it-a-lane-note
+    event:
+      type: completed
+      ts: "2026-09-12T05:54:51Z"
+      host: lenovinha
+      summary: |-
+        status 'verified' with evidence_refs: 2e86a75a9: as-wired on origin/linux-next — scripts/test-pre-push-plan-lane-fails-closed-without-binary.sh 5/5 (arm1 refusal, arm2 fast-lane negative control, arm3 scope control); mutation-tested, arm1's three assertions FAIL against the pre-fix hook while arms 2-3 stay green; scripts/test-pre-push-empty-ref-list.sh 11/11; issue-capture-lane 16/16; gate-stamp-scope 8/8; plan-binary-runnability 5/5; full ./build.sh --check green with the step wired at scripts/gate-steps.d/195-1124-7f3u.step
+  - packet_id: the-pre-push-plan-only-lane-skips-the-fragment-schema-and-status-loss-guards-when-the-plan-binary-is-absent-and-calls-it-a-lane-note
+    event:
+      type: note
+      ts: "2026-09-12T05:54:51Z"
+      host: lenovinha
+      summary: |-
+        the plan-only lane now refuses a fragment-bearing push it cannot fold, scoped so an issues-only push keeps the fast lane; criterion 1 answered and the answer was neither option, with the real mechanism split out as 1127-waxf

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: two-timing-logs-on-one-host-so-every-recurrence-count-is-a-partition-presenting-as-a-total
+    field: status
+    value: completed
+    ts: "2026-09-12T06:07:43Z"
+    host: pirria
+
+events:
+  - packet_id: two-timing-logs-on-one-host-so-every-recurrence-count-is-a-partition-presenting-as-a-total
+    event:
+      type: completed
+      ts: "2026-09-12T06:07:43Z"
+      host: pirria
+      summary: |-
+        status 'completed' with evidence_refs: 68d404947: bash scripts/test-metrics-log-path-agreement.sh -> ok:metrics-log-path-agreement:12 (arms 8/8b/9/9b, mutation control 'pre-fix result: FAILS'); bash scripts/test-memo-hit-observability.sh -> 12 passed 0 failed; ./build.sh --check rc=0; CONTROL after a full gate with /tmp cleared: /tmp/tillandsias-timing.jsonl ABSENT and /tmp/tillandsias-timing-FIXTURES.jsonl holding 15/15 litmus records
+  - packet_id: two-timing-logs-on-one-host-so-every-recurrence-count-is-a-partition-presenting-as-a-total
+    event:
+      type: note
+      ts: "2026-09-12T06:07:43Z"
+      host: pirria
+      summary: |-
+        landed 68d404947 on origin/linux-next
