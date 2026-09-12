@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-guest-whose-provisioning-completed-never-reaches-ready-and-the-host-has-no-way-to-ask-why
+    event:
+      type: decision
+      ts: "2026-09-12T04:44:12Z"
+      agent_id: linux-macuahuitl-claude-20260912t013351z
+      host: macuahuitl
+      summary: |
+        COORDINATOR RULINGS FOR THE FIX (2026-09-12T05:20Z), so reviewers find them here and not only in host messages:
+        1. WHICH BYTES: the host derives from a guest digest known at TRAY BUILD TIME — macOS: scripts/build-macos-tray.sh builds the two musl guests BEFORE the tray, digests each, exports them, and macos-tray/build.rs emits two consts selected at runtime by the same arch match guest_binary_filename() uses; Windows: the include_bytes! asset's SHA-256 computed in windows-tray/build.rs. The guest keeps its self-hash. A fetched or stale guest mismatches and is refused with a named cause (the fail-closed shape the packet wanted); the fetch path does not reopen the bug because a guest running different bytes SHOULD be refused, loudly. Never a runtime host file; hashing the staged copy would hide exactly the skew this packet exists to surface.
+        2. BUILD WITHOUT DIGESTS: a Darwin RELEASE-profile tray built without the digest env vars FAILS TO BUILD, with a message naming the script — scoped to CARGO_CFG_TARGET_OS=macos AND release profile AND vars absent, so debug builds (every gate and test, on the dev seed) and the non-Darwin stub are untouched and the sanctioned script always satisfies it. A sentinel with a runtime refusal was rejected: a tray that cannot handshake with better wording is today's defect renamed.
+        3. SHARED HOST-SHELL API: host-shell's connect_with_handshake is shared VM-path code (macOS and Windows; only line 325 is production, 665/830 are tests). No process-global. A keyed entry point takes the guest digest explicitly; the old entry point keeps compiling but on release builds REFUSES before any bytes go out with a named cause ("unkeyed handshake: this caller predates guest-digest keying, pass the guest digest"), debug unchanged. macbookair converts the macOS callers tonight; the Windows call sites (hvsocket.rs, vsock_client::Client consumers in installation_uuid.rs and notify_icon.rs) convert in yolanda's lane, whose commit deletes the old entry point. This does not wrong the Windows lane: Windows cannot provision on the candidate today at all, so a named refusal on release is strictly better than "noise: input error", and no silent self-hash path remains reachable from any host caller.
+        4. TESTS: the unit closure is derive_psk with two explicit, different byte strings (host-from-guest-digest == guest-self-hash-of-those-bytes, != host-self-hash). An in-process release-profile test is NOT evidence: both peers hash the same test binary and it passes regardless (yolanda). The integration proof is two distinct binaries: a release-built tray and the release guest reaching Ready on a cold provision, on macOS (macbookair) and Windows (yolanda); yolanda additionally runs a debug tray + debug guest pair as the independent discriminator (shared dev seed: expected to handshake).
+        5. ROUTING: macbookair lands on osx-next and pushes work/1084-x8ya for the coordinator to relay to linux-next; macneo's host-side classifier (a) and yolanda's guest-side reclaim log line land as diagnosability; esme and macneo are floor tier and done. Promotion of the next tag requires Ready on both VM platforms.
