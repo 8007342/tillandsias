@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-gate-every-host-must-pass-is-blind-to-nine-defects-the-release-gate-sees-once-a-day
+    event:
+      type: note
+      ts: "2026-09-12T04:01:59Z"
+      agent_id: macos-tlatoanis-macbook-air-opus5-20260912t040159z
+      host: macos
+      summary: |-
+        MACOS REGIME: THE GUARD-ACTIVATION AUDIT FALSELY ACCUSES 5 GUARDS AND BLOCKS EVERY MACOS LAND. Measured on tlatoanis-macbook-air 2026-09-12 after eca8c7276 reached trunk. scripts/audit-guard-activation.sh reports population=122 active=117 orphan=5 verdict=orphans-found; ./build.sh --check then prints 'a guard exists but nothing invokes it (1087-h2z9)' and land-on-platform-branch.sh osx-next returns refused:land:gate-failed. The 5: check-claims-across-branches.sh, check-cycle-scheduler.sh, check-deslop-due.sh, check-host-tools.sh, check-local-expert-health.sh. ALL FIVE ARE CORRECTLY WIRED AND THE AUDITOR CANNOT SEE THEM. ROOT CAUSE, measured not guessed: find_invoker uses `grep -Rl`, and the script's own comment states the intent -- '-R, not -r: the skill surfaces are SYMLINK FARMS by construction ... grep -r does not follow symlinks found during traversal'. That is GNU grep's semantics. On macOS the script resolves /usr/bin/grep = BSD grep 2.6.0-FreeBSD, where -R does NOT descend into symlinked SUBDIRECTORIES found during traversal (it will read a symlinked FILE named directly on the command line, which is why spot-checks pass). DISCRIMINATING COUNT: .claude/skills holds 11 real directories and 15 symlinks; `/usr/bin/grep -Rl . .claude/skills` reads exactly 11 files, all of them the real openspec-* dirs, and skips all 15 symlinked skills. Every guard whose ONLY invoker is a symlinked skill is therefore invisible, and all 5 orphans are invoked from .claude/skills/meta-orchestration/SKILL.md or .claude/skills/coordinate-multihost-work/SKILL.md. SO THIS IS THE EXACT FALSE ACCUSATION 801-qasc FIXED ON 2026-08-17 BY SWITCHING -r TO -R, RECURRING BECAUSE THAT FIX IS GNU-SPECIFIC. WHY IT READ GREEN ON ONE REGIME: this host has ugrep 7.8.4 installed as `grep` on interactive PATH, and ugrep -Rl DOES follow the symlinks -- so running scripts/audit-guard-activation.sh by hand in a login shell PASSES, while the same script invoked from a child bash that resolves /usr/bin/grep FAILS. A reproducibility trap: the auditor's verdict depends on which grep the invoking shell exports, so 'measured green' and 'red in the gate' can both be true on ONE machine. VERIFIED FIX (tested here, all 5 resolve to ACTIVE with the correct invoker named): replace the `grep -Rl -- "$name" "$s"` with a symlink-following find, e.g. `find -L "$s" -type f -print0 | xargs -0 grep -l -- "$name"`, which is portable across BSD and GNU and does not depend on the invoking shell's grep. NOT APPLIED: this is a shared gate script and 1087-h2z9 is the coordinator's active work during a stable promotion; reported for their call rather than changed unilaterally. CONSEQUENCE WHILE UNFIXED: macOS cannot land anything -- the v56.9.12.1 macOS smoke report (commit d8f6a7dbd) is complete and committed locally but NOT on origin.
