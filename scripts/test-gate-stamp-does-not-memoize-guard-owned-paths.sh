@@ -109,7 +109,26 @@ fi
 # ── ARM 4: a stamp with no plan_digest FAILS CLOSED ─────────────────────────
 _stamp_now
 # Strip the field to synthesise a stamp written before this order.
-LC_ALL=C sed -i '/^plan_digest /d' "$STAMP_FILE"
+#
+# TEMP FILE, NOT `sed -i` — AND `-i ''` IS THE TRAP IN THE OTHER DIRECTION.
+# `sed -i SCRIPT FILE` is GNU-only. BSD sed (macOS) reads the argument AFTER
+# -i as the backup SUFFIX, so it took '/^plan_digest /d' as the extension and
+# "$STAMP_FILE" as the script, errored to stderr, and LEFT THE FILE UNCHANGED
+# — the strip silently did nothing, plan_digest was still recorded,
+# `memo-check check` correctly answered ok:gate-fresh, and THIS ARM FAILED
+# ITSELF on every macOS host while the code under test was fine. It blocked
+# every macOS land until it was fixed (2026-09-12).
+#
+# Measured here, both forms:
+#   BSD  sed -i '/^plan_digest /d' f   -> "unescaped newline inside substitute
+#                                         pattern"; FILE UNCHANGED
+#   BSD  sed -i '' '/^plan_digest /d' f -> correct
+# But DO NOT "fix" it to `-i ''`: GNU sed consumes that empty string as the
+# SCRIPT, so that form just moves the breakage to Linux. Swapping one
+# platform's idiom for the other's is how the sibling grep -R fix (1087-h2z9)
+# travelled wrong. The temp file has no GNU/BSD divergence at all.
+LC_ALL=C sed '/^plan_digest /d' "$STAMP_FILE" > "$STAMP_FILE.tmp" \
+    && mv "$STAMP_FILE.tmp" "$STAMP_FILE"
 out="$(S memo-check check)"
 if [ "$out" = "stale:no-plan-digest-recorded" ]; then
     ok "arm4: a pre-1127 stamp is stale, not assumed-unchanged (fail closed, one re-gate per host)"
