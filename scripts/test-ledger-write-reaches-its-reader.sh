@@ -63,6 +63,45 @@ packets:
     desired_release: v0.5
     pickup_role: linux
     priority: p2
+  - packet_id: claimed-but-ready
+    order: 900-clm
+    status: ready
+    desired_release: v0.5
+    pickup_role: linux
+    priority: p2
+YAML
+
+# ARM 1 (claim without status) needs a FRAGMENTS dir whose claim event is not a
+# status field — the write that lands where the status reader never looks.
+mkdir -p "$_fx/fragments.d"
+cat > "$_fx/fragments.d/claim-frag.yaml" <<'YAML'
+events:
+  - packet_id: claimed-but-ready
+    event:
+      type: claim
+      ts: "2026-09-10T06:00:00Z"
+      host: fixture-host
+      summary: claimed for cycle but appended the event only
+  - packet_id: released-back-to-ready
+    event:
+      type: claim
+      ts: "2026-09-10T06:00:00Z"
+      host: fixture-host
+      summary: claimed, then...
+  - packet_id: released-back-to-ready
+    event:
+      type: release
+      ts: "2026-09-10T06:05:00Z"
+      host: fixture-host
+      summary: released deliberately, status is ready again and events match
+YAML
+cat >> "$_fx/ledger.yaml" <<'YAML'
+  - packet_id: released-back-to-ready
+    order: 900-rel
+    status: ready
+    desired_release: v0.5
+    pickup_role: linux
+    priority: p2
 YAML
 
 # The reachability oracle, isolated so both the fixture and the real run use
@@ -104,6 +143,57 @@ report_ready_but_landed() {   # <index-path> <landed-orders-file>
     return 0
 }
 
+# ---------------------------------------------------------------- ARM 1 ------
+# A CLAIM EVENT DOES NOT MOVE THE STATUS (1079-qb8k family, ARM 1 of 1080-4deb).
+#
+# `append-event --type claim` writes an event keyed by packet_id; `set-field
+# status in_progress` is a SEPARATE call and is the only thing the fold reads.
+# So a packet can carry a claim event and read `ready` — held by a host,
+# invisible to the sweep, still offered by the selector.
+#
+# The reader that is blind here is the FOLD. The claim lives in plan/index.d/
+# fragments as `events: []`, keyed by packet_id; the status the selector reads
+# comes from the folded packet row. Report every `ready` packet whose packet_id
+# appears as the subject of a `type: claim` event AND has no `type: release`
+# resolving it — a released claim returning the packet to `ready` is the
+# healthy case, not the blind one (measured: guest-pulls 1004-4xie and
+# windows-lane both carry claim+release pairs and must NOT be reported).
+claimed_packet_ids_from() {   # <fragments-dir>
+    local frags="$1" f
+    [ -d "${frags}" ] || return 0
+    for f in "$frags"/*.yaml; do
+        [ -e "$f" ] || continue
+        awk '/^  - packet_id:/{pid=$3} /^      type: claim$/{print pid}' "$f"
+    done | sort -u
+}
+
+released_packet_ids_from() {   # <fragments-dir>
+    local frags="$1" f
+    [ -d "${frags}" ] || return 0
+    for f in "$frags"/*.yaml; do
+        [ -e "$f" ] || continue
+        awk '/^  - packet_id:/{pid=$3} /^      type: release$/{print pid}' "$f"
+    done | sort -u
+}
+
+report_ready_but_claimed() {   # <index-path> <fragments-dir>
+    local idx="$1" frags="$2" claimed released
+    claimed="$(claimed_packet_ids_from "$frags")"
+    [ -n "$claimed" ] || return 0
+    # Subtract packets that carry a release event: someone returned them to
+    # `ready` deliberately, so status-matches-events and nothing is blind.
+    released="$(released_packet_ids_from "$frags")"
+    if [ -n "$released" ]; then
+        claimed="$(printf '%s\n' "$claimed" | grep -vxF -f <(printf '%s\n' "$released") || true)"
+    fi
+    [ -n "$claimed" ] || return 0
+    # Match the claimed set against ready packets by packet_id (field 4).
+    # One fold pass, then a set membership test per hit — a git/grep pass per
+    # packet is the shape ARM 3 already avoided.
+    "$PLAN" --index "$idx" select-rows --status ready --limit 2000 2>/dev/null | \
+        awk -v c="$claimed" 'BEGIN{n=split(c,cs,"\n"); for(i=1;i<=n;i++) have[cs[i]]=1} $4 in have {print $3}'
+}
+
 # ------------------------------------------------- NEGATIVE CONTROL (FIRST) --
 # A healthy packet — status matching its events, no landed fix — must produce
 # NO report. This runs before every arm and its failure makes them all vacuous.
@@ -131,14 +221,14 @@ fi
 # ----------------------------------------------- DENOMINATOR MUST BE KNOWN --
 # A count with an unstated denominator is not falsifiable, and a silently
 # truncated one reports zero while looking clean. The fixture ledger has
-# exactly two ready packets; if the reader cannot see both, every arm below is
-# measuring a sample and saying nothing about it.
+# exactly four ready packets; if the reader cannot see them all, every arm
+# below is measuring a sample and saying nothing about it.
 _seen="$(ready_orders "$_fx/ledger.yaml" | wc -l | tr -d ' ')"
-if [ "$_seen" != 2 ]; then
-    bad "denominator: expected 2 ready fixture packets, the reader saw $_seen — arms would measure a sample"
+if [ "$_seen" != 4 ]; then
+    bad "denominator: expected 4 ready fixture packets, the reader saw $_seen — arms would measure a sample"
     exit 1
 fi
-ok "denominator: the reader sees all 2 fixture ready packets"
+ok "denominator: the reader sees all 4 fixture ready packets"
 
 # --------------------------------------------------------------- ARM 3 ------
 # A packet whose status is `ready` while a commit whose SUBJECT names its order
@@ -159,6 +249,40 @@ if printf '%s\n' "$out" | grep -qxF '900-heal'; then
     bad "arm3: a healthy packet was reported (the negative control's failure, one arm later)"
 else
     ok "arm3: the healthy packet is still not reported when another packet fires"
+fi
+
+# The negative control must hold for ARM 1 too: a healthy packet (no claim
+# event anywhere) must produce NO report even though the fixture HAS a claimed
+# packet. Run it first, exactly as the packet's plan dictates.
+_claimed="$(report_ready_but_claimed "$_fx/ledger.yaml" "$_fx/fragments.d")"
+if printf '%s\n' "$_claimed" | grep -qxF '900-heal'; then
+    bad "arm1: the healthy packet was reported by the claim-without-status check"
+else
+    ok "arm1: the healthy packet produces no report from the claim check"
+fi
+
+# Then the miss itself: 900-clm carries a claim event in the fragments and
+# still reads `ready` — exactly the write that lands where the fold does not
+# look. The check that cannot see this is satisfied at zero and looks like a
+# remedy; it must name the order.
+if printf '%s\n' "$_claimed" | grep -qxF '900-clm'; then
+    ok "arm1: a ready packet with a claim event and no release is reported"
+else
+    bad "arm1: claim-without-status was NOT reported"
+fi
+if printf '%s\n' "$_claimed" | grep -qxF '900-land'; then
+    bad "arm1: a ready packet WITHOUT a claim event was reported (over-reporting)"
+else
+    ok "arm1: the claim check does not report on claim-free packets"
+fi
+# And the exclusion: a claim that WAS resolved by a release returns the packet
+# to `ready` deliberately — status matches events, nothing is blind. A checker
+# that reports it has a false-positive on the healthy case, which is the failure
+# this packet's negative control exists to catch.
+if printf '%s\n' "$_claimed" | grep -qxF '900-rel'; then
+    bad "arm1: a claim resolved by a typed release was reported (over-reporting)"
+else
+    ok "arm1: a released claim is not reported (status matches its events)"
 fi
 
 echo "ok:ledger-write-reaches-its-reader:$_n arm assertion(s)"

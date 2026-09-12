@@ -56,10 +56,50 @@ NR == FNR {
     # .yaml:16). Zero false positives.
     #
     # EXPLICIT NON-GOALS, so the next reader does not "complete" the set: a
-    # backtick `scripts/x.sh` is NOT matched — all 16 occurrences in the corpus
-    # are Markdown prose inside descriptions, and widening for them would be
-    # pure noise. Neither is $VAR/scripts/x.sh. The narrowness of this checker
-    # is the reason it is trusted.
+    # backtick `scripts/x.sh` is NOT matched. Neither is $VAR/scripts/x.sh. The
+    # narrowness of this checker is the reason it is trusted.
+    #
+    # THE CONCLUSION STANDS; ONE CLAUSE OF ITS STATED REASON DOES NOT
+    # (macneo + lenovinha + macuahuitl, 2026-09-06, order 1116-vps5). The
+    # original wording said "all 16 occurrences in the corpus are Markdown
+    # prose inside descriptions". That is FALSE of at least one instance:
+    #
+    #   skills/advance-work-from-plan/SKILL.md:799
+    #     4. **Attest**: with every commit pushed, run
+    #        `scripts/finalize-cycle.sh <active-branch>`
+    #
+    # is an IMPERATIVE execution instruction, not a description. It surfaced
+    # because finalize-cycle.sh sat at 100644 on trunk, invoked by path, and
+    # this checker passed it — correctly, by its own rules, and unhelpfully.
+    #
+    # THE WIDENING WAS PRICED THREE WAYS ON THE 2026-09-06 CORPUS (1003 caller
+    # files, 564 candidates, every script promoted so latent noise fires), and
+    # the numbers are recorded here so the next reader does not re-derive them:
+    #
+    #   bare backtick             119 occurrences; newly flagged paths
+    #                             159 -> 184, i.e. +25
+    #   imperative verb, unbounded  6 matches, SUBSTRING-CONTAMINATED:
+    #                             "Specifi[call]y" matches, as do runtime,
+    #                             running, callers, recall
+    #   imperative verb, bounded    3 matches — 2 genuine, 1 false positive
+    #                             ("every host that HAS RUN `...`", past
+    #                             perfect), and it MISSES "after running `...`"
+    #                             because run+n fails the boundary
+    #
+    #   LIVE EXPOSURE IN ALL THREE CASES: ZERO. No affected script is
+    #   currently non-executable.
+    #
+    # THE VERB ANCHOR WAS REJECTED ON ITS OWN TERMS, not on its error rate: a
+    # rule that recognises `run \`X\`` but not `running \`X\`` is a convention
+    # with a spelling test, and the next author writes the gerund. It protects
+    # two sites, not a class.
+    #
+    # SO THIS IS A CONTRACT, NOT ENFORCEMENT, and it is stated as one: AN
+    # INVOCATION YOU WANT PROTECTED MUST APPEAR IN A FORM THIS CHECKER SEES —
+    # line-start, fenced, or after ; & | ( or $( or a litmus `command:`. A
+    # backticked mention is legitimate prose and is deliberately unprotected.
+    # No pattern found at any price catches the class without buying noise
+    # against zero live exposure.
     dotslash = "(\\./)?"
     envpfx   = "([A-Za-z_][A-Za-z_0-9]*=[^[:space:]]*[[:space:]]+)*"
 

@@ -1,6 +1,6 @@
 [package]
 name = "tillandsias-scanner"
-version = "56.9.5"
+version = "56.9.11"
 edition.workspace = true
 license.workspace = true
 authors.workspace = true

@@ -987,11 +987,10 @@ fn main() {
         return;
     }
 
-    // Cloud attach: turn `--cloud owner/repo` into a concrete project path
-    // under the bind-mount root, cloning on first use. Must run before the
-    // agent-mode dispatch so all four kinds (--opencode/--claude/--codex/
-    // --bash) pick the resolved path up as their positional project arg.
-    // An explicit positional path wins over the derived one.
+    // Cloud attach: turn `--cloud owner/repo` into project identity and remote URL.
+    // Host filesystem is NEVER touched (fully ephemeral) — the git mirror seeds
+    // directly from upstream GitHub via Vault credentials, and the forge clones
+    // from the mirror into RAM-backed tmpfs.
     let config_path = match &cloud_repo {
         Some(nwo) if config_path.is_none() => match resolve_cloud_project_checkout(nwo, debug) {
             Ok(path) => Some(path),
@@ -5833,7 +5832,7 @@ pub(crate) fn sanitize_hostname(raw: &str) -> String {
 ///   3. `$HOME/src` — Linux native fallback
 ///
 /// @trace spec:host-shell-architecture, spec:remote-projects
-#[cfg(any(feature = "tray", feature = "listen-vsock"))]
+#[allow(dead_code)]
 fn projects_root() -> PathBuf {
     if let Ok(root) = std::env::var("TILLANDSIAS_IN_VM_PROJECT_ROOT") {
         return PathBuf::from(root);
@@ -5882,7 +5881,7 @@ fn projects_root() -> PathBuf {
 // host, including the ones that build neither tray nor listen-vsock. The
 // allow(dead_code) is the same shape this file already uses for
 // physical_core_count on non-Linux.
-#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum CheckoutVerdict {
     /// A git worktree whose HEAD resolves to a commit.
@@ -5953,7 +5952,7 @@ pub(crate) enum CheckoutVerdict {
 /// to Indeterminate and leaves the tree alone. The cost of a wrong true is a
 /// refusal the operator must resolve; the cost of a wrong false is a renamed
 /// directory.
-#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+#[allow(dead_code)]
 pub(crate) fn head_is_structurally_present(path: &Path) -> bool {
     let dot_git = path.join(".git");
     let meta = match std::fs::metadata(&dot_git) {
@@ -5983,7 +5982,7 @@ pub(crate) fn head_is_structurally_present(path: &Path) -> bool {
     resolved.join("HEAD").exists()
 }
 
-#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+#[allow(dead_code)]
 pub(crate) fn classify_git_checkout(path: &Path) -> CheckoutVerdict {
     if !path.join(".git").exists() {
         // No `.git` at all is a real, evaluated answer about the tree.
@@ -6030,7 +6029,7 @@ pub(crate) fn classify_git_checkout(path: &Path) -> CheckoutVerdict {
 /// aborted clone can coexist with unrelated files); renaming preserves every
 /// byte while keeping repeated launches idempotent (each quarantine gets a
 /// unique timestamped name).
-#[cfg(any(feature = "tray", feature = "listen-vsock"))]
+#[allow(dead_code)]
 pub(crate) fn quarantine_invalid_checkout(path: &Path) -> Result<PathBuf, String> {
     let stamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -6057,8 +6056,12 @@ pub(crate) fn quarantine_invalid_checkout(path: &Path) -> Result<PathBuf, String
 /// clone, then the standard agent launch pipeline takes the path from here.
 ///
 /// The VM rootfs deliberately ships no `git`, so the "refresh if present"
-/// step the Linux tray does (`git fetch`, best-effort) is skipped here; the
-/// forge's git mirror handles freshness once the container is up.
+/// Resolve `--cloud owner/repo` into project identity and upstream remote URL.
+///
+/// Under the cloud-only ephemeral forge architecture, the host filesystem is
+/// NEVER touched (no cloning into ~/src/<name>). The git mirror seeds directly
+/// from upstream GitHub, and the forge clones from the mirror into ephemeral
+/// tmpfs.
 ///
 /// @trace spec:remote-projects, spec:host-shell-architecture
 #[cfg(any(feature = "tray", feature = "listen-vsock"))]
@@ -6068,54 +6071,19 @@ fn resolve_cloud_project_checkout(nwo: &str, debug: bool) -> Result<String, Stri
         .next()
         .filter(|s| !s.is_empty())
         .ok_or_else(|| format!("--cloud value has no repo name: {nwo}"))?;
-    let target = projects_root().join(short_name);
-    // Ground-truth gate (fresh-checkout invariant, 2026-07-20): bare
-    // `exists()` accepted empty/partial/broken checkouts and launched agents
-    // onto them. Quarantine anything invalid (rename aside, never delete —
-    // the dir may hold user data), then materialize fresh below.
-    if target.exists() {
-        match classify_git_checkout(&target) {
-            CheckoutVerdict::Valid => {}
-            CheckoutVerdict::Invalid => {
-                let aside = quarantine_invalid_checkout(&target)?;
-                eprintln!(
-                    "[tillandsias] cloud: {} was not a valid git checkout; moved aside to {} and re-cloning",
-                    target.display(),
-                    aside.display()
-                );
-            }
-            // 997-e4v2: REFUSE, do not quarantine. Renaming a tree we could not
-            // evaluate is a mutation on the strength of an unanswered question,
-            // and it is how ten healthy checkouts were moved aside on one host.
-            CheckoutVerdict::Indeterminate(why) => {
-                return Err(format!(
-                    "cannot evaluate the checkout at {}: {why}. Leaving it untouched — this says \
-                     nothing about the tree, and the instrument is what needs repair. If this is \
-                     a uid mismatch on a mounted project root, that mount is the defect (997-e4v2).",
-                    target.display()
-                ));
-            }
-        }
-    }
-    if !target.exists() {
+    let remote_url = if nwo.starts_with("https://") || nwo.starts_with("git@") {
+        nwo.to_string()
+    } else {
+        format!("https://github.com/{nwo}.git")
+    };
+    if debug {
         eprintln!(
-            "[tillandsias] cloud: cloning {} into {} ...",
-            nwo,
-            target.display()
-        );
-        // Proxy bring-up lives INSIDE clone_project_from_github (after the
-        // Vault lease acquire — vault churn can tear the proxy down), so the
-        // clone works even right after a VM restart when only Vault has been
-        // auto-restarted. Observed 2026-07-02: `Could not resolve proxy`.
-        remote_projects::clone_project_from_github_with_debug(nwo, &target, debug)?;
-        eprintln!("[tillandsias] cloud: clone complete");
-    } else if debug {
-        eprintln!(
-            "[tillandsias] cloud: checkout already present at {}",
-            target.display()
+            "[tillandsias] cloud: ephemeral project resolved: name={short_name}, remote={remote_url} (host disk untouched)"
         );
     }
-    Ok(target.to_string_lossy().into_owned())
+    // SAFETY: process initialization before launching container
+    unsafe { std::env::set_var("TILLANDSIAS_PROJECT_REMOTE_URL", &remote_url) };
+    Ok(short_name.to_string())
 }
 
 #[cfg(not(any(feature = "tray", feature = "listen-vsock")))]
@@ -11611,13 +11579,23 @@ fn run_observatorium_mode(
     }
     report_runtime_lane("--observatorium", debug);
 
+    let is_cloud = std::env::var("TILLANDSIAS_PROJECT_REMOTE_URL").is_ok();
     let project = Path::new(project_path);
-    if !project.exists() {
+    let (project_name, project_path_resolved): (String, PathBuf) = if project.exists() && !is_cloud
+    {
+        if !project.is_dir() {
+            return Err(format!("Project path is not a directory: {project_path}"));
+        }
+        let resolved = project
+            .canonicalize()
+            .unwrap_or_else(|_| PathBuf::from(project_path));
+        let name = project_label_from_path(&resolved, "observatorium-project");
+        (name, resolved)
+    } else if is_cloud {
+        (project_path.to_string(), PathBuf::from(project_path))
+    } else {
         return Err(format!("Project not found: {project_path}"));
-    }
-    if !project.is_dir() {
-        return Err(format!("Project path is not a directory: {project_path}"));
-    }
+    };
 
     let version = VERSION.trim();
     let root = resolve_runtime_asset_root(version, debug)?;
@@ -11629,10 +11607,6 @@ fn run_observatorium_mode(
         ));
     }
 
-    let project_path_resolved = project
-        .canonicalize()
-        .unwrap_or_else(|_| PathBuf::from(project_path));
-    let project_name = project_label_from_path(&project_path_resolved, "observatorium-project");
     let certs_dir = ensure_ca_bundle(debug)?;
     ensure_enclave_network(debug)?;
 
@@ -12308,29 +12282,44 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
         }
     }
 
-    // Phase B: Project initialization and container startup
+    let is_cloud = std::env::var("TILLANDSIAS_PROJECT_REMOTE_URL").is_ok();
     let project = std::path::Path::new(project_path);
-    if !project.exists() {
-        return Err(format!("Project not found: {}", project_path));
+    let (project_name_owned, canonical_path): (String, Option<PathBuf>) =
+        if project.exists() && !is_cloud {
+            let canonical = project
+                .canonicalize()
+                .unwrap_or_else(|_| project.to_path_buf());
+            let name = canonical
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("opencode-project")
+                .to_string();
+            (name, Some(canonical))
+        } else if is_cloud {
+            (project_path.to_string(), None)
+        } else {
+            return Err(format!("Project not found: {}", project_path));
+        };
+    let project_name = project_name_owned.as_str();
+
+    if forge_uses_host_mount() && canonical_path.is_none() {
+        return Err(
+            "cannot use TILLANDSIAS_FORGE_HOST_MOUNT for ephemeral cloud project".to_string(),
+        );
     }
 
     if debug {
-        eprintln!(
-            "[tillandsias] Project path is valid: {}",
-            project.canonicalize().unwrap_or_default().display()
-        );
+        if let Some(ref c) = canonical_path {
+            eprintln!("[tillandsias] Project path is valid: {}", c.display());
+        } else {
+            eprintln!("[tillandsias] Ephemeral cloud project: {project_name}");
+        }
     }
 
     let version = VERSION.trim();
     let root = resolve_runtime_asset_root(version, debug)?;
-    // `Path::new(".").file_name()` returns None — canonicalize first.
-    let project_path_resolved = std::path::Path::new(project_path)
-        .canonicalize()
-        .unwrap_or_else(|_| std::path::PathBuf::from(project_path));
-    let project_name = project_path_resolved
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("opencode-project");
+    let dummy_path = PathBuf::from(project_name);
+    let project_path_resolved = canonical_path.unwrap_or(dummy_path);
     // ORDER 626-w3fn (b). Bring-up is multi-minute on a cold host and was
     // entirely silent without --debug; the field report this packet was filed
     // from records an operator closing a window that was working. Five stages
@@ -12372,11 +12361,15 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
     // Read the host's `remote.origin.url` so the mirror's post-receive hook
     // knows where to forward pushes. None when the project has no origin —
     // the mirror still works, the hook just logs "skipping push".
-    let project_remote_url = read_host_project_origin_url(&project_path_resolved);
+    let project_remote_url = read_host_project_origin_url(&project_path_resolved).or_else(|| {
+        std::env::var("TILLANDSIAS_PROJECT_REMOTE_URL")
+            .ok()
+            .filter(|s| !s.is_empty())
+    });
     if debug {
         match &project_remote_url {
-            Some(url) => eprintln!("[tillandsias] [OpenCode] Host origin URL: {url}"),
-            None => eprintln!("[tillandsias] [OpenCode] No host origin URL configured"),
+            Some(url) => eprintln!("[tillandsias] [OpenCode] Project remote URL: {url}"),
+            None => eprintln!("[tillandsias] [OpenCode] No project remote URL configured"),
         }
     }
 
@@ -13471,29 +13464,38 @@ pub(crate) fn run_opencode_web_mode(
         }
     }
 
+    let is_cloud = std::env::var("TILLANDSIAS_PROJECT_REMOTE_URL").is_ok();
     let project = std::path::Path::new(project_path);
-    if !project.exists() {
-        return Err(format!("Project not found: {}", project_path));
-    }
+    let (project_name_owned, canonical_path): (String, Option<PathBuf>) =
+        if project.exists() && !is_cloud {
+            let canonical = project
+                .canonicalize()
+                .unwrap_or_else(|_| project.to_path_buf());
+            let name = canonical
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("opencode-project")
+                .to_string();
+            (name, Some(canonical))
+        } else if is_cloud {
+            (project_path.to_string(), None)
+        } else {
+            return Err(format!("Project not found: {}", project_path));
+        };
+    let project_name = project_name_owned.as_str();
 
     if debug {
-        eprintln!(
-            "[tillandsias] Project path is valid: {}",
-            project.canonicalize().unwrap_or_default().display()
-        );
+        if let Some(ref c) = canonical_path {
+            eprintln!("[tillandsias] Project path is valid: {}", c.display());
+        } else {
+            eprintln!("[tillandsias] Ephemeral cloud project: {project_name}");
+        }
     }
 
     let version = VERSION.trim();
     let root = resolve_runtime_asset_root(version, debug)?;
-    // `Path::new(".").file_name()` returns None — canonicalize first so the
-    // project_name reflects the actual directory the user pointed at.
-    let project_path_resolved = std::path::Path::new(project_path)
-        .canonicalize()
-        .unwrap_or_else(|_| std::path::PathBuf::from(project_path));
-    let project_name = project_path_resolved
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("opencode-project");
+    let dummy_path = PathBuf::from(project_name);
+    let project_path_resolved = canonical_path.unwrap_or(dummy_path);
     let certs_dir = ensure_ca_bundle(debug)?;
     ensure_enclave_network(debug)?;
 
@@ -13534,11 +13536,15 @@ pub(crate) fn run_opencode_web_mode(
     )?;
     // Read the host's `remote.origin.url` so the mirror's post-receive hook
     // knows where to forward pushes.
-    let project_remote_url = read_host_project_origin_url(&project_path_resolved);
+    let project_remote_url = read_host_project_origin_url(&project_path_resolved).or_else(|| {
+        std::env::var("TILLANDSIAS_PROJECT_REMOTE_URL")
+            .ok()
+            .filter(|s| !s.is_empty())
+    });
     if debug {
         match &project_remote_url {
-            Some(url) => eprintln!("[tillandsias] [OpenCode Web] Host origin URL: {url}"),
-            None => eprintln!("[tillandsias] [OpenCode Web] No host origin URL configured"),
+            Some(url) => eprintln!("[tillandsias] [OpenCode Web] Project remote URL: {url}"),
+            None => eprintln!("[tillandsias] [OpenCode Web] No project remote URL configured"),
         }
     }
     rt.block_on(async {
@@ -14051,11 +14057,17 @@ pub(crate) fn ensure_enclave_for_project(
     let images = ["router", "git", "inference", "forge"];
     ensure_versioned_images(&root, &images, version, debug)?;
 
-    let project_remote_url = project_path.and_then(read_host_project_origin_url);
+    let project_remote_url = project_path
+        .and_then(read_host_project_origin_url)
+        .or_else(|| {
+            std::env::var("TILLANDSIAS_PROJECT_REMOTE_URL")
+                .ok()
+                .filter(|s| !s.is_empty())
+        });
     if debug {
         match &project_remote_url {
-            Some(url) => eprintln!("[tillandsias] [forge-launch] Host origin URL: {url}"),
-            None => eprintln!("[tillandsias] [forge-launch] No host origin URL configured"),
+            Some(url) => eprintln!("[tillandsias] [forge-launch] Project remote URL: {url}"),
+            None => eprintln!("[tillandsias] [forge-launch] No project remote URL configured"),
         }
     }
     // The branch the mirror's HEAD should name (unborn-HEAD fix): the host
@@ -14496,7 +14508,7 @@ fn forge_hot_src_tmpfs(project_name: &str) -> String {
         forge_mirror_pack_size_kb(project_name),
         &tillandsias_core::config::ForgeConfig::default(),
     );
-    format!("/home/forge/src:size={budget}m,mode=0755")
+    format!("/home/forge/src:size={budget}m,mode=0777")
 }
 
 /// The project mirror's `size-pack` in KiB, or 0 when it cannot be read.
@@ -15167,24 +15179,38 @@ fn run_forge_agent_cli_mode(
         eprintln!("[tillandsias] Project: {}", project_path);
     }
 
+    let is_cloud = std::env::var("TILLANDSIAS_PROJECT_REMOTE_URL").is_ok();
     let project = Path::new(project_path);
-    if !project.exists() {
-        return Err(format!("Project not found: {}", project_path));
+    let (project_name_owned, canonical_path): (String, Option<PathBuf>) =
+        if project.exists() && !is_cloud {
+            let canonical = project
+                .canonicalize()
+                .unwrap_or_else(|_| project.to_path_buf());
+            let name = canonical
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("forge-project")
+                .to_string();
+            (name, Some(canonical))
+        } else if is_cloud {
+            (project_path.to_string(), None)
+        } else {
+            return Err(format!("Project not found: {}", project_path));
+        };
+    let project_name = project_name_owned.as_str();
+
+    if forge_uses_host_mount() && canonical_path.is_none() {
+        return Err(
+            "cannot use TILLANDSIAS_FORGE_HOST_MOUNT for ephemeral cloud project".to_string(),
+        );
     }
 
-    let canonical = project
-        .canonicalize()
-        .unwrap_or_else(|_| project.to_path_buf());
-    let project_name = canonical
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("forge-project");
-
     if debug {
-        eprintln!(
-            "[tillandsias] Project path is valid: {}",
-            canonical.display()
-        );
+        if let Some(ref c) = canonical_path {
+            eprintln!("[tillandsias] Project path is valid: {}", c.display());
+        } else {
+            eprintln!("[tillandsias] Ephemeral cloud project: {project_name}");
+        }
     }
 
     let version = VERSION.trim();
@@ -15193,8 +15219,12 @@ fn run_forge_agent_cli_mode(
     // during our pre-create window keeps the shared stack up for us. Held for
     // the whole session; the exit cleanup below excludes it by name.
     let (launch_marker, _launch_guard) = acquire_launch_in_flight_marker(project_name, debug)?;
-    let (certs_dir, mirror_identity) =
-        ensure_enclave_for_project(project_name, Some(&canonical), Some(&launch_marker), debug)?;
+    let (certs_dir, mirror_identity) = ensure_enclave_for_project(
+        project_name,
+        canonical_path.as_deref(),
+        Some(&launch_marker),
+        debug,
+    )?;
     ensure_provider_auth(mode, debug)?;
 
     // Mint a scoped Vault token lease for any OAuth-credentialed lane so its
@@ -15216,8 +15246,10 @@ fn run_forge_agent_cli_mode(
     #[cfg(not(feature = "vault"))]
     let provider_vault_secret: Option<&str> = None;
 
+    let dummy_path = PathBuf::from(project_name);
+    let effective_path = canonical_path.as_deref().unwrap_or(&dummy_path);
     let forge_args = build_forge_agent_run_args_with_vault(
-        &canonical,
+        effective_path,
         project_name,
         mirror_identity.as_deref(),
         &certs_dir,
@@ -25666,8 +25698,8 @@ esac
             .expect("tmpfs spec is <path>:<options>");
         assert_eq!(path, "/home/forge/src", "the spec names this exact path");
         assert!(
-            opts.contains("mode=0755"),
-            "spec table gives /home/forge/src mode 0755, got {opts:?}"
+            opts.contains("mode=0777"),
+            "spec table gives /home/forge/src mode 0777, got {opts:?}"
         );
 
         let size_mb: u32 = opts

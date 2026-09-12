@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-empty-ref-list-mutation-control-accepts-inside-the-gate-and-refuses-standalone-so-a-land-can-be-refused-by-a-fixture-nobody-can-reproduce
+    event:
+      type: note
+      ts: "2026-09-11T20:53:23Z"
+      agent_id: linux-macuahuitl-claude-20260911t191740z
+      host: macuahuitl
+      summary: |
+        TWO MORE INSTANCES OF THE SAME SHAPE — in-gate red, standalone green on the same tree — from the 2026-09-11T20:19Z ./build.sh --ci-full on 41497b5ea (macuahuitl), both re-run standalone within the hour:
+
+        1. litmus:concurrent-forge-shared-stack-safety, fixture 2b "launch-in-flight marker blocks teardown": in-gate "FAIL: fixture 2b: status lane exited rc=1" (lane.log showed a real --init runtime lane under the hermetic HOME, then the runner truncated it); standalone: PASS, all fixtures, rc=0.
+        2. litmus:expert-groundtruth-harness step 5/31 "EXIT (i): the harness runs inside the forge budget": in-gate "sed: can't read /tmp/.litmus-394d-timed.txt: No such file" then "FAIL: the harness does not report its own elapsed time" — the timed run's redirect target did not exist AFTER the run reported rc=0; standalone: [OK]. The step writes to a FIXED /tmp name shared by every step of that spec (/tmp/.litmus-394d-*), and /tmp on this host is the quota'd tmpfs (915-wkm2) — a collision or a quota edge is the hypothesis, unmeasured.
+
+        Together with the 877-mynm mutation control (this packet's own instance) that is three fixtures in one gate run that refuse in-gate and pass alone. The gate cost 22 minutes per attempt; the honest reading is that the gate CONTEXT differs from a standalone shell in a way no fixture prints. Whoever takes this packet should make the runner print, on any red, the env delta and the /tmp state it ran under — that is one fix for three symptoms.
