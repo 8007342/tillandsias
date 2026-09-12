@@ -314,7 +314,62 @@ impl Client {
 ///
 /// @trace spec:host-shell-architecture.transport.vsock-client-lifecycle@v1
 /// @trace plan/issues/encrypted-control-channel-impl-2026-07-01.md (slice 4)
+/// UNKEYED. Prefer [`connect_with_handshake_keyed`] — see order 1084-x8ya.
+///
+/// This entry point derives the host's PSK from `channel_psk`, i.e. from the
+/// SHA-256 of the HOST's own executable. The guest self-hashes the binary IT
+/// runs, and a tray and a musl guest are never byte-identical, so the two ends
+/// derive different keys and the handshake cannot complete. On RELEASE builds
+/// it therefore refuses before any bytes reach the wire rather than opening a
+/// connection that is guaranteed to fail with `noise: input error`.
+///
+/// It still compiles, and on debug it still works, because the Windows callers
+/// have not been converted yet: they key off an `include_bytes!` asset whose
+/// digest their own build.rs must supply. This function is a SEAM WITH A NAMED
+/// OWNER, not a fallback — it is deleted in the Windows conversion, after
+/// which no self-hash derivation is reachable from any host caller.
+///
+/// Debug behaviour is deliberately unchanged: both ends use `DEV_ROOT_SEED`
+/// there, so locally-built peers interoperate and no gate, test or fixture
+/// moves.
 pub async fn connect_with_handshake(transport: Transport, timeout: Duration) -> io::Result<Client> {
+    #[cfg(not(debug_assertions))]
+    {
+        if matches!(
+            secure_control_wire_mode().map_err(io::Error::other)?,
+            SecureControlWireMode::On
+        ) {
+            return Err(io::Error::other(
+                "unkeyed handshake: this caller predates guest-digest keying \
+                 (1084-x8ya); pass the guest digest via \
+                 connect_with_handshake_keyed",
+            ));
+        }
+    }
+    connect_with_handshake_inner(transport, timeout, None).await
+}
+
+/// Connect and run the Noise handshake keyed to the GUEST binary's digest.
+///
+/// `guest_binary_sha256` is the SHA-256 of the guest asset this host ships and
+/// stages — a digest known at TRAY BUILD TIME, never a hash of a file read
+/// from the host at runtime. The guest self-hashes the same bytes, so the two
+/// ends derive an identical PSK; a guest that was never re-staged keeps an
+/// older self-hash and is refused, which is the fail-closed behaviour working
+/// rather than a regression (order 1084-x8ya).
+pub async fn connect_with_handshake_keyed(
+    transport: Transport,
+    timeout: Duration,
+    guest_binary_sha256: &[u8; 32],
+) -> io::Result<Client> {
+    connect_with_handshake_inner(transport, timeout, Some(*guest_binary_sha256)).await
+}
+
+async fn connect_with_handshake_inner(
+    transport: Transport,
+    timeout: Duration,
+    guest_binary_sha256: Option<[u8; 32]>,
+) -> io::Result<Client> {
     match tokio::time::timeout(timeout, async {
         let raw = transport::connect(&transport).await?;
         let wrapped: Box<dyn AsyncReadWrite + Unpin + Send> = match secure_control_wire_mode()
@@ -322,7 +377,16 @@ pub async fn connect_with_handshake(transport: Transport, timeout: Duration) -> 
         {
             SecureControlWireMode::Off => raw,
             SecureControlWireMode::On => {
-                let psk = channel_psk(crate::version(), WIRE_VERSION, HopId::HostGuest);
+                let psk = match guest_binary_sha256.as_ref() {
+                    Some(digest) => tillandsias_secure_channel::channel_psk_for_guest(
+                        digest,
+                        crate::version(),
+                        WIRE_VERSION,
+                        HopId::HostGuest,
+                    ),
+                    // Unkeyed: reachable on debug only — release refuses above.
+                    None => channel_psk(crate::version(), WIRE_VERSION, HopId::HostGuest),
+                };
                 let encrypted = client_handshake(raw, &psk).await?;
                 info!(
                     spec = "vsock-transport",

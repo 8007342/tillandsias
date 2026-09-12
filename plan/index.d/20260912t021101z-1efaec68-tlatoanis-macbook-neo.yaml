@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-guest-whose-provisioning-completed-never-reaches-ready-and-the-host-has-no-way-to-ask-why
+    event:
+      type: note
+      ts: "2026-09-12T02:11:01Z"
+      agent_id: macos-macneo-claude-20260912t020722z
+      host: tlatoanis-macbook-neo
+      summary: |-
+        EVIDENCE SET PRESERVED, and the live substrate has moved — read this before attempting (c).
+
+        macneo's guest has REACHED READY. ~/Library/Application Support/tillandsias/crashloop.state now reads `ever_ready 1`, `last_phase ready`, written_at 1789178574 (~2026-09-12T02:02Z) — minutes into the 2026-09-12 restart session, not from September 5. The packet's premise (phase=Ready count 0; crashloop.state never written because the guest had NEVER been ready) does NOT hold for the current live state, so a cold provision may now simply succeed and prove nothing.
+
+        provision/provision.state is still the Sep 5 record: phase complete, guest_binary_sha256 d677e5f5843d16de00dc5771fb23da3dcae8d7de3378420adc86c72f075dc3bb — matching the staged hash, consistent with criterion 1 being MET and version skew REFUTED.
+
+        PRESERVED BEFORE ANY SMOKE, because /build-macos-tray §2 launches the tray detached and this packet's own context records "Auto-boot: VM is running", which can overwrite exactly what (c) needs. APFS clone (cp -c, instant, no space cost — df showed 80Gi used before and after for a 1.7G set) at:
+          ~/tillandsias-1084-x8ya-evidence-20260912/   (host tlatoanis-macbook-neo)
+            rootfs.img, rootfs.qcow2, provision/, console.log, crashloop.state, heartbeat.state, nvram.bin, SHA256SUMS.txt
+          sha256 rootfs.qcow2      55c60a3b80d3616a08705afd0459e75fe9f03c54aba7a46e4002a41a72fa0d5b
+          sha256 provision.state   37998d86310c51460d78a16a62cc6256cb96e65bd9ca5e941e0e796251160cba
+          sha256 crashloop.state   6ff56b84895c83d01382cf83ea8f892f9cbd98662cb6d4d4a4c915cd320a75d4
+          sha256 console.log       3841c4068f92d9d40aed49af7159711a476f6256e929735dc7f86bc673438e4f
+        These are now genuinely checksum-verified rather than described that way.
+
+        COORDINATOR RULING (macuahuitl, 2026-09-12): do NOT cold-provision. The preserved failing images are the only artefact; a cold provision that succeeds proves nothing while destroying them. (c) goes the Linux-mount route the packet already names as its alternative.
+
+        FOR THE LINUX HOST THAT TAKES THE MOUNT. What to mount: rootfs.qcow2 (504M, the Sep 5 cold-provisioned guest that never reached Ready), or rootfs.img if a raw device is easier. What to look for, in priority order:
+          1. sha256 of /usr/local/bin/tillandsias-headless INSIDE the image. Compare against the staged d677e5f5843d16de00dc5771fb23da3dcae8d7de3378420adc86c72f075dc3bb. This is the question macOS cannot ask and the one that settles whether the RUNNING guest was pre- or post-79e3ca876. Criterion 1 was met by the guest self-hashing on a LATER boot; this answers it for the artefact that actually failed.
+          2. /var/log/journal or /run/log — the headless unit's state at failure: ExecMainStartTimestamp, Result, NRestarts, and whether the unit was `activating` rather than failed (which is criterion 4's negative control).
+          3. Anything under /etc/tillandsias or the provision marker recording which PSK/version the guest bound.
+        DO NOT re-run: the version-string scan of the image (cannot date the artefact — the new binary contains five copies of the old version string) or the getty-bytes hypothesis (refuted; the wire is vsock 42420).
+
+        Work order from here: (a) variant-preserving handshake error + fixture and (b) the criterion-4 activating/slow-boot fixture are platform-independent and proceed on this host now.

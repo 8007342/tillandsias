@@ -756,11 +756,26 @@ async fn open_control_wire_stream(
     match secure_control_wire_mode()? {
         SecureWireMode::Off => Ok(ControlWireStream::Plain(stream)),
         SecureWireMode::On => {
-            let psk = channel_psk(
-                tillandsias_secure_channel::workspace_version(),
-                tillandsias_control_wire::WIRE_VERSION,
-                HopId::HostGuest,
-            );
+            // ORDER 1084-x8ya: key off the GUEST binary's digest, not this
+            // tray's own exe hash. The guest self-hashes what it runs; a tray
+            // and a musl guest are never byte-identical, so deriving from
+            // `channel_psk` here gave the two ends different keys and the
+            // handshake could not complete even with an identical version
+            // triple. On a debug build there is no baked digest and both ends
+            // use the dev seed, so fall back to the unkeyed derivation there.
+            let psk = match crate::guest_binary::bundled_guest_digest() {
+                Some(digest) => tillandsias_secure_channel::channel_psk_for_guest(
+                    &digest,
+                    tillandsias_secure_channel::workspace_version(),
+                    tillandsias_control_wire::WIRE_VERSION,
+                    HopId::HostGuest,
+                ),
+                None => channel_psk(
+                    tillandsias_secure_channel::workspace_version(),
+                    tillandsias_control_wire::WIRE_VERSION,
+                    HopId::HostGuest,
+                ),
+            };
             // 733-mppc. Same defect as action_host.rs's copy of this function,
             // and WORSE HERE because of where it sits: this is the DIAGNOSTIC
             // path, so the tool an operator reaches for when the host is sick

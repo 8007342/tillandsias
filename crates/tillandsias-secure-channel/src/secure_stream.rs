@@ -391,6 +391,23 @@ mod tests {
     }
 
     /// Round-trip: matching PSKs handshake, then bytes flow encrypted both ways.
+    ///
+    /// SCOPE LIMIT, ORDER 1084-x8ya — READ BEFORE EXTENDING THIS TEST. This
+    /// fixture pairs client and server IN ONE PROCESS over an in-memory duplex,
+    /// and it is handed a PSK. It therefore proves the handshake and the frame
+    /// codec, and it says NOTHING about whether the two ends DERIVE the same
+    /// key — a single process has exactly one `current_exe`, so it cannot
+    /// express a cross-binary ikm mismatch by construction. That is why this
+    /// test stayed green through a release in which the host↔guest handshake
+    /// failed on every macOS and Windows install.
+    ///
+    /// **Do not try to close that gap by running this under `--release`.**
+    /// Under `--release` a one-process test still hashes the same file for
+    /// both ends and passes whether or not the keying is correct: a harness
+    /// that guarantees the invariant it is checking. The derivation is covered
+    /// by `host_derives_the_guests_key_from_the_guest_binary_not_its_own` in
+    /// lib.rs with explicit byte strings; the only INTEGRATION proof is two
+    /// distinct binaries — a release tray and the release guest reaching Ready.
     #[tokio::test]
     async fn round_trip_with_matching_psk() {
         let (c, s) = tokio::io::duplex(64 * 1024);
