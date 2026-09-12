@@ -26,6 +26,37 @@ fn guest_binary_filename() -> &'static str {
     }
 }
 
+/// SHA-256 of the guest binary this tray ships, for the host↔guest PSK.
+///
+/// ORDER 1084-x8ya. The guest self-hashes the binary it runs; the host must
+/// derive its half of the channel key from that SAME digest or the handshake
+/// fails closed with an otherwise-identical version triple. Baked in by
+/// build.rs from the asset `scripts/build-macos-tray.sh` built moments before
+/// the tray — deliberately NOT hashed from the bundle at runtime, because a
+/// runtime read would make the host agree with whatever guest is on disk and
+/// hide the skew a stale guest must reveal.
+///
+/// Arch-selected by the SAME match `guest_binary_filename` uses, because the
+/// bundle ships both guests and the digest has to name the one that will run.
+/// Returns `None` on a build that has no digests baked in — only possible on
+/// a debug build, where both ends use the dev seed and no digest is needed;
+/// a release tray without them cannot be produced (build.rs refuses).
+pub(crate) fn bundled_guest_digest() -> Option<[u8; 32]> {
+    let hex = match std::env::consts::ARCH {
+        "aarch64" => env!("TILLANDSIAS_GUEST_DIGEST_AARCH64_MUSL"),
+        "x86_64" => env!("TILLANDSIAS_GUEST_DIGEST_X86_64_MUSL"),
+        other => panic!("unsupported macOS host arch for guest digest: {other}"),
+    };
+    if hex.len() != 64 {
+        return None;
+    }
+    let mut out = [0u8; 32];
+    for (i, byte) in out.iter_mut().enumerate() {
+        *byte = u8::from_str_radix(hex.get(i * 2..i * 2 + 2)?, 16).ok()?;
+    }
+    Some(out)
+}
+
 fn bundle_resource_candidate() -> Option<PathBuf> {
     let resource_name = guest_binary_filename();
     if let Ok(mut exe) = std::env::current_exe() {

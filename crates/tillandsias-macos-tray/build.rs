@@ -92,6 +92,54 @@ fn main() {
     println!("cargo:rustc-env=TILLANDSIAS_GIT_SHA={sha_full}");
     println!("cargo:rustc-env=TILLANDSIAS_BUILD_TIME={build_time}");
 
+    // ORDER 1084-x8ya — bake in the digests of the guest binaries this tray
+    // ships, so the host can key the host↔guest control channel to the guest
+    // it is about to stage. The guest self-hashes what it runs; the host must
+    // derive from that SAME digest or NNpsk0 fails closed with a perfectly
+    // equal (build_version, wire_version, hop) triple, which is precisely the
+    // bug that made every macOS and Windows install unable to reach Ready.
+    //
+    // Known at BUILD TIME on purpose, never read from a host file at runtime:
+    // a runtime read would make the host agree with whatever guest happens to
+    // be on disk and hide the skew a stale guest is supposed to reveal.
+    // scripts/build-macos-tray.sh builds the guests first and exports these.
+    //
+    // TWO digests, selected at runtime by the same arch match guest_binary.rs
+    // uses — the bundle ships an aarch64 and an x86_64 guest.
+    println!("cargo:rerun-if-env-changed=TILLANDSIAS_GUEST_DIGEST_AARCH64_MUSL");
+    println!("cargo:rerun-if-env-changed=TILLANDSIAS_GUEST_DIGEST_X86_64_MUSL");
+    let guest_digest_aarch64 =
+        std::env::var("TILLANDSIAS_GUEST_DIGEST_AARCH64_MUSL").unwrap_or_default();
+    let guest_digest_x86_64 =
+        std::env::var("TILLANDSIAS_GUEST_DIGEST_X86_64_MUSL").unwrap_or_default();
+
+    // THE REFUSAL IS SCOPED AS TIGHTLY AS IT CAN BE, and the scoping is the
+    // reason it is safe to fail the build at all:
+    //   - target_os == macos : the crate compiles as a cfg-gated stub on Linux
+    //                          and Windows, in every gate run on every host.
+    //                          Those builds have no guest to key to.
+    //   - PROFILE == release : debug builds use DEV_ROOT_SEED on BOTH ends, so
+    //                          they interoperate without any digest. Every
+    //                          `./build.sh --check`, every `cargo test`, every
+    //                          fixture is debug and is untouched by this.
+    //   - digests absent     : the sanctioned path always exports them.
+    // Widening any of the three would red the fleet's gate to fix a macOS
+    // keying bug, which is a trade nobody asked for.
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    let is_release = std::env::var("PROFILE").unwrap_or_default() == "release";
+    if target_os == "macos"
+        && is_release
+        && (guest_digest_aarch64.is_empty() || guest_digest_x86_64.is_empty())
+    {
+        panic!(
+            "release macOS tray built without the guest digests — build through \
+             scripts/build-macos-tray.sh, which builds the guests first"
+        );
+    }
+
+    println!("cargo:rustc-env=TILLANDSIAS_GUEST_DIGEST_AARCH64_MUSL={guest_digest_aarch64}");
+    println!("cargo:rustc-env=TILLANDSIAS_GUEST_DIGEST_X86_64_MUSL={guest_digest_x86_64}");
+
     // Re-run when HEAD moves so the embedded SHA stays accurate across
     // commits/branch switches. 765-uti9 quick win (velocity audit F6.1):
     // .git/index is deliberately NOT tracked — its mtime moves on every
