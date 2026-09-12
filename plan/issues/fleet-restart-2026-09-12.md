@@ -748,3 +748,23 @@ surface another host's claim names (`tillandsias-plan expire-claims
   the generic rebuild remedy cleared the staleness in 2m16s — one tree, two
   loci, two opposite correct answers; the orphaned Sep 4 ELF is removed on
   the refusal's own reasoning and the row is closed verified.
+- **The portability advisory landed with a baseline, not a zero** (macbookair,
+  1130-i6xj, osx-next 91b04268d): the first run found 35 genuine pre-existing
+  GNU-only idioms unrelated to the night (stat -c ×14, sed -i ×13, date -d ×5,
+  readlink -f ×2; sampled bare `sed -i` in bump-version.sh, delegate-outcome.sh
+  and ensure-nvidia-cdi.sh), so "zero on the fixed tree" would have made the
+  closure un-passable and therefore deleted; the closure is per-instance and
+  the 23 silent-degrade / 12 loud-fail split prints on every gate as a
+  baseline that must not climb. The guard's own four false positives (a
+  correct BSD-first `stat -f || stat -c` chain, the repo's GNU/BSD absorption
+  layer, help text, `grep -r` over the canonical skills/ tree) and one in the
+  fixture (a negative control matching its own advice string) are pinned as
+  negative controls; 102 s → 6 s by a glob pre-filter. Three structural facts
+  for the next litmus author: a new litmus must be bound in
+  openspec/litmus-bindings.yaml or nothing runs it (660-ryhn class); steps go
+  under `critical_path:`; each `command:` is a single-line double-quoted
+  scalar, which is why the convention is a thin litmus over a test-*.sh
+  fixture. Two pre-existing macOS reds found by stash-and-rerun: BSD `wc -l`
+  pads its count so a string compare against "1" fails on every Mac (eighth
+  idiom: string-comparing a wc count; macbookair fixes it), and
+  litmus:tool-dispatch-lib (diagnosis pending).
