@@ -135,6 +135,24 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
     | Linux           | `linux`       | `linux-next`     |
     | macOS           | `macos`       | `osx-next`       |
     | Windows         | `windows`     | `windows-next`   |
+
+    **PASS YOUR PRECISE ROLE TO THE SELECTOR, not just the platform** (order
+    1115-yvrq). On Linux, say `linux-immutable` or `linux-mutable` — a
+    read-only `/usr` (Fedora Silverblue, bootc) is immutable; anything you can
+    `dnf install` into is mutable. `scripts/host-capability-probe.sh` reports
+    it if you are unsure.
+
+    `pickup_role` on a packet means **REQUIRES**, not authored-on (coordinator
+    ruling, macuahuitl, 2026-09-06). The specific satisfies the general, so a
+    precise role costs you nothing and gains correctness: an immutable host
+    passing `linux-immutable` is offered every packet asking for `linux`, and
+    is NOT offered the ones needing a writable `/usr`. Measured on yoga
+    2026-09-06 — 301 rows either way, and the one packet it cannot do
+    (1025-a896, an investigation needing `dnf`) drops out.
+
+    Passing the bare platform still works and is still correct for a host that
+    genuinely has no sub-role; it simply cannot express a requirement it does
+    not have.
 4.  **Create Agent ID**: Do NOT hand-compose it — call the canonical helper
     (order 756-hn3a; contract: `methodology/distributed-work.yaml` →
     `agent_identity_contract`):
