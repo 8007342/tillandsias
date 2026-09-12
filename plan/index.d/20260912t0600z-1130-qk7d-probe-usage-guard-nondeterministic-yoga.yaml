@@ -1,0 +1,112 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-probe-usage-guard-returns-a-different-verdict-on-an-unchanged-tree-so-one-eligible-file-is-scanned-every-run-and-judged-eligible-only-one-run-in-four
+    order: 1130-qk7d
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [testing, ci, plan]
+    estimated_hours: 3
+    verifiable_closure: bash scripts/test-plan-binary-probe-usage-determinism.sh — arm 1 requires twenty consecutive runs on the real tree to give ONE verdict (pre-fix it gives TWO), arm 2 is a positive control only
+    owned_files:
+      - scripts/check-plan-binary-probe-usage.sh
+    title: |
+      scripts/check-plan-binary-probe-usage.sh returns a different verdict on an unchanged tree between consecutive runs — one eligible file is scanned every time and judged eligible only about one run in four, so a violation in it is found by coin flip
+    context: |
+      FOUND on yoga 2026-09-12 while widening this guard's population for
+      1128-j9fc. Noticed only because the widening changed a count and the
+      before/after numbers refused to reconcile; nobody was looking for this.
+
+      THE GUARD IS A GATE CHECK. build.sh:2590 runs it inside ./build.sh
+      --check, which is the pre-push gate every host pays on every land.
+
+      MEASURED, same tree, no edits between runs, 10 runs each:
+
+        my patched guard   6x scripts=7/568    4x scripts=8/568
+        ORIGINAL guard     7x scripts=7/568    3x scripts=8/568
+
+      The pre-existing guard flakes too. That was checked deliberately: "the
+      thing I just touched is broken" is the cheap conclusion and it was wrong.
+
+      EXACTLY ONE FILE FLIPS. Instrumented copy, 8 runs, counting how often each
+      eligible file is seen:
+
+        8/8  scripts/test-pre-push-issue-capture-lane.sh
+        8/8  scripts/test-plan-binary-runnability-precondition.sh
+        8/8  scripts/test-plan-binary-probe.sh
+        8/8  scripts/test-plan-binary-locus-native.sh
+        8/8  scripts/test-plan-binary-freshness.sh
+        8/8  scripts/test-capability-manifest-guard.sh
+        8/8  scripts/test-base-ledger-status-loss.sh
+        2/8  scripts/test-fragment-status-loss.sh      <-- 25%
+
+      `scanned` is a stable 568 on every run, so the file is READ every time and
+      it is the ELIGIBILITY decision that flips. That file hardcodes the path
+      twice. A violation in it is found or missed by coin flip, and the guard
+      says `ok:` either way — the verdict cannot distinguish "checked and clean"
+      from "not checked this time", which is the 1124-7f3u family again, now as
+      a race rather than a missing precondition.
+
+      MECHANISM FOUND, AND MY FIRST REPORT OF IT WAS WRONG. The initial filing
+      said SIGPIPE-under-pipefail had been REFUTED, on the strength of an
+      isolation test. It had not been refuted; the isolation simply failed to
+      reproduce the timing, and "I could not reproduce it" was written up as
+      "it is not the cause". That is the same move this fleet has been
+      correcting all night, made against my own hypothesis.
+
+      What settled it was instrumenting the two eligibility gates in situ and
+      recording their exit codes over 12 runs:
+
+        3 runs   rc1=0  rc2=0
+        9 runs   rc1=0  rc2=141        <-- 141 = 128+13 = SIGPIPE
+
+      THE CHAIN. Eligibility was `printf '%s' "$code" | grep -v ... | grep -q
+      ...`. `grep -q` exits on its FIRST match and SIGPIPEs whatever is still
+      writing upstream. Under `set -o pipefail` the pipeline reports 141, `if !`
+      reads 141 as "no match", and an ELIGIBLE file is silently reclassified as
+      ineligible.
+
+      WHY EXACTLY ONE FILE. It is timing-dependent. Only a file large enough for
+      the match to land while the writer is still writing can raise the signal —
+      test-fragment-status-loss.sh is 16191 bytes of code, the largest on the
+      surface. Smaller files finish writing before grep -q exits, so they never
+      flake. The bug was therefore invisible on every file except the one nobody
+      was watching.
+
+      A BITTER DETAIL WORTH KEEPING: this file already carries `# sigpipe-ok:
+      safe pipeline` comments on its OTHER greps. Those are herestring greps
+      with no upstream process to kill, so they were never at risk. The author
+      annotated the safe pipelines and left the dangerous one bare.
+
+      THE FIX: capture the filtered text into a variable, then match a
+      herestring. No writer, nothing to signal. Measured after: 15/15 runs agree
+      where 10 runs had split 6/4, and 20/20 in the fixture.
+
+      Also checked and absent, so nobody re-walks them: the guard does not
+      parallelise (no xargs -P, no trailing &, no wait) and its eligibility path
+      reads no mutable or shared state. And it is NOT ugrep, though bare `grep`
+      here is ugrep 7.8.4 — forcing GNU grep first on PATH still flaked 8/2.
+
+    exit_criteria:
+      - "twenty consecutive runs on an unchanged tree give ONE verdict; pre-fix result: FAILS (10 runs split 6/4 patched, 7/3 original)"
+      - "the pin DISCRIMINATES, shown in both directions on the real tree - pre-fix 20 runs give TWO distinct verdicts (scripts=7/569 and scripts=8/569), post-fix ONE. NOTE the planted-violation arm does NOT discriminate: measured against the pre-fix guard on a scratch tree it refused 20/20 too, because a two-file tree does not reproduce the race timing. It is a positive control that the guard has teeth, never evidence the flake is gone"
+      - "the mechanism is NAMED, not merely fixed: a change that makes the symptom go away without an account of WHY leaves a guard nobody can argue about. If the cause turns out to be environmental rather than in this file, say so and say which environment"
+      - "NEGATIVE CONTROL: the seven files that were seen 8/8 are still seen after the fix, and the verdict's `scanned` total is unchanged at 568 — a fix that stabilises the verdict by dropping the surface would satisfy criterion 1 and be strictly worse"
+    events:
+      - type: filed
+        ts: "2026-09-12T06:00:00Z"
+        agent_id: "linux-yoga-claude-20260912t013000z"
+        host: yoga
+        summary: |
+          Filed by yoga during the 1128-j9fc population fix, at macuahuitl's
+          direction, with the numbers verbatim rather than summarised.
+
+          Worth keeping: this was found by an arithmetic disagreement, not by a
+          failure. The guard was green on every run; only the COUNT moved, and
+          only because a widening happened to make two counts comparable. A
+          check that is green while silently sampling its own corpus is
+          invisible to everything except someone reconciling numbers that
+          should have matched.

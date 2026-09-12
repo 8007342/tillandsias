@@ -889,8 +889,33 @@ is by design, so their ABSENCE here is the pass, not a finding.
 > used instead, after the fact.
 
 Each finding becomes a `### Work Packet:` entry so `/advance-work-from-plan` can
-claim and fix it. Append packets to a dated smoke report:
-`plan/issues/smoke-e2e-findings-<RELEASE_TAG>-<DATE>.md`.
+claim and fix it. Append packets to a dated, **host-qualified** smoke report:
+
+```
+plan/issues/smoke-e2e-findings-<RELEASE_TAG>-<DATE>-<host_kind>-<host_id>.md
+```
+
+e.g. `smoke-e2e-findings-v56.9.11.1-2026-09-12-macos-macbookair.md`.
+
+**THE HOST FIELDS ARE NOT DECORATION — WITHOUT THEM TWO LANES COLLIDE IN GIT.**
+This template read `<RELEASE_TAG>-<DATE>` until 2026-09-12, while the convention
+in practice had always carried a host (`plan/smoke-e2e-v0.4.260815.1-windows.md`
+in-tree; the README row for v0.4.260826.1 cites `…-macos-…-macbook.md`,
+`…-windows-…-yolanda.md`, `…-linux-…-yoga.md`). A three-platform release asks
+every lane to smoke the same tag on the same day, so the dropped field made a
+collision *certain*, not unlucky: on 2026-09-12 yoga's Linux report and
+macbookair's macOS report were both written to
+`smoke-e2e-findings-v56.9.11.1-2026-09-12.md`, and
+`land-on-platform-branch.sh` refused with `refused:land:trunk-merge-conflict`
+(add/add). Recorded on order 1004-fue3.
+
+**On such a conflict, KEEP BOTH LANES' REPORTS.** The conflict surfaces at LAND
+time, on a host that did nothing wrong, and the obvious resolution — take one
+side — silently destroys another platform's entire smoke result, including its
+NOT CHECKED list and any findings only that platform could have seen. Give each
+side its host-qualified name; never resolve by choosing. If one side already
+sits at an unqualified path on trunk, leave it there (renaming another host's
+landed file is that host's call) and qualify yours.
 
 Packet template (status `ready` so it is immediately claimable):
 
