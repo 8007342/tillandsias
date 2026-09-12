@@ -176,18 +176,38 @@ rm -rf "$LOCKD"
 bare="$( cd "$REPO" && TILLANDSIAS_CYCLE_STATE_DIR="$WORK/state" \
          env -u TILLANDSIAS_CYCLE_HOLDER_PID -u CLAUDE_PID \
          ./scripts/cycle-checkout-lock.sh acquire --lane prompt --source bare 2>&1 )"
+# ORDER 1098-q7bk changed this arm's expectation from warn: to refused:, in
+# the same commit as the fix, as that packet's next_action item 3(a) requires.
+# WHY THE ESCALATION: a warning is printed to a lane that then keeps working,
+# and the lock it took is already dead — so warn: still ends with two lanes in
+# one checkout, which is the incident 873-zcim exists to prevent. Refusing is
+# the only outcome that makes the bare path safe without MOVING the anchor,
+# which stays out of scope (dir_lock_live's measured 3h over-hold on a session
+# harness, 2026-08-26). Arms 7 and 8 below are untouched and still green: the
+# refusal keys on anchor_source being the invoking-shell fallback, not on
+# TILLANDSIAS_CYCLE_HOLDER_PID being empty, so CLAUDE_PID still acquires cleanly.
 case "$bare" in
+    refused:checkout-lock:no-holder-pid*)
+        ok "the bare invocation refuses rather than acquiring over a dying anchor" ;;
     warn:checkout-lock:acquired-unverified-anchor:*)
-        ok "the bare invocation warns that its anchor is unverified" ;;
+        bad "the bare invocation still only WARNS and acquires over a dying anchor: $bare" ;;
     ok:checkout-lock:acquired:*)
         bad "the bare invocation still reports a plain success over a dying anchor: $bare" ;;
     *)
         bad "the bare invocation produced an unexpected verdict: $bare" ;;
 esac
 case "$bare" in
-    *TILLANDSIAS_CYCLE_HOLDER_PID*) ok "the warning names the variable that fixes it" ;;
-    *) bad "the warning does not name the remedy: $bare" ;;
+    *TILLANDSIAS_CYCLE_HOLDER_PID*) ok "the refusal names the variable that fixes it" ;;
+    *) bad "the refusal does not name the remedy: $bare" ;;
 esac
+# The refusal must also leave NO lock behind: a refusing acquire that still
+# created the dir would hand the next lane a stale lock to reap, reintroducing
+# the defect through the fix.
+if [ -d "$LOCKD" ]; then
+    bad "the refused acquire left a lock directory behind"
+else
+    ok "the refused acquire left no lock for the next lane to reap"
+fi
 
 # ── 7. NEGATIVE CONTROL: the harness env var makes the bare path CORRECT ──
 # Without this, arm 6 is satisfiable by warning unconditionally — including on

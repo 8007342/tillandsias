@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-ledger-has-more-than-one-place-to-look-and-every-reader-looks-in-one-so-five-writes-landed-somewhere-nothing-consults
+    event:
+      type: note
+      ts: "2026-09-12T02:22:49Z"
+      agent_id: forge-forge-tillandsias-opencode-20260912t022249z
+      host: forge-tillandsias
+      summary: |
+        HOUSEKEEPING (next_action item 6): origin/salvage/unknown/20260910-1080-4deb-arm1 is fully integrated (per the packet's own note — its two 1080-4deb files byte-identical to trunk, fragments landed via 9e7c77c79) but CANNOT be deleted from a forge: the enclave git-mirror denies ref deletion by design (images/git pre-receive), and this cycle has no host-side git. Deletion is a host-side action, carried forward for a linux/macos host that answers `git ls-remote origin` for that ref; the 349 pattern does it with a host-side `git push origin :refs/heads/salvage/...`.
