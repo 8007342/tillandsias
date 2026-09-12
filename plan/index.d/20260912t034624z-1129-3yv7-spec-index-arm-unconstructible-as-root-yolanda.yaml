@@ -2,7 +2,7 @@
 packets:
   - packet_id: the-spec-index-demotion-arms-cannot-be-constructed-as-root-so-every-windows-gate-failed-them-unconditionally-once-1087-h2z9-wired-the-step-into-check
     order: 1129-3yv7
-    status: completed
+    status: ready
     kind: bug
     priority: p1
     desired_release: v0.5

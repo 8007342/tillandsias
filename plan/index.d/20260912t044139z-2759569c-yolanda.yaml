@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-spec-index-demotion-arms-cannot-be-constructed-as-root-so-every-windows-gate-failed-them-unconditionally-once-1087-h2z9-wired-the-step-into-check
+    field: status
+    value: completed
+    ts: "2026-09-12T04:41:39Z"
+    host: yolanda
+
+events:
+  - packet_id: the-spec-index-demotion-arms-cannot-be-constructed-as-root-so-every-windows-gate-failed-them-unconditionally-once-1087-h2z9-wired-the-step-into-check
+    event:
+      type: completed
+      ts: "2026-09-12T04:41:39Z"
+      host: yolanda
+      summary: |-
+        status 'completed' with evidence_refs: bba583f26: chmod 000 does not constrain euid 0 and the Windows gate re-execs as wsl -u root, so both demotion arms failed on every Windows host once 1087-h2z9 wired the step into --check (cf3b5c68b). Measured in the tillandsias-build distro: whoami=root euid=0 and root stats a chmod-000 path. Fixed with the tray-asset-placeholder idiom (a probe that cannot construct its arm says so). Falsified BOTH ways: as root ok:test-spec-index-durable-tier-demotion:5-passed:2-skipped-root; as nobody ok:test-spec-index-durable-tier-demotion:7-passed with both arms RUN and PASSED. Unskipped token byte-identical to the original.
