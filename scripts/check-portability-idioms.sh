@@ -345,7 +345,18 @@ while IFS= read -r f; do
         esac
         case "$t" in
             *"date -d "*)
-                { _has_fallback "$t" "date -r" || _has_fallback "$t" "date -v"; } && : || \
+                # THREE BSD COUNTERPARTS, not two. `-r EPOCH` and `-v` are the
+                # obvious ones; `date -j` / `-jf FMT` is the BSD PARSE form, and
+                # it is what every correct site in this tree actually uses —
+                # `date -d "$x" +%s 2>/dev/null || date -jf '%Y-%m-%dT%H:%M:%S' …`.
+                # Omitting it made this arm report FOUR correct fallback chains
+                # as defects (check-readme-discipline.sh, manage-cache.sh,
+                # test-forge-liveness-probe.sh, hooks/pre-commit-openspec.sh),
+                # which is the whole `date -d` class minus one deliberate test
+                # subject. An incomplete counterpart list does not under-report:
+                # it accuses working code.
+                { _has_fallback "$t" "date -r" || _has_fallback "$t" "date -v" \
+                  || _has_fallback "$t" "date -j"; } && : || \
                     _flag "$f" "$n" "date -d (GNU-only; BSD uses -v/-r)" "date -r EPOCH, or compute in awk" ;;
         esac
         case "$t" in

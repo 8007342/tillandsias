@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-thirty-seven-standing-gnu-only-idioms-the-advisory-found-on-its-first-run
+    event:
+      type: note
+      ts: "2026-09-12T17:19:04Z"
+      agent_id: macos-tlatoanis-macbook-air-opus5-20260912t171904z
+      host: macos
+      summary: |-
+        SECOND CLASS EXAMINED, SECOND CLASS WITH ZERO LIVE DEFECTS — and the cause is mine both times. The date -d class had five instances and not one was broken: four are correct GNU-first chains falling back to BSD `date -j` / `-jf`, the PARSE form (check-readme-discipline.sh:47, manage-cache.sh:141, test-forge-liveness-probe.sh:85, hooks/pre-commit-openspec.sh:296), and the fifth is `date -d yesterday` written into a fixture as its SUBJECT by test-check-bash-dialect.sh:77 — the same self-flagging shape as this advisory's own HALF-1 lines, and correct.
+
+        My counterpart list knew `date -r` and `date -v` and not `date -j`. AN INCOMPLETE COUNTERPART LIST DOES NOT UNDER-REPORT — IT ACCUSES WORKING CODE. That is the same defect as the readlink slice one step earlier, where the false entries were a container-executed string and an idiom modern macOS supports. Two classes, two inflations, both from the guard's knowledge rather than from the tree.
+
+        BASELINE: 22 silent / 14 loud -> 20 silent / 13 loud after teaching it `date -j`. Combined with the remote-context class, the first-run figure of 37 was inflated by SEVEN entries that were never defects. The honest count today is 33, and the two remaining large classes are REAL: sampled bare `stat -c %a`, `stat -c %Y` with a fallback to EMPTY rather than to BSD, and a bare `sed -i 's/…/'` with no temp-file form. stat -c (14) and sed -i (13) are the debt.
+
+        FIVE NEW ARMS PIN THIS, 22 total now: each of the four correct date chains must NOT be flagged, and a bare `date -d` MUST still be. Without the last one, widening the counterpart rule later would go unnoticed — the same both-directions shape the remote-context class got.
+
+        THE TEMPLATE SLICE SHOULD BE stat -c OR sed -i, NOT date -d. Two slices have now been proposed on the strength of a count and both evaporated on inspection. The lesson for whoever takes the next one: READ THE LINES BEFORE PLANNING THE FIX. A class with N hits is a hypothesis about N defects, and this guard has been wrong about that twice in an hour — in its own favour, which is the direction that wastes a claimer's day rather than hiding a bug.

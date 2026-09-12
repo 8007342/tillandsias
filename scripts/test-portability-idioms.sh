@@ -111,6 +111,26 @@ printf '%s\n' "$OUT" | grep -qE 'help-(de|es|fr|ja)\.sh' \
     && bad "NEGATIVE CONTROL: flagged help TEXT as an rg invocation" \
     || ok "NEGATIVE CONTROL: usage lines not flagged"
 
+# COUNTERPART COMPLETENESS: `date -j` / `-jf` is the BSD PARSE form and is what
+# every correct site in this tree uses. It was missing from the counterpart
+# list, so the arm reported FOUR working fallback chains as defects — the whole
+# date -d class minus one deliberate test subject. AN INCOMPLETE COUNTERPART
+# LIST DOES NOT UNDER-REPORT, IT ACCUSES WORKING CODE, which is the failure
+# this fixture exists to catch.
+for _cf in check-readme-discipline.sh manage-cache.sh test-forge-liveness-probe.sh \
+           pre-commit-openspec.sh; do
+    printf '%s\n' "$OUT" | grep -qE "${_cf}:[0-9]+.*date -d" \
+        && bad "COUNTERPART: flagged a correct GNU-first date fallback in ${_cf}" \
+        || ok "COUNTERPART: ${_cf}'s date -d/-jf chain is not flagged"
+done
+
+# AND THE CONTROL: a `date -d` with NO counterpart must still be named.
+# test-check-bash-dialect.sh:77 writes one into a fixture as its SUBJECT — the
+# same self-flagging shape as this file's own HALF-1 lines, and correct.
+printf '%s\n' "$OUT" | grep -qE 'test-check-bash-dialect\.sh:[0-9]+' \
+    && ok "COUNTERPART control: a bare date -d IS still flagged" \
+    || bad "COUNTERPART control: the date fallback rule is swallowing bare idioms"
+
 # REMOTE-CONTEXT CLASS, both directions. with-nix-builder.sh:295 carries
 # `readlink -f` inside a snippet that `podman run … -c` executes IN A LINUX
 # CONTAINER — correct there, and the guard reaches it TRANSITIVELY (podman runs
