@@ -104,6 +104,91 @@ _rg_in_command_position() { # _rg_in_command_position <line>
     printf '%s\n' "$1" | grep -Eq '(^|[|;&(]|\$\()[[:space:]]*(rg|\$RG)[[:space:]]'
 }
 
+# A STRING EXECUTED ON A LINUX HOST IS NOT A PORTABILITY DEFECT, and flagging
+# one removes a whole CLASS of false positive rather than a line. Measured
+# 2026-09-12: with-nix-builder.sh:295 carries `readlink -f` inside
+# _NB_POPULATE_SNIPPET, which is appended to a script string and run via
+# `podman run "$_NB_IMAGE_NAME" -c "$_script"` (line ~330) — i.e. INSIDE A
+# LINUX CONTAINER, where GNU readlink is guaranteed. The idiom is correct
+# there and "fixing" it would be churn.
+#
+# The same applies to anything dispatched through `wsl.exe` or `ssh`: the
+# dialect that matters is the REMOTE one, and this scan cannot see it. So a
+# line whose idiom sits inside such a dispatch is skipped and SAID to be
+# skipped — the guard's own limits section already refuses to let a count read
+# as a portability verdict, and this is one more thing it cannot see rather
+# than one more thing it knows.
+#
+# TWO FORMS, because the worked example needs the second. A same-line dispatch
+# is easy. But with-nix-builder.sh assigns the snippet at :295 and dispatches it
+# at ~:330 — thirty-five lines apart — so a same-line rule flags it anyway,
+# which is what the first cut of this did. The variable is the link, so follow
+# it: collect the variables that a remote dispatch EXECUTES in this file, then
+# skip assignments to those variables.
+#
+# This is NOT exemption-by-inference. The evidence is a dispatch line in the
+# same file naming that exact variable; nothing is skipped on a name that
+# merely looks remote. A variable executed remotely from ANOTHER file is still
+# flagged, which is the correct side to err on.
+_is_remote_context() { # _is_remote_context <line>
+    case "$1" in
+        *"podman run"*|*"docker run"*|*"wsl.exe"*|*"wsl "*|*"ssh "*|*"--exec-guest"*) return 0 ;;
+    esac
+    return 1
+}
+
+# Variables this file hands to a remote dispatch, TRANSITIVELY — because one
+# hop is not enough and the worked example proves it. with-nix-builder.sh runs
+# `podman run … -c "$_script"`, and $_script is built from
+# $_NB_POPULATE_SNIPPET thirty-five lines earlier. A one-hop rule finds
+# $_script and still flags the snippet, which is exactly what the first two
+# cuts of this did.
+#
+# So: seed with the variables a dispatch line names, then repeatedly add any
+# variable whose ASSIGNMENT references one already in the set. Each link is a
+# real assignment in the same file — evidence, not name-matching — and the
+# closure is capped so a pathological file cannot spin. Only files that
+# actually contain a dispatch pay for this.
+_remote_vars_of() { # _remote_vars_of <file>
+    _rv_seed="$(grep -hE 'podman run|docker run|wsl\.exe|wsl |ssh |--exec-guest' "$1" 2>/dev/null \
+        | grep -oE '\$\{?[A-Za-z_][A-Za-z0-9_]*' | tr -d '${' | sort -u)"
+    [ -n "$_rv_seed" ] || { printf ''; return 0; }
+    _rv_set="$_rv_seed"
+    _rv_i=0
+    while [ "$_rv_i" -lt 5 ]; do
+        _rv_i=$((_rv_i+1))
+        # lines assigning a variable that is IN the set, e.g. `_script+=" … $X"`
+        _rv_new="$(
+            printf '%s\n' "$_rv_set" | while IFS= read -r v; do
+                [ -n "$v" ] || continue
+                grep -hE "^[[:space:]]*(local[[:space:]]+)?${v}\+?=" "$1" 2>/dev/null
+            done | grep -oE '\$\{?[A-Za-z_][A-Za-z0-9_]*' | tr -d '${' | sort -u
+        )"
+        _rv_merged="$(printf '%s\n%s\n' "$_rv_set" "$_rv_new" | grep -v '^$' | sort -u)"
+        [ "$_rv_merged" = "$_rv_set" ] && break
+        _rv_set="$_rv_merged"
+    done
+    printf '%s\n' "$_rv_set"
+}
+
+_assigns_remote_var() { # _assigns_remote_var <line> <remote-vars>
+    case "$1" in
+        [A-Za-z_]*=*) : ;;
+        *) return 1 ;;
+    esac
+    _arv_name="${1%%=*}"
+    _arv_name="${_arv_name##*[!A-Za-z0-9_]}"
+    [ -n "$_arv_name" ] || return 1
+    case "
+$2
+" in
+        *"
+$_arv_name
+"*) return 0 ;;
+    esac
+    return 1
+}
+
 _looks_like_invocation() { # _looks_like_invocation <line>
     case "$1" in
         *" -"*|*"'"*|*'"'*) return 0 ;;
@@ -144,8 +229,14 @@ _today="$(date -u +%Y%m%d)"
 while IFS= read -r f; do
     [ -f "$f" ] || continue
     case "$f" in */check-portability-idioms.sh) continue ;; esac
+    _rvars="$(_remote_vars_of "$f")"
     while IFS= read -r line; do
         n="${line%%:*}"; t="${line#*:}"
+        # Remote dispatch: the dialect that matters is the remote host's,
+        # and this scan cannot see it. Same-line dispatch, or an assignment to
+        # a variable this file later hands to one.
+        _is_remote_context "$t" && continue
+        [ -n "$_rvars" ] && _assigns_remote_var "$t" "$_rvars" && continue
         case "$t" in
             *"sed -i"*)
                 case "$t" in

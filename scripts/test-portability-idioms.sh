@@ -111,6 +111,23 @@ printf '%s\n' "$OUT" | grep -qE 'help-(de|es|fr|ja)\.sh' \
     && bad "NEGATIVE CONTROL: flagged help TEXT as an rg invocation" \
     || ok "NEGATIVE CONTROL: usage lines not flagged"
 
+# REMOTE-CONTEXT CLASS, both directions. with-nix-builder.sh:295 carries
+# `readlink -f` inside a snippet that `podman run … -c` executes IN A LINUX
+# CONTAINER — correct there, and the guard reaches it TRANSITIVELY (podman runs
+# $_script, $_script is built from $_NB_POPULATE_SNIPPET, 35 lines apart; a
+# one-hop rule flagged it and two cuts of this guard did exactly that).
+printf '%s\n' "$OUT" | grep -qE 'with-nix-builder\.sh:[0-9]+' \
+    && bad "REMOTE CONTEXT: flagged an idiom executed inside a Linux container" \
+    || ok "REMOTE CONTEXT: a remotely-dispatched string is not flagged"
+
+# AND THE CONTROL THAT KEEPS IT HONEST: the exemption must not swallow bare
+# idioms. plan-binary-probe.sh:291 has `readlink -f` in ordinary host code and
+# MUST still be named — without this arm, widening the remote rule would go
+# unnoticed and the class would become an exemption list with a hole.
+printf '%s\n' "$OUT" | grep -qE 'plan-binary-probe\.sh:[0-9]+' \
+    && ok "REMOTE CONTEXT control: a bare idiom outside a dispatch IS still flagged" \
+    || bad "REMOTE CONTEXT control: the remote-context rule is swallowing host code"
+
 printf '%s\n' "$OUT" | grep -q 'check-plan-ledger-readers.sh' \
     && bad "NEGATIVE CONTROL: flagged grep -r over the CANONICAL skills/ tree" \
     || ok "NEGATIVE CONTROL: the canonical tree is not a symlink farm"

@@ -28,10 +28,10 @@ preconditions:
 severity: medium
 
 critical_path:
-  - step: "the fifteen-case fixture passes (both halves + four false-accusation controls + cost)"
-    command: "bash scripts/test-portability-idioms.sh 2>&1 | tail -1 | grep -qx 'PASS: portability idioms (15/15)' && echo 'ok: fixture 15/15'"
+  - step: "the seventeen-case fixture passes (both halves + six false-accusation/remote-context controls + cost)"
+    command: "bash scripts/test-portability-idioms.sh 2>&1 | tail -1 | grep -qx 'PASS: portability idioms (17/17)' && echo 'ok: fixture 17/17'"
     timeout_ms: 120000
-    expected_behavior: "ok: fixture 15/15"
+    expected_behavior: "ok: fixture 17/17"
 
   - step: "the advisory NEVER blocks — four of the defects it reports each froze a platform"
     command: "bash scripts/check-portability-idioms.sh >/dev/null 2>&1; test $? -eq 0 && echo 'ok: advisory-exit-0'"
