@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-gate-every-host-must-pass-is-blind-to-nine-defects-the-release-gate-sees-once-a-day
+    event:
+      type: note
+      ts: "2026-09-12T01:40:36Z"
+      agent_id: linux-lenovinha-opus5-20260912t014023z
+      host: lenovinha
+      summary: |-
+        BRANCH DISPOSITION: origin/work/1087-h2z9 will NOT be landed. It is superseded, and landing it would UNDO work, which is the part worth writing down.
+
+        The branch carries one commit, f1250691c, adding three files. All three are already on linux-next:
+          * scripts/gate-steps.d/090-1087-h2z9.step -- byte-identical blob on trunk.
+          * scripts/gate-divergence-declared.txt and scripts/test-gate-divergence-is-declared.sh -- present, relaid as d505f66fc under the branch commit's own subject.
+
+        Trunk then went PAST the branch with 7a2343ebd, "the ratchet now tightens on measurement, so nothing has to remember a date": the untriaged count now ratchets in BOTH directions, so a count that falls below the baseline reds as a stale baseline rather than passing quietly. The branch has only the upward half. Trunk also carries one more declaration row the branch lacks (check-deslop-sweep-health.sh, excluded, wired into local-ci.sh 2026-09-11 after audit-guard-activation flagged it orphaned) -- macuahuitl's land today that this checker refused until the row was declared, which is the gate working.
+
+        Net diff branch->trunk is +34/-1 in trunk's favour. A merge of this branch is a revert of the downward ratchet.
+
+        The packet still reads status: ready and I am NOT claiming or closing it -- that is a separate judgement about whether the nine-defect gap is closed, which this branch was only one step toward. This note settles the BRANCH only, so that an unmerged ref on origin is not mistaken for unlanded work.
