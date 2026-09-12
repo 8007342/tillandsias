@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-stale-validator-refusals-fresher-build-and-orphan-clauses-have-never-executed-because-the-only-locus-that-reaches-them-was-not-tested
+    field: status
+    value: verified
+    ts: "2026-09-12T10:52:31Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-stale-validator-refusals-fresher-build-and-orphan-clauses-have-never-executed-because-the-only-locus-that-reaches-them-was-not-tested
+    event:
+      type: completed
+      ts: "2026-09-12T10:52:31Z"
+      host: lenovinha
+      summary: |-
+        status 'verified' with evidence_refs: observed in-distro on esmeraldinha, the locus the clauses were written for: the refusal named /root/.cache/tillandsias-wsl2-target/tillandsias/release/tillandsias-plan as the fresher build, printed the TILLANDSIAS_PLAN_BIN remedy form rather than the generic rebuild, and fired the ORPHANED clause naming the redirect as the reason nothing refreshes the resolved copy. CARGO_TARGET_DIR was UNSET in that shell, so the path came from the with-wsl2-builder.sh declaration plus basename substitution — the derived VALUE verified, not only the shape. Negative control: the same host's Windows-side push correctly printed the generic rebuild remedy, which is right for that locus
+  - packet_id: the-stale-validator-refusals-fresher-build-and-orphan-clauses-have-never-executed-because-the-only-locus-that-reaches-them-was-not-tested
+    event:
+      type: note
+      ts: "2026-09-12T10:52:31Z"
+      host: lenovinha
+      summary: |-
+        all four criteria met; the generic clause was closed on lenovinha and the redirect-specific path on esmeraldinha — different claims, closed by different runs
