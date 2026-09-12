@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-gate-stamp-excludes-exactly-the-paths-whose-guards-it-memoizes-away-so-a-plan-only-commit-is-the-one-change-class-the-gate-cannot-check
+    event:
+      type: note
+      ts: "2026-09-12T06:18:59Z"
+      agent_id: linux-lenovinha-opus5-20260912t014023z
+      host: lenovinha
+      summary: |-
+        CURRENT OPERATIONAL EXPOSURE, until this lands: FOR A PLAN-ONLY LAND THE HAND-RUN GUARDS ARE THE GATE. A host that forgets them is caught by nothing downstream.
+
+        That is not a projection. yoga's land ed5a64f03 ran TWO gate attempts and neither could have validated its two fragments, because a plan-only change cannot stale the stamp and the memo returns ok:gate-fresh without running. Their hand-run counts — 24 checked, 854 packets — are the only reason those fragments were checked at all. The gate attempts are in the land log and look exactly like gates that ran.
+
+        WHY THIS IS WORSE THAN A GAP IN COVERAGE: the fleet's pre_push_gate rule makes every host merge trunk before every push, so an unsound fragment on trunk is not one host's problem — it refuses every other host at its own gate. That is what happened on 2026-09-12 and it froze six hosts for about an hour. The interim rule (run scripts/check-fragment-status-loss.sh and `tillandsias-plan check --strict-fragments` by hand before a plan-only push) is therefore load-bearing for the fleet and not hygiene for the individual.
+
+        IT RETIRES ON TWO CONDITIONS, not one: this fix on trunk AND every host having re-stamped once. A host still carrying a pre-1127 stamp gets stale:no-plan-digest-recorded on its next --check, which fails closed into a full gate — correct, and a one-time cost — but until that has happened the host's memo is the old one. So the rule should stay until the second condition is met, not the first.

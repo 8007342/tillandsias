@@ -145,6 +145,134 @@ case "$probe_path" in
     *) ok "metrics log is outside target/, so daily-maintenance cargo clean cannot eat it" ;;
 esac
 
+# ── arm 8: ORDER 1096-p3tn — an UNRESOLVABLE rule file must REFUSE ──────────
+# The closure criterion of 1096-p3tn, made executable. cycle-metrics.sh used to
+# source the rule best-effort and, on failure, define a stub returning
+# /tmp/<name>. The file is present in every checkout, so SOME invocations
+# sourced it and some did not, and pirria measured the result on 2026-09-06:
+# two live timing logs, overlapping in time, both carrying both hosts, with
+# near-disjoint step sets — so every runs= and skippable: was computed over a
+# PARTITION while presenting as a TOTAL.
+#
+# A writer that cannot resolve the canonical path must SAY SO, not pick one.
+# The copy below has no metrics-log-path.sh beside it, which is exactly the
+# condition the stub used to paper over.
+MD="$(mktemp -d "${TMPDIR:-/tmp}/metrics-norule.XXXXXX")"
+cp "$ROOT/scripts/cycle-metrics.sh" "$MD/cycle-metrics.sh"
+norule_out="$(bash "$MD/cycle-metrics.sh" 2>&1 >/dev/null | head -1)"
+norule_rc=0; bash "$MD/cycle-metrics.sh" >/dev/null 2>&1 || norule_rc=$?
+case "$norule_out" in
+    refused:metrics:unresolvable-log-path*)
+        if [ "$norule_rc" -ne 0 ]; then
+            ok "an unsourceable path rule REFUSES with a named cause (rc=$norule_rc)"
+        else
+            bad "it printed the refusal but exited 0 — a refusal nobody can branch on"
+        fi ;;
+    *)
+        bad "an unsourceable path rule did not refuse: '$norule_out' (rc=$norule_rc) — it is choosing a path it cannot justify" ;;
+esac
+
+# ── arm 8b: MUTATION CONTROL — the PRE-1096-p3tn script must NOT refuse. ────
+# Arm 8 passes trivially once the refusal is present. This restores the old
+# best-effort stub in a scratch copy and asserts that copy silently resolves a
+# /tmp path instead of refusing, proving arm 8 has teeth. Same shape as the
+# mutation arms in test-check-credential-channel.sh (876-exg2 / 877-mynm) and
+# test-cycle-checkout-lock.sh arm 7 (1098-q7bk).
+MUT="$MD/pre-1096-cycle-metrics.sh"
+awk '/# ORDER 1096-p3tn: A WRITER THAT CANNOT RESOLVE/{skip=1}
+     skip && /^# shellcheck source=scripts\/metrics-log-path\.sh$/{skip=0}
+     skip{next} {print}' "$ROOT/scripts/cycle-metrics.sh" \
+  | awk '/^if ! command -v metrics_default_log/{sub(/^if ! command -v metrics_default_log >\/dev\/null 2>&1; then$/, "command -v metrics_default_log >/dev/null 2>\\&1 || {\n    metrics_default_log() { printf \x27/tmp/%s\x27 \"$1\"; }\n}\nif false; then")} {print}' \
+  > "$MUT"
+if grep -q 'refused:metrics:unresolvable-log-path' "$MUT" && ! grep -q 'if false; then' "$MUT"; then
+    bad "MUTATION: the strip left the refusal reachable — arm 8b proves nothing"
+elif ! bash -n "$MUT" 2>/dev/null; then
+    bad "MUTATION: the reconstructed pre-fix script does not parse — arm 8b proves nothing"
+else
+    mut_rc=0; bash "$MUT" >/dev/null 2>&1 || mut_rc=$?
+    if [ "$mut_rc" -eq 0 ]; then
+        ok "MUTATION: the pre-fix script silently accepts an unresolvable rule — arm 8 has teeth (pre-fix result: FAILS)"
+    else
+        bad "MUTATION: the pre-fix script exited $mut_rc; it was expected to silently substitute /tmp"
+    fi
+fi
+rm -rf "$MD"
+
+# ── arm 9: ORDER 1096-p3tn — a SECOND live timing log must be REFUSED ────────
+# The reader half. On a host carrying both files, runs= and skippable: are
+# computed from one and published as totals, and the cross-host recurrence
+# audit (1001-q3zf) compares those totals ACROSS hosts — so a low runs= reads
+# as "this step is rare" rather than "I read half the log".
+#
+# The guard fires ONLY on a defaulted path. Arm 9b is the control that pins
+# that, and it is not optional: metrics-log-path.sh's contract is that an
+# explicit TILLANDSIAS_*_LOG always wins so every fixture keeps working, and
+# every fixture sets it. A guard without that exemption would red this suite.
+SD="$(mktemp -d "${TMPDIR:-/tmp}/metrics-split.XXXXXX")"
+split_out=""
+if [ -e /tmp/tillandsias-timing.jsonl ]; then
+    # Never disturb a real log: if one is already there, this arm cannot run
+    # hermetically, so it declines rather than overwriting evidence.
+    ok "SKIPPED (a real /tmp/tillandsias-timing.jsonl exists; arm 9 declines rather than overwrite it)"
+else
+    printf '{"ts":"2026-01-01T00:00:00Z","step":"fixture","phase":"f","duration_ms":1,"host":"fixture"}\n' \
+        > /tmp/tillandsias-timing.jsonl
+    split_out="$(cd "$ROOT" && bash scripts/cycle-metrics.sh 2>&1 >/dev/null | head -1)"
+    split_rc=0; (cd "$ROOT" && bash scripts/cycle-metrics.sh >/dev/null 2>&1) || split_rc=$?
+    case "$split_out" in
+        violation:metrics-log-split:*)
+            if [ "$split_rc" -ne 0 ]; then
+                ok "two live timing logs are refused, not silently halved (rc=$split_rc)"
+            else
+                bad "it named the split but exited 0 — the numbers still publish"
+            fi ;;
+        *) bad "a second live timing log was not refused: '$split_out' (rc=$split_rc) — runs= is a partition presenting as a total" ;;
+    esac
+
+    # ── arm 9b: CONTROL — naming the log explicitly stands the guard down ────
+    named_rc=0
+    (cd "$ROOT" && TILLANDSIAS_TIMING_LOG="$ROOT/.cache/metrics/tillandsias-timing.jsonl" \
+        bash scripts/cycle-metrics.sh >/dev/null 2>&1) || named_rc=$?
+    if [ "$named_rc" -eq 0 ]; then
+        ok "CONTROL: an explicitly named timing log is read without complaint, split or no split"
+    else
+        bad "CONTROL: naming the log explicitly still refused (rc=$named_rc) — this would red every fixture that names its own log"
+    fi
+    rm -f /tmp/tillandsias-timing.jsonl
+fi
+rm -rf "$SD"
+
+# ── arm 9c: the split guard must NOT touch the append subcommands. ──────────
+# Found by measurement after 1096-p3tn first landed, and it was a real
+# regression: the guard sat before the subcommand branches, so a TIMING-log
+# split refused an unrelated --emit-flow. With the /tmp debris every host
+# carried that night, test-cycle-flow-emit-idempotency.sh failed 12 scenarios.
+# The emit paths are best-effort by contract — they must never take down the
+# step they measure — and --emit-flow does not even read the timing log. The
+# split matters when numbers are PUBLISHED, not when a record is appended.
+if [ -e /tmp/tillandsias-timing.jsonl ]; then
+    ok "SKIPPED arm 9c (a real /tmp/tillandsias-timing.jsonl exists; declining rather than overwrite it)"
+else
+    printf '{"ts":"2026-01-01T00:00:00Z","step":"fixture","phase":"f","duration_ms":1,"host":"fixture"}\n' \
+        > /tmp/tillandsias-timing.jsonl
+    emit_rc=0
+    (cd "$ROOT" && bash scripts/cycle-metrics.sh --emit-timing step=arm9c phase=f duration_ms=1 \
+        >/dev/null 2>&1) || emit_rc=$?
+    if [ "$emit_rc" -eq 0 ]; then
+        ok "CONTROL: --emit-* is unaffected by a split — an append never takes down the step it measures"
+    else
+        bad "--emit-timing refused (rc=$emit_rc) over a timing-log split — the guard is coupling an append to a reader's problem"
+    fi
+    rep_rc=0
+    (cd "$ROOT" && bash scripts/cycle-metrics.sh >/dev/null 2>&1) || rep_rc=$?
+    if [ "$rep_rc" -ne 0 ]; then
+        ok "CONTROL: the REPORTING path still refuses the same split (rc=$rep_rc) — the scoping did not disarm the guard"
+    else
+        bad "the reporting path stopped refusing a split — scoping the guard disarmed it"
+    fi
+    rm -f /tmp/tillandsias-timing.jsonl
+fi
+
 printf 'metrics-log-path-agreement: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1
 printf 'ok:metrics-log-path-agreement:%d\n' "$pass"
