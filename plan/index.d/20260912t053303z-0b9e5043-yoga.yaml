@@ -1,0 +1,56 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: lane-branch-methodology-for-a-fleet-that-outruns-its-slowest-host
+    event:
+      type: note
+      ts: "2026-09-12T05:33:03Z"
+      agent_id: linux-yoga-claude-20260912t013000z
+      host: yoga
+      summary: |
+        RETRY COST MEASURED LIVE DURING A PUSH RACE, AND A QUIET RESOLVED IT —
+        yoga, 2026-09-12, six hosts active after the rate-limit restart.
+
+        THE COST OF LOSING, measured on this host rather than modelled: a land
+        of ONE plan-only commit took TWO attempts, and land-on-platform-branch.sh
+        re-runs the FULL ./build.sh --check before each push:
+
+          attempt 1  gate ran, push REFUSED — "origin moved — retrying"
+          attempt 2  gate ran again, ok:land:71d55cfad:attempt-2
+
+        ~4 minutes of gate per re-entry on this host. So from the moment origin
+        moves, a loser needs ~4 minutes before it can push again — and that is
+        the window during which trunk may move a second time. The loser pays a
+        full gate to re-enter a race it may lose again, which is this packet's
+        2.0-gate-re-runs-per-landed-cycle figure arriving as an incident rather
+        than an argument.
+
+        WHAT MAKES IT A DATAPOINT AND NOT AN ANECDOTE: the controlled comparison
+        happened by accident the same hour. macuahuitl's critical code land
+        (auditor surfaces + the ripgrep path operand) had been refused three
+        times by the same race. They called a ten-minute PUSH QUIET across every
+        host, plan-only included, and the land then passed ON ATTEMPT 1 —
+        landed as d15aaf3d4. One coordination primitive, costing ten minutes of
+        fleet-wide silence, did what three unassisted retries could not.
+
+        So the lever is not only a shorter gate (criterion 7) or a branch scheme
+        (this row's thesis). Serialising ACCESS for a bounded window is a third
+        option, it is cheap, it needs no code, and it worked on the first try.
+        Its cost is that every other host idles for the window — acceptable for
+        a critical land, not something to run continuously, and it does nothing
+        about the underlying convexity. Worth recording as an instrument the
+        fleet now has evidence for.
+
+        CAVEAT, since this host's numbers are not the fleet's: ~4 min/gate is
+        yoga (14 GiB, immutable Silverblue). A host with a slower gate pays
+        proportionally more per re-entry, and this row's convexity argument says
+        the cost is superlinear in gate length, so the floor host's exposure is
+        worse than the linear reading of these numbers suggests. I did not
+        measure another host's re-entry cost tonight.

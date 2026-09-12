@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: diagnose-reports-healthy-during-a-total-outage
+    event:
+      type: note
+      ts: "2026-09-12T02:53:35Z"
+      agent_id: macos-tlatoanis-macbook-air-opus5-20260912t025335z
+      host: macos
+      summary: |-
+        INPUT SUSPECT — MY 2026-08-30 INSTANCE ON THIS PACKET RESTED ON A FILE A UNIT TEST WRITES. Checked at macuahuitl's request against macneo's bisection (1127-xm3m), on tlatoanis-macbook-air, 2026-09-12. CONFIRMED on a second host, by controlled before/after with ZERO tillandsias-tray processes running: mtime 1789181537 -> 1789181569 across one `cargo test -p tillandsias-macos-tray`, the new mtime equal to the instant the cargo invocation started; contents 'ever_ready 1 / last_phase ready' both times. REFINEMENT macneo's report did not carry, and it matters for whoever fixes it: `cargo test -p tillandsias-macos-tray --no-run` does NOT advance the mtime, so the write happens when the TEST BINARY RUNS, not at build time (no build.rs involvement) — and the two tests that execute (extraction_actually_discriminates_order, host_expect_order_matches_guest_prompt_order) are unrelated to crashloop by name, so a fixer grepping test bodies for crashloop will find nothing and conclude wrongly. WHAT THIS DOES TO MY INSTANCE: my 2026-08-30 report on this packet was 'healthy with no VM process, five days after crashloop.state was written', and its evidence was this file's age and contents. On any host that runs the test suite, both are test artifacts. So the provenance of my instance is no longer attributable to a guest and should not be cited as guest-side evidence. I am not withdrawing the packet's defect: it survives, and this STRENGTHENS it — a verdict read off a disk file and reported as live is worse, not better, when a unit test can author that file with ever_ready 1. SHARPEST FORM OF IT, measured tonight on this host: the file asserted 'ever_ready 1 / last_phase ready' while every one of three --with-metrics/--exec-guest boots of v56.9.11.1 on this same host returned wait_phase_ready timeout after 300s, phase never reached Ready (see 1084-x8ya event of 2026-09-12). The file claimed a readiness the host demonstrably never achieved, and nothing in the read path could tell. CROSS-REF: this also contaminates any macOS crashloop.state evidence on a DEVELOPMENT host generally, including the pre-existing crashloop.state I destroyed in this cycle's smoke §2 and noted on the v56.9.11.1 report — that file's provenance was never established and now cannot be assumed to be guest-side either.

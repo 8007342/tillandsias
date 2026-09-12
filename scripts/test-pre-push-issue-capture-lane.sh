@@ -401,10 +401,31 @@ out="$(run_guard)"
 # environment reason. What must not happen is the fragment failing
 # QUALIFICATION — being turned away as outside the allowlist — because that is
 # what a regression in this change would look like.
+# ORDER 1124-7f3u ADDED THE THIRD ACCEPTED VERDICT, and the distinction this
+# arm already draws is exactly why it belongs here rather than being a
+# weakening. The arm tests QUALIFICATION — that a plan/index.d fragment is not
+# turned away as outside the allowlist. It accepted two verdicts because those
+# were the only two the lane could reach.
+#
+# There is now a third: when no RUNNABLE plan binary resolves, a
+# fragment-bearing push is refused fail-closed, because yq validates one blob's
+# shape and cannot fold the ledger — which is what the status-loss and
+# fragment-schema checks read. That refusal says "not applicable", the same
+# idiom the lane's older fail-closed path at the top of the function uses.
+#
+# It is NOT a qualification failure: the fragment qualified, and the lane then
+# declined to vouch for what it could not check. Reaching it here is expected
+# whenever this fixture runs under an unrunnable binary (1060-6fx7 routes that
+# into the absent path deliberately), which is precisely how
+# test-plan-binary-runnability-precondition.sh drives it. Folding it into `bad`
+# would pin the pre-1124 behaviour — a fragment push passing with a note saying
+# nobody looked — as the contract.
 if grep -q "is outside plan/index.d/" <<<"$out"; then
     bad "CONTROL BROKEN — a plan/index.d fragment no longer qualifies for the lane"
 elif grep -qE 'plan-only lane clean|plan-only lane: validation FAILED' <<<"$out"; then
     ok "CONTROL: a plain plan/index.d fragment still qualifies for the lane"
+elif grep -q 'no runnable tillandsias-plan resolved\|does NOT run here' <<<"$out"; then
+    ok "CONTROL: the fragment qualified; the lane refused fail-closed for a missing fold validator (1124-7f3u)"
 else
     bad "CONTROL: unexpected verdict for a plain fragment: $(grep -m1 'not applicable\|FAILED' <<<"$out")"
 fi

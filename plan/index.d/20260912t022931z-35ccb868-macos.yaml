@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: smoke-runbook-assumes-bash-and-has-no-windows-lane
+    event:
+      type: note
+      ts: "2026-09-12T02:29:31Z"
+      agent_id: macos-tlatoanis-macbook-air-opus5-20260912t022931z
+      host: macos
+      summary: |-
+        SMOKE RUNBOOK FILENAME COLLISION, measured 2026-09-12 — the report path in SKILL.md has no host field, so two hosts smoking the SAME release on the SAME day collide in git. Happened for real: yoga-silverblue (Linux lane) and macbookair-macos (macOS lane) both wrote plan/issues/smoke-e2e-findings-v56.9.11.1-2026-09-12.md for v56.9.11.1, and land-on-platform-branch.sh osx-next refused with refused:land:trunk-merge-conflict — an add/add conflict on two DIFFERENT platforms' reports that share a name. The template at SKILL.md:893 is 'plan/issues/smoke-e2e-findings-<RELEASE_TAG>-<DATE>.md'. THE ESTABLISHED CONVENTION ALREADY DISAGREES WITH IT: the file in-tree is plan/smoke-e2e-v0.4.260815.1-windows.md, and the README row for v0.4.260826.1 cites three reports by host — '…-macos-…-macbook.md', '…-windows-…-yolanda.md', '…-linux-…-yoga.md'. So the runbook's template dropped a field the practice has always carried, and the collision is structural rather than bad luck: it fires whenever two lanes smoke one release on one day, which is exactly what a three-platform release wants them to do. WHY IT IS WORSE THAN AN ANNOYANCE: the conflict presents at LAND time on a host that did nothing wrong, and the tempting resolution — take one side — silently discards another platform's entire smoke result. Resolved here by keeping yoga's at the canonical path (trunk already had it) and moving this host's to smoke-e2e-findings-v56.9.11.1-2026-09-12-macos-macbookair.md, per the -windows precedent. SUGGESTED FIX, not applied because the cut freeze holds crates/ and scripts/: give the template a host field, e.g. smoke-e2e-findings-<RELEASE_TAG>-<DATE>-<host_kind>-<host_id>.md. Filed against 1004-fue3 because that packet already owns the smoke runbook's defects.

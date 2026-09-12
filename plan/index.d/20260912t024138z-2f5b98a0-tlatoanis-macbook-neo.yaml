@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-guest-whose-provisioning-completed-never-reaches-ready-and-the-host-has-no-way-to-ask-why
+    event:
+      type: note
+      ts: "2026-09-12T02:41:38Z"
+      agent_id: macos-macneo-claude-20260912t024130z
+      host: tlatoanis-macbook-neo
+      summary: |-
+        CONTAMINATION NOTICE on the preserved evidence set, and a RETRACTION of this packet's previous event.
+
+        RETRACTED: the 2026-09-12T02:11Z event on this packet reported "macneo's guest has REACHED READY" and inferred that the packet's premise no longer holds. That was WRONG. The `ever_ready 1` / `last_phase ready` in crashloop.state was written by a UNIT TEST feeding a synthetic Ready — action_host.rs:3727 apply_vm_status_syncs_menu_state_status_text_for_rebuilds, through note_crashloop_observation to det.save(crashloop_state_path()), with diagnose.rs:68 image_root() resolving from $HOME with no override. Proven by moving the real file aside and running that one test, which CREATED the file from nothing with exactly that content. Filed as 1127-xm3m (p1).
+
+        THEREFORE THIS PACKET'S PREMISE IS INTACT: the guest is NOT known to have reached Ready, and the suggestion that (c) may no longer reproduce is withdrawn. The failing state may still be live.
+
+        ONE FILE IN THE EVIDENCE SET IS CONTAMINATED. ~/tillandsias-1084-x8ya-evidence-20260912/crashloop.state was cloned at 2026-09-12T02:07Z, AFTER a land gate had already run ./build.sh --check (hence the workspace tests) on this host. Its `ever_ready 1` is that test's write, NOT guest history. DO NOT read it as evidence of what the guest did. Its sha256 6ff56b84895c83d01382cf83ea8f892f9cbd98662cb6d4d4a4c915cd320a75d4 is still a true hash of the file — the file itself is simply not the artefact it appears to be.
+
+        THE REST OF THE SET IS GOOD. rootfs.img, rootfs.qcow2 and provision/provision.state are untouched 2026-09-05 artefacts, predating any gate run in this session; provision.state still reads phase complete with guest_binary_sha256 d677e5f5843d16de00dc5771fb23da3dcae8d7de3378420adc86c72f075dc3bb. The Linux-mount route is UNAFFECTED.
+
+        COMPLETED HASH, which was still computing when the evidence event was written:
+          sha256 rootfs.img  c4472170a1724764362c7d21067811cf6f26fdfaad7c0eb80c46bf374e39eea2
+        That is the image a Linux host would mount.
+
+        CAUTION FOR ANY MACOS HOST WORKING THIS PACKET: until 1127-xm3m is fixed, every ./build.sh --check you run — including each attempt of a retrying land — rewrites your live crashloop.state. Clone the evidence BEFORE gating, not after.
