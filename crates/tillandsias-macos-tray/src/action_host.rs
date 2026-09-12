@@ -3679,6 +3679,14 @@ mod tests {
     /// queued to the (never-running-in-tests) main queue — harmless.
     #[test]
     fn apply_vm_status_updates_menu_state_and_reports_rebuild_on_change() {
+        // Order 1127-xm3m, same reason as the sibling test below: every
+        // apply_vm_status call reaches the crash-loop save. This one was
+        // initially missed because a second-granularity mtime comparison
+        // showed "unchanged" when both writes landed inside one second — a
+        // false negative that only a delete-and-check-existence probe caught.
+        let tmp = tempfile::tempdir().expect("temp image root");
+        let _root = crate::diagnose::ImageRootGuard::set(tmp.path().to_path_buf());
+
         let last_logged = Arc::new(Mutex::new(None));
         let menu_state = Arc::new(Mutex::new(
             tillandsias_host_shell::menu_state::MenuState::initial(),
@@ -3725,6 +3733,14 @@ mod tests {
     /// "Booting…" forever while stderr says Ready.
     #[test]
     fn apply_vm_status_syncs_menu_state_status_text_for_rebuilds() {
+        // Order 1127-xm3m: apply_vm_status reaches note_crashloop_observation,
+        // which SAVES crash-loop state. Without this guard that save lands in
+        // the developer's own ~/Library/Application Support/tillandsias/
+        // crashloop.state — this test wrote `ever_ready 1 / last_phase ready`
+        // over live guest history on every `./build.sh --check`.
+        let tmp = tempfile::tempdir().expect("temp image root");
+        let _root = crate::diagnose::ImageRootGuard::set(tmp.path().to_path_buf());
+
         let last_logged = Arc::new(Mutex::new(None));
         let menu_state = Arc::new(Mutex::new(
             tillandsias_host_shell::menu_state::MenuState::initial(),
