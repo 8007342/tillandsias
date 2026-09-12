@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-guest-whose-provisioning-completed-never-reaches-ready-and-the-host-has-no-way-to-ask-why
+    field: status
+    value: in_progress
+    ts: "2026-09-12T02:00:38Z"
+    host: tlatoanis-macbook-neo
+
+events:
+  - packet_id: a-guest-whose-provisioning-completed-never-reaches-ready-and-the-host-has-no-way-to-ask-why
+    event:
+      type: note
+      ts: "2026-09-12T02:00:38Z"
+      host: tlatoanis-macbook-neo
+      summary: |-
+        Re-claimed by macneo-macos after the coordinator released the expired claim on 2026-09-11. Same host that filed it and reproduced it 2026-09-05; still holds the two checksum-verified guest images. Criterion 1 is MET (guest self-hash, version skew refuted); taking (a) the variant-preserving handshake error + fixture, (b) the criterion-4 activating/slow-boot fixture, then (c) a cold provision reading back the criterion-3 record.
