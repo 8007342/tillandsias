@@ -95,31 +95,99 @@ rm -rf "$D" "$SD"
 # ── 6. ORDER 1098-q7bk: the BARE invocation, which no arm above exercises. ──
 # Every arm above supplies TILLANDSIAS_CYCLE_HOLDER_PID, so the line an agent
 # actually types -- `bash scripts/cycle-checkout-lock.sh acquire` -- could not
-# make this fixture red. The default anchor is this script's own $PPID, which
-# for an agent invocation is the tool-call wrapper shell: dead within seconds,
-# so the next acquire stale-reclaims and two lanes share one checkout with
-# `ok:checkout-lock:acquired` printed to both.
+# make this fixture red. The unverified fallback anchors on this script's own
+# $PPID, which for an agent invocation is the tool-call wrapper shell: dead
+# within seconds, so the next acquire stale-reclaims and two lanes share one
+# checkout while the verdict told the caller it had acquired.
+#
+# `env -u CLAUDE_PID` IS MANDATORY, and is the reason this arm is not a
+# one-liner. Since 1091-zh6d the script anchors on CLAUDE_PID when present
+# (cycle-checkout-lock.sh anchor chain), so an arm that drops only HOLDER_PID
+# is green under a claude harness and red under cron/codex/opencode -- a
+# fixture whose verdict depends on who runs it. Both variables come out.
 #
 # A fixture has no tool-call boundary to cross, so the boundary is SIMULATED by
 # a wrapper process that acquires and then exits. Without that simulation the
 # defect is invisible in-process: the acquiring shell is still alive when the
 # assertion runs and the lock looks healthy.
+#
+# THE PREDICATE IS A DISJUNCTION, and deliberately so. The packet's next_action
+# asks for `status` to answer skip:overlap-lock-held:*, but that is UNREACHABLE
+# under the fix this arm pins: a refusal takes no lock, so status correctly
+# answers free. Only MOVING the anchor could satisfy it literally, and that is
+# out of scope for a measured reason (dir_lock_live's 3h over-hold on a session
+# harness, 2026-08-26). So the two acceptable outcomes are: REFUSED (the caller
+# is told it does not hold the checkout), or ACQUIRED AND STILL HELD BY A LIVE
+# HOLDER. `acquired` over a holder that died with the wrapper is the defect,
+# and is the only failure.
+bare_boundary_run() {
+    # Echoes the last verdict line, then the recorded holder pid, one per line.
+    local lockscript="$1"
+    local dir="$2"
+    local w="$dir/w.sh"
+    printf '#!/usr/bin/env bash\ncd "%s" && bash "%s" acquire --lane bare --source s\n' \
+        "$dir" "$lockscript" > "$w"
+    env -u TILLANDSIAS_CYCLE_HOLDER_PID -u CLAUDE_PID bash "$w" 2>/dev/null | tail -1
+    cat "$dir/.git/tillandsias-cycle.lock.d/pid" 2>/dev/null || true
+}
+
 D="$(scratch)"
-W="$D/w.sh"
-printf '#!/usr/bin/env bash\ncd "%s" && bash "%s" acquire --lane bare --source s\n' "$D" "$LOCKSH" > "$W"
-out="$(env -u TILLANDSIAS_CYCLE_HOLDER_PID bash "$W" 2>/dev/null | tail -1)"
+out="$(bare_boundary_run "$LOCKSH" "$D" | sed -n 1p)"
+held="$(cat "$D/.git/tillandsias-cycle.lock.d/pid" 2>/dev/null || true)"
 case "$out" in
     refused:checkout-lock:no-holder-pid)
-        ok "bare acquire refuses instead of anchoring to a pid that dies" ;;
-    ok:checkout-lock:acquired:*)
-        held="$(cat "$D/.git/tillandsias-cycle.lock.d/pid" 2>/dev/null)"
+        ok "bare acquire refuses instead of anchoring to a pid that dies with the tool call" ;;
+    ok:checkout-lock:acquired:*|warn:checkout-lock:acquired-unverified-anchor:*)
         if [ -n "$held" ] && kill -0 "$held" 2>/dev/null; then
-            ok "bare acquire produced a lock with a live holder"
+            ok "bare acquire produced a lock whose holder survived the boundary"
         else
-            bad "bare acquire returned '$out' but holder $held is already dead -- the next acquire stale-reclaims: two lanes, one checkout"
+            bad "bare acquire returned '$out' but holder ${held:-<none>} is already dead -- the next acquire stale-reclaims: two lanes, one checkout"
         fi ;;
     *) bad "bare acquire: unexpected verdict: $out" ;;
 esac
+
+# ── 7. MUTATION CONTROL for arm 6: the PRE-1098-q7bk script must FAIL it. ────
+# Arm 6 passes trivially once the refusal is present, so this arm strips the
+# refusal back out of a scratch copy and re-runs arm 6's exact scenario against
+# the mutant, proving arm 6 has teeth rather than passing by luck. Same shape
+# as the mutation arms in scripts/test-check-credential-channel.sh (876-exg2 /
+# 877-mynm).
+#
+# NOTE THE INVERTED POLARITY. 876-exg2's mutant fails LOUDLY, so its arm can
+# assert on a verdict string. This defect fails QUIETLY: the mutant prints
+# warn:...acquired-unverified-anchor -- a verdict that reads like a caveat, not
+# a failure -- and the lock is gone anyway. So the assertion here is not on the
+# verdict but on the HOLDER BEING DEAD once the wrapper exits, which is exactly
+# arm 6's own predicate. The two arms share one predicate, so this really does
+# measure the thing arm 6 measures.
+MUT="$(scratch)/pre-1098-lock.sh"
+awk '/# ORDER 1098-q7bk — REFUSE an UNVERIFIED anchor/{skip=1}
+     skip && /^        # 1\. The atomic claim among prompt lanes\./{skip=0}
+     skip{next} {print}' "$LOCKSH" > "$MUT"
+if grep -q 'refused:checkout-lock:no-holder-pid' "$MUT"; then
+    bad "MUTATION: the strip left the refusal in place -- the awk terminator drifted; arm 7 proves nothing"
+elif ! grep -q 'The atomic claim among prompt lanes' "$MUT"; then
+    bad "MUTATION: the strip removed too much -- the acquire body is gone; arm 7 proves nothing"
+elif ! bash -n "$MUT" 2>/dev/null; then
+    bad "MUTATION: the stripped script does not parse; arm 7 proves nothing"
+else
+    MD="$(scratch)"
+    mout="$(bare_boundary_run "$MUT" "$MD" | sed -n 1p)"
+    mheld="$(cat "$MD/.git/tillandsias-cycle.lock.d/pid" 2>/dev/null || true)"
+    case "$mout" in
+        refused:checkout-lock:no-holder-pid)
+            bad "MUTATION: the pre-fix script still refused -- the refusal is not what arm 6 measures" ;;
+        ok:checkout-lock:acquired:*|warn:checkout-lock:acquired-unverified-anchor:*)
+            if [ -n "$mheld" ] && kill -0 "$mheld" 2>/dev/null; then
+                bad "MUTATION: the pre-fix script acquired with a LIVE holder $mheld -- arm 6 would pass against the mutant, so it has no teeth"
+            else
+                ok "MUTATION: the pre-fix script acquires over dead holder ${mheld:-<none>} -- arm 6 is red without the fix (pre-fix result: FAILS)"
+            fi ;;
+        *) bad "MUTATION: unexpected verdict from the pre-fix script: $mout" ;;
+    esac
+    rm -rf "$MD"
+fi
+rm -rf "$D"
 
 if [ "$fail" -eq 0 ]; then
     echo "ok:checkout-lock-fixture:all"
