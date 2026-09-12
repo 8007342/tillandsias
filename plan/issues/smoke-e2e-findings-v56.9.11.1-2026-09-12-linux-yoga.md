@@ -1,10 +1,13 @@
 # Curl-install smoke — v56.9.11.1 — yoga-silverblue (Fedora Silverblue, immutable; Vulkan gfx1152 GPU lane, NPU blocked)
 
-RESULT: **PASS through §4b** on the published Linux artifact. Steps 1, 2, 3 and
-4b all green with assertions, not observations. §4 (forge lane) launched
-correctly and ran; this host could not supervise it to completion — that is a
-host-resource limit, recorded below and on 1026-ps4n, and **not** a defect in
-the release.
+RESULT: **FULL PASS** on the published Linux artifact — §1, §2, §3, §4, §4b and
+§4c all green, every one by assertion rather than observation.
+
+**§4 COMPLETED**, after an earlier supervisor loss that looked fatal and was
+not: `opencode_exit=0`, 84m46s (`smoke-forge-lane` duration_ms=5086635, exit 0,
+captured by the on-disk stamp). As of this run, this is the **only completed §4
+in the fleet for v56.9.11.1** — macOS is legitimately NOT APPLICABLE (the forge
+lane is Linux/Podman) and no other Linux lane completed one.
 
 - release under test: `v56.9.11.1` (daily channel)
 - artifact: `https://github.com/8007342/tillandsias/releases/download/v56.9.11.1/tillandsias-linux-x86_64`
@@ -22,15 +25,16 @@ the release.
 | §1 curl-install | PASS | `install_exit=0`; `tillandsias --version` -> `Tillandsias v56.9.11.1`, asserted against `$SMOKE_TAG` |
 | §2 destructive reset | PASS | `reset_exit=0`; `podman ps -aq` / `volume ls -q` / `images -q` all EMPTY — clean room proven, not assumed |
 | §3 init from pristine | PASS | `init_exit=0` on the detached relaunch; vault bootstrapped, 12 policies, AppRoles provisioned, `tillandsias-vault` healthy |
-| §4 forge lane | LAUNCHED, UNSUPERVISED | six enclave containers up + healthy; in-forge agent honored the prompt (`Skill "meta-orchestration"`, then `forge-quick-intro`) |
+| §4 forge lane | **PASS** | `opencode_exit=0`, 84m46s; in-forge agent honored the prompt and ran a full meta-orchestration cycle to MO-FULL attest COMPLETE |
 | §4b egress (order 298) | PASS | `tillandsias-proxy` alive alongside the lane — non-regression confirmed by liveness, not by grepping the teardown trace |
-| §4c final health | NOT TAKEN | deliberately withheld: §4c must be LAST after every mutating step, and the lane was still mutating. A health check taken mid-mutation is the 2026-08-10 incident. |
+| §4c final health | **PASS** | `health_rc=0`; vault `initialized:true,sealed:false`; `tillandsias-proxy` up; lane-scoped containers correctly torn down; `tillandsias --version` still `v56.9.11.1`. Taken LAST, after every mutating step. |
 
 ## Ledger claims (order 380)
 
 Row read at `README.md:114`.
 
 **EXERCISED**
+- the forge lane end to end — §4 ran a complete meta-orchestration cycle inside the enclave: it filed `plan/issues/forge-gate-reset-and-hookspath-findings-2026-09-12.md`, pushed 6 commits through the enclave git mirror, survived two sibling rebase rounds AND the v56.9.12.1 release cut, and finished with MO-FULL attest COMPLETE and a clean worktree.
 - the release installs and self-identifies from a published artifact — §1, exact-tag assertion.
 - a pristine `--init` reaches a healthy enclave — §3, from a provably empty store.
 - forge `/home/forge/src` tmpfs 0777 so the forge clone no longer fails (440cde994) — §4: the forge container came up and the in-forge agent read the checkout and ran skills, which is the clone path working.
@@ -113,13 +117,28 @@ Row read at `README.md:114`.
     agent_id: `linux-yoga-claude-20260912t013000z`
     host: yoga
 
+## Forge-internal findings stream (§4)
+
+Self-filed and self-pushed by the in-forge agent; NOT re-filed here, because
+they are already on origin and duplicating them would fork the record. Its own
+persistence gate confirms nothing was stranded on teardown:
+`scripts/check-forge-findings-persisted.sh` -> `ok:no-findings`.
+
+- `plan/issues/forge-gate-reset-and-hookspath-findings-2026-09-12.md` — three
+  findings, cited by symbol per 881-29me. Finding 1 (fixed in-lane):
+  `test-host-tools.sh` arm 6 ignores the forge openssl carve-out. Finding 2
+  (workaround, durable fix deferred): the product sets a GLOBAL `core.hooksPath`
+  that shadows repo hooks.
+- a per-host transparent-push datapoint appended to 776-jcf3: linux-next
+  `f1f1691cc` pushed THROUGH the enclave mirror, `git ls-remote origin` == local
+  HEAD, converged after two rebase rounds. About a dozen such proofs now exist
+  that a forge cycle's work is not lost on container teardown.
+
 ## Note on what this run does NOT establish
 
-§4c was not taken, so this report does not claim a final clean health state; it
-claims the enclave was healthy at §4b while the lane was up. The forge lane's
-own findings (forge-internal stream) are not captured here because the lane was
-still running when this report was written — `target/smoke-e2e/04-opencode.log`
-is the record and any findings in it belong to a follow-up.
+One transient `error: failed to push some refs` appears at 04-opencode.log:3495;
+the lane recovered and converged (final head `1a25d277c`), so it is recorded as
+an observation, not a finding.
 
 The GPU lane needs its inference image rebuilt before it will place again on
 this host: `podman system reset --force` destroyed the Vulkan/gfx1152 image.
