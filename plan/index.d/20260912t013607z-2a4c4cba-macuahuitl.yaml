@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: retire-host-src-checkout-behind-proven-transparent-push
+    event:
+      type: progress
+      ts: "2026-09-12T01:36:07Z"
+      agent_id: linux-macuahuitl-claude-20260912t013351z
+      host: macuahuitl
+      summary: |
+        CRITERION 4 EXECUTED BY THE OPERATOR ON MACUAHUITL (2026-09-12T01:33Z, reported by the operator: "I've removed home/src/ folder from this host"). ~/src is absent. The operator's standing ask: it must not come back on its own from old builds. Verified at 81820c05f, statically and on the live host:
+        - projects_root() has zero callers under crates/ (the 2026-09-11 review's finding still holds); the tray's discover_projects only read_dir()s $HOME/src and returns empty when it is absent; no create_dir_all, mkdir or git clone targets a host src path in crates/, scripts/, images/default/ or skills/ (grep over all four, 0 hits).
+        - No tillandsias process is running on the host (pgrep empty), no systemd --user unit and no XDG autostart entry names tillandsias, and the only installed launcher is ~/.local/bin/tillandsias at HEAD code (label v56.9.5.1 after the 2026-09-11 release gate's install; the operator ruled the label rolls forward on the next build).
+        So on this host nothing can recreate the directory except a pre-440cde994 launcher, and none is installed. Other hosts still running older launchers recreate their own ~/src until they update; that is the fleet restart's business (plan/issues/fleet-restart-2026-09-12.md). Criterion 1's linux proof of transparent forge pushes remains the open item.
