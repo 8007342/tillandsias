@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: gnu-only-shell-idioms-reach-trunk-green-and-freeze-a-whole-platform-one-host-at-a-time
+    event:
+      type: note
+      ts: "2026-09-12T15:54:30Z"
+      agent_id: macos-tlatoanis-macbook-air-opus5-20260912t155430z
+      host: macos
+      summary: |-
+        DELIVERED, and the build surfaced two findings worth more than the guard itself. Guard: scripts/check-portability-idioms.sh, advisory and counted, wired in build.sh as a _warn that never gates. Fixture: scripts/test-portability-idioms.sh, 15/15. Litmus: litmus:gnuism-advisory-names-the-known-instances, bound and executing in the ci-release suite.
+
+        FINDING 1 - THERE IS A 35-INSTANCE PRE-EXISTING BACKLOG, and it is why the closure had to be restated. The first run named 35 GENUINE portability defects unrelated to 2026-09-12: stat -c x14, sed -i x13, date -d x5, readlink -f x2, sampled and confirmed real (bump-version.sh:158, delegate-outcome.sh:286, ensure-nvidia-cdi.sh:125 are bare GNU-only sed -i with no fallback). The wording "zero on the fixed tree" assumed the night's three were the only ones; they were not, and demanding zero would have made the closure un-passable until an unrelated backlog is cleared. Restated per-instance instead. The 23 silent-degrade / 12 loud-fail split is now a BASELINE: the number should not climb.
+
+        FINDING 2 - FOUR FALSE POSITIVES IN MY OWN GUARD, each caught by reading its output rather than trusting the count, each now a pinned negative control. (a) The stat -f%z then stat -c%s chain in diagnose-macos-provision.sh is a CORRECT BSD-first fallback and the first cut called it a defect. (b) litmus-stdlib.sh, the repo's own GNU/BSD absorption layer, was flagged because its touch -d fallback wraps a backslash continuation; the guard now joins continuations before matching, and flagging the absorption layer for absorbing is the purest false accusation available. (c) A line in help-de.sh reading "rg <muster>" is HELP TEXT, not an invocation. (d) grep -r over skills/ is correct - skills/ is the CANONICAL tree of real files, only the dotted runtime dirs are symlink farms. A FIFTH was in the FIXTURE rather than the guard: my negative control grepped the bare string litmus-stdlib.sh, which appears in every stat -c hit's ADVICE text, so the test mistook its own subject's recommendation for a finding.
+
+        COST: the first cut took 102s by forking grep for every line of every script; a cheap glob pre-filter took it to 6s with byte-identical output. An advisory that slow gets disabled, which is the same end state as never writing it (1009-gccx).
+
+        THREE STRUCTURAL FACTS LEARNED THE HARD WAY, recorded so the next author does not have to. A new litmus must be BOUND in openspec/litmus-bindings.yaml or nothing ever runs it (660-ryhn) - mine was silently never executed until check-litmus-bindings.sh said so. Its steps must live under critical_path, not steps. And each command must be a SINGLE-LINE DOUBLE-QUOTED scalar, which is why the repo's pattern is a thin litmus wrapping a test-*.sh fixture. My first cut was valid YAML, correctly bound, and reported violation:bound-but-unrunnable - a test that looks registered and has never executed.
+
+        TWO PRE-EXISTING macOS FAILURES found while running the suite, NOT caused by this work and confirmed by stashing it: litmus:sigpipe-verdict-pipeline-shape and litmus:tool-dispatch-lib. The first is diagnosed and is this packet's own class one level up: litmus-sigpipe-verdict-pipeline-shape.yaml:40 string-compares the output of wc -l against 1, and BSD wc -l PADS its count, so the comparison sees leading spaces and fails on every macOS host while a numeric -eq would pass. Worth its own line in the idiom set as "string-comparing a wc count". I did not fix it: it is not mine, and the suite is not mine to change mid-claim.

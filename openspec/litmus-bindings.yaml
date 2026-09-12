@@ -146,6 +146,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:tool-materialization
+  - litmus:gnuism-advisory-names-the-known-instances
   - litmus:if-not-pipeline-guard-shape
   - litmus:ci-release-musl-binary-policy
   - litmus:github-actions-budget

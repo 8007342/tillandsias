@@ -1,0 +1,49 @@
+# @trace order:1130-i6xj, spec:ci-release
+#
+# litmus:gnuism-advisory-names-the-known-instances — the closure for 1130-i6xj.
+#
+# THIN BY REQUIREMENT, not by preference: the runner extracts only a
+# single-line double-quoted `command:` scalar, so the assertions live in
+# scripts/test-portability-idioms.sh and this file runs it and reads one line.
+# The first cut wrote block-literal commands, bound cleanly, and was reported
+# `violation:bound-but-unrunnable` — valid YAML, correctly bound, and the
+# runner could not extract a single step (958-b36m). Worth stating because the
+# failure mode is a test that LOOKS registered and has never executed, which is
+# the 660-ryhn class this repo already guards.
+
+spec: ci-release
+name: litmus:gnuism-advisory-names-the-known-instances
+size: quick
+phase: pre-build
+
+description: >
+  Pin scripts/check-portability-idioms.sh: it names each 2026-09-12
+  portability defect on the tree that carried it, names none of those files
+  once fixed, never blocks, stays cheap, and does not repeat any of the four
+  false positives found while building it.
+
+preconditions:
+  - workspace contains scripts/check-portability-idioms.sh and scripts/test-portability-idioms.sh
+
+severity: medium
+
+critical_path:
+  - step: "the fifteen-case fixture passes (both halves + four false-accusation controls + cost)"
+    command: "bash scripts/test-portability-idioms.sh 2>&1 | tail -1 | grep -qx 'PASS: portability idioms (15/15)' && echo 'ok: fixture 15/15'"
+    timeout_ms: 120000
+    expected_behavior: "ok: fixture 15/15"
+
+  - step: "the advisory NEVER blocks — four of the defects it reports each froze a platform"
+    command: "bash scripts/check-portability-idioms.sh >/dev/null 2>&1; test $? -eq 0 && echo 'ok: advisory-exit-0'"
+    timeout_ms: 60000
+    expected_behavior: "ok: advisory-exit-0"
+
+  - step: "the verdict is COUNTED and severity-split, silent-degrade class first"
+    command: "bash scripts/check-portability-idioms.sh 2>&1 | head -1 | grep -qE '^portability-idioms: silent-degrade=[0-9]+ loud-fail=[0-9]+$' && echo 'ok: counted-verdict'"
+    timeout_ms: 60000
+    expected_behavior: "ok: counted-verdict"
+
+  - step: "it states what it CANNOT see, so the count is never read as a portability verdict"
+    command: "bash scripts/check-portability-idioms.sh 2>&1 | grep -q 'RUNTIME facts this scan cannot see' && echo 'ok: limits-stated'"
+    timeout_ms: 60000
+    expected_behavior: "ok: limits-stated"
