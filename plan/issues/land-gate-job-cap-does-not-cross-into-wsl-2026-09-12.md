@@ -86,3 +86,46 @@ gate and extend `WSLENV` so it crosses.
   (and per coordinator also 1126-w8rq); not duplicated here.
 - No `scripts/` edit is made by this packet — it was filed during a release cut
   freeze on authored `crates/`/`scripts/` changes reaching linux-next.
+
+---
+
+## AMENDMENT 2026-09-12 — the cap is necessary but NOT sufficient
+
+A second land on this host was OOM-killed **with the cap crossing correctly**.
+The orphan process left behind names where it died:
+
+```
+cargo test --workspace --no-fail-fast --manifest-path .../Cargo.toml -- --test-threads=1
+```
+
+The gate died in the **test** phase, not the compile phase. `CARGO_BUILD_JOBS`
+is a compile-parallelism cap and has no authority over test-binary residency;
+tests were already serial at `--test-threads=1`. This is consistent with the
+earlier finding that compiling is only ~14% of a green floor gate and the test
+phase is the freeze.
+
+**So the fix proposed above would have been believed and would not have
+worked.** The honest claim is two claims:
+
+1. The cap must cross into WSL — real, fixes the compile phase, measured.
+2. The workspace test phase needs its own floor-tier memory story — **open**.
+   I do not know the right lever and will not guess one. It wants measurement:
+   peak RSS per test binary, whether any single test dominates, and whether the
+   harness kill threshold is reached by one binary or by their sum.
+
+Also measured, and relevant to any budget built on this host: **WSL is capped at
+~7942 MB**, half the 16 GB box. The gate's real budget is 8 GB, not 16, and
+`ollama serve` is resident in the other locus throughout.
+
+A further operational note: the orphaned `cargo test` **survived the harness
+kill** and continued holding ~120 MB. Clear stray `cargo`/`rustc` in the distro
+before retrying a killed land, or the retry starts already short.
+
+Neither kill damaged the repo: origin untouched both times, tree clean, no
+merge or rebase in progress, because the script commits the mandated
+`origin/linux-next` merge before gating.
+
+### Additional exit criterion
+
+- "a floor-tier land survives the workspace TEST phase, not merely the compile
+  phase; pre-fix result: FAILS (killed with the cap correctly applied)"
