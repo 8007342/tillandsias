@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @trace order:1003-v3dc
+# @trace order:1003-v3dc, order:1129-3yv7
 #
 # test-spec-index-durable-tier-demotion.sh — pin the two properties 1003-v3dc
 # fixes, and pin them on the SHARED BLOCK rather than on a copy of it.
@@ -63,6 +63,7 @@ _run() {
 }
 
 fails=0
+skips=0
 _expect() {
     _name="$1"; _got="$2"; _pred="$3"; _why="$4"
     if eval "$_pred"; then echo "PASS  $_name"; else
@@ -82,6 +83,35 @@ _expect "reachable volume wins rung 3 with no demotion" "$out" \
 # ── 2. THE REGRESSION: volume podman NAMES but we cannot stat (real EACCES) ──
 # A 000 parent makes stat of the child fail with EACCES while the volume very
 # much exists — precisely the rootless-podman shape.
+# ORDER 1129-3yv7. THIS ARM CANNOT BE CONSTRUCTED AS ROOT, so it says
+# so rather than failing the tree. `chmod 000` does not constrain euid 0: root
+# traverses the denied parent, the resolver legitimately finds the volume and
+# reports no demotion, and both assertions below fail for a reason that has
+# nothing to do with the behaviour under test. Measured on yolanda 2026-09-12
+# inside the tillandsias-build distro: `whoami=root euid=0` and a chmod-000
+# parent still stats its child.
+#
+# This matters on exactly one platform: the Windows gate re-execs as
+# `wsl.exe -d tillandsias-build -u root ... ./build.sh --check`, so EVERY
+# Windows gate runs euid 0 and these two arms failed unconditionally there.
+# The test dates from dcc50ff27 (2026-09-04) but only began running in
+# --check when 1087-h2z9 wired it as gate-steps.d/180-1087-h2z9.step
+# (cf3b5c68b, 2026-09-11), measured green on Linux — where the gate is not
+# root. So it is a wiring-time regression for the Windows lane, not a
+# 09-04 one.
+#
+# The idiom is the project's own, stated in
+# test-tray-asset-placeholder-refused.sh: a probe that cannot run its own arm
+# must say so rather than fail the tree. The arms still RUN for every non-root
+# host, which is where the rootless-podman shape 1003-v3dc fixes actually
+# occurs, so the teeth are intact exactly where the condition is real.
+if [ "$(id -u)" -eq 0 ]; then
+    echo "SKIP  unreadable volume is a DEMOTION, not an absence"
+    echo "        chmod 000 does not constrain root; the not-permitted condition cannot be constructed"
+    echo "SKIP  the demotion reason names the volume"
+    echo "        chmod 000 does not constrain root; the not-permitted condition cannot be constructed"
+    skips=$((skips+2))
+else
 denied="$work/denied"; mkdir -p "$denied/vol"; chmod 000 "$denied"
 out="$(_run "echo '$denied/vol'")"
 root="${out%%|*}"; reason="$(printf '%s' "$out" | cut -d'|' -f3)"
@@ -92,6 +122,7 @@ _expect "the demotion reason names the volume" "$out" \
     'case "$reason" in *not-permitted*testvol*) true;; *) false;; esac' \
     "expected a reason mentioning not-permitted and the volume name"
 chmod 755 "$denied"
+fi
 
 # ── 3. Volume genuinely ABSENT: fall through QUIETLY, no reason ──────────────
 # Reporting this as a demotion would be a new defect: a host with no volume is
@@ -119,8 +150,15 @@ _expect "resolver emits root, serving AND reason" "$out" \
     '[ "$n" -eq 3 ]' \
     "expected 3 fields; a missing third line silently disables demotion reporting"
 
+# The unskipped verdict keeps its exact original token, so a non-root host's
+# line is byte-identical to what this test has always emitted. A host that
+# skipped an arm must never be able to print the same line as one that ran it.
 if [ "$fails" -eq 0 ]; then
-    echo "ok:test-spec-index-durable-tier-demotion:7-passed"
+    if [ "$skips" -eq 0 ]; then
+        echo "ok:test-spec-index-durable-tier-demotion:7-passed"
+    else
+        echo "ok:test-spec-index-durable-tier-demotion:$((7-skips))-passed:${skips}-skipped-root"
+    fi
     exit 0
 fi
 echo "fail:test-spec-index-durable-tier-demotion:${fails}-failed"

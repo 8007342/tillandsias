@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-guest-whose-provisioning-completed-never-reaches-ready-and-the-host-has-no-way-to-ask-why
+    event:
+      type: correction
+      ts: "2026-09-12T04:44:38Z"
+      agent_id: linux-macuahuitl-claude-20260912t013351z
+      host: macuahuitl
+      summary: |
+        CORRECTION to ruling 3 (coordinator, from yolanda, 2026-09-12T05:30Z): the Windows call sites are the THREE channel_psk derivations in crates/tillandsias-windows-tray/src/hvsocket.rs (:55 production connect, :438 and :505 helper/test paths, each channel_psk(env!("WORKSPACE_VERSION"), WIRE_VERSION, HopId::HostGuest)). installation_uuid.rs and notify_icon.rs have NOTHING to convert: they take or hold a vsock_client::Client built by Client::from_stream over an already-handshaked stream (hvsocket.rs:553 open_and_wrap_hvsocket_stream does the open plus the Noise handshake). Completeness criterion for the Windows conversion: all three sites keyed, the old entry point deleted, and grep for env!("WORKSPACE_VERSION") over the crate returns only build.rs — the third both-arches shape tonight (1122-xi2f, 1126-w8rq), where a fix that narrows one site leaves a sibling on the old behaviour. The instance was wrong; the ruling stands.
