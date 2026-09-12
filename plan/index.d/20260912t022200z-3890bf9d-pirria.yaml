@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-checkout-locks-bare-invocation-is-the-line-agents-type-and-no-fixture-can-make-it-red
+    event:
+      type: note
+      ts: "2026-09-12T02:22:00Z"
+      agent_id: linux-pirria-claude-20260912t022150z
+      host: pirria
+      summary: |-
+        CLAIMED by pirria-cachyos 2026-09-12T02:21Z, after the 2026-09-11 fleet rate-limit restart. Coordinator macuahuitl offered the packet; this claim is pushed BEFORE the work, closing the §3 deviation recorded in the 2026-09-06 claim event.
+
+        SALVAGE: item 7 is answered — pirria's local draft SURVIVED and did not need re-implementing. It was in this host's `git stash` as stash@{0} ("On linux-next: 1098-q7bk work", 2026-09-05T23:57:58-0700, base 1b40b8929). The reflog shows why it never pushed: `reset: moving to HEAD` landed ONE SECOND after the stash and the session ended there. Worth a sentence for the next host: a clean working tree is not proof a draft is gone — check `git stash list` and `git reflog` before concluding it is. Preserved verbatim on its original base as commit 09535a607 on branch work/1098-q7bk.
+
+        The draft contains the fixture arm AND a bare-acquire refusal. It does NOT contain the PID-1 mutant control the 1102-e4tk fragment describes; that is not on this host in any dangling object (all seven checked are pre-rebase duplicates of landed work, none from 09-06). Per coordinator, 1102-e4tk stays a separate packet and is not folded in here.
+
+        OPTION CHOSEN, per item 3: (a) — a minimal fix that refuses on an unverified anchor, landed together with the arm, so no host ever sees a red instant litmus (item 4 avoided rather than parked). yoga's arm 6 in scripts/test-cycle-lock-attested-release.sh changes in the SAME commit from `warn:checkout-lock:acquired-unverified-anchor:*` to `refused:checkout-lock:no-holder-pid`, exactly as item 3(a) requires; its arms 7 and 8 (CLAUDE_PID-only and explicit-recipe controls) stay untouched and green. Coordinated with macuahuitl, who is notifying yoga.
+
+        PRE-FIX MEASUREMENT recorded now, against PRISTINE origin/linux-next (git show origin/linux-next:scripts/cycle-checkout-lock.sh, so the draft is not in the picture), bare acquire in a subshell that then exits:
+            warn:checkout-lock:acquired-unverified-anchor:prompt:134628
+            recorded holder pid 134628 -> DEAD once the subshell exited
+            status from a fresh subshell -> ok:checkout-lock:free
+        The lock evaporates across the boundary on today's code. The criterion has teeth.
+
+        TWO PREMISE CORRECTIONS for the record, both load-bearing for whoever reads this next:
+        1. Item 2's literal assertion is UNREACHABLE under option (a). If the acquire refuses, no lock exists, so `status` answers ok:checkout-lock:free — never skip:overlap-lock-held:*. Only moving the anchor could satisfy item 2 as written, and item 3 puts that out of scope. The arm's predicate is therefore the DISJUNCTION: refused, OR acquired-and-held-by-a-live-holder. "Acquired + evaporated" is the only failure. A reader who tries to satisfy item 2 literally will reach for the anchor, which is the trap this packet exists to avoid.
+        2. The salvaged draft's own comment predates yoga's 25ec242dc (1091-zh6d) and claims the bare path prints a plain ok:checkout-lock:acquired. Trunk now prints warn:*. The draft's comment is being rewritten against today's code before landing.
+
+        Item 1's mandatory `env -u CLAUDE_PID` confirmed necessary and missing from the salvaged draft: since 25ec242dc the script anchors on CLAUDE_PID (cycle-checkout-lock.sh:101-102), so an arm that drops only HOLDER_PID is green under a claude harness and red under cron/codex/opencode. Being fixed in the arm.
+
+        CODE LAND IS HELD at coordinator request while the release head is re-gated on b026372ff; this claim is plan-only. Items 5 (pid_is_self_or_ancestor tri-state) and 6 (premise #1 correction) will be honoured in the closing note.
