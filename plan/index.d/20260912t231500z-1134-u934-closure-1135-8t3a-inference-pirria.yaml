@@ -1,0 +1,178 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by pirria-cachyos 2026-09-12: the 1134-u934 closure, and the sibling
+# the packet's own next_action step 4 told whoever fixed it to go and check.
+packets:
+  - packet_id: the-inference-entrypoint-waits-on-ollama-with-no-trap-so-it-is-the-same-pid-1-shell-that-never-forwards-sigterm
+    order: 1135-8t3a
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [runtime, podman, inference, shutdown]
+    estimated_hours: 1
+    depends_on: []
+    verifiable_closure: |
+      `TILLANDSIAS_VAULT_CONTAINER=tillandsias-inference bash
+      scripts/test-vault-shutdown-forwards-sigterm.sh` — the fixture written
+      for 1134-u934 takes the container name from the environment precisely so
+      the sibling images can be measured with the SAME instrument rather than
+      a second one that drifts. It asserts elapsed under half the declared
+      grace AND ExitCode 0, and exits 3 (could-not-run) on a host with no
+      provisioned enclave.
+
+      NOT YET MEASURED on tillandsias-inference, and that is deliberate: this
+      host's inference container is not running, so a claim either way would be
+      inference from the script's text — the exact mistake 1134-u934 warned
+      about. Whoever claims this MEASURES FIRST (the fixture is RED or it is
+      not this bug) and files the elapsed/exit pair either way.
+    owned_files:
+      - images/inference/entrypoint.sh
+    title: |
+      READ FROM THE SOURCE, NOT MEASURED: images/inference/entrypoint.sh ends in a bare `wait $OLLAMA_PID` with no trap anywhere in the file — the same PID-1-shell-that-forwards-nothing shape as 1134-u934, so `podman stop` on tillandsias-inference is expected to burn its full grace and exit 137
+    context: |
+      FOUND by pirria 2026-09-12 while closing 1134-u934, whose next_action
+      step 4 says in as many words: "Check the sibling images. proxy exits 0 so
+      it is likely fine, but git/inference/forge were not examined here and may
+      share the shape." This is that check, and it is recorded as its own row
+      rather than folded into the vault fix because it is a DIFFERENT image
+      with a different owner and, unlike the vault finding, it is NOT MEASURED.
+
+      THE SWEEP, so the negative results are on the record too:
+        images/proxy/entrypoint.sh    exec squid-supervisor   — exec, fine
+        images/router/entrypoint.sh   exec caddy              — exec, fine
+        images/web/entrypoint.sh      exec httpd              — exec, fine
+        images/default/entrypoint*.sh exec <agent>            — exec, fine
+        images/git/entrypoint.sh      trap ... EXIT/SIGTERM/SIGINT at :405-406
+                                                              — traps, fine
+        images/inference/entrypoint.sh  `ollama serve &` :442,
+                                        `wait $OLLAMA_PID` :728,
+                                        `grep -c trap` = 0   — THIS ROW
+
+      ONE DIFFERENCE FROM 1134-u934 THAT MATTERS, and it changes the fix.
+      inference launches `ollama serve &` as a DIRECT background child, not as
+      a backgrounded pipeline, so `$!` there really is ollama's pid. The second
+      defect of 1134-u934 (a `$!` that held tee's pid) is ABSENT here. What is
+      missing is only the trap — and `set -e` is active from line 2, so the
+      third defect of 1134-u934 applies verbatim: a bare `wait` interrupted by
+      a trapped signal returns 143 and `set -e` exits the shell at 143 before
+      ollama has finished. A fix that adds the trap and leaves the bare `wait`
+      swaps a 137 for a 143.
+
+      WHY p2 AND NOT p1. Vault was p1 because it is a sealed secret store. The
+      inference container serves models from a read-mostly store and holds no
+      secret material of its own, so an unclean kill costs the grace period and
+      an unclean model-file close, not a credential. It is the same defect at a
+      lower blast radius.
+
+      NOT ESTABLISHED: that the stop actually stalls. The container is not
+      running on this host and was not started to find out — see the closure.
+    next_action: |
+      1. MEASURE FIRST on a host with a running tillandsias-inference:
+         `TILLANDSIAS_VAULT_CONTAINER=tillandsias-inference bash
+         scripts/test-vault-shutdown-forwards-sigterm.sh`. Record elapsed and
+         ExitCode whatever they are. If it is green, close this row as
+         not-reproduced and say so — that is a result, not a failed claim.
+      2. If red: add `trap` forwarding SIGTERM to $OLLAMA_PID, and fix the bare
+         `wait` in the same edit — `wait "$OLLAMA_PID" || rc=$?`, then wait
+         again until the pid is gone. images/vault/entrypoint.sh carries the
+         worked form and the reasoning inline.
+      3. Do NOT copy vault's process-substitution change here. It exists to
+         make $! the server's pid after a pipeline; inference has no pipeline
+         and does not need it.
+events:
+  - packet_id: the-vault-entrypoint-traps-no-signals-so-a-sealed-secret-store-is-sigkilled-after-a-30s-stall-on-every-single-shutdown
+    event:
+      type: claimed
+      ts: "2026-09-12T23:14:00Z"
+      agent_id: "linux-pirria-claude-20260912t022150z"
+      host: pirria
+      summary: |
+        Claimed by pirria, the host that filed it and the host that can
+        reproduce it — a running enclave is the instrument this closure needs.
+  - packet_id: the-vault-entrypoint-traps-no-signals-so-a-sealed-secret-store-is-sigkilled-after-a-30s-stall-on-every-single-shutdown
+    event:
+      type: completed
+      ts: "2026-09-12T23:14:30Z"
+      agent_id: "linux-pirria-claude-20260912t022150z"
+      host: pirria
+      summary: |
+        FIXED in images/vault/entrypoint.sh, with the closure the packet named
+        MEASURED RED then GREEN on pirria against real containers.
+
+        EVIDENCE, both halves, same instrument
+        (scripts/test-vault-shutdown-forwards-sigterm.sh):
+
+          RED, pre-fix image (localhost/tillandsias-vault:sha256-be8031931d,
+          the image the running enclave was on):
+            measured: elapsed=30s exit_code=137 oom_killed=false grace=30s
+            fixture_rc=1
+          GREEN, post-fix image (localhost/tillandsias-vault:f9ab7f8d9d0d):
+            measured: elapsed=1s exit_code=0 oom_killed=false grace=30s
+            fixture_rc=0
+
+        30s/137 -> 1s/0. The container's own log carries the forwarded signal
+        and the seal, which is what distinguishes this from a container that
+        merely died faster:
+            [vault-entrypoint] received termination signal; forwarding to vault (pid 10)
+            ==> Vault shutdown triggered
+            core: marked as sealed
+            core: vault is sealed
+            [vault-entrypoint] vault exited after a forwarded termination signal (rc=0); reporting a clean shutdown
+        `pid 10` is the assertion that the second defect is gone: the process
+        tree is `1 bash / 10 vault / 11 tee`, so a trap forwarding to tee would
+        have printed 11 and changed nothing.
+
+        THREE DEFECTS, not the two that were filed. The third was found while
+        fixing the first two and is invisible until a correct trap exists:
+        `set -e` is active, a trapped signal INTERRUPTS `wait`, and a bare
+        failing `wait` then exits the shell at 143 THAT INSTANT — before vault
+        has sealed. A correct trap plus a bare `wait` still produces an unclean
+        stop. Every wait is now guarded (`|| rc=$?`) and the handler reaps
+        vault itself rather than returning into the provisioning curls, where
+        `set -e` would have turned a stop into a non-zero container exit by a
+        third route. The subsequent-boot early return had the same bare `wait`
+        and an `exit 0` that reported clean regardless of what vault did; both
+        paths now go through one function.
+
+        THE FIXTURE IS THE INSTRUMENT, AND IT IS A LIVE-CONTAINER ONE ON
+        PURPOSE. A text fixture grepping for `trap` would have passed the wrong
+        fix — the one forwarding to tee — which the packet explicitly warned
+        "looks fixed". It exits 3 (could-not-run, the 923-ws3r channel) on a
+        host with no provisioned enclave rather than printing ok: over an
+        assertion that never ran.
+
+        HOW THE GREEN WAS OBTAINED, stated because it is not the obvious route
+        and the difference matters to whoever reads this next. `tillandsias
+        --init` did NOT pick the fix up: the installed tray embeds its own copy
+        of the image sources (EMBEDDED_RUNTIME_ASSETS in runtime_assets.rs), so
+        it rebuilt the same pre-fix digest from its own bytes and reported
+        "container already running and unsealed". The measurement was taken
+        against an ISOLATED probe container run directly from the newly built
+        image on scratch volumes, with the host's real enclave left intact.
+        CONSEQUENCE, not hidden: this host's live tillandsias-vault STILL RUNS
+        THE PRE-FIX ENTRYPOINT, and every host will, until a tray is built and
+        released from a checkout carrying this commit. The source is fixed; the
+        fleet is not, until the next release.
+
+        NOT ESTABLISHED, unchanged from the filing: that the SIGKILL ever
+        corrupted anything.
+
+        INCIDENTAL, recorded not filed: the probe's SECOND boot logged "FATAL:
+        unseal request returned HTTP 400: wrong key". That is an artifact of
+        the isolation, not a defect — a scratch store initializes with its own
+        generated key and stashes it on a tmpfs nobody captured, so the host's
+        HKDF secret is legitimately the wrong key for it. The real container's
+        flow captures that key to the keychain. Named here so a later reader
+        does not mistake it for a regression in the unseal path.
+
+        RUNBOOK §3b ADDED, which is the other half of the packet: §3 asserts a
+        clean init and cannot see a shutdown defect in principle — this run's
+        §1/§2/§3 were all PASS while vault was being SIGKILLed on every stop.
+        §3b stops the substrate after §3 and asserts elapsed AND exit code per
+        container, and tells whoever files a finding there to read the process
+        tree from the running container first.
+
+        SIBLING SWEEP, next_action step 4: proxy/router/web/forge all `exec`,
+        git traps at :405-406, inference does not — filed as 1135-8t3a,
+        READ not MEASURED, and its closure says measure before claiming.
