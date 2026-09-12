@@ -767,4 +767,13 @@ surface another host's claim names (`tillandsias-plan expire-claims
   fixture. Two pre-existing macOS reds found by stash-and-rerun: BSD `wc -l`
   pads its count so a string compare against "1" fails on every Mac (eighth
   idiom: string-comparing a wc count; macbookair fixes it), and
-  litmus:tool-dispatch-lib (diagnosis pending).
+  litmus:tool-dispatch-lib (diagnosis pending). The Linux gate then printed
+  loud-fail=14 against macbookair's 12; macbookair suspected a platform
+  difference in their own guard, the coordinator suspected a moved tree, and
+  the byte-identical 14-entry lists on both platforms at the same commit
+  settled it: the 12 was measured before `test-portability-idioms.sh`
+  existed, and that fixture's :61/:63 carry the idioms as test SUBJECTS, so
+  the guard flags its own proof — deliberately, with a comment saying so
+  rather than a by-name exemption. One baseline, 23/14 at e5d5ac0af, both
+  platforms. A measurement whose tree state is not stated, in the packet
+  about measurements whose regime is not stated (macbookair's own words).
