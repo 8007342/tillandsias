@@ -129,3 +129,33 @@ verdict was a pass and the lines looked wrong.
 Someone who had written a packet about stale evidence, while looking for stale
 evidence, still built a tool that read stale evidence. That is the argument for
 fixing this at the runbook rather than trusting each operator to remember.
+
+## Second occurrence, and the claim that survives it
+
+yolanda archived `target/smoke-e2e/` **twice in one night on one host**
+(their measurement, reported 2026-09-12):
+
+- ~01:15Z — 13 files, all dated 2026-09-04, eight days old; archived before the
+  v56.9.12.1 smoke, on a warning from this host.
+- ~09:31Z — 13 files produced by their own runs that same night; archived before
+  the v56.9.12.2 smoke.
+
+26 files across two archivals in one night, **0 of them cleared by any
+tooling**. On esmeraldinha: 21 files, 15 predating the run. Every one of those
+is readable as live by an assertion that runs after an aborted block.
+
+**The claim worth making is narrower than "agents are surprised by this", and
+stronger.** yolanda knew about the trap — they archived for it once, on an
+explicit warning — then ran three provisions and a debug-pair arm, and eight
+hours later the directory was full again. Awareness did not help, because
+nothing clears the directory and every run adds to it.
+
+That is the argument for fixing it at the runbook: surprise can be answered
+with documentation, and this cannot. An operator who has read the warning, and
+acted on it once, still ends the night with a directory that will make the next
+aborted block report a stale verdict.
+
+Recorded with attribution: both archivals and their counts are yolanda's
+measurement, not this host's. An earlier draft of this section described them
+as two agents on two hosts; that was this host overstating someone else's
+evidence while summarising it, corrected before filing.
