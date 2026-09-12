@@ -735,3 +735,16 @@ surface another host's claim names (`tillandsias-plan expire-claims
   a chat message had dropped it: an instruction quoted out of its runbook
   loses the guards the runbook wrapped it in, and the coordinator prescribed
   a fix without reading the file (the check-for-the-capability shape).
+- **The promotion proven on the default Windows path** (esme): with
+  `TILLANDSIAS_VERSION` unset, install-windows.ps1 reported "Channel: stable",
+  resolved /releases/latest itself, fetched
+  tillandsias-tray-56.9.12.2-windows-x64.zip with the same sha256 as the
+  pinned §1 run (949e1997…), and the tray reports "tillandsias-tray 56.9.12.2
+  (8a45bd522)" — stable channel and exact-tag pin serve the identical
+  artifact, 16 s. esme's assertion used a bounded regex; the runbook's
+  substring form would accept 56.9.12.20 (amendment to 1133-kktm). On the
+  same host both loci of 1129-4su6 are verified: in-distro the refusal named
+  the fresher redirected build and the orphaned checkout copy, Windows-side
+  the generic rebuild remedy cleared the staleness in 2m16s — one tree, two
+  loci, two opposite correct answers; the orphaned Sep 4 ELF is removed on
+  the refusal's own reasoning and the row is closed verified.
