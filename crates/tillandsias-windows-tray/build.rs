@@ -131,11 +131,10 @@ fn main() {
     } else {
         embedded_arch.clone()
     };
-    let digest_asset =
-        assets_dir.join(format!("tillandsias-headless-{digest_arch}-unknown-linux-musl"));
-    println!(
-        "cargo:rerun-if-changed=assets/tillandsias-headless-{digest_arch}-unknown-linux-musl"
-    );
+    let digest_asset = assets_dir.join(format!(
+        "tillandsias-headless-{digest_arch}-unknown-linux-musl"
+    ));
+    println!("cargo:rerun-if-changed=assets/tillandsias-headless-{digest_arch}-unknown-linux-musl");
     let digest_src = match std::fs::read(&digest_asset) {
         Ok(bytes) if !bytes.is_empty() => {
             use sha2::{Digest, Sha256};
