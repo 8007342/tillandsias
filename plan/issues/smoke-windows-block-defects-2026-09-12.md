@@ -77,3 +77,41 @@ run wrote.
 - "a healthy tray run that writes to stderr completes §3 without aborting; pre-fix result: FAILS (locale line terminated the pipeline mid-provision)"
 - "an aborted §3 cannot produce a PASS from a previous run's files; pre-fix result: FAILS (a 2026-09-04 provision_exit=0 was present and readable as today's)"
 - "NEGATIVE CONTROL: a genuine non-zero `$LASTEXITCODE` still fails the step loudly — the stderr fix must not swallow real failures"
+
+---
+
+## CORRECTION 2026-09-12 — `ErrorActionPreference='Continue'` is NOT a sufficient fix
+
+The fix shape given above for Defect 1 is wrong, and I disproved it by relying
+on it. I wrote a bisect runner that set `$ErrorActionPreference = 'Continue'`
+and kept the redirect:
+
+```powershell
+& $tray --provision-once 2>&1 | Out-File -Encoding utf8 "$ev\03-provision.log"
+```
+
+It aborted at exactly the same point as the runbook's own block — mid-provision,
+on the same benign `Failed to set locale, defaulting to "C.UTF-8"` line, with
+the same `NativeCommandError`. Twice, on two different tags.
+
+**The redirect itself is the defect, not the preference variable.** In Windows
+PowerShell 5.1 the merge of a native executable's stderr into the success
+stream is what manufactures the ErrorRecord; `Continue` does not reliably
+prevent that record from killing the pipeline in a script context, and
+`$?` is set false even when the exe exits 0.
+
+Corrected fix shape — **do not let PowerShell touch the native stderr stream at
+all.** Redirect outside it:
+
+```powershell
+& cmd.exe /c "`"$tray`" --provision-once > `"$log`" 2>&1"
+$provisionExit = $LASTEXITCODE
+```
+
+`Start-Process -Wait -NoNewWindow -RedirectStandardOutput -RedirectStandardError`
+is the other acceptable shape. Both keep the exit code authoritative, which is
+the property the block needs.
+
+This correction matters for whoever implements the fix: a patch that only
+changes the preference variable will look right, pass a casual review, and
+still abort on the next host whose tray writes a locale warning.
