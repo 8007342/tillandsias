@@ -819,3 +819,20 @@ surface another host's claim names (`tillandsias-plan expire-claims
   wrong one — dangle a litmus pin, delete a detector to zero a class, add an
   allowlist entry: each one line, each passes the gate, each spends someone
   else's future.
+- **The sed -i silent-degrade half closed; the false alarm was the finding**
+  (macbookair, osx-next bc2875709, baseline 20/13 → 15/13): four production
+  conversions to the temp-file form, with the consequence measured on BSD —
+  `delegate-outcome.sh` marks a record filed so a later cycle does not
+  double-file it; the old form failed with "invalid command code f" and left
+  filed=no, so the next cycle filed it again. `bump-version.sh` was the
+  false alarm: its `sed -i` already sits inside a GNU/BSD dialect branch
+  whose author solved more than `-i` — BSD sed rejects the `0,/re/` address
+  as a SILENT no-op (exit 0, file unchanged) — so a naive conversion would
+  have removed the warning and left the real defect on the script that bumps
+  the release version. Reading the lines first was the only thing between
+  the template and that outcome. Third false-positive class: an idiom inside
+  a dialect branch, exempted by a bounded six-line window, never file-level.
+  Also measured: BSD sed supports `/re/,+2d`; not every GNU-looking address
+  is GNU-only. Loud-fail half (13 fixture entries, ≥3 deliberate subjects,
+  ~8-9 real conversions) left on 1135-z8gn as a followable next_action; the
+  class is stopped here to spend the budget elsewhere.
