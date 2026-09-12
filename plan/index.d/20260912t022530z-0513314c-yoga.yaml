@@ -1,0 +1,89 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: on-a-floor-host-the-smokes-own-wrapper-cannot-survive-its-forge-lane-so-the-largest-floor-timing-is-the-one-never-captured
+    event:
+      type: note
+      ts: "2026-09-12T02:25:30Z"
+      agent_id: linux-yoga-claude-20260912t013000z
+      host: yoga
+      summary: |
+        THE FLOOR KILL IS A MEASUREMENT ARTEFACT, NOT MEMORY PRESSURE — TWO
+        HOSTS, SAME FOUR NUMBERS, SAME INSTRUMENT. Raised by the operator, who
+        suspected a self-induced I/O bottleneck in our own socket/buffer
+        sizing. Measured rather than argued, and the answer is neither.
+
+        yoga (14 GiB floor, Silverblue immutable), forge lane up, 7 containers:
+          /proc/pressure/io      some avg10=0.00 avg60=0.00 avg300=0.27
+                                 full avg10=0.00 avg60=0.00 avg300=0.25
+          /proc/pressure/memory  all zero
+          MemTotal 15.5 GB · MemFree 0.34 GB · MemAvailable 6.8 GB
+          Cached 6.4 GB · Dirty 3 MB · Writeback 0 · swap barely touched
+          overlay NATIVE on btrfs, zero fuse-overlayfs
+
+        macuahuitl (62.4 GiB), ./build.sh --ci-full building, 6 containers up:
+          /proc/pressure/io      some avg10=0.45 avg60=0.49 avg300=0.41
+                                 full avg10=0.45 avg60=0.47 avg300=0.40
+          /proc/pressure/memory  all zero
+          MemTotal 62.4 GB · MemFree 1.3 GB · MemAvailable 57.6 GB
+          Cached 54.9 GB · Dirty 395 MB · Writeback 0 · swap untouched
+          overlay NATIVE on btrfs (compress=zstd:1, ssd, discard=async),
+          zero fuse-overlayfs
+
+        BOTH HOSTS SHOW THE SAME SHAPE: MemFree collapsed to ~2% by page cache
+        from image-layer extraction, while MemAvailable stays healthy (44% and
+        92%). Memory PSI is ZERO on both. I/O PSI is under half a percent.
+        Writeback is zero on both. So there is no memory pressure and no I/O
+        stall on either host, at either end of a 4x RAM range.
+
+        CONSEQUENCE FOR THIS PACKET'S DIAGNOSIS, which is why it is filed here.
+        The row reads the loss as the forge lane's six containers pushing the
+        host into memory pressure. On yoga there IS no memory pressure by the
+        kernel's own accounting, and every kill was the agent harness with NO
+        kernel oom-kill in journalctl — five times. A killer keyed on MemFree
+        rather than MemAvailable or PSI fires during exactly this workload,
+        because filling page cache with image layers is what the workload IS.
+
+        THE DISCRIMINATING OBSERVATION, measured 2026-09-12T02:25Z on yoga:
+        `./build.sh --check` ran TWICE (two land attempts) CONCURRENTLY with
+        the forge lane, and NEITHER died — the lane went 571 -> 1322 log lines
+        across both gate runs with all seven containers healthy throughout.
+        So the host carries a full cargo gate plus the whole enclave at once
+        without difficulty. What it cannot carry is a supervising shell that
+        does nothing: a bash loop running only sleep(300) was killed as
+        reliably as the one running the lane. Real work survives; the observer
+        dies. That is not a resource limit, and no amount of RAM addresses it.
+
+        SO "ADD RAM" AND "MAKE THE WRAPPER LIGHTER" ARE BOTH WRONG REMEDIES,
+        and the packet currently implies the second. The right one is the
+        design this packet already chose: timing_begin/timing_commit writing
+        the stamp TO DISK, so the measurement survives the death of whatever
+        was watching. yoga confirms it end to end — setsid detachment rescued
+        the pristine --init on the first retry after two foreground deaths,
+        and on a floor host §4 cannot be observed by a harness-tracked task at
+        all.
+
+        RULED OUT, so nobody re-opens them: not fuse-overlayfs (both hosts on
+        native overlay, zero fuse processes); not socket or buffer sizing in
+        our layers (no writeback backlog, I/O PSI under 0.5% on both); not
+        swap thrash (untouched on both). The one genuine I/O stall ever
+        measured in this fleet was btrfs commit serialization under PARALLEL
+        cargo builds on macuahuitl, 2026-08-30, io full 21.6% PSI — a
+        different workload from container creation, already recorded in
+        build.sh's comments, and its remedy was to serialize heavy jobs.
+
+        STILL UNMEASURED, and it needs a host neither of us has: overlay-on-
+        btrfs CoW during image extraction versus overlay-on-xfs. Both hosts
+        here are btrfs, so neither can measure the difference.
+
+        CAVEAT ON THE CENTRAL CLAIM: that the harness keys on MemFree is
+        INFERENCE from three facts (no kernel oom-kill, zero memory PSI,
+        killed anyway), not something read out of the harness's source. Stated
+        as inference so the next reader can falsify it rather than inherit it.

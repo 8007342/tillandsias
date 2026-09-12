@@ -1,0 +1,107 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by pirria-cachyos 2026-09-12 at the coordinator's direction, from a
+# floor-host observation. Measure-before-optimize: the mechanism below is the
+# CORRECTED one; the first explanation pirria offered was arithmetically wrong
+# and is recorded in the event so the correction is auditable.
+packets:
+  - packet_id: the-closure-evidence-gate-costs-one-process-per-fragment-that-differs-from-the-base-so-a-behind-worktree-pays-half-an-hour-and-a-current-one-pays-nothing
+    order: 1126-vswr
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [gate, performance, floor-tier, measurement]
+    estimated_hours: 2
+    verifiable_closure: bash scripts/check-fragment-closure-evidence-added.sh
+    owned_files:
+      - scripts/check-fragment-closure-evidence-added.sh
+    title: |
+      MEASURED on pirria: the 686-7qcm closure-evidence gate spawns one tillandsias-plan process per fragment differing from base_ref, and because compaction REMOVES fragments a worktree that is merely BEHIND sees them all as added — 650 fragments, ~31 min of a single gate run, against 0 fragments and 0s on a current tree
+    context: |
+      FOUND by pirria 2026-09-12, on the low-end Linux floor host, while waiting
+      out a cut freeze. The kind of finding a floor host exists to make visible:
+      the same gate is free on a current checkout and half an hour on a stale one,
+      and no host that stays current can see it.
+
+      THE MECHANISM. scripts/check-fragment-closure-evidence-added.sh:76 scopes
+      itself with
+
+          git diff --name-only --diff-filter=AM "$base_ref" -- plan/index.d/'*.yaml'
+
+      i.e. base_ref (default origin/linux-next) against the WORKING TREE, and runs
+      `tillandsias-plan closure-evidence-check` as a separate process for each path
+      it names. The diff-scoping is deliberate and correct (it is why the base
+      ledger's historical closures are never re-judged). The cost is the problem.
+
+      WHY BEING BEHIND IS EXPENSIVE, and this is the non-obvious half: plan
+      fragments are COMPACTED — folded into plan/index.yaml and DELETED (889
+      folded on 2026-09-11). So a fragment that exists in an older tree but has
+      since been compacted away reads as ADDED when the older tree is diffed
+      against a newer base_ref. Being behind does not cost you the fragments you
+      are missing; it costs you every fragment that has been compacted since, all
+      of which look new.
+
+      MEASURED on pirria 2026-09-12, one host, release and debug binaries timed
+      separately because the gate uses the workspace build:
+
+          fragments named, tree current (HEAD == origin/linux-next):        0
+          fragments named, tree 140 commits behind (1b40b8929):           650
+          one closure-evidence-check invocation, target/release:          500 ms
+          one closure-evidence-check invocation, target/debug:           2906 ms
+          predicted cost when behind: 650 x 2.906s                    ~31.5 min
+          OBSERVED elapsed of the check step on the behind tree:       ~28 min
+          OBSERVED elapsed of the check step on the current tree:           0 s
+
+      plan/index.d holds 26 fragments today, so the live ledger is not the driver
+      — the DIFF is, and the diff is unbounded in the stale direction.
+
+      COMPACTION CHANGES THE CONSTANT, NOT THE SHAPE. A compaction pass makes the
+      number of "added-looking" fragments larger for every host that has not yet
+      pulled it, so the more diligently the ledger is compacted the worse the
+      penalty for being behind. That is the wrong gradient: it charges the hosts
+      least able to pay, at exactly the moment they are trying to catch up.
+
+      NOT A CLAIM THAT THE GATE IS WRONG. It computes the right answer. It
+      computes it by spawning a process per path, each of which re-parses the
+      ledger, and nothing in it is aware that 650 paths is a different regime from
+      6.
+    next_action: |
+      1. Measure before optimizing, again and on a second host: confirm the
+         per-invocation cost is dominated by ledger re-parse rather than process
+         spawn. If it is the parse, batching is the fix; if it is the spawn,
+         batching is still the fix but the expected win is smaller. Do not skip
+         this step — the first explanation offered for this defect (one process
+         per LEDGER fragment, 26 of them) was arithmetically impossible and was
+         caught only by doing the multiplication.
+      2. Give tillandsias-plan a form that accepts MANY fragment paths in one
+         invocation (closure-evidence-check reading paths from stdin or argv+),
+         so the gate pays one parse instead of N. Keep the single-path form: the
+         per-fragment exit code is what the gate reports on.
+      3. Consider whether the check should bound itself when the tree is behind —
+         a host that is 140 commits back is about to merge anyway, and judging
+         fragments that the merge will bring in is work the merge will redo. If it
+         does bound itself it must SAY so with a distinct verdict, never silently
+         check fewer: this file's own header already insists that a skip is "NOT a
+         pass dressed up as one" (702-68zj), and a quietly-narrowed scope would be
+         exactly that.
+    exit_criteria:
+      - "the gate's wall-clock on a worktree 140 commits behind origin/linux-next is reported, before and after; pre-fix result: ~28 min observed on pirria 2026-09-12 (650 fragments, debug binary at 2906 ms each)"
+      - "the current-tree case stays at or near 0s and the verdict grammar is unchanged"
+      - "if the scope is bounded when behind, it emits a distinct verdict saying so — never a quiet reduction, per this file's own 702-68zj skip discipline"
+      - "NEGATIVE CONTROL: a fragment that genuinely closes without evidence is still refused, batched form and single form alike"
+    events:
+      - type: filed
+        ts: "2026-09-12T02:48:00Z"
+        agent_id: "linux-pirria-claude-20260912t022150z"
+        host: pirria
+        summary: |
+          CORRECTION RECORDED DELIBERATELY. pirria first reported this to the
+          coordinator as "one tillandsias-plan process per ledger fragment, 28
+          minutes", which does not survive multiplication: plan/index.d holds 26
+          fragments and 26 x 2.9s is 75 seconds, not 28 minutes. The real driver is
+          the DIFF against base_ref on a behind worktree (650 paths, because
+          compaction makes removed fragments read as added), which does reproduce
+          the observed time. The wrong version is kept here rather than quietly
+          replaced: a floor-tier performance claim that nobody multiplied is the
+          same class of defect as the instruments this fleet keeps finding.

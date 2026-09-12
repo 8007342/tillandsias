@@ -1,0 +1,119 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by pirria-cachyos 2026-09-12, from measurement taken while blocked on a
+# cut freeze. Split from 1096-p3tn at the coordinator's direction: same class,
+# different owned_files, independently schedulable.
+packets:
+  - packet_id: the-shared-metrics-path-rule-is-a-shell-file-so-the-rust-writer-cannot-ask-it-and-901-usage-records-are-unreadable-by-their-own-reader
+    order: 1125-92xa
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [observability, metrics, fail-loud, testing, cross-language]
+    estimated_hours: 3
+    verifiable_closure: bash scripts/test-metrics-log-path-agreement.sh
+    owned_files:
+      - crates/tillandsias-plan/src/main.rs
+      - scripts/check-mcp-expert-health.sh
+      - scripts/check-mcp-surface.sh
+    title: |
+      MEASURED on pirria: the Rust CLI writes forge-expert-usage.jsonl to a hardcoded /tmp while the shell reader resolves .cache/metrics — 901 records written, 0 readable, growing under the gate that was measuring it; and the identical silent /tmp stub sits in the health-log WRITER and its READER, the second pair metrics-log-path.sh names
+    context: |
+      FOUND by pirria 2026-09-12 while measuring 1096-p3tn. Not the same defect:
+      1096-p3tn blames a silent sourcing failure in cycle-metrics.sh, and on this
+      host sourcing SUCCEEDS and resolves correctly. This is a different mechanism
+      reaching the same end.
+
+      THE BOUNDARY. crates/tillandsias-plan/src/main.rs:2337-2339 (log_cli_usage,
+      order 706-jmi7) resolves the usage log as TILLANDSIAS_EXPERT_USAGE_LOG, else
+      PathBuf::from("/tmp/forge-expert-usage.jsonl") — hardcoded. It never consults
+      scripts/metrics-log-path.sh, and CANNOT: that rule is a shell file, and a
+      Rust binary has no way to source it. The shell reader resolves the same
+      logical log through the rule:
+
+          WRITER (tillandsias-plan, Rust)  -> /tmp/forge-expert-usage.jsonl
+          READER (cycle-metrics.sh, shell) -> <checkout>/.cache/metrics/forge-expert-usage.jsonl
+
+      MEASURED on pirria 2026-09-12T02:26Z:
+          /tmp/forge-expert-usage.jsonl              901 lines, GROWING
+          .cache/metrics/forge-expert-usage.jsonl    does not exist
+          /tmp/forge-expert-health.jsonl               2 lines
+          .cache/metrics/forge-expert-health.jsonl   does not exist
+      The usage file grew while it was being measured — the new records were the
+      measuring agent's own ./build.sh --check CLI calls. Writer and reader are on
+      different paths BY CONSTRUCTION, not by a failure, so nothing can fail and
+      nothing reports.
+
+      THE CONTRACT THIS BREAKS IS THE ONE metrics-log-path.sh EXISTS TO ENFORCE.
+      Its header states the defect as "a WRITER and a READER disagreeing about a
+      path", and states the remedy as putting the rule in exactly one file "so a
+      writer and a reader cannot drift apart". That remedy is a SHELL remedy, and
+      it silently does not reach participants outside the shell. The header also
+      names the pair it was written to protect — check-mcp-expert-health.sh
+      (writer) and cycle-metrics.sh / check-mcp-surface.sh (readers) — which is
+      the second half of this packet.
+
+      THE SECOND HALF: THE STUB IS IN THREE SCRIPTS, NOT ONE.
+          scripts/cycle-metrics.sh:250-252        (owned by 1096-p3tn, fixed there)
+          scripts/check-mcp-expert-health.sh:185  (WRITER of forge-expert-health.jsonl)
+          scripts/check-mcp-surface.sh:103        (READER of forge-expert-health.jsonl)
+      All three are byte-identical in effect:
+          command -v metrics_default_log >/dev/null 2>&1 || { metrics_default_log() { printf '/tmp/%s' "$1"; }; }
+      and ALL THREE DROP THE repo_root ARGUMENT, so the stub returns /tmp even
+      inside a perfectly writable checkout where the real rule would have returned
+      .cache/metrics. Fixing only cycle-metrics.sh, which is all 1096-p3tn owns,
+      leaves the health-log writer/reader pair able to drift exactly as before —
+      the same bug, one subsystem over, which is the precise failure mode
+      metrics-log-path.sh's header says it was created to avoid.
+
+      CLASS. Sibling of 1096-p3tn and of methodology
+      `agreement_at_zero_is_not_a_remedy`: an instrument that cannot report that it
+      could not look. A reader pointed at an absent path reports a SMALLER NUMBER
+      or `source=absent`, not an error, and both are legitimate values — which is
+      why 901 unreadable records produced no complaint from anything.
+
+      NOT A DUPLICATE OF 1096-p3tn, stated for arrival routing: disjoint
+      owned_files (that packet owns scripts/cycle-metrics.sh and
+      scripts/metrics-log-path.sh; this one owns the Rust writer and the other two
+      shell participants), and this one is schedulable by a host that cannot take
+      1096-p3tn's shell work but can build the crate.
+    next_action: |
+      1. Decide the cross-language rule and say which: either the Rust side
+         DERIVES the same path (checkout/.cache/metrics with the documented /tmp
+         fallback when there is no writable checkout), or every caller must pass
+         TILLANDSIAS_EXPERT_USAGE_LOG and the binary REFUSES to log without it.
+         Do not add a second hardcoded default in Rust that merely agrees with the
+         shell today — that is two copies of a rule, which is the shape
+         metrics-log-path.sh was written to end.
+      2. Make the three shell stubs REFUSE with a named cause instead of silently
+         returning /tmp, and stop dropping repo_root. (Coordinate with 1096-p3tn,
+         which does exactly this for cycle-metrics.sh; take the same shape.)
+      3. Extend scripts/test-metrics-log-path-agreement.sh arm 1 — "every
+         participant resolves the same health-log path" — to include the RUST
+         participant, which is today a participant that does not. The arm must be
+         RED before the fix: on today's code the Rust writer resolves /tmp while
+         every shell participant resolves .cache/metrics inside a checkout.
+      4. Decide what happens to the 901 existing /tmp records: merge or declare
+         historical. NOTE from 1096-p3tn's measurement that /tmp is VOLATILE — a
+         reboot on pirria already destroyed that host's earlier timing log — so
+         "declare historical" means "accept that it will vanish", not "keep it".
+    exit_criteria:
+      - "the Rust writer and the shell reader resolve the SAME path for forge-expert-usage.jsonl inside a checkout; pre-fix result: FAILS (writer /tmp/forge-expert-usage.jsonl, reader <checkout>/.cache/metrics/forge-expert-usage.jsonl, measured pirria 2026-09-12T02:26Z, 901 records written and 0 readable)"
+      - "scripts/test-metrics-log-path-agreement.sh arm 1 covers the Rust participant and is red without the fix"
+      - "none of the three shell stubs can silently return /tmp from inside a writable checkout; each refuses with a named cause"
+      - "NEGATIVE CONTROL: outside a checkout, and with TILLANDSIAS_EXPERT_USAGE_LOG set, both participants still work exactly as before (arms 3 and 4 of the agreement fixture stay green)"
+    events:
+      - type: filed
+        ts: "2026-09-12T02:45:00Z"
+        agent_id: "linux-pirria-claude-20260912t022150z"
+        host: pirria
+        summary: |
+          Filed by pirria while blocked on a cut freeze, from read-only measurement
+          taken during 1096-p3tn. Split from that packet at the coordinator's
+          direction (disjoint owned_files, independently schedulable).
+
+          The usage log grew from 899 to 901 lines during the measurement itself;
+          the added records were the measuring agent's own gate CLI calls. That is
+          the sharpest statement of the defect: the instrument recorded the act of
+          being examined, into a file its own reader cannot open.
