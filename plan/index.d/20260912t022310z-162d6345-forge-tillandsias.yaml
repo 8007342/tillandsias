@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-ledger-has-more-than-one-place-to-look-and-every-reader-looks-in-one-so-five-writes-landed-somewhere-nothing-consults
+    field: next_action
+    value: 'REMAINS (after forge-tillandsias 2026-09-12: ARM 2 landed with RED proof; ARM 4 presence arm landed; item-3 decision recorded as a decision event, verdict fixture-only-does-not-satisfy-the-live-lane): 1. LIVE-LANE ARMS. Narrow ARM 3 to completion-shaped subjects (fix(|close(|feat( naming the order) and run it over the real ledger (plan/index.yaml + plan/index.d) with --limit 2000 and a stated denominator; 1055-e8ie positive control, 1063-nraf multi-commit packets negative. Add live-lane callers for report_ready_but_landed / report_ready_but_claimed / blocked_in_prose_orders, or decide where they are meant to run (build.sh --check gate vs. a sweep) and wire that in. 2. SALVAGE BRANCH DELETION (housekeeping item 6): origin/salvage/unknown/20260910-1080-4deb-arm1 is integrated and deletable; the mirror denies ref deletion so a host-side git push origin :refs/heads/salvage/unknown/20260910-1080-4deb-arm1 is the smallest next action.'
+    ts: "2026-09-12T02:23:10Z"
+    host: forge-tillandsias

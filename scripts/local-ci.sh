@@ -1095,7 +1095,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
             archive_check_log "version-monotonicity" "fail" /tmp/version-check.log
         fi
     else
-        log_fail_missing_guard "version-monotonicity" "scripts/check-version-monotonicity.sh"
+        log_fail_missing_guard "version-monotonicity" "scripts/verify-version-monotonic.sh"
         archive_check_log "version-monotonicity" "skipped"
     fi
 
