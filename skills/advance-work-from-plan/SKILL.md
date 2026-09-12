@@ -46,6 +46,15 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
     Measured on yoga 2026-09-06, direct and via `bash -c`: both anchor on the
     dying shell.
 
+    Since order 1098-q7bk the script **refuses** that path rather than warning
+    about it: an invocation with neither `TILLANDSIAS_CYCLE_HOLDER_PID` nor a
+    harness-exported `CLAUDE_PID` answers `refused:checkout-lock:no-holder-pid`
+    and exits 2, taking no lock. **A refusal means you do NOT hold the
+    checkout** — supply the variable and acquire again; do not proceed as if
+    you did. Under a claude harness `CLAUDE_PID` is exported and the bare line
+    acquires cleanly, so this refusal is the cron/codex/opencode path; the
+    command line above is correct under every backend.
+
     On `skip:overlap-lock-held:<holder>` **DO NOT PROCEED.** The verdict names
     who holds the checkout (lane, pid, start, source). Report it as the cycle's
     final output and exit — that is the designed outcome, not a failure, and it

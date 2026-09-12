@@ -56,7 +56,7 @@ CONSUMER_ROOT="${TILLANDSIAS_PROXY_CONSUMER_ROOT:-crates}"
 # A CONSUMER is Rust that names the port — a published port, a proxy URL, an
 # argument. squid.conf declaring its own listener is not a consumer, which is
 # the whole distinction the old comment collapsed.
-consumers="$(grep -rlF -- '3129' --include='*.rs' "$CONSUMER_ROOT" 2>/dev/null | sort -u)"
+consumers="$(grep -rlF --include='*.rs' -- '3129' "$CONSUMER_ROOT" 2>/dev/null | sort -u)"
 n_consumers=$(printf '%s' "$consumers" | grep -c . || true)
 
 # The caveat must be present as a phrase, not merely the word "3129" — the

@@ -597,6 +597,139 @@ attempt_plan_only_lane() {
     for f in "${files[@]}"; do
         case "$f" in plan/index.d/*) needs_yaml=1 ;; esac
     done
+    # ── STALE VALIDATOR (order 1129-4su6) ────────────────────────────────────
+    #
+    # RESOLVED IS NOT THE SAME AS CURRENT, and this lane was the one consumer
+    # that never asked. It calls resolve_plan_binary and nothing on this path
+    # called plan_binary_is_stale — while SIX other consumers
+    # (check-fragment-events-land.sh, check-mo-full-attestations.sh,
+    # check-resumable-claim-dirt.sh, archive-plan-packets.sh and two fixtures)
+    # call ensure_fresh_plan_binary. The lane standing in front of the trunk
+    # skipped the freshness check that the scripts behind it all run.
+    #
+    # MEASURED on esmeraldinha 2026-09-12 by esme: an EIGHT-DAY-OLD ELF at
+    # ./target/release/tillandsias-plan that RUNS, sitting before the .exe
+    # rebuilt the previous day in the probe's candidate order — so in-distro it
+    # wins, and it would have been this lane's fold validator. The concrete harm
+    # is dated: macuahuitl changed the status-loss guard's understanding of a
+    # reopen-after-falsification that same night (ac0ea1089), so a Sep 4
+    # instrument answers a question whose correct answer had already moved.
+    # The lane validates the bytes being pushed — validate-yaml and yaml-type
+    # per blob, `check --strict-fragments` over the fold — so a stale binary
+    # accepts shapes the current rules refuse.
+    #
+    # REFUSE, DO NOT REFRESH. ensure_fresh_plan_binary would rebuild, and a git
+    # hook that silently starts a cargo build is a surprise on a floor host and
+    # a push-time cost nobody budgeted. This lane's character is a fast path
+    # that DECLINES when it cannot vouch — it already refuses rather than doing
+    # work in four other places in this function. The remedy is one line the
+    # operator types.
+    #
+    # SCOPED, like every other refusal here: only when the push actually
+    # carries plan/index.d fragments. An issues-only push does not fold the
+    # ledger, so the validator's age cannot affect what it vouches for.
+    # THE REMEDY IS DERIVED, NOT HARDCODED — esme's ruling, and they are the host
+    # that reproduces this. A single hardcoded `cargo build --release -p
+    # tillandsias-plan` is WRONG on their host and would loop them: with
+    # CARGO_TARGET_DIR redirected (with-wsl2-builder.sh:276) that command
+    # rebuilds a copy that is already fresh and never touches
+    # ./target/release/tillandsias-plan, so the operator does exactly what the
+    # line says, pushes again, gets the identical refusal, and stops believing
+    # the message. A remedy that is wrong for the host reading it is worse than
+    # no remedy.
+    #
+    # SO NAME THE FRESHER BUILD IF ONE EXISTS. On a redirected host the stale
+    # file is not lagging, it is ORPHANED: nothing writes it any more, so
+    # "rebuild" can never fix it. The single most confusing fact available to
+    # that operator is that the thing they rebuilt IS current and simply was not
+    # the thing used, and a refusal that says "stale" while a fresh copy sits
+    # two directories away unmentioned makes them doubt their own build.
+    #
+    # DO NOT AUTO-PREFER THE FRESHER COPY (esme, and it is right): silently
+    # resolving somewhere other than where the operator thinks is exactly how
+    # the .exe stayed stale forever in plan-binary-probe.sh's own comments.
+    # Refuse and name.
+    if [[ $needs_yaml -eq 1 && $have_plan -eq 1 ]] && plan_binary_is_stale "$plan_bin"; then
+        local _newer _fresher _ctd
+        # ONE newer file, the newest — not a list. At 06:00 the unaffordable
+        # thing is a question whose answer needs another tool, and a list is a
+        # second question.
+        # PORTABLE, and it matters here: `find -printf` is GNU-only, and on a BSD
+        # find (macOS, which pushes osx-next through this same hook) it fails,
+        # $_newer goes silently empty, and the refusal drops the "newer:" line —
+        # the one esme asked to keep because it answers "stale relative to what"
+        # without a second command. A silently thinner refusal on one platform is
+        # the regime class this packet chain has hit seven times tonight.
+        # `ls -t` is POSIX and picks the newest without any -printf.
+        _newer="$(find crates/tillandsias-plan Cargo.lock -type f -newer "$plan_bin" -print 2>/dev/null \
+                  | tr '\n' '\0' | xargs -0 ls -t 2>/dev/null | head -1)"
+        # A fresher build of the SAME binary anywhere the probe could have
+        # looked. CARGO_TARGET_DIR first, because that is where a redirected
+        # host's current copy actually lives.
+        _ctd="${CARGO_TARGET_DIR:-}"
+        # CARGO_TARGET_DIR IS USUALLY UNSET AT PUSH TIME, and that is the whole
+        # difficulty. esme measured it: the redirect is exported by
+        # scripts/with-wsl2-builder.sh for the duration of a wrapped BUILD, so
+        # an interactive shell — and therefore a git hook — sees it unset. The
+        # fresher copy exists and the lane has no variable pointing at it.
+        #
+        # So read the host's own DECLARATION rather than guess. :276 of that
+        # script names the path it redirects to, and this derives the same one.
+        # That is coupling to a constant another file declares, which is the
+        # same move 1036-e5w9 made with core.fileMode — read the declaration
+        # both sides already share, do not re-infer it. If the declaration ever
+        # moves, this finds nothing and the refusal falls back to the rebuild
+        # remedy: degraded, never wrong.
+        if [[ -z "$_ctd" && -f scripts/with-wsl2-builder.sh ]]; then
+            local _decl
+            # 1129-4su6 READS scripts/with-wsl2-builder.sh:~276; KEEP THE SHAPE.
+            # That line carries a marker comment pointing back here, and
+            # scripts/test-plan-binary-freshness.sh asserts it still parses — so
+            # a move reds a fixture rather than silently dropping this host back
+            # to a rebuild remedy that cannot fix it.
+            _decl="$(sed -n 's|.*export CARGO_TARGET_DIR=\\"\([^"]*\)\\".*|\1|p' scripts/with-wsl2-builder.sh | head -1)"
+            if [[ -n "$_decl" && "$_decl" == *'$REPO_BASENAME'* ]]; then
+                _decl="${_decl//\$REPO_BASENAME/$(basename "$(pwd)")}"
+                [[ -d "$_decl" ]] && _ctd="$_decl"
+            fi
+        fi
+        for _cand in \
+            ${_ctd:+"$_ctd/release/tillandsias-plan"} \
+            ${_ctd:+"$_ctd/debug/tillandsias-plan"} \
+            ./target/release/tillandsias-plan ./target/debug/tillandsias-plan \
+            ./target/release/tillandsias-plan.exe ./target/debug/tillandsias-plan.exe; do
+            [[ -f "$_cand" ]] || continue
+            [[ "$_cand" -ef "$plan_bin" ]] && continue
+            [[ "$_cand" -nt "$plan_bin" ]] || continue
+            _fresher="$_cand"; break
+        done
+        echo "plan-only lane: REFUSED — the resolved plan binary is STALE (full gate required)" >&2
+        echo "  resolved: $plan_bin" >&2
+        [[ -n "$_newer" ]] && echo "  newer:    $_newer" >&2
+        echo "  This lane validates the bytes you are pushing with the resolved binary, so a" >&2
+        echo "  stale one can accept a fragment shape the current rules refuse (1129-4su6)." >&2
+        if [[ -n "${_fresher:-}" ]]; then
+            echo "  A FRESHER build of this binary exists but was not used:" >&2
+            echo "            $_fresher" >&2
+            echo "  REMEDY: TILLANDSIAS_PLAN_BIN=$_fresher git push ..." >&2
+            # The one place tonight where removing an artifact is the right
+            # advice — and only because it has been DIAGNOSED rather than
+            # guessed. The reason travels with the verb, or it reads like the
+            # rm-the-ledger advice this fleet refused twice today.
+            if [[ -n "$_ctd" && "${_fresher#$_ctd}" != "$_fresher" ]]; then
+                echo "  The resolved copy is ORPHANED: CARGO_TARGET_DIR is redirected to" >&2
+                echo "  $_ctd, so no build writes $plan_bin any more and rebuilding cannot" >&2
+                echo "  refresh it in place. Removing it is safe for that reason, not merely to" >&2
+                echo "  quiet this message." >&2
+            fi
+        elif [[ -f scripts/with-wsl2-builder.sh ]] && grep -qi microsoft /proc/version 2>/dev/null; then
+            echo "  REMEDY: bash scripts/with-wsl2-builder.sh cargo build --release -p tillandsias-plan" >&2
+        else
+            echo "  REMEDY: cargo build --release -p tillandsias-plan" >&2
+        fi
+        return 1
+    fi
+
     if [[ $needs_yaml -eq 1 && $have_yq -eq 0 && $have_plan -eq 0 ]]; then
         # NAME WHICH OF THE TWO IT WAS. "not available" reads as absent, and an
         # operator who can see the file sitting in target/release will not
@@ -806,10 +939,69 @@ attempt_plan_only_lane() {
                 return 1
             fi
         else
+            # 1124-7f3u CONSIDERED AND DELIBERATELY NOT CHANGED. The branch
+            # below refuses when the plan BINARY is absent; the symmetric move
+            # here would be to refuse when this CHECKER is absent, and it is
+            # wrong for a reason worth writing down rather than rediscovering.
+            #
+            # The binary is a BUILD ARTIFACT — commonly absent, on a floor host
+            # or a fresh checkout, which is exactly why its absence is a live
+            # hole. This checker is TRACKED IN THE REPO, so its absence is not a
+            # state a real checkout reaches; and if it ever did, build.sh:2597
+            # runs it unconditionally and the full gate fails on the missing
+            # file anyway. Refusing here would guard an unreachable state.
+            #
+            # It is not free, either: it would oblige every fixture that drives
+            # this lane with a fragment-bearing push to provision this script in
+            # its scratch tree. Measured — an earlier revision of this fix did
+            # refuse here, and broke test-gate-stamp-scope.sh case 7, whose tree
+            # legitimately provisions a minimal set. Scope kept to the binary,
+            # which is what 1124-7f3u is about.
             LANE_NOTES+=("scripts/check-fragment-status-loss.sh absent — skipped")
         fi
     else
-        LANE_NOTES+=("target/release/tillandsias-plan absent — fragment schema and status-loss checks skipped (yq tier validated every pushed blob: parse + !!map shape)")
+        # ORDER 1124-7f3u: A SKIP HERE IS A REFUSAL, because yq cannot stand in
+        # for what this block does.
+        #
+        # The fail-closed test at the top of this function (889-twhe) is
+        # satisfied by yq ALONE. That is right for the per-blob validation
+        # above, which asks "is this YAML, and is it a map" — yq answers that.
+        # It is wrong here. The two checks below are the FOLD: `check
+        # --strict-fragments` reads every fragment together, and
+        # check-fragment-status-loss.sh asks whether a status transition a
+        # fragment declares actually survives folding. Neither is a property of
+        # any single blob, and no YAML parser can compute either. So a host with
+        # yq and no plan binary passed the fail-closed test and then skipped the
+        # only checks that needed the thing it was missing.
+        #
+        # MEASURED 2026-09-12: yoga's honest reopen of 1115-yvrq reached
+        # origin/linux-next carrying a 'completed' event beside a status that
+        # folds as in_progress. build.sh --check refuses that shape
+        # (check-fragment-status-loss.sh exits 2 unbuilt, and build.sh runs it
+        # through _run, which honours the rc) — but a fragment-only push never
+        # runs build.sh, and a ledger reopen is EXACTLY a fragment-only push.
+        # Every host that then obeyed the pre-push merge rule was refused at its
+        # own gate for about an hour, for a shape this lane let through.
+        #
+        # "skipped" printed as a note beside a successful push reads as a pass
+        # (order 531, one hook deep). The lane already knows how to say the
+        # honest thing, and says it everywhere else in this function: full gate
+        # required.
+        if [[ $needs_yaml -eq 1 ]]; then
+            if [[ -n "$plan_not_runnable" ]]; then
+                echo "plan-only lane: not applicable — this push adds plan/index.d fragments and $plan_not_runnable exists but does NOT run here, so the fold and status-loss checks cannot run (fail closed; full gate required)" >&2
+                echo "  ${plan_why:-}" >&2
+            else
+                echo "plan-only lane: not applicable — this push adds plan/index.d fragments and no runnable tillandsias-plan resolved, so the fold and status-loss checks cannot run (fail closed; full gate required)" >&2
+                echo "  yq validates one blob's shape; it cannot fold the ledger, which is what these two checks read. 1124-7f3u." >&2
+            fi
+            return 1
+        fi
+        # No plan/index.d fragments in this push: there is no fold to check, so
+        # the absence of the binary costs this lane nothing. Scoped exactly as
+        # 889-twhe scoped the yq rule — refuse on a missing validator only when
+        # the push carries what that validator reads.
+        LANE_NOTES+=("no runnable tillandsias-plan resolved — fragment schema and status-loss checks not applicable (this push adds no plan/index.d fragments)")
     fi
 
     # The AUTHOR-SIDE fragment parse gate (order 698-7n6q). It was wired into

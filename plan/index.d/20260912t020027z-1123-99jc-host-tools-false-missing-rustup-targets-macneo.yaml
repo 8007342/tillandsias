@@ -1,0 +1,107 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macneo-macos 2026-09-12 from the fleet-restart cycle's own preflight:
+# the host-tools check reported two rustup targets MISSING that were installed.
+packets:
+  - packet_id: check-host-tools-reports-two-installed-rustup-targets-as-missing-because-it-resolves-rustup-with-bare-command-v-and-never-applies-its-own-path-repair
+    order: 1123-99jc
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: any
+    capability_tags: [tooling, probes, host-tools, fail-loud, macos, path]
+    estimated_hours: 2
+    verifiable_closure: bash scripts/test-host-tools.sh
+    owned_files:
+      - scripts/check-host-tools.sh
+      - scripts/test-host-tools.sh
+    title: |
+      check-host-tools.sh reports aarch64/x86_64-unknown-linux-musl as MISSING on a host where both are installed: the rustup-target cache resolves `rustup` with a bare `command -v`, so the script's own PATH repair — which it DOES apply to cargo and rustc from the very same toolchain directory — never runs for rustup, and the probe answers a question about its own PATH as if it were a question about the host
+    context: |
+      MEASURED on macneo (tlatoanis-macbook-neo, Darwin 25.6.0) 2026-09-12,
+      during the fleet-restart preflight, before any build:
+
+        $ scripts/check-host-tools.sh
+          MISSING (tray-build): aarch64-unknown-linux-musl
+            remedy: rustup target add aarch64-unknown-linux-musl
+          MISSING (tray-build): x86_64-unknown-linux-musl
+            remedy: rustup target add x86_64-unknown-linux-musl
+        ok:host-tools:macos:gate:5 present; tray-build:4 present, missing aarch64-unknown-linux-musl,x86_64-unknown-linux-musl
+
+      BOTH TARGETS WERE ALREADY INSTALLED. Running the named remedy changed
+      nothing on the host — `rustup target add` answered "component rust-std
+      for target <t> is up to date" for both — and the positive control says
+      so directly:
+
+        $ ~/.cargo/bin/rustup target list --installed | grep musl
+        aarch64-unknown-linux-musl
+        x86_64-unknown-linux-musl
+
+      THE VERDICT FLIPS ON PATH ALONE, same tree, same host, same targets:
+
+        $ env PATH=/usr/bin:/bin:/usr/sbin:/sbin scripts/check-host-tools.sh | tail -1
+        ok:host-tools:macos:gate:5 present; tray-build:4 present, missing aarch64-unknown-linux-musl,x86_64-unknown-linux-musl
+        $ env PATH=$HOME/.cargo/bin:/usr/bin:/bin:/usr/sbin:/sbin scripts/check-host-tools.sh | tail -1
+        ok:host-tools:macos:gate:6 present
+
+      ROOT CAUSE, and it is one line. The script ALREADY knows about this
+      failure mode and already carries the repair: lines 133-137 name it (a
+      non-login non-interactive shell never reads the rc file rustup and
+      Homebrew write their PATH edit into, measured on tlatoanis-macbook-air
+      2026-09-05), `tool_prefixes` lists $CARGO_HOME/bin and $HOME/.cargo/bin
+      first, and `_resolve_onto_path` puts the resolved directory ON PATH and
+      exports it. But the rustup-target cache at :241-243 is written
+
+        if command -v rustup >/dev/null 2>&1; then
+            _installed_targets="$(rustup target list --installed 2>/dev/null || true)"
+        fi
+
+      — a BARE `command -v`, not `have`/`_resolve_onto_path`. And `rustup` is
+      declared 0 times as a `binary` entry in the prerequisite table (cargo and
+      rustc are, :101-102), so nothing else ever repairs it either. On a clean
+      PATH `_installed_targets` is therefore empty, and the :236-240 comment's
+      reasoning — "Empty when rustup is absent, which is correct — no rustup
+      means no installed targets" — is sound for an absent rustup and WRONG for
+      an unresolved one, which is the case it cannot distinguish.
+
+      THE INTERNAL INCONSISTENCY IS THE PROOF, and it is visible in the failing
+      output itself: under the clean PATH above, cargo and rustc are counted
+      PRESENT (gate:5) because `have()` repaired them out of
+      ~/.cargo/bin — while the targets from THAT SAME DIRECTORY's toolchain are
+      reported missing. One run, one directory, two opposite answers.
+
+      WHY IT MATTERS RATHER THAN BEING COSMETIC. This is 823-u3k9 / 889-ewvt's
+      shape (a probe that answers about itself and reports it as a fact about
+      the host), in the one script whose entire job is to be the trustworthy
+      answer to "can this host build". It sends a stranger to reinstall a
+      correct toolchain — this cycle it cost exactly that detour — and the
+      failure is SILENT in the direction that matters: the summary line still
+      starts `ok:`, so a reader who checks the verdict rather than the body
+      sees a pass. It also under-reports capability for routing: a host that
+      can cross-build reports that it cannot.
+    exit_criteria:
+      - "the rustup-target cache resolves rustup through the SAME path resolution the rest of the script uses (have/_resolve_onto_path, i.e. $CARGO_HOME/bin and $HOME/.cargo/bin), so an installed target on a clean PATH is reported present; pre-fix result: FAILS — `env PATH=/usr/bin:/bin:/usr/sbin:/sbin scripts/check-host-tools.sh` reports both musl targets missing on a host where `rustup target list --installed` lists both"
+      - "a rustup that cannot be resolved AT ALL is a DISTINCT verdict from a target that is genuinely not installed — the unresolvable case must not print `MISSING (<group>): <target>` with `rustup target add` as its remedy, because that remedy is wrong for it; pre-fix result: FAILS (the two are the same output today)"
+      - "NEGATIVE CONTROL, and it is the one that must not regress: with rustup resolvable, a target that is genuinely absent is still reported MISSING with its `rustup target add` remedy — the fix must not turn the probe into one that passes because it stopped asking"
+      - "NEGATIVE CONTROL: a host with no rustup installed anywhere still reports the rustup-target entries as unsatisfied rather than silently present"
+      - "scripts/test-host-tools.sh covers all three arms (installed-but-off-PATH, genuinely-absent, rustup-absent) by driving TILLANDSIAS_HOST_TOOL_PREFIXES and a stub rustup rather than mutating the real toolchain, and the installed-but-off-PATH arm FAILS against the pre-fix script"
+    events:
+      - type: filed
+        ts: "2026-09-12T02:00:27Z"
+        agent_id: "macos-macneo-claude-20260912t020027z"
+        host: tlatoanis-macbook-neo
+        summary: |
+          Found by macneo-macos during the 2026-09-12 fleet-restart preflight,
+          not by a search for it: the check named two missing targets, the
+          remedy was run, and rustup reported both already up to date — which
+          is what exposed the probe rather than the host as the thing at fault.
+          Root cause read from the script (:241-243 bare `command -v rustup`;
+          rustup declared 0 times as a binary entry) and confirmed by the
+          PATH-flip pair and by the internal inconsistency in the failing run's
+          own output (cargo/rustc repaired and counted present out of the same
+          directory whose targets were called missing). Cites 989-ykks as the
+          probe's own order; 823-u3k9 and 889-ewvt as the shape. The targets
+          were NOT installed by this cycle — they were already there; the
+          `rustup target add` this cycle ran was a no-op and is the positive
+          control.

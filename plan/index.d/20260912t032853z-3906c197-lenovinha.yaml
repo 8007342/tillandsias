@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-gate-every-host-must-pass-is-blind-to-nine-defects-the-release-gate-sees-once-a-day
+    event:
+      type: note
+      ts: "2026-09-12T03:28:53Z"
+      agent_id: linux-lenovinha-opus5-20260912t014023z
+      host: lenovinha
+      summary: |-
+        CLOSURE EVIDENCE. Landed as cf3b5c68b on origin/linux-next.
+
+        The packet's verifiable_closure asks for `bash scripts/test-gate-divergence-is-declared.sh`. On the landed tree:
+
+            ok:gate-divergence-declared:16
+
+        with no `note:gate-divergence-untriaged` line at all, because the count is zero and the note only prints when it is not. Measured on origin/linux-next directly, not just locally: 0 rows with $2=="untriaged", BASELINE_UNTRIAGED=0, 17 files in scripts/gate-steps.d matching 1087-h2z9 (16 wired here plus the original 090 step).
+
+        WHAT THE NINE-DEFECT GAP TURNED OUT TO BE. The gap was 33 checks, 22 undecided. It is now 16, all of them with a written reason, and the undecided set is empty:
+          * 16 wired into --check, ~2.2s total, one gate-steps.d/*.step file each.
+          * 5 excluded with a measured reason (check-dead-env-branches.sh is red by design as a sweep input; check-tray-string-corpus-drift.sh is a report that always exits 0; validate-traces.sh is already gated indirectly through test-trace-coverage.sh; validate-spec-cheatsheet-binding-fast.sh and test-litmus-grep-escapes.sh are corpus/litmus scans 748-tkjx keeps out).
+          * 1 was never real: scripts/check-version-monotonicity.sh does not exist and never did, and was fixed at source rather than declared.
+
+        COROLLARY WORTH RECORDING: no row was cleared by wiring a red check into --check. That was macuahuitl's explicit condition and it held without strain, because the only red one (dead-env-branches, dead=29) states in its own header that exit 1 on findings is its contract.
+
+        EVIDENCE OF THE WIRING ITSELF, not just of the declaration file: TILLANDSIAS_FORCE_CHECK=1 ./build.sh --check exits 0 with all 16 STEP_OK lines present in the log, 317s of phases. audit-guard-activation.sh on the landed tree: population=122 total=122 active=122 orphan=0 verdict=ok. The 11 of the 16 that are check-*.sh each attribute to their own step file; the other 5 are outside that audit's population by its own definition (line 59), being test-*/verify-* or the instrument itself.

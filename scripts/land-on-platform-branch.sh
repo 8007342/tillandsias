@@ -31,6 +31,8 @@
 # Exit: 0 landed (verified against origin) | 1 dirty tree | 2 rebase conflict
 #       3 gate failed | 4 attempts exhausted | 5 auth failed
 #       6 push failed for a reason retrying cannot fix
+#       7 push emitted nothing and hit its bound (1131-iax2: blocked credential
+#         helper — the push hangs forever and the log stays zero-byte)
 set -uo pipefail
 
 BRANCH="${1:-$(git rev-parse --abbrev-ref HEAD)}"
@@ -244,8 +246,146 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
     # full gate run each time. Measured 2026-08-23: an expired GitHub token cost
     # four gate cycles and reported "origin moved" for all of them.
     _plog="${TMPDIR:-/tmp}/land-push.$$.log"
-    git push origin "$BRANCH" > "$_plog" 2>&1
-    rc=$?
+    # ORDER 1131-iax2: BOUND THE PUSH. `git push` has no timeout of its own, and a
+    # credential helper that blocks makes it hang FOREVER — the outer land
+    # timeout is the only thing that ends it, and what it produces is a
+    # zero-byte push log, no verdict, and (because this script's own header
+    # documents a pipeline-ending-in-tail bug elsewhere) a SUCCESS-SHAPED exit.
+    # A reader sees "push", silence, and exit 0.
+    #
+    # MEASURED on macneo 2026-09-11, twice: 2362s and 2360s, both killed by the
+    # outer bound rather than ending on their own. The helper was
+    # `osxkeychain`, configured in /opt/homebrew/etc/gitconfig (NOT ~/.gitconfig
+    # — someone looking there will not find it), blocked inside
+    # SecKeychainItemCopyContent.
+    #
+    # THE CAUSE IS NOT A LOCKED KEYCHAIN, and the first version of this comment
+    # said it was. Four probes on that host: show-keychain-info, list-keychains
+    # and the item's METADATA all read fine, securityd responsive — only the
+    # DECRYPT hung, with nothing on stdin (fd 0 was /dev/null). The keychain was
+    # already unlocked, which leaves the stored item's own access policy.
+    #
+    # WHAT IS MEASURED AND WHAT IS NOT, kept separate on purpose. Measured: the
+    # metadata/decrypt asymmetry, and that `timeout` DOES kill a blocked helper
+    # (rc=124 at exactly the bound, no orphan, no zombie — so SIGTERM lands and
+    # no -k is needed for the leaf process). NOT measured: that the fix is
+    # approving the item from a GUI session. Nobody has executed that; it is
+    # inference from how keychain ACLs normally behave. Note also that the
+    # credential is an INTERNET password (srvr=github.com), so the
+    # set-generic-password-partition-list recipe people reach for is probably
+    # not even the right tool. So this names the CAUSE and points at the probes,
+    # and declines to prescribe a cure it cannot stand behind.
+    #
+    # THE TREE PROPAGATES, measured on macneo against the genuinely ACL-blocked
+    # helper — not a fake:
+    #     GIT_TERMINAL_PROMPT=0 timeout 30 git push origin osx-next \
+    #         > /tmp/treetest.log 2>&1 < /dev/null
+    #     -> rc=124 at 31s, log 0 bytes, and afterwards NOTHING matching
+    #        osxkeychain|remote-https|git push|git-credential survives.
+    # So the bound reaches git push -> git-remote-https ->
+    # git-credential-osxkeychain, all three die, and no `timeout -k` is needed.
+    # Had the tree NOT propagated this guard would have been unfixable by
+    # wording alone: it would return a verdict while a helper kept running.
+    #
+    # THE BOUND IS GENEROUS ON PURPOSE. A healthy push on that host took ~5s
+    # (one derived data point, small plan/ commits, normal link) — 300s is 60x
+    # that and still caught both stalls in a twentieth of the time. But 5s is
+    # one measurement on one host and NOT a distribution, and refusing a
+    # slow-but-healthy push would be worse than the hang it replaces, so the
+    # bound is overridable: a big pack or a slow link raises it without patching
+    # this script.
+    _push_timeout="${TILLANDSIAS_PUSH_TIMEOUT:-300}"
+    _t0=$(date +%s)
+    # RESOLVE THE BOUNDER, AND ACCEPT gtimeout. macOS ships NO `timeout` in the
+    # base system: on tlatoanis-macbook-neo it exists only via Homebrew
+    # coreutils, and `env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin sh -c 'command
+    # -v timeout'` finds nothing. So a bare `command -v timeout` answers about
+    # the CALLER'S PATH, not the host — and a land invoked from a stripped
+    # environment (the LaunchServices regime, 980-xcaf) would silently fall
+    # through to the unbounded path on a host that has the tool installed.
+    # check-host-tools.sh:199-201 already declares `timeout -> gtimeout` as an
+    # accepted alternate on macOS; take either, and look in the Homebrew
+    # prefixes a stripped PATH omits.
+    _bounder=""
+    for _cand in timeout gtimeout; do
+        if command -v "$_cand" >/dev/null 2>&1; then _bounder="$_cand"; break; fi
+    done
+    if [ -z "$_bounder" ]; then
+        for _pfx in /opt/homebrew/bin /usr/local/bin /home/linuxbrew/.linuxbrew/bin; do
+            for _cand in timeout gtimeout; do
+                [ -x "$_pfx/$_cand" ] && { _bounder="$_pfx/$_cand"; break 2; }
+            done
+        done
+    fi
+    if [ -n "$_bounder" ]; then
+        "$_bounder" "$_push_timeout" git push origin "$BRANCH" > "$_plog" 2>&1
+        rc=$?
+    else
+        # No coreutils timeout (some macOS hosts without gnu-coreutils): do not
+        # pretend to bound it. Say so, so an unbounded push is a KNOWN state
+        # rather than a silent one.
+        # NAME IT rather than silently degrading. On a Mac without Homebrew
+        # coreutils there is neither timeout nor gtimeout, so this defect stays
+        # exactly as it was on the hosts most likely to hit it — the macOS lane
+        # is where the keychain hang was measured. An honest message is much
+        # better than silence, but it is not a fix, and the packet says so.
+        echo "land: warn — no 'timeout' or 'gtimeout' found; push is UNBOUNDED on this host (1131-iax2)" >&2
+        echo "land:        install GNU coreutils to bound it: brew install coreutils" >&2
+        git push origin "$BRANCH" > "$_plog" 2>&1
+        rc=$?
+    fi
+    _elapsed=$(( $(date +%s) - _t0 ))
+
+    # THE HANG, NAMED. Distinguish it from a fast empty log: only a push that
+    # BOTH produced nothing AND consumed the bound is this defect. A push that
+    # returned quickly with an empty log is something else and must not borrow
+    # this remedy.
+    if [ ! -s "$_plog" ] && [ "$_elapsed" -ge "$_push_timeout" ]; then
+        # THE VERDICT NAMES THE BOUND, NOT THE MEASURED ELAPSED. Measured on
+        # macneo: a 30s bound returned at 31s, because timeout signals at the
+        # bound and the shell's teardown lands in the next tick. A verdict
+        # string that reads 300 on one host and 301 on another is one a fixture
+        # cannot pin and a reader would file a bug about. The elapsed is still
+        # reported, on the line below, where varying is harmless.
+        echo "refused:land:push-emitted-nothing:$_push_timeout" >&2
+        {
+            echo "  git push produced NO output and hit the ${_push_timeout}s bound (elapsed ${_elapsed}s)."
+            echo "  Nothing was pushed. The commit is safe locally; nothing was lost."
+            echo "  FIRST SUSPECT: a blocked credential helper. It is the only part"
+            echo "  of a push that can wait forever without printing anything."
+            echo "    git config --get credential.helper"
+            echo "    git config --show-origin --get credential.helper   # may be a"
+            echo "      system gitconfig, not ~/.gitconfig"
+            echo "  Probe it directly — this returns instantly when healthy:"
+            echo "    printf 'protocol=https\nhost=github.com\n\n' | timeout 20 git credential-<helper> get"
+            echo "  rc=124 there confirms it."
+            echo "  ON macOS, DO NOT REACH FOR THE KEYCHAIN LOCK. Measured on a"
+            echo "  host in this state: show-keychain-info, list-keychains and"
+            echo "  the item METADATA all read fine and securityd was responsive;"
+            echo "  only the DECRYPT hung. The keychain was already unlocked, so"
+            echo "  unlocking it changes nothing."
+            echo "  WHAT THAT LEAVES is the stored credential item's own access"
+            echo "  policy: the decrypt is waiting for a confirmation that the"
+            echo "  session running the land has no way to present or answer."
+            echo "  CONFIRM IT ON YOUR OWN HOST before acting — run those four"
+            echo "  probes; if metadata reads and decrypt hangs, this is it."
+            echo "  THE FIX must come from a session that CAN answer that prompt,"
+            echo "  and it is the machine owner's call to make: approving a"
+            echo "  credential's access policy is not something a land should do"
+            echo "  on someone's behalf. Then RE-RUN the land; it does not"
+            echo "  self-recover and retrying headless hangs again."
+            echo "  NOTE: 'git fetch works' proves nothing here. Anonymous read"
+            echo "  never consults the helper, so fetch stays healthy while every"
+            echo "  push hangs."
+            echo "  If this host legitimately needs longer than ${_push_timeout}s:"
+            echo "    TILLANDSIAS_PUSH_TIMEOUT=<seconds> $0 $BRANCH"
+        } >&2
+        rm -f "$_plog"; exit 7
+    fi
+    # END ORDER 1131-iax2 push bound — this marker is load-bearing: the mutation
+    # control in test-land-push-bounded.sh strips from the ORDER banner to here
+    # to rebuild the pre-fix (unbounded) push. If it moves, that arm refuses to
+    # prove anything rather than passing vacuously.
     if [ "$rc" -ne 0 ]; then
         # Retrying only helps a LOST RACE. Anything else must refuse at once and
         # carry its remedy: an error read mid-incident should say what to do.
