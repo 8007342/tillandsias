@@ -382,3 +382,28 @@ surface another host's claim names (`tillandsias-plan expire-claims
   was withdrawn as unnecessary after reading `GuestWiringOutcome`. The new
   refusal log line discriminated on first use: `early eof` (a probe closing)
   followed by Ready, not a key disagreement.
+- **The non-reproducing host did the work** (lenovinha, on the sixth regime
+  gap): both the coordinator and the fixture's author started from the root
+  diagnosis, and what settled it was yolanda being UNABLE to reproduce esme's
+  red on a clean Windows host — that eliminated platform and build lane as
+  the variable and turned "it fails on Windows" into "a runnable ELF exists
+  at that path for any historical reason". Ask the host that cannot reproduce
+  what it sees, not only the one that can.
+- **The keying fix's completeness criterion was wrong and its site count was
+  wrong in both lanes** (yolanda, macbookair): corrected on 1084-x8ya — no
+  bare `channel_psk(` call remains is the criterion (the version stays in the
+  HKDF info), and each lane has ONE production call site with the rest inside
+  test functions.
+- **A gate check gives different verdicts on an unchanged tree** (yoga, found
+  while widening `check-plan-binary-probe-usage.sh` for 1128-j9fc): ten runs of
+  the ORIGINAL guard on one tree report `scripts=7/568` seven times and
+  `scripts=8/568` three times; the patched guard flakes the same way. Exactly
+  one file flips eligibility — `test-fragment-status-loss.sh`, seen 2/8 — so a
+  violation there is found by coin flip. Refuted by measurement: ugrep (GNU
+  grep forced, still flakes), SIGPIPE under pipefail (the pipeline extracted
+  verbatim is 20/20 and 30/30 in a while-read loop), the file's bytes.
+  Reproducible in situ, not in isolation, mechanism open. Ruling: the
+  widening lands honestly scoped (a population fix that names its
+  population, not a trustworthy refusal), the flake is its own row with the
+  numbers, yoga takes it next; closure is twenty consecutive runs giving one
+  verdict and a planted violation found 20/20.
