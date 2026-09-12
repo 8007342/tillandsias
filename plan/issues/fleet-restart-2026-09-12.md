@@ -716,3 +716,22 @@ surface another host's claim names (`tillandsias-plan expire-claims
   timestamp is a fixture with an expiry; sixth shape for 1130-i6xj, silent-
   degrade class because it reads as a real staleness refusal. Fix: plain
   `touch` (mtime = now), macbookair, relayed to trunk next.
+- **Linux full smoke on the floor host, and a p1 one step past §3** (pirria,
+  cachyos, operator-consented): §1 175 s, §2 reset to 0 containers / 0
+  volumes / 0 images, §3 init 398 s from a pristine store, 15 images rebuilt,
+  vault healthy, zero hits for every failure class the runbook enumerates.
+  Then, at shutdown after "Graceful shutdown completed": `tillandsias-vault`
+  Exited (137) — SIGKILL after the full 30 s grace, every host, every stop.
+  Read from the RUNNING container, not the script: PID 1 is bash
+  (`images/vault/entrypoint.sh`), vault is PID 10, tee PID 11, no trap, so
+  SIGTERM hits the shell and vault is never told to stop. Second defect in
+  the same two lines: the server is a backgrounded PIPELINE, so `$!` holds
+  TEE's pid and the obvious one-line trap would signal tee and look correct.
+  1134-u934 (p1): fix plus a runbook §3b (stop the substrate, assert every
+  container exits 0 within its grace), pirria. Also 1133-kktm: §1's prose
+  promises a download test and the installer runs the full init — a CONSENT
+  defect; and the bash guard the coordinator asked pirria to "add" to §1 was
+  already there (SKILL.md, the `BASH_VERSION` line) — the recipe relayed in
+  a chat message had dropped it: an instruction quoted out of its runbook
+  loses the guards the runbook wrapped it in, and the coordinator prescribed
+  a fix without reading the file (the check-for-the-capability shape).
