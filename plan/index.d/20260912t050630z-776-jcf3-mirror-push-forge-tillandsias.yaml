@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+events:
+  - packet_id: retire-host-src-checkout-behind-proven-transparent-push
+    event:
+      type: note
+      ts: "2026-09-12T05:06:30Z"
+      agent_id: forge-tillandsias-opencode-20260912t040719z
+      host: forge-tillandsias
+      summary: |-
+        LINUX-HOST MIRROR-PUSH PROOF, taken this cycle (criterion 1's in-forge
+        half, the 349 pattern). No ~/src path was created or touched; the
+        checkout is /home/forge/src/tillandsias on tmpfs.
+
+        1. linux-next advanced through the mirror end-to-end:
+           a53e4748a..6e8ad8697  linux-next -> linux-next
+           remote: [relay] Atomic push to https://github.com/8007342/tillandsias.git succeeded
+           remote: [pre-receive] Relay verified: upstream durably accepted the ref transaction
+           remote: [post-receive] Committed 1 upstream-verified ref update(s) to the local mirror
+           The pushed range carries this cycle's claims + the 1080-4deb
+           live-lane implementation (commit 6e8ad8697).
+
+        2. PROBE BRANCH pushed through the same transparent chain (the
+           reversible artifact criterion 1 asks for):
+             git push origin probe/776-jcf3-linux-forge-20260912
+             -> * [new branch] 6e8ad86970d36ade02d3029df2bd5e0a0f7b6be8
+           mirror confirms upstream: [relay] Atomic push ... succeeded;
+           [pre-receive] Relay verified: upstream durably accepted.
+           git ls-remote origin refs/heads/probe/776-jcf3-linux-forge-20260912
+             = 6e8ad86970d36ade02d3029df2bd5e0a0f7b6be8
+
+        OUTSIDE-THE-ENCLAVE VERIFICATION IS HOST-SIDE (I cannot do it from
+        inside the forge: the GitHub repo is private, gh auth config is
+        unreadable here, and direct HTTPS needs credentials). The HOST
+        (macuahuitl) must, per the 349 pattern:
+          git ls-remote https://github.com/8007342/tillandsias.git \
+              refs/heads/probe/776-jcf3-linux-forge-20260912
+          # expect 6e8ad86970d36ade02d3029df2bd5e0a0f7b6be8
+          gh api -X DELETE \
+              repos/8007342/tillandsias/git/refs/heads/probe/776-jcf3-linux-forge-20260912
+          # the mirror denies ref deletion, so deletion is host-side only
+        Paste that command output into this stream; then, and only then, is
+        criterion 1 banked on Linux.
+
+        REMAINING for this packet (unchanged by this event): step 1's
+        launch-side proof (tillandsias --cloud ... from the INSTALLED binary on
+        a host, confirming the ephemeral project resolves and the clone no
+        longer dies with Permission denied); criteria 3 and 4 as written in
+        next_action. What is now MEASURED rather than asserted: the forge can
+        push arbitrary refs through mirror->github transparently, and every
+        commit a forge makes dies with the container unless it is pushed.

@@ -72,7 +72,14 @@ W="$(mktemp -d "${TMPDIR:-/tmp}/preflight-cargo-test.XXXXXX")"
 #     path and keep working; copies silently produce nothing at all (8 arms red,
 #     no error text).
 NOCARGO="$W/nopath"; mkdir -p "$NOCARGO"
-for _t in bash git; do
+# dirname is in the donor list because the scripts under test call it before
+# they can reach their own cargo-absent skip, and on macOS neither bash's
+# directory (/bin) nor Homebrew git's carries the coreutils — measured by
+# macneo 2026-09-12 as "dirname: command not found" red on every Mac gate
+# from e6a834746. Donating dirname's directory (/usr/bin there, /usr/bin on
+# Linux too) brings the coreutils the scripts need; Linux was complete only
+# because bash and git happen to live beside them.
+for _t in bash git dirname; do
     _p="$(command -v "$_t" 2>/dev/null)" || continue
     [ -n "$_p" ] || continue
     _d="$(cd "$(dirname "$_p")" && pwd)" || continue
