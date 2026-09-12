@@ -1,0 +1,69 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-ledger-has-more-than-one-place-to-look-and-every-reader-looks-in-one-so-five-writes-landed-somewhere-nothing-consults
+    event:
+      type: note
+      ts: "2026-09-12T04:34:30Z"
+      agent_id: forge-tillandsias-opencode-20260912t040719z
+      host: forge-tillandsias
+      summary: |-
+        LIVE-LANE ARM 3 LANDED (forge-tillandsias 2026-09-12, item-1 of this
+        packet's next_action). scripts/test-ledger-write-reaches-its-reader.sh
+        now: land claims extracted ONLY from completion-shaped subjects —
+        ^(fix|close|feat)\(ORDER\) with the order INSIDE THE FIRST PAREN GROUP
+        (19 fixture arm assertions green, exit 0); a 7th fixture packet
+        (900-refs) + docs( / bare-token narrowing arms prove prose and bare
+        tokens never ring; an opt-in report-only sweeper (`--live` / LIVE_LANE=1)
+        runs the SAME code paths over the real folded ledger with a stated
+        denominator and exits 0 (decided caller: a periodic audit host, the
+        coordinator's sweep — NOT the build.sh --check gate, because the gate
+        must not RED a push for a packet someone is mid-import on).
+
+        MEASUREMENT TAKEN (the packet's unmeasured population, now measured):
+        over origin/linux-next (10,000 most recent subjects), denominator 383
+        ready packets, the narrowed reader reports 46 ready-but-landed:
+        702-6jza 722-w7a2 718-jqt5 793-zumy 793-qc6q 795-5itp 803-49re
+        814-75yf 814-5avq 823-u5zf 824-6qxh 829-dkuc 830-xsk2 856-s56y
+        888-miiy 915-wkm2 917-zkge 917-6iwv 920-pxg6 929-47u8 945-vpg3
+        956-llei 959-fpc5 964-tzmp 965-rb3v 965-hz3f 966-7umc 967-6ax6
+        972-umik 997-e4v2 980-krib 982-sguu 989-ykks 992-w7ds 997-pdgf
+        1001-i5ux 1002-kav4 1021-hf9e 1032-utne 1042-svey 1057-dgij
+        1061-zd83 1064-5hv2 1063-nraf 1077-vzwq 1081-gynk 1083-gzqj
+        1084-x8ya 1095-vk8r 1109-t8kw. ready-but-claimed [] and
+        blocked-in-prose [] (the two other sweep readers, same scan), so no
+        claim/release or prose blocker is currently blind. Positive control
+        1055-e8ie correctly ABSENT (completed). The full run is at
+        /tmp/live-lane-measurement.txt in the cycle's container.
+
+        SELF-FIXED DURING THE MEASUREMENT, both against the same "writer"
+        test: (a) the extractor's first draft grabbed the first order-shaped
+        body token under a non-order prefix — fix(tray): ... (order 591-33s6,
+        partial) [112ea637c] rung 591-33s6; group-2 extraction removed those
+        false positives (591-33s6, 647-6c3g, 667-se87, 682-z5h8, 684-awhm
+        dropped). (b) report_ready_but_landed re-greps the landed set once per
+        ready packet, and a process-substitution FIFO is single-consumption —
+        the first grep drained it and every later one read EOF ("agrees at
+        zero"); the set is materialized to a regular file instead.
+
+        CORRECTIVE ON THE ASSUMED NEGATIVE (important for future readers):
+        1063-nraf IS a live hit — its commits genuinely open with
+        fix(1063-nraf) (9b2f0842a et al. on origin/linux-next) while the
+        packet reads ready. The "1063-nraf-style multi-commit packet as the
+        negative" framing in the next_action assumed its subjects were NOT
+        completion-shaped; they are. Multi-commit packets whose interim step
+        subjects use fix(ORDER) will be rung by the live reader BY DESIGN and
+        handed to the sweep to judge (report names, fleet judges prominence).
+        Fixture negatives are controlled; the live ledger is not.
+
+        WALK-THROUGH of 2 of the 46 on the live ledger, to prove the report
+        names real landings: 793-qc6q (this batch's own packet; criterion (b)
+        landed at bbe0801c9 while status=ready — the scan's very premise),
+        fix(702-6jza) at 9493681 'seed the guest PTY ... (D2)'.
