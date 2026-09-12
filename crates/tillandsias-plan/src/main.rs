@@ -1382,6 +1382,30 @@ fn query_json_projection(packet: &serde_yaml::Value) -> serde_json::Value {
     serde_json::Value::Object(obj)
 }
 
+/// ORDER 1115-yvrq. Does a host of `host_role` satisfy a packet's
+/// `pickup_role` requirement? Split out so it can be tested without a ledger,
+/// the same reason `expire_claim_candidates` and `forgotten_sort` are.
+///
+/// The specific satisfies the general, never the reverse:
+///   host linux-immutable, requires linux           -> true
+///   host linux-immutable, requires linux-immutable -> true
+///   host linux-immutable, requires linux-mutable   -> FALSE
+///   host linux,           requires linux-mutable   -> FALSE
+///
+/// Separators are normalised because the fleet spells one role three ways:
+/// packets use hyphens, scripts/host-capability-probe.sh emits underscores,
+/// and the worker skill's host table passes a bare platform.
+fn role_satisfies(requirement: &str, host_role: &str) -> bool {
+    let req = requirement.trim().to_ascii_lowercase().replace('_', "-");
+    let have = host_role.trim().to_ascii_lowercase().replace('_', "-");
+    if req == "any" || req == have {
+        return true;
+    }
+    // A TOKEN boundary, not a bare prefix: `linux` must not satisfy a
+    // requirement of `linuxfoo`, which a plain starts_with would allow.
+    have.starts_with(&req) && have.as_bytes().get(req.len()) == Some(&b'-')
+}
+
 /// ORDER 582-26mm + 606-e2hg. Filter the FOLDED ledger by status and
 /// desired_release (exact), pickup_role (case-insensitive substring),
 /// capability_tags (every given tag must be present), then cap at `limit`.
@@ -1428,18 +1452,46 @@ fn query_packets<'a>(
                     .map(|pr| pr.to_ascii_lowercase().contains(&want))
                     .unwrap_or(false)
             };
+            // ORDER 1115-yvrq. CLAIMABILITY IS SATISFACTION, NOT CONTAINMENT,
+            // and the old test had the direction backwards.
+            //
+            // COORDINATOR RULING, macuahuitl 2026-09-06: `pickup_role` means
+            // REQUIRES, not AUTHORED-ON. A selector exists to offer a host work
+            // it can actually do, and authorship is already recoverable from the
+            // fragment's host field and the git author, so reading the field as
+            // provenance makes it useless for its one job. Do not reopen this
+            // without a newer ruling.
+            //
+            // Under REQUIRES the question is "does this host's role SATISFY the
+            // packet's requirement", so the packet's value must be a prefix of
+            // the host's role on a token boundary — the specific host satisfies
+            // the general requirement, never the reverse:
+            //
+            //   host linux-immutable, requires linux            -> yes
+            //   host linux-immutable, requires linux-immutable  -> yes
+            //   host linux-immutable, requires linux-mutable    -> NO
+            //   host linux,           requires linux-mutable    -> NO
+            //
+            // The old `pickup_role.contains(host_role)` inverted that: "linux"
+            // is a substring of "linux-mutable", so an immutable host was
+            // offered mutable-only work. MEASURED on yoga 2026-09-06:
+            // `--claimable-by linux` returned 302 rows including 1025-a896
+            // (pickup_role linux-mutable, an investigation needing a writable
+            // /usr on a Silverblue host that has none), where
+            // `--claimable-by linux-immutable` returned 172 and excluded it.
+            //
+            // SEPARATORS ARE NORMALISED because the fleet spells the same role
+            // three ways: packets use hyphens (`linux-mutable`),
+            // scripts/host-capability-probe.sh emits underscores
+            // (`linux_immutable`), and the worker skill's host table passes the
+            // bare platform. Both spellings happened to give the right answer
+            // here by coincidence of substring matching; folding `_` to `-`
+            // makes that deliberate.
             match (role, claimable_by) {
                 (Some(r), _) => matches_field(r),
-                (None, Some(c)) => {
-                    matches_field(c) || {
-                        // `any` must be the WHOLE field, not a substring: a
-                        // pickup_role of "company-lane" contains "any" and is
-                        // emphatically not claimable by everyone.
-                        str_field(p, "pickup_role")
-                            .map(|pr| pr.trim().eq_ignore_ascii_case("any"))
-                            .unwrap_or(false)
-                    }
-                }
+                (None, Some(c)) => str_field(p, "pickup_role")
+                    .map(|pr| role_satisfies(pr, c))
+                    .unwrap_or(false),
                 (None, None) => true,
             }
         })
@@ -7827,6 +7879,64 @@ fn read_prose_source(path: &str) -> std::io::Result<String> {
 
 #[cfg(test)]
 mod tests {
+    use super::role_satisfies;
+
+    /// ORDER 1115-yvrq. THE DEFECT, as a test: an immutable host must not be
+    /// offered work that requires a mutable one. Before the fix the matcher
+    /// asked whether the requirement CONTAINED the host role, so "linux" was a
+    /// substring of "linux-mutable" and yoga — Fedora Silverblue, read-only
+    /// /usr — was offered 1025-a896.
+    #[test]
+    fn role_a_specific_host_does_not_satisfy_a_sibling_requirement() {
+        assert!(!role_satisfies("linux-mutable", "linux-immutable"));
+        assert!(!role_satisfies("linux-mutable", "linux"));
+        assert!(!role_satisfies("linux-immutable", "linux-mutable"));
+    }
+
+    /// The specific satisfies the general. This is the arm that makes the fix
+    /// a correction rather than a narrowing: a host declaring its precise role
+    /// must still be offered every packet asking only for the platform —
+    /// measured, an immutable host goes from 172 rows to 301, not down to 172.
+    #[test]
+    fn role_a_specific_host_satisfies_a_general_requirement() {
+        assert!(role_satisfies("linux", "linux-immutable"));
+        assert!(role_satisfies("linux", "linux-mutable"));
+        assert!(role_satisfies("linux", "linux"));
+        assert!(role_satisfies("macos", "macos"));
+    }
+
+    /// `any` is claimable by everyone, and remains a WHOLE-field test: a
+    /// pickup_role of "company-lane" contains "any" and is emphatically not
+    /// claimable by all (the precedent this fix preserves).
+    #[test]
+    fn role_any_is_universal_but_only_as_a_whole_field() {
+        assert!(role_satisfies("any", "linux-immutable"));
+        assert!(role_satisfies("any", "windows"));
+        assert!(!role_satisfies("company-lane", "linux"));
+    }
+
+    /// The fleet spells one role three ways — packets hyphenate,
+    /// host-capability-probe.sh underscores, the skill passes a bare platform.
+    /// Agreement must be deliberate rather than a coincidence of substring
+    /// matching.
+    #[test]
+    fn role_separators_are_normalised() {
+        assert!(role_satisfies("linux", "linux_immutable"));
+        assert!(role_satisfies("linux_immutable", "linux-immutable"));
+        assert!(!role_satisfies("linux_mutable", "linux-immutable"));
+    }
+
+    /// A TOKEN boundary, not a bare prefix. Without this, `linux` would
+    /// satisfy a requirement of `linuxfoo` and any future role sharing a
+    /// prefix would silently collide — the same shape as the `any` substring
+    /// bug this function inherited its caution from.
+    #[test]
+    fn role_matching_stops_at_a_token_boundary() {
+        assert!(!role_satisfies("linuxfoo", "linux"));
+        assert!(!role_satisfies("linux", "linuxfoo"));
+        assert!(role_satisfies("linux", "linux-foo"));
+    }
+
     use super::{ForgottenRow, forgotten_sort};
 
     fn row(age: Option<i64>, order: i64, blocking: usize, id: &str) -> ForgottenRow {
