@@ -518,3 +518,21 @@ surface another host's claim names (`tillandsias-plan expire-claims
   refusals must name each other; small row, macbookair, after the smoke.
   macOS lands unblocked at osx-next 73d951a6e (sed fix, 804-deux findings,
   1130-i6xj); trunk gets the sed fix on the coordinator's relay.
+- **Windows conversion landed** (yolanda, windows-next b2fa4a21c): one
+  production call site and two test sites converted, build.rs exports the
+  embedded guest digest (None on a placeholder, never an empty file's hash),
+  no bare `channel_psk(` remains, and the mismatch arm was shown to go RED
+  when the two digests are made equal — a green arm never shown red would
+  have been this packet's own defect under a newer name. Two hazards from
+  the same land: (1) test functions inserted after the previous STATEMENT
+  rather than after the enclosing test's closing brace nest inside it; Rust
+  accepts it, `#[tokio::test]` on a nested fn never registers, brace balance
+  passes, the suite goes green with neither arm running — only indentation
+  caught it, and plain `cargo check` compiles no `#[cfg(test)]` code at all
+  (`--all-targets` does). (2) `git commit --amend` right after a merge amends
+  the MERGE — check the parent count first (2 = merge, do not amend); the
+  coordinator made the same mistake tonight and recovered the same way, by
+  reflog. **Operator ask:** consent for `wsl --unregister tillandsias` on
+  yolanda for the cold two-binary provision (the distro holds only debug-pair
+  artifacts and has never reached Ready; tillandsias-build is untouched);
+  yolanda runs the weaker in-distro re-injection arm meanwhile, labelled.
