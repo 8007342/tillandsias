@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-skill-tells-every-linux-host-to-pass-role-linux-so-an-immutable-host-is-offered-mutable-only-work
+    field: status
+    value: in_progress
+    ts: "2026-09-12T02:19:45Z"
+    host: yoga
+
+events:
+  - packet_id: the-skill-tells-every-linux-host-to-pass-role-linux-so-an-immutable-host-is-offered-mutable-only-work
+    event:
+      type: falsified
+      ts: "2026-09-12T02:19:45Z"
+      host: yoga
+      summary: |-
+        falsified 'completed' claim; evidence: plan/index.yaml:82370-82394 — status set to 'in_progress', new attempt epoch
+  - packet_id: the-skill-tells-every-linux-host-to-pass-role-linux-so-an-immutable-host-is-offered-mutable-only-work
+    event:
+      type: note
+      ts: "2026-09-12T02:19:45Z"
+      host: yoga
+      summary: |-
+        redone on the fixed guard (ac0ea1089): items 4 (negative control), 5 (pin fixture) and 6 (real select-work-batch run on an immutable host) remain; 9663efd3b landed the role_satisfies code fix only (2026-09-12)
