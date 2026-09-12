@@ -14,7 +14,7 @@ for a mutable host; only the first is fixed in this cycle's push.
 
 ## Finding 1 (FIXED here): test-host-tools.sh arm 6 ignores the forge openssl carve-out
 
-`check-host-tools.sh` (line 263-268) exempts openssl when
+`check-host-tools.sh` (`ensure_ca_bundle` forge branch) exempts openssl when
 `TILLANDSIAS_HOST_KIND=forge` (the CA-generating test `ensure_ca_bundle`
 early-returns on forge, so the openssl CLI is genuinely unnecessary). The arm-6
 partition property in `scripts/test-host-tools.sh` (added by 1004-cp6p) counts
@@ -26,9 +26,9 @@ added arm 8 (the "does not name openssl" assertion) but never reconciled arm 6.
 - RED (this forge, 2026-09-12): `FAIL --platform linux accounts for every
   declared tool declared=4 seen=3 out=[ok:host-tools:linux:gate:3 present ...]`
 - FIX: in arm 6, when `TILLANDSIAS_HOST_KIND=forge`, drop the forge-exempt
-  tools (`openssl`; predicate mirrors check-host-tools.sh:266) from the declared
-  set before counting. Mutable hosts set no such env var, so their verdict is
-  byte-identical.
+  tools (`openssl`; predicate mirrors check-host-tools.sh's forge branch) from
+  the declared set before counting. Mutable hosts set no such env var, so their
+  verdict is byte-identical.
 - VERIFIED: `scripts/test-host-tools.sh` exit 0, `--platform linux partitions
   its 3 declared tool(s) exactly`; full gate host-tools step green.
 
@@ -39,10 +39,11 @@ design.
 
 ## Finding 2 (WORKAROUND, durable fix deferred to relaunch): the product sets a GLOBAL core.hooksPath that shadows repo hooks
 
-`crates/tillandsias-headless/src/main.rs:10752` writes
+`crates/tillandsias-headless/src/main.rs` `write_forge_gitconfig` writes
 `core.hooksPath = /home/forge/.cache/tillandsias/git-hooks` into the forge's
-GLOBAL git config (`/home/forge/.gitconfig`) at provisioning time (line 11050
-sets the same for the facade gitdir, which is correct and per-repo). A global
+GLOBAL git config (`/home/forge/.gitconfig`) at provisioning time
+(`write_forge_repo_gitdir` sets the same for the facade gitdir, which is
+correct and per-repo). A global
 core.hooksPath REPLACES hooks for EVERY repo, including product test fixtures
 that simulate a server-side refusal with a repo-LOCAL pre-receive hook. First
 casualty: `scripts/test-land-merges-trunk.sh` arm 3 (order 1064-r8fv) — the
