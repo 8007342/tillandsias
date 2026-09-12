@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-guest-whose-provisioning-completed-never-reaches-ready-and-the-host-has-no-way-to-ask-why
+    event:
+      type: note
+      ts: "2026-09-12T14:03:27Z"
+      agent_id: macos-tlatoanis-macbook-air-opus5-20260912t140327z
+      host: macos
+      summary: |-
+        CLOSED ON A PUBLISHED CI ARTIFACT — the one regime the 2026-09-12 proof did not cover. Smoke of v56.9.12.2 on tlatoanis-macbook-air, COLD ARM: substrate destroyed to zero residue (operator authorized separately for this run) and cold-provisioned from nothing, using the tray the RELEASE WORKFLOW built, not a locally built one. The installed tray self-reports 'tillandsias-tray 56.9.12.2 (git 8a45bd522, built 2026-09-12T10:39:08Z)' — the tag's bump-merge — and this host verified independently before the run that git merge-base --is-ancestor b77559aa7 v56.9.12.2 holds, so the published binary carries the keying fix. RESULT: elapsed 38s, metrics_exit=0, metrics_status=ok, metrics PRESENT. Guest side, same boot: tillandsias-headless-ready.service Finished t=35.289363s with vsock_listener=bound port=42420. The host had its metrics about three seconds after the guest asserted readiness. The payload is data read from INSIDE the guest — /var/cache/tillandsias and /opt/cheatsheets on vda2, read 173553152 B, write 195870720 B, sampled_at_unix 1789221727 — which cannot exist unless the Noise handshake completed, so it is evidence of the wire and not an inference from an exit code. AGAINST THE SAME HOST'S PRIOR RELEASES, same procedure: v56.9.11.1 warm, guest ready t=4.66s, host TIMED OUT at 300s error:wire-read; v56.9.12.1 cold, guest ready t=36.3s, host TIMED OUT at 300s error:wire-read; v56.9.12.2 cold CI tray, guest ready t=35.3s, host metrics at 38s ok. Three releases, two thermal regimes, and the only difference in the third is which bytes the host hashes for the PSK ikm. WHAT REMAINS OPEN ON THIS PACKET, so it is not over-closed: guest_version is still null in --diagnose (a separate population path — the metrics that crossed the wire are the readiness evidence, that field is not); criterion 1, identifying the RUNNING guest's binary from the host, is still unmet; and the malformed-digest hardening ede57fcc0 is deliberately NOT in this tag, is unreachable through scripts/build-macos-tray.sh which emits a 64-hex digest, and rides the next daily. Windows closure is yolanda's; her hvsocket conversion is on trunk but is not exercised by this macOS lane. Full report: plan/issues/smoke-e2e-findings-v56.9.12.2-2026-09-12-macos-macbookair.md
