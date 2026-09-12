@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: gnu-only-shell-idioms-reach-trunk-green-and-freeze-a-whole-platform-one-host-at-a-time
+    event:
+      type: note
+      ts: "2026-09-12T14:27:37Z"
+      agent_id: linux-lenovinha-opus5-20260912t014023z
+      host: lenovinha
+      summary: |-
+        A SEPARATE CLASS BELONGS ON THIS ROW WITH A SEPARATE REMEDY: a fixture may not encode an ABSOLUTE MOMENT.
+
+        This row counts GNU-only shell idioms — sed -i, touch -d, find -printf, grep -P, readlink -f. They share a property: they are HOST-dependent, and they fail the SAME WAY on every run on a given host. That is what makes them tractable. Run the fixture twice on the failing host and you get the same answer; run it on a passing host and you get the other answer; the difference is a property of the machine and re-running is a reliable diagnostic.
+
+        I introduced one that is not like that, while fixing one that was. Converting `touch -d '2026-09-12 06:00'` to `touch -t 202609120600` for BSD portability froze "current" to a LITERAL, and that literal crossed from future to past during the same day:
+
+            03:40Z  full ./build.sh --check, same commit  -> RC=0, plan-binary-freshness 16/0
+            14:09Z  same fixture, same host, no change    -> 15 passed, 1 failed
+                    FAIL CONTROL: a CURRENT binary is not refused as stale
+
+        Every code land on the fleet was refused in between, Linux included.
+
+        WHY IT IS A DIFFERENT CLASS AND NOT A SIXTH INSTANCE:
+          * HOST-dependent defects differ between MACHINES. This one differs between MOMENTS on one machine.
+          * Re-running is the standard first move when a result looks wrong. For the GNU-only family it is informative. Here it is actively misleading: the same command gives different verdicts at different times with nothing changed, so a reader's most reliable instrument stops working on exactly the defect that most needs it.
+          * It retroactively devalues measurements already taken. I ran that gate, it was green, and I reported 16/0 as verification in good faith. A hardcoded future timestamp makes a fixture CORRECT when measured and WRONG later — so "I verified it" carries no information about the state anyone else will find. None of the host-dependent five do that; a green run on Linux never claimed anything about macOS.
+          * It reads as a REAL failure of the subject. The inverted control prints as a genuine staleness refusal, so the reader debugs the lane, plan_binary_is_stale, and their own binary — everything except a timestamp that was fine when it was written.
+
+        THE REMEDIES DIFFER, which is the practical reason to split them:
+          * host-dependent idioms want a PORTABILITY GUARD — an enumerated list of constructs, checked across the corpus.
+          * an absolute moment wants a RULE with no list: a fixture establishes relative order by writing files in sequence (plain `touch`, mtime = now), never by naming a time. macbookair's fix is exactly that, and it is better on BOTH axes at once — portable AND unexpirable — which is the tell that mine was the narrow fix rather than the right one.
+
+        Verified recovered on lenovinha after the fix landed: plan-binary-freshness 16/0.
