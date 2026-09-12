@@ -3821,6 +3821,16 @@ if [[ "$FLAG_CHECK" == true ]]; then
         _error "scripts/test-plan-binary-probe.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
         exit 1
     fi
+    _step "Checking the probe-usage guard answers the same twice (1130-qk7d; 20 runs)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-plan-binary-probe-usage-determinism.sh" 2>&1; then
+        _error "scripts/test-plan-binary-probe-usage-determinism.sh failed — the probe-usage guard gave more than one verdict on an unchanged tree. That is 1130-qk7d: grep -q SIGPIPEs its upstream, pipefail reports 141, and an eligible file is silently dropped. Read WHICH arm failed: arm 1 is the regression pin, arm 2 is only a positive control and passes on the unfixed code"
+        exit 1
+    fi
+    _step "Checking the probe-usage guard walks its whole population (1128-j9fc)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-plan-binary-probe-usage-population.sh" 2>&1; then
+        _error "scripts/test-plan-binary-probe-usage-population.sh failed — this fixture asserts that check-plan-binary-probe-usage.sh WALKS repo-root *.sh and scripts/gate-steps.d/*.step, not merely that it passes. An unwalked surface and a clean surface produce the same verdict, which is how that guard was found too narrow three times; read which arm failed rather than assuming the binding is at fault"
+        exit 1
+    fi
     _step "Checking test-podman-sync-budgets (1063-nraf; 116ms)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-podman-sync-budgets.sh" 2>&1; then
         _error "scripts/test-podman-sync-budgets.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"

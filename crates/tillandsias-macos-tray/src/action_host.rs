@@ -425,12 +425,10 @@ async fn open_control_wire_stream(
                 // error anywhere — the guest simply never becomes reachable.
                 #[cfg(not(debug_assertions))]
                 None => {
-                    return Err(
-                        "no embedded guest digest in a release tray: refusing the \
+                    return Err("no embedded guest digest in a release tray: refusing the \
                          unkeyed self-hash derivation (1084-x8ya) — rebuild through \
                          scripts/build-macos-tray.sh"
-                            .to_string(),
-                    );
+                        .to_string());
                 }
                 #[cfg(debug_assertions)]
                 None => channel_psk(
