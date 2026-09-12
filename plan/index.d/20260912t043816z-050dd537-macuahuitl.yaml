@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-guest-whose-provisioning-completed-never-reaches-ready-and-the-host-has-no-way-to-ask-why
+    event:
+      type: finding
+      ts: "2026-09-12T04:38:16Z"
+      agent_id: linux-macuahuitl-claude-20260912t013351z
+      host: macuahuitl
+      summary: |
+        ROOT CAUSE, found by macbookair and confirmed on trunk by the coordinator (2026-09-12T05:05Z): the handshake key has a fourth input nobody compared. On RELEASE builds release_root_secret() (crates/tillandsias-secure-channel/src/lib.rs:86-96) is the SHA-256 of the RUNNING BINARY'S OWN on-disk content (current_exe self-hash); on debug builds it is the fixed DEV_ROOT_SEED. derive_psk has no callers outside the crate; every host caller (host-shell vsock_client.rs:325/665/830, provisioning.rs:173, macos-tray action_host.rs:403 and diagnose.rs:759, the Windows hvsocket path) uses channel_psk, which uses that self-hash. So the tray (Mach-O or PE) and the guest (Linux musl headless) hash DIFFERENT FILES, derive different PSKs, and NNpsk0 fails on msg1: the guest's read_message fails with Decrypt, server_handshake_or_reclaim hands the raw stream back, the guest answers in PLAINTEXT with the Unauthorized control frame and never logs why (vsock_server.rs:115-117 passes the error along as a value), and the host, still mid-Noise, parses those bytes as a Noise message and reports "noise: input error". The doc comment above the function ("both ends automatically run identical content and derive matching keys") states the intended design; the implementation hashes each end's own exe.
+
+        MEASURED on macbookair, v56.9.12.1: host tray sha256 3777f0ae…, staged guest sha256 68f176d0… — different ikm with an equal (build_version, wire_version, hop) triple. WHY NOW: 79e3ca876 made the wire secure by default after v56.9.5.1, so v56.9.11.1 and v56.9.12.1 are the first releases in which this handshake runs at all between two different binaries; v56.9.5.1 passed on Windows because both ends were plaintext. WHY LINUX IS GREEN: no guest VM, no HostGuest hop. WHY NO TEST CAUGHT IT: the only handshake test pairs client and server in ONE process over an in-memory duplex — one current_exe, one self-hash, one PSK; the fixture's shape excludes the defect. DISCRIMINATING PREDICTION: a debug-built pair handshakes (fixed seed); a release pair does not. Framing in secure_stream.rs is exonerated (yolanda: read_exact and write_all both ways, u16 be both ways).
+
+        FIX, routed: macbookair (capable macOS host) adds a host-side derivation whose root secret is the SHA-256 of the guest binary bytes the host stages/embeds — identical content on both ends, the comment's intent — fail-closed on a stale guest stays; a unit test with two different byte strings standing in for tray and guest; macOS callers converted; doc sentences rewritten. yolanda converts the Windows caller (hvsocket.rs) and verifies a release pair reaches Ready on Windows. macneo's host-side classifier (a) and yolanda's guest-side reclaim log line still land as diagnosability. The stable promotion is held until a tag carrying the fix provisions to Ready on both VM platforms.
