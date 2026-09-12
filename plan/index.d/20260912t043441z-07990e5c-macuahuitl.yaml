@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-guest-whose-provisioning-completed-never-reaches-ready-and-the-host-has-no-way-to-ask-why
+    event:
+      type: note
+      ts: "2026-09-12T04:34:41Z"
+      agent_id: linux-macuahuitl-claude-20260912t013351z
+      host: macuahuitl
+      summary: |
+        SETTLING READ FROM TRUNK (coordinator, 2026-09-12T04:50Z), narrowing the window to its mechanism class:
+        - At v56.9.5.1 the control-wire default was STILL PLAINTEXT on both ends (vsock_server.rs at that tag: "The default is STILL plaintext: the flip is atomic across six readers and lands with the last of them"). 79e3ca876 (972-umik commit B) flipped the default to secure on every reader AFTER that cut; 7623213e2 (commit A) converted hvsocket.rs to the shared secure-wire reader (+150 lines). Both are in (v56.9.5.1 .. v56.9.12.1]. So esme's pass on v56.9.5.1 was a plaintext handshake, and v56.9.11.1 / v56.9.12.1 are the FIRST Windows and macOS releases in which a CI-built tray and a Linux-built musl guest run the Noise handshake for real over hvsocket / vsock.
+        - The only test of that handshake, windows_lane_psk_pairs_and_carries_a_frame_both_ways, pairs client and server in ONE process over an in-memory duplex with the PSK from one expression. Nothing has ever paired two separately built binaries over a real socket.
+        - yolanda's static "identical binding string" claim is WITHDRAWN by yolanda: the info string is formatted at runtime (secure-channel/src/lib.rs:124). Both binaries carry the constant 56.9.12.1, the guest is byte-identical to the published musl asset, both call sites pass HopId::HostGuest and the same crate's WIRE_VERSION; runtime equality is unmeasured. The tray's build.rs falls back SILENTLY to CARGO_PKG_VERSION (0.1.0) if VERSION is unreadable at build time (build.rs:93-95); the path is manifest-relative and CI builds from the checkout root, so it is unlikely to have fired, but it must become a hard error (yolanda lands it).
+        - Two candidate classes remain, and the runtime PSK-triple experiment (both ends log build_version, wire_version, hop) discriminates them: UNEQUAL triples name a version-binding cause; EQUAL triples point at transport framing in the shared reader over a real socket — partial reads (read vs read_exact on length-prefixed Noise messages), prefix-width disagreement, or the first message arriving in two chunks — since "noise: input error" is snow's length error and "early eof" (macneo) is what a short read produces, and an in-memory duplex never splits a message.
+        - Hosts: yolanda (Windows half: triple experiment, A' both-sides on the existing distro, the build.rs hard error), macbookair (macOS half, after macneo lands the handshake classifier (a) that reports the guest's own refusal verbatim). esme and macneo are floor tier and are done. The stable promotion stays held on this packet.
