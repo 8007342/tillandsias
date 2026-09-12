@@ -189,6 +189,35 @@ $_arv_name
     return 1
 }
 
+# AN IDIOM INSIDE AN EXPLICIT DIALECT BRANCH IS ALREADY HANDLED — the third
+# false-positive class, and the third time this guard has been wrong in its own
+# favour. bump-version.sh:157-161 reads:
+#
+#   if sed --version 2>/dev/null | grep -q GNU; then
+#       sed -i "0,/…/s//…/" "$f"          # GNU arm — FLAGGED by a naive scan
+#   else
+#       awk … "$f" > tmp && mv tmp "$f"    # BSD arm, with a comment saying
+#   fi                                     # "BSD sed: can't use 0,/pat/"
+#
+# The author had already solved it, in more depth than the guard knows: BSD
+# sed also rejects the `0,/re/` ADDRESS, which measured here as a SILENT NO-OP
+# (exit 0, file unchanged) — so a naive `-i` fix would have left the real
+# defect in place while removing the warning about it.
+#
+# BOUNDED WINDOW, not file-level: a dialect probe suppresses only the next few
+# lines. A file that branches for ONE idiom must not get blanket immunity for
+# every other idiom in it — that would be an exemption list wearing a
+# heuristic's clothes.
+_DIALECT_WINDOW=6
+
+_is_dialect_probe() { # _is_dialect_probe <line>
+    case "$1" in
+        *"--version"*GNU*|*"grep -q GNU"*|*"grep -qi gnu"*) return 0 ;;
+        *"uname -s"*|*"_litmus_os"*|*"Darwin)"*) return 0 ;;
+    esac
+    return 1
+}
+
 _looks_like_invocation() { # _looks_like_invocation <line>
     case "$1" in
         *" -"*|*"'"*|*'"'*) return 0 ;;
@@ -230,6 +259,7 @@ while IFS= read -r f; do
     [ -f "$f" ] || continue
     case "$f" in */check-portability-idioms.sh) continue ;; esac
     _rvars="$(_remote_vars_of "$f")"
+    _dialect_left=0
     while IFS= read -r line; do
         n="${line%%:*}"; t="${line#*:}"
         # Remote dispatch: the dialect that matters is the remote host's,
@@ -237,6 +267,12 @@ while IFS= read -r f; do
         # a variable this file later hands to one.
         _is_remote_context "$t" && continue
         [ -n "$_rvars" ] && _assigns_remote_var "$t" "$_rvars" && continue
+        # Inside an explicit GNU/BSD branch: the author is already handling it.
+        if _is_dialect_probe "$t"; then _dialect_left=$_DIALECT_WINDOW; fi
+        if [ "$_dialect_left" -gt 0 ]; then
+            _dialect_left=$((_dialect_left - 1))
+            continue
+        fi
         case "$t" in
             *"sed -i"*)
                 case "$t" in

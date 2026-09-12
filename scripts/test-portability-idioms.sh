@@ -111,6 +111,23 @@ printf '%s\n' "$OUT" | grep -qE 'help-(de|es|fr|ja)\.sh' \
     && bad "NEGATIVE CONTROL: flagged help TEXT as an rg invocation" \
     || ok "NEGATIVE CONTROL: usage lines not flagged"
 
+# DIALECT-BRANCH CLASS, both directions. bump-version.sh wraps its GNU arm in
+# `if sed --version | grep -q GNU; then … else awk … fi` and its BSD arm is
+# more thorough than a -i fix would have been: BSD sed also rejects the
+# `0,/re/` ADDRESS, measured here as a SILENT NO-OP (exit 0, file unchanged).
+# So flagging it would have invited a "fix" that removed the warning and left
+# the real defect.
+printf '%s\n' "$OUT" | grep -qE 'bump-version\.sh:[0-9]+' \
+    && bad "DIALECT BRANCH: flagged an idiom whose file already branches on dialect" \
+    || ok "DIALECT BRANCH: an idiom inside an explicit GNU/BSD branch is not flagged"
+
+# AND THE CONTROL: the window is BOUNDED, so a file that branches for ONE
+# idiom does not get blanket immunity. test-source-slice-bounds.sh has bare
+# sed -i and no dialect probe near it; it MUST still be named.
+printf '%s\n' "$OUT" | grep -qE 'test-source-slice-bounds\.sh:[0-9]+' \
+    && ok "DIALECT BRANCH control: a bare idiom with no nearby probe IS still flagged" \
+    || bad "DIALECT BRANCH control: the window is swallowing unguarded code"
+
 _D=d   # split literal; see the note at the grep below
 # COUNTERPART COMPLETENESS: `date -j` / `-jf` is the BSD PARSE form and is what
 # every correct site in this tree uses. It was missing from the counterpart

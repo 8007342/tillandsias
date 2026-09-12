@@ -283,7 +283,12 @@ cmd_sweep() {
           file_silent_death "$id" "$order" "$dry"
           if [ -z "$dry" ]; then
             # mark filed so a later cycle does not double-file
-            sed -i 's/^filed=no$/filed=yes/' "$rec"
+            # TEMP FILE, NOT `sed -i` (1135-z8gn): GNU-only, and on BSD the
+            # next arg is read as a backup SUFFIX so the edit silently does
+            # NOTHING and returns success. Here that means the record is never
+            # marked filed and the next cycle FILES IT AGAIN — a no-op that
+            # reports success is worse than a crash.
+            sed 's/^filed=no$/filed=yes/' "$rec" > "$rec.tmp" && mv "$rec.tmp" "$rec"
           fi
         fi
         ;;
