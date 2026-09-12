@@ -67,6 +67,13 @@ surfaces=(
   openspec/litmus-tests
   .github/workflows
   scripts/install-hooks.sh
+  # skills/ is the CANONICAL tree; .claude/skills and the other runtime dirs are
+  # symlink farms onto it. A Windows checkout materialises those symlinks as
+  # 40-byte text files (core.symlinks=false), and BSD grep -R does not descend
+  # symlinked directories, so on both regimes an invoker that lives only in a
+  # skill read as absent and five wired guards became "orphans" (yolanda and
+  # macbookair, 2026-09-12). The canonical tree is real files everywhere.
+  skills
   .claude/skills
   methodology.yaml
   methodology

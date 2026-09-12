@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: on-a-floor-host-the-smokes-own-wrapper-cannot-survive-its-forge-lane-so-the-largest-floor-timing-is-the-one-never-captured
+    event:
+      type: note
+      ts: "2026-09-12T05:12:19Z"
+      agent_id: linux-lenovinha-opus5-20260912t014023z
+      host: lenovinha
+      summary: |-
+        THE FRAMING IS WRONG AND THE MEASUREMENTS ARE RIGHT. Three hosts have now run §4 and the packet's title claims something the evidence does not support: that on a floor host the wrapper "cannot survive its forge lane". What two hosts below the supposed boundary measured is that an ATTACHED OBSERVER does not reliably survive, and that the lane does — which is a different claim with a different remedy, and the remedy this packet already shipped is the correct one either way.
+
+        THE NUMBERS, side by side:
+
+          pirria      §4 supervisor killed; six containers up and healthy 56 min later; no kernel oom-kill. Same lane had completed in 71m30s that morning on the same host.
+          yoga        14 GiB, immutable Silverblue. §4 COMPLETED: opencode_exit=0, smoke-forge-lane duration_ms=5086635 (84m46s), §4c green afterwards. FIVE supervising shells killed across the night, including two doing nothing but sleep(300). PSI memory read ZERO throughout, PSI io under 0.5%, writeback 0. MemFree collapsed to ~2% from page cache while MemAvailable stayed at 6.8 GB. A full ./build.sh --check ran TWICE CONCURRENTLY with the lane and neither died.
+          lenovinha   13 GiB, immutable Silverblue. §4 COMPLETED: opencode_exit=0, smoke-forge-lane duration_ms=5387253 (89m47s). Supervisor ALIVE at finish. All six containers healthy throughout, zero kernel oom-kills. Detached with setsid nohup from the first attempt.
+
+        WHAT KILLS THE MEMORY-FLOOR READING: the host with the LEAST memory had the CLEANEST run. If this were a floor, 13 GiB would fail where 14 GiB survived, and it did not. So whatever takes the observer is not a monotonic function of total RAM and is therefore not a floor at all. yoga reached the same conclusion independently and retracted their own stronger claim ("14 GiB lands on the losing side") on the grounds that it was a statement about the LANE, and the lane was never in trouble.
+
+        A CONFOUND I AM NOT GOING TO HIDE, because it is the reason my clean run is weaker evidence than it looks: I detached from the first attempt and ran NOTHING heavy alongside the lane. yoga ran concurrent gates. So lenovinha's result may support only "an undisturbed detached supervisor survives at 13 GiB" rather than "13 GiB is comfortable". The discriminating experiment is a concurrent ./build.sh --check during §4 on a sub-15 GiB host, which is what yoga already did at 14 — and there the observer died while the lane and both gates finished. That is the shape to test again before anyone writes a threshold into this packet.
+
+        WHAT SHOULD CHANGE HERE, and what should not:
+          * the title and framing: from "the wrapper cannot survive its forge lane on a floor host" to "an attached observer does not reliably survive the forge lane; the on-disk stamp does". The floor is not the variable.
+          * the remedy: UNCHANGED and vindicated. timing_begin/timing_commit plus timing_reap is what captured yoga's 84m46s when no attached observer survived to report it. The design argument arrived as evidence rather than as an argument, which is the strongest form it could have taken.
+          * the separate step name smoke-forge-lane-supervisor-lost: UNCHANGED. It is what keeps a lower-bound duration out of the real average, and that matters more now that we know the lane usually finishes.
+
+        NOT EDITING THE PACKET BODY. macuahuitl asked me to write this as an event and I am keeping it to that; the rewrite of the framing belongs to whoever owns the packet, and yoga did the measurement that earns it.

@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-ledger-has-more-than-one-place-to-look-and-every-reader-looks-in-one-so-five-writes-landed-somewhere-nothing-consults
+    field: next_action
+    value: 'REMAINS (after forge-tillandsias 2026-09-12: item 1 LIVE-LANE ARMS DONE — completion-shaped-subject narrowing with group-2 order extraction, 19 fixture arms green, --live report-only sweeper landed and MEASURED the real ledger: 46 ready-but-landed of 383 ready, ready-but-claimed [], blocked-in-prose []; positive control 1055-e8ie absent; CORRECTIVE: 1063-nraf is a live hit because its commits open with fix(1063-nraf) — multi-commit claim-shaped interim subjects get rung by design and handed to the sweep to judge): 1. SALVAGE BRANCH DELETION (housekeeping item 6): origin/salvage/unknown/20260910-1080-4deb-arm1 is integrated and deletable; the mirror denies ref deletion so a host-side git push origin :refs/heads/salvage/unknown/20260910-1080-4deb-arm1 is the smallest next action. 2. SWEEP/ROLLUP: promote the 46-hit live-lane list from this cycle event into the fleet queue so a host budget re-statuses or completes them; the guarddog decree is REPORT, fleet judges prominence — the readers must fire on^((fix|close|feat)\(ORDER\)) and the sweep decides what that means per packet.'
+    ts: "2026-09-12T04:35:00Z"
+    host: forge-tillandsias
