@@ -72,9 +72,27 @@ const DEV_ROOT_SEED: &[u8] = b"tillandsias-dev-root-not-a-secret";
 /// On release builds, every invocation of this function returns the SHA-256
 /// hash of the binary's own on-disk content. This creates a cryptographic
 /// version binding — only binaries compiled from identical source produce
-/// identical hashes and therefore derive the same PSK. When the host embeds
-/// the guest binary and overwrites the guest on each boot (order 190), both
-/// ends automatically run identical content and derive matching keys.
+/// identical hashes and therefore derive the same PSK.
+///
+/// THIS IS THE **GUEST**'S DERIVATION ONLY. The host must NOT use it for the
+/// host↔guest hop — see [`channel_psk_for_guest`]. The sentence that used to
+/// stand here claimed that "when the host embeds the guest binary and
+/// overwrites the guest on each boot (order 190), both ends automatically run
+/// identical content and derive matching keys". That was never implemented on
+/// the host side and cannot be: the host runs the TRAY (a macOS Mach-O or a
+/// Windows PE) while the guest runs `tillandsias-headless` (a Linux musl ELF),
+/// so `current_exe()` names a different file on each end and the two binaries
+/// can never be byte-identical. Both ends derived from their own self-hash,
+/// the ikm differed, and the NNpsk0 handshake failed with a perfectly equal
+/// (build_version, wire_version, hop) triple.
+///
+/// MEASURED on macOS 2026-09-12 against published v56.9.12.1 (order
+/// 1084-x8ya): tray `3777f0ae…`, guest `68f176d0…`; the guest asserted
+/// readiness in 36 s and kept running while the host, unable to complete the
+/// handshake, reported "phase never reached Ready" 300 s later. The defect was
+/// invisible until 79e3ca876 made the wire secure by default, because before
+/// that the handshake did not run at all. Linux never saw it: there is no
+/// guest VM there, so this hop does not exist.
 ///
 /// On debug (dev) builds, falls back to [`DEV_ROOT_SEED`] so locally-built
 /// peers interoperate without a full release build.
@@ -136,6 +154,33 @@ pub fn channel_psk(build_version: &str, wire_version: u16, hop: HopId) -> Zeroiz
     derive_psk(release_root_secret(), build_version, wire_version, hop)
 }
 
+/// Derive the host's side of the host↔guest PSK from the GUEST binary's digest.
+///
+/// **This is the host's derivation for [`HopId::HostGuest`]; [`channel_psk`] is
+/// the guest's.** The guest self-hashes the binary it is running, so the host
+/// must supply exactly that digest — SHA-256 over the same bytes — or the two
+/// ends derive different keys and NNpsk0 fails closed (order 1084-x8ya).
+///
+/// `guest_binary_sha256` MUST be a digest the host knows at TRAY BUILD TIME —
+/// the SHA-256 of the guest asset shipped with this release — and never a hash
+/// of a file read from the host at runtime. A runtime read would make the host
+/// agree with whatever guest happens to be on disk, which is precisely the
+/// skew that must stay visible: a guest that was never re-staged keeps its old
+/// self-hash, mismatches, and is refused with a named cause. That refusal is
+/// the design working, not a regression.
+///
+/// It exists as a named function rather than leaving each caller to hash for
+/// itself because there are several call sites and two candidate files on each
+/// platform; hand-rolled hashing is a wrong file waiting to happen.
+pub fn channel_psk_for_guest(
+    guest_binary_sha256: &[u8; 32],
+    build_version: &str,
+    wire_version: u16,
+    hop: HopId,
+) -> Zeroizing<[u8; 32]> {
+    derive_psk(guest_binary_sha256, build_version, wire_version, hop)
+}
+
 pub mod secure_stream;
 
 pub use secure_stream::{
@@ -156,6 +201,56 @@ mod tests {
         let a = derive_psk(ROOT, "0.3.260630.1", WIRE, HopId::HostGuest);
         let b = derive_psk(ROOT, "0.3.260701.1", WIRE, HopId::HostGuest);
         assert_ne!(*a, *b, "different build_version MUST yield a different PSK");
+    }
+
+    /// ORDER 1084-x8ya — the defect this crate shipped, expressed as a test.
+    ///
+    /// The host and the guest are DIFFERENT BINARIES: a macOS/Windows tray and
+    /// a Linux musl `tillandsias-headless`. Every host caller used to derive
+    /// from `release_root_secret()` = SHA-256 of its OWN exe, so the ikm
+    /// differed from the guest's self-hash and NNpsk0 failed closed even with
+    /// an identical (build_version, wire_version, hop) triple.
+    ///
+    /// WHY THIS TEST USES EXPLICIT BYTE STRINGS AND NOT `release_root_secret`:
+    /// a single-process fixture has exactly ONE `current_exe`, so it derives
+    /// ONE self-hash for both ends and CANNOT express this defect by
+    /// construction. That is also why the round-trip test below could never
+    /// have caught it. **Do not "upgrade" either test to `--release` to cover
+    /// this**: under `--release` a one-process test still hashes the same file
+    /// on both sides and passes whether or not the keying is correct — a
+    /// harness that guarantees the invariant it checks. The only integration
+    /// proof is two DISTINCT binaries: a release-built tray and the release
+    /// guest reaching Ready on a real cold provision.
+    #[test]
+    fn host_derives_the_guests_key_from_the_guest_binary_not_its_own() {
+        use sha2::Digest;
+
+        // Stand-ins for two binaries that can never be byte-identical.
+        const TRAY_BYTES: &[u8] = b"pretend-mach-o-tray-bytes";
+        const GUEST_BYTES: &[u8] = b"pretend-musl-guest-bytes";
+
+        let guest_digest: [u8; 32] = Sha256::digest(GUEST_BYTES).into();
+        let tray_digest: [u8; 32] = Sha256::digest(TRAY_BYTES).into();
+
+        // What the GUEST derives: self-hash of the bytes it is running.
+        let guest_self = derive_psk(&guest_digest, "56.9.12.1", WIRE, HopId::HostGuest);
+        // What the HOST derives now: from the guest's digest.
+        let host_from_guest =
+            channel_psk_for_guest(&guest_digest, "56.9.12.1", WIRE, HopId::HostGuest);
+        // What the HOST used to derive: self-hash of its own exe. The defect.
+        let host_self = derive_psk(&tray_digest, "56.9.12.1", WIRE, HopId::HostGuest);
+
+        assert_eq!(
+            *host_from_guest, *guest_self,
+            "host and guest MUST derive the same PSK — the host keys off the \
+             guest binary's digest, which is what the guest self-hashes"
+        );
+        assert_ne!(
+            *host_from_guest, *host_self,
+            "deriving from the host's OWN binary is order 1084-x8ya; if these \
+             are equal the fix has been reverted and the handshake is broken \
+             again on every guest-VM platform"
+        );
     }
 
     /// Hop domain separation: a host↔guest key is never usable guest↔container.
