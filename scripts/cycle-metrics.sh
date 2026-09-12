@@ -329,7 +329,19 @@ TIMING_LOG="${TILLANDSIAS_TIMING_LOG:-$(_metrics_default_log tillandsias-timing.
 # pirria measured 99 records in /tmp on 2026-09-06 and the file was GONE by
 # 2026-09-12, cleared by a reboot, taking 1074-96z9's own hit/miss records with
 # it. A second log is not merely misplaced; it is being lost.
-if [ -z "${TILLANDSIAS_TIMING_LOG:-}" ]; then
+# SCOPED TO THE REPORTING PATH ONLY. The append subcommands (--emit-timing,
+# --emit-timing-batch, --emit-flow) are best-effort by contract and must never
+# take down the step they are measuring; and an --emit-flow caller is not even
+# reading the timing log. Refusing there couples an unrelated writer to a
+# timing-log split — measured: with /tmp debris present,
+# test-cycle-flow-emit-idempotency.sh failed 12 scenarios because a FLOW emit
+# was refused over a TIMING log. The split matters when numbers are PUBLISHED,
+# which is this script's reporting path, so the guard lives there.
+case "${1:-}" in
+    --emit-*) _tl_reporting=0 ;;
+    *)        _tl_reporting=1 ;;
+esac
+if [ "$_tl_reporting" = 1 ] && [ -z "${TILLANDSIAS_TIMING_LOG:-}" ]; then
     _tl_base="$(basename "$TIMING_LOG")"
     _tl_other=""
     case "$TIMING_LOG" in
@@ -346,17 +358,23 @@ if [ -z "${TILLANDSIAS_TIMING_LOG:-}" ]; then
             echo "  and the cross-host recurrence audit compares them as totals."
             echo "  Refusing to publish numbers that cannot say which half they saw."
             echo ""
-            echo "  MOST LIKELY CAUSE ON A HOST THAT GATED BEFORE 1096-p3tn LANDED:"
-            echo "  fixture debris. Until that packet, eleven scripts/test-litmus-*.sh"
-            echo "  fixtures ran the litmus runner from a scratch dir, and their records"
-            echo "  landed in the shared log carrying the REAL host name — so they are"
-            echo "  indistinguishable by eye. CHECK BEFORE DELETING:"
+            echo "  DIAGNOSE FIRST — the two cases look identical and are not:"
             echo "      grep -c '\"step\":\"litmus' $_tl_other"
             echo "      wc -l < $_tl_other"
-            echo "  If those two numbers MATCH, every record is fixture debris and the"
-            echo "  file is safe to remove:"
-            echo "      rm $_tl_other"
-            echo "  If they DIFFER, real records are mixed in. Do not delete blindly."
+            echo "  EQUAL counts: fixture debris. Until 1096-p3tn, litmus fixtures"
+            echo "  ran from scratch dirs and their records landed here carrying the"
+            echo "  REAL host name, so they are indistinguishable by eye."
+            echo "  DIFFERING counts: REAL records are in this file, and the reader"
+            echo "  has been HALVING your numbers. Measured on yolanda 2026-09-12:"
+            echo "  4756 lines, 921 litmus, real build-check records back to"
+            echo "  2026-08-11 — a month of that host history invisible to every"
+            echo "  reader looking in .cache/metrics, because checkout detection"
+            echo "  fails from that build distro."
+            echo ""
+            echo "  THE SAFE ACTION IS THE SAME EITHER WAY. Do not delete:"
+            echo "      mv $_tl_other $_tl_other.\$(date -u +%Y%m%d).\$(hostname -s)"
+            echo "  That clears the split and keeps whatever the file held. If the"
+            echo "  counts differed, the moved file is real history worth merging."
             echo ""
             echo "  DECIDE, then re-run: merge the two, or delete the one you are"
             echo "  declaring historical. Note that /tmp is VOLATILE — a reboot has"
