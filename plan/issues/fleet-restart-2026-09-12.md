@@ -407,3 +407,114 @@ surface another host's claim names (`tillandsias-plan expire-claims
   population, not a trustworthy refusal), the flake is its own row with the
   numbers, yoga takes it next; closure is twenty consecutive runs giving one
   verdict and a planted violation found 20/20.
+- **Every host's next `--check` after merging 8e3afa99f is a full gate,
+  once, by design** (lenovinha, 1127-waxf): a pre-1127 stamp carries no plan
+  digest and reads `stale:no-plan-digest-recorded`, fail-closed into one
+  re-gate per host. esme's ~20-minute full gate was the first observed
+  re-stamp. Do not debug a 300-second gate that is doing what it was told.
+  The by-hand ledger-guard rule retires on TWO conditions — the fix on trunk
+  AND each host re-stamped once — so hosts report their first post-1127 full
+  gate and the rule retires on observation, not on the SHA.
+- **The keying fix reached trunk at f51e96382** (relay of osx-next
+  b77559aa7 by macuahuitl; macbookair's proof: a release tray keyed to guests
+  built moments earlier, cold-provisioned on a zeroed substrate, host had
+  guest metrics at 22 s where v56.9.12.1 timed out at 300 s). The first relay
+  gate refused on `scripts/test-archiver-ruby-could-not-run.sh` ("positive
+  control did not pass on a host with ruby (rc=1)", "the refusal path left
+  scratch state in the worktree", 3/5); the same fixture passed 5/5
+  standalone on the same tree and passed in the relaunched gate — the second
+  in-situ-only flake of the night, named as a sibling on yoga's flake row.
+  Windows conversion (yolanda) and the two-binary provision remain before the
+  next cut; stable remains v56.9.2.1.
+- **Windows lane back in full** (esme, windows-next 9a765da19, sixteen
+  commits, attempt 1): arm 0 of the 1124-7f3u fixture green as the
+  verification host ("the premise holds — no plan binary resolves under the
+  scrubbed environment"), which retired esme's own residue hypothesis — the
+  resolving route was the WSL2 redirect's fresh copy inherited into the
+  fixture, not the stale Sep 4 ELF; a plausible story fitted to one
+  measurement, retracted in the report. The stale ELF still matters for
+  1129-4su6 because at PUSH time the redirect is unset and the lane falls
+  back to the checkout. The cheatsheet step costs 4.2 s on a host with rg
+  (gate total 2049 s, reported separately). Found on the same gate: the
+  "touched and left OPEN with no next_action" advisory evaluates the
+  declaring fragment in isolation and never consults the status channel later
+  fragments carry — 73 firings on one tree, at least two on packets the fold
+  reports verified/completed (1124-7f3u, 1115-yvrq). Filed by esme, unclaimed.
+- **A push with no timeout emits nothing** (macneo, two land stalls, 3000 s
+  each): "land: attempt 1 — push" was the last line, the push log was ZERO
+  bytes, and a stack sample showed git-credential-osxkeychain blocked in
+  `CSSM_DecryptDataFinal` — the login keychain waiting for a GUI unlock a
+  non-GUI session can never give. Isolated standalone: `printf
+  'protocol=https\nhost=github.com\n\n' | timeout 20 git credential-osxkeychain
+  get` → rc 124, no output; fetches worked all night because anonymous reads
+  never consult the helper. macneo correctly refused `gh auth login`
+  (1025-a896), credential rewiring and token injection. **Operator ask (corrected by macneo — the keychain is NOT locked):** on
+  tlatoanis-macbook-neo, from a GUI session (Terminal.app opened normally,
+  not over ssh, not from an agent), run `git push` in ~/claudia/tillandsias
+  — or `security find-internet-password -g -s github.com` — and when macOS
+  asks whether to allow access to the github.com credential choose ALWAYS
+  ALLOW. Four probes: `show-keychain-info` and `list-keychains` succeed, the
+  item's metadata reads (srvr=github.com), only the `-g` DECRYPT hangs — the
+  stored credential's ACL wants a confirmation dialog no non-GUI session can
+  show, and it blocks instead of failing. Unlocking will not help. Nothing
+  else on that host is blocked, its four
+  commits are green locally and off the cut's critical path. Hardening
+  routed to pirria: bound the push with a timeout and make an empty push log
+  its own named refusal.
+- **Same helper, same repo, opposite outcome — the variable is the session**
+  (macbookair): its `credential.helper` is exactly `osxkeychain` and it
+  pushed six times tonight, because its agent runs inside the operator's
+  logged-in GUI session with the login keychain unlocked. So macneo's hang is
+  neither a helper misconfiguration nor a credential fault — a genuine
+  credential fault REFUSES with output; a locked keychain HANGS with none.
+  Discriminator that needs no operator: `git config --get-all
+  credential.helper` plus a push probe on a throwaway ref. Fourth instance of
+  the night's shape — a thing that hangs rather than fails, on a host where
+  the same code works by hand (rg with no path, the dead 43-minute land, the
+  auditor's grep, the keychain). The durable lesson: when something is slow,
+  check whether it is ALIVE before reporting it slow — `stat` the log twice
+  a minute apart, and look for a process with 0:00.00 CPU time.
+- **Seventh regime gap, second GNU-versus-BSD: `sed -i SCRIPT FILE`**
+  (macbookair, on lenovinha's 1127-waxf fixture): BSD sed takes the argument
+  after `-i` as a backup SUFFIX, so the strip that synthesises a pre-1127
+  stamp is a no-op on macOS, plan_digest stays, and arm4 fails itself while
+  the code under test is right. `-i ''` is the trap in the other direction
+  (GNU consumes the empty string as the script), which is how the `grep -R`
+  fix travelled wrong earlier. Portable form: write through a temp file and
+  `mv`, no `-i` at all. Landed on osx-next by macbookair with both measured
+  arms; relayed to trunk in the coordinator's next slot (Linux unaffected).
+  macbookair's count for the night — grep -R on symlinks, rg with no path,
+  the keychain ACL prompt, ugrep-as-grep, sed -i — is five environment-
+  dependent defects that each passed where written and reached trunk green;
+  a counted, non-blocking portability advisory over `scripts/` for the known
+  GNU-only idioms would have named three of them before they froze a lane.
+  Filed by macbookair, theirs after the smoke.
+- **The same class, swept before it was found one at a time** (lenovinha):
+  the unlanded 1129-4su6 refusal in `scripts/hooks/pre-push-local-gate.sh`
+  used `find -printf '%T@ %p'` (GNU-only); on BSD find — macOS pushes
+  osx-next through THIS hook — it fails, `$_newer` goes silently empty and
+  the refusal drops the "newer:" line esme asked for. A fix for a defect that
+  degrades silently on one platform would itself have degraded silently on
+  one platform, in the file the packet is about. Rewritten with POSIX
+  `ls -t`; three `touch -d` in `test-plan-binary-freshness.sh` became
+  `touch -t`. For the portability advisory's tally: a fixture's gap fails
+  LOUDLY on the host that runs it, a hook's DEGRADES SILENTLY on the host
+  that pushes — separate them by severity. Hazard from the same sweep, third
+  time tonight: an assertion written at the same moment as the fix inherits
+  the author's picture of it, so its first red is as likely to be the
+  assertion as the code (an arm pinned main.rs as "newest" when Cargo.lock
+  legitimately wins in that fixture; now it asserts a real source, not which).
+  Run the new arm and read its failure; do not trust it because it is green.
+- **A packet whose deliverable is a new test can satisfy neither ledger
+  gate** (macbookair, measured twice while filing 1130-i6xj): 977-448j
+  refuses a packet with no scorable obligation; naming the future litmus to
+  satisfy it trips `check-declared-closures-added.sh` with
+  `declared-closure-unresolvable`, which build.sh exits on. Ruling: the bind
+  is intended (a declared pin must resolve), and the sanctioned form is
+  `unscoreable: unpinnable-until-the-guard-exists` naming the exact future
+  litmus filename and instructing the claimer to write it in the same commit
+  as the guard and move the closure text across. Declaring the pin anyway and
+  letting it dangle is 1068-cxmf's defect under a new number. The two
+  refusals must name each other; small row, macbookair, after the smoke.
+  macOS lands unblocked at osx-next 73d951a6e (sed fix, 804-deux findings,
+  1130-i6xj); trunk gets the sed fix on the coordinator's relay.
