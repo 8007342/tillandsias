@@ -605,3 +605,14 @@ surface another host's claim names (`tillandsias-plan expire-claims
   ahead of the land instead of discovered after it. 1129-4su6 lands with its
   row OPEN on esme's end-to-end arm, which is structurally unreachable until
   the refusal is on trunk.
+- **A fallback is "never wrong" only if you have checked it on the host that
+  will reach it** (lenovinha, corrected by esme, on 1129-4su6): the
+  declaration coupling that derives the fresher build's path was first
+  described as degrading to the rebuild remedy "worse, never wrong"; on the
+  one host that needs the derived remedy that fallback is not degraded, it is
+  useless — it loops the operator through a rebuild that never touches the
+  stale copy, and they stop trusting the next thing the tool prints. The
+  coupling now breaks loudly (a marker on both lines, a fixture asserting the
+  declaration parses). 1129-4su6 is landed at c44c55d26 and deliberately NOT
+  closed: "the mechanism is on trunk" and "the mechanism works where it
+  matters" are different claims, and esme's verbatim refusal is the second.
