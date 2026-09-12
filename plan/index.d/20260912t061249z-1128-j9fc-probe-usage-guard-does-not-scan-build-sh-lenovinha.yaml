@@ -1,0 +1,89 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-guard-that-refuses-hardcoded-plan-binary-paths-does-not-scan-build-sh-which-is-the-gate-that-runs-it
+    order: 1128-j9fc
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [guard, gate, fail-loud, plan-binary]
+    estimated_hours: 2
+    verifiable_closure: |
+      bash scripts/check-plan-binary-probe-usage.sh
+
+      With an arm that drives a hardcoded `target/release/tillandsias-plan`
+      path planted in build.sh and asserts the guard REFUSES it.
+
+      PRE-FIX RESULT: FAILS — measured, not argued. See context.
+    owned_files:
+      - scripts/check-plan-binary-probe-usage.sh
+    title: |
+      scripts/check-plan-binary-probe-usage.sh:64 defaults SCAN_DIR to `scripts` and :117 walks only that tree plus the litmus corpus, so build.sh — the gate that invokes the plan binary, and the one file every host runs every land — is never scanned, and a hardcoded target/release path with an `-x` claim sits there reporting ok
+    context: |
+      FOUND BY lenovinha 2026-09-12, in my own patch, during 1127-waxf.
+
+      MY FIRST CUT of the 1127-waxf memo arm in build.sh gated the ledger
+      check behind
+
+          [[ -x "$SCRIPT_DIR/target/release/tillandsias-plan" ]] || command -v tillandsias-plan ...
+
+      with a `|| exit 0` inside the resolution. Both are defects this repo
+      already has rules for: an exec bit is a CLAIM and running the binary is
+      EVIDENCE (721-nyev), and a `|| exit 0` on a failed resolution is a skip
+      that reads as a pass. The guard written to refuse the first of those ran
+      green in the same gate.
+
+      DEMONSTRATED, not inferred. A hardcoded `target/release/tillandsias-plan`
+      path with an `-x` test was planted in build.sh and the guard was re-run:
+
+          ok:plan-binary-probe-usage:21 eligible of 990 scanned [scripts=8/568 litmus=13/422]
+          rc=0
+
+      990 files scanned, and the one the defect was in is not among them.
+      SCAN_DIR defaults to `scripts` (:64) and the walk is
+      `find "$SCAN_DIR" -name '*.sh'` (:117); build.sh sits at the repo root.
+
+      THE GUARD'S OWN HEADER RECORDS THE PRECEDENT, which is why this is a
+      narrowing rather than a novelty: it was once scoped to scripts/ by a
+      `find scripts -name '*.sh'` and "had been reporting ok on every windows
+      cycle ... and its verdict said so nowhere". The scope was widened to
+      include the litmus corpus and the entry point was not added. Same defect,
+      one population smaller.
+
+      NOT A SCOPE WIDENING TO BE DONE BLIND. build.sh may have legitimate
+      reasons to name that path — the gate is the thing that BUILDS the binary,
+      so a build-time reference is not automatically the defect the guard is
+      about. Whoever takes this should decide whether the entry point joins the
+      scanned population, or gets a narrower rule of its own, and say which.
+      Adding it to SCAN_DIR without reading build.sh's existing references
+      would trade a blind spot for a false red.
+
+      FAMILY. This is the third population gap found in one night, and the three
+      together are the finding:
+        * audit-guard-activation.sh enumerates check-*.sh ONLY (its line 59), so
+          a test-*.sh or verify-*.sh that nothing invokes is invisible to it;
+        * an orphaned test-*.sh is detectable today only via
+          scripts/gate-divergence-declared.txt, which exists for a different
+          purpose (1087-h2z9) and makes "in neither gate" a one-grep question;
+        * and this one: the gate's own entry point is outside the population of
+          the guard that polices how the gate resolves its binary.
+      Each guard is correct about everything it examines. What none of them can
+      see is the edge of its own population, and nothing enumerates the
+      populations.
+    exit_criteria:
+      - "a hardcoded target/release/tillandsias-plan path planted in build.sh is REFUSED by scripts/check-plan-binary-probe-usage.sh; pre-fix result: FAILS (ok:21 eligible of 990 scanned, rc=0, measured 2026-09-12)"
+      - "the decision is NAMED: either build.sh joins the scanned population, or it gets a narrower rule, with build.sh's existing legitimate references read first rather than assumed away"
+      - "NEGATIVE CONTROL: build.sh's pre-existing references still pass, so the fix does not trade a blind spot for a false red that gets the guard switched off"
+      - "the verdict line states its population, so a future reader can tell what was scanned without reading the script — the omission the guard's own header says went unnoticed on every windows cycle"
+    events:
+      - type: filed
+        ts: "2026-09-12T06:12:49Z"
+        agent_id: "linux-lenovinha-opus5-20260912t014023z"
+        host: lenovinha
+        summary: |
+          Filed by lenovinha after writing the exact defect the guard exists to
+          refuse, in the one file it does not scan, and having the guard report
+          ok in the same run. Split from 1127-waxf on the coordinator's ruling
+          rather than folded in; 1127's scope stays at the memo.

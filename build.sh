@@ -1649,13 +1649,33 @@ if [[ "$FLAG_CHECK" == true ]]; then
                     exit 1
                 fi
                 _info "Fragment status-loss check passed"
-                if [[ -x "$SCRIPT_DIR/target/release/tillandsias-plan" ]] || command -v tillandsias-plan >/dev/null 2>&1; then
-                    if ! _run bash -c '. "$0/scripts/plan-binary-probe.sh"; PLAN="$(resolve_plan_binary)" || exit 0; "$PLAN" check --strict-fragments' "$SCRIPT_DIR" 2>&1; then
-                        _error "the plan ledger does not fold cleanly (1127-waxf) — see the verdict above"
-                        exit 1
+                # UNCONDITIONAL, and through the probe — never an `-x` on a
+                # hardcoded target/ path. The exec bit is a CLAIM; running the
+                # binary is evidence (721-nyev), and this arm's first draft got
+                # that wrong in the one file check-plan-binary-probe-usage.sh
+                # does not scan (it walks scripts/ and the litmus corpus, not
+                # build.sh) — so the guard written to refuse exactly this could
+                # not see it. Filed separately; not worked around here.
+                #
+                # NO "SKIP IF ABSENT" BRANCH, because a missing binary is
+                # already impossible at this line: check-fragment-status-loss.sh
+                # ran above and exits 2 when none resolves, which the refusal
+                # above turns into a failed gate. A conditional here would be a
+                # second opinion on a question already settled — and the shape
+                # of it, a skip that reads as a pass, is what this whole packet
+                # is about.
+                if ! _run bash -c '. "$0/scripts/plan-binary-probe.sh"
+                    PLAN="$(resolve_plan_binary)" || PLAN=""
+                    if [ -z "$PLAN" ]; then
+                        echo "violation:plan-ledger-unverifiable:0" >&2
+                        echo "  no runnable tillandsias-plan resolved, so the fold was not checked (1127-waxf)" >&2
+                        exit 2
                     fi
-                    _info "Plan ledger check passed"
+                    "$PLAN" check --strict-fragments' "$SCRIPT_DIR" 2>&1; then
+                    _error "the plan ledger does not fold cleanly, or no binary could fold it (1127-waxf) — see the verdict above"
+                    exit 1
                 fi
+                _info "Plan ledger check passed"
                 trap - EXIT
                 timing_emit build-check-memoized-plan check "$_CHECK_T0" 0 || true
                 exit 0
