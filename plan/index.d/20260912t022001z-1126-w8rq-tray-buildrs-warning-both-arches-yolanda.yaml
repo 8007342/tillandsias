@@ -84,7 +84,9 @@ packets:
     exit_criteria:
       - "a successful Windows packaging run with the non-host arch at its designed 0-byte reset emits no warning about that arch; pre-fix result: FAILS (the run above prints the aarch64 warning alongside its own Built: line)"
       - "the warning text no longer claims build-windows-tray.ps1 refuses on a condition it does not refuse; pre-fix result: FAILS (build.rs:79)"
-      - "NEGATIVE CONTROL: with the EMBEDDED arch's asset at 0 bytes the warning still fires AND build-windows-tray.ps1 still throws — pinned by scripts/test-tray-asset-placeholder-refused.sh, which must stay at 8/8 arms on a Windows host (arms 1-2 are the PowerShell predicate and skip on Linux); pre-fix result: PASSES, and must keep passing across the fix"
+      - "NEGATIVE CONTROL A, the warning keeps its teeth: with the EMBEDDED arch's asset at 0 bytes, a direct `cargo build -p tillandsias-windows-tray --release` still emits the 0-bytes warning for THAT arch; post-fix measured 2026-09-12 on yolanda: x86_64 warning fires True, aarch64 warning False — which is the whole packet in one line"
+      - "NEGATIVE CONTROL B, the refusal keeps its teeth: with the EMBEDDED arch's asset at 0 bytes, build-windows-tray.ps1 still throws 'guest asset is a placeholder'; post-fix measured: THREW True. NOTE these two controls CANNOT be observed in one run — the .ps1 check at :234 throws BEFORE cargo is invoked, so the warning never gets the chance to fire in a packaging run. An earlier draft of this criterion demanded both from one invocation and was unsatisfiable; it is split here because a criterion nobody can satisfy is scored by guessing"
+      - "NEGATIVE CONTROL C: scripts/test-tray-asset-placeholder-refused.sh stays at 8/8 arms on a Windows host (arms 1-2 are the PowerShell predicate and skip on Linux); pre-fix result: PASSES, must keep passing across the fix"
       - "the placeholder-CREATION half of the build.rs loop still covers both arches so cargo check compiles on a host that never packages; pre-fix result: PASSES, must not regress"
     events:
       - type: filed

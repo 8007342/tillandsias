@@ -63,10 +63,29 @@ fn main() {
     // placeholder in August would otherwise never be told again.
     let assets_dir = manifest_dir_path.join("assets");
     let _ = std::fs::create_dir_all(&assets_dir);
+    // ORDER 1126-w8rq. The PLACEHOLDER FILE still gets created for both
+    // arches — `cargo check` on a host that will never package depends on
+    // that. The WARNING is scoped to the arch this build actually embeds.
+    //
+    // 1122-xi2f narrowed the packaging check to $hostGuestArch because
+    // build-windows-tray.ps1 RESETS the non-host arch to a zero-byte
+    // placeholder on purpose (order 282). Warning about that arch told the
+    // reader a correct build should have been refused, citing a refusal that
+    // no longer happens — and its premise was wrong anyway, since an x86_64
+    // tray does not embed the aarch64 asset and cannot be no-op'd by it.
+    //
+    // Scoping restores the warning's truth rather than deleting it: for the
+    // arch that IS embedded, every clause below still holds, refusal
+    // included. An empty CARGO_CFG_TARGET_ARCH keeps the old both-arches
+    // behaviour, so a missing variable degrades to noisy, never to silent.
+    let embedded_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
     for arch in ["x86_64", "aarch64"] {
         let bin = assets_dir.join(format!("tillandsias-headless-{arch}-unknown-linux-musl"));
         if !bin.exists() {
             let _ = std::fs::write(&bin, b"");
+        }
+        if !embedded_arch.is_empty() && arch != embedded_arch {
+            continue;
         }
         let is_placeholder = std::fs::metadata(&bin)
             .map(|m| m.len() == 0)
