@@ -1,0 +1,83 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-windows-release-job-refuses-its-own-per-host-arch-staging-because-the-placeholder-check-demands-both-arches-so-no-windows-tray-shipped-for-v56-9-11-1
+    event:
+      type: progress
+      ts: "2026-09-12T02:21:17Z"
+      agent_id: windows-yolanda-claude-20260912t022117z
+      host: yolanda
+      summary: |
+        CONFIRMED ON WINDOWS. Criterion 1 PASSES and criterion 3's PowerShell arms
+        executed. yolanda, first Windows host up since 2026-09-06, at a tree carrying
+        203d56218 (verified: merge-base --is-ancestor against HEAD).
+
+        OBSERVATION 1 — the designed release case, which is the verdict.
+        Asset state at packaging time, the whole point of the packet:
+          x86_64  14,210,264 bytes  (staged, carries workspace VERSION 56.9.11.1, EMBEDDED)
+          aarch64          0 bytes  (the deliberate order-282 reset for the non-host arch)
+        Packaging verdict, verbatim:
+
+          Built: C:\Users\bullo\claudia\tillandsias\target\release\tillandsias-windows-tray.exe
+
+        EXITCODE=0. Finished release profile [optimized] in 1m 52s. Artifact
+        21,877,248 bytes, LastWriteTime 2026-09-11 19:17. The narrowed check at
+        build-windows-tray.ps1:234, foreach over @($hostGuestArch), passed exactly the
+        condition that threw in release run 34649585604 / job 103439175869.
+
+        OBSERVATION 2 — the NEGATIVE CONTROL, criterion 3.
+          bash scripts/test-tray-asset-placeholder-refused.sh
+          -> ok:tray-asset-placeholder:8 arm(s)   PASS: 8  FAIL: 0   exit 0
+        EIGHT arms, not the six Linux reports. The two extra are the PowerShell
+        predicate (arms 1-2). They RAN rather than passing vacuously: that script
+        prints its skips to stderr, and stderr alone was EMPTY — no "SKIP arms 1-2"
+        line. powershell.exe and cygpath both present; the probe returns probe-ok.
+        So 1059-ry6t keeps its teeth for the embedded arch, measured where the
+        predicate can actually execute.
+
+        OBSERVATION 3 — the returning-host shape, NOT a verdict on this packet.
+        Before restaging, target-guest/ here was from 2026-08-30 and carried 50.54.14
+        and 54.0.0, with no 56.9.x anywhere in it. On that state the sequence is:
+        build-windows-tray.ps1:139-160 (order 689-gipe) scans the staged binary for
+        the literal workspace VERSION, does not find it, WARNs that the guest predates
+        the checkout, RESETS the asset to the zero-byte placeholder, and the narrowed
+        :234 check then finds its one arch empty and throws "guest asset is a
+        placeholder".
+
+        That throw is TEXTUALLY IDENTICAL to the pre-fix defect and has a completely
+        different cause. It is a true statement about a stale host and a false
+        statement about this fix, and a Built:-line-or-throw report cannot tell them
+        apart from the outside. Order 447 notes any --install VERSION bump leaves
+        target-guest/ behind, and both Windows hosts were down from 2026-09-06, so
+        this is the state a returning Windows host boots into. Restage the guest
+        before packaging, or the throw you get is about your host.
+
+        Guest restaged here by building tillandsias-headless for
+        x86_64-unknown-linux-musl in the tillandsias-build WSL distro (Nix absent
+        there, so build-guest-binaries.sh was not the path). NOTE FOR WHOEVER AUTOMATES
+        THIS: that crate's [[bin]] name is "tillandsias", not "tillandsias-headless" —
+        the artifact is .../x86_64-unknown-linux-musl/release/tillandsias. A copy from
+        the crate-named path fails silently while cargo still reports success.
+
+        METHOD NOTE, offered as a drill rule. A packaging report is only a verdict if
+        it ends in Built: or a throw; anything else is "did not complete", and the arm
+        that distinguishes them is the exe's LastWriteTime, not the log's last line.
+        An attempt here died ~4s in, leaving a log ending at "Building
+        tillandsias-tray (release)..." with no Built: and no throw, AFTER the staging
+        half had already run — so the assets looked correct and the absence looked
+        like a result.
+
+        No tree impact: assets/ is gitignored (.gitignore:132), git status clean, and
+        the cycle's startup boundary still verifies "ok: startup worktree boundary
+        preserved".
+
+        Criterion 2 (the next release.yml Windows job publishes the zip and the run
+        concludes success) is untouched by this event and remains open; it closes on
+        the next cut, not here.

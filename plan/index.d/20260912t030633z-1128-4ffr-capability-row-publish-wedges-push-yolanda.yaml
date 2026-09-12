@@ -1,0 +1,105 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: publishing-a-capability-row-for-a-host-absent-from-the-compacted-base-makes-the-corpus-partial-so-release-preflight-refuses-and-the-pre-push-hook-wedges-every-push-from-that-host
+    order: 1128-4ffr
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: any
+    capability_tags: [plan-ledger, capability-matrix, release, ci]
+    estimated_hours: 3
+    owned_files:
+      - scripts/release-preflight.sh
+      - scripts/check-capability-row.sh
+    verifiable_closure: |
+      bash scripts/release-preflight.sh answers ok:release-preflight on a
+      tree carrying a freshly published capability row for a host the
+      compacted base has no row for — the exact state
+      scripts/check-capability-row.sh TELLS a joining or returning host to
+      create. Today it answers blocked:plan-ledger-incomplete and the
+      pre-push hook refuses the push. NEGATIVE CONTROL: a genuinely
+      unreadable or malformed fragment must STILL make the corpus partial
+      and still refuse — this packet is about a well-formed row the fold
+      declines to consume, not about weakening --strict-fragments.
+    title: |
+      scripts/check-capability-row.sh instructs a host whose row is absent or expired to publish one, but the fold DROPS a `capabilities:` row whose host+locus the compacted base does not already carry, which makes the corpus PARTIAL, so scripts/release-preflight.sh refuses with blocked:plan-ledger-incomplete and the pre-push hook wedges EVERY push from that host — obeying the capability-row guard is what breaks the host's ability to push
+    context: |
+      MEASURED on yolanda, 2026-09-12, during the fleet restart, as a PUSH
+      REFUSAL after the gate had already passed:
+
+        refused:land:push-failed — not a lost race, so retrying cannot help:
+        pre-push refused: release preflight says blocked:plan-ledger-incomplete
+
+      scripts/release-preflight.sh named exactly one dropped entry:
+
+        dropped-entry: plan/index.d/20260912t014202z-capability-row-yolanda.yaml:
+        a `capabilities:` row for yolanda/bare-metal — the compacted base
+        carries no row for that host and locus, so consuming this fragment
+        would lose it
+        incomplete: 856 packets from a PARTIAL corpus — 1 fragment entry the
+        fold could not use
+        refusing (--strict-fragments): this ledger is incomplete
+
+      Falsified both ways on the same tree, minutes apart: with the fragment
+      present, exit 1 and blocked:plan-ledger-incomplete; with that one file
+      moved aside, ok:release-preflight, exit 0. Nothing else changed.
+
+      THE LOOP IS THE DEFECT, not either half. check-capability-row.sh is
+      explicit that its verdicts "ask the cycle to publish and commit a row,
+      they never block work" (its own header), and its remedy for absent,
+      drifted or expired is one `host-capability-probe.sh --fragment`
+      publish. This host did precisely that, on instruction, and the result
+      was that it could not push anything at all — not the row, not three
+      unrelated packets, not a release confirmation. An advisory guard whose
+      remedy is load-bearing in the other direction is worse than a blocking
+      one, because the host that obeys it is the host that gets wedged.
+
+      WHO THIS CATCHES. Exactly the hosts 850-bif2 exists to onboard: the
+      ones with no row in the base yet. Five of seven hosts were silent in
+      the matrix, and the fix for silence is a publish that the fold cannot
+      consume. The base at HEAD carries four rows (windows/in-guest,
+      windows/windows-host, linux_immutable/bare-metal,
+      linux_mutable/bare-metal); a host+locus outside that set cannot land a
+      row at all. So the matrix cannot grow past the shape it already has,
+      and the guard that asks it to grow is the thing that stops it.
+
+      RELATED, NOT DUPLICATE. 846-idhn already records that folding
+      capability rows into the base writes `capabilities:` at a position the
+      compaction candidate parser rejects, and 843-624y has compaction
+      deliberately refusing to fold `capabilities:` fragments as a result —
+      "the channel has no base representation yet", as the generated
+      fragment's own header says. That is the upstream cause. This packet is
+      the CONSEQUENCE that nobody had measured: the un-foldable channel does
+      not merely fail to compact, it fails the release preflight's
+      completeness test and therefore blocks the push path for the host that
+      published. Fixing 846-idhn may well close this; it must be verified
+      against the closure above rather than assumed.
+
+      THE RELAY IS NOT A FIX. The refusal text offers pushing to
+      refs/heads/work/<order> for a trunk host to merge. That moves the
+      incomplete corpus to trunk rather than repairing it, and a trunk host
+      cutting a release then hits the same refusal with the same one dropped
+      entry. Recorded here so the next host does not take the escape hatch
+      for a remedy.
+    exit_criteria:
+      - "a host publishing a capability row for a host+locus absent from the compacted base can still push; pre-fix result: FAILS (push refused, blocked:plan-ledger-incomplete, one dropped entry)"
+      - "release-preflight answers ok:release-preflight on that tree; pre-fix result: FAILS (exit 1)"
+      - "the published row is actually consumed — capability-matrix reports it rather than the fold silently dropping it; pre-fix result: FAILS (dropped-entry)"
+      - "NEGATIVE CONTROL: a malformed or unreadable fragment still makes the corpus partial and still refuses under --strict-fragments; pre-fix result: PASSES, must not regress — the completeness test is not the bug"
+    events:
+      - type: filed
+        ts: "2026-09-12T03:06:33Z"
+        agent_id: "windows-yolanda-claude-20260912t030633z"
+        host: yolanda
+        summary: |
+          Found as a push refusal on the first Windows host up since
+          2026-09-06, after obeying check-capability-row.sh's instruction to
+          republish an expired row. The gate had already passed; the refusal
+          came from the pre-push hook's release preflight.
+
+          Unwedged by withdrawing the unlanded row fragment from the branch,
+          which is why yolanda still has no capability row and will answer
+          stale on its next cycle. That is the lesser harm: the row guard is
+          advisory by its own header, while the push block is total.

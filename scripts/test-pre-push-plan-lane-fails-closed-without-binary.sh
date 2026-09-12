@@ -112,15 +112,68 @@ done
 _mk_yq_stub "$W/emptybin"      # yq PRESENT, plan binary ABSENT — the exact gap
 NOPLAN_PATH="$W/emptybin"
 
-_run_push() { # $1=extra env assignments as a string; prints output, returns rc
+# ORDER 1124-7f3u, REGIME CORRECTION (esme, Windows/WSL, 2026-09-12).
+# UNSET EVERY INPUT resolve_plan_binary HONOURS, not just the obvious one.
+# The probe reads exactly three (grep of scripts/plan-binary-probe.sh):
+# TILLANDSIAS_PLAN_BIN, CARGO_TARGET_DIR, and BASH_SOURCE. The first two are
+# ambient on real hosts and BOTH must go.
+#
+# CARGO_TARGET_DIR IS THE ONE THAT BIT. Every forge exports it
+# (images/default/lib-common.sh) and scripts/with-wsl2-builder.sh points it at a
+# distro-native path, precisely so ./target never lands on 9p — so on those
+# hosts it names an ABSOLUTE directory outside this scratch tree that holds a
+# real, runnable binary. The probe checks it FIRST (783-jdeh), resolves happily,
+# and arm 1's premise — "no runnable binary" — is false before the arm begins.
+# The lane then does the right thing, accepts, and the arm reports the LANE
+# broken when the FIXTURE was.
+#
+# NOT A ROOT OR PERMISSION ISSUE, and worth saying because it was first
+# diagnosed as one: no arm here uses a permission bit. Reproduced on lenovinha,
+# linux, ROOTLESS, by exporting CARGO_TARGET_DIR at a directory holding a real
+# binary — verbatim the failure esme's root gate reported:
+#     FAIL: arm1: the lane admitted a fragment-bearing push it could not fold (rc=0)
+# So this needs no euid-0 skip and keeps its teeth as root.
+_run_push() { # prints output, returns rc
     local out rc
-    out="$(env -u TILLANDSIAS_PLAN_BIN PATH="$NOPLAN_PATH" \
+    out="$(env -u TILLANDSIAS_PLAN_BIN -u CARGO_TARGET_DIR PATH="$NOPLAN_PATH" \
         bash scripts/hooks/pre-push-local-gate.sh origin "$W/bare.git" 2>&1 <<< \
         "refs/heads/linux-next $(git rev-parse HEAD) refs/heads/linux-next $(git rev-parse origin/linux-next)")"
     rc=$?
     printf '%s\n' "$out"
     return $rc
 }
+
+# ── ARM 0: ESTABLISH THE PREMISE, DO NOT ASSUME IT ──────────────────────────
+#
+# ORDER 1124-7f3u, after esme (Windows/WSL, drvfs, root) and a reproduction on
+# lenovinha. Arm 1 asks what the lane does when NO runnable plan binary
+# resolves. That premise was manufactured by scrubbing PATH and one env var,
+# and a scrub is an ENUMERATION of the routes someone thought of. The probe has
+# five (plan-binary-probe.sh): CARGO_TARGET_DIR, ./target/release,
+# ./target/debug, the two .exe variants, and PATH. Miss any one and the premise
+# is false before arm 1 begins — the lane then correctly ACCEPTS, and arm 1
+# reports the LANE broken when the FIXTURE was. That has now happened twice, on
+# two different routes, on two different hosts.
+#
+# So stop enumerating and ASK. Resolve under exactly the environment arm 1 will
+# use; if anything comes back, the premise is not established and this says so
+# in those words. A fixture that cannot establish its precondition must report
+# THAT, never a verdict about the thing it failed to test.
+#
+# Why this is regime-proof where a scrub is not: it makes no claim about which
+# routes exist. A sixth candidate added to the probe tomorrow, or a host with a
+# locus this fixture has never seen, changes the ANSWER and not the QUESTION.
+_probe_says="$( cd "$W/wc" && env -u TILLANDSIAS_PLAN_BIN -u CARGO_TARGET_DIR PATH="$NOPLAN_PATH" \
+    bash -c '. scripts/plan-binary-probe.sh; resolve_plan_binary 2>/dev/null' 2>/dev/null )"
+if [ -n "$_probe_says" ]; then
+    bad "arm0 PREMISE NOT ESTABLISHED: a plan binary still resolves as '$_probe_says' under the scrubbed environment"
+    echo "      Arm 1 asks what the lane does with NO runnable binary; on this host one is still reachable," >&2
+    echo "      so arm 1 cannot test that and its verdict would describe the fixture, not the lane." >&2
+    echo "      Neutralise that route (it is one of the candidates in scripts/plan-binary-probe.sh) and re-run." >&2
+    echo "test-pre-push-plan-lane-fails-closed-without-binary: ${pass} passed, ${fail} failed"
+    exit 1
+fi
+ok "arm0: the premise holds — no plan binary resolves under the scrubbed environment"
 
 # ── ARM 1: fragment-bearing push, no runnable binary → REFUSE ────────────────
 printf 'packets: []\n' > plan/index.d/20260912t000000z-arm1.yaml

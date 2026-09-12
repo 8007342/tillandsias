@@ -1,0 +1,55 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: two-timing-logs-on-one-host-so-every-recurrence-count-is-a-partition-presenting-as-a-total
+    event:
+      type: progress
+      ts: "2026-09-12T06:11:39Z"
+      agent_id: windows-yolanda-claude-20260912t061139z
+      host: yolanda
+      summary: |
+        ARTIFACT ON YOLANDA: the real records land in the /tmp fallback, so a month of
+        this host's timing history was invisible to every reader that looked in
+        .cache/metrics. This is the halved-numbers case the packet exists for, measured
+        on a host that actually had it.
+
+        The file, inside the tillandsias-build WSL2 distro:
+          /tmp/tillandsias-timing.jsonl
+          4756 lines, 702,631 bytes
+          first: {"ts":"2026-08-11T22:04:38Z","host":"unknown","step":"build-check","phase":"check","duration_ms":119...
+          last:  {"ts":"2026-09-12T05:40:23Z","host":"Yolanda","step":"litmus-suite","phase":"pre-build","duration_ms...
+          span:  2026-08-11 to 2026-09-12, thirty-two days
+
+        Composition, which is the claim:
+          litmus lines  921  (grep -c '"step":"litmus')
+          other lines  3835  (81% — build-check and phase records, i.e. REAL history)
+        So on this host the /tmp fallback is not a scratch file that fixtures dirty. It
+        is where the actual metrics went, and they went there for thirty-two days while
+        `.cache/metrics` was what anyone reading this host's trends would have opened.
+        A reader of .cache/metrics saw a fraction of the truth and had no way to know it.
+
+        HOW IT SURFACED, because the near-miss is part of the evidence. A workaround was
+        circulated for an unrelated metrics split guard: delete /tmp/tillandsias-timing.jsonl
+        IF its total line count equals its litmus line count. The conditional is the whole
+        safety and it held — on yolanda 4756 != 921, so the file was preserved, not
+        removed. esme-windows ran the same check independently and also found real data:
+        1289 total, 279 litmus, 1010 non-litmus (78%), spanning 2026-08-16 to 2026-09-12,
+        including the forty build-check records their own CARGO_BUILD_JOBS packet leans on
+        for its 21m41s-25m17s floor-gate bracket.
+
+        TWO HOSTS, TWO LEDGERS, ZERO DEBRIS. That is not two lucky hosts; it is the
+        predicate being wrong about what these files usually contain. An unconditional
+        "rm the fixture debris" would have destroyed a month of history on one host and
+        a packet's evidence base on the other, invisibly — nobody opens a timing ledger
+        until they want a trend, and by then the loss cannot be detected.
+
+        Preserved, not deleted:
+          mv /tmp/tillandsias-timing.jsonl /tmp/tillandsias-timing.jsonl.20260912-yolanda
+          verified after: 4756 lines, 702,631 bytes, intact.

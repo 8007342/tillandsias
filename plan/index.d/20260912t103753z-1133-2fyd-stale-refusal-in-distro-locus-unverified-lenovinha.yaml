@@ -1,0 +1,102 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-stale-validator-refusals-fresher-build-and-orphan-clauses-have-never-executed-because-the-only-locus-that-reaches-them-was-not-tested
+    order: 1133-2fyd
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: windows
+    capability_tags: [pre-push, hooks, plan-binary, windows, wsl]
+    estimated_hours: 2
+    verifiable_closure: |
+      bash scripts/test-plan-binary-freshness.sh
+
+      Plus an observed in-distro push on a WSL2 host: the refusal must name the
+      CARGO_TARGET_DIR copy as the fresher build and fire the ORPHANED clause.
+
+      PRE-FIX RESULT: UNVERIFIED, not failing. Both clauses are unexecuted.
+    owned_files:
+      - scripts/hooks/pre-push-local-gate.sh
+    title: |
+      the 1129-4su6 stale-validator refusal's ORPHANED clause and its with-wsl2-builder.sh declaration derivation have never executed on any host, because the only locus that reaches them is an in-distro WSL2 push nobody has produced — the generic fresher-build clause DID fire, on lenovinha, refusing my own push minutes after I filed this row claiming it had not
+    context: |
+      SPLIT OUT OF 1129-4su6 rather than left inside a green row. That packet is
+      verified: esme observed the refusal fire on esmeraldinha with the stale
+      binary correctly named and a working remedy.
+
+      THIS ROW WAS FILED WRONG AND CORRECTED WITHIN MINUTES, which is worth
+      keeping because the correction came from the mechanism itself. I filed it
+      saying the "A FRESHER build of this binary exists" clause had never
+      executed on any host. It then fired on MY OWN PUSH of this very fragment,
+      on lenovinha, linux, no WSL2 anywhere:
+
+          plan-only lane: REFUSED — the resolved plan binary is STALE (full gate required)
+            resolved: ./target/release/tillandsias-plan
+            newer:    Cargo.lock
+            A FRESHER build of this binary exists but was not used:
+                      ./target/debug/tillandsias-plan
+            REMEDY: TILLANDSIAS_PLAN_BIN=./target/debug/tillandsias-plan git push ...
+
+      A release binary from 19:51 against a debug binary from 22:26 and a
+      Cargo.lock the release cut touched at 01:31. The generic clause needs no
+      redirect and no WSL2 — any tree with two builds of different ages reaches
+      it. I had reasoned from esme's locus to "no locus", which is the same
+      over-generalisation this row exists to record, committed while recording
+      it.
+
+      SO THE UNVERIFIED SURFACE IS NARROWER than filed: the fresher-build clause
+      and the TILLANDSIAS_PLAN_BIN remedy form are VERIFIED (lenovinha,
+      observed). What remains unexecuted is the ORPHANED sub-clause, which fires
+      only when the fresher copy sits under CARGO_TARGET_DIR, and the
+      with-wsl2-builder.sh derivation that finds it there.
+
+      WHY THEY DID NOT RUN, and it is a locus fact rather than a defect: the
+      hook ran WINDOWS-SIDE, where resolve_plan_binary returns
+      ./target/release/tillandsias-plan.exe. The derivation searches for a
+      fresher copy at /root/.cache/tillandsias-wsl2-target/<repo>/release/
+      tillandsias-plan — inside the WSL2 distro, unreachable from Git Bash, and
+      a Linux ELF that could not serve a Windows-side caller anyway. So no
+      fresher build of that binary existed from where the hook stood and the
+      search correctly found nothing.
+
+      THE UNIT OF "WHICH REMEDY IS RIGHT" IS THE LOCUS, NOT THE HOST — esme's
+      generalisation, made after they and I had both generalised the other way.
+      esme measured that `cargo build --release -p tillandsias-plan` loops
+      in-distro (the wrapper redirects CARGO_TARGET_DIR, so the rebuild never
+      touches ./target/release), told me so, and I rebuilt the design around it.
+      Windows-side there is no redirect: cargo writes the .exe straight to
+      ./target/release, which is the file the hook resolved, so the generic
+      remedy is CORRECT there. One machine, two loci, opposite answers. Both of
+      us reasoned from one locus to the whole host.
+
+      WHAT IS AT RISK IF NOBODY RUNS IT: the derivation reads a path out of
+      scripts/with-wsl2-builder.sh (reciprocal markers on both ends,
+      shape asserted by test-plan-binary-freshness.sh, mutation-tested). The
+      SHAPE is guarded. Whether the derived path is CORRECT — resolves, matches
+      the real redirect for that repo basename, and names a file the operator
+      can actually use — is unmeasured. A wrong path there produces a refusal
+      that names a fresher build which does not exist, which is worse than the
+      generic remedy it replaced.
+
+      REPRODUCER NOTE: the original eight-day-stale ELF on esmeraldinha
+      (target/release/tillandsias-plan, 2026-09-04 12:15:08, held untouched
+      through six lands) is NOT the subject here — the Windows-side refusal
+      fired on the .exe. The in-distro case needs a push made from inside the
+      tillandsias-build distro, which may not be reachable from an agent
+      session on that host.
+    exit_criteria:
+      - "an in-distro plan-only push on a WSL2 host produces a refusal naming the CARGO_TARGET_DIR copy as the fresher build; pre-fix result: UNVERIFIED for that PATH (the clause itself is verified on lenovinha against ./target/debug, but never against a redirected path)"
+      - "the ORPHANED clause fires there and names the redirect as the reason nothing will refresh the resolved copy in place"
+      - "the derived path is checked against the ACTUAL redirect for that repo basename, not merely against the declaration's shape — the shape is already guarded, the value is not"
+      - "NEGATIVE CONTROL: the Windows-side locus keeps the generic rebuild remedy, which is correct there and is what esme verified"
+    events:
+      - type: filed
+        ts: "2026-09-12T10:37:53Z"
+        agent_id: "linux-lenovinha-opus5-20260912t014023z"
+        host: lenovinha
+        summary: |
+          Filed by lenovinha on esme's end-to-end result. 1129-4su6 closes
+          verified on its four exit criteria; these two clauses are unexecuted
+          and are carried here rather than counted as covered by a green row.

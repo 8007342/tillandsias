@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-probe-usage-guard-returns-a-different-verdict-on-an-unchanged-tree-so-one-eligible-file-is-scanned-every-run-and-judged-eligible-only-one-run-in-four
+    field: status
+    value: completed
+    ts: "2026-09-12T06:51:08Z"
+    host: yoga
+
+events:
+  - packet_id: the-probe-usage-guard-returns-a-different-verdict-on-an-unchanged-tree-so-one-eligible-file-is-scanned-every-run-and-judged-eligible-only-one-run-in-four
+    event:
+      type: completed
+      ts: "2026-09-12T06:51:08Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: cause traced in situ to SIGPIPE under pipefail (rc=141 on 9 of 12 traced runs) from grep -q killing its upstream writer; fixed by capturing then matching a herestring; 15/15 runs agree where 10 had split 6/4; pinned by scripts/test-plan-binary-probe-usage-determinism.sh arm 1, which discriminates (pre-fix TWO verdicts on the real tree, post-fix ONE), wired into build.sh --check
+  - packet_id: the-probe-usage-guard-returns-a-different-verdict-on-an-unchanged-tree-so-one-eligible-file-is-scanned-every-run-and-judged-eligible-only-one-run-in-four
+    event:
+      type: note
+      ts: "2026-09-12T06:51:08Z"
+      host: yoga
+      summary: |-
+        mechanism found and fixed in the same commit that filed it; my initial report wrongly called SIGPIPE refuted and the row records that correction

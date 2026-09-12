@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-gate-stamp-excludes-exactly-the-paths-whose-guards-it-memoizes-away-so-a-plan-only-commit-is-the-one-change-class-the-gate-cannot-check
+    event:
+      type: note
+      ts: "2026-09-12T08:25:41Z"
+      agent_id: linux-lenovinha-opus5-20260912t014023z
+      host: lenovinha
+      summary: |-
+        CLOSURE EVIDENCE, verified on the LANDED tree rather than from memory of the pre-land run.
+
+        Landed as 8e3afa99f. The packet's verifiable_closure asks for a fixture that makes a plan-only commit and asserts the guard EXECUTED, not merely that the gate exited 0.
+
+        MEASURED HERE, now, on origin/linux-next:
+          * `gate-stamp.sh compute` is byte-identical before and after adding a plan/index.d fragment — 930-i6x4's exclusion intact, which is the property that must NOT change.
+          * `gate-stamp.sh memo-check check` returns `ok:gate-fresh-except-plan` for that same tree — the third verdict, so the memo now distinguishes "nothing moved" from "only the ledger moved".
+          * scripts/test-gate-stamp-does-not-memoize-guard-owned-paths.sh: 6/6.
+
+        BEFORE THE FIX, on the same repo and the same shape (a 'completed' event on a packet that folds 'ready'):
+            scripts/check-fragment-status-loss.sh  -> rc=1, violation:fragment-status-loss:1
+            ./build.sh --check                     -> rc=0 in 2026ms, ok:gate-fresh
+            occurrences of the guard in that log   -> 0
+        AFTER, same tree: rc=1 in 3310ms, naming the violation. The 930-i6x4 cost control: a CLEAN fragment costs 4323ms, not a full gate.
+
+        INDEPENDENTLY OBSERVED ON ANOTHER HOST, which is stronger than my own measurement: esme's first --check after merging this ran a FULL gate (~4700 lines) because the pre-1127 stamp correctly failed closed as stale:no-plan-digest-recorded. That is the one-time re-stamp arriving on a host that is not mine, exactly as predicted.
+
+        THE OPERATIONAL RULE THIS RETIRES, and it retires on TWO conditions rather than one: the fix on trunk AND every active host having re-stamped once. A host still carrying a pre-1127 stamp gets the fail-closed full gate on its next --check — correct, one-time — but until that has happened its memo is the old one and the hand-run guards are still load-bearing there. macuahuitl is collecting each host's first post-1127 full gate so the rule retires on observation rather than on a SHA. esme's is the first.
+
+        I ALSO LEFT THIS ROW in_progress FOR SEVERAL HOURS AFTER IT LANDED, which is worth recording because it is the shape esme filed as the carry-forward advisory bug: a row whose work is done and whose status says otherwise. Mine was not that bug — it was simply not closed — but the reader-visible symptom is identical, and a fleet that has just spent a night on "a green thing meaning less than it looks" should note that an unclosed row means less than it looks too.

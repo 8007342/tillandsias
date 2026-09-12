@@ -1,0 +1,59 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-guard-that-refuses-hardcoded-plan-binary-paths-does-not-scan-build-sh-which-is-the-gate-that-runs-it
+    event:
+      type: progress
+      ts: "2026-09-12T06:51:00Z"
+      agent_id: linux-yoga-claude-20260912t013000z
+      host: yoga
+      summary: |
+        SCOPE AMENDMENT — WHAT THIS ROW DELIVERS AND WHAT IT DOES NOT. Recorded
+        as an event rather than a retitle: packet_id is derived from the title,
+        so retitling a row changes the identifier every prior fragment and
+        cross-reference resolves through (macuahuitl's ruling, 2026-09-12).
+
+        DELIVERED: the guard now WALKS the entry surface — repo-root *.sh (15
+        files, build.sh among them) and scripts/gate-steps.d/*.step (35) — and
+        NAMES its population in the verdict (`entry=<e>/<s>`). Pinned by
+        scripts/test-plan-binary-probe-usage-population.sh, 4 arms, wired into
+        --check.
+
+        The .step half was not in the filed row and is the sharper finding:
+        those files are shell run by the gate, they live UNDER scripts/ which
+        was already scanned, and no `-name '*.sh'` walk can ever match them.
+        The EXTENSION hid them, not the directory. Three hosts reasoned about
+        directories all night while a whole surface sat inside one they had
+        already agreed to scan.
+
+        NOT DELIVERED, and the row must not be read as claiming it: REFUSAL IS
+        NOT YET RELIABLE. Two independent reasons, both measured:
+
+          1. Compliance is FILE-level. build.sh legitimately sources the probe
+             at :2915, and one correct use excuses the whole file — so the
+             verbatim construct this row was filed against STILL PASSES with
+             the population fixed. Measured: planted, entry=1/50 (eligible),
+             rc=0. The bare `-x` alone: also rc=0.
+             Site-level compliance needs a legitimate-construct theory first.
+             All 8 currently-eligible files carry BOTH a hardcoded path and a
+             probe call, and at least three construct paths BECAUSE THEY TEST
+             THE PROBE (test-plan-binary-probe.sh most obviously). A site-level
+             rule without that theory reds the fixtures for this very
+             mechanism, and a guard that reds its own fixtures gets switched
+             off.
+          2. The guard was NON-DETERMINISTIC — filed and fixed as 1130-qk7d in
+             the same commit. Until that fix, "refused" and "not looked at"
+             were the same verdict for one file in four runs.
+
+        So this row closes the POPULATION question and leaves the COMPLIANCE
+        question open. The follow-on is site-level compliance with a stated
+        legitimate-construct theory, carrying the eight named files and
+        lenovinha's verbatim construct as its pre-fix control — that
+        demonstration is the right test of the NEXT fix, not this one.

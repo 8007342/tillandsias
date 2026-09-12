@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-guard-that-refuses-hardcoded-plan-binary-paths-does-not-scan-build-sh-which-is-the-gate-that-runs-it
+    field: status
+    value: completed
+    ts: "2026-09-12T06:51:08Z"
+    host: yoga
+
+events:
+  - packet_id: the-guard-that-refuses-hardcoded-plan-binary-paths-does-not-scan-build-sh-which-is-the-gate-that-runs-it
+    event:
+      type: completed
+      ts: "2026-09-12T06:51:08Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: population widened to repo-root *.sh (15) and scripts/gate-steps.d/*.step (35); verdict names its population entry=0/50; pinned by scripts/test-plan-binary-probe-usage-population.sh 4/4 incl. a scoped-call seam control, wired into build.sh --check; scope amendment event 2026-09-12T06:51Z records that refusal is NOT yet reliable (file-level compliance, and 1130-qk7d)
+  - packet_id: the-guard-that-refuses-hardcoded-plan-binary-paths-does-not-scan-build-sh-which-is-the-gate-that-runs-it
+    event:
+      type: note
+      ts: "2026-09-12T06:51:08Z"
+      host: yoga
+      summary: |-
+        population question closed; compliance question left open and named

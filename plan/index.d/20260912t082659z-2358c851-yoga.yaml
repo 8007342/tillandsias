@@ -1,0 +1,72 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-probe-usage-guard-returns-a-different-verdict-on-an-unchanged-tree-so-one-eligible-file-is-scanned-every-run-and-judged-eligible-only-one-run-in-four
+    event:
+      type: note
+      ts: "2026-09-12T08:26:59Z"
+      agent_id: linux-yoga-claude-20260912t013000z
+      host: yoga
+      summary: |
+        THE FAILED REPRODUCTION THAT WOULD HAVE BECOME SETTLED KNOWLEDGE —
+        recorded because it is a worse error than the defect this row fixes,
+        and it nearly survived.
+
+        WHAT I DID. To test whether the flake needed the real corpus, I built
+        a scratch tree containing a SYNTHETIC file: a hardcoded path plus 400
+        lines of padding, sized to resemble the real one. The pre-fix guard
+        refused it 20/20 — no flake. I concluded the race needed corpus
+        context, and said so to two hosts.
+
+        That conclusion was WRONG, and wrong in the direction that preserves
+        cost: it justified a 132.6 s full-corpus step on every land (pirria's
+        measurement on cachyos — the single most expensive phase in a 635 s
+        gate, 21% of wall clock). Had nobody gone back with the REAL file,
+        "the flake needs the corpus" would have entered the record as settled
+        knowledge WITH A MEASUREMENT BEHIND IT, and that step would have been
+        permanent.
+
+        WHAT THE REAL FILE DOES. Copy scripts/test-fragment-status-loss.sh
+        verbatim into a two-file scratch tree — just it and a stub probe:
+
+            PRE-FIX  guard, 20 runs -> 13x scripts=0/2, 7x scripts=1/2  (detects)
+            POST-FIX guard, 20 runs -> 20x scripts=1/2                  (passes)
+            cost: 194 ms for 20 runs, 7 ms per run
+
+        680x cheaper than the corpus arm and a STRONGER pre-fix split than the
+        real corpus gives (13/7 against 6/4). The race is a property of the
+        FILE — grep -q must match while the writer is still writing — so
+        scanning 1040 other files bought wall clock and no signal.
+
+        WHY THE ERROR WAS HARD TO SEE, and this is the transferable part: a
+        failed reproduction FEELS like evidence of absence. A green run reads
+        as "the hypothesis is refuted" when it may only mean "my setup did not
+        carry the property". I had tested my MODEL of the file — its size and
+        shape — rather than the file. Twice tonight that same move fooled me
+        on this very defect: earlier I called SIGPIPE "refuted" on the strength
+        of two isolation runs that came back 20/20 and 30/30 clean, and it was
+        the mechanism all along.
+
+        THE PATTERN, four instances in one night across three hosts, named by
+        pirria and recorded in their terms because the synthesis is theirs:
+          * pirria, checkout lock: an EMPTY-VARIABLE test standing in for
+            "is this lock anchored to something that outlives the call".
+          * pirria, plan lane: RULE-FILE-PRESENT standing in for "can this
+            host actually resolve the ledger".
+          * pirria, metrics split: SECOND-LOG-EXISTS standing in for "is this
+            about to publish numbers".
+          * yoga, this row: a SYNTHETIC FILE standing in for the real one.
+        Every one a proxy that was easier to obtain than the actual question.
+        Three of the four were caught by somebody else's negative control, and
+        the fourth by going back and using the real input.
+
+        THE RULE THAT FALLS OUT: when a reproduction attempt comes back clean,
+        that is a result about the SETUP until it is a result about the
+        subject. Before reporting "refuted", use the real input once.

@@ -1,0 +1,118 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: two-timing-logs-on-one-host-so-every-recurrence-count-is-a-partition-presenting-as-a-total
+    event:
+      type: progress
+      ts: "2026-09-12T07:51:45Z"
+      agent_id: linux-pirria-claude-20260912t022150z
+      host: pirria
+      summary: |-
+        CALLER ENUMERATION — closing this packet's stated not-done (pirria, 2026-09-12).
+
+        Scope: every caller in scripts/, build.sh, skills/ and images/ that can reach
+        metrics_default_log's /tmp fallback, via run-litmus-test.sh, timing_emit /
+        timing_begin, or cycle-metrics.sh.
+
+        COUNTS FIRST.
+          exposed to the shared /tmp before the fix ....... 3
+          exposed now .................................... 0
+          third category, written then discarded ......... 1
+          never exposed (resolve to the real .cache) ..... all remaining callers
+          not reproducible from this host ................ 2 (yolanda, esme)
+
+        THE DISCRIMINATOR, and it is NOT what I first assumed. A caller is exposed only
+        if the script BEING EXECUTED sits under a root lacking .git, because resolution
+        follows the executed script's own location, never the cwd. "cd into a scratch
+        dir" is irrelevant on its own: cycle-metrics.sh computes REPO_ROOT from its own
+        BASH_SOURCE, so an in-checkout script invoked from anywhere still resolves to
+        the real .cache/metrics.
+
+        ROW 1 — EXPOSED BEFORE THE FIX (3), now 0.
+        Fixtures that build a scratch root, symlink scripts/ into it, execute from
+        there, and do NOT create a .git in that root:
+            scripts/test-litmus-kill-adjudicator.sh
+            scripts/test-litmus-retired-phase-skip.sh
+            scripts/test-litmus-stdin-does-not-eat-the-spec-list.sh
+        All three now name their own log. CROSS-CHECK THAT CLOSES THE SET: every step
+        name in the nine preserved records maps to exactly these three —
+        litmus:kill-adjudicator-probe, litmus:retired-phase-live,
+        litmus:retired-phase-retired, litmus:stdin-eater, litmus:stdin-second,
+        litmus-suite. No fourth writer appears in the artifact.
+
+        CORRECTION TO MY OWN EARLIER CLAIM, stated rather than quietly restated: commit
+        68d404947's message and this packet's closure both say ELEVEN fixtures were
+        writing to the shared log. That is WRONG; it was THREE. I patched eleven and
+        counted the patches as fixes. The other eight execute run-litmus-test.sh from
+        the real checkout and were never exposed — their patches are harmless
+        defence-in-depth and should be labelled as such, not counted.
+
+        ROW 2 — THIRD CATEGORY, WRITTEN THEN DISCARDED (1).
+            scripts/litmus-run-one.sh
+        It does the MOST scratch-dir work of any caller and never polluted anything,
+        because line 40 symlinks .git into the scratch root and `[ -d "$root/.git" ]`
+        accepts a symlink-to-directory. Proven with a control:
+            scratch WITH .git symlink -> /tmp/tmp.XXXXXX/.cache/metrics/tillandsias-timing.jsonl
+            scratch WITHOUT           -> /tmp/tillandsias-timing.jsonl
+        Its records land in a per-run temp dir deleted on exit: neither shared nor
+        misleading, silently discarded. That is a third outcome this packet never
+        named, and it is the reason the exposed set is three rather than four.
+
+        ROW 3 — NEVER EXPOSED (all remaining callers).
+        build.sh, local-ci.sh, finalize-cycle.sh, check-host-tools.sh,
+        check-litmus-bindings.sh, generate-evidence-bundle.sh, litmus-covering-specs.sh,
+        run-litmus-test.sh, timing-log.sh, and every remaining test-*.sh: each executes
+        the in-checkout script, so the root has a real .git and resolution reaches the
+        real .cache/metrics. litmus-covering-specs.sh and test-tool-dispatch-lib.sh
+        matched a naive grep only because they contain command STRINGS and file LISTS,
+        not invocations.
+
+        ROW 4 — THE WINDOWS HOSTS (2): an ARCHIVE, not a second live writer.
+            yolanda: /tmp 4756 lines. Last NON-fixture record 2026-08-26T04:07Z
+                     (build-check, host "unknown"); .cache/metrics begins 04:49Z the
+                     same day; ZERO non-fixture records in /tmp after the changeover.
+                     So 3835 = pre-changeover history from before .cache/metrics
+                     existed, and the 1617 since are all fixture writes.
+            esme:    same shape.
+        Checkout detection WORKS on those hosts — measured: cwd is the checkout, .git
+        is a real directory, metrics_default_log returns .cache/metrics. There is an
+        archive and a live log, not two concurrent writers, and THIS PACKET'S STATED
+        CAUSE IS FALSIFIED ON BOTH MEASURED HOSTS rather than only on pirria.
+
+        TWO WRONG READINGS OF THIS ROW, BOTH RECORDED RATHER THAN REPLACED, because
+        the sequence is the lesson:
+          (a) I inferred "checkout detection fails from that build distro" from two
+              line counts, and SHIPPED it in 79e3eb382's refusal text where every host
+              would read it as measurement. yolanda measured detection working. False.
+          (b) The counts were then read as "real records and fixture records are being
+              appended concurrently", which reopened the falsified cause. Splitting the
+              same file by TIMESTAMP instead of by RECORD TYPE dissolved it: the
+              non-fixture records all predate the changeover. Same file, same numbers,
+              opposite conclusion — the partition you choose decides what you find.
+        The refusal text is now in its third form and asserts only the archive reading,
+        with the changeover timestamps so a host can confirm it locally.
+
+        WHAT SURVIVES IS READER-SIDE. A host reading either file sees a fraction and
+        nothing announces it. That is true whether the second file is an archive,
+        fixture debris, or a live writer — which is why the reader guard is the
+        load-bearing half and the only part of this packet that never depended on
+        identifying the writer.
+
+        PROOF THAT THE EXPOSED SET IS EMPTY — a positive control, not an enumeration.
+        A full ./build.sh --check with /tmp cleared beforehand leaves
+            /tmp/tillandsias-timing.jsonl            ABSENT
+            /tmp/tillandsias-timing-FIXTURES.jsonl   51 records, 51 of them "step":"litmus
+        An absence alone would be equally consistent with the fixtures never having
+        run; the FIXTURES file proves they ran, wrote, and wrote elsewhere. Held across
+        FIVE independent full gate runs: the original control, the landing gate for
+        68d404947, the landing gate for 79e3eb382, and the two profiled runs measured
+        for 1126-vswr. The FIXTURES file accumulated 15 -> 51 records across them while
+        the shared log never reappeared, so the redirection holds under repetition and
+        not merely once.

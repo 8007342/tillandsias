@@ -1,0 +1,99 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-capability-row-guard-judges-freshness-on-whichever-locus-sorts-first-so-a-multi-locus-host-can-never-clear-its-own-expired-verdict-by-publishing
+    order: 1130-8zxn
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: any
+    capability_tags: [capability-matrix, guards, windows, routing]
+    estimated_hours: 2
+    owned_files:
+      - scripts/check-capability-row.sh
+    verifiable_closure: |
+      bash scripts/check-capability-row.sh answers
+      ok:capability-row-current:<host> on a host that has just published a
+      fresh row for ITS OWN locus while an older row for a DIFFERENT locus
+      of the same host_id exists in the base. Today it answers
+      stale:capability-row-expired because it reads the other locus's row.
+      NEGATIVE CONTROL: a host whose own-locus row is genuinely older than
+      TILLANDSIAS_CAPABILITY_ROW_MAX_AGE must STILL answer expired — this
+      packet fixes WHICH ROW is judged, not whether staleness is enforced.
+    title: |
+      scripts/check-capability-row.sh's row_ts() at :229-234 matches the FIRST matrix line beginning `host:<name>\t` and exits, ignoring locus — so a host with rows at more than one locus is judged on whichever sorts first, and on yolanda that is a 2026-09-04 in-guest row this host's probe never writes, making the expired verdict unclearable by the very publish the guard prescribes
+    context: |
+      MEASURED on yolanda, 2026-09-12, immediately after fixing 1125-wi4d
+      and publishing a correct row. The matrix now holds, for this host_id:
+
+        1) locus:in-guest      ts:2026-09-04T06:48:50Z   from:0000-base
+        2) locus:windows-host  ts:2026-09-12T04:07:21Z   from:<this cycle>
+
+      capability-matrix shows row 2 present, fresh, correctly labelled
+      kind:windows writer:windows. release-preflight consumes it:
+      ok:release-preflight. And check-capability-row.sh still answers
+
+        stale:capability-row-expired:yolanda:age=682046s
+
+      682046s is 7.9 days — the age of row 1, not row 2. row_ts() takes the
+      first matching line and exits, so the guard graded a row this host's
+      probe cannot refresh: `in-guest` is the forge's locus inside a guest,
+      not the Windows host's.
+
+      THE GUARD'S REMEDY CANNOT SATISFY THE GUARD. Its header states the
+      contract: "a joining host's first cycle answers `due:` and publishes,
+      every later cycle answers `ok:` for free", and its exit-code comment
+      says absent, drifted and expired are "all three fixed by
+      scripts/host-capability-probe.sh --fragment". On a multi-locus host
+      that is false. Publishing cannot clear the verdict, because the
+      published row is not the row being read. The host is told to act,
+      acts correctly, and the verdict does not move — indistinguishable,
+      from the acting host's side, from having done it wrong.
+
+      THIS IS WHAT SET OFF THE WHOLE 09-12 CAPABILITY DETOUR. yolanda
+      started this cycle on stale:capability-row-expired and obeyed it. The
+      published row then wedged every push on this host (1128-4ffr) because
+      the probe's missing windows branch emitted a first-ever locus
+      (1125-wi4d). Both of those are real and now fixed — but the verdict
+      that triggered the sequence was never clearable by publishing in the
+      first place. A guard that asks for an action that cannot change its
+      own answer does not merely fail to help; it manufactures work, and
+      the work it manufactured here cost this host its ability to push.
+
+      WHO ELSE. esmeraldinha has the same shape in the base today
+      (locus:in-guest 2026-08-23T04:38:31Z and locus:windows-host
+      2026-08-23T04:29:22Z), so both Windows hosts are affected. Any host
+      that has ever run a forge in-guest AND published from the metal will
+      be.
+
+      WHAT THE FIX HAS TO DECIDE, stated rather than assumed: freshness is
+      a property of a (host_id, locus) pair, not of a host_id. The guard
+      already knows this host's locus — host-capability-probe.sh derives it
+      two lines above the writer label — so the honest comparison is
+      against the row for THIS host's own locus, with rows for other loci
+      of the same host_id neither refreshed nor graded here. A cheaper fix
+      that grades the NEWEST row for the host_id would clear this verdict
+      while hiding a genuinely stale own-locus row behind a fresh foreign
+      one, which is the same class of defect one level down.
+    exit_criteria:
+      - "freshness is graded on the row matching this host's own locus; pre-fix result: FAILS (yolanda: fresh windows-host row published and consumed, guard still answers stale:capability-row-expired:yolanda:age=682046s, the age of the 2026-09-04 in-guest row)"
+      - "a host that publishes for its own locus sees the verdict change to ok:capability-row-current within the same cycle; pre-fix result: FAILS (publish cannot clear it)"
+      - "NEGATIVE CONTROL: a genuinely stale OWN-LOCUS row still answers expired, and a drifted own-locus row still answers drifted; pre-fix result: PASSES, must not regress — this packet changes which row is judged, never whether staleness is enforced"
+      - "NEGATIVE CONTROL 2: grading the newest row for the host_id is NOT accepted as the fix — a stale own-locus row must not be masked by a fresher row at another locus; pre-fix result: N/A, stated so the cheap fix is refused on purpose"
+    events:
+      - type: filed
+        ts: "2026-09-12T04:16:50Z"
+        agent_id: "windows-yolanda-claude-20260912t041650z"
+        host: yolanda
+        summary: |
+          Found on yolanda 2026-09-12 while verifying the 1125-wi4d fix. The
+          row was published, correctly labelled, present in capability-matrix
+          and consumed by release-preflight — and the guard still called it
+          expired. Chasing why the remedy did not move the verdict is what
+          exposed the selection bug.
+
+          Worth recording that this verdict is what began the night's
+          capability work at all: the expired answer was acted on in good
+          faith, and acting on it wedged this host's pushes. The lesson is
+          not that the host should have ignored it.

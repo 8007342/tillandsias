@@ -1,0 +1,103 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-tray-build-rs-placeholder-warning-still-loops-both-arches-so-every-correct-windows-release-build-prints-a-warning-citing-a-refusal-that-no-longer-happens
+    order: 1126-w8rq
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: windows
+    capability_tags: [windows, release, tray, guest-embed]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-windows-tray/build.rs
+    verifiable_closure: |
+      bash scripts/test-tray-asset-placeholder-refused.sh stays at 8/8 arms on
+      a Windows host (arms 1-2 are the PowerShell predicate and skip on Linux)
+      AND a packaging run on a Windows host with a current guest staged emits
+      no warning naming the NON-host arch: pwsh scripts/build-windows-tray.ps1
+      reaches its Built: line with no tillandsias-headless-aarch64 warning in
+      its output. Today it reaches Built: AND prints that warning; the warning
+      is the failure. NEGATIVE CONTROL, and it is the half that matters: with
+      the EMBEDDED (host) arch asset at 0 bytes the warning must still fire and
+      the script must still throw. This packet narrows the warning; a fix that
+      silences it fails the control.
+    title: |
+      crates/tillandsias-windows-tray/build.rs:66 still loops over both arches when emitting the 1059-ry6t placeholder warning, so after 1122-xi2f narrowed the packaging CHECK to $hostGuestArch every correct Windows release build now prints a warning that says guest injection will be a silent no-op and that build-windows-tray.ps1 "refuses on this condition" — a refusal that, by design, no longer happens for that arch
+    context: |
+      MEASURED on yolanda, 2026-09-12, in the run that confirmed 1122-xi2f.
+      A fully correct packaging — x86_64 staged at 14,210,264 bytes carrying
+      workspace VERSION 56.9.11.1, aarch64 at its deliberate order-282
+      zero-byte reset — succeeded:
+
+        Built: C:\Users\bullo\claudia\tillandsias\target\release\tillandsias-windows-tray.exe
+
+      EXITCODE=0, Finished release profile [optimized] in 1m 52s, artifact
+      21,877,248 bytes. And in the SAME successful output:
+
+        warning: tillandsias-windows-tray@0.1.0: tillandsias-windows-tray:
+        ...assets\tillandsias-headless-aarch64-unknown-linux-musl is 0 bytes
+        (placeholder). This build embeds an EMPTY guest binary, so guest
+        injection will be a SILENT NO-OP at runtime. Stage the real musl
+        headless before packaging -- scripts/build-windows-tray.ps1 refuses
+        on this condition (1059-ry6t).
+
+      THE WARNING IS NOW WRONG IN TWO SEPARATE WAYS, and they fail differently.
+
+      (1) Its last clause is a statement about code that changed underneath it.
+      1122-xi2f narrowed the packaging check at build-windows-tray.ps1:234 to
+      `foreach ($arch in @($hostGuestArch))` precisely so the non-host arch's
+      designed placeholder stops refusing the build. The warning still tells
+      the reader that the script "refuses on this condition". It does not, by
+      design. A reader who trusts the warning concludes their green build
+      should have been red.
+
+      (2) Its FIRST half is wrong on its own terms for the non-host arch. An
+      x86_64 tray embeds only the x86_64 asset; the aarch64 asset's emptiness
+      cannot make that tray's guest injection a no-op. The sentence describes
+      a real hazard — it is just attached to the arch that cannot have it.
+
+      THE SHAPE IS THE PACKET IT CAME FROM. build.rs:66 iterates
+      `for arch in ["x86_64", "aarch64"]` — the same both-arches assumption
+      1122-xi2f removed from the check, in the other half of the same feature,
+      left behind because the fix was applied blind from Linux where no
+      Windows packaging runs. 1059-ry6t's two halves disagreed about what a
+      correct assets/ dir looks like; the check was reconciled and the warning
+      was not.
+
+      WHY IT IS WORTH A PACKET RATHER THAN A SHRUG. 1059-ry6t exists because a
+      zero-byte guest shipped silently for two weeks, and the warning is the
+      instrument that was supposed to make that condition audible. An
+      instrument that cries on every correct build is the one people learn to
+      filter, which is how the next real placeholder gets through. This is the
+      same argument 1059-ry6t makes for its own existence, one build later.
+
+      IMPLEMENTATION NOTE. build.rs cannot read $hostGuestArch — that is the
+      script's variable. The equivalent inside build.rs is the arch it is
+      being built FOR: CARGO_CFG_TARGET_ARCH ("x86_64" / "aarch64"), which is
+      what the tray actually embeds via include_bytes!. Scope the warning to
+      that and the two halves agree again by construction rather than by two
+      lists being kept in sync. Do NOT simply drop the aarch64 iteration: the
+      file-creation half of the loop (writing the empty placeholder so
+      `cargo check` compiles) must keep covering both arches.
+    exit_criteria:
+      - "a successful Windows packaging run with the non-host arch at its designed 0-byte reset emits no warning about that arch; pre-fix result: FAILS (the run above prints the aarch64 warning alongside its own Built: line)"
+      - "the warning text no longer claims build-windows-tray.ps1 refuses on a condition it does not refuse; pre-fix result: FAILS (build.rs:79)"
+      - "NEGATIVE CONTROL A, the warning keeps its teeth: with the EMBEDDED arch's asset at 0 bytes, a direct `cargo build -p tillandsias-windows-tray --release` still emits the 0-bytes warning for THAT arch; post-fix measured 2026-09-12 on yolanda: x86_64 warning fires True, aarch64 warning False — which is the whole packet in one line"
+      - "NEGATIVE CONTROL B, the refusal keeps its teeth: with the EMBEDDED arch's asset at 0 bytes, build-windows-tray.ps1 still throws 'guest asset is a placeholder'; post-fix measured: THREW True. NOTE these two controls CANNOT be observed in one run — the .ps1 check at :234 throws BEFORE cargo is invoked, so the warning never gets the chance to fire in a packaging run. An earlier draft of this criterion demanded both from one invocation and was unsatisfiable; it is split here because a criterion nobody can satisfy is scored by guessing"
+      - "NEGATIVE CONTROL C: scripts/test-tray-asset-placeholder-refused.sh stays at 8/8 arms on a Windows host (arms 1-2 are the PowerShell predicate and skip on Linux); pre-fix result: PASSES, must keep passing across the fix"
+      - "the placeholder-CREATION half of the build.rs loop still covers both arches so cargo check compiles on a host that never packages; pre-fix result: PASSES, must not regress"
+    events:
+      - type: filed
+        ts: "2026-09-12T02:20:01Z"
+        agent_id: "windows-yolanda-claude-20260912t022001z"
+        host: yolanda
+        summary: |
+          Found while confirming 1122-xi2f on the first Windows host up since
+          2026-09-06 — the warning appeared in the same output as the Built:
+          line that proves that packet's fix works. Filed at the coordinator's
+          direction (macuahuitl-fedora).
+
+          The reproduction is that successful run: a green build that tells
+          its reader it should have been refused.

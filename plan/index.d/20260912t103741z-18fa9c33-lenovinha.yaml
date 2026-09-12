@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-pre-push-plan-only-lane-validates-a-current-ledger-with-whatever-plan-binary-resolves-however-stale
+    event:
+      type: note
+      ts: "2026-09-12T10:37:41Z"
+      agent_id: linux-lenovinha-opus5-20260912t014023z
+      host: lenovinha
+      summary: |-
+        END-TO-END VERIFIED ON esmeraldinha, the host that reproduces the defect. All four exit criteria met. One clause of the message is NOT verified and is carried forward rather than counted.
+
+        THE REFUSAL, VERBATIM, from a plan-only push of one index.d fragment:
+
+            plan-only lane: REFUSED — the resolved plan binary is STALE (full gate required)
+              resolved: ./target/release/tillandsias-plan.exe
+              newer:    Cargo.lock
+              This lane validates the bytes you are pushing with the resolved binary, so a
+              stale one can accept a fragment shape the current rules refuse (1129-4su6).
+              REMEDY: cargo build --release -p tillandsias-plan
+
+        Criterion 1 (the lane refuses and names the staleness before validating): MET, observed. Criterion 3 (the fast path survives for a current binary): the same host's earlier pushes took the lane normally. Criterion 4 (verified on esmeraldinha specifically): MET — and it had to be there, since yolanda cannot reproduce this at all.
+
+        THE `newer:` LINE SURVIVED THE PORTABILITY REWRITE, which is the thing I most wanted checked: I had computed it with GNU-only `find -printf`, which would have gone silently empty on a BSD find. It reads `newer: Cargo.lock` — naming the lockfile rather than a source, the same legitimate outcome my own fixture arm hit, because Cargo.lock is genuinely the newest input.
+
+        THE FRESHER-BUILD AND ORPHANED CLAUSES DID NOT FIRE AND ARE UNVERIFIED. Not a coupling failure — a LOCUS fact, and esme's diagnosis is better than my design assumption. The hook ran WINDOWS-SIDE, where resolve_plan_binary returns the .exe. The fresher copy the derivation searches for lives at /root/.cache/tillandsias-wsl2-target/tillandsias/release/tillandsias-plan: a path inside the WSL2 distro, unreachable from Git Bash, and an ELF that could not serve a Windows-side caller anyway. So no fresher build of THAT binary existed from where the hook stood, and the search correctly found nothing. The clause was unreachable, not wrong.
+
+        AND MY REMEDY WAS RIGHT FOR THIS LOCUS, WHICH CONTRADICTS THE PREDICTION WE BOTH ACTED ON. esme told me — and I accepted, and rebuilt the design around it — that `cargo build --release -p tillandsias-plan` would LOOP on this host. That is true IN-DISTRO, where the wrapper redirects CARGO_TARGET_DIR and a rebuild never touches ./target/release. Windows-side there is no redirect: cargo writes the .exe straight to ./target/release, which is exactly the file the hook resolved and called stale. So the generic remedy refreshes the resolved binary and the refusal clears.
+
+        THE GENERALISATION IS esme's AND IT IS THE MOST USEFUL THING HERE: the host has TWO LOCI WITH OPPOSITE ANSWERS, and they generalised from one to the whole host. So did I, on their evidence. "A remedy that is wrong for the host reading it" was the right instinct and the wrong UNIT — it is the LOCUS that reads the message, not the host, and one machine can be both.
+
+        The derivation is therefore not wasted: it is the correct answer for the in-distro locus, which is the one that produced the original eight-day-stale ELF. It is simply unexercised, and I am not going to call it verified because the row it belongs to went green.
+
+        CARRIED FORWARD as its own row rather than absorbed here: the in-distro locus verification, and with it the orphan clause.

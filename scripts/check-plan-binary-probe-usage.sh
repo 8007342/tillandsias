@@ -51,7 +51,13 @@
 #
 # GRAMMAR (exactly one line on stdout)
 #   ok:plan-binary-probe-usage:<eligible> eligible of <scanned> scanned \
-#       [scripts=<e>/<s> litmus=<e>/<s>]
+#       [scripts=<e>/<s> litmus=<e>/<s> entry=<e>/<s>]
+#
+# `entry=` is the gate-entry-point surface added by 1128-j9fc: repo-root *.sh
+# (build.sh and siblings) plus scripts/gate-steps.d/*.step. It is NAMED in the
+# verdict rather than folded into the total because a surface that is walked and
+# a surface that does not exist produce the same silence otherwise — which is
+# how this one hid.
 #   violation:plan-binary-probe-usage:<n>
 #
 # Exit 0 on ok, 1 on violation, 2 on usage error.
@@ -64,13 +70,77 @@ cd "$ROOT" || { echo "violation:plan-binary-probe-usage:0"; exit 2; }
 SCAN_DIR="${1:-scripts}"
 PROBE_REL="plan-binary-probe.sh"
 
+# ── THE POPULATION, AND WHY IT IS NOT JUST `scripts/` (order 1128-j9fc) ──────
+#
+# This walk began as `find scripts -name '*.sh'`. It has now been found too
+# narrow THREE times, each time the same way — by someone noticing a file that
+# resolves the binary by hand and asking why the guard was green:
+#
+#   1. litmus commands (751-vega): FOURTEEN files resolved by hand while this
+#      reported ok on every windows cycle.
+#   2. mention-vs-use (1060-428m): a file naming the probe in a comment counted
+#      as compliant.
+#   3. build.sh itself (1128-j9fc): the gate ENTRY POINT. build.sh:2590 is the
+#      only caller of this script, and build.sh was not in its own population —
+#      so the file that runs the check could not be checked by it. A hardcoded
+#      `-x "$SCRIPT_DIR/target/release/tillandsias-plan"` with a `|| exit 0`
+#      sat in its `ok:gate-fresh-except-plan` arm and this guard said ok:21.
+#
+# THE RULE, stated as a rule so the fourth widening is a scoped change and not
+# another discovery: the population is EVERY FILE THAT CAN RESOLVE THIS BINARY,
+# with exclusions stated and justified. A population defined by enumerating the
+# directories someone has thought of so far will be found wrong again; the
+# question is not "where do scripts live" but "what can run this resolution".
+#
+# NOT YET CLOSED, deliberately and with the reason recorded rather than left to
+# be rediscovered: images/default/**.sh is still outside. Four files there name
+# the path — lib-common.sh installs it (`cp`), lib-expert-capability.sh prints
+# it in operator-facing remedy prose, and the two MCP servers resolve it via
+# plan_bin_runs(), which EXECUTES `"$1" capabilities`. That last form satisfies
+# 721-nyev in substance (resolution by evidence) while matching the string, so
+# widening to it on a string test would red-gate the two servers the whole fleet
+# reads the ledger through. Closing that surface needs the by-construct rule to
+# recognise execution-probes first. Tracked separately; see also the 704-zcgi
+# duplication those two files represent.
+ENTRY_SCAN="${PLAN_PROBE_ENTRY_SCAN:-$([ "$#" -ge 1 ] && echo 0 || echo 1)}"
+
+# One emitter, so every surface is judged by the SAME eligibility and
+# compliance bytes below. A second copy of that logic for the new surface would
+# be this repo's 704-zcgi defect reproduced inside the guard that exists to
+# refuse it.
+_population() {
+    find "$SCAN_DIR" -name '*.sh' -type f 2>/dev/null | sort
+    [ "$ENTRY_SCAN" = "1" ] || return 0
+    # Gate entry points: repo-root shell files (build.sh and its siblings) and
+    # the gate step corpus. `.step` files are shell run by the gate and are
+    # invisible to any `-name '*.sh'` walk — the extension, not the directory,
+    # is what hid them.
+    find . -maxdepth 1 -name '*.sh' -type f 2>/dev/null | sed 's|^\./||' | sort
+    find scripts/gate-steps.d -name '*.step' -type f 2>/dev/null | sort
+}
+
 violations=()
 checked=0
 scanned=0
 
+en_checked=0
+en_scanned=0
+
 while IFS= read -r f; do
     # The probe itself defines the candidate paths; it cannot source itself.
     scanned=$((scanned + 1))
+    # Which surface is this file on? Reported separately so the verdict states
+    # its own population (1128-j9fc criterion 4) — a reader must be able to see
+    # that the entry-point surface was walked, not infer it from a total.
+    # Classified by WHAT THE FILE IS, not where it sits. gate-steps.d/*.step
+    # lives under scripts/, so a path-prefix test files it as `scripts` and the
+    # entry surface reports 0 while silently absorbing 35 files — a count that
+    # misreports its own population is the defect this criterion exists to stop.
+    case "$f" in
+        *.step)  _surface=entry;   en_scanned=$((en_scanned + 1)) ;;
+        */*)     _surface=scripts ;;
+        *)       _surface=entry;   en_scanned=$((en_scanned + 1)) ;;
+    esac
     case "$f" in */$PROBE_REL) continue ;; esac
 
     # Code lines only. A comment or a user-facing message may name the path
@@ -83,13 +153,32 @@ while IFS= read -r f; do
     fi
     # Messages that merely NAME the path (echo/printf/array notes) are not
     # executions. Strip quoted-string contexts that are obviously output.
-    if ! printf '%s' "$code" \
-        | grep -vE '(echo|printf|LANE_NOTES|note|fail|say)[[:space:]]' \
-        | grep -qE 'target/(release|debug)/tillandsias-plan'; then
+    # SIGPIPE UNDER pipefail SILENTLY DROPPED FILES (order 1130-qk7d). This was
+    # `printf ... | grep -v ... | grep -q ...`. `grep -q` exits on its FIRST
+    # match and SIGPIPEs whatever is still writing upstream; `set -o pipefail`
+    # then reports the pipeline as 141, `if !` takes it as "no match", and an
+    # ELIGIBLE file is silently reclassified as ineligible.
+    #
+    # It is timing-dependent, so it bit exactly one file: the largest
+    # (test-fragment-status-loss.sh, 16191 bytes of code), where grep -q found a
+    # match and exited before the upstream finished writing. Smaller files
+    # finish first and never raise the signal. MEASURED on yoga 2026-09-12: that
+    # file was judged eligible 2 runs in 8 while the other seven were 8/8, with
+    # rc=141 on 9 of 12 traced runs; after this change, 15/15 runs agree.
+    #
+    # The `# sigpipe-ok` notes elsewhere in this file are on HERESTRING greps,
+    # which have no upstream process to kill. They were correct; this pipeline
+    # was the one that needed the care, and it had none.
+    #
+    # Capturing first and matching a herestring removes the writer entirely, so
+    # there is nothing left to signal.
+    _filtered="$(printf '%s' "$code" | grep -vE '(echo|printf|LANE_NOTES|note|fail|say)[[:space:]]')"
+    if ! grep -qE 'target/(release|debug)/tillandsias-plan' <<<"$_filtered"; then # sigpipe-ok: no upstream writer
         continue
     fi
 
     checked=$((checked + 1))
+    [ "$_surface" = entry ] && en_checked=$((en_checked + 1))
     # COMPLIANCE IS TESTED ON THE SAME BYTES ELIGIBILITY WAS (order 1060-428m).
     # This read used to be `grep -q "$PROBE_REL" "$f"` — the RAW file, comments
     # included — while eligibility above is computed on comment-STRIPPED $code.
@@ -114,10 +203,10 @@ while IFS= read -r f; do
     if ! grep -qE '(^|[;&|[:space:]])(\.|source)[[:space:]]+[^;&|]*'"$PROBE_REL"'|resolve_plan_binary|mf_plan_binary' <<<"$code"; then # sigpipe-ok: safe pipeline
         violations+=("$f")
     fi
-done < <(find "$SCAN_DIR" -name '*.sh' -type f 2>/dev/null | sort)
+done < <(_population)
 
-sh_checked="$checked"
-sh_scanned="$scanned"
+sh_checked=$((checked - en_checked))
+sh_scanned=$((scanned - en_scanned))
 
 # ── Surface 2: litmus step commands (order 751-vega) ──────────────────────────
 # A litmus `command:` runs in a bash -c child that has already sourced
@@ -209,5 +298,5 @@ fi
 # about. The per-surface breakdown exists for a sharper reason: this gate was
 # green for weeks while a whole directory sat outside its beam, and a single
 # total could never have shown that (751-vega).
-echo "ok:plan-binary-probe-usage:${checked} eligible of ${scanned} scanned [scripts=${sh_checked}/${sh_scanned} litmus=${lit_checked}/${lit_scanned}]"
+echo "ok:plan-binary-probe-usage:${checked} eligible of ${scanned} scanned [scripts=${sh_checked}/${sh_scanned} litmus=${lit_checked}/${lit_scanned} entry=${en_checked}/${en_scanned}]"
 exit 0

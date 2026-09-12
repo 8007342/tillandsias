@@ -1,0 +1,134 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by pirria-cachyos 2026-09-12 from the v56.9.12.2 destructive smoke (§2/§3).
+packets:
+  - packet_id: the-vault-entrypoint-traps-no-signals-so-a-sealed-secret-store-is-sigkilled-after-a-30s-stall-on-every-single-shutdown
+    order: 1134-u934
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [runtime, podman, vault, fail-loud, shutdown]
+    estimated_hours: 2
+    verifiable_closure: |
+      unscoreable: no litmus binds the vault image's shutdown path today, and
+      the assertion needs a live container — `podman stop -t 30
+      tillandsias-vault` must return in well under 30s with exit 0, not 137.
+      A fixture could pin it (start the image, stop it, assert elapsed and exit
+      code) and SHOULD be written with the fix; naming a litmus that does not
+      exist would be the dishonest form 977-448j refuses. The closure is that
+      stop-and-assert, run against the built image.
+    owned_files:
+      - images/vault/entrypoint.sh
+    title: |
+      MEASURED on pirria: tillandsias-vault takes the FULL 30s stop timeout and dies of SIGKILL (exit 137) on every shutdown, because its entrypoint is a PID-1 shell that traps nothing and never forwards SIGTERM to the vault process — and the pid it does hold is tee's, not vault's
+    context: |
+      FOUND by pirria 2026-09-12 during the authorised destructive smoke of
+      v56.9.12.2 (§2 reset + §3 pristine init, both PASS). Not a smoke failure —
+      it falls out of watching what the tray's own graceful shutdown does.
+
+      OBSERVED, then REPRODUCED DELIBERATELY:
+          tillandsias --diagnostics ... "Graceful shutdown completed"
+          tillandsias-vault  Exited (137)   <- SIGKILL
+          tillandsias-proxy  Exited (0)     <- clean, same shutdown
+      Reproduced on demand: start the container, `podman stop -t 30
+      tillandsias-vault` -> takes exactly 30s, ExitCode 137, OOMKilled false.
+      The proxy in the same sequence exits 0, so this is not podman and not the
+      tray — it is this image.
+
+      CAUSE, read from the container rather than inferred. Process tree inside
+      tillandsias-vault:
+          PID 1   bash        <- images/vault/entrypoint.sh
+          PID 10  vault       <- child
+          PID 11  tee         <- child
+      images/vault/entrypoint.sh:75 launches the server as a BACKGROUNDED
+      PIPELINE:
+          vault server -config="$VAULT_CONFIG" 2>&1 | tee -a "$ENTRYPOINT_LOG" &
+          VAULT_PID=$!
+      and the file contains NO trap (grep 'trap' matches one line, 238, which is
+      a comment). So PID 1 is a shell with no signal handling: podman's SIGTERM
+      goes to the shell, vault is never told to shut down, the 30s grace expires
+      and the container is SIGKILLed. Vault's own log confirms it — the last
+      lines are "vault is unsealed / serving", and there is NO shutdown entry at
+      all. It never hears the signal.
+
+      SECOND DEFECT IN THE SAME TWO LINES, and it survives the first being
+      fixed: after a PIPELINE, `$!` is the LAST element's pid — tee, not vault.
+      Confirmed in the container: /proc/10/comm = vault, /proc/11/comm = tee,
+      and VAULT_PID holds 11. So `wait "$VAULT_PID"` (line 251) waits on tee.
+      Anyone adding a trap that forwards to $VAULT_PID would signal tee and
+      believe they had fixed it — the container would still take 30s and still
+      exit 137, with a plausible-looking trap in place.
+
+      WHY p1 RATHER THAN COSMETIC. This is a SEALED SECRET STORE being killed
+      uncleanly on every single shutdown, on every host, with no graceful
+      unmount of its storage. The runbook's §3 already names "Vault failing to
+      initialize/unseal … keychain<->volume share mismatch" as a thing this
+      smoke exists to catch, and cites the resync brick in git history
+      738059bc. A store that is never allowed to shut down cleanly is a
+      plausible contributor to exactly that class, and it costs 30 seconds of
+      every stop besides. Nothing has bricked here — this is the precondition,
+      found before an incident rather than after one.
+
+      NOT ESTABLISHED, so nobody over-reads this: that the SIGKILL has ever
+      corrupted anything. Vault's file backend is crash-tolerant by design and
+      this host's init came up clean immediately afterwards. The claim is that
+      the shutdown path is wrong and the risk is unnecessary, not that damage
+      has been observed.
+    next_action: |
+      1. Make the entrypoint forward signals. Either `exec` vault as PID 1 —
+         which removes the shell and the pipeline together and is the simplest
+         correct shape — or install `trap 'kill -TERM "$VAULT_PID"' TERM INT`
+         and wait on it properly.
+      2. If the pipeline to tee is kept, FIX THE PID CAPTURE first: `$!` after a
+         pipeline is tee's. Use `${PIPESTATUS}`-style handling, a process
+         substitution (`> >(tee -a "$LOG")`) so vault stays the direct child, or
+         capture vault's pid explicitly. A trap that forwards to the wrong pid
+         is worse than no trap, because it looks fixed.
+      3. Pin it with a fixture: start the built image, `podman stop -t 30`,
+         assert elapsed well under 30s AND exit 0. It must be RED against
+         today's image — 30s and 137 — or it is not evidence.
+      4. Check the sibling images. proxy exits 0 so it is likely fine, but
+         git/inference/forge were not examined here and may share the shape.
+    events:
+      - type: filed
+        ts: "2026-09-12T14:30:00Z"
+        agent_id: "linux-pirria-claude-20260912t022150z"
+        host: pirria
+        summary: |
+          Filed from an authorised destructive smoke on an operator workstation
+          — consent obtained for that specific run, per the runbook's own rule
+          that an orchestrator's instruction is not consent to destroy a
+          particular machine's state.
+
+          SMOKE RESULT AROUND IT, so this finding is not mistaken for a red run:
+          §1 PASS (175s, v56.9.5.1 -> v56.9.12.2 verbatim). §2 PASS (reset_exit=0,
+          4 containers / 7 volumes / 18 images -> 0/0/0, all three emptiness
+          assertions). §3 PASS (init_exit=0, 398.5s from a pristine store, 15
+          images rebuilt, vault healthy) with ZERO occurrences of every failure
+          class the runbook enumerates: Error:, panic, "message authentication
+          failed", connection refused, short-name prompts, x509/TLS, SIGSEGV/139,
+          and no non-zero container exits during init.
+
+          The 137 appears only at SHUTDOWN, which is why a smoke that stops at
+          "init was clean" would not see it. It was found by looking at what the
+          tray's own graceful-shutdown line actually produced, after it had
+          already printed "Graceful shutdown completed".
+
+          TWO PROCESS-LEVEL FACTS WERE READ FROM THE RUNNING CONTAINER rather
+          than from the script, because the script alone would have supported a
+          wrong fix: the tree (bash PID 1, vault 10, tee 11) and /proc/*/comm.
+          The pipeline means $! is tee's pid, so the obvious one-line trap
+          forwarding to $VAULT_PID would signal tee and change nothing while
+          looking correct.
+
+          INCIDENTAL, recorded not filed: `--diagnostics` logs "keyring root
+          token get failed/timed out (No matching entry found in secure storage);
+          checking file fallback" and then recovers from the file fallback —
+          once during init, twice during diagnostics. It works, and the fallback
+          is doing its job. But a keyring path that never succeeds on this host
+          means the file fallback is load-bearing rather than a fallback, and
+          nobody would notice until the file is the thing that is missing. Not
+          filed as its own row because pirria has not established whether this is
+          expected on a headless cachyos session; it belongs to whoever owns the
+          keyring path.

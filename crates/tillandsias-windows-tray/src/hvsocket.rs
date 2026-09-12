@@ -19,6 +19,30 @@ pub use tillandsias_vm_layer::transport_windows::{
     wsl_utility_vm_id,
 };
 
+// ORDER 1084-x8ya. The digest of the guest binary THIS tray embeds, computed in
+// build.rs from the same include_bytes! asset the tray injects. `None` when that
+// asset is the zero-byte placeholder — see the refusal at the call site.
+include!(concat!(env!("OUT_DIR"), "/embedded_guest_digest.rs"));
+
+/// The guest digest, or a named refusal. ORDER 1084-x8ya.
+///
+/// Keying to the hash of an absent guest is the failure this packet removed, so
+/// the absent case is refused rather than defaulted. A release tray always has a
+/// real asset here: `scripts/build-windows-tray.ps1` refuses to package a
+/// placeholder for the embedded arch (1059-ry6t), so reaching this error means
+/// something bypassed packaging.
+#[cfg(target_os = "windows")]
+fn embedded_guest_digest() -> std::io::Result<&'static [u8; 32]> {
+    EMBEDDED_GUEST_SHA256.as_ref().ok_or_else(|| {
+        std::io::Error::other(
+            "no embedded guest digest: this tray was built against the zero-byte \
+             placeholder asset, so it cannot key the control wire to the guest it \
+             would inject (1084-x8ya). Stage the real musl headless and rebuild \
+             -- scripts/build-windows-tray.ps1 refuses this condition at packaging.",
+        )
+    })
+}
+
 #[cfg(target_os = "windows")]
 pub async fn open_and_wrap_hvsocket_stream(
     port: u32,
@@ -52,7 +76,8 @@ pub async fn open_and_wrap_hvsocket_stream(
         Err(err) => return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, err)),
     };
     if mode.is_secure() {
-        let psk = tillandsias_secure_channel::channel_psk(
+        let psk = tillandsias_secure_channel::channel_psk_for_guest(
+            embedded_guest_digest()?,
             env!("WORKSPACE_VERSION"),
             tillandsias_control_wire::WIRE_VERSION,
             tillandsias_secure_channel::HopId::HostGuest,
@@ -202,6 +227,21 @@ pub async fn hvsocket_read_envelope(
 
 #[cfg(test)]
 mod tests {
+
+    /// ORDER 1084-x8ya. Tests key from an EXPLICIT digest, never the embedded
+    /// one. `EMBEDDED_GUEST_SHA256` is `None` whenever assets/ holds the
+    /// build.rs zero-byte placeholder, which is the normal state on any host
+    /// running `cargo test` without packaging — so keying these tests to it
+    /// would make them fail for a reason that has nothing to do with what they
+    /// assert.
+    ///
+    /// It also makes the mismatch arm EXPRESSIBLE. Under the old
+    /// `channel_psk(version, wire, hop)` the key material was a property of
+    /// which file was running, so a single-process test could not construct two
+    /// peers with different keys — which is exactly why the in-process test
+    /// below could never have caught the self-hash divergence that shipped.
+    /// With the digest as a parameter, a mismatch is one different array.
+    const TEST_GUEST_DIGEST: [u8; 32] = [0x5a; 32];
     use super::*;
 
     #[test]
@@ -435,7 +475,8 @@ mod tests {
         // wrapper and `zeroize` is not a direct dependency of this crate, so
         // naming it here would add one for a test helper.
         let lane_psk = || {
-            tillandsias_secure_channel::channel_psk(
+            tillandsias_secure_channel::channel_psk_for_guest(
+                &TEST_GUEST_DIGEST,
                 env!("WORKSPACE_VERSION"),
                 tillandsias_control_wire::WIRE_VERSION,
                 tillandsias_secure_channel::HopId::HostGuest,
@@ -470,6 +511,115 @@ mod tests {
         server.await.expect("server task");
     }
 
+    /// ORDER 1084-x8ya, THE NEGATIVE CONTROL THE OLD API COULD NOT EXPRESS:
+    /// two peers whose GUEST DIGESTS DIFFER must fail the handshake, not carry
+    /// a frame.
+    ///
+    /// WHY THIS ARM DID NOT EXIST BEFORE, which is the whole reason the defect
+    /// shipped. Under `channel_psk(version, wire, hop)` the key material came
+    /// from `release_root_secret()`, which on release builds hashes
+    /// `current_exe()` — a property of WHICH FILE IS RUNNING, not a parameter.
+    /// In a single-process test both peers are the same file by construction,
+    /// so they always agreed, and `windows_lane_psk_pairs_and_carries_a_frame_
+    /// both_ways` above passed for a structural reason rather than because the
+    /// derivation was sound. No in-process test could have constructed a
+    /// mismatch, so no in-process test could have caught the real one:
+    /// tillandsias-tray.exe and tillandsias-headless are different files and
+    /// their digests can never be equal, so EVERY release pair failed while the
+    /// suite stayed green.
+    ///
+    /// MEASURED, yolanda 2026-09-12: tray d912454f…ecd34eb9 against guest
+    /// 3d27e306…cb35f2f, same tag and same CI run; a release cold provision
+    /// died at Connecting with "noise: input error" in 210s while a DEBUG pair
+    /// — identical but for the profile, which is the only thing that moves the
+    /// root secret — reached "VM Ready — control wire up" in 521s on the same
+    /// host, distro and substrate.
+    ///
+    /// With the digest as an explicit parameter the mismatch is one different
+    /// array, so the arm below is finally writable. Pre-fix result:
+    /// INEXPRESSIBLE — the old signature takes no digest, so this test could
+    /// not be written against it at all, which is a stronger statement than
+    /// "it failed".
+    #[tokio::test]
+    async fn a_guest_digest_mismatch_is_refused_not_carried() {
+        // One byte apart is deliberate: the arm must fail on the KEY, not on
+        // some incidental difference between two unrelated-looking arrays.
+        let mut other_digest = TEST_GUEST_DIGEST;
+        other_digest[31] ^= 0x01;
+        assert_ne!(
+            other_digest, TEST_GUEST_DIGEST,
+            "the sabotage must actually differ, or this arm asserts nothing"
+        );
+
+        let psk_for = |digest: &[u8; 32]| {
+            tillandsias_secure_channel::channel_psk_for_guest(
+                digest,
+                env!("WORKSPACE_VERSION"),
+                tillandsias_control_wire::WIRE_VERSION,
+                tillandsias_secure_channel::HopId::HostGuest,
+            )
+        };
+
+        let (client_side, server_side) = tokio::io::duplex(64 * 1024);
+        let server_psk = psk_for(&TEST_GUEST_DIGEST);
+        let server = tokio::spawn(async move {
+            tillandsias_secure_channel::server_handshake(server_side, &server_psk).await
+        });
+
+        let client_psk = psk_for(&other_digest);
+        let client = tillandsias_secure_channel::client_handshake(client_side, &client_psk).await;
+
+        assert!(
+            client.is_err(),
+            "a client keyed to a DIFFERENT guest digest must be refused; carrying a \
+             frame here would mean the digest is not actually bound into the key"
+        );
+        // The server must not hand back a usable channel either. Its exact
+        // error is snow's business and not pinned here; what is pinned is that
+        // neither side ends up with a stream it would write plaintext into.
+        let served = server.await.expect("server task");
+        assert!(
+            served.is_err(),
+            "the server must refuse the mismatched peer rather than complete a handshake"
+        );
+    }
+
+    /// ORDER 1084-x8ya, the POSITIVE half of the same pair, stated separately
+    /// so a future change that broke keying could not pass by making both arms
+    /// fail: EQUAL digests must still pair. This duplicates what
+    /// `windows_lane_psk_pairs_and_carries_a_frame_both_ways` proves about a
+    /// frame, deliberately — that test is about the channel carrying data, this
+    /// one is about the digest being the thing that decides.
+    #[tokio::test]
+    async fn equal_guest_digests_still_pair() {
+        let psk_for = |digest: &[u8; 32]| {
+            tillandsias_secure_channel::channel_psk_for_guest(
+                digest,
+                env!("WORKSPACE_VERSION"),
+                tillandsias_control_wire::WIRE_VERSION,
+                tillandsias_secure_channel::HopId::HostGuest,
+            )
+        };
+
+        let (client_side, server_side) = tokio::io::duplex(64 * 1024);
+        let server_psk = psk_for(&TEST_GUEST_DIGEST);
+        let server = tokio::spawn(async move {
+            tillandsias_secure_channel::server_handshake(server_side, &server_psk).await
+        });
+
+        let client_psk = psk_for(&TEST_GUEST_DIGEST);
+        let client = tillandsias_secure_channel::client_handshake(client_side, &client_psk).await;
+
+        assert!(
+            client.is_ok(),
+            "identical guest digests must still produce a working handshake"
+        );
+        assert!(
+            server.await.expect("server task").is_ok(),
+            "identical guest digests must still produce a working handshake (server side)"
+        );
+    }
+
     /// ORDER 972-umik COMMIT B, THE SABOTAGE ARM: with the default flipped to
     /// On, a peer left on PLAINTEXT must be REFUSED, loudly, rather than
     /// quietly carrying bytes in the clear.
@@ -502,7 +652,8 @@ mod tests {
         let (plaintext_side, server_side) = tokio::io::duplex(64 * 1024);
 
         let server = tokio::spawn(async move {
-            let psk = tillandsias_secure_channel::channel_psk(
+            let psk = tillandsias_secure_channel::channel_psk_for_guest(
+                &TEST_GUEST_DIGEST,
                 env!("WORKSPACE_VERSION"),
                 tillandsias_control_wire::WIRE_VERSION,
                 tillandsias_secure_channel::HopId::HostGuest,

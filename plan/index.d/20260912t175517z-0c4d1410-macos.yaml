@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-thirty-seven-standing-gnu-only-idioms-the-advisory-found-on-its-first-run
+    field: next_action
+    value: |-
+      THE LOUD-FAIL HALF OF sed -i IS THE NEXT SLICE, and the template is followable: temp-file form (`sed EXPR in > in.tmp && mv in.tmp in`), never `-i` and never `-i ''` (GNU consumes the empty string as the SCRIPT, so that form only moves the breakage to Linux). READ THE LINES BEFORE PLANNING — three-for-three now, and the near-miss that earned it: bump-version.sh looked like a bare sed -i and was already inside a GNU/BSD branch whose BSD arm handled MORE than -i, so a naive conversion would have removed the warning and left a silent `0,/re/` no-op on the script that bumps the release version.
+
+      CORRECTED ESTIMATE: 13 flagged fixture entries, at least THREE of them deliberate test SUBJECTS that must stay flagged — test-litmus-mutation-arm-guard.sh carries sed -i inside the `command:` strings it is testing (:71, :99), and scripts/test-portability-idioms.sh self-flags at :73 where the idiom is a pattern ARGUMENT proving the guard catches it. Expect ~8-9 real conversions, not 13. A class with N hits is a hypothesis about N defects; this guard has been wrong about that three times, always in its own favour.
+
+      FOUR FALSE-POSITIVE CLASSES ARE ALREADY HANDLED and must not be re-litigated: remote context (a string dispatched through podman/docker/wsl/ssh/--exec-guest, tracked transitively through variable assignments), incomplete counterpart lists (`date -j`/`-jf` is the BSD PARSE form; `touch -A` is a counterpart to `touch -d`; `tr -d '[:space:]'` before a wc compare is already correct), idiom-inside-a-dialect-branch (bounded six-line window after a `sed --version | grep -q GNU` or `uname -s` probe), and self-flagging test subjects.
+
+      PER SITE, add or extend an arm proving the fixed line behaves on BOTH dialects. A conversion with no arm is how the grep -R repair travelled wrong (GNU-correct, BSD-broken) and how a touch -d → -t conversion shipped a literal timestamp with an expiry date. A FIX TRAVELLING WITH A NEW DEFECT ATTACHED has happened twice in this packet's history.
+
+      Re-measure the baseline after the slice and record the tree AND host with it. Current: 15 silent-degrade / 13 loud-fail at bc2875709, macOS; the Linux count agreed exactly at the last cross-check, so a divergence is a finding, not a rounding difference.
+    ts: "2026-09-12T17:55:17Z"
+    host: macos
+
+events:
+  - packet_id: the-thirty-seven-standing-gnu-only-idioms-the-advisory-found-on-its-first-run
+    event:
+      type: progress
+      ts: "2026-09-12T17:55:17Z"
+      host: macos
+      summary: |-
+        status 'THE LOUD-FAIL HALF OF sed -i IS THE NEXT SLICE, and the template is followable: temp-file form (`sed EXPR in > in.tmp && mv in.tmp in`), never `-i` and never `-i ''` (GNU consumes the empty string as the SCRIPT, so that form only moves the breakage to Linux). READ THE LINES BEFORE PLANNING — three-for-three now, and the near-miss that earned it: bump-version.sh looked like a bare sed -i and was already inside a GNU/BSD branch whose BSD arm handled MORE than -i, so a naive conversion would have removed the warning and left a silent `0,/re/` no-op on the script that bumps the release version.
+        
+        CORRECTED ESTIMATE: 13 flagged fixture entries, at least THREE of them deliberate test SUBJECTS that must stay flagged — test-litmus-mutation-arm-guard.sh carries sed -i inside the `command:` strings it is testing (:71, :99), and scripts/test-portability-idioms.sh self-flags at :73 where the idiom is a pattern ARGUMENT proving the guard catches it. Expect ~8-9 real conversions, not 13. A class with N hits is a hypothesis about N defects; this guard has been wrong about that three times, always in its own favour.
+        
+        FOUR FALSE-POSITIVE CLASSES ARE ALREADY HANDLED and must not be re-litigated: remote context (a string dispatched through podman/docker/wsl/ssh/--exec-guest, tracked transitively through variable assignments), incomplete counterpart lists (`date -j`/`-jf` is the BSD PARSE form; `touch -A` is a counterpart to `touch -d`; `tr -d '[:space:]'` before a wc compare is already correct), idiom-inside-a-dialect-branch (bounded six-line window after a `sed --version | grep -q GNU` or `uname -s` probe), and self-flagging test subjects.
+        
+        PER SITE, add or extend an arm proving the fixed line behaves on BOTH dialects. A conversion with no arm is how the grep -R repair travelled wrong (GNU-correct, BSD-broken) and how a touch -d → -t conversion shipped a literal timestamp with an expiry date. A FIX TRAVELLING WITH A NEW DEFECT ATTACHED has happened twice in this packet's history.
+        
+        Re-measure the baseline after the slice and record the tree AND host with it. Current: 15 silent-degrade / 13 loud-fail at bc2875709, macOS; the Linux count agreed exactly at the last cross-check, so a divergence is a finding, not a rounding difference.' (not terminal) with evidence_refs: silent-degrade half of sed -i closed at bc2875709; four production sites converted with behavioural proof

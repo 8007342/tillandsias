@@ -1,0 +1,151 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: gnu-only-shell-idioms-reach-trunk-green-and-freeze-a-whole-platform-one-host-at-a-time
+    order: 1130-i6xj
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [gate, portability, macos, windows, fail-loud]
+    estimated_hours: 3
+    owned_files:
+      - scripts
+      - build.sh
+    unscoreable: |
+      NO LITMUS CAN BE PINNED AT FILING TIME, and the reason is mechanical
+      rather than an excuse. The thing to be tested is a guard that does not
+      exist yet — this packet's own deliverable — so any litmus named here
+      would resolve to nothing. MEASURED, not assumed: declaring
+      `litmus:gnuism-advisory-names-the-known-instances` in verifiable_closure
+      makes check-declared-closures-added.sh emit
+      `violation:declared-closure-unresolvable:1`, and build.sh:2940-2942 exits
+      1 on it. So a new packet delivering a NEW test is caught between two hard
+      gates: 977-448j refuses a row with no scorable obligation, and 885-92iu
+      refuses one naming a test that does not resolve. `unscoreable:` is the
+      state the first guard's own message offers for exactly this, and it is
+      the honest one — this is not unscoreable forever, it is unpinnable until
+      the guard exists.
+
+      WHAT MAKES IT SCORABLE, named so the claimer can pin it the moment it is
+      real: write openspec/litmus-tests/litmus-gnuism-advisory-names-the-known-
+      instances.yaml in the SAME commit as the guard, asserting both halves of
+      the closure below, and move this text into verifiable_closure. Order
+      1068-cxmf is why the pin is not declared early and left dangling: four
+      packets already name litmus tests nothing defines, and adding a fifth to
+      look rigorous would be the same defect wearing this packet's number.
+
+      THE CLOSURE THAT LITMUS MUST ASSERT — the guard names all THREE of 2026-09-12's catchable defects when run
+      against the pre-fix tree — audit-guard-activation.sh's `grep -Rl` over a
+      symlink surface, check-cheatsheet-refs.sh's `rg` with no path operand,
+      and test-gate-stamp-does-not-memoize-guard-owned-paths.sh's `sed -i` —
+      and names ZERO on the fixed tree. A guard that cannot demonstrate both
+      halves on real history is not scorable, and the history is right there.
+    title: |
+      GNU-only shell idioms pass every gate on the host that wrote them and then freeze an entire platform on first contact — FIVE in one night, each costing a fleet-wide stall, and nothing in the gate looks for them
+    context: |
+      FIVE ENVIRONMENT-DEPENDENT DEFECTS IN ONE NIGHT (2026-09-12), every one
+      of them green on trunk before it bit. Listed because the pattern, not any
+      single instance, is the argument:
+
+        1. audit-guard-activation.sh `grep -Rl` over .claude/skills — GNU grep
+           follows symlinked dirs during traversal, BSD grep does not. Five
+           correctly-wired guards reported ORPHAN; ./build.sh --check red;
+           every macOS land refused. (1087-h2z9)
+        2. check-cheatsheet-refs.sh `rg` with NO PATH OPERAND — ripgrep reads
+           STDIN when stdin is a readable stream, so under a piped stdin it
+           blocked forever. The gate HUNG rather than failing: no error, no
+           exit code, 43 minutes of a land that was dead while being reported
+           as slow.
+        3. test-gate-stamp-does-not-memoize-guard-owned-paths.sh `sed -i` —
+           GNU-only; BSD reads the next arg as the backup suffix, so arm4's
+           strip silently did nothing and the arm FAILED ITSELF while the code
+           under test was correct. Blocked every macOS land. (1127-waxf)
+        4. ugrep-as-grep verdict skew — a host with ugrep on the interactive
+           PATH runs audit-guard-activation.sh BY HAND and it PASSES, while the
+           identical script under a child bash resolving /usr/bin/grep FAILS.
+           "Measured green" and "red in the gate" were both true on ONE machine.
+        5. git-credential-osxkeychain — answers in the operator's GUI session,
+           hangs forever headless on a locked login keychain. Same helper, same
+           platform, same repo: one host pushes fine, another times out with
+           rc 124 and zero output. (macneo, 2026-09-12)
+
+      THE COMMON SHAPE, and why a test suite does not catch it: every one PASSES
+      WHERE IT WAS WRITTEN. The author runs it, sees green, lands it. It is not
+      a logic error and no amount of additional test CASES finds it, because the
+      defect is in the relationship between the code and the environment, and
+      the gate only ever observes one environment at a time. Three of the five
+      also fail in the most expensive possible way — they HANG or report a FALSE
+      RED, so the receiving host reads "my machine is slow" or "someone broke
+      trunk" rather than "this idiom is not portable".
+
+      LENOVINHA'S SWEEP OF THE SAME NIGHT ADDS TWO MORE, and one of them is
+      the worst shape in the set: `find -printf` in
+      scripts/hooks/pre-push-local-gate.sh — a HOOK, on the path macOS pushes
+      through — where BSD find yielded an empty `$_newer` and the refusal never
+      fired at all. Nothing went red; the guard simply stopped guarding. Also
+      three `touch -d` in test-plan-binary-freshness.sh. That makes SEVEN known
+      instances across three hosts in one night.
+
+      TWO OF THEM WERE THE SAME FIX TRAVELLING WRONG. 1087-h2z9's `grep -R`
+      (GNU-correct, BSD-broken) and the `sed -i` above are the same mistake in
+      two utilities; and the obvious repair for the second — `-i ''` — breaks
+      GNU in the mirror image. A guard that knows the PAIR is worth more than
+      one that knows either half.
+    deliverable: |
+      A non-blocking, COUNTED advisory gate step that greps scripts/ (and
+      build.sh) for known-non-portable idioms and prints one line per hit with
+      file:line and the portable form. Counted so the number is the signal, and
+      ADVISORY so it never becomes the thing that freezes a platform — the
+      failure mode it exists to prevent.
+
+      THE TALLY IS SPLIT BY SEVERITY, SILENT CLASS FIRST (lenovinha's
+      distinction, and it is the right one). Where the idiom sits decides how
+      the failure presents:
+        * SILENT-DEGRADE — a hook or a production script. It fails on the host
+          that PUSHES, produces no error, and the wrong answer looks exactly
+          like the right one. lenovinha's `find -printf` in
+          scripts/hooks/pre-push-local-gate.sh is this: on BSD find the
+          `$_newer` set went silently EMPTY, so the hook's refusal simply did
+          not fire on macOS — a guard that was not guarding, on the very path
+          macOS pushes through. COUNT AND PRINT THESE FIRST.
+        * LOUD-FAIL — a fixture. It fails on the host that RUNS it, with a red
+          line and a name. Expensive (it froze macOS lands twice tonight) but
+          self-announcing, and nobody ships a wrong result on the back of it.
+      A tally that mixes the two hides the dangerous half behind the noisy one.
+
+      Idiom set, every entry from a real 2026-09-12 incident:
+        * `sed -i` without a following empty-string argument   (GNU-only)
+        * `sed -i ''`                                          (BSD-only — the
+                                                                mirror trap)
+        * `grep -R`/`-r` where the searched path is a symlink farm
+        * `rg` with no path operand                            (reads stdin)
+        * `find -printf`                                       (GNU-only; the
+                                                                silent-empty case)
+        * `touch -d`                                           (GNU-only; three
+                                                                in
+                                                                test-plan-binary-freshness.sh)
+        * `readlink -f`, `date -d`, `stat -c`                  (GNU-only forms)
+
+      NOT a blocking gate, and that is deliberate: tonight already demonstrates
+      that a check which can freeze a platform is more expensive than the
+      defects it catches.
+    next_action: >
+      Write the advisory as a gate step AND openspec/litmus-tests/
+      litmus-gnuism-advisory-names-the-known-instances.yaml in the same commit —
+      the declared pin is unresolvable until that file exists, and an
+      unresolvable pin is 1068-cxmf's defect, not a placeholder. Then prove
+      BOTH halves of the closure
+      against real history: run it on the tree before 2026-09-12's fixes (it
+      must name grep -Rl in audit-guard-activation.sh, rg in
+      check-cheatsheet-refs.sh, and sed -i in
+      test-gate-stamp-does-not-memoize-guard-owned-paths.sh) and on the tree
+      after (it must name none). Idioms 4 and 5 from the context are NOT
+      grep-detectable — a PATH-dependent tool identity and a locked keychain
+      are runtime facts, not source text — so say so in the step's own comment
+      rather than letting a future reader believe the advisory covers all five.
+    provenance: |
+      Filed at the coordinator's instruction by macbookair (macos), 2026-09-12,
+      after hitting three of the five personally in one session — two of which
+      blocked its own lands — and diagnosing a fourth from the other side.

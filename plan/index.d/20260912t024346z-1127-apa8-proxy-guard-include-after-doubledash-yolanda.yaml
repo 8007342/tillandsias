@@ -1,0 +1,102 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-proxy-permissive-port-guard-puts-include-after-the-double-dash-so-the-filter-is-inert-and-it-scans-binaries-reporting-a-staged-guest-as-a-consumer
+    order: 1127-apa8
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: any
+    capability_tags: [ci, guards, windows, release]
+    estimated_hours: 1
+    owned_files:
+      - scripts/check-proxy-permissive-port-routing.sh
+    verifiable_closure: |
+      bash scripts/check-proxy-permissive-port-routing.sh answers
+      ok:proxy-permissive-port:unrouted-and-documented on a tree that has a
+      non-empty crates/tillandsias-windows-tray/assets/tillandsias-headless-*
+      binary containing the bytes 3129 — the state a Windows host is in
+      between staging a guest and packaging. Today it answers
+      violation:proxy-permissive-port:stale-unrouted-caveat and names that
+      binary. NEGATIVE CONTROL: adding a real .rs under crates/ that names
+      3129 must still flip the guard to the routed branch, and squid.conf
+      keeping its NOT ROUTED caveat with such a consumer present must still
+      be a violation — this packet fixes WHICH FILES are searched, it must
+      not weaken what the guard asserts about the ones it does search.
+    title: |
+      scripts/check-proxy-permissive-port-routing.sh:59 writes `grep -rlF -- '3129' --include='*.rs' "$CONSUMER_ROOT"`, but `--` ends option parsing, so --include is taken as a FILENAME and no filter is applied — the guard searches every file under crates/ including build artifacts, and a staged 14MB musl guest binary that merely contains the bytes 3129 is reported as a consumer that routes to the permissive port
+    context: |
+      MEASURED on yolanda, 2026-09-12, as a LAND REFUSAL during the fleet
+      restart. scripts/land-on-platform-branch.sh was refused by the gate with
+
+        violation:proxy-permissive-port:stale-unrouted-caveat
+
+      naming, as the consumer that "now references 3129":
+
+        crates/tillandsias-windows-tray/assets/tillandsias-headless-x86_64-unknown-linux-musl
+
+      That is the staged musl guest binary — build output, gitignored
+      (.gitignore:132), 14,210,264 bytes. It does not reference the port. It
+      contains those four bytes somewhere in 14MB, which is unremarkable.
+
+      ROOT CAUSE is one token of shell grammar. Line 59 reads
+
+        consumers="$(grep -rlF -- '3129' --include='*.rs' "$CONSUMER_ROOT" 2>/dev/null | sort -u)"
+
+      `--` terminates option parsing. Everything after it is an operand, so
+      --include='*.rs' is not an option — grep treats it as a path to search,
+      finds no such file, and applies NO INCLUDE FILTER AT ALL. Both forms,
+      run on this tree minutes apart:
+
+        grep -rlF -- '3129' --include='*.rs' crates   -> the musl binary
+        grep -rlF --include='*.rs' -- '3129' crates   -> (empty)
+
+      With the filter actually applied the answer is empty, and the guard's
+      verdict becomes ok:proxy-permissive-port:unrouted-and-documented, which
+      is the true state: no .rs under crates/ references 3129.
+
+      THE GUARD CONTRADICTS ITS OWN HEADER. Lines 57-59 state the rule it
+      means to implement: "A CONSUMER is Rust that names the port — an
+      argument, a published port, a proxy URL. squid.conf declaring its own
+      listener is not a consumer, which is the whole distinction the old
+      comment collapsed." The implementation does not honour that sentence.
+      It was written to stop one conflation (a listener read as a route) and
+      it silently permits a wider one (any byte sequence in any file read as
+      a route). The prose is right; the code never matched it.
+
+      WHY IT SURFACED ONLY NOW, which is the part worth keeping. The defect
+      needs a file under crates/ that is not Rust and contains "3129". In
+      practice that means a staged guest binary, which exists only on a
+      Windows host in the window between staging and packaging. Both Windows
+      hosts were down from 2026-09-06 to 2026-09-12. The first Windows host
+      to come back, stage a guest, and land hit it immediately. A guard whose
+      false-positive surface is only reachable from one platform is a guard
+      the fleet cannot discover by running more Linux cycles.
+
+      SEVERITY. This refuses the LAND of an unrelated, plan-only commit, on a
+      host whose only sin was to have done the packaging work it was asked to
+      do. The obvious local workaround — deleting the build artifact — is
+      what the affected host will reach for, and it works, which is exactly
+      why the underlying bug can persist through several hosts hitting it.
+    exit_criteria:
+      - "--include is applied: a non-empty staged guest binary under crates/ containing 3129 does not appear in the consumer set; pre-fix result: FAILS (the binary above is named as a consumer and the land is refused)"
+      - "the guard answers ok:proxy-permissive-port:unrouted-and-documented on a tree with a staged guest binary present; pre-fix result: FAILS (violation:proxy-permissive-port:stale-unrouted-caveat)"
+      - "NEGATIVE CONTROL: a real .rs under crates/ naming 3129 still flips the guard to its routed branch, and the NOT ROUTED caveat still violates in that case — the fix narrows WHICH FILES are searched, not WHAT is asserted; pre-fix result: PASSES, must keep passing"
+      - "the guard keeps searching crates/ only and does not start searching build.sh (the dev proxy is a different proxy, per the scope comment at :47-55); pre-fix result: PASSES, must not regress"
+    events:
+      - type: filed
+        ts: "2026-09-12T02:43:46Z"
+        agent_id: "windows-yolanda-claude-20260912t024346z"
+        host: yolanda
+        summary: |
+          Found as a land refusal on the first Windows host up since
+          2026-09-06, while landing the 1122-xi2f confirmation. The refusal
+          was not about the commit being landed.
+
+          Unblocked without touching the guard: the offending asset is
+          gitignored build output, so it was truncated back to the zero-byte
+          placeholder build.rs writes by default, with the real binary kept
+          in target-guest/ so repackaging restages it. The guard was NOT
+          edited and the push was NOT forced past it — a gate that is wrong
+          is still a gate, and scripts/ was under a cut freeze at the time.

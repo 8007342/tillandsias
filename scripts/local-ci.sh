@@ -1657,6 +1657,28 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
         archive_check_log "no-python-scripts" "skipped"
     fi
 
+    # Sub-check 8a2: probe-usage guard determinism over the WHOLE corpus
+    # (order 1130-qk7d). The BREADTH arm. Its cheap sibling,
+    # test-plan-binary-probe-usage-determinism.sh, runs on every --check against
+    # a two-file tree and pins the SIGPIPE mechanism in ~200 ms. This one asks
+    # the question that arm cannot: is the guard deterministic across the whole
+    # repository, including files nobody has identified? ~66 s here, ~99 s on a
+    # floor host, which is why it is daily and not per-land.
+    # Declared in scripts/gate-divergence-declared.txt as `excluded`.
+    if [[ -f "scripts/test-plan-binary-probe-usage-determinism-corpus.sh" ]]; then
+        if bash scripts/test-plan-binary-probe-usage-determinism-corpus.sh 2>&1 | tee /tmp/probe-usage-determinism-corpus.log; then
+            log_pass "Probe-usage guard deterministic over the full corpus"
+            archive_check_log "probe-usage-determinism-corpus" "pass" /tmp/probe-usage-determinism-corpus.log
+        else
+            log_fail_tracked "probe-usage-determinism-corpus" "the probe-usage guard gave more than one verdict over the full corpus — a split HERE that --check did not catch is a DIFFERENT file or cause than 1130-qk7d (see /tmp/probe-usage-determinism-corpus.log)"
+            [[ "$VERBOSE" == "1" ]] && cat /tmp/probe-usage-determinism-corpus.log >&2
+            archive_check_log "probe-usage-determinism-corpus" "fail" /tmp/probe-usage-determinism-corpus.log
+        fi
+    else
+        log_fail_missing_guard "probe-usage-determinism-corpus" "scripts/test-plan-binary-probe-usage-determinism-corpus.sh"
+        archive_check_log "probe-usage-determinism-corpus" "skipped"
+    fi
+
     # Sub-check 8b: Base64 script injection ban
     if [[ -f "scripts/check-no-base64-script-injection.sh" ]]; then
         if bash scripts/check-no-base64-script-injection.sh 2>&1 | tee /tmp/no-base64-script-injection.log; then

@@ -85,6 +85,7 @@ tracing-appender = { workspace = true }
 uuid = { workspace = true }
 
 [build-dependencies]
+sha2 = { workspace = true }
 embed-resource = { workspace = true }
 # ORDER 776-g6r3 — MSIX logo rendering. Same pure-Rust pipeline
 # tillandsias-core/build.rs already uses for the tray icons, deliberately: the

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: macos-model-cache-dies-with-the-vm-directory
+    field: status
+    value: ready
+    ts: "2026-09-12T06:57:15Z"
+    host: macos
+
+events:
+  - packet_id: macos-model-cache-dies-with-the-vm-directory
+    event:
+      type: progress
+      ts: "2026-09-12T06:57:15Z"
+      host: macos
+      summary: |-
+        status 'ready' (not terminal) with evidence_refs: releasing: remaining work is a populated-cache measurement plus a scope decision; smoke run preempts

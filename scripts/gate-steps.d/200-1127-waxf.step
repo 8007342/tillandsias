@@ -1,0 +1,22 @@
+# Gate step 1127-waxf — data, not code (order 1072-b7eq).
+#
+# WHY IN --check: this pins the memo's own soundness, and the memo is what
+# decides whether --check runs at all. A regression here is invisible from
+# every other vantage — the gate would simply stop running on a change class
+# and report success, which is the defect it was written for.
+#
+# It drives scripts/gate-stamp.sh in a scratch repo and never invokes
+# ./build.sh (it runs inside it). ~1s, hermetic, no network.
+#
+# REGIME NOTE (1087-h2z9's lesson): verified on linux/rootless. No arm uses
+# chmod 000, chown, or any construct root can bypass; the one host-dependent
+# value, the toolchain digest, is obtained by letting gate-stamp.sh write a
+# real stamp rather than hand-writing one, so a host whose toolchain differs
+# still matches itself. Root-parity is expected on the WSL lane by reading the
+# arms, not measured.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the gate memo cannot skip the guards that read the plan ledger (1127-waxf)"
+STEP_SCRIPT="scripts/test-gate-stamp-does-not-memoize-guard-owned-paths.sh"
+STEP_ERROR="a plan-only change can memoize away the fragment guards again, or the partial-memo verdict lost its wiring (1127-waxf) — see the arm above"
+STEP_OK="Gate-memo plan-ledger coverage check passed"

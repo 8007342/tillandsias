@@ -1,0 +1,79 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: two-timing-logs-on-one-host-so-every-recurrence-count-is-a-partition-presenting-as-a-total
+    event:
+      type: progress
+      ts: "2026-09-12T07:48:56Z"
+      agent_id: windows-yolanda-claude-20260912t074855z
+      host: yolanda
+      summary: |
+        CORRECTION TO MY OWN EARLIER EVENT ON THIS PACKET. I claimed the checkout
+        detection fails under WSL/drvfs so "the REAL records land in the /tmp fallback
+        and a month of history was invisible to readers of .cache/metrics". MEASURED
+        NOW, THAT IS WRONG. The detection works on this host and .cache/metrics is the
+        larger, live log. I am correcting it rather than leaving a plausible mechanism
+        in the ledger for pirria to chase.
+
+        All three of the candidates put to me are REFUTED on yolanda, inside the
+        tillandsias-build distro where the gate runs:
+          cwd is the checkout            pwd=/mnt/c/Users/bullo/claudia/tillandsias
+          .git is a readable DIRECTORY   drwxrwxrwx, is-dir yes, is-file no, readable yes
+          $root resolves correctly       cycle-metrics.sh:220 REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+                                         -> /mnt/c/Users/bullo/claudia/tillandsias, has .git
+          the mkdir half of the AND      succeeds; .cache/metrics exists, drwxrwxrwx
+          metrics_default_log returns    /mnt/c/.../.cache/metrics/tillandsias-timing.jsonl
+        So `[ -d "$root/.git" ]` does NOT fail from the build distro. The question as
+        posed has no defect behind it.
+
+        WHAT IS ACTUALLY TRUE HERE — and it is still exactly this packet's subject,
+        a split, just not the split I described:
+          .cache/metrics/tillandsias-timing.jsonl  16,442 lines  2,626,616 bytes
+                                                   2026-08-26T04:49:01Z .. 2026-09-12T07:48:30Z
+          /tmp/tillandsias-timing.jsonl            4,756 lines     702,631 bytes
+                                                   2026-08-11T22:04:38Z .. 2026-09-12T05:40:23Z
+        BOTH ARE LIVE AND BOTH WERE WRITTEN TODAY. The /tmp log is not a stale orphan
+        from before a fix; it received a record at 05:40Z while .cache received one at
+        07:48Z. The partition is concurrent, which is worse than a historical
+        changeover: a reader of either file today sees a fraction and cannot tell.
+
+        MY EARLIER CLAIM WAS DIRECTIONALLY BACKWARDS. I said the real records were in
+        /tmp and .cache was the impoverished view. It is the other way round on this
+        host: .cache holds 16,442 lines to /tmp's 4,756. What survives from my earlier
+        event, and is unaffected, is the near-miss: the circulated `rm` workaround was
+        conditional, the condition held on two hosts, and both files turned out to
+        contain real records. Preserving /tmp was still right — it holds 4,756 real
+        records nothing else has, including the earliest history on this host
+        (2026-08-11, three weeks before .cache's first line).
+
+        WHERE TO LOOK INSTEAD, since the detection is exonerated: scripts that never
+        source scripts/metrics-log-path.sh install a FALLBACK STUB that hardcodes /tmp
+        unconditionally —
+          scripts/check-mcp-expert-health.sh:185
+          scripts/check-mcp-surface.sh:103
+            command -v metrics_default_log >/dev/null 2>&1 || \
+              { metrics_default_log() { printf '/tmp/%s' "$1"; }; }
+        That stub cannot consult a repo root because it takes none. Any caller reaching
+        it writes to /tmp no matter how healthy the checkout detection is. I have NOT
+        established that these particular scripts wrote the 4,756 timing records — they
+        name other basenames — so this is a lead, not a finding, and the honest next
+        step is to identify the writer by record shape rather than by assuming the
+        nearest suspicious code is guilty. That is the same discipline that made me
+        re-measure my own claim.
+
+        The `host: unknown -> Yolanda` transition is visible in the /tmp file (earliest
+        records "unknown", latest "Yolanda") and .cache carries "Yolanda" from its first
+        line and a "-" on its last, so host identity resolution is worth its own look
+        but is not evidence for the detection theory either.
+
+        next_action superseded: the question "why does [ -d \"$root/.git\" ] fail from
+        the build distro" should be closed as ANSWERED-NEGATIVE (it does not fail), and
+        replaced with "which writer appends to /tmp/tillandsias-timing.jsonl while
+        .cache/metrics is healthy, and is it a fallback stub that takes no repo root".

@@ -114,7 +114,40 @@ async fn maybe_secure_stream(
             );
             match server_handshake_or_reclaim(stream, &psk).await {
                 Ok(secure) => Ok(Box::new(secure)),
-                Err((raw, err)) => Err((raw, err)),
+                Err((raw, err)) => {
+                    // ORDER 1084-x8ya. THE SIDE THAT KNOWS WHY USED TO SAY
+                    // NOTHING. This arm handed `err` back as a value, the
+                    // caller turned it into a plaintext Unauthorized frame,
+                    // and nothing ever reached the journal. Measured on
+                    // yolanda 2026-09-12 against a failed v56.9.12.1 cold
+                    // provision: journalctl since the provision, filtered for
+                    // handshake|noise|unauthorized|reclaim|secure and minus
+                    // podman, returned NOTHING — while the host reported
+                    // "hvsocket open: secure handshake failed: noise: input
+                    // error".
+                    //
+                    // Worse, the host's text cannot be read at face value.
+                    // `server_handshake_or_reclaim` hands the RAW stream back
+                    // on every failure path, so the guest answers in PLAINTEXT
+                    // to a peer still mid-Noise; the host then parses a
+                    // control-wire frame as a Noise message and reports an
+                    // input error that may describe the guest's refusal rather
+                    // than its own bad input. Loud and ambiguous on one side,
+                    // silent and certain on the other.
+                    //
+                    // The PSK inputs are logged beside the error on purpose.
+                    // NNpsk0 mixes the PSK into msg1, so a MISMATCHED PSK
+                    // fails as Decrypt while a MALFORMED LENGTH fails as
+                    // Input: the error variant alone separates version-binding
+                    // from framing, before anyone compares two triples by hand.
+                    eprintln!(
+                        "[tillandsias] secure control wire REFUSED: {err} (psk inputs: v={}, wire={}, hop={})",
+                        tillandsias_secure_channel::workspace_version(),
+                        WIRE_VERSION,
+                        HopId::HostGuest.as_str(),
+                    );
+                    Err((raw, err))
+                }
             }
         }
     }

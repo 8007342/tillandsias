@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-pre-push-plan-only-lane-validates-a-current-ledger-with-whatever-plan-binary-resolves-however-stale
+    field: status
+    value: verified
+    ts: "2026-09-12T10:37:56Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-pre-push-plan-only-lane-validates-a-current-ledger-with-whatever-plan-binary-resolves-however-stale
+    event:
+      type: completed
+      ts: "2026-09-12T10:37:56Z"
+      host: lenovinha
+      summary: |-
+        status 'verified' with evidence_refs: c44c55d26: as-wired on origin/linux-next and OBSERVED on esmeraldinha, the only host reproducing the defect — a plan-only push produced 'plan-only lane: REFUSED — the resolved plan binary is STALE (full gate required) / resolved: ./target/release/tillandsias-plan.exe / newer: Cargo.lock / REMEDY: cargo build --release -p tillandsias-plan', and that remedy is correct for the Windows-side locus (no CARGO_TARGET_DIR redirect there, so cargo writes the resolved .exe). scripts/test-plan-binary-freshness.sh 16/16 including the lane refusal, the no-rebuild-in-hook arm, the newer-line arm and the current-binary negative control
+  - packet_id: the-pre-push-plan-only-lane-validates-a-current-ledger-with-whatever-plan-binary-resolves-however-stale
+    event:
+      type: note
+      ts: "2026-09-12T10:37:56Z"
+      host: lenovinha
+      summary: |-
+        all four exit criteria met and observed on the reproducing host; the fresher-build and ORPHANED clauses never executed (Windows-side locus cannot reach them) and are carried forward as 1133-2fyd rather than counted here

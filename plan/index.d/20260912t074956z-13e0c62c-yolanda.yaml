@@ -1,0 +1,73 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: two-timing-logs-on-one-host-so-every-recurrence-count-is-a-partition-presenting-as-a-total
+    event:
+      type: progress
+      ts: "2026-09-12T07:49:56Z"
+      agent_id: windows-yolanda-claude-20260912t074955z
+      host: yolanda
+      summary: |
+        WRITER IDENTIFIED BY RECORD SHAPE, and the answer closes the Windows question
+        rather than routing a fix: THE STUB-SHAPED CAUSE IS NOT ALIVE ON THIS HOST.
+        pirria's falsification holds here too. On yolanda the /tmp file is a clean
+        pre-changeover archive plus fixture debris, with no overlap at all.
+
+        THE CHANGEOVER IS CLEAN, to the minute:
+          last non-litmus record in /tmp      2026-08-26T04:07:34Z  build-check
+          first record in .cache/metrics      2026-08-26T04:49:01Z  boundary-proof
+          non-litmus /tmp records after that  0
+        A 42-minute handover on 2026-08-26 and nothing real has been written to /tmp
+        since. Every real record before it went to /tmp; every real record after it has
+        gone to .cache/metrics.
+
+        THE 4,756 /tmp LINES, DECOMPOSED:
+          3,139  pre-changeover (2026-08-11T22:04Z .. 2026-08-26T04:07Z) — real history,
+                 from before .cache/metrics existed on this host
+          1,617  post-changeover, and ALL of them are fixtures:
+                   701  litmus:*   (kill-adjudicator-probe, stdin-eater, stdin-second,
+                                    retired-phase-live, retired-phase-retired, …)
+                   199  litmus-suite
+                 0 non-litmus. The fixture writes are deliberate and documented —
+                 test-bound-litmus-is-runnable.sh's own header says eleven fixtures
+                 write /tmp/tillandsias-timing.jsonl precisely so no reader mistakes
+                 fixture debris for data.
+
+        STEP FAMILIES IN THE PRE-CHANGEOVER HISTORY, for completeness:
+            334  build-check
+            152  build-preamble
+            104  each, ~30 distinct `step:*` names (writing-the-gate-stamp,
+                 running-clippy-strict-*, checking-* …) — i.e. build.sh's per-step
+                 timing, one record per step per gate run
+        All carry "host":"unknown"; the "Yolanda" values appear only in the fixture
+        records and in .cache. So the host-identity question is orthogonal to this one.
+
+        I CORRECTED MYSELF TWICE GETTING HERE, and both corrections matter more than
+        the result. First I claimed the checkout detection fails under WSL/drvfs and
+        that /tmp held the real records — refuted: the detection works and .cache is the
+        larger log (16,442 lines to 4,756). Then the 3,835 non-litmus /tmp records were
+        read as evidence that a stub-shaped writer is alive on Windows — refuted here:
+        they are historical, every one of them predating .cache's first line. A count
+        that large FEELS current and is not; the only way to tell was to split it by the
+        changeover timestamp rather than by record type.
+
+        CONSEQUENCE FOR THE PACKET. On this host there is no ongoing partition of REAL
+        records — there is an archive and a live log, which is a different and much
+        smaller problem than two concurrently-written logs. What remains true is that a
+        reader who opens either file sees a fraction of this host's history and nothing
+        says so: .cache begins 2026-08-26 and silently omits the fifteen days before it,
+        while /tmp ends there and silently omits everything after. The cost shape esme
+        named still applies — it surfaces only when someone asks a question the file
+        cannot answer, such as a build-time trend spanning the changeover.
+
+        NOT ROUTED TO PIRRIA. There is no Windows instance of the stub-shaped cause to
+        fix. If the packet wants the archive readable alongside the live log, that is a
+        reader-side concern (or a one-time concatenation), not a writer defect, and it
+        should be stated as such rather than left as an open cause.

@@ -304,8 +304,16 @@ surface another host's claim names (`tillandsias-plan expire-claims
   its line count). That condition earned its keep within the hour: on yolanda the file
   was a THIRTY-TWO DAY timing ledger (4756 lines, 921 litmus), real
   build-check records from 2026-08-11 on, because that host's real records
-  land in the /tmp fallback — checkout detection fails there, which is a
-  separate 1096-p3tn finding. Moved aside with a dated suffix, never deleted. Each instance was caught by someone else's control or an
+  land in the /tmp fallback. Moved aside with a dated suffix, never deleted.
+  (Corrected twice by yolanda: checkout detection WORKS from the build
+  distro; and splitting /tmp by TIMESTAMP rather than record type shows every
+  non-litmus record predates .cache's first line — last real /tmp record
+  2026-08-26T04:07Z, first .cache record 04:49Z the same day, zero real
+  records since. /tmp is an ARCHIVE of pre-changeover history plus fixture
+  debris; .cache is the live log. pirria's falsification holds on Windows
+  too. The coordinator relayed the first inference to pirria as a reopening
+  within minutes and had to un-tell it: a large count reads as current and
+  is not, and only the timestamp split can tell.) Each instance was caught by someone else's control or an
   instruction, none by the author's own review: treat it as a standing hazard
   for guards written under time pressure — a guard fires where a NUMBER IS
   PUBLISHED, not where a record is appended. Third writer category found by
@@ -358,9 +366,11 @@ surface another host's claim names (`tillandsias-plan expire-claims
 - **The timing-ledger predicate was wrong on both Windows hosts** (yolanda,
   esme): yolanda 4756 lines / 921 litmus over 32 days; esme 1289 / 279 over
   27 days including the 40 build-check records its own CARGO_BUILD_JOBS
-  packet cites. Two hosts checked, two real ledgers: on Windows every record
-  lands in the /tmp fallback because checkout detection fails from the build
-  distro. Nobody deletes; the only remedy is mv-aside, and only when the
+  packet cites. Two hosts checked, two real ledgers. (yolanda later refuted the "checkout detection fails" reading with
+  one-command tests, then the "concurrent writer" reading with a timestamp
+  split: /tmp is pre-2026-08-26 history plus fixture debris, nothing real
+  since; the two files are an archive and a live log, and a reader of either
+  sees a fraction nobody announces.) Nobody deletes; the only remedy is mv-aside, and only when the
   guard actually blocks a run. A remedy whose safety is a conditional relayed
   between hosts at 06:00 is one paste from being run unconditionally (esme).
 - **The debug pair reaches Ready where the release pair cannot** (yolanda,
@@ -382,3 +392,430 @@ surface another host's claim names (`tillandsias-plan expire-claims
   was withdrawn as unnecessary after reading `GuestWiringOutcome`. The new
   refusal log line discriminated on first use: `early eof` (a probe closing)
   followed by Ready, not a key disagreement.
+- **The non-reproducing host did the work** (lenovinha, on the sixth regime
+  gap): both the coordinator and the fixture's author started from the root
+  diagnosis, and what settled it was yolanda being UNABLE to reproduce esme's
+  red on a clean Windows host — that eliminated platform and build lane as
+  the variable and turned "it fails on Windows" into "a runnable ELF exists
+  at that path for any historical reason". Ask the host that cannot reproduce
+  what it sees, not only the one that can.
+- **The keying fix's completeness criterion was wrong and its site count was
+  wrong in both lanes** (yolanda, macbookair): corrected on 1084-x8ya — no
+  bare `channel_psk(` call remains is the criterion (the version stays in the
+  HKDF info), and each lane has ONE production call site with the rest inside
+  test functions.
+- **A gate check gives different verdicts on an unchanged tree** (yoga, found
+  while widening `check-plan-binary-probe-usage.sh` for 1128-j9fc): ten runs of
+  the ORIGINAL guard on one tree report `scripts=7/568` seven times and
+  `scripts=8/568` three times; the patched guard flakes the same way. Exactly
+  one file flips eligibility — `test-fragment-status-loss.sh`, seen 2/8 — so a
+  violation there is found by coin flip. Refuted by measurement: ugrep (GNU
+  grep forced, still flakes), SIGPIPE under pipefail (the pipeline extracted
+  verbatim is 20/20 and 30/30 in a while-read loop), the file's bytes.
+  Reproducible in situ, not in isolation, mechanism open. Ruling: the
+  widening lands honestly scoped (a population fix that names its
+  population, not a trustworthy refusal), the flake is its own row with the
+  numbers, yoga takes it next; closure is twenty consecutive runs giving one
+  verdict and a planted violation found 20/20.
+- **Every host's next `--check` after merging 8e3afa99f is a full gate,
+  once, by design** (lenovinha, 1127-waxf): a pre-1127 stamp carries no plan
+  digest and reads `stale:no-plan-digest-recorded`, fail-closed into one
+  re-gate per host. esme's ~20-minute full gate was the first observed
+  re-stamp. Do not debug a 300-second gate that is doing what it was told.
+  The by-hand ledger-guard rule retires on TWO conditions — the fix on trunk
+  AND each host re-stamped once — so hosts report their first post-1127 full
+  gate and the rule retires on observation, not on the SHA.
+- **The keying fix reached trunk at f51e96382** (relay of osx-next
+  b77559aa7 by macuahuitl; macbookair's proof: a release tray keyed to guests
+  built moments earlier, cold-provisioned on a zeroed substrate, host had
+  guest metrics at 22 s where v56.9.12.1 timed out at 300 s). The first relay
+  gate refused on `scripts/test-archiver-ruby-could-not-run.sh` ("positive
+  control did not pass on a host with ruby (rc=1)", "the refusal path left
+  scratch state in the worktree", 3/5); the same fixture passed 5/5
+  standalone on the same tree and passed in the relaunched gate — the second
+  in-situ-only flake of the night, named as a sibling on yoga's flake row.
+  Windows conversion (yolanda) and the two-binary provision remain before the
+  next cut; stable remains v56.9.2.1.
+- **Windows lane back in full** (esme, windows-next 9a765da19, sixteen
+  commits, attempt 1): arm 0 of the 1124-7f3u fixture green as the
+  verification host ("the premise holds — no plan binary resolves under the
+  scrubbed environment"), which retired esme's own residue hypothesis — the
+  resolving route was the WSL2 redirect's fresh copy inherited into the
+  fixture, not the stale Sep 4 ELF; a plausible story fitted to one
+  measurement, retracted in the report. The stale ELF still matters for
+  1129-4su6 because at PUSH time the redirect is unset and the lane falls
+  back to the checkout. The cheatsheet step costs 4.2 s on a host with rg
+  (gate total 2049 s, reported separately). Found on the same gate: the
+  "touched and left OPEN with no next_action" advisory evaluates the
+  declaring fragment in isolation and never consults the status channel later
+  fragments carry — 73 firings on one tree, at least two on packets the fold
+  reports verified/completed (1124-7f3u, 1115-yvrq). Filed by esme, unclaimed.
+- **A push with no timeout emits nothing** (macneo, two land stalls, 3000 s
+  each): "land: attempt 1 — push" was the last line, the push log was ZERO
+  bytes, and a stack sample showed git-credential-osxkeychain blocked in
+  `CSSM_DecryptDataFinal` — the login keychain waiting for a GUI unlock a
+  non-GUI session can never give. Isolated standalone: `printf
+  'protocol=https\nhost=github.com\n\n' | timeout 20 git credential-osxkeychain
+  get` → rc 124, no output; fetches worked all night because anonymous reads
+  never consult the helper. macneo correctly refused `gh auth login`
+  (1025-a896), credential rewiring and token injection. **Operator ask (corrected by macneo — the keychain is NOT locked):** on
+  tlatoanis-macbook-neo, from a GUI session (Terminal.app opened normally,
+  not over ssh, not from an agent), run `git push` in ~/claudia/tillandsias
+  — or `security find-internet-password -g -s github.com` — and when macOS
+  asks whether to allow access to the github.com credential choose ALWAYS
+  ALLOW. Four probes: `show-keychain-info` and `list-keychains` succeed, the
+  item's metadata reads (srvr=github.com), only the `-g` DECRYPT hangs — the
+  stored credential's ACL wants a confirmation dialog no non-GUI session can
+  show, and it blocks instead of failing. Unlocking will not help. Nothing
+  else on that host is blocked, its four
+  commits are green locally and off the cut's critical path. Hardening
+  routed to pirria: bound the push with a timeout and make an empty push log
+  its own named refusal.
+- **Same helper, same repo, opposite outcome — the variable is the session**
+  (macbookair): its `credential.helper` is exactly `osxkeychain` and it
+  pushed six times tonight, because its agent runs inside the operator's
+  logged-in GUI session with the login keychain unlocked. So macneo's hang is
+  neither a helper misconfiguration nor a credential fault — a genuine
+  credential fault REFUSES with output; a locked keychain HANGS with none.
+  Discriminator that needs no operator: `git config --get-all
+  credential.helper` plus a push probe on a throwaway ref. Fourth instance of
+  the night's shape — a thing that hangs rather than fails, on a host where
+  the same code works by hand (rg with no path, the dead 43-minute land, the
+  auditor's grep, the keychain). The durable lesson: when something is slow,
+  check whether it is ALIVE before reporting it slow — `stat` the log twice
+  a minute apart, and look for a process with 0:00.00 CPU time.
+- **Seventh regime gap, second GNU-versus-BSD: `sed -i SCRIPT FILE`**
+  (macbookair, on lenovinha's 1127-waxf fixture): BSD sed takes the argument
+  after `-i` as a backup SUFFIX, so the strip that synthesises a pre-1127
+  stamp is a no-op on macOS, plan_digest stays, and arm4 fails itself while
+  the code under test is right. `-i ''` is the trap in the other direction
+  (GNU consumes the empty string as the script), which is how the `grep -R`
+  fix travelled wrong earlier. Portable form: write through a temp file and
+  `mv`, no `-i` at all. Landed on osx-next by macbookair with both measured
+  arms; relayed to trunk in the coordinator's next slot (Linux unaffected).
+  macbookair's count for the night — grep -R on symlinks, rg with no path,
+  the keychain ACL prompt, ugrep-as-grep, sed -i — is five environment-
+  dependent defects that each passed where written and reached trunk green;
+  a counted, non-blocking portability advisory over `scripts/` for the known
+  GNU-only idioms would have named three of them before they froze a lane.
+  Filed by macbookair, theirs after the smoke.
+- **The same class, swept before it was found one at a time** (lenovinha):
+  the unlanded 1129-4su6 refusal in `scripts/hooks/pre-push-local-gate.sh`
+  used `find -printf '%T@ %p'` (GNU-only); on BSD find — macOS pushes
+  osx-next through THIS hook — it fails, `$_newer` goes silently empty and
+  the refusal drops the "newer:" line esme asked for. A fix for a defect that
+  degrades silently on one platform would itself have degraded silently on
+  one platform, in the file the packet is about. Rewritten with POSIX
+  `ls -t`; three `touch -d` in `test-plan-binary-freshness.sh` became
+  `touch -t`. For the portability advisory's tally: a fixture's gap fails
+  LOUDLY on the host that runs it, a hook's DEGRADES SILENTLY on the host
+  that pushes — separate them by severity. Hazard from the same sweep, third
+  time tonight: an assertion written at the same moment as the fix inherits
+  the author's picture of it, so its first red is as likely to be the
+  assertion as the code (an arm pinned main.rs as "newest" when Cargo.lock
+  legitimately wins in that fixture; now it asserts a real source, not which).
+  Run the new arm and read its failure; do not trust it because it is green.
+- **A packet whose deliverable is a new test can satisfy neither ledger
+  gate** (macbookair, measured twice while filing 1130-i6xj): 977-448j
+  refuses a packet with no scorable obligation; naming the future litmus to
+  satisfy it trips `check-declared-closures-added.sh` with
+  `declared-closure-unresolvable`, which build.sh exits on. Ruling: the bind
+  is intended (a declared pin must resolve), and the sanctioned form is
+  `unscoreable: unpinnable-until-the-guard-exists` naming the exact future
+  litmus filename and instructing the claimer to write it in the same commit
+  as the guard and move the closure text across. Declaring the pin anyway and
+  letting it dangle is 1068-cxmf's defect under a new number. The two
+  refusals must name each other; small row, macbookair, after the smoke.
+  macOS lands unblocked at osx-next 73d951a6e (sed fix, 804-deux findings,
+  1130-i6xj); trunk gets the sed fix on the coordinator's relay.
+- **Windows conversion landed** (yolanda, windows-next b2fa4a21c): one
+  production call site and two test sites converted, build.rs exports the
+  embedded guest digest (None on a placeholder, never an empty file's hash),
+  no bare `channel_psk(` remains, and the mismatch arm was shown to go RED
+  when the two digests are made equal — a green arm never shown red would
+  have been this packet's own defect under a newer name. Two hazards from
+  the same land: (1) test functions inserted after the previous STATEMENT
+  rather than after the enclosing test's closing brace nest inside it; Rust
+  accepts it, `#[tokio::test]` on a nested fn never registers, brace balance
+  passes, the suite goes green with neither arm running — only indentation
+  caught it, and plain `cargo check` compiles no `#[cfg(test)]` code at all
+  (`--all-targets` does). (2) `git commit --amend` right after a merge amends
+  the MERGE — check the parent count first (2 = merge, do not amend); the
+  coordinator made the same mistake tonight and recovered the same way, by
+  reflog. **Operator ask:** consent for `wsl --unregister tillandsias` on
+  yolanda for the cold two-binary provision (the distro holds only debug-pair
+  artifacts and has never reached Ready; tillandsias-build is untouched);
+  yolanda runs the weaker in-distro re-injection arm meanwhile, labelled.
+- **The archiver ruby fixture flakes in situ on two hosts with opposite ruby
+  layouts** (macuahuitl rc=1 with ruby on the host AND in the tillandsias-builder toolbox, measured; yoga rc=3 with ruby
+  absent on the host and present in the toolbox): the same gate run passes
+  the 4/4 could-not-run verdict fixture at ~:4045 and fails
+  `test-archiver-ruby-could-not-run.sh`'s positive control at ~:4679;
+  standalone the failing fixture passes 5/5 on both hosts, repeatedly. Two
+  full gates lost to it tonight. yoga's hypothesis, recorded as a hypothesis
+  with its prediction: the positive control's outcome depends on WHICH
+  execution context the gate hands that step (host vs toolbox dispatch, or
+  a PATH that differs between the two invocations), so the two call sites
+  should disagree about `command -v ruby`. Different mechanism from the
+  SIGPIPE flake in 1130-qk7d (fixed, 15/15). yoga takes it after 1128-j9fc
+  lands; first move is printing `command -v ruby`, the host kind and the
+  dispatch path at both call sites inside the gate, before changing anything.
+  Sharpened by yoga from the fixture's own logic: arm 4 skips only on the
+  CONJUNCTION rc=3 AND "no usable ruby", and yoga's gate hit rc=3 without
+  that string — so inside the gate the ARCHIVER itself returns could-not-run
+  with a different reason (standalone on the same tree it is rc=0, 305/305),
+  and the fixture merely notices. First move on both hosts is therefore to
+  print `$out2`, which the fixture already captures at :67 and discards at
+  :74. Separate cause under the same fixture's name: arm 5 fails if plan_tmp,
+  plan_tmp_bak, scripts/archive-plan-packets-check.rb or toolbox exist in the
+  worktree — exactly what an interrupted land leaves behind — so "the refusal
+  path left scratch state" (macuahuitl) may be a second mechanism, not the
+  ruby one.
+  Sharpened by yoga from the fixture's own logic: arm 4 skips only on the
+  CONJUNCTION rc=3 AND "no usable ruby", and yoga's gate hit rc=3 without
+  that string — so inside the gate the ARCHIVER itself returns could-not-run
+  with a different reason (standalone on the same tree it is rc=0,
+  305/305), and the fixture merely notices. First move on both hosts is
+  therefore to print ``, which the fixture already captures at :67 and
+  discards at :74. Separate cause under the same fixture's name: arm 5 fails
+  if plan_tmp, plan_tmp_bak, scripts/archive-plan-packets-check.rb or
+  toolbox exist in the worktree — exactly what an interrupted land leaves
+  behind — so "the refusal path left scratch state" (macuahuitl) may be a
+  second mechanism, not the ruby one.
+- **A keyed release pair reaches Ready on Windows** (yolanda, 1084-x8ya):
+  "VM Ready — control wire up" in 77 s with a release tray whose
+  EMBEDDED_GUEST_SHA256 (read from the generated embedded_guest_digest.rs,
+  not inferred from the staged asset) equals the digest of the guest injected
+  into the distro (4434eb13…, 14,910,776 bytes); the same host's unkeyed
+  release run earlier died at Connecting in 210 s with two necessarily
+  different self-hashes. Both binaries release profile, guest built with
+  build-guest-binaries.sh's exact flags, re-injection proven (the pre-removal
+  digest was the debug one). Labelled the WEAKER arm by its author: prior
+  state in the distro and a locally built tray. The mechanism is closed on
+  both VM platforms; the promotable closure is the smoke of the CI-built tag
+  on each, which needs the operator's per-run destruction consent.
+- **Two hosts' changes to one mechanism, verified against each other BEFORE
+  the second landed** (lenovinha, on yoga's 1128-j9fc widening): merged
+  baf53e287 and re-ran the guard on the merged base rather than trusting the
+  pre-merge green — `ok:plan-binary-probe-usage:22 eligible of 1043 scanned
+  [scripts=9/570 litmus=13/422 entry=0/51]` — so yoga's new entry-point
+  population is clean and lenovinha's hook, which now names candidate paths
+  in its stale-validator search, is eligible and compliant because it
+  resolves through the probe. First time tonight the composition was checked
+  ahead of the land instead of discovered after it. 1129-4su6 lands with its
+  row OPEN on esme's end-to-end arm, which is structurally unreachable until
+  the refusal is on trunk.
+- **A fallback is "never wrong" only if you have checked it on the host that
+  will reach it** (lenovinha, corrected by esme, on 1129-4su6): the
+  declaration coupling that derives the fresher build's path was first
+  described as degrading to the rebuild remedy "worse, never wrong"; on the
+  one host that needs the derived remedy that fallback is not degraded, it is
+  useless — it loops the operator through a rebuild that never touches the
+  stale copy, and they stop trusting the next thing the tool prints. The
+  coupling now breaks loudly (a marker on both lines, a fixture asserting the
+  declaration parses). 1129-4su6 is landed at c44c55d26 and deliberately NOT
+  closed: "the mechanism is on trunk" and "the mechanism works where it
+  matters" are different claims, and esme's verbatim refusal is the second.
+- **An exemption describes what is allowed, not what is free** (lenovinha,
+  after a plan-only closure push moved trunk under the coordinator's relay
+  gate and cost it a re-integrate and a second 8-minute gate): "plan-only is
+  exempt" was true and still forced a full re-integration on whoever was
+  mid-gate. The question before any push during a freeze is not "am I
+  exempt" but "is anyone mid-gate", and the second has to be asked even when
+  the first answers yes. The coordinator then asked for a total hold, plan-
+  only included, for the relay's last minutes.
+- **The cut's first release gate refused on a litmus pinning the pre-fix
+  API shape** (macuahuitl, 1084-x8ya): `litmus:psk-input-parity-shape`
+  grepped for `channel_psk(` and could not see `channel_psk_for_guest(`, so
+  the converted hvsocket.rs matched only doc comments — "does not use
+  workspace VERSION for PSK" on a file that does. A fixture that encodes the
+  symptom's spelling as the contract. Fixed at 46bc11426 with both spellings
+  and a -A3 window; controls: pre-fix step FAILS on the post-fix tree (the
+  gate log), post-fix passes 3/3, post-fix FAILS on a copy with the version
+  literal replaced. The guest responder legitimately keeps a bare
+  `channel_psk(` — it has no digest to key to, it IS the digest's subject —
+  so the next tightening must not chase it. Cost: one 22-minute gate and a
+  30-minute later tag.
+- **Asking "unreachable by construction?" found the self-hash surviving on
+  one path** (macbookair, after the relay): `build.rs` refused only an EMPTY
+  digest while the runtime required exactly 64 hex, so a non-empty malformed
+  digest passed the build, returned None at runtime, and the `None =>` arm
+  derived from the host's own hash silently — 1084-x8ya reinstated with no
+  signal. Unreachable via `build-macos-tray.sh` only because the producer
+  happens to emit 64 hex. Closed at both ends on osx-next (ede57fcc0):
+  build.rs validates the runtime's shape and names the lengths; the None arm
+  is cfg-split and returns a named error on release. Rides the NEXT daily;
+  v56.9.12.2's row names it as a known defect shipping. A formatting delta
+  ended up inside the land's integrate merge (`--amend` after the integrate
+  had already created it) — named rather than rewritten mid-land.
+- **After `podman system reset`, the first metrics read on a host carrying
+  pre-2026-08-26 archive records in /tmp will refuse** (pirria): the reset
+  does not clear /tmp, so `violation:metrics-log-split` fires once with the
+  mv-aside remedy; correct behaviour, not a regression from the release —
+  told to every smoking host so nobody files it as one.
+- **The floor-tier treadmill, measured** (esme): a windows-next land merged
+  trunk at 09:13, gated green for 39 minutes, and was refused at 09:52 on
+  containment because trunk had moved to 8a45bd522 under it — the stamp was
+  valid, the merge premise beneath it was not. A green gate on that tier is
+  21-25 minutes at best, so against a trunk moving every few minutes the
+  platform branch can land only in the gaps. Ruling: esme switches to the
+  relay-ref shape for the rest of the cycle (push the gated tree to
+  `work/<order>`, yolanda merges it into windows-next on their next land),
+  converting a 39-minute exposure into a seconds-long merge on a fast host;
+  the one exception is the plan-only push that is lenovinha's 1129-4su6 arm,
+  which must leave esme's own push path.
+- **§1 of the smoke is not a non-destructive binary install** (pirria, on
+  cachyos, v56.9.12.2): `install.sh` runs the full init — 131 lines of
+  podman/vault output, a Vault bootstrap provisioning twelve policies and
+  AppRole roles, and a `tillandsias-vault` container left running on 8201.
+  Reversible, not nothing, and not what "curl-install and assert the tag"
+  describes; the coordinator had named it the safe half. The §1/§2 consent
+  line still holds (§2 destroys, §1 provisions), but the runbook must say
+  what §1 does so an operator agrees to the real thing. Also: on a fish
+  shell `${PIPESTATUS[0]}` expands to nothing and install_exit goes blank —
+  the runbook's §0 bash guard exists for exactly this and must sit at the top
+  of the §1 recipe, not only in §0. cachyos §1: 175 s, "Tillandsias
+  v56.9.12.2" verbatim, from v56.9.5.1; macuahuitl §1: 78 s, exact tag.
+- **v56.9.12.2 on Windows, CI-built tray: Ready in 38 s** (yolanda, weaker
+  arm, stated on the report's second line): §1 install_exit=0, tray reports
+  56.9.12.2 (8a45bd522); no `wsl --unregister` (consent not granted, asked
+  twice, not inferred from silence), re-injection forced and demonstrated
+  (local 4434eb13… before, published 85495603… after); provision Ready with
+  the control wire up in 38 s; diagnose LAST: phase=Ready, wire reachable,
+  ready_history=observed-ready where v56.9.12.1 read never-observed-ready on
+  the same host. Pairing evidenced two ways rather than asserted (the
+  injected guest is byte-identical to the asset CI staged; the NNpsk0
+  handshake succeeded). Answers "does CI-built keying work on Windows" —
+  yes; does not answer "does a pristine host reach Ready" — that is one
+  consent away. Report: smoke-e2e-findings-v56.9.12.2-2026-09-12-windows-yolanda.md.
+- **v56.9.12.2 §1 on the Windows floor host** (esme, N100/16 GB): install
+  exit 0 in 22 s, "tillandsias-tray 56.9.12.2 (8a45bd522)" verbatim, SHA-256
+  of the zip verified by the installer, evidence in a per-tag directory
+  cleared at start. The tray is still not on PATH after the install — a third
+  consecutive tag on which 1004-vsh2's fallback is load-bearing. On the
+  1129-4su6 arm esme caught their own false negative before sending it: a
+  plan-only push of `plan/issues/*.md` is validated without the plan binary
+  (`needs_yaml` is set only for `plan/index.d/`), so no staleness refusal
+  there is correct; the real arm is a push carrying one index.d fragment,
+  with the hook resolving a 2026-09-11 .exe that `plan_binary_is_stale`
+  reports STALE against Cargo.lock.
+- **v56.9.12.2 is STABLE** (macuahuitl, 10:52Z): macOS cold smoke with the
+  CI-built tray PASSED on macbookair — substrate zeroed, provisioned from
+  nothing, host had guest metrics at 38 s; three releases on that host by the
+  same procedure read v56.9.11.1 TIMED OUT, v56.9.12.1 TIMED OUT,
+  v56.9.12.2 ok. With yolanda's CI-tray Ready on Windows (in-distro arm) and
+  the Linux/Windows §1 installs, the daily was promoted: prerelease off,
+  releases/latest = v56.9.12.2, `stable` moved 341ab0010 → 8a45bd522.
+  Recorded gaps: the pristine-host Windows provision and the Linux reset path
+  await per-run consent. Found by the smoke's land: `touch -t 202609120600`
+  in `test-plan-binary-freshness.sh` (the control arm's stub `touch`; this morning's `-d`→`-t`
+  conversion) froze "current" to a literal that expired at 06:00Z — the stub
+  is now older than sources the fixture writes at run time, the control arm
+  inverts, and EVERY code land on EVERY host refuses (plan-only lands pass
+  only because the partial memo runs the ledger guards alone). A hardcoded
+  timestamp is a fixture with an expiry; sixth shape for 1130-i6xj, silent-
+  degrade class because it reads as a real staleness refusal. Fix: plain
+  `touch` (mtime = now), macbookair, relayed to trunk next.
+- **Linux full smoke on the floor host, and a p1 one step past §3** (pirria,
+  cachyos, operator-consented): §1 175 s, §2 reset to 0 containers / 0
+  volumes / 0 images, §3 init 398 s from a pristine store, 15 images rebuilt,
+  vault healthy, zero hits for every failure class the runbook enumerates.
+  Then, at shutdown after "Graceful shutdown completed": `tillandsias-vault`
+  Exited (137) — SIGKILL after the full 30 s grace, every host, every stop.
+  Read from the RUNNING container, not the script: PID 1 is bash
+  (`images/vault/entrypoint.sh`), vault is PID 10, tee PID 11, no trap, so
+  SIGTERM hits the shell and vault is never told to stop. Second defect in
+  the same two lines: the server is a backgrounded PIPELINE, so `$!` holds
+  TEE's pid and the obvious one-line trap would signal tee and look correct.
+  1134-u934 (p1): fix plus a runbook §3b (stop the substrate, assert every
+  container exits 0 within its grace), pirria. Also 1133-kktm: §1's prose
+  promises a download test and the installer runs the full init — a CONSENT
+  defect; and the bash guard the coordinator asked pirria to "add" to §1 was
+  already there (SKILL.md, the `BASH_VERSION` line) — the recipe relayed in
+  a chat message had dropped it: an instruction quoted out of its runbook
+  loses the guards the runbook wrapped it in, and the coordinator prescribed
+  a fix without reading the file (the check-for-the-capability shape).
+- **The promotion proven on the default Windows path** (esme): with
+  `TILLANDSIAS_VERSION` unset, install-windows.ps1 reported "Channel: stable",
+  resolved /releases/latest itself, fetched
+  tillandsias-tray-56.9.12.2-windows-x64.zip with the same sha256 as the
+  pinned §1 run (949e1997…), and the tray reports "tillandsias-tray 56.9.12.2
+  (8a45bd522)" — stable channel and exact-tag pin serve the identical
+  artifact, 16 s. esme's assertion used a bounded regex; the runbook's
+  substring form would accept 56.9.12.20 (amendment to 1133-kktm). On the
+  same host both loci of 1129-4su6 are verified: in-distro the refusal named
+  the fresher redirected build and the orphaned checkout copy, Windows-side
+  the generic rebuild remedy cleared the staleness in 2m16s — one tree, two
+  loci, two opposite correct answers; the orphaned Sep 4 ELF is removed on
+  the refusal's own reasoning and the row is closed verified.
+- **The portability advisory landed with a baseline, not a zero** (macbookair,
+  1130-i6xj, osx-next 91b04268d): the first run found 35 genuine pre-existing
+  GNU-only idioms unrelated to the night (stat -c ×14, sed -i ×13, date -d ×5,
+  readlink -f ×2; sampled bare `sed -i` in bump-version.sh, delegate-outcome.sh
+  and ensure-nvidia-cdi.sh), so "zero on the fixed tree" would have made the
+  closure un-passable and therefore deleted; the closure is per-instance and
+  the 23 silent-degrade / 12 loud-fail split prints on every gate as a
+  baseline that must not climb. The guard's own four false positives (a
+  correct BSD-first `stat -f || stat -c` chain, the repo's GNU/BSD absorption
+  layer, help text, `grep -r` over the canonical skills/ tree) and one in the
+  fixture (a negative control matching its own advice string) are pinned as
+  negative controls; 102 s → 6 s by a glob pre-filter. Three structural facts
+  for the next litmus author: a new litmus must be bound in
+  openspec/litmus-bindings.yaml or nothing runs it (660-ryhn class); steps go
+  under `critical_path:`; each `command:` is a single-line double-quoted
+  scalar, which is why the convention is a thin litmus over a test-*.sh
+  fixture. Two pre-existing macOS reds found by stash-and-rerun: BSD `wc -l`
+  pads its count so a string compare against "1" fails on every Mac (eighth
+  idiom: string-comparing a wc count; macbookair fixes it), and
+  litmus:tool-dispatch-lib (diagnosis pending). The Linux gate then printed
+  loud-fail=14 against macbookair's 12; macbookair suspected a platform
+  difference in their own guard, the coordinator suspected a moved tree, and
+  the byte-identical 14-entry lists on both platforms at the same commit
+  settled it: the 12 was measured before `test-portability-idioms.sh`
+  existed, and that fixture's :61/:63 carry the idioms as test SUBJECTS, so
+  the guard flags its own proof — deliberately, with a comment saying so
+  rather than a by-name exemption. One baseline, 23/14 at e5d5ac0af, both
+  platforms. A measurement whose tree state is not stated, in the packet
+  about measurements whose regime is not stated (macbookair's own words).
+- **ci-release 37/37 on macOS; neither standing red was in the code under
+  test** (macbookair, osx-next 8f004a77d): BSD `wc -l` pads its count in
+  every form, so a string compare against "1" failed on every Mac — the
+  sigpipe litmus fixed to `-eq`, an eighth idiom added with a `tr -d`
+  negative control, and the new arm immediately found a live red nobody had
+  reported (`test-capability-manifest-guard.sh` string-comparing a padded
+  count, "drifted token count differs" while the code was fine). And
+  litmus:tool-dispatch-lib: arm 4f asserted `= "RESOLVER-ABSENT"` where three
+  outcomes exist — `.` is a POSIX special builtin, so on bash 3.2 (every
+  macOS /bin/bash) a failed source under `set -e` terminates the shell
+  despite `|| true`; the old caller printed nothing, empty fell to the else
+  branch, and the arm reported the opposite of what happened. Changed to
+  `!= "RESOLVER-PRESENT"`, what it always meant. The property worth naming:
+  an assertion that enumerates fewer outcomes than exist does not merely
+  miss — it reports a specific falsehood, and both of today's did so in the
+  direction that accused the subject. Filed: 1135-z8gn (the 35-item GNU-ism
+  backlog with the 23/14 baseline, both hosts named, the ninth idiom `. FILE
+  || true` under set -e, unscoreable with its scorable slice named) and
+  1136-n8sh (the two ledger guards must name each other; the unresolvable
+  half is Rust in tillandsias-plan, the 977-448j half is a shell string).
+- **Both proposed template slices had zero live defects, and both times the
+  guard's knowledge was the cause** (macbookair, osx-next 8b401ecae):
+  readlink -f — one instance runs inside a `podman run … -c` string
+  (Linux context, needed TRANSITIVE tracking across a 35-line assignment
+  chain to exempt, pinned in both directions), the other is on a Darwin that
+  carries `-f`; `date -d` — four correct GNU-first chains falling back to
+  BSD `date -j`, which the counterpart list did not know, and one fixture
+  subject. An incomplete counterpart list does not under-report, it accuses
+  working code. Honest baseline 20 silent / 13 loud at 8b401ecae, seven
+  first-run entries never defects; the real classes are `stat -c` (14) and
+  `sed -i` (13), sampled real (claim-ledger-node.sh falls back to EMPTY
+  rather than BSD and yields a blank mtime on macOS). Fixed on the way:
+  plan-binary-probe.sh's same-artefact compare answered "same" having
+  compared two empty substitutions where readlink -f is absent — now refuses
+  on an empty side, dormant on today's fleet. The land was refused by
+  check-bash-dialect because the fixture's ok() message carried a literal GNU
+  idiom: a test about tests that contain their subject, caught containing
+  its subject, both guards correct; fixed by splitting the literal, the
+  offered allowlist entry declined. Third time today the cheap path was the
+  wrong one — dangle a litmus pin, delete a detector to zero a class, add an
+  allowlist entry: each one line, each passes the gate, each spends someone
+  else's future.

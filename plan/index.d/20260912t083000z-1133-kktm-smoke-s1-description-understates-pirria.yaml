@@ -1,0 +1,104 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by pirria-cachyos 2026-09-12 from the v56.9.12.2 floor-tier §1 run.
+packets:
+  - packet_id: the-smoke-runbooks-section-1-is-described-as-a-curl-install-but-runs-a-full-init-that-provisions-vault-and-starts-a-container
+    order: 1133-kktm
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [docs, smoke, consent, release]
+    estimated_hours: 1
+    verifiable_closure: |
+      unscoreable: this row's deliverable is PROSE — the §1 description must
+      tell an operator what install.sh actually does before they consent to it.
+      No litmus can score whether a paragraph is honest about its own side
+      effects. A grep for vault|container|8201 in the section would pass on any
+      text containing those words, including text that still called §1 a
+      download test, so it would score the presence of tokens rather than the
+      truthfulness of the description — a pin that cannot fail for the reason
+      the row exists. The closure is a human reading §1 and agreeing it
+      describes the Vault bootstrap and the container left running on
+      127.0.0.1:8201. Stated as a refusal rather than dressed up, per 977-448j.
+    owned_files:
+      - skills/smoke-curl-install-and-test-e2e/SKILL.md
+    title: |
+      MEASURED on pirria: §1 is described as "curl-install the latest release" and "test the download", but install.sh runs a full init — Vault bootstrap, twelve policies and AppRole roles, and a container left running on https://127.0.0.1:8201
+    context: |
+      FOUND by pirria 2026-09-12 running the floor-tier §1 for v56.9.12.2 at the
+      coordinator's request.
+
+      WHAT §1 SAYS IT IS (SKILL.md:224-236): "Curl-install the latest release …
+      Install the published artifact the canonical way an operator would … the
+      whole point is to test the *download*." Nothing in that prose mentions
+      init, Vault, podman or a listening service — measured: 0 occurrences of
+      vault|container|podman|init|8201 in the section's description.
+
+      WHAT IT ACTUALLY DID, on this host:
+          install_time 175s
+          131 log lines mentioning podman/container/vault
+          Vault bootstrap provisioning twelve policies and AppRole roles
+          (GitMirror, Forge, Tray, Inference, GithubLogin, ClaudeLogin,
+          CodexLogin, CodexForge, ClaudeForge, AntigravityForge,
+          AntigravityLogin, OpenCodeForge)
+          container `tillandsias-vault` left RUNNING, healthy, serving
+          https://127.0.0.1:8201
+          the installer's own banner ends "Init complete."
+      Reversible, and not destructive — but not "a download test" either.
+
+      WHY IT MATTERS, and it is a CONSENT defect rather than a docs nicety. The
+      runbook's §1/§2 split is the basis on which operators are asked for
+      permission: §2 is destructive and needs explicit consent, §1 is the safe
+      half that does not. That split is sound in kind — §1 does not destroy
+      anything — but an operator agreeing to "curl-install and check the
+      version" is not thereby agreeing to stand up a credentials service on
+      their machine. The description is what they consent to, so the
+      description has to be true.
+
+      NOT A DEFECT, CHECKED BEFORE FILING: the runbook's own §1 block ALREADY
+      carries the bash guard, at SKILL.md:238 —
+          [ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash
+          — PIPESTATUS is a bash array and zsh expands it empty'; exit 2; }
+      so the runbook is correct on that point and needs no change. The blank
+      install_exit in this host's report came from running an inline recipe
+      relayed in a message, which had been transcribed without the guard. The
+      runbook was not at fault; the out-of-band copy was.
+    next_action: |
+      1. Amend §1's prose to say what install.sh does: full init, Vault
+         bootstrap with policies and AppRole roles, and a container left running
+         on 127.0.0.1:8201. One or two sentences, placed before the code block
+         where an operator reads it.
+      2. Say plainly that §1 MUTATES host container state and is therefore not
+         a read-only or no-op step, while keeping the true distinction from §2
+         (reversible vs destructive) rather than blurring it.
+      3. Consider whether the §1 heading should stop calling it a curl-install.
+         NOT decided here: renaming may break references elsewhere in the fleet
+         that say "§1", so the prose fix is the safe minimum and the rename is a
+         separate call.
+    events:
+      - type: filed
+        ts: "2026-09-12T08:30:00Z"
+        agent_id: "linux-pirria-claude-20260912t022150z"
+        host: pirria
+        summary: |
+          Filed from a §1 PASS, not a failure: the install worked, the exact-tag
+          assertion passed (v56.9.5.1 -> "Tillandsias v56.9.12.2"), and the
+          defect is that the description understates the action.
+
+          THE COORDINATOR ASKED FOR TWO FIXES AND ONLY ONE IS REAL. The second
+          — paste the §0 bash guard at the top of §1 — is already there at
+          SKILL.md:238 and even names the failure mode. I checked the line
+          before filing rather than implementing the instruction, because
+          "adding" a guard that exists would have produced a duplicate and a
+          ledger row claiming a fix for a defect the file did not have.
+
+          The blank install_exit that prompted it was real, but its cause was
+          that this host ran a recipe relayed in a chat message rather than the
+          runbook block — and the relayed copy had lost the guard in
+          transcription. That is the more interesting finding and it is not
+          fixable in this file: an instruction quoted out of its runbook loses
+          the guards the runbook wrapped it in, and the person following it
+          cannot tell what was dropped. Worth a methodology line rather than a
+          code change; noted here so the observation is not lost with the
+          message it came from.

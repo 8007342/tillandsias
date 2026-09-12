@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @trace order:850-bif2, spec:accel-capability-probe
+# @trace order:850-bif2, spec:accel-capability-probe, order:1125-wi4d
 #
 # host-capability-probe.sh — emit this host's capability row (Linux/macOS
 # bare-metal and forge loci), the sibling of
@@ -117,12 +117,42 @@ fi
 
 # ── fragment assembly ────────────────────────────────────────────────────────
 host_id="$(printf '%s' "$doc" | "$JQ" -r '.host.host_id')"
+# ORDER 1125-wi4d. ASK THE DOCUMENT, DO NOT GUESS AGAIN. The probe already
+# answered what kind of host this is — `.host.host_kind` — and host_id is read
+# from that same document one line above. Both derivations below used to fall
+# through a uname/ostree chain with no windows branch, so a Windows host was
+# labelled `linux_mutable` at a locus of `bare-metal`, while its own embedded
+# document said host_kind "windows" and every Windows row already in the
+# compacted base said windows-host.
+#
+# The two halves failed DIFFERENTLY and that is worth keeping straight:
+#   * the locus wedged the host. The fold keys on host_id+locus, so
+#     yolanda/bare-metal was a first-ever key, the fold dropped the fragment,
+#     the corpus read PARTIAL and release-preflight refused the PUSH
+#     (blocked:plan-ledger-incomplete). See 1128-4ffr.
+#   * the label misrouted work. capability-aware routing (847-wgy4) reads the
+#     row to decide what kind of host it is talking to; a row that says
+#     linux_mutable on a Windows box routes confidently and wrongly.
+# Measured 2026-09-12 by folding one fragment at a time against a baselined
+# copy of the real ledger: (linux_mutable, bare-metal) -> dropped-entry,
+# corpus partial; (linux_mutable, windows-host) -> 0 dropped; (windows,
+# windows-host) -> 0 dropped. So the locus alone unwedges, and the label alone
+# was never the blocker — both are fixed here because both are wrong.
+host_kind="$(printf '%s' "$doc" | "$JQ" -r '.host.host_kind // empty')"
 if [ -z "$LOCUS" ]; then
-    if [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ]; then LOCUS="in-guest"; else LOCUS="bare-metal"; fi
+    if [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ]; then
+        LOCUS="in-guest"
+    elif [ "$host_kind" = "windows" ]; then
+        LOCUS="windows-host"
+    else
+        LOCUS="bare-metal"
+    fi
 fi
 if [ -z "$WRITER" ]; then
     if [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ]; then
         WRITER="forge"
+    elif [ "$host_kind" = "windows" ]; then
+        WRITER="windows"
     elif [ "$(uname -s 2>/dev/null)" = "Darwin" ]; then
         WRITER="macos"
     elif [ -e /run/ostree-booted ] || command -v rpm-ostree >/dev/null 2>&1; then

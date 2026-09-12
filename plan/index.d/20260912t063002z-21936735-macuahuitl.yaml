@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-guest-whose-provisioning-completed-never-reaches-ready-and-the-host-has-no-way-to-ask-why
+    event:
+      type: progress
+      ts: "2026-09-12T06:30:02Z"
+      agent_id: linux-macuahuitl-fable-20260912t063002z
+      host: macuahuitl
+      summary: |
+        Two corrections to the coordinator rulings on this packet, from both lanes. (1) COMPLETENESS CRITERION: the ruled grep — env!("WORKSPACE_VERSION") returns only build.rs — is the wrong instrument and cannot hold: the keyed API channel_psk_for_guest(guest_binary_sha256, build_version, wire_version, hop) still takes the version as HKDF info; what changes is the ROOT SECRET's source. The criterion is: no bare `channel_psk(` call remains in the crate (yolanda measured: only a doc comment hits; all three sites are channel_psk_for_guest). (2) SITE COUNT: the six-site figure is wrong in both lanes. Windows: one production site (hvsocket.rs open_and_wrap_hvsocket_stream, ~:79) and two inside mod tests (:463, :531). macOS: one production connect path in host-shell, the other two inside test functions. Design calls approved on the Windows half: the build.rs placeholder exports None (never the digest of an empty file — that would be the silent substitution one layer down) with a runtime refusal naming 1059-ry6t; tests key from an explicit TEST_GUEST_DIGEST, which is what makes the two-different-digests mismatch arm expressible (pre-fix result: inexpressible, the old API takes no digest). Evidence from the other direction (yolanda): a debug tray + debug guest (shared DEV_ROOT_SEED) reached "VM Ready — control wire up" in 521 s on the same host, distro, source and substrate where the release pair fails with "noise: input error" in 210 s; only the build profile differs. macbookair's keying commit 2976154d8 (work/1084-x8ya on origin) touches lib.rs +101 and secure_stream.rs +17 (doc comment only), refusal path does not name snow_err.

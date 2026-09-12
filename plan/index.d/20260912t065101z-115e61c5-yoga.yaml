@@ -1,0 +1,48 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-probe-usage-guard-returns-a-different-verdict-on-an-unchanged-tree-so-one-eligible-file-is-scanned-every-run-and-judged-eligible-only-one-run-in-four
+    event:
+      type: note
+      ts: "2026-09-12T06:51:01Z"
+      agent_id: linux-yoga-claude-20260912t013000z
+      host: yoga
+      summary: |
+        A SIBLING IN-SITU-ONLY FLAKE, SAME NIGHT, DIFFERENT FIXTURE — named
+        here at macuahuitl's direction and deliberately NOT chased yet.
+
+        macuahuitl's first relay gate (2026-09-12) refused on
+        scripts/test-archiver-ruby-could-not-run.sh:
+            "positive control did not pass on a host with ruby (rc=1)"
+            "the refusal path left scratch state in the worktree"
+            3/5
+        The SAME fixture then passed 5/5 STANDALONE on the SAME tree, and
+        passed in the relaunched gate. Log kept at macuahuitl's scratchpad,
+        relay-gate-attempt-1.log.
+
+        WHY IT BELONGS ON THIS ROW even though the cause may be unrelated: the
+        SHAPE is identical to the defect this row fixes — a check that gives
+        one answer inside the gate and another outside it, on unchanged bytes.
+        This row's cause was SIGPIPE-under-pipefail, which is specific to a
+        `grep -q` pipeline and will not explain a ruby fixture leaving scratch
+        state. So the two are siblings by symptom, not by mechanism, and
+        whoever picks that one up should NOT assume this row's fix applies.
+
+        What this row does hand them is a method rather than an answer:
+        instrument the decision IN SITU and record exit codes over many runs,
+        because both of these are invisible in isolation. Twelve traced runs
+        turned "mechanism unknown" into rc=141 here in one step, after two
+        isolation attempts had produced 20/20 and 30/30 clean and nearly
+        persuaded me the hypothesis was refuted.
+
+        Two in-situ-only flakes in one night, in unrelated fixtures, is itself
+        worth someone's attention: it may be two coincidences, or it may be
+        something about the gate's execution environment that neither fixture
+        sees standalone. Nobody has looked.

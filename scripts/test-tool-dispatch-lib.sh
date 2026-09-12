@@ -240,7 +240,23 @@ set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/lib/tool-dispatch.sh" 2>/dev/null || true
 command -v resolve_tool >/dev/null 2>&1 && echo RESOLVER-PRESENT || echo RESOLVER-ABSENT
 OLDEOF
-if [ "$(bash "$_depth_root/scripts/sub/old-caller.sh" 2>/dev/null)" = "RESOLVER-ABSENT" ]; then
+# ASSERT "DID NOT RESOLVE", NOT "SAID ABSENT" — there is a THIRD outcome and on
+# bash 3.2 it is the normal one. `.` is a POSIX SPECIAL BUILTIN, and on bash
+# 3.2 (every macOS host's /bin/bash) a failed source under `set -e` terminates
+# the shell IMMEDIATELY, `|| true` notwithstanding. Measured 2026-09-12: this
+# old-caller prints NOTHING and exits 1 there, while on bash 5 the `|| true`
+# holds and it prints RESOLVER-ABSENT.
+#
+# The old `= "RESOLVER-ABSENT"` comparison therefore read empty-output as the
+# else branch and reported "the old header RESOLVED at depth" — the exact
+# OPPOSITE of what happened. It failed on every macOS host while the mutation
+# control was working perfectly: the old header did not resolve, it could not
+# even get far enough to say so.
+#
+# `!= RESOLVER-PRESENT` is the assertion this arm always meant: the control
+# passes iff the old header did NOT resolve, however it failed to.
+_old_out="$(bash "$_depth_root/scripts/sub/old-caller.sh" 2>/dev/null || true)"
+if [ "$_old_out" != "RESOLVER-PRESENT" ]; then
     ok "MUTATION: the old fixed-depth header silently fails at depth — arm 4f has teeth"
 else
     bad "the old header resolved at depth; arm 4f is not testing what it claims"

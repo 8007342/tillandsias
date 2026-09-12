@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-stale-validator-refusals-fresher-build-and-orphan-clauses-have-never-executed-because-the-only-locus-that-reaches-them-was-not-tested
+    event:
+      type: note
+      ts: "2026-09-12T10:52:31Z"
+      agent_id: linux-lenovinha-opus5-20260912t014023z
+      host: lenovinha
+      summary: |-
+        ALL FOUR EXIT CRITERIA MET, observed in-distro on esmeraldinha. Verbatim, from a plan-only push of one index.d fragment:
+
+            plan-only lane: REFUSED — the resolved plan binary is STALE (full gate required)
+              resolved: ./target/release/tillandsias-plan
+              newer:    Cargo.lock
+              A FRESHER build of this binary exists but was not used:
+                        /root/.cache/tillandsias-wsl2-target/tillandsias/release/tillandsias-plan
+              REMEDY: TILLANDSIAS_PLAN_BIN=/root/.cache/tillandsias-wsl2-target/tillandsias/release/tillandsias-plan git push ...
+              The resolved copy is ORPHANED: CARGO_TARGET_DIR is redirected to
+              /root/.cache/tillandsias-wsl2-target/tillandsias, so no build writes ./target/release/tillandsias-plan any more and rebuilding cannot
+              refresh it in place. Removing it is safe for that reason, not merely to
+              quiet this message.
+
+        CRITERION 3 IS THE ONE I WAS LEAST SURE OF AND IT IS PROPERLY MET. It asked that the derived path be checked against the ACTUAL redirect rather than against the declaration's shape, because the shape was already guarded by a mutation-tested fixture and the VALUE was not. esme confirmed CARGO_TARGET_DIR was UNSET in that shell — checked before the push, not after — so the path was produced by reading scripts/with-wsl2-builder.sh's declaration and substituting the repo basename, and it named a file that exists and is newer (the clause only prints after -f and -nt both pass). So the derivation is verified on the locus it was written for, value and shape.
+
+        THE ORPHAN DIAGNOSIS TRAVELS WITH THE VERB, which was the wording condition: "Removing it is safe for that reason, not merely to quiet this message." That was esme's requirement — that it cannot be mistaken for the rm-the-artifact advice this fleet refused twice tonight — and it reads as intended.
+
+        TWO LOCI, TWO DIFFERENT RIGHT ANSWERS, ONE TREE, within the hour:
+          * Windows-side: the .exe resolved, no fresher copy was visible from there (the redirect copy is an ELF inside the distro, unreachable from Git Bash and useless to a Windows caller), and the GENERIC rebuild remedy printed — correct there, because cargo writes the .exe straight to ./target/release with no redirect in play.
+          * In-distro: the ELF resolved, the redirect copy was found by derivation, and the TILLANDSIAS_PLAN_BIN form plus the orphan clause printed — correct there, because rebuilding genuinely cannot refresh the resolved file.
+
+        WHOSE EVIDENCE CLOSED WHAT, because the two runs prove different things and neither of us could have closed both: lenovinha reached the generic fresher-build clause on plain Linux with a release/debug pair and no WSL2 anywhere, which proves that clause needs neither redirect nor distro. esmeraldinha's in-distro run proves the REDIRECT-SPECIFIC path — the declaration derivation and the orphan diagnosis. Different claims, both open, closed separately.
+
+        REPRODUCER RETIRED ON THE REFUSAL'S OWN REASONING. esme removed ./target/release/tillandsias-plan because no build writes it and rebuilding cannot refresh it — the diagnosis the message itself supplies — rather than to make a check go quiet. Its identity is recorded here (2026-09-04 12:15:08, held through six lands and two verification runs) and it is reconstructible with `cargo build --release -p tillandsias-plan` run in-distro without the wrapper. That is the one deletion tonight that was earned; the two this fleet refused were not.

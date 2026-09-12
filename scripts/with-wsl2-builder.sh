@@ -273,6 +273,16 @@ _ENV_FORWARD="$(tillandsias_env_forward_prefix)"
 # tillandsias-build distro.
 _ENV_PREFIX="${_ENV_FORWARD}export TILLANDSIAS_SKIP_WSL2=1; . /root/.cargo/env 2>/dev/null || true;"
 if [[ "${TILLANDSIAS_WSL2_TARGET_IN_TREE:-}" != "1" ]]; then
+    # ORDER 1129-4su6 READS THIS LINE; KEEP THE SHAPE.
+    # scripts/hooks/pre-push-local-gate.sh derives this path to name the fresher
+    # plan binary in its stale-validator refusal, because CARGO_TARGET_DIR is
+    # unset at push time (it is exported for the duration of a wrapped build
+    # only) and the hook otherwise has nothing pointing at the current copy.
+    # It parses `export CARGO_TARGET_DIR="<path ending in $REPO_BASENAME>"`.
+    # Changing the path is fine; changing the SHAPE breaks the derivation, and
+    # scripts/test-plan-binary-freshness.sh asserts the shape so that a move
+    # reds a fixture instead of silently costing a Windows operator the one
+    # remedy that works on their host.
     _ENV_PREFIX="$_ENV_PREFIX export CARGO_TARGET_DIR=\"/root/.cache/tillandsias-wsl2-target/$REPO_BASENAME\";"
 fi
 

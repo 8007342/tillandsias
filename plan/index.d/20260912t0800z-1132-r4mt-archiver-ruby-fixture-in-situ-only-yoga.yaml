@@ -1,0 +1,102 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-archiver-ruby-fixture-refuses-inside-the-gate-and-passes-standalone-on-the-same-tree-on-two-hosts-with-opposite-ruby-layouts
+    order: 1132-r4mt
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [testing, ci, ruby, toolbox]
+    estimated_hours: 4
+    verifiable_closure: bash scripts/test-archiver-ruby-could-not-run.sh — the same verdict in the gate and standalone on the same tree, demonstrated on a host that has reproduced the in-gate refusal
+    owned_files:
+      - scripts/test-archiver-ruby-could-not-run.sh
+    title: |
+      scripts/test-archiver-ruby-could-not-run.sh refuses INSIDE ./build.sh --check and passes standalone on the same tree, on two hosts with opposite ruby layouts — it has cost two full gates and the fixture discards the one string that would say why
+    context: |
+      TWO HOSTS, ONE NIGHT, 2026-09-12. Both refused a land; both passed on
+      relaunch with nothing changed in between.
+
+        macuahuitl   gate refusal rc=1, "positive control did not pass on a host
+                     with ruby"; relaunched gate PASSED; standalone 5/5.
+        yoga         gate refusal rc=3, same arm, 4/5; relaunched gate PASSED
+                     5/5 (log :4682); standalone 5/5 on the same tree.
+
+      COST: two full ./build.sh --check runs, on two hosts, during a night with
+      a cut queue behind them. That is what makes it p1 rather than a curiosity.
+
+      THE MIRRORED-LAYOUT STORY IS DEAD, and it was mine. I proposed that the
+      positive control's outcome depends on which execution context the gate
+      hands it, because yoga has ruby in the toolbox and NOT on the host while
+      macuahuitl had the opposite. macuahuitl then MEASURED their host: ruby is
+      present in BOTH contexts there (/usr/bin/ruby 4.0.6 on the host and in the
+      tillandsias-builder toolbox) and the positive control still failed. So
+      "which context lacks ruby" cannot be the mechanism; on that host neither
+      lacks it. Recorded because the refutation is more useful than the story.
+
+      WHAT THE FIXTURE'S OWN LOGIC SAYS, and it narrows yoga's case sharply.
+      Arm 4 (:67-75) SKIPS only on a conjunction:
+
+          rc2 == 3  AND  output contains 'no usable ruby'   -> skip, counts pass
+          anything else                                      -> FAIL
+
+      yoga's gate failure was rc=3. So in situ the archiver returned
+      COULD-NOT-RUN WITH A DIFFERENT REASON STRING — not "no usable ruby".
+      Measured standalone on the same tree minutes later:
+
+          ./scripts/archive-plan-packets.sh --check  ->  rc=0
+          "ok:archive-answerability:305/305 after archiving 1020 packets,
+           ready set unchanged at 494"
+
+      So on yoga it is the ARCHIVER that behaves differently inside the gate —
+      rc=0 standalone, rc=3-for-some-other-reason in situ. The fixture is merely
+      the thing that notices. That is a sharper subject than "the fixture is
+      flaky".
+
+      THE ONE STRING THAT WOULD SETTLE IT IS ALREADY CAPTURED AND THEN THROWN
+      AWAY. :67 is `out2="$(./scripts/archive-plan-packets.sh --check 2>&1)"` —
+      stderr included. :74 prints only `rc=$rc2` and never `$out2`. So every
+      refusal so far has discarded the sentence naming its own cause, on both
+      hosts, twice. FIRST MOVE, authorised by macuahuitl ahead of this row:
+      print `$out2` on that failure path. It changes nothing else and turns the
+      next refusal into evidence.
+
+      A SECOND, PROBABLY UNRELATED CAUSE WEARING THE SAME FIXTURE'S NAME.
+      macuahuitl also saw "the refusal path left scratch state in the worktree",
+      which is arm 5 (:81), not arm 4. That arm fails if plan_tmp, plan_tmp_bak,
+      scripts/archive-plan-packets-check.rb or toolbox are present. Those are
+      exactly the paths yoga watched an INTERRUPTED land leave behind earlier
+      the same night — all three were untracked in the worktree after a land was
+      killed mid-gate, and gone by the next look. So on a host where a previous
+      gate died, arm 5 can fail for reasons with nothing to do with ruby. Treat
+      arms 4 and 5 as separate subjects until one is shown to cause the other.
+    exit_criteria:
+      - "the failure path PRINTS $out2, so a refusal names its own cause; pre-fix result: FAILS (two hosts, two refusals, the string captured at :67 and discarded at :74 every time)"
+      - "the mechanism is NAMED for the rc=3 shape: what makes ./scripts/archive-plan-packets.sh --check return could-not-run in situ while returning 0 standalone on the same tree. A change that only makes the fixture tolerant would satisfy nobody — the archiver's in-gate behaviour is the subject"
+      - "the same verdict in the gate and standalone, demonstrated on a host that has actually reproduced the refusal (yoga or macuahuitl), not on a host that has never seen it"
+      - "arms 4 and 5 are shown to be independent, or one is shown to cause the other. Both have been called `the ruby fixture flake` and they are different assertions; a fix for one that silently closes the other would bury a real defect"
+      - "NEGATIVE CONTROL: the fixture still REFUSES a genuinely absent ruby. Arms 1-3 exist because a check that could not run must not claim what it would have found (965-sxec); a fix that makes the positive control lenient must not make the could-not-run channel lenient too"
+    events:
+      - type: filed
+        ts: "2026-09-12T08:00:00Z"
+        agent_id: "linux-yoga-claude-20260912t013000z"
+        host: yoga
+        summary: |
+          Filed by yoga at macuahuitl's direction after it refused yoga's
+          1128-j9fc land (attempt 1) and macuahuitl's relay gate.
+
+          Sibling by SYMPTOM to 1130-qk7d — a check that answers differently in
+          situ than standalone — but NOT by mechanism: 1130 was SIGPIPE in a
+          `grep -q` pipeline and cannot explain a ruby positive control. Filed
+          as its own row for that reason; a row titled for one mechanism is a
+          poor home for another.
+
+          What 1130-qk7d hands this one is a METHOD rather than an answer:
+          instrument the decision IN SITU and record exit codes over many runs.
+          Twelve traced runs turned "mechanism unknown" into rc=141 there in a
+          single step — after two isolation attempts had come back 20/20 and
+          30/30 clean and very nearly convinced me the hypothesis was refuted.
+          Both of these defects are invisible in isolation, which is exactly
+          where it is most tempting to look.
