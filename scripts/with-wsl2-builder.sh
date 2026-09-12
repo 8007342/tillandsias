@@ -192,6 +192,24 @@ set -eu
 # ensure_ca_bundle with `os error 2` while the 989-ykks host-tools step had
 # passed seconds earlier. Same shape as the jq/yq omission above: packaged in
 # Fedora, so the absence was an omission rather than a constraint.
+#
+# ORDER 1129-xm5z - `ripgrep`, and it is the THIRD instance of the sentence
+# above. check-cheatsheet-refs.sh hard-requires rg (host first, then the
+# builder toolbox, else refuse), and 1087-h2z9 moved that check from --ci-full
+# into --check, so it now runs on EVERY land on EVERY host. Nothing provisions
+# rg here, and the podman toolbox's init set that does name it is unreachable
+# from a WSL2 host.
+#
+# MEASURED on esmeraldinha 2026-09-12: the land refused with
+# `[build] a cheatsheet reference does not resolve (1087-h2z9)` having examined
+# ZERO references - a missing INSTRUMENT reported as a verdict about the
+# CONTENT, because gate steps are data (1072-b7eq) and carry one STEP_ERROR
+# string for every non-zero exit. The operator then hunts a cheatsheet that is
+# fine. `dnf install -y ripgrep` cleared it and the step now passes in 4.2s
+# resolving 577 references.
+#
+# The absence was never a constraint: ripgrep is packaged in Fedora 44 and
+# installs in about a second.
 dnf install -y \
     gcc pkg-config file cmake make \
     musl-gcc musl-devel musl-libc-static \
@@ -200,6 +218,7 @@ dnf install -y \
     procps-ng findutils diffutils \
     git curl tar xz ShellCheck awk \
     jq yq \
+    ripgrep \
     2>&1 | sed 's/^/  [dnf] /'
 if ! command -v rustup >/dev/null 2>&1 && [ ! -x /root/.cargo/bin/rustup ]; then
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o /tmp/rustup-init.sh
