@@ -108,10 +108,26 @@ fn main() {
     // the single source of truth (the install/build scripts already quote
     // it). This is set UNCONDITIONALLY (before the windows-target gate)
     // so cross-checks from Linux also have the env var available.
+    // ORDER 1084-x8ya. THIS MUST NOT SILENTLY SUBSTITUTE. WORKSPACE_VERSION is
+    // not merely a display string: hvsocket.rs passes it to channel_psk() as
+    // the version half of the host-guest PSK binding, and the guest derives its
+    // half from include_str!(VERSION).trim() with NO fallback. So a failed read
+    // here used to bind the host to CARGO_PKG_VERSION ("0.1.0" for this crate)
+    // while the guest bound the real release, producing a PSK mismatch with no
+    // build error, no warning, and a runtime symptom ("noise: input error")
+    // that names no version at all. A PSK input that can quietly become a
+    // different value must not be expressible; an unreadable VERSION is a
+    // broken checkout, which is a build failure, not a default.
     let version_file = manifest_dir_path.join("../../VERSION");
-    let workspace_version = std::fs::read_to_string(&version_file)
-        .map(|s| s.trim().to_string())
-        .unwrap_or_else(|_| env!("CARGO_PKG_VERSION").to_string());
+    let workspace_version = match std::fs::read_to_string(&version_file) {
+        Ok(s) => s.trim().to_string(),
+        Err(e) => panic!(
+            "cannot read {} ({e}) — WORKSPACE_VERSION binds the host-guest control-wire PSK \
+             (see crates/tillandsias-windows-tray/src/hvsocket.rs), so substituting \
+             CARGO_PKG_VERSION here would silently mismatch the guest's key (1084-x8ya)",
+            version_file.display()
+        ),
+    };
     println!("cargo:rerun-if-changed=../../VERSION");
     println!("cargo:rustc-env=WORKSPACE_VERSION={workspace_version}");
 
