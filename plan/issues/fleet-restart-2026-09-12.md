@@ -456,6 +456,9 @@ surface another host's claim names (`tillandsias-plan expire-claims
   `CSSM_DecryptDataFinal` — the login keychain waiting for a GUI unlock a
   non-GUI session can never give. Isolated standalone: `printf
   'protocol=https\nhost=github.com\n\n' | timeout 20 git credential-osxkeychain
+  get >/dev/null; echo rc=$?` → rc 124 (ALWAYS redirect stdout: on success the
+  helper prints the live token, and the first form put the operator's PAT
+  into a transcript — macneo flagged rotation);| timeout 20 git credential-osxkeychain
   get` → rc 124, no output; fetches worked all night because anonymous reads
   never consult the helper. macneo correctly refused `gh auth login`
   (1025-a896), credential rewiring and token injection. **Operator ask (corrected by macneo — the keychain is NOT locked):** on
@@ -863,3 +866,12 @@ stories.
   liveness probe resolves native PIDs (tasklist/OpenProcess) behind the
   is_live seam; yolanda owns it, esme verifies; one lane at a time per
   Windows host meanwhile.
+- **macneo can push again; the probe leaked the token** (macneo, osx-next
+  369c67add, four commits landed attempt 1, the secure_stream.rs union merged
+  clean): the operator approved the keychain ACL and the 20-second probe
+  returned rc 0 — and printed the PAT to stdout, because the coordinator's
+  probe line had no redirect. The rc is the signal; stdout is the secret.
+  Every probe of a credential helper redirects stdout: `… get >/dev/null;
+  echo rc=$?`. macneo flagged rotation to the operator; the drill's earlier
+  probe text is corrected above. Crons on every host are session-only and
+  expire 2026-09-19; the cadence must be re-armed on session start.
