@@ -770,6 +770,23 @@ async fn open_control_wire_stream(
                     tillandsias_control_wire::WIRE_VERSION,
                     HopId::HostGuest,
                 ),
+                // DEBUG ONLY, AND ENFORCED AS SUCH. On a release macOS tray
+                // this arm is unreachable by construction — build.rs refuses
+                // to produce one unless both digests are present AND 64 hex
+                // chars, which is exactly what bundled_guest_digest() needs to
+                // return Some. The refusal below is defence in depth: if that
+                // invariant is ever weakened, this path must FAIL LOUDLY
+                // rather than quietly derive from the host's own binary hash,
+                // because a silent fall-back here reinstates 1084-x8ya with no
+                // error anywhere — the guest simply never becomes reachable.
+                #[cfg(not(debug_assertions))]
+                None => {
+                    return Err("no embedded guest digest in a release tray: refusing the \
+                         unkeyed self-hash derivation (1084-x8ya) — rebuild through \
+                         scripts/build-macos-tray.sh"
+                        .to_string());
+                }
+                #[cfg(debug_assertions)]
                 None => channel_psk(
                     tillandsias_secure_channel::workspace_version(),
                     tillandsias_control_wire::WIRE_VERSION,
