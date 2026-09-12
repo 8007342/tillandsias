@@ -797,3 +797,25 @@ surface another host's claim names (`tillandsias-plan expire-claims
   || true` under set -e, unscoreable with its scorable slice named) and
   1136-n8sh (the two ledger guards must name each other; the unresolvable
   half is Rust in tillandsias-plan, the 977-448j half is a shell string).
+- **Both proposed template slices had zero live defects, and both times the
+  guard's knowledge was the cause** (macbookair, osx-next 8b401ecae):
+  readlink -f — one instance runs inside a `podman run … -c` string
+  (Linux context, needed TRANSITIVE tracking across a 35-line assignment
+  chain to exempt, pinned in both directions), the other is on a Darwin that
+  carries `-f`; `date -d` — four correct GNU-first chains falling back to
+  BSD `date -j`, which the counterpart list did not know, and one fixture
+  subject. An incomplete counterpart list does not under-report, it accuses
+  working code. Honest baseline 20 silent / 13 loud at 8b401ecae, seven
+  first-run entries never defects; the real classes are `stat -c` (14) and
+  `sed -i` (13), sampled real (claim-ledger-node.sh falls back to EMPTY
+  rather than BSD and yields a blank mtime on macOS). Fixed on the way:
+  plan-binary-probe.sh's same-artefact compare answered "same" having
+  compared two empty substitutions where readlink -f is absent — now refuses
+  on an empty side, dormant on today's fleet. The land was refused by
+  check-bash-dialect because the fixture's ok() message carried a literal GNU
+  idiom: a test about tests that contain their subject, caught containing
+  its subject, both guards correct; fixed by splitting the literal, the
+  offered allowlist entry declined. Third time today the cheap path was the
+  wrong one — dangle a litmus pin, delete a detector to zero a class, add an
+  allowlist entry: each one line, each passes the gate, each spends someone
+  else's future.
