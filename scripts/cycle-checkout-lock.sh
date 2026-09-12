@@ -21,7 +21,7 @@
 # CHAIN of short-lived shells — no single process spans it, so there is no fd
 # to hold. These lanes use the mkdir arm (atomic, survives process exit) with
 # the AGENT HARNESS pid as the liveness anchor: the parent of the tool shells
-# (e.g. the `claude` process) lives for the whole session and `kill -0` on it
+# (e.g. the `claude` process) lives for the whole session and `pid_is_live` on it
 # answers "is that cycle still possibly running".
 #
 # CROSS-ARM VISIBILITY, both directions, or the gap just moves:
@@ -106,12 +106,66 @@ else
     anchor_source="invoking-shell-UNVERIFIED"
 fi
 
+# Is pid $1 running? THE ONE LIVENESS PRIMITIVE — every lock decision that asks
+# "is the recorded holder still there" goes through here, so a host where the
+# answer is wrong is wrong in ONE place rather than four.
+#
+# `kill -0` alone is NOT that primitive on Windows, and the gap is silent.
+# Under MSYS/Cygwin bash, `kill` speaks MSYS pids, while the anchor a claude
+# harness exports (CLAUDE_PID) — and anything `ps -W` reports as WINPID — is a NATIVE
+# Windows pid from a different numbering space. MEASURED on yolanda
+# 2026-09-12: CLAUDE_PID=12388, `tasklist /FI "PID eq 12388"` listing a running
+# claude.exe, and `kill -0 12388` answering "No such process".
+#
+# The consequence was not a warning, it was the ABSENCE OF THE LOCK. Every
+# Windows anchor was stamped `-DEAD`, every recorded holder read stale, and a
+# second lane calling `status` one command after a successful acquire got
+# `ok:checkout-lock:free`. Both Windows hosts ran with no mutual exclusion at
+# all — the 873-zcim guard present, green, and inert — and the warn verdict's
+# FIX line sent the operator to put the variable on the command line, which it
+# already was. The fixture could not see any of it because every arm anchors on
+# `$$`, an MSYS pid, which is the one kind `kill -0` resolves correctly here;
+# arm 8 closes that.
+#
+# THE FALLBACK IS `ps -W`, NOT `tasklist`, and the choice is load-bearing twice
+# over. esme validated this predicate independently on esmeraldinha and made the
+# case for it (plan/issues/checkout-lock-inert-on-windows-hosts-2026-09-12.md):
+# `ps -W` exposes WINPID as its own column, so nothing is parsed out of
+# human-facing text that varies by locale. And it keeps `tasklist` UNUSED here,
+# which is what lets the fixture attest liveness through a mechanism this
+# function does not share — a probe confirmed only by itself is not confirmed.
+#
+# The locale point is not theoretical. The obvious `tasklist /NH /FI "PID eq $p"`
+# form was written first and rejected on measurement: its output is
+# space-padded columns (image, pid, session name, SESSION NUMBER, memory), so a
+# whitespace-delimited match for the pid also matches the session-number column
+# — `pid 1` reads live on any host with a session 1, which is every one. `PPID=1`
+# is exactly the value Git Bash reports to a tool shell (esme, same writeup), so
+# the one pid most likely to be probed here is the one that form gets wrong.
+#
+# ORDERING: `kill -0` stays first and answers alone on linux and darwin, so
+# this is a no-op off Windows by construction rather than by test — which is
+# also why it cannot disturb the green arms of
+# scripts/test-cycle-lock-attested-release.sh.
+pid_is_live() {
+    local p="${1:-}"
+    [ -n "$p" ] || return 1
+    case "$p" in *[!0-9]*) return 1 ;; esac
+    kill -0 "$p" 2>/dev/null && return 0
+    case "$(uname -s 2>/dev/null)" in
+        MINGW*|MSYS*|CYGWIN*)
+            ps -W 2>/dev/null | awk -v p="$p" '$4 == p { found=1 } END { exit !found }'                 && return 0
+            ;;
+    esac
+    return 1
+}
+
 # VALIDATE THE VALUE RATHER THAN TRUSTING IT. An env var inherited into an
 # unrelated context would anchor the lock to a live process with nothing to do
 # with this cycle — presence used as proof, which is the arm-1 defect of
 # check-credential-channel.sh one layer over. A dead anchor is worse still: the
 # lock would be born stale.
-if ! kill -0 "$HOLDER_PID" 2>/dev/null; then
+if ! pid_is_live "$HOLDER_PID"; then
     anchor_source="${anchor_source}-DEAD"
 fi
 # Staleness bound: same 10800s (2x the 90m cycle cap) the driver uses.
@@ -210,7 +264,7 @@ dir_lock_live() {
     born="$(cat "$LOCKD/epoch" 2>/dev/null || echo 0)"
     case "$born" in *[!0-9]*|"") born=0 ;; esac
     age=$(( $(now) - born ))
-    [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null && [ "$age" -le "$STALE_S" ]
+    [ -n "$pid" ] && pid_is_live "$pid" && [ "$age" -le "$STALE_S" ]
 }
 
 # Is the DRIVER's flock held? Probe without keeping it: if we can take it, the
@@ -325,15 +379,28 @@ case "$cmd" in
                 echo "ok:checkout-lock:acquired:$lane:$HOLDER_PID"
                 ;;
             *)
-                echo "warn:checkout-lock:acquired-unverified-anchor:$lane:$HOLDER_PID"
+                # THE ONLY INPUTS THAT REACH HERE ARE THE `-DEAD` ONES.
+                # `invoking-shell-UNVERIFIED*` is refused and exits above, so
+                # the caller standing here NAMED a pid (explicitly, or via the
+                # harness) and that pid did not answer the liveness probe. The
+                # old text told them to put the variable on the command line —
+                # advice for a case that can no longer arrive, and which on
+                # Windows sent the operator chasing a shell-syntax fix for what
+                # was actually a broken probe (yolanda 2026-09-12). Say what is
+                # true instead: the anchor you named is not running.
+                echo "warn:checkout-lock:acquired-dead-anchor:$lane:$HOLDER_PID"
                 {
-                    echo "  ANCHOR: $anchor_source — this lock is anchored to the shell that"
-                    echo "  invoked the script, which dies when your tool call returns. It will"
-                    echo "  stale-reap immediately and the next lane will read"
-                    echo "  ok:checkout-lock:free while you are still working (1091-zh6d)."
-                    echo "  FIX: put the variable on the command line, in YOUR shell —"
-                    echo "    TILLANDSIAS_CYCLE_HOLDER_PID=\$PPID $0 acquire --lane <l> --source <s>"
-                    echo "  See skills/advance-work-from-plan section 1b."
+                    echo "  ANCHOR: $anchor_source — pid $HOLDER_PID did not answer the"
+                    echo "  liveness probe, so this lock is born stale: it will be"
+                    echo "  reclaimed and the next lane will read ok:checkout-lock:free"
+                    echo "  while you are still working (1091-zh6d)."
+                    echo "  FIX: anchor on a process that spans the whole cycle — the agent"
+                    echo "  harness, not a shell that exits with your tool call. A claude"
+                    echo "  harness exports CLAUDE_PID and needs nothing; other backends pass"
+                    echo "    TILLANDSIAS_CYCLE_HOLDER_PID=<harness pid> $0 acquire ..."
+                    echo "  If the pid IS running, the probe is wrong on this host, not your"
+                    echo "  command: check it directly with \`$0 pid-probe --pid $HOLDER_PID\`"
+                    echo "  and report the verdict line. See skills/advance-work-from-plan 1b."
                 } >&2
                 ;;
         esac
@@ -344,7 +411,7 @@ case "$cmd" in
         # cycle — the failure mode this lock exists to prevent.
         if [ -d "$LOCKD" ]; then
             held_pid="$(cat "$LOCKD/pid" 2>/dev/null || true)"
-            if [ -n "$held_pid" ] && [ "$held_pid" != "$HOLDER_PID" ] && kill -0 "$held_pid" 2>/dev/null; then
+            if [ -n "$held_pid" ] && [ "$held_pid" != "$HOLDER_PID" ] && pid_is_live "$held_pid"; then
                 echo "fail:checkout-lock:held-by-other:$(dir_holder_desc)"
                 exit 1
             fi
@@ -371,7 +438,23 @@ case "$cmd" in
             # problem the HOLDER_PID comment above documents for `acquire`.
             # An equality test would call the holder "someone else" and refuse
             # to mark every lock it was written to mark.
-            if [ -n "$held_pid" ]; then
+            # ANCHOR EQUALITY IS A SUFFICIENT OWNERSHIP PROOF, and it is
+            # checked FIRST because the ancestry walk cannot supply it on
+            # Windows. `record` runs under the same cycle that acquired, so it
+            # passes the same HOLDER_PID the lock recorded; when those match we
+            # are the holder and no walk is needed. The walk remains for the
+            # case the ancestry comment describes — a caller some levels below
+            # the harness that did not inherit the variable.
+            #
+            # Without this, the pid_is_live fix above would REGRESS Windows
+            # rather than repair it: on MSYS the walk climbs MSYS pids from
+            # `$$` and the lock records a NATIVE pid (CLAUDE_PID), so it can
+            # never reach the target and answers "no". Previously `kill -0`
+            # then called that native pid dead and the block fell through to
+            # marking; with a liveness probe that answers correctly, the same
+            # walk would instead refuse `held-by-other` about the cycle's own
+            # lock — every mark-attested on both Windows hosts.
+            if [ -n "$held_pid" ] && [ "$held_pid" != "$HOLDER_PID" ]; then
                 pid_is_self_or_ancestor "$held_pid"; anc=$?
                 if [ "$anc" -eq 2 ]; then
                     # No working ppid mechanism on this host. Say THAT, rather
@@ -380,7 +463,7 @@ case "$cmd" in
                     echo "fail:checkout-lock:ancestry-unavailable:no-ppid-mechanism"
                     exit 3
                 fi
-                if [ "$anc" -ne 0 ] && kill -0 "$held_pid" 2>/dev/null; then
+                if [ "$anc" -ne 0 ] && pid_is_live "$held_pid"; then
                     echo "fail:checkout-lock:held-by-other:$(dir_holder_desc)"
                     exit 1
                 fi
@@ -405,6 +488,25 @@ case "$cmd" in
         else
             echo "fail:ppid-probe:no-mechanism"
             exit 1
+        fi
+        ;;
+    pid-probe)
+        # Exposes the LIVENESS primitive, for the same reason `ppid-probe`
+        # exposes the ancestry one: this guard reads host state, and when the
+        # state-reading primitive is wrong the symptom is a confident wrong
+        # VERDICT ("free", "DEAD") rather than "the probe does not work here".
+        # That is exactly how the Windows gap survived — acquire said the
+        # anchor was dead, status said the checkout was free, and nothing said
+        # `kill -0` could not see a native pid.
+        #
+        # Defaults to this shell so a bare call is always answerable; pass
+        # --pid to ask about a pid the caller independently knows the state of,
+        # which is the cross-check a fixture (or a sibling host) needs.
+        _pp="${probe_pid:-$$}"
+        if pid_is_live "$_pp"; then
+            echo "ok:pid-probe:live:$_pp:$(uname -s 2>/dev/null || echo unknown)"
+        else
+            echo "ok:pid-probe:dead:$_pp:$(uname -s 2>/dev/null || echo unknown)"
         fi
         ;;
     status)
