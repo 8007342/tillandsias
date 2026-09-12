@@ -115,3 +115,17 @@ the property the block needs.
 This correction matters for whoever implements the fix: a patch that only
 changes the preference variable will look right, pass a casual review, and
 still abort on the next host whose tray writes a locale warning.
+
+## How easily Defect 2 is made
+
+Worth recording as evidence for the severity ordering above: **I reproduced
+this exact defect in my own tooling within an hour of filing it against the
+runbook.** The bisect runner I wrote to investigate 1084-x8ya greps the tray's
+append-only log for its report lines without bounding the grep by the run's
+start timestamp, so a PASSING run printed `noise: input error` lines belonging
+to a FAILED run forty minutes earlier. I caught it only because I knew the
+verdict was a pass and the lines looked wrong.
+
+Someone who had written a packet about stale evidence, while looking for stale
+evidence, still built a tool that read stale evidence. That is the argument for
+fixing this at the runbook rather than trusting each operator to remember.

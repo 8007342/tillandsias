@@ -4,9 +4,9 @@
 **Host:** ESMERALDINHA (Windows 11 + WSL2), found while bisecting 1084-x8ya
 **Ordered by:** macuahuitl-fedora (coordinator), 2026-09-12
 
-trace: crates/tillandsias-vm-layer/src/vz.rs:1067          (macOS — writes it)
-       crates/tillandsias-windows-tray/src/wsl_lifecycle.rs:1850-1853  (Windows — omits it)
-       crates/tillandsias-vm-layer/src/wsl.rs:102-103       (WSL — omits it)
+trace: crates/tillandsias-vm-layer/src/vz.rs `provision_user_data` (macOS — writes it)
+       crates/tillandsias-windows-tray/src/wsl_lifecycle.rs `inject_bootstrap_logic` (Windows — omits it)
+       crates/tillandsias-vm-layer/src/wsl.rs `headless_unit` (WSL — omits it)
        crates/tillandsias-control-wire/src/secure_wire_mode.rs (order 972-umik, the ONE reader)
 
 **This defect stands regardless of what ultimately caused 1084-x8ya.** It was
@@ -19,7 +19,7 @@ Noise handshake or passes plaintext. On macOS the host's resolved mode is
 substituted into the guest's systemd unit, so both ends agree. On Windows/WSL
 that line is simply not written, so the host's value reaches the host only.
 
-macOS, `vz.rs:1067`:
+macOS, `vz.rs` `provision_user_data`:
 
 ```
 Environment=XDG_RUNTIME_DIR=/run/user/0
@@ -28,7 +28,7 @@ Environment=TILLANDSIAS_SECURE_CONTROL_WIRE=__SECURE_CONTROL_WIRE__   <-- substi
 ExecStart=/usr/local/bin/tillandsias-headless --listen-vsock 42420
 ```
 
-Windows, `wsl_lifecycle.rs:1850-1853`:
+Windows, `wsl_lifecycle.rs` `inject_bootstrap_logic`:
 
 ```
 Environment=HOME=/root
@@ -38,7 +38,7 @@ Environment=TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200
 ```
 
 The three sibling variables are present on both. Only the secure-wire line
-differs. `wsl.rs:102-103` writes the same shorter set.
+differs. `wsl.rs` `headless_unit` writes the same shorter set.
 
 ## Why this is a defect and not a cosmetic gap
 
@@ -80,14 +80,14 @@ untestable on Windows by construction.
 
 ## Exit criteria
 
-- "the WSL/Windows guest unit carries the host's resolved secure-wire mode, as the macOS unit does; pre-fix result: FAILS (line absent at wsl_lifecycle.rs:1850-1853 and wsl.rs:102-103)"
+- "the WSL/Windows guest unit carries the host's resolved secure-wire mode, as the macOS unit does; pre-fix result: FAILS (line absent from `inject_bootstrap_logic` and `headless_unit`)"
 - "setting TILLANDSIAS_SECURE_CONTROL_WIRE=off on a Windows host and re-provisioning produces a working plaintext wire, not a handshake failure; pre-fix result: FAILS (host-only flip, guest unchanged, wire down)"
 - "NEGATIVE CONTROL: with the variable unset, the Windows guest still runs SECURE — the fix must propagate the resolved mode, never weaken the default to whatever the guest happens to do"
-- "a check refuses a guest unit writer that omits the variable, so the two platforms cannot drift apart again; pre-fix result: FAILS (no such check — build.sh:1749 guards only against NEW READERS of the variable, not against writers that fail to propagate it)"
+- "a check refuses a guest unit writer that omits the variable, so the two platforms cannot drift apart again; pre-fix result: FAILS (no such check — `build.sh`'s `check-secure-wire-single-reader.sh` step guards only against NEW READERS of the variable, not against writers that fail to propagate it)"
 
 ## Note on the existing guard
 
-`build.sh:1749` refuses "a new reader of TILLANDSIAS_SECURE_CONTROL_WIRE
+`build.sh`'s `check-secure-wire-single-reader.sh` step refuses "a new reader of TILLANDSIAS_SECURE_CONTROL_WIRE
 appeared (972-umik)" and `scripts/check-secure-wire-single-reader.sh` enforces
 the one-reader rule. Both police READERS. Neither notices that one of the two
 guest-unit WRITERS does not pass the value on, which is how this survived the
