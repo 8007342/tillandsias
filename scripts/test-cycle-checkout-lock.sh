@@ -210,17 +210,59 @@ winpid_of() {  # $1 = msys pid -> its native WINPID. A LOOKUP, not a liveness
     # to come from here even though the fix also reads `ps -W`.
     ps 2>/dev/null | awk -v p="$1" '$1==p {print $4; exit}'
 }
-native_pid_live_oracle() {  # $1 = native WINPID -> 0 if running, INDEPENDENTLY
-    # of pid_is_live's own mechanism. This is the whole reason the fix uses
-    # `ps -W` and this uses `tasklist`: an arm that asked `ps -W` whether `ps -W`
-    # was right would be a tautology wearing a test's clothes.
-    #
-    # /FO CSV, not the default table. The table form is space-padded columns
-    # (image, pid, session name, SESSION NUMBER, memory) and a whitespace match
-    # for the pid also hits the session-number column -- pid 1 reads live on
-    # every host. CSV quotes each field, so field 2 can be matched exactly.
-    MSYS_NO_PATHCONV=1 tasklist /NH /FO CSV /FI "PID eq $1" 2>/dev/null \
-        | grep -q "^\"[^\"]*\",\"$1\","
+# $1 = native WINPID. 0 = running, 1 = not running, 2 = COULD NOT ASK.
+#
+# INDEPENDENT of pid_is_live's own mechanism, which is the whole reason the fix
+# uses `ps -W` and this uses `tasklist`: an arm that asked `ps -W` whether
+# `ps -W` was right would be a tautology wearing a test's clothes.
+#
+# THREE OUTCOMES, NOT TWO. A broken invocation must not read as "the pid is
+# dead" -- that is this packet's own defect pointed the other way, an oracle
+# answering confidently about something it never measured. Measured on both
+# Windows hosts, capturing into a variable so the status is tasklist's:
+#
+#   mangled invocation  -> rc=1, "ERROR: Invalid argument/option - ..."
+#   no matching task    -> rc=0, "INFO: No tasks are running which match ..."
+#   matching task       -> rc=0, the CSV row
+#
+# So rc DISTINGUISHES BROKEN FROM WORKING AND NOTHING ELSE: match and no-match
+# are both 0. Keying liveness on rc would answer "live" for every pid ever
+# handed to it (esme, 2026-09-12). Hence: rc for "could not ask", content for
+# the liveness answer.
+#
+# THE INVOCATION IS DOUBLE-SLASHED AND MUST NOT ALSO SET MSYS_NO_PATHCONV.
+# Bare `/NH` is converted to a Windows path before tasklist sees it -- the
+# error is literally `'C:/Program Files/Git/NH'`. Three guards each fix that
+# alone (MSYS_NO_PATHCONV=1, MSYS2_ARG_CONV_EXCL='*', or doubling the slash),
+# verified on both Windows hosts. The double slash is preferred because it
+# needs no environment at all, removing a way two hosts can differ rather than
+# relying on them happening not to.
+#
+# BUT THE GUARDS ARE MUTUALLY EXCLUSIVE, NOT CUMULATIVE, and belt-and-braces is
+# exactly wrong here. `//NH` works by relying on the conversion layer to
+# collapse it to `/NH`; MSYS_NO_PATHCONV=1 turns that layer off, so the two
+# together pass a literal `//NH` and tasklist refuses it:
+#
+#   tasklist //NH ...                      -> rc=0, the CSV row
+#   MSYS_NO_PATHCONV=1 tasklist //NH ...   -> rc=1, "Invalid argument/option - '//NH'"
+#
+# Found by this arm's own third outcome on its first run -- it reported "the
+# oracle COULD NOT ASK" instead of "pid 19112 is dead", which is the entire
+# reason the third outcome exists.
+#
+# /FO CSV, not the default table. The table form is space-padded columns
+# (image, pid, session name, SESSION NUMBER, memory), and the session number is
+# `1` ON THE HARNESS ROW ITSELF -- so a whitespace match for pid 1 matches
+# claude.exe on every host (esme's row, the sharpest evidence in this packet).
+# `$PPID` under Git Bash is 1. CSV quotes each field, so field 2 matches exactly.
+native_pid_live_oracle() {
+    local out
+    out="$(tasklist //NH //FO CSV //FI "PID eq $1" 2>&1)"
+    if [ $? -ne 0 ]; then
+        printf 'oracle-refused: %s\n' "$(printf '%s' "$out" | head -1)" >&2
+        return 2
+    fi
+    printf '%s' "$out" | grep -q "^\"[^\"]*\",\"$1\","
 }
 case "$(uname -s 2>/dev/null)" in
     MINGW*|MSYS*|CYGWIN*)
@@ -247,11 +289,12 @@ case "$(uname -s 2>/dev/null)" in
             # (b) INDEPENDENT ATTESTATION that the native pid really is
             #     running, from a mechanism pid_is_live does not use. Without
             #     this the arm rests on `ps` twice and proves nothing.
-            if native_pid_live_oracle "$WP"; then
-                ok "arm 8c-pre: tasklist independently confirms native pid $WP is running"
-            else
-                bad "arm 8c-pre: tasklist cannot see native pid $WP — the oracle disagrees with ps, so arms 8c/8e/8f rest on one unconfirmed mechanism"
-            fi
+            native_pid_live_oracle "$WP"; orc=$?
+            case "$orc" in
+                0) ok "arm 8c-pre: tasklist independently confirms native pid $WP is running" ;;
+                2) bad "arm 8c-pre: the oracle COULD NOT ASK (see oracle-refused above) — this is not evidence about $WP either way, and arms 8c/8e/8f below rest on ps alone until it is fixed" ;;
+                *) bad "arm 8c-pre: tasklist says native pid $WP is NOT running while ps says it is — the two mechanisms disagree, so one of them is wrong and this arm cannot say which" ;;
+            esac
             # (c) The primitive under test must get BOTH right.
             out="$(bash "$LOCKSH" pid-probe --pid "$WP" | tail -1)"
             case "$out" in

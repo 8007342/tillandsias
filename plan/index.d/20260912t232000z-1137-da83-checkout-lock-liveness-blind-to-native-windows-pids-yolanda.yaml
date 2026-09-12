@@ -169,7 +169,7 @@ packets:
       transcript in context, above; esme's is the `harness-env-DEAD` transcript
       in their writeup, the same defect reached through the other anchor.
     events:
-      - kind: claim
+      - type: claim
         host: yolanda
         agent: windows-yolanda-claude
         note: >
@@ -179,9 +179,15 @@ packets:
           a brand-new order. Recording the claim anyway so the audit trail
           shows a claim preceding the completion rather than a row that
           appeared already done.
-      - kind: completed
+      - type: completed
         host: yolanda
         agent: windows-yolanda-claude
+        evidence_refs:
+          - "scripts/test-cycle-checkout-lock.sh -> ok:checkout-lock-fixture:all (arms 8a-8f green; both arm-9 mutation controls report 'pre-fix result: FAILS')"
+          - "scripts/test-cycle-lock-attested-release.sh -> ok:cycle-lock-attested-release-fixture:11, 11 passed 0 failed"
+          - "litmus:cycle-checkout-lock-shape -> PASS under scripts/run-litmus-test.sh meta-orchestration --phase pre-build --size instant"
+          - "live on yolanda, post-fix: acquire -> ok:checkout-lock:acquired:prompt:12388; sibling status -> skip:overlap-lock-held:lane=prompt pid=12388. Pre-fix the same pair answered warn:...-DEAD and ok:checkout-lock:free."
+          - "plan/issues/checkout-lock-inert-on-windows-hosts-2026-09-12.md (esme, independent reproduction from the harness-env anchor)"
         note: >
           scripts/test-cycle-checkout-lock.sh -> ok:checkout-lock-fixture:all
           with arms 8a-8f green and both arm-9 mutation controls reporting
