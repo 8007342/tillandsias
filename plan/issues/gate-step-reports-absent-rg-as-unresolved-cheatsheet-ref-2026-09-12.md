@@ -89,3 +89,37 @@ check-cheatsheet-tiers does in its own script. Worth deciding whether other
 data-wired steps share the defect; this packet only measured this one.
 Alternatively `with-tillandsias-builder.sh` grows `rg` in its init set, which
 fixes the symptom on toolbox-capable hosts and leaves WSL/dnf hosts exposed.
+
+---
+
+## Resolved — order 1137-dzzu (lenovinha, linux)
+
+`STEP_SKIP_EXIT` landed: a gate step may nominate ONE exit code meaning
+"could not run here", and step 165 nominates 2 with a reason string.
+`STEP_ERROR` is untouched, so an exit-1 unresolvable reference still refuses.
+
+Both exit criteria are now executed rather than argued, in
+`scripts/test-gate-step-skip-exit.sh` (gate step 205-1137-dzzu, 10/10 on
+lenovinha): exit 2 reproduced from genuine `rg` absence, exit 1 reproduced from
+an injected unresolvable reference. The NEGATIVE CONTROL is enforced in two
+places — the runner's skip branch requires an exact match against a non-empty
+nomination, and `check-gate-step-append-no-conflict` now refuses any step that
+nominates 0 or 1 at all, so the downgrade cannot be introduced by a later step
+author.
+
+Two things this packet asked about, answered:
+
+- **"Worth deciding whether other data-wired steps share the defect."** They
+  share the *shape* — every step carries one `STEP_ERROR` — but 165 is the only
+  one wired to a script with a distinct could-not-run code today. The field is
+  now available to any of them.
+- **"Alternatively `with-tillandsias-builder.sh` grows `rg`."** Not taken, and
+  the packet's own reasoning is why: it fixes toolbox-capable hosts and leaves
+  WSL/dnf hosts exposed. Adding `rg` to the toolbox init set is still worth
+  doing, but as a convenience, not as this fix.
+
+Found while fixing this, filed separately as **1138-bb5r**: a *present but
+unusable* `rg` (on PATH, non-zero on run) makes the checker match nothing and
+exit **0** — a clean pass over zero references, silent where this bug was loud.
+`resolve_tool`'s host arm probes presence only, while its toolbox arm already
+probes usability.
