@@ -1,0 +1,82 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: on-a-floor-host-the-smokes-own-wrapper-cannot-survive-its-forge-lane-so-the-largest-floor-timing-is-the-one-never-captured
+    event:
+      type: falsified
+      ts: "2026-09-12T05:33:11Z"
+      agent_id: linux-yoga-claude-20260912t013000z
+      host: yoga
+      summary: |
+        AMENDMENT — THIS ROW'S CENTRAL CLAIM IS FALSIFIED BY THE FLEET'S OWN
+        DATA. The corrected framing, verbatim:
+
+          supervisor loss is not a memory floor; 13 GiB completed §4 with its
+          supervisor alive where 14 died
+
+        The title is deliberately NOT changed and stands as the historical claim
+        it was: packet_id is derived from the title, so a retitle on a landed
+        row would change the identifier that every prior fragment and
+        cross-reference resolves through (macuahuitl's ruling, 2026-09-12).
+
+        THE THREE-HOST ARTIFACT, ordered by total RAM:
+
+          pirria      15 GiB   observer died          lane survived
+          yoga        14 GiB   observer died x5       lane survived; §4 COMPLETED
+                                                      (opencode_exit=0, 84m46s,
+                                                      smoke-forge-lane
+                                                      duration_ms=5086635)
+          lenovinha   13 GiB   NOTHING died           §4 COMPLETED, supervisor
+                                                      ALIVE at finish
+                                                      (duration_ms=5387253,
+                                                      89m47s, exit 0)
+
+        The host with the LEAST memory had the cleanest run. A floor is
+        monotonic in the resource that defines it: 13 GiB must fail wherever
+        14 GiB failed, and it did not. So whatever kills the observer is not a
+        function of total RAM, and the row's premise — that six containers push
+        a 15 GiB host into memory pressure — is not what happened on any of the
+        three hosts.
+
+        NOR WAS THERE MEMORY PRESSURE TO BEGIN WITH, measured on two hosts 4x
+        apart in RAM while their enclaves ran: /proc/pressure/memory read ALL
+        ZERO on both, I/O PSI under 0.5%, writeback 0, and no kernel oom-kill
+        appeared in journalctl for ANY of the deaths. MemFree collapsed to ~2%
+        on both because image extraction fills page cache, while MemAvailable
+        stayed healthy (yoga 6.8 GB of 15.5; macuahuitl 57.6 GB of 62.4).
+
+        THE CONFOUND, AND IT IS LENOVINHA'S — raised against their own clean
+        result rather than claimed as a win: lenovinha ran nothing heavy beside
+        their lane, while yoga ran ./build.sh --check TWICE concurrently with
+        its lane and yoga's earlier deaths were during a cold --init extracting
+        every image. So lenovinha's run establishes "an undisturbed detached
+        supervisor survives at 13 GiB", NOT "13 GiB is comfortable".
+
+        WHICH LEAVES THE REAL CANDIDATE, stated as a hypothesis and not a
+        finding: every observer death in the fleet coincided with heavy
+        page-cache churn beside the watcher. No such work, no death, at the
+        lowest RAM measured. That is consistent with a killer keyed on MemFree
+        rather than MemAvailable or PSI — but that I have NOT read out of any
+        source, and it stays labelled inference until someone does.
+
+        THE TEST THAT WOULD SETTLE IT, unrun by anyone: a concurrent gate
+        DURING the lane on a sub-15 GiB host. yoga did exactly that at 14 GiB
+        and the observer died; nobody has done it at 13. If lenovinha's
+        supervisor dies under a concurrent gate the variable is load, and this
+        row should be re-scoped around load rather than memory.
+
+        WHAT SURVIVES THIS ROW INTACT, and it is the part worth keeping: the
+        remedy was always right. §4a's detach advice rescued yoga's --init on
+        the first retry after two foreground deaths, and lenovinha detached
+        from the first attempt on that advice and never lost a supervisor. And
+        the timing_begin/timing_commit design this packet chose captured all
+        three durations — no attached observer survived to record yoga's. An
+        on-disk stamp that outlives the watcher is the correct instrument
+        whatever turns out to be doing the killing.

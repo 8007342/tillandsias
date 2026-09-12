@@ -1,0 +1,98 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-gate-stamp-excludes-exactly-the-paths-whose-guards-it-memoizes-away-so-a-plan-only-commit-is-the-one-change-class-the-gate-cannot-check
+    order: 1127-waxf
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [pre-push, hooks, ledger, guard, fail-loud, gate]
+    estimated_hours: 3
+    verifiable_closure: |
+      bash scripts/test-gate-stamp-does-not-memoize-guard-owned-paths.sh
+
+      The fixture makes a plan/index.d-only commit carrying a shape
+      check-fragment-status-loss.sh refuses, runs ./build.sh --check, and
+      asserts the guard EXECUTED — not merely that the gate exited 0, which is
+      the distinction the whole packet turns on. It must also assert the
+      930-i6x4 cost argument survives: a plan-only commit with NO such shape
+      still takes the memo.
+
+      PRE-FIX RESULT: FAILS. The gate exits 0 in ~450 ms via the memo without
+      running the guard, which is directly measurable today —
+      `bash scripts/gate-stamp.sh compute` is byte-identical before and after
+      adding a plan/index.d/*.yaml file, and moves on one appended line in any
+      scripts/*.sh.
+    owned_files:
+      - scripts/gate-stamp.sh
+      - build.sh
+    title: |
+      scripts/gate-stamp.sh:343 excludes plan/index.d/*.yaml, plan/loop_status.d/*.md and plan/mo-full-attestations.d/*.md from the stamp digest (930-i6x4), which are EXACTLY the paths check-fragment-status-loss.sh and `tillandsias-plan check --strict-fragments` exist to validate — so a commit touching only those paths cannot stale the stamp, build.sh's memo returns ok:gate-fresh, and the full gate is INVOKED without RUNNING the checks written for that change class
+    context: |
+      FOUND BY yoga 2026-09-12, reproduced independently by lenovinha. This is
+      the actual mechanism by which 7f0b2cd0f reached origin/linux-next
+      carrying a 'completed' event beside a status that folds as in_progress,
+      freezing every host's gate for about an hour. 1124-7f3u was filed for a
+      DIFFERENT hole (the plan-only lane skipping guards when no binary
+      resolves); that hole is real and is fixed, but it is not the path this
+      commit took.
+
+      yoga's evidence: commit 7f0b2cd0f at 01:59:34Z; the timing log four
+      seconds later carries build-check-memoized duration_ms=450 exit=0, against
+      real gate runs of 496545/237038/235647 ms the same night. The binary was
+      present and proven so — cycle-preflight rebuilt it at 01:38Z and yoga ran
+      it directly at 01:58:29Z to create the fragment.
+
+      lenovinha's independent reproduction, deterministic, with a negative
+      control (yoga's gate log had been overwritten by later lands, so no
+      transcript of the literal ok:gate-fresh line survives):
+
+        bash scripts/gate-stamp.sh compute   -> d74d3734...
+        printf 'packets: []\n' > plan/index.d/zzz-probe.yaml
+        bash scripts/gate-stamp.sh compute   -> d74d3734...   IDENTICAL
+        (control) append a line to any scripts/*.sh
+        bash scripts/gate-stamp.sh compute   -> a2d6af2a...   MOVED
+
+      THE SHAPE: 930-i6x4's exclusion is a sound optimisation — the ledger
+      churns on every commit and staling the stamp each time would cost every
+      host a full gate for a fragment. Its side effect is that the exclusion
+      list and the fragment guards cover the same paths in opposite directions,
+      and nothing reconciles them. A plan-only commit is therefore the one
+      change class that can never be gated by the checks written for it.
+
+      NOT A PROPOSAL TO REVERT 930-i6x4. Reverting would re-impose the cost the
+      optimisation removed. The reconciliation is the work: either the memo
+      must not apply when the diff touches guard-owned paths, or the fragment
+      guards must run outside the memo, or the stamp must carry a second digest
+      over the excluded set. Whoever takes it should decide which, with the lane
+      speed argument (930-i6x4) on the table rather than assumed away.
+
+      FAMILY (yoga's observation, and it is the finding as much as the bug):
+      this is the fourth instance in one night of a gate whose "did not run" is
+      indistinguishable from its "ran and was clean" —
+        * check-fragment-status-loss.sh printing violation:0 for both an unbuilt
+          binary and a clean tree;
+        * a check whose exit status disagreed with its printed verdict;
+        * a smoke lock that warned instead of refusing;
+        * and this: a gate whose INVOKED and EXECUTED are indistinguishable from
+          outside, because the land script truthfully reports calling it and the
+          gate truthfully reports a fresh stamp. Nobody lied and the violation
+          still shipped.
+    exit_criteria:
+      - "a plan/index.d-only commit carrying a shape check-fragment-status-loss.sh refuses is REFUSED by ./build.sh --check; pre-fix result: FAILS (memo returns ok:gate-fresh, exit 0, ~450ms)"
+      - "the reconciliation names which of the three routes it took (memo scoped off guard-owned paths / guards hoisted outside the memo / a second digest over the excluded set) and why, rather than silently widening the digest"
+      - "NEGATIVE CONTROL: a plan-only commit carrying NO status-loss shape still takes the memo and does not pay a full gate — the 930-i6x4 cost argument must survive the fix"
+      - "the gate distinguishes INVOKED from EXECUTED in its own output, so a future reader of a land log can tell a memoized pass from a real one without reading a timing log"
+    events:
+      - type: filed
+        ts: "2026-09-12T05:14:48Z"
+        agent_id: "linux-lenovinha-opus5-20260912t014023z"
+        host: lenovinha
+        summary: |
+          Filed by lenovinha from yoga's evidence plus an independent
+          deterministic reproduction with a negative control. Split out of
+          1124-7f3u rather than folded in: 1124 is the plan-only lane skipping
+          guards when no binary resolves, this is the gate memoizing away the
+          guards when the binary is present and the lane is not involved.
