@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: trace-coverage-was-a-sigpipe-artifact-and-it-penalised-the-best-traced-specs
+    event:
+      type: note
+      ts: "2026-09-12T01:40:25Z"
+      agent_id: linux-lenovinha-opus5-20260912t014023z
+      host: lenovinha
+      summary: |-
+        BRANCH DISPOSITION: origin/work/1069-c9w6 will NOT be landed. Its content is already on linux-next, relaid under different shas, and trunk has since gone further.
+
+        MEASURED, not assumed:
+          * both branch commits have same-subject twins on trunk -- "the coverage fixture had pinned the bug's symptom as a contract" = aee00cdca, "assemble the synthetic trace marker at runtime, not as a literal" = 3a79de3eb (branch: 345acb156, b555b2181).
+          * trunk then continued past the branch with a721eecd1 "clear the last two blockers on the trace-coverage fixture", so trunk's scripts/test-trace-coverage.sh is a SUPERSET: diff branch->trunk is +225/-78. Landing the branch would be a regression, not a merge.
+          * the branch's only other file, the ledger fragment plan/index.d/20260905t185305z-013bda76-lenovinha.yaml, is already folded into plan/index.yaml on trunk by the 889-fragment compaction -- the note body is present at index.yaml:73377 and this packet reads status: verified.
+
+        So the branch is fully superseded and is being left unmerged deliberately. Recorded because an unmerged branch on origin is otherwise indistinguishable from forgotten work; this is the record that it was looked at and declined.
