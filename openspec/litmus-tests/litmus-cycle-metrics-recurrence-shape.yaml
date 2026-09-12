@@ -60,7 +60,7 @@ critical_path:
   - step: "the recurrence fixture is green: exact arithmetic on all three lines, colon-bearing step parsed from the right, boundaries, windows, absent log, malformed rows, experts-only silence, sanitised step keys, unparsed cycle-start"
     command: "bash scripts/test-cycle-metrics-recurrence.sh 2>&1 | tail -1"
     timeout_ms: 30000
-    expected_behavior: "ok:cycle-metrics-recurrence-fixture:37"
+    expected_behavior: "ok:cycle-metrics-recurrence-fixture:39"
 
   - step: "the recur: line computes runs/total_ms/avg_ms/fail_pct over the window, not the last row and not call volume (inline fixture, exact string)"
     # step a: 100 + 300 -> runs=2 total=400 avg=200, no failures; step b runs once
@@ -70,7 +70,7 @@ critical_path:
     expected_behavior: "ok: recur arithmetic exact"
 
   - step: "a missing timing log reads source=absent with zeros and top3=- on repeat:, recur: and skippable:, and the reporter still exits 0"
-    command: "F=$(mktemp -u); out=$(TILLANDSIAS_TIMING_LOG=$F TILLANDSIAS_PLAN_BIN=/nonexistent TILLANDSIAS_CYCLE_START_TS= TILLANDSIAS_RECUR_WINDOW_DAYS=7 TILLANDSIAS_SKIP_MIN_RUNS=5 TILLANDSIAS_SKIP_FLOOR_MS=2000 scripts/cycle-metrics.sh 2>/dev/null); rc=$?; r=$(printf '%s\\n' \"$out\" | grep '^repeat:'); c=$(printf '%s\\n' \"$out\" | grep '^recur:'); s=$(printf '%s\\n' \"$out\" | grep '^skippable:'); if [ $rc -eq 0 ] && [ \"$r\" = 'repeat: window=3h steps=0 top3=- source=absent' ] && [ \"$c\" = 'recur: window=7d runs=0 steps=0 top3=- source=absent' ] && [ \"$s\" = 'skippable: candidates=0 floor_ms=2000 min_runs=5 top3=- source=absent' ]; then echo 'ok: absent honest on all three lines'; else echo \"observed rc=$rc [$r] [$c] [$s]\"; echo 'fail: absent honest on all three lines'; fi"
+    command: "F=$(mktemp -u); out=$(TILLANDSIAS_TIMING_LOG=$F TILLANDSIAS_PLAN_BIN=/nonexistent TILLANDSIAS_CYCLE_START_TS= TILLANDSIAS_RECUR_WINDOW_DAYS=7 TILLANDSIAS_SKIP_MIN_RUNS=5 TILLANDSIAS_SKIP_FLOOR_MS=2000 scripts/cycle-metrics.sh 2>/dev/null); rc=$?; r=$(printf '%s\\n' \"$out\" | grep '^repeat:'); c=$(printf '%s\\n' \"$out\" | grep '^recur:'); s=$(printf '%s\\n' \"$out\" | grep '^skippable:'); if [ $rc -eq 0 ] && [ \"$r\" = 'repeat: window=3h steps=0 top3=- source=absent' ] && [ \"$c\" = 'recur: window=7d runs=0 steps=0 top3=- source=absent' ] && [ \"$s\" = 'skippable: window=7d candidates=0 floor_ms=2000 min_runs=5 top3=- source=absent' ]; then echo 'ok: absent honest on all three lines'; else echo \"observed rc=$rc [$r] [$c] [$s]\"; echo 'fail: absent honest on all three lines'; fi"
     timeout_ms: 20000
     expected_behavior: "ok: absent honest on all three lines"
 

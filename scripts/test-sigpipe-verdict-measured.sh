@@ -5,8 +5,13 @@
 #
 # THE PROBLEM THIS FIXTURE HAD TO SOLVE, and it is not obvious.
 #
-# The defect is decided by PRODUCER LATENCY, not by output size (measured
-# 2026-09-05, esmeraldinha + macuahuitl):
+# THE CONDITION IS WHETHER THE PRODUCER STILL HAS BYTES TO WRITE WHEN THE
+# CONSUMER EXITS. `grep -q` exits at its first match; a producer that has
+# finished writing is never refused, and one that has not is. Everything below
+# is a route to that condition, not a separate mechanism.
+#
+# ROUTE 1, PRODUCER LATENCY — a slow producer is still writing when the consumer
+# leaves (measured 2026-09-05, esmeraldinha + macuahuitl):
 #
 #   byte-identical file, same command, same consumer
 #     drvfs  /mnt/c/...     10/10 SIGPIPE     producer read 207 ms / 5
@@ -15,19 +20,26 @@
 #
 #   CAUSAL CONTROL, because a filesystem differs in more than speed: slowing the
 #   producer ON EXT4 with a per-line read loop — same bytes, same consumer —
-#   reproduces it 10/10. Nothing about drvfs is required. Latency is.
+#   reproduces it 10/10. Nothing about drvfs is required.
 #
-# So a KNOWN-BAD calibration case cannot be a live file: on a fast host no
-# pipeline SIGPIPEs at all, and the case would silently not be bad. And it
-# cannot be a plain synthetic either — every synthetic built during this
-# investigation lived on ext4 and NONE reproduced the defect across four
-# variables (size, match position, ERE complexity, sed doing real substitution
-# work). A synthetic calibration reports SAFE and makes the check confidently
-# blind, which is the exact failure the check exists to detect.
+# ROUTE 2, MATCH POSITION — a FAST producer with a large unwritten remainder
+# (macneo, 2026-09-06, from a live escape in scripts/litmus-covering-specs.sh):
 #
-# The portable known-bad case is therefore a DELIBERATELY SLOWED PRODUCER, which
-# forces the defect on any host irrespective of filesystem. That is the causal
-# control promoted into a fixture.
+#     seq 1 20000 | grep -qxF "1"       rc=141   match is the FIRST line
+#     seq 1 20000 | grep -qxF "20000"   rc=0     producer had finished
+#
+# This CORRECTS the earlier claim, kept here because the fixture was built on it,
+# that the defect is decided by latency and that no plain synthetic reproduces
+# it. A synthetic does reproduce it, deterministically, with no sleep and no
+# filesystem, provided the match is early enough that output remains. That is
+# why lib-sigpipe-verdict.sh can afford to run a calibration before EVERY clean
+# verdict — route 2 is cheap where route 1 is not.
+#
+# A KNOWN-BAD calibration case still cannot be a LIVE FILE: on a fast host whose
+# match happens to be late, no pipeline SIGPIPEs and the case would silently
+# stop being bad. Arm 1 keeps the deliberately slowed producer, which forces the
+# defect irrespective of filesystem — the causal control promoted into a
+# fixture, and now one of two independent routes rather than the only one.
 #
 # Arm 5 is the teeth: it re-runs arm 1 through the BROKEN eval form and requires
 # it to MISS. Without that, a check that measures nothing passes arms 1-4 by
@@ -45,6 +57,7 @@ bad() { echo "FAIL: $1" >&2; fail=$((fail+1)); }
 # shellcheck disable=SC1090
 . "$CHECK"
 
+
 # Scratch lives INSIDE the checkout on purpose: it must inherit the checkout's
 # filesystem, since that is the variable that decides the answer. A /tmp scratch
 # would be ext4 on this host and would not represent what the gate actually runs.
@@ -60,11 +73,17 @@ case "$v" in
     *) bad "the known-bad case was not caught — the check cannot see a 141: $v" ;;
 esac
 
-# 2. A fast producer that matches is clean.
+# 2. NO 141 OBSERVED IS NOT A CLEAN BILL. This arm used to assert
+#    `measured-clean:` for a fast producer under PIPE_BUF, and that verdict no
+#    longer exists. 0 of REPS means NOT OBSERVED: the identical pipeline reads
+#    40/40 on one locus and 0/40 on another, and no rep count separates "safe"
+#    from "unsafe with a low observation rate" without a reference at this
+#    site's own producer size and consumer — which is the site itself.
 v="$(REPS=3 measure_pipeline fx 2 "cat $W/small.txt" "-q 'NEEDLE_HERE'")"
 case "$v" in
-    measured-clean:*) ok "a fast producer whose consumer matches is measured-clean ($v)" ;;
-    *) bad "expected measured-clean, got: $v" ;;
+    unmeasured:*not-observed*) ok "no 141 observed reads unmeasured, NOT clean ($v)" ;;
+    measured-clean:*)          bad "the clean verdict is back — it is the only verdict that can be false: $v" ;;
+    *)                         bad "expected unmeasured:not-observed, got: $v" ;;
 esac
 
 # 3. No match today is NOT safety — it is having nothing to report.
@@ -91,6 +110,7 @@ if [ "$broken" = "1" ]; then
 else
     bad "CONTROL failed: evaled pipeline reported ${broken} PIPESTATUS elements; this fixture's arm 1 may be passing for the wrong reason"
 fi
+
 
 echo "sigpipe-verdict-measured: $pass passed, $fail failed"
 [ "$fail" = 0 ] || exit 1

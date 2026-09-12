@@ -322,16 +322,39 @@ credential_channel_verdict() {
   if git_dir="$(git rev-parse --git-dir 2>/dev/null)"; then
     cred_file="${git_dir}/.gh-credentials"
     if [ -s "$cred_file" ]; then
-      echo "ok:gh-credentials-store"
+      # ORDER 1092-uv3k. `unverified:`, not `ok:`. THIS ARM VERIFIES NOTHING —
+      # it reports that a store file EXISTS and is non-empty. The string was
+      # always narrow and truthful; the prefix was not, because every consumer
+      # pattern-matches on the prefix rather than reading the noun.
+      #
+      # MEASURED: `gh-keyring-push-verified` is referenced in exactly three
+      # files — this check, its fixture, and one comment in check-host-tools.sh
+      # — and NONE requires it. The dispatch preflight every host runs triggers
+      # on `blocked:*` (advance-work-from-plan/SKILL.md:247), so an unverified
+      # arm sails through silently and reads as a credential green.
+      #
+      # esmeraldinha's dead token was never caught by this check for exactly
+      # that reason: their host had a non-empty store file, so arm 4 — the only
+      # arm that probes anything — had never run there.
+      #
+      # THIS RENAME CHANGES NO CONTROL FLOW, deliberately. It cannot false-red
+      # any host, which is why it is safe to land before the real work: arm 1
+      # needs a bounded probe of ITS OWN channel (yoga measured a host where the
+      # store credential authenticates while the keyring token is invalid, so a
+      # fall-through to arm 4 would block a host over a channel git is not
+      # using). Tightening the dispatch rule to require a verified verdict comes
+      # only after that, or it strands store-file hosts with no arm to satisfy.
+      echo "unverified:gh-credentials-store"
       return 0
     fi
   fi
   if [ -n "${GH_TOKEN:-}" ]; then
-    echo "ok:gh-token-env"
+    # Unverified for the same reason: a variable is set. Nothing was probed.
+    echo "unverified:gh-token-env"
     return 0
   fi
   if [ -n "${GITHUB_TOKEN:-}" ]; then
-    echo "ok:github-token-env"
+    echo "unverified:github-token-env"
     return 0
   fi
   if [ "${TILLANDSIAS_CRED_SKIP_GH:-0}" != "1" ] \
@@ -564,11 +587,12 @@ credential_channel_verdict() {
         echo "[check-credential-channel] THE TOKEN WAS REJECTED BY GITHUB — the keyring is not the problem." >&2
         echo "  \`gh api user\` returned 401 against the stored credential. The secret was" >&2
         echo "  retrieved fine; GitHub refused it. Look at the ACCOUNT, not the keyring:" >&2
-        echo "  the token is expired, revoked, or had its scopes/SSO authorisation withdrawn." >&2
+        echo "  the token was revoked, expired, or evicted by GitHub's 10-token OAuth app" >&2
+        echo "  cap across multi-host logins (order 1025-a896)." >&2
         echo "  gh's own message says \"The token in keyring is invalid\", which names the" >&2
         echo "  layer it OBSERVED rather than the one that FAILED (894-scxy). Three hosts" >&2
         echo "  diagnosed the keyring from that string on 2026-08-25; the keyring was healthy." >&2
-        echo "  REMEDY:  gh auth refresh   # or: gh auth login" >&2
+        echo "  REMEDY:  gh auth login" >&2
         echo "  Then re-run this guard. Do NOT go looking at secret-service." >&2
         echo "blocked:credential-rejected-by-github"
         return 1 ;;

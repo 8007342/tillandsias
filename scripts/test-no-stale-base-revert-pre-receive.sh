@@ -60,6 +60,14 @@ chmod +x "$tmp/origin.git/hooks/pre-receive"
 # consumes stdin because the real helper does.
 printf '#!/bin/sh\ncat >/dev/null\nexit 0\n' > "$tmp/origin.git/hooks/tillandsias-relay-refs"
 chmod +x "$tmp/origin.git/hooks/tillandsias-relay-refs"
+# Pin the BARE REMOTE's hooks path to its OWN hooks dir (order 1022-73pk).
+# An ambient GLOBAL `core.hooksPath` — this forge sets one — redirects hook
+# lookup for every repository, freshly-created bare remotes included, so the
+# copied pre-receive below would be silently ignored and every REFUSAL arm
+# would read as ACCEPTED. The client-half fixture (1000-rqmx) already pins its
+# worktree the same way; the receiving half must too, or a host with that
+# config sees a "green" fixture that never ran the hook it claims to test.
+git -C "$tmp/origin.git" config core.hooksPath "$tmp/origin.git/hooks"
 
 git init -q -b main "$tmp/work"
 cd "$tmp/work" || exit 2

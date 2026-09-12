@@ -387,4 +387,4 @@ The legacy keyring + `tillandsias-github-token` podman secret path was removed i
 - `runtime/wsl2-provisioning.md` — sibling architecture surrounding the Vault container on Windows
 - `runtime/vz-framework-provisioning.md` — sibling architecture on macOS
 - `openspec/specs/tillandsias-vault/spec.md` — normative contract with RESEARCH items
-- `docs/cheatsheets/tillandsias-secrets-architecture.md` — current Linux keyring flow (to be retired in Phase 6)
+- `utils/tillandsias-secrets-architecture.md` — current Linux keyring flow (to be retired in Phase 6)

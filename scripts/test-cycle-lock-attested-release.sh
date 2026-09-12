@@ -40,7 +40,11 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOCKSH="${TILLANDSIAS_LOCK_SCRIPT:-$ROOT/scripts/cycle-checkout-lock.sh}"
 pass=0; fail=0
 ok()  { echo "ok: $1"; pass=$((pass + 1)); }
-bad() { echo "FAIL: $1" >&2; fail=1; }
+# ORDER 1091-zh6d: INCREMENT, do not SET. This read `fail=1`, so the summary
+# printed "1 failed" however many arms failed — a boolean wearing a count's
+# clothing. Exit status was always right; the number never was, and a reader
+# comparing "1 failed" against two FAIL lines has to decide which to believe.
+bad() { echo "FAIL: $1" >&2; fail=$((fail + 1)); }
 
 WORK="$(mktemp -d)"
 # A long-lived stand-in for the agent harness: a real live pid we can point the
@@ -157,6 +161,55 @@ out="$(run "$$" mark-attested)"
 case "$out" in
     ok:checkout-lock:no-lock-held) ok "mark-attested with no lock is a clean no-op" ;;
     *) bad "no-lock mark-attested did not report cleanly: $out" ;;
+esac
+
+# ── 6. THE BARE PATH, which had no arm at all (order 1091-zh6d) ───────────
+# THE HELPER ABOVE SETS TILLANDSIAS_CYCLE_HOLDER_PID ON EVERY INVOCATION, so
+# every arm 0-5 exercises the recipe path and NONE exercises the path an agent
+# takes by typing the obvious command. That is why five escapes, a tri-state
+# ancestry walk and a documented anchor coexisted with a lock that read `free`
+# in practice: the defect lives precisely where the fixture does not go.
+#
+# Deliberately NOT routed through run(): using the helper here would re-supply
+# the variable and re-test arm 1.
+rm -rf "$LOCKD"
+bare="$( cd "$REPO" && TILLANDSIAS_CYCLE_STATE_DIR="$WORK/state" \
+         env -u TILLANDSIAS_CYCLE_HOLDER_PID -u CLAUDE_PID \
+         ./scripts/cycle-checkout-lock.sh acquire --lane prompt --source bare 2>&1 )"
+case "$bare" in
+    warn:checkout-lock:acquired-unverified-anchor:*)
+        ok "the bare invocation warns that its anchor is unverified" ;;
+    ok:checkout-lock:acquired:*)
+        bad "the bare invocation still reports a plain success over a dying anchor: $bare" ;;
+    *)
+        bad "the bare invocation produced an unexpected verdict: $bare" ;;
+esac
+case "$bare" in
+    *TILLANDSIAS_CYCLE_HOLDER_PID*) ok "the warning names the variable that fixes it" ;;
+    *) bad "the warning does not name the remedy: $bare" ;;
+esac
+
+# ── 7. NEGATIVE CONTROL: the harness env var makes the bare path CORRECT ──
+# Without this, arm 6 is satisfiable by warning unconditionally — including on
+# the recipe path, which would train every host to ignore the warning.
+rm -rf "$LOCKD"
+harness="$( cd "$REPO" && TILLANDSIAS_CYCLE_STATE_DIR="$WORK/state" \
+            env -u TILLANDSIAS_CYCLE_HOLDER_PID CLAUDE_PID="$$" \
+            ./scripts/cycle-checkout-lock.sh acquire --lane prompt --source harness 2>&1 )"
+case "$harness" in
+    ok:checkout-lock:acquired:*)
+        ok "CONTROL: CLAUDE_PID alone yields a clean acquire, no warning" ;;
+    *) bad "the harness-env anchor did not acquire cleanly: $harness" ;;
+esac
+
+# ── 8. NEGATIVE CONTROL: the documented recipe is still clean ─────────────
+# The fix must not make the path every coordinator cycle uses noisy.
+rm -rf "$LOCKD"
+recipe="$(run "$$" acquire --lane prompt --source recipe)"
+case "$recipe" in
+    ok:checkout-lock:acquired:*)
+        ok "CONTROL: the documented explicit anchor is still a clean acquire" ;;
+    *) bad "the documented recipe regressed: $recipe" ;;
 esac
 
 echo "cycle-lock-attested-release: $pass passed, $fail failed"

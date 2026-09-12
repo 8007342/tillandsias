@@ -43,7 +43,22 @@ STUB
     chmod +x "$W/stub.sh"
 }
 
-_run() { TILLANDSIAS_XBRANCH_CHECK="$W/stub.sh" bash scripts/select-work-batch.sh linux --budget 3 2>&1; }
+# TILLANDSIAS_HOST_TIER IS PINNED, and that is this fixture's second live-state
+# dependency, not its first. The comment below records removing the CROSS-BRANCH
+# checker's dependency with a clean stub. The TIER GATE (847-wgy4) sits UPSTREAM
+# of that stub and was never covered: on a low-end host the selector's pool is
+# exactly the [low-end]-tagged work, so when none is claimable it correctly emits
+#   refused:no-tier-work: ... the mandate forbids the general queue
+# and this fixture's baseline read that legitimate refusal as an empty batch.
+#
+# It therefore failed on ESMERALDINHA and passed everywhere else, which is why it
+# reached trunk: the arms are sound, only the precondition was host-dependent.
+# Verified both ways on that host — 3/6 unpinned, 6/6 pinned.
+#
+# The tier is not this fixture's subject. Its subject is what the selector does
+# with a batch once it HAS one, so pinning the tier removes a variable that
+# decides whether the test can run at all on the host that runs it.
+_run() { TILLANDSIAS_HOST_TIER=general TILLANDSIAS_XBRANCH_CHECK="$W/stub.sh" bash scripts/select-work-batch.sh linux --budget 3 2>&1; }
 
 # ── 0. BASELINE: the UNFILTERED batch, taken with the clean stub ───────────
 # NOT with the live checker. The baseline is the batch before any cross-branch
@@ -59,7 +74,13 @@ n_base="$(printf '%s\n' "$base" | grep -c '^packet' || true)"
 if [ "${n_base:-0}" -ge 1 ]; then
     ok "the selector emits a batch ($n_base packet(s)) — the arms below have a subject"
 else
-    bad "the selector emitted no packets; every arm below would be vacuous"
+    # NAME WHAT THE SELECTOR ACTUALLY SAID. This arm went red on a low-end host
+    # and the message — "emitted no packets" — described the symptom while the
+    # selector had printed its exact reason on the line above. Diagnosing it
+    # cost an hour that the refusal string would have closed in a second. Still
+    # a FAIL and not a skip (a step that cannot run must refuse, not pass), but
+    # a refusal has to carry the reason it was handed.
+    bad "the selector emitted no packets; every arm below would be vacuous — it said: $(printf '%s\n' "$base" | grep -m1 -E '^(refused|blocked):' || printf '(no typed refusal; first line: %s)' "$(printf '%s\n' "$base" | head -1)")"
 fi
 
 # ── 1. NOTHING HELD: the batch is untouched ───────────────────────────────

@@ -1,0 +1,22 @@
+# Gate step 1073-dqtx — data, not code (order 1072-b7eq).
+#
+# A build verdict, `podman image exists` and a size in `podman images` all
+# agreed an image was fine while a referenced overlay layer was missing from
+# storage; only inspect and run reached the truth. Three green signals over an
+# artifact that could not start, and anything gating on build success proceeds
+# against it.
+#
+# The fixture is hermetic — it builds `FROM scratch` into an isolated
+# `--root` and removes a layer directory there — so it never touches the
+# host's real container storage, which on a workstation holds the toolbox the
+# fleet compiles in. It SKIPs with a named reason where podman is absent or a
+# scratch store cannot be built, rather than reddening a host for a defect it
+# does not have.
+#
+# STEP_SCRIPT is a LITERAL path on purpose: a binding assembled from a
+# variable is invisible to every name-based scan, including the
+# bound-or-retired guard (1063-nraf). Keep it a plain string.
+STEP_DESC="Checking a built image is usable, not merely present (1073-dqtx)"
+STEP_SCRIPT="scripts/test-image-usability-check.sh"
+STEP_ERROR="the usability check no longer refuses an image whose overlay layer is missing, or it refuses an intact one — a build verdict can again stand over an unrunnable artifact (1073-dqtx)"
+STEP_OK="Image usability check passed"

@@ -191,6 +191,63 @@ STUB
     rm -rf "$D"
 fi
 
+# ── 6. UNREACHABLE ORIGIN: the copy must still exist locally (1103-i7xq) ────
+# THE ARM THIS FIXTURE NEVER HAD, and the reason the defect survived: every
+# arm above gives the script a working local bare as `origin`, so the push
+# always succeeds and the push-failure path was never executed. The script
+# pushed the commit straight to origin and created no local ref, so a failed
+# push left NO COPY — the object unreferenced and unreachable.
+#
+# That is inverted for this script's purpose. It exists because refusing to
+# touch dirt protects it from the agent and not from a fresh clone (872-c9nd),
+# and the hosts most likely to strand work are the ones that cannot push:
+# macbookneo was credential-blocked for a full day (1025-a896), esmeraldinha's
+# token went 401 mid-session.
+if want unreachable-origin; then
+    D="$(mktemp -d "${TMPDIR:-/tmp}/salvage-net-unreach.XXXXXX")"
+    mk_fixture "$D"
+    # Point origin at nothing. The dirt is what a stranded cycle would hold.
+    ( cd "$D/work" && git remote set-url origin "$D/does-not-exist.git" )
+    echo edited > "$D/work/tracked.txt"
+    echo precious > "$D/work/untracked.txt"
+    before="$(cd "$D/work" && find . -path ./.git -prune -o -type f -print | sort | xargs sha256sum | sha256sum)"
+    out6="$(TILLANDSIAS_SALVAGE_ROOT="$D/work" bash "$SALVAGE" unreachable 2>/dev/null | tail -1)"
+    rc6=$?
+    after="$(cd "$D/work" && find . -path ./.git -prune -o -type f -print | sort | xargs sha256sum | sha256sum)"
+
+    case "$out6" in
+        ok:salvaged-local:refs/heads/salvage/*/*-unreachable:*)
+            ok "an unreachable origin still salvages, with a distinct verdict" ;;
+        ok:salvaged:*)
+            bad "reported a plain salvage though the push could not have landed: $out6" ;;
+        *)
+            bad "unreachable-origin verdict: $out6" ;;
+    esac
+
+    # EXIT 0 IS PART OF THE FIX. A local copy is a real copy; exiting non-zero
+    # tells the caller nothing was saved and is how a host abandons the one
+    # thing standing between it and 872-c9nd.
+    [ "$rc6" -eq 0 ] && ok "a local-only salvage exits 0" \
+        || bad "local-only salvage exited $rc6, want 0"
+
+    # THE CONTENT IS THE POINT, not the ref. Without this the arm passes on a
+    # ref pointing at an empty tree.
+    ref6="${out6#ok:salvaged-local:}"; ref6="${ref6%:*}"
+    if git -C "$D/work" ls-tree -r --name-only "$ref6" 2>/dev/null | grep -qx untracked.txt; then
+        ok "the untracked file is inside the local salvage commit"
+    else
+        bad "the local salvage ref does not contain the untracked file"
+    fi
+
+    # NEGATIVE CONTROL: a fix that reached for the worktree to recover from a
+    # push failure would trade data loss for corruption.
+    [ "$before" = "$after" ] \
+        && ok "the worktree is byte-identical after a failed-push salvage" \
+        || bad "the failed-push path MUTATED the worktree"
+
+    rm -rf "$D"
+fi
+
 if [ "$fail" -eq 0 ]; then
     echo "ok:salvage-net-fixture:all"
     exit 0

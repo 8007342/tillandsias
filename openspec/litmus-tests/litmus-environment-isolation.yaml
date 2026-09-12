@@ -1,4 +1,5 @@
 # @trace spec:environment-runtime, spec:forge-launch
+# freshness: auditor=forge-forge-tillandsias-opencode-20260906t040047z date=2026-09-06 verdict=refreshed scope=structural re-validation only: spec environment-runtime binding alive; env allowlist still covers the whole committed image env surface (CARGO_HOME,TILLANDSIAS_CHEATSHEETS,LANG,HOME,USER + base vars); spec:forge-launch is the project-wide virtual id tracked at observability-convergence spec:161, not component drift; behavioral run still impossible this host — services-no-podman cannot meet the podman+image preconditions
 # freshness: auditor=linux-macuahuitl-opencode-20260802T0519Z date=2026-08-02 verdict=refreshed scope=live post-build run passed 4/4; explicit env allowlist, session leak rejection, image warmup, and cargo PATH checks remain meaningful and complete
 # Verify the forge container sees ONLY a minimal environment — no host env
 # leakage (session/display vars, DOCKER_HOST, XDG_*). Rewritten for order

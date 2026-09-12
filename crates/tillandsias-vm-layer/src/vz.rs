@@ -1176,9 +1176,70 @@ if [ -r /usr/local/bin/tillandsias-headless ]; then
   [ -n "$GUEST_BIN_SHA" ] || GUEST_BIN_SHA=unreadable
 fi
 
+# ORDER 1084-x8ya CRITERION 3. WHETHER THE DAEMON IS RUNNING, RECORDED HERE
+# BECAUSE THE HOST CANNOT ASK.
+#
+# The handshake fails with `noise: input error`, which is snow's SIZE error
+# (Error::Input) and not its crypto error (Error::Decrypt / Error::Dh). A
+# response too short to hold the ephemeral key is what an ABSENT or CLOSED
+# listener produces, so "is anything listening" became the live question and
+# the host has no way to ask it: order 272 makes the wire the only channel and
+# the wire is the thing that is down.
+#
+# `is-active` EXITS NON-ZERO FOR A UNIT THAT IS NOT ACTIVE, which is a normal
+# answer and not an error. `|| true` keeps it from tripping `set -e` and the
+# ERR trap, which would convert this diagnostic into the abort it exists to
+# explain.
+#
+# INACTIVE IS NOT FAILED, AND THIS RECORD MUST NOT CONFLATE THEM. The literal
+# systemctl word is written verbatim — active, inactive, activating, failed —
+# because collapsing them is exactly the loss that cost this packet eight
+# hours. `tillandsias-headless-ready.service` in particular was started
+# `--no-block` a few lines above, so `activating` or `inactive` for it AT THIS
+# INSTANT is EXPECTED and says nothing is wrong.
+HEADLESS_STATE="$(systemctl is-active tillandsias-headless.service 2>/dev/null || true)"
+[ -n "$HEADLESS_STATE" ] || HEADLESS_STATE=unknown
+
+# `inactive` IS TWO STATES AND is-active CANNOT TELL THEM APART. A unit that
+# NEVER STARTED and one that started, bound 42420 and DIED both print
+# `inactive`. Recording only that word reproduces, one level down and inside
+# the instrument built to expose it, the exact conflation this packet exists to
+# punish.
+#
+# THE DISTINCTION IS THE POINT, not tidiness. `noise: input error` is snow's
+# SIZE error, which is what an absent OR closed listener produces — so "did the
+# daemon die" and "did it never run" are different explanations of the same
+# handshake failure, and this field exists to say which.
+#
+# These four survive the exit that `is-active` forgets:
+#   ExecMainStartTimestamp  EMPTY means it never started. Non-empty means it
+#                           ran, whatever it says now.
+#   ExecMainStatus          the exit code it died with.
+#   Result                  systemd's own verdict (success, exit-code, signal,
+#                           timeout...).
+#   NRestarts               whether it flapped rather than simply stopping.
+# Recorded VERBATIM and uninterpreted, same rule as the state word. Empty is
+# written as `empty` rather than omitted: an omitted field reads as
+# "not measured", and here the empty value IS the finding.
+_show() {
+  v="$(systemctl show -p "$1" --value tillandsias-headless.service 2>/dev/null || true)"
+  [ -n "$v" ] || v=empty
+  printf '%s' "$v"
+}
+HEADLESS_START_TS="$(_show ExecMainStartTimestamp)"
+HEADLESS_EXIT_STATUS="$(_show ExecMainStatus)"
+HEADLESS_RESULT="$(_show Result)"
+HEADLESS_NRESTARTS="$(_show NRestarts)"
+READY_STATE="$(systemctl is-active tillandsias-headless-ready.service 2>/dev/null || true)"
+[ -n "$READY_STATE" ] || READY_STATE=unknown
+
+# A BOUNDED excerpt, prefixed per line so a multi-line value cannot be mistaken
+# for further records by anything parsing this file line-wise.
+HEADLESS_LOG="$(journalctl -u tillandsias-headless.service -n 20 --no-pager 2>/dev/null | sed 's/^/log /' || true)"
+
 # Written LAST on purpose. Anything after it could fail while the record says
 # complete, which would be a fresh instance of this packet's defect.
-{ echo "tillandsias-provision-state v1"; echo "written_at $(date -u +%s)"; echo "written_at_iso $(date -u +%FT%TZ)"; echo "phase complete"; echo "guest_binary_sha256 $GUEST_BIN_SHA"; } > "$PROV_STATE" 2>/dev/null || true
+{ echo "tillandsias-provision-state v1"; echo "written_at $(date -u +%s)"; echo "written_at_iso $(date -u +%FT%TZ)"; echo "phase complete"; echo "guest_binary_sha256 $GUEST_BIN_SHA"; echo "headless_service_state $HEADLESS_STATE"; echo "headless_exec_main_start_timestamp $HEADLESS_START_TS"; echo "headless_exec_main_status $HEADLESS_EXIT_STATUS"; echo "headless_result $HEADLESS_RESULT"; echo "headless_nrestarts $HEADLESS_NRESTARTS"; echo "ready_service_state $READY_STATE"; echo "ready_service_state_note started --no-block; not-yet-active here is EXPECTED"; [ -n "$HEADLESS_LOG" ] && printf '%s\n' "$HEADLESS_LOG"; } > "$PROV_STATE" 2>/dev/null || true
 "#
     .replace("__SECURE_CONTROL_WIRE__", secure_control_wire)
     // ORDER 1055-e8ie. Substituted rather than interpolated: this script is a

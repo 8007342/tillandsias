@@ -105,6 +105,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "pipeline",
     "query",
     "ready",
+    "forgotten",
     "select-rows",
     "split-parents",
     "experts-probe",
@@ -314,6 +315,15 @@ const USAGE: &str = concat!(
     "                                     packets each id blocks, counted over EVERY ready packet\n",
     "                                     rather than one role's, because a packet in another column\n",
     "                                     is frequently the thing this one waits on.\n",
+    "           forgotten [--limit N] [--min-age-days N] [--now-epoch S]\n",
+    "                                     ORDER 718-jqt5. READY packets the fleet has stopped\n",
+    "                                     noticing, as TSV: order, packet_id, age_days, leased,\n",
+    "                                     blocking. Eventless first (oldest ORDER first, since\n",
+    "                                     next-order mints monotonically), then stalest, then\n",
+    "                                     fewest dependents — a leaf is what a residual-maximising\n",
+    "                                     selector never reaches. Milestones excluded: they are\n",
+    "                                     containers, not claimable work. Total order, no seed:\n",
+    "                                     the same ledger yields the same list on every host.\n",
     "           select-rows [--claimable-by R] [--release V] [--limit N]\n",
     "                                     ORDER 632-retq. The batch selector's projection, as TSV:\n",
     "                                     rank, release_target, order, packet_id, urgency, release.\n",
@@ -1372,6 +1382,30 @@ fn query_json_projection(packet: &serde_yaml::Value) -> serde_json::Value {
     serde_json::Value::Object(obj)
 }
 
+/// ORDER 1115-yvrq. Does a host of `host_role` satisfy a packet's
+/// `pickup_role` requirement? Split out so it can be tested without a ledger,
+/// the same reason `expire_claim_candidates` and `forgotten_sort` are.
+///
+/// The specific satisfies the general, never the reverse:
+///   host linux-immutable, requires linux           -> true
+///   host linux-immutable, requires linux-immutable -> true
+///   host linux-immutable, requires linux-mutable   -> FALSE
+///   host linux,           requires linux-mutable   -> FALSE
+///
+/// Separators are normalised because the fleet spells one role three ways:
+/// packets use hyphens, scripts/host-capability-probe.sh emits underscores,
+/// and the worker skill's host table passes a bare platform.
+fn role_satisfies(requirement: &str, host_role: &str) -> bool {
+    let req = requirement.trim().to_ascii_lowercase().replace('_', "-");
+    let have = host_role.trim().to_ascii_lowercase().replace('_', "-");
+    if req == "any" || req == have {
+        return true;
+    }
+    // A TOKEN boundary, not a bare prefix: `linux` must not satisfy a
+    // requirement of `linuxfoo`, which a plain starts_with would allow.
+    have.starts_with(&req) && have.as_bytes().get(req.len()) == Some(&b'-')
+}
+
 /// ORDER 582-26mm + 606-e2hg. Filter the FOLDED ledger by status and
 /// desired_release (exact), pickup_role (case-insensitive substring),
 /// capability_tags (every given tag must be present), then cap at `limit`.
@@ -1418,18 +1452,46 @@ fn query_packets<'a>(
                     .map(|pr| pr.to_ascii_lowercase().contains(&want))
                     .unwrap_or(false)
             };
+            // ORDER 1115-yvrq. CLAIMABILITY IS SATISFACTION, NOT CONTAINMENT,
+            // and the old test had the direction backwards.
+            //
+            // COORDINATOR RULING, macuahuitl 2026-09-06: `pickup_role` means
+            // REQUIRES, not AUTHORED-ON. A selector exists to offer a host work
+            // it can actually do, and authorship is already recoverable from the
+            // fragment's host field and the git author, so reading the field as
+            // provenance makes it useless for its one job. Do not reopen this
+            // without a newer ruling.
+            //
+            // Under REQUIRES the question is "does this host's role SATISFY the
+            // packet's requirement", so the packet's value must be a prefix of
+            // the host's role on a token boundary — the specific host satisfies
+            // the general requirement, never the reverse:
+            //
+            //   host linux-immutable, requires linux            -> yes
+            //   host linux-immutable, requires linux-immutable  -> yes
+            //   host linux-immutable, requires linux-mutable    -> NO
+            //   host linux,           requires linux-mutable    -> NO
+            //
+            // The old `pickup_role.contains(host_role)` inverted that: "linux"
+            // is a substring of "linux-mutable", so an immutable host was
+            // offered mutable-only work. MEASURED on yoga 2026-09-06:
+            // `--claimable-by linux` returned 302 rows including 1025-a896
+            // (pickup_role linux-mutable, an investigation needing a writable
+            // /usr on a Silverblue host that has none), where
+            // `--claimable-by linux-immutable` returned 172 and excluded it.
+            //
+            // SEPARATORS ARE NORMALISED because the fleet spells the same role
+            // three ways: packets use hyphens (`linux-mutable`),
+            // scripts/host-capability-probe.sh emits underscores
+            // (`linux_immutable`), and the worker skill's host table passes the
+            // bare platform. Both spellings happened to give the right answer
+            // here by coincidence of substring matching; folding `_` to `-`
+            // makes that deliberate.
             match (role, claimable_by) {
                 (Some(r), _) => matches_field(r),
-                (None, Some(c)) => {
-                    matches_field(c) || {
-                        // `any` must be the WHOLE field, not a substring: a
-                        // pickup_role of "company-lane" contains "any" and is
-                        // emphatically not claimable by everyone.
-                        str_field(p, "pickup_role")
-                            .map(|pr| pr.trim().eq_ignore_ascii_case("any"))
-                            .unwrap_or(false)
-                    }
-                }
+                (None, Some(c)) => str_field(p, "pickup_role")
+                    .map(|pr| role_satisfies(pr, c))
+                    .unwrap_or(false),
                 (None, None) => true,
             }
         })
@@ -5435,6 +5497,220 @@ fn main() {
                 emit(&line(&ledger, p));
             }
         }
+        "forgotten" => {
+            // ORDER 718-jqt5 criterion 1. THE DETERMINISTIC HALF of the
+            // story-shaped query surface: which ready packets has the fleet
+            // stopped noticing?
+            //
+            // "Forgotten" is a property of the LEDGER, not a judgement, which is
+            // why it belongs here and not in a prompt. The packet's framing is
+            // explicit that inference should PHRASE and CLUSTER the result and
+            // never decide it — otherwise the entropy stops being reproducible
+            // and a batch stops being replayable from its seed.
+            //
+            // Three inputs, each computable exactly:
+            //   age_days   days since the packet's newest event (never = oldest)
+            //   leased     has anything ever claimed it
+            //   blocking   how many ready packets depend on it
+            //
+            // WHY MINIMAX MISSES THESE. The selector scores epics by
+            // `2*urgency + 1.5*blocking + neglect`, so a packet with NO
+            // dependents contributes almost nothing to its epic's residual and
+            // is never the reason an epic wins. Low blocking weight is not a
+            // sign of low value — it is a sign of being a leaf, and leaves are
+            // exactly what a residual-maximising selector never reaches.
+            //
+            // A SEPARATE PROJECTION FROM select-rows, DELIBERATELY, and stated
+            // because the opposite mistake is the one this fleet keeps making
+            // (1081-gynk): select-rows answers "what may I pick", filtered to
+            // dependency-clear and unleased. This answers "what has nobody
+            // touched", which must INCLUDE packets select-rows filters out —
+            // a blocked or leased-then-abandoned packet is more forgotten, not
+            // less. Two questions, two projections, and neither is the other's
+            // subset.
+            // Parsed locally rather than through parse_query_options: this
+            // subcommand needs --min-age-days and --now-epoch, and neither
+            // belongs on the shared struct every other query arm reads.
+            let mut limit: usize = 20;
+            let mut min_age_days: i64 = 0;
+            let mut now: i64 = now_epoch();
+            let mut i = 1;
+            while i < args.len() {
+                let need = |i: usize| -> String {
+                    match args.get(i + 1) {
+                        Some(v) => v.clone(),
+                        None => {
+                            eprintln!("error: {} needs a value", args[i]);
+                            std::process::exit(2);
+                        }
+                    }
+                };
+                match args[i].as_str() {
+                    "--limit" => {
+                        limit = need(i).parse().unwrap_or_else(|_| {
+                            eprintln!("error: --limit needs a non-negative integer");
+                            std::process::exit(2);
+                        });
+                        i += 1;
+                    }
+                    "--min-age-days" => {
+                        min_age_days = need(i).parse().unwrap_or_else(|_| {
+                            eprintln!("error: --min-age-days needs an integer");
+                            std::process::exit(2);
+                        });
+                        i += 1;
+                    }
+                    "--now-epoch" => {
+                        now = need(i).parse().unwrap_or_else(|_| {
+                            eprintln!("error: --now-epoch needs unix seconds");
+                            std::process::exit(2);
+                        });
+                        i += 1;
+                    }
+                    other => {
+                        eprintln!("error: unknown forgotten flag '{other}'");
+                        std::process::exit(2);
+                    }
+                }
+                i += 1;
+            }
+
+            // Dependents, counted over EVERY ready packet — the same edge set
+            // blocking-counts uses, for the same reason it does not fold into
+            // select-rows.
+            let mut dependents: std::collections::BTreeMap<String, usize> =
+                std::collections::BTreeMap::new();
+            for p in query_packets(&ledger, Some("ready"), None, None, None, &[], usize::MAX) {
+                if let Some(deps) = p.get("depends_on").and_then(serde_yaml::Value::as_sequence) {
+                    for d in deps {
+                        let key = match d {
+                            serde_yaml::Value::String(s) => s.clone(),
+                            serde_yaml::Value::Number(n) => n.to_string(),
+                            _ => continue,
+                        };
+                        *dependents.entry(key).or_insert(0) += 1;
+                    }
+                }
+            }
+
+            // (age_days, order_num, blocking, order, packet_id, leased)
+            let mut rows: Vec<ForgottenRow> = Vec::new();
+            for p in query_packets(&ledger, Some("ready"), None, None, None, &[], usize::MAX) {
+                let id = ledger.id_of(p).to_string();
+                let order = p
+                    .get("order")
+                    .map(|o| match o {
+                        serde_yaml::Value::Number(n) => n.to_string(),
+                        serde_yaml::Value::String(s) => s.clone(),
+                        _ => "?".to_string(),
+                    })
+                    .unwrap_or_else(|| "?".to_string());
+
+                // MILESTONES ARE CONTAINERS, NOT FORGOTTEN WORK. A milestone
+                // holds criteria and is never claimed for implementation
+                // (ambitious_milestone_reduction.milestone_packet_semantics);
+                // its children are. MEASURED: 15 ready milestones would
+                // otherwise sit in this list, and every one of them is a row a
+                // reader must learn to skip. Excluded here rather than left for
+                // the caller, because a projection whose top rows are all
+                // un-actionable teaches people to stop reading it.
+                if p.get("kind").and_then(serde_yaml::Value::as_str) == Some("milestone") {
+                    continue;
+                }
+
+                let mut newest: Option<i64> = None;
+                let mut leased = false;
+                if let Some(evs) = p.get("events").and_then(serde_yaml::Value::as_sequence) {
+                    for ev in evs {
+                        if let Some(ts) = ev.get("ts").and_then(serde_yaml::Value::as_str)
+                            && let Some(e) = answer::iso8601_to_epoch(ts)
+                            && newest.is_none_or(|cur| e > cur)
+                        {
+                            newest = Some(e);
+                        }
+                        let ty = ev.get("type").and_then(serde_yaml::Value::as_str);
+                        if ty == Some("claim") {
+                            leased = true;
+                        }
+                        // The claim CONVENTION is a note whose summary says so
+                        // (943-unii): a `claim` type is the audit record, and
+                        // plenty of real claims are notes. Both count as "someone
+                        // has had hands on this".
+                        if let Some(sum) = ev.get("summary").and_then(serde_yaml::Value::as_str)
+                            && sum.contains("claimed for cycle")
+                        {
+                            leased = true;
+                        }
+                    }
+                }
+                // MEASURED 2026-09-06: 461 of 461 ready packets carry NO events
+                // at all, so "age since last event" is undefined for essentially
+                // the whole ledger and cannot rank anything on its own. That is
+                // a finding about the ledger, not a gap in the query — most
+                // packets are declared and never touched again until claimed.
+                //
+                // The ORDER TOKEN carries the missing signal. next-order mints
+                // monotonically (581-k3f9), so a lower order number is a packet
+                // filed longer ago; order 491 predates 1085 by construction.
+                // Eventless packets are therefore ranked oldest-first by order,
+                // which surfaces the genuinely ancient ones instead of the
+                // alphabetically unlucky.
+                let age_days = newest.map(|e| (now - e) / 86_400);
+                let order_num: i64 = order
+                    .chars()
+                    .take_while(|c| c.is_ascii_digit())
+                    .collect::<String>()
+                    .parse()
+                    .unwrap_or(i64::MAX);
+                let blocking = dependents.get(&id).copied().unwrap_or(0);
+                // --min-age-days filters on a MEASURED age; an eventless
+                // packet has no age to compare, and dropping it would hide the
+                // most-forgotten rows behind a flag meant to narrow the list.
+                if let Some(a) = age_days
+                    && a < min_age_days
+                {
+                    continue;
+                }
+                rows.push((age_days, order_num, blocking, order, id, leased));
+            }
+
+            // TOTAL ORDER, so the same ledger yields the same list on every host
+            // and every run (criterion 4's negative control depends on it):
+            // most-neglected first, then fewest dependents, then packet_id as
+            // the tiebreak — never insertion order, which is fragment-order and
+            // therefore host-dependent.
+            forgotten_sort(&mut rows);
+
+            let mut shown = 0usize;
+            for (age_days, _order_num, blocking, order, id, leased) in &rows {
+                if shown >= limit {
+                    break;
+                }
+                let age = match age_days {
+                    Some(a) => a.to_string(),
+                    None => "no-events".to_string(),
+                };
+                emit(&format!(
+                    "forgotten\t{order}\t{id}\tage_days={age}\tleased={}\tblocking={blocking}",
+                    if *leased { "yes" } else { "no" }
+                ));
+                shown += 1;
+            }
+            if shown == limit && rows.len() > shown {
+                emit(&format!(
+                    "  (stopped at --limit {}: {} row(s) match — this is a SAMPLE, not every \
+                     forgotten packet)",
+                    limit,
+                    rows.len()
+                ));
+            }
+            emit(&format!(
+                "summary: forgotten={} shown={} min_age_days={}",
+                rows.len(),
+                shown,
+                min_age_days
+            ));
+        }
         "blocking-counts" => {
             // ORDER 632-retq (rung 2). How many READY packets each id blocks.
             //
@@ -7111,6 +7387,45 @@ fn main() {
     log_cli_usage(&subcommand, "answered", start_time.elapsed().as_millis());
 }
 
+/// ORDER 718-jqt5. One `forgotten` row: (age_days, order_num, blocking,
+/// order, packet_id, leased).
+type ForgottenRow = (Option<i64>, i64, usize, String, String, bool);
+
+/// The TOTAL ORDER for `forgotten`, split out so it can be tested without a
+/// ledger — the same reason `child_env_with_home` and `expire_claim_candidates`
+/// are split out.
+///
+/// Determinism is the point, and it is stronger than the packet's criterion
+/// asked for. 718-jqt5's negative control says "the same seed yields the same
+/// set". This projection takes NO seed: the order is total, so the same ledger
+/// yields the same list on every host and every run, and reproducibility does
+/// not depend on remembering to record a seed. A seed belongs to the SAMPLING
+/// layer above this (which epics to spread across), not to the projection.
+///
+/// The rules, in order:
+///   1. eventless packets first — nothing has ever happened to them;
+///   2. within those, LOWEST ORDER first: `next-order` mints monotonically
+///      (581-k3f9), so a lower number was filed longer ago;
+///   3. within evented packets, GREATEST age first;
+///   4. then fewest dependents, because a leaf is what a residual-maximising
+///      selector never reaches;
+///   5. then packet_id — never insertion order, which is fragment order and
+///      therefore differs between hosts.
+fn forgotten_sort(rows: &mut [ForgottenRow]) {
+    rows.sort_by(|a, b| {
+        let bucket = |r: &ForgottenRow| if r.0.is_none() { 0u8 } else { 1u8 };
+        bucket(a)
+            .cmp(&bucket(b))
+            .then_with(|| match (a.0, b.0) {
+                (None, None) => a.1.cmp(&b.1),
+                (Some(x), Some(y)) => y.cmp(&x),
+                _ => std::cmp::Ordering::Equal,
+            })
+            .then(a.2.cmp(&b.2))
+            .then(a.4.cmp(&b.4))
+    });
+}
+
 /// ORDER 672-bz7u. The candidate selection for `expire-claims`, split out so
 /// the policy is unit-testable without a filesystem: given the folded ledger
 /// and a cutoff timestamp, partition every `in_progress` packet into
@@ -7564,6 +7879,165 @@ fn read_prose_source(path: &str) -> std::io::Result<String> {
 
 #[cfg(test)]
 mod tests {
+    use super::role_satisfies;
+
+    /// ORDER 1115-yvrq. THE DEFECT, as a test: an immutable host must not be
+    /// offered work that requires a mutable one. Before the fix the matcher
+    /// asked whether the requirement CONTAINED the host role, so "linux" was a
+    /// substring of "linux-mutable" and yoga — Fedora Silverblue, read-only
+    /// /usr — was offered 1025-a896.
+    #[test]
+    fn role_a_specific_host_does_not_satisfy_a_sibling_requirement() {
+        assert!(!role_satisfies("linux-mutable", "linux-immutable"));
+        assert!(!role_satisfies("linux-mutable", "linux"));
+        assert!(!role_satisfies("linux-immutable", "linux-mutable"));
+    }
+
+    /// The specific satisfies the general. This is the arm that makes the fix
+    /// a correction rather than a narrowing: a host declaring its precise role
+    /// must still be offered every packet asking only for the platform —
+    /// measured, an immutable host goes from 172 rows to 301, not down to 172.
+    #[test]
+    fn role_a_specific_host_satisfies_a_general_requirement() {
+        assert!(role_satisfies("linux", "linux-immutable"));
+        assert!(role_satisfies("linux", "linux-mutable"));
+        assert!(role_satisfies("linux", "linux"));
+        assert!(role_satisfies("macos", "macos"));
+    }
+
+    /// `any` is claimable by everyone, and remains a WHOLE-field test: a
+    /// pickup_role of "company-lane" contains "any" and is emphatically not
+    /// claimable by all (the precedent this fix preserves).
+    #[test]
+    fn role_any_is_universal_but_only_as_a_whole_field() {
+        assert!(role_satisfies("any", "linux-immutable"));
+        assert!(role_satisfies("any", "windows"));
+        assert!(!role_satisfies("company-lane", "linux"));
+    }
+
+    /// The fleet spells one role three ways — packets hyphenate,
+    /// host-capability-probe.sh underscores, the skill passes a bare platform.
+    /// Agreement must be deliberate rather than a coincidence of substring
+    /// matching.
+    #[test]
+    fn role_separators_are_normalised() {
+        assert!(role_satisfies("linux", "linux_immutable"));
+        assert!(role_satisfies("linux_immutable", "linux-immutable"));
+        assert!(!role_satisfies("linux_mutable", "linux-immutable"));
+    }
+
+    /// A TOKEN boundary, not a bare prefix. Without this, `linux` would
+    /// satisfy a requirement of `linuxfoo` and any future role sharing a
+    /// prefix would silently collide — the same shape as the `any` substring
+    /// bug this function inherited its caution from.
+    #[test]
+    fn role_matching_stops_at_a_token_boundary() {
+        assert!(!role_satisfies("linuxfoo", "linux"));
+        assert!(!role_satisfies("linux", "linuxfoo"));
+        assert!(role_satisfies("linux", "linux-foo"));
+    }
+
+    use super::{ForgottenRow, forgotten_sort};
+
+    fn row(age: Option<i64>, order: i64, blocking: usize, id: &str) -> ForgottenRow {
+        (
+            age,
+            order,
+            blocking,
+            order.to_string(),
+            id.to_string(),
+            false,
+        )
+    }
+
+    /// ORDER 718-jqt5 criterion 1. Eventless packets come FIRST — nothing has
+    /// ever happened to them — and within that bucket the LOWEST order wins,
+    /// because next-order mints monotonically so a lower number was filed
+    /// longer ago (581-k3f9).
+    #[test]
+    fn forgotten_puts_eventless_packets_first_oldest_order_first() {
+        let mut rows = vec![
+            row(Some(3), 900, 0, "recent-event"),
+            row(None, 1085, 0, "new-and-untouched"),
+            row(None, 151, 0, "ancient-and-untouched"),
+        ];
+        forgotten_sort(&mut rows);
+        let ids: Vec<&str> = rows.iter().map(|r| r.4.as_str()).collect();
+        assert_eq!(
+            ids,
+            vec!["ancient-and-untouched", "new-and-untouched", "recent-event"]
+        );
+    }
+
+    /// Among packets that DO have events, the stalest ranks first. Without this
+    /// the bucket rule above could be satisfied by ignoring age entirely.
+    #[test]
+    fn forgotten_ranks_evented_packets_by_descending_age() {
+        let mut rows = vec![
+            row(Some(2), 100, 0, "fresh"),
+            row(Some(90), 900, 0, "stale"),
+            row(Some(30), 500, 0, "middling"),
+        ];
+        forgotten_sort(&mut rows);
+        let ids: Vec<&str> = rows.iter().map(|r| r.4.as_str()).collect();
+        assert_eq!(ids, vec!["stale", "middling", "fresh"]);
+    }
+
+    /// A LEAF is what a residual-maximising selector never reaches: the epic
+    /// score weights `blocking` at 1.5, so a packet nothing depends on barely
+    /// moves its epic and is never the reason one wins. Fewest dependents
+    /// first, at equal age.
+    #[test]
+    fn forgotten_prefers_the_leaf_at_equal_age() {
+        let mut rows = vec![
+            row(None, 200, 7, "blocks-many"),
+            row(None, 200, 0, "blocks-nothing"),
+        ];
+        forgotten_sort(&mut rows);
+        assert_eq!(rows[0].4, "blocks-nothing");
+    }
+
+    /// THE NEGATIVE CONTROL 718-jqt5 ASKS FOR, and it is stronger than the
+    /// criterion. The criterion says "the same seed yields the same set"; this
+    /// projection takes no seed, so the order is total and the same input
+    /// yields the same output regardless of how it arrived. Shuffling the input
+    /// must change nothing — which is what rules out insertion order (fragment
+    /// order, and therefore host-dependent) leaking into the ranking.
+    #[test]
+    fn forgotten_is_reproducible_without_a_seed() {
+        let build = || {
+            vec![
+                row(None, 500, 1, "e"),
+                row(Some(10), 100, 0, "a"),
+                row(None, 200, 0, "c"),
+                row(Some(10), 900, 0, "b"),
+                row(None, 200, 3, "d"),
+            ]
+        };
+        let mut first = build();
+        forgotten_sort(&mut first);
+
+        let mut shuffled = build();
+        shuffled.reverse();
+        forgotten_sort(&mut shuffled);
+        assert_eq!(first, shuffled, "input order must not reach the ranking");
+
+        let mut rotated = build();
+        rotated.rotate_left(3);
+        forgotten_sort(&mut rotated);
+        assert_eq!(first, rotated);
+    }
+
+    /// Equal age AND equal blocking must still be a total order, or two hosts
+    /// can print the same set in different sequences and a batch stops being
+    /// replayable.
+    #[test]
+    fn forgotten_breaks_full_ties_on_packet_id() {
+        let mut rows = vec![row(None, 300, 0, "zeta"), row(None, 300, 0, "alpha")];
+        forgotten_sort(&mut rows);
+        assert_eq!(rows[0].4, "alpha");
+    }
+
     use super::*;
     use answer::{Citation, CitationKind, Confidence, Envelope, Freshness};
     use std::collections::BTreeMap;

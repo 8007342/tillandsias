@@ -237,6 +237,6 @@ unreachable path becomes JSON `null`).
 ## See also
 
 - `runtime/agent-startup-skills.md`
-- `windows-installer-prereqs.md`
-- `windows-native-dev-build.md`
+- `runtime/windows-installer-prereqs.md`
+- `runtime/windows-native-dev-build.md`
 - `runtime/socket-enclave-diagnostics.md`

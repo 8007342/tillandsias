@@ -334,12 +334,61 @@ _run() {
 }
 # Every passing case goes through this so the tally cannot drift from reality.
 _ok() { _fx_n=$((_fx_n + 1)); echo "ok: $1"; }
+# _expect_line asserts that STDOUT contains a whole line equal to $_want.
+#
+# 1076-kft9 (esmeraldinha) — instance, not a change to their packet. The
+# previous form had four defects in four lines, three of which made a FAILING
+# check report clean:
+#
+#   if _run "$@" 2>/dev/null | grep -qxF "$_want"; then ... else _run "$@" ...
+#
+#   (1) SIGPIPE. `grep -q` exits at its first match, so a producer with output
+#       still to write dies of SIGPIPE. MEASURED on macOS 2026-09-05: match on
+#       the first line -> rc=141; match on the last line -> rc=0, SAME CODE.
+#       A green run is therefore consistent with the defect being present, so
+#       this fixture can never be its own oracle.
+#   (2) TWO EXECUTIONS. The diagnostic re-ran the command, so the bytes printed
+#       on failure were not the bytes the assertion read.
+#   (3) The pipeline's producer status was discarded by `if`, so a crashing
+#       producer that printed the wanted line first still passed.
+#   (4) The obvious repair, `_out="$(_run "$@" 2>&1)"`, introduces a FOURTH:
+#       `grep -qxF` matches whole lines, so folding stderr into the captured
+#       text lets a DIAGNOSTIC satisfy the assertion. MEASURED with this file's
+#       own want-string `ok:litmus-coverage:2-spec(s)` emitted only on stderr —
+#       merged capture PASSES, separated capture FAILS. Separated is correct.
+#       Streams must be separated, not merged.
+#
+# The fix is the idiom THIS FILE ALREADY USES at lines 113-164 — capture each
+# stream to its own file, check them separately — whose comment at line 107
+# records that it exists because gawk/BSD-awk divergence "shipped green from
+# the Linux hosts and only the macOS gate caught it". The file learned
+# separated-stream capture once and forgot it forty lines later.
+#
+# PLATFORM: validated on macOS/arm64 under bash. Under MSYS Git Bash SIGPIPE
+# cannot be produced at all (esmeraldinha, 2026-09-05) — every arm reads clean
+# there for reasons unrelated to this code, so a clean re-run on Windows is not
+# evidence the defect never existed.
+#
+# `$_fx_dir/expect.err` rather than mktemp per call: five call sites would leak
+# one temp each, and this script installs no trap, so an early return or a
+# signal leaks whatever is outstanding.
 _expect_line() {
     _n="$1"; _want="$2"; shift 2
-    if _run "$@" 2>/dev/null | grep -qxF "$_want"; then
+    _el_err="$_fx_dir/expect.err"
+    _el_out="$(_run "$@" 2>"$_el_err")"; _el_rc=$?
+    if [ "$_el_rc" = 0 ] && grep -qxF "$_want" <<<"$_el_out"; then
         _ok "$_n"
     else
-        echo "FAIL: $_n — no line '$_want' in:"; _run "$@" 2>&1 | sed 's/^/    /'
+        if [ "$_el_rc" != 0 ]; then
+            echo "FAIL: $_n — command exited $_el_rc; stdout was:"
+        else
+            echo "FAIL: $_n — no line '$_want' in:"
+        fi
+        printf '%s\n' "$_el_out" | sed 's/^/    /'
+        if [ -s "$_el_err" ]; then
+            echo "  stderr (NOT searched — the assertion reads stdout only):"
+            sed 's/^/    /' "$_el_err"
+        fi
         _fx_fail=1
     fi
 }

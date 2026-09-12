@@ -418,6 +418,27 @@ verification:
           rule as "check WHICH refusal you got" pointed at the mutation instead
           of the outcome. Both fail the same way: a step that consults an
           external fact instead of REQUIRING it.
+        earned_by_second: >
+          2026-09-06, yoga, and it SHARPENS the rule: observing that the subject
+          changed is necessary and NOT sufficient — it must have changed
+          COMPLETELY, into the state you named. Building a hermetic
+          reproduction of an unusable podman image, they removed the image's
+          overlay directory with a plain `rm -rf`. Rootless overlay content is
+          owned by a subuid, so the removal failed EPERM PARTWAY and left the
+          layer PARTIALLY present. Against that partial state `podman image
+          inspect` still returns 0 and only `run` fails — so a fixture that
+          skipped `podman unshare` would have constructed a WEAKER, DIFFERENT
+          defect and then proven the check misses it. The mutation applied, the
+          subject changed, and the arm would still have been about something
+          else. The fixture now SKIPs with a named reason when the removal is
+          incomplete rather than asserting against a partial state.
+        corollary: >
+          A PARTIAL MUTATION IS THE DANGEROUS ONE, because it satisfies a
+          did-it-change check and produces a plausible result about a subject
+          nobody named. Require the delta to be the FULL delta, and when it
+          cannot be confirmed, SKIP with the reason rather than assert — an arm
+          that runs against an unintended state is worse than one that did not
+          run, since only the first produces a number.
         enforced_by: "judgment — an arm whose mutation is not separately observed to have landed reports on nothing; require the delta, then read the verdict"
       - id: a_discriminating_probe_needs_both_controls
         kind: judgment
@@ -449,6 +470,126 @@ verification:
           instrument cannot answer the question; skew neither eliminated nor
           established.
         enforced_by: "judgment — report the positive and negative control results beside the count, or the count is not evidence of a difference"
+      - id: a_probe_whose_pattern_the_shell_rewrites_is_not_testing_what_it_names
+        kind: judgment
+        rule: >
+          A REPORTED ROW MUST CARRY THE ARGUMENT AS THE PROCESS RECEIVED IT, not
+          as it was typed into the source. MEASURED three times in one
+          investigation, 2026-09-06, three hosts, three different mechanisms, one
+          shape: a matrix that generalised past a row it already held; a probe
+          written inside a double-quoted echo, so the tool received an escaped
+          literal while the report named the unescaped form; and an eval-based
+          loop that re-quoted the patterns it passed, inverting a result its own
+          author had measured correctly an hour earlier. A fourth, in the same
+          session: a display prefix added by the reader's own sed was read as
+          file content, and an anchor built from it matched nothing. Every one was
+          caught by CONTRADICTION WITH A PRIOR MEASUREMENT and never by inspecting
+          the harness, which is luck and only works while a prior measurement
+          exists. The numbers were REAL in every case; only the label was wrong,
+          which is why review does not catch it — a reader checking the work reads
+          the pattern as written, exactly as the author did. Print what the
+          process actually received, or call the tool directly. A helper that
+          loops variants is the thing most likely to alter them.
+
+      - id: an_unquoted_heredoc_edits_the_evidence_it_is_writing
+        kind: judgment
+        rule: >
+          WRITE EVERY LEDGER FRAGMENT AND EVERY RECORD THROUGH A QUOTED HEREDOC
+          (<<'EOF'), AND SUBSTITUTE VARIABLES AFTERWARDS WITH sed. An unquoted
+          heredoc performs command substitution on its body, so backticked prose
+          is EXECUTED and replaced by its output — usually empty. MEASURED on
+          macuahuitl 2026-09-06: a correction fragment explaining that a cost
+          driver was the plan-ledger check was written with <<EOF, the shell ran
+          the backticked name, and the committed text read "THE DRIVER IS ,
+          WHICH IS O(FRAGMENTS)" — the words naming the driver deleted from the
+          document whose entire purpose was to name it. It COMMITTED CLEAN: no
+          error, no guard, valid YAML, plausible English, and a fold that
+          reported ok. Caught only by reading the file back. This is the worst
+          shape in the family the same night produced: every other instrument
+          returned a wrong ANSWER, while this one silently edited the EVIDENCE.
+          `<<EOF` and `<<'EOF'` differ by one character with no diagnostic
+          between them, and the corrupted artifact is the record itself.
+
+      - id: ancestry_is_not_evidence_that_work_is_unlanded
+        kind: judgment
+        rule: >
+          A POSITIVE ANCESTRY ANSWER IS CONCLUSIVE; A NEGATIVE ONE IS NOT.
+          `git merge-base --is-ancestor <ref> <trunk>` returning YES means that
+          commit is genuinely in trunk's history and may be cited as landed —
+          that half is sound and load-bearing. Returning NO means only that this
+          REF is not an ancestor, which has at least three distinct causes: never
+          landed; captured too early (1024-c3h3); or CONTENT-LANDED BY ANOTHER
+          ROUTE — cherry-picked, rebased, or re-applied. A relay branch whose commits were
+          cherry-picked, rebased, or simply re-applied onto trunk is NOT an
+          ancestor and its content is fully landed. MEASURED on macuahuitl
+          2026-09-06: two work/ refs reported "NOT MERGED — n commits ahead", and
+          BOTH were superseded. work/1087-h2z9's commit had landed under the same
+          subject and trunk had since IMPROVED the fixture from 119 lines to 151;
+          merging the ref would have regressed it. work/1069-c9w6's two commits
+          both matched subjects already on trunk, and the marker they introduce
+          appears there three times. Before merging a relay ref, compare CONTENT:
+          match commit subjects against trunk, and diff the files the ref
+          touches against trunk rather than against the merge base. A work/ ref
+          is a snapshot of a moment, not a statement that the moment is
+          outstanding — and the coordinator acting on the ancestry answer alone
+          reverts finished work while believing it is rescuing it.
+
+      - id: a_guard_must_not_penalise_the_honest_verdict
+        kind: judgment
+        rule: >
+          A GUARD THAT MAKES THE TRUTHFUL ANSWER MORE EXPENSIVE THAN THE
+          FLATTERING ONE WILL BE ANSWERED FLATTERINGLY, and no amount of care in
+          the answering agent fixes that. Distinct from an instrument that cannot
+          report its own failure: this is an instrument that PENALISES the
+          report. MEASURED twice in one night, 2026-09-06, in two unrelated
+          guards. scripts/finalize-cycle.sh matched only `^MO-FULL: COMPLETE`, so
+          a cycle declaring the documented BLOCKED disposition was refused AFTER
+          its ledger line had been written — a cycle willing to say it was
+          blocked could not attest, while one claiming COMPLETE passed, and the
+          obvious recovery appended a duplicate line. The startup-boundary guard
+          accepts a snapshot taken at the END of a cycle, so an agent whose
+          finalize refuses can make it green by snapshotting late, manufacturing
+          the very artefact the guard exists to verify; the honest path — refuse,
+          report, explain — costs the marker. Neither required intent to
+          deceive: in both, the cheap path is the dishonest one and it is the
+          path a competent agent reaches for first. When designing a check, ask
+          what the agent does when it FAILS, and make the honest disposition a
+          first-class accepted outcome rather than an error state.
+
+      - id: agreement_at_zero_is_not_a_remedy
+        kind: judgment
+        rule: >
+          WHEN COMPARING A SUSPECT TOOL AGAINST A REFERENCE, A ROW WHERE BOTH
+          RETURN ZERO IS NOT EVIDENCE THE DISCREPANCY IS FIXED. It is evidence
+          that neither could answer. MEASURED 2026-09-06: grep -E on a pattern
+          with a mid-string dollar returns 0 from both the suspect and the
+          reference, because in ERE the dollar anchors and the pattern cannot
+          match at all. In a mitigation table that row sits beside escaping and
+          -F, which return the TRUE count from both, so -E reads as a third fix
+          while actually converting a wrong answer into a confident silence —
+          which is the failure the table was built to escape. A remedy must
+          RECOVER THE KNOWN-CORRECT VALUE, not merely make two readings agree:
+          establish the true answer independently first, then require a candidate
+          remedy to reproduce it. Same shape as a green gate that ran no tests,
+          and as a partition of a log presenting as a total.
+
+      - id: state_an_instrument_finding_as_rows_not_as_a_sentence
+        kind: judgment
+        rule: >
+          PUBLISH THE MATRIX, NOT THE MECHANISM. MEASURED 2026-09-06: five
+          successive prose formulations of ONE instrument behaviour, from three
+          hosts, every one wrong at least once, while the measured rows never
+          moved. The failure mode is specific and it is not carelessness — each
+          wrong sentence was produced while CORRECTING someone else's narrower
+          one, because a correction feels like a simplification and the qualifier
+          looks like clutter. Over-broadening a true narrow statement is the same
+          move as over-withdrawing a true finding on a confounded control, and one
+          fleet did both within four hours, each caught only by the peer who had
+          been right first. A row is a claim about what happened; a sentence is a
+          claim about the mechanism, and the mechanism is the part nobody has yet.
+          Rows also survive being wrong about the mechanism, which sentences do
+          not.
+
       - id: an_artefact_scan_cannot_date_a_change_that_ships_no_string
         kind: judgment
         rule: >
@@ -562,6 +703,49 @@ verification:
           scanner cannot distinguish an assertion from a mention and should not
           have to; the discipline belongs on the author. Assemble the needle at
           runtime — in fixtures, in assertions, and in the comments about both.
+      - id: a_measurement_row_must_carry_the_input_as_the_tool_received_it
+        kind: judgment
+        rule: >
+          A MEASUREMENT REPORTED WITHOUT THE INPUT AS THE TOOL ACTUALLY RECEIVED
+          IT IS PROSE, NOT DATA. When a probe's input passes through a shell, a
+          loop, a heredoc or a quoting layer before reaching the thing under
+          test, the input NAMED in the report and the input MEASURED can differ
+          silently — every number is real and the label on it is wrong. Print
+          the input as the caller held it, in the same output as the number, or
+          the row cannot be checked by anyone including its author.
+          Corollary: when a new measurement contradicts an earlier one, SUSPECT
+          THE HARNESS BEFORE THE SUBJECT. Each instance below was caught by a
+          contradiction with a prior row, never by inspecting the apparatus.
+        earned_by: >
+          Three instances in one investigation, 2026-09-06, two hosts, one
+          shape, different mechanisms every time. (1) A matrix generalised past
+          a row it already contained: `escaped \$ func=1 real=1` was measured an
+          hour before the rule "any $ not at end-of-pattern returns 0" was
+          written without the UNESCAPED qualifier. (2) A probe written inside a
+          double-quoted echo escaped the dollar it was testing, so `\$b` reached
+          grep — a literal, not an anchor — and matched; it was reported as `$b`
+          and became a false refinement that made the defect look smaller.
+          (3) An eval-based loop re-quoted the patterns it passed, reporting
+          escaped `\$b` as 0/0 where the direct call gives 2/2.
+          A FOURTH, from the same hour and the same pair of hosts: `-E` was
+          entered in a mitigation table as func 1 / real 1 CORRECT, measured
+          with an ESCAPED pattern — escaping was measured and labelled `-E`.
+          A FIFTH, and the one whose mechanism is furthest from the others: a
+          `sed` DISPLAY PREFIX was read as file content, so an anchor was built
+          from two spaces the reader's own formatting had added. It matched
+          nothing and threw. Five independent mechanisms — a generalisation
+          past an existing row, a shell-escaped probe, an eval-requoted loop, a
+          mislabelled table entry, and a display artefact mistaken for data —
+          producing one shape, which is what makes the rule general rather than
+          a note about quoting.
+        rule_general_form: >
+          THE APPARATUS IS PART OF THE MEASUREMENT. A row is trustworthy only
+          when it carries what the tool received, not what the author intended
+          to send. And a mitigation that AGREES AT ZERO is not a mitigation: in
+          the same investigation, `-E` made both engines return 0 and sat in the
+          table beside escaping and `-F`, which return the right number. A row
+          that agrees on nothing looks like a remedy and is the same silence it
+          claims to escape.
       - id: an_explanation_offered_before_the_evidence_disarms_the_detector
         kind: judgment
         rule: >

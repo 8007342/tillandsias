@@ -56,7 +56,7 @@ plan:
 BROKEN
 
 git -C "$WORK" add -A
-git -C "$WORK" commit -m "test: broken yaml" --quiet 2>/dev/null
+git -C "$WORK" -c user.email=fixture@tillandsias.invalid -c user.name=fixture commit -m "test: broken yaml" --quiet
 
 if git -C "$WORK" push origin HEAD:main 2>/dev/null; then
     echo "FAIL: push with invalid YAML was accepted (should have been rejected)"
@@ -72,7 +72,7 @@ plan:
 VALID
 
 git -C "$WORK" add -A
-git -C "$WORK" commit -m "test: valid yaml" --quiet 2>/dev/null
+git -C "$WORK" -c user.email=fixture@tillandsias.invalid -c user.name=fixture commit -m "test: valid yaml" --quiet
 
 if ! git -C "$WORK" push origin HEAD:main 2>/dev/null; then
     echo "FAIL: push with valid YAML was rejected (should have been accepted)"
@@ -95,7 +95,7 @@ plan:
   version: v1
   name: test
 VALID
-git -C "$WORK2" add -A && git -C "$WORK2" commit -m "valid" --quiet 2>/dev/null
+git -C "$WORK2" add -A && git -C "$WORK2" -c user.email=fixture@tillandsias.invalid -c user.name=fixture commit -m "valid" --quiet
 git -C "$WORK2" push origin HEAD:refs/heads/valid-branch 2>/dev/null
 
 # Second commit: broken YAML on a different branch
@@ -105,7 +105,7 @@ plan:
   version: v1
   broken yaml: [[[
 BROKEN
-git -C "$WORK2" add -A && git -C "$WORK2" commit -m "broken" --quiet 2>/dev/null
+git -C "$WORK2" add -A && git -C "$WORK2" -c user.email=fixture@tillandsias.invalid -c user.name=fixture commit -m "broken" --quiet
 
 # Push both refs — the hook sees valid-branch first, broken-branch second
 # Without the fix, REJECTED=1 from broken-branch is lost in the pipe subshell
@@ -139,7 +139,7 @@ plan:
   version: v1
   name: test-parent
 VALID
-git -C "$WORK3" add -A && git -C "$WORK3" commit -m "seed parent" --quiet 2>/dev/null
+git -C "$WORK3" add -A && git -C "$WORK3" -c user.email=fixture@tillandsias.invalid -c user.name=fixture commit -m "seed parent" --quiet
 git -C "$WORK3" push origin HEAD:main 2>/dev/null
 
 # Add a broken legacy archive file to the parent (simulating frozen legacy content)
@@ -147,7 +147,7 @@ cat > "$WORK3/openspec/changes/archive/2026-03-22-legacy/.openspec.yaml" <<'BROK
 openspec:
   broken: [[[
 BROKEN
-git -C "$WORK3" add -A && git -C "$WORK3" commit -m "add broken legacy archive" --quiet 2>/dev/null
+git -C "$WORK3" add -A && git -C "$WORK3" -c user.email=fixture@tillandsias.invalid -c user.name=fixture commit -m "add broken legacy archive" --quiet
 git -C "$WORK3" push origin HEAD:main 2>/dev/null
 
 # Create a new branch that only changes plan/index.yaml (valid YAML)
@@ -157,7 +157,7 @@ plan:
   version: v1
   name: test-new-branch
 VALID
-git -C "$WORK3" add -A && git -C "$WORK3" commit -m "new branch change" --quiet 2>/dev/null
+git -C "$WORK3" add -A && git -C "$WORK3" -c user.email=fixture@tillandsias.invalid -c user.name=fixture commit -m "new branch change" --quiet
 
 if ! git -C "$WORK3" push origin feature/new-branch 2>/dev/null; then
     echo "FAIL: new branch push with valid changes was rejected (diff-base should have excluded legacy archive)"
@@ -232,7 +232,7 @@ plan:
   broken yaml: [[[
 BROKEN
 git -C "$WORK" add -A
-git -C "$WORK" commit -m "salvage: half-edited tree" --quiet 2>/dev/null
+git -C "$WORK" -c user.email=fixture@tillandsias.invalid -c user.name=fixture commit -m "salvage: half-edited tree" --quiet
 
 # 6a: no exemption configured -> salvage is still gated (neutral default)
 if git -C "$WORK" push origin HEAD:refs/heads/salvage/testhost/20260728-triage-a 2>/dev/null; then
@@ -274,7 +274,7 @@ mkdir -p "$WORK/.github/workflows"
 printf 'name: release\non: workflow_dispatch\njobs:\n  r:\n    runs-on: ubuntu-latest\n    steps: [{run: "echo"}]\n' \
     > "$WORK/.github/workflows/release.yml"
 git -C "$WORK" add -A
-git -C "$WORK" commit -m "add allowed workflow" --quiet 2>/dev/null
+git -C "$WORK" -c user.email=fixture@tillandsias.invalid -c user.name=fixture commit -m "add allowed workflow" --quiet
 
 # 7a: an ALLOWED workflow lands
 if ! OUT7A="$(TILLANDSIAS_CI_WORKFLOW_ALLOWLIST='release.yml' \
@@ -289,7 +289,7 @@ echo "PASS: allowed workflow accepted"
 printf 'name: ci\non: [push]\njobs:\n  c:\n    runs-on: ubuntu-latest\n    steps: [{run: "echo"}]\n' \
     > "$WORK/.github/workflows/ci.yml"
 git -C "$WORK" add -A
-git -C "$WORK" commit -m "add unsanctioned workflow" --quiet 2>/dev/null
+git -C "$WORK" -c user.email=fixture@tillandsias.invalid -c user.name=fixture commit -m "add unsanctioned workflow" --quiet
 if TILLANDSIAS_CI_WORKFLOW_ALLOWLIST='release.yml' \
         git -C "$WORK" push origin HEAD:refs/heads/wf-rejected 2>/dev/null; then
     echo "FAIL: unsanctioned workflow (ci.yml) was accepted — cloud minutes are unprotected"
@@ -301,7 +301,7 @@ echo "PASS: unsanctioned workflow rejected at the mirror"
 # `git diff --name-only`, so a gate that ignores tree membership would reject
 # the very cleanup it exists to enable, leaving bypass as the only way to comply.
 git -C "$WORK" rm -q "$WORK/.github/workflows/ci.yml" 2>/dev/null
-git -C "$WORK" commit -m "remove unsanctioned workflow" --quiet 2>/dev/null
+git -C "$WORK" -c user.email=fixture@tillandsias.invalid -c user.name=fixture commit -m "remove unsanctioned workflow" --quiet
 if ! OUT7C="$(TILLANDSIAS_CI_WORKFLOW_ALLOWLIST='release.yml' \
         git -C "$WORK" push origin HEAD:refs/heads/wf-deletion 2>&1)"; then
     echo "FAIL: DELETING an unsanctioned workflow was rejected — the gate blocks its own remedy"
@@ -316,7 +316,7 @@ git -C "$WORK" checkout -q -b wf-neutral 2>/dev/null
 printf 'name: ci\non: [push]\njobs:\n  c:\n    runs-on: ubuntu-latest\n    steps: [{run: "echo"}]\n' \
     > "$WORK/.github/workflows/ci.yml"
 git -C "$WORK" add -A
-git -C "$WORK" commit -m "end-user CI" --quiet 2>/dev/null
+git -C "$WORK" -c user.email=fixture@tillandsias.invalid -c user.name=fixture commit -m "end-user CI" --quiet
 if ! OUT7D="$(git -C "$WORK" push origin HEAD:refs/heads/wf-unconfigured 2>&1)"; then
     echo "FAIL: workflow rejected although no allowlist was configured (hook is not convention-neutral)"
     printf '%s\n' "$OUT7D"

@@ -188,6 +188,15 @@ fi
 
 checked=0
 found=""
+# ORDER 1091 (filed with this change): does the packet EXIST on any branch?
+# Without this the verdict cannot distinguish "nobody holds it" from "there is
+# no such packet", and both print ok. MEASURED: this tool answered
+# `ok:cross-branch-claims:2 sibling branch(es) checked` for
+# `definitely-not-a-real-packet-xyz`, and for 1090-8nh4 in the window before its
+# author had pushed it — so a host acting on that ok would claim a phantom.
+# It is the defect this tool was built to catch, in the tool itself: a green
+# answering a narrower question than the sentence attached to it.
+seen_anywhere=0
 for b in $SIBLINGS; do
     git rev-parse --verify -q "origin/$b" >/dev/null 2>&1 || continue
     [ "$b" = "$CURRENT" ] && continue
@@ -198,6 +207,7 @@ for b in $SIBLINGS; do
     tmp="$(mktemp -d "${TMPDIR:-/tmp}/xbranch.XXXXXX")"
     if git archive "origin/$b" plan/index.yaml plan/index.d 2>/dev/null | tar -x -C "$tmp" 2>/dev/null; then
         st="$("$PLAN_BIN" --index "$tmp/plan/index.yaml" status "$PACKET" 2>/dev/null | awk '{print $2}')"
+        [ -n "$st" ] && seen_anywhere=1
         if [ "$st" = in_progress ]; then
             found="${found:+$found }$b"
         fi
@@ -213,5 +223,17 @@ if [ -n "$found" ]; then
     echo "  It is NOT yours to implement. Arbitration is by claim TIMESTAMP, not push order:" >&2
     echo "  if yours is earlier you continue; if theirs is earlier you release and reroute." >&2
     exit 1
+fi
+# The local fold counts as existence too: a packet this host just filed is real
+# even before it reaches a sibling.
+if [ "$seen_anywhere" -eq 0 ]; then
+    "$PLAN_BIN" status "$PACKET" >/dev/null 2>&1 && seen_anywhere=1
+fi
+if [ "$seen_anywhere" -eq 0 ]; then
+    echo "  No branch and no local fold knows this packet. That is NOT the same" >&2
+    echo "  as unclaimed: an ok here would send you to claim something that does" >&2
+    echo "  not exist, or that its author has not pushed yet." >&2
+    echo "unknown-packet:$PACKET:$checked sibling branch(es) checked"
+    exit 2
 fi
 echo "ok:cross-branch-claims:$checked sibling branch(es) checked"

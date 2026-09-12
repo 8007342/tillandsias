@@ -525,7 +525,8 @@ yaml_get() {
     if v="$(_yaml_jq "$file" "$path")"; then
         echo "$v"
     elif command -v yq &>/dev/null; then
-        yq eval "$path" "$file" 2>/dev/null | tr -d "" || echo ""
+        yq eval "$path" "$file" 2>/dev/null | tr -d "
+" || echo ""
     elif command -v jq &>/dev/null; then
         # Simple fallback for yq-style paths (not perfect but functional)
         grep -E "^${path//./\\.}:" "$file" 2>/dev/null | cut -d':' -f2- | xargs || echo ""
@@ -2151,6 +2152,46 @@ main() {
 
     if ! validate_environment; then
         exit 3
+    fi
+
+    # ORDER 871-wrmv: STAGE THE ROUTER SIDECAR BEFORE ANY STEP COMPILES RUST.
+    #
+    # `images/router/tillandsias-router-sidecar` is a BUILD ARTIFACT, gitignored
+    # and never committed (710-w9kc), and tillandsias-headless/build.rs
+    # hard-panics when it is absent. 29 litmus files invoke cargo against that
+    # crate, so on a fresh clone — or any host whose target/ was wiped — each of
+    # them fails for a reason that has nothing to do with what it tests.
+    #
+    # THIS IS WHY IT MATTERS BEYOND ONE RED TEST. 865-n8vq's ledger of seven
+    # release blockers is only as trustworthy as its causes, and at least one of
+    # those entries was an unstaged artifact on the running host rather than a
+    # trunk defect. A gate that reports environmental failures as code failures
+    # makes every entry in its own list less believable.
+    #
+    # ONCE PER RUN, NOT PER STEP. Patching 29 files would leave the 30th, and
+    # the packet's own criterion offers the runner preflight as the alternative.
+    # build.sh already stages before every compiling dispatch
+    # (_stage_router_sidecar_if_compiling); this is the same call for the lane
+    # that had none.
+    #
+    # SKIPPED WHEN ALREADY PRESENT, so the common case costs one `[[ -f ]]`.
+    # NON-FATAL BY DESIGN: a host that cannot build the sidecar (no rust
+    # toolchain) must still run the many litmus specs that never touch cargo,
+    # so a staging failure is NAMED and the run continues — the affected steps
+    # then fail with build.rs's own diagnostic, which already tells the reader
+    # exactly what to do. Refusing the whole run here would trade 29 confusing
+    # failures for a total outage on hosts that have no stake in them.
+    if [[ ! -f "$PROJECT_ROOT/images/router/tillandsias-router-sidecar" ]]; then
+        if [[ -f "$PROJECT_ROOT/scripts/build-sidecar.sh" ]]; then
+            log_info "Staging router sidecar (build artifact, absent — 871-wrmv)..."
+            if bash "$PROJECT_ROOT/scripts/build-sidecar.sh" >/dev/null 2>&1; then
+                log_info "Router sidecar staged"
+            else
+                log_warn "could not stage images/router/tillandsias-router-sidecar (871-wrmv) — steps that compile tillandsias-headless will fail with build.rs's missing-asset panic, which is an ENVIRONMENT fault and not a code defect"
+            fi
+        else
+            log_warn "images/router/tillandsias-router-sidecar is absent and scripts/build-sidecar.sh is missing (871-wrmv) — steps compiling tillandsias-headless will panic on the missing asset"
+        fi
     fi
 
     if [[ $LIST_ONLY -eq 1 ]]; then

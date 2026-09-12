@@ -97,6 +97,43 @@ Hard rules:
    litmus greps for this marker; a smoke run that exits without it is a
    failure by definition.
 
+## Sub-agent and token budget (operator directive 2026-09-11; packet 1119-6wn6)
+
+Sub-agents spend the same rate-limited pool as the main loop, and that pool
+ran out a week early last month. This checkout's 2026-09-06 cycle died
+mid-finalization for the same reason, with two finished fragments sitting
+uncommitted for five days. MEASURED on macuahuitl 2026-09-11: one read-only
+reconciliation Workflow of 42 agents at the main model's tier spent 4,480,590
+tokens in 21 minutes — roughly twenty times the main context of the entire
+cycle. The output was good; the price was invisible until the operator asked.
+
+The loop has `timing:`, `recur:` and `skippable:` for CPU seconds and nothing
+for tokens, so an expensive repeatable delegation cannot be seen the way the
+low-end hosts made the CPU bottlenecks visible. Until the counter in
+1119-6wn6 lands and replaces these rules with numbers:
+
+- **Count.** At most 8 sub-agents per full cycle by default, at most 3 running
+  at once. A Workflow (fan-out orchestration) only when the invoking prompt
+  opts in ("ultracode", "use a workflow"), and then at most 15 agents.
+- **Tier by task class, and pass `model` and `effort` explicitly every time.**
+  Lookups, greps, "does commit X exist / touch file Y", ancestry and existence
+  checks: haiku, effort low. Summarising a diff or a fragment, drafting event
+  prose: sonnet, effort medium. Judgment (a verdict on a packet, a review
+  finding, a design choice): opus, effort medium — high only when the error is
+  unrecoverable. The main model's tier is for the main loop, never for
+  refuters or fan-out.
+- **Refuters.** At most one per verdict, one tier below the verdict's author.
+  Prefer one agent with a schema over N parallel ones when the items are cheap.
+- **Never delegate a read an expert answers.** `plan_status`, `plan_answer`,
+  `methodology_ask` and the project-info tools cost nothing next to an agent.
+- **Report it.** Until `scripts/cycle-metrics.sh --emit-tokens` exists, the
+  handoff carries a hand-attested `tokens:` line from what the harness reports:
+  main-context tokens spent, sub-agent tokens, agent count by model. A cycle
+  that spawned nothing writes `subagent_tokens=0 agents=0`. Only the agent can
+  observe these numbers, so this is an attestation (the `check-mcp-surface.sh`
+  shape), and an unmeasured spend is the order-531 shape one level up: it
+  reads as free and is not.
+
 ## Full-Mode Terminal Attestation (order 614-2gqx)
 
 Smoke mode has a machine-grepped verdict (`MO-SMOKE:`); full mode did not, so

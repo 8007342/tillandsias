@@ -29,6 +29,52 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
     `plan/issues/main-branch-direct-push-guard-2026-07-24.md`). Switch to
     your host's canonical branch or run the cycle read-only.
 
+1b. **Acquire the checkout lock — BEFORE any committable work** (orders
+    873-zcim, 1091-zh6d):
+
+    ```bash
+    TILLANDSIAS_CYCLE_HOLDER_PID=$PPID scripts/cycle-checkout-lock.sh acquire \
+        --lane prompt --source "<how this cycle was launched, one line>"
+    ```
+
+    **`TILLANDSIAS_CYCLE_HOLDER_PID=$PPID` MUST BE ON THE COMMAND LINE, in
+    YOUR shell.** It anchors liveness to the agent-harness process that spans
+    the whole cycle. Evaluated inside the script instead, `$PPID` is the tool
+    shell that invoked it — which dies the moment your tool call returns, so
+    the lock stale-reaps immediately, every later lane reads
+    `ok:checkout-lock:free`, and the verdict you got still said `acquired`.
+    Measured on yoga 2026-09-06, direct and via `bash -c`: both anchor on the
+    dying shell.
+
+    On `skip:overlap-lock-held:<holder>` **DO NOT PROCEED.** The verdict names
+    who holds the checkout (lane, pid, start, source). Report it as the cycle's
+    final output and exit — that is the designed outcome, not a failure, and it
+    is recorded outside the checkout in
+    `~/.cache/tillandsias/overlap-refusals.jsonl` so a refused-for-overlap
+    cycle is distinguishable from one that ran and found nothing. Do not retry
+    in a loop; the next scheduled fire retries on its own clock.
+
+    **WHY THIS SECTION EXISTS: it did not, and every worker host paid for it.**
+    The lock instruction lived only in `skills/meta-orchestration` — one host,
+    four-hourly — while THIS skill is the lane every host runs to drain plan
+    work. Measured on yoga 2026-09-06: a full night of cycles on one checkout,
+    eight lands, `./build.sh --check` runs of six to seven minutes, and the
+    lock taken ZERO times, because nothing here mentioned it. A sibling lane
+    firing into that checkout mid-gate produces a red with no discoverable
+    cause. Same shape as 943-7dn5, where `--emit-flow` lived in the
+    coordinator skill and the flow log was fed only when a session happened to
+    run it: **anything the worker loop must do belongs in the worker skill.**
+
+    Release at §7 Finalization, after the cycle's last commit lands:
+
+    ```bash
+    TILLANDSIAS_CYCLE_HOLDER_PID=$PPID scripts/cycle-checkout-lock.sh release
+    ```
+
+    A second agent NEVER works in a locked checkout (873-zcim criterion 4).
+    The sanctioned path for concurrent work on one host is a separate git
+    worktree or a clean temp clone.
+
 2.  **Instrument check**: `scripts/cycle-preflight.sh` must answer `ok:` before
     you select work — selecting with an unverified instrument is the one
     failure the loop cannot reason its way out of, because the tool it would
@@ -89,6 +135,24 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
     | Linux           | `linux`       | `linux-next`     |
     | macOS           | `macos`       | `osx-next`       |
     | Windows         | `windows`     | `windows-next`   |
+
+    **PASS YOUR PRECISE ROLE TO THE SELECTOR, not just the platform** (order
+    1115-yvrq). On Linux, say `linux-immutable` or `linux-mutable` — a
+    read-only `/usr` (Fedora Silverblue, bootc) is immutable; anything you can
+    `dnf install` into is mutable. `scripts/host-capability-probe.sh` reports
+    it if you are unsure.
+
+    `pickup_role` on a packet means **REQUIRES**, not authored-on (coordinator
+    ruling, macuahuitl, 2026-09-06). The specific satisfies the general, so a
+    precise role costs you nothing and gains correctness: an immutable host
+    passing `linux-immutable` is offered every packet asking for `linux`, and
+    is NOT offered the ones needing a writable `/usr`. Measured on yoga
+    2026-09-06 — 301 rows either way, and the one packet it cannot do
+    (1025-a896, an investigation needing `dnf`) drops out.
+
+    Passing the bare platform still works and is still correct for a host that
+    genuinely has no sub-role; it simply cannot express a requirement it does
+    not have.
 4.  **Create Agent ID**: Do NOT hand-compose it — call the canonical helper
     (order 756-hn3a; contract: `methodology/distributed-work.yaml` →
     `agent_identity_contract`):
@@ -226,7 +290,7 @@ automates. Canonical: `methodology/distributed-work.yaml` → `cycle_batch_triag
 4.  **Long-running packets** (`multi_cycle: true`): claims are CYCLE-SCOPED — you claim one session's slice, not the packet. A `ready` multi_cycle packet with prior progress events is claimable (that's the design, not a stale lease). Canonical rules: `methodology/distributed-work.yaml` → `long_running_packets`.
 5.  **Constraint**: ONE logical commit per batch/cycle. If an individual slice estimates >2h, split it and ship the first half. (Unattended litmus-hosted sessions (`TILLANDSIAS_LITMUS_STEP`) drain **at most ONE packet per session** to fit the 600s timeout; autonomous/pairing forge cycles execute **adaptive batches of 3–6 packets** to maximize the work-to-orchestration ratio. Decided by The Tlatoāni, order 707-3x9d; canonical: `methodology/distributed-work.yaml` `worker_agent_protocol.forge_cycle_budget`.)
 6.  **Standing FRESHNESS audit class** (order 372, methodology `component_freshness`): each cycle, after worker drain, pick ONE component the `freshness-advisory` CI phase flagged as stale (or any unstamped component) and re-validate it against the audit question — *last properly looked at and confirmed still meaningful, useful, efficient, sound, and complete?* End in exactly one disposition: **refreshed** (re-validated, update its `# freshness:` stamp), **updated** (fixed/tuned, update stamp), or **obsoleted** (delete/tombstone with a same-commit removal of dependents). Apply the **discard-over-repair bias**: discard a stale component rather than repair it when a fresh implementation would be better. Record a `# freshness: auditor=<id> date=<ISO> verdict=<...> scope=<one-line>` stamp (grammar in methodology.yaml). `scripts/freshness-inventory.sh` emits the coverage report + the top stale components each `./build.sh --ci` run.
-6.  **Delegate Parallelizable Research**: Use sub-agents for file inventories, grep searches, etc., but keep ownership of specs, verification, and commits.
+6.  **Delegate Parallelizable Research — inside the sub-agent budget** (operator directive 2026-09-11; packet 1119-6wn6; canonical rules in `skills/meta-orchestration/SKILL.md` → "Sub-agent and token budget"): Use sub-agents for file inventories, grep searches, ancestry checks and diff summaries, but keep ownership of specs, verification, and commits — and pass `model` and `effort` explicitly: haiku/low for lookups, sonnet/medium for summaries and prose, opus/medium for judgment; at most 8 per cycle and 3 concurrent; never the main model's tier for fan-out or refuters; never an agent for a read the plan experts answer. Measured 2026-09-11: a 42-agent sweep at the main tier cost 4.48M tokens in 21 minutes. Report the spend in the handoff's `tokens:` line.
 
 ---
 
@@ -799,6 +863,46 @@ A successful invocation MUST NOT exit with local-only work:
 - `release.yml` is `workflow_dispatch` only — never auto-trigger. (The old `recipe-publish.yml` rootfs workflow was removed in the 2026-06 Fedora pivot.)
 - NEVER resolve cross-host plan conflicts by deletion — tombstone or supersede only.
 - When the worktree is dirty, only stage `plan/` files explicitly by path. Implementation code from a previous (uncommitted) iteration is NOT yours to touch.
+- **AND BEFORE YOU LEAVE IT ALONE, COPY IT** (orders 872-c9nd, 1102-93ng).
+  Run this the moment you find startup dirt, before refusing and before any
+  other detector:
+
+  ```bash
+  scripts/salvage-dirty-worktree.sh <slug>     # -> ok:salvaged:<ref>:<sha>
+  ```
+
+  Quote the `ok:salvaged:<ref>:<sha>` verdict in your cycle report — that ref
+  is the only durable record that the work existed.
+
+  **CHECK THE VERDICT — THERE ARE THREE, NOT TWO** (order 1103-i7xq):
+
+  | verdict | what you have |
+  |---|---|
+  | `ok:salvaged:<ref>:<sha>` | the copy is on origin; it survives a re-clone |
+  | `ok:salvaged-local:<ref>:<sha>` | the copy is in THIS repo only — the push failed. It survives a re-clone **only if someone pushes that ref**. Say so in your report and push it when the credential works: `git push origin <ref>` |
+  | `fail:salvage:<reason>` | there is **no copy**. Do not proceed to a refusal on the strength of one |
+
+  The middle row exists because the salvage used to push the commit straight
+  to origin and create no local ref, so a failed push left nothing at all — on
+  exactly the hosts most likely to strand work, the ones that cannot push.
+
+  **It cannot touch the worktree.** The script works through a temporary index
+  and git plumbing only, so it is safe to run on dirt you have just been
+  forbidden to alter. "Refuse" and "copy" are not in tension; the copy is what
+  makes the refusal survivable.
+
+  **WHY THE OTHER HALF IS NOT ENOUGH, and this skill only ever had the other
+  half:** refusing protects the work from YOU. It does not protect it from a
+  fresh clone. On 2026-08-24 three consecutive cycles refused a dirty tree,
+  each writing more careful prose about the diff than the last, and then the
+  checkout was re-cloned. Four hours of finished work was unrecoverable and the
+  untracked file's name appears in no commit on any branch. Every one of those
+  cycles obeyed the rule it had been given.
+
+  This does NOT license committing, discarding, restoring, resetting or
+  cleaning unknown dirt. Treat every recorded path as immutable sibling or
+  operator work unless the operator identifies it as disposable in the current
+  prompt. Salvage, then refuse, then report both.
 - Treat every local-only commit as volatile. If it matters, push it before
   ending; if it cannot be pushed after three retries, file a blocked event.
 
