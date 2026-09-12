@@ -504,6 +504,50 @@ VIOLATIONS_EOF
     fi
 fi
 
+# ── A REOPEN AFTER FALSIFICATION IS NOT STATUS LOSS (2026-09-12) ──────────
+# A closure event beside a non-terminal fold is the signature of a discarded
+# transition — UNLESS a later `falsified` event moved the packet back DOWN the
+# ladder through the only path down there is (650-dq6u: `set-field
+# --reopen-evidence`). yoga's honest reopen of 1115-yvrq at 2026-09-12T01:58Z
+# left exactly that shape on trunk; this guard refused it, and because every
+# platform branch merges trunk before every push, every host in the fleet was
+# refused at its gate for the next hour. The closure event is history, not
+# loss: the falsified event supersedes it, and the guard says so as an
+# advisory. Ordering is by event timestamp (ISO-8601 Z, so string order is
+# time order); a falsified event OLDER than the closure does not rescue it.
+if [ -n "$violations" ]; then
+    _kept=""
+    _reopen_adv=""
+    while IFS= read -r _vl; do
+        [ -n "$_vl" ] || continue
+        case "$_vl" in
+            *"EVENT but folds as"*)
+                _pid="${_vl%%:*}"
+                _evs="$("$PLAN" plan-events "$_pid" 2>/dev/null || true)"
+                _c_ts="$(printf '%s\n' "$_evs" | awk -F'\t' '($1=="completed"||$1=="verified"||$1=="done"){if($2>m)m=$2} END{print m}')"
+                _f_ts="$(printf '%s\n' "$_evs" | awk -F'\t' '$1=="falsified"{if($2>m)m=$2} END{print m}')"
+                if [ -n "$_f_ts" ] && [ -n "$_c_ts" ] && [[ ! "$_f_ts" < "$_c_ts" ]]; then
+                    _reopen_adv="${_reopen_adv}${_pid}: closure event of ${_c_ts} is superseded by a falsified event at ${_f_ts} (reopened through 650-dq6u) — the non-terminal fold IS the reopen, not a lost transition
+"
+                else
+                    _kept="${_kept}${_vl}
+"
+                fi
+                ;;
+            *)
+                _kept="${_kept}${_vl}
+"
+                ;;
+        esac
+    done <<VIOLATIONS_EOF
+$violations
+VIOLATIONS_EOF
+    violations="$(printf '%s' "$_kept" | grep -v '^$' || true)"
+    if [ -n "$_reopen_adv" ]; then
+        printf '%s' "$_reopen_adv" | sed 's/^/  advisory: /' >&2
+    fi
+fi
+
 [ -n "$violations" ] && violations="${violations}"$'\n'
 
 if [ -n "$violations" ]; then

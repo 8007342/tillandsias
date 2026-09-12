@@ -1,0 +1,56 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-release-gate-installs-the-launcher-on-the-host-that-runs-it-so-a-coordinator-desktop-loses-its-local-build-to-the-trees-version-label
+    order: 1122-6sqz
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [build, release, install, gate, operator-desktop]
+    estimated_hours: 2
+    verifiable_closure: bash scripts/test-gate-fast-refusals.sh
+    owned_files:
+      - build.sh
+      - skills/merge-to-main-and-release/SKILL.md
+    title: |
+      ./build.sh --ci-full ends with "Pre-build CI/CD validation passed — continuing to install" and installs the tree's launcher on the host that ran it; on 2026-09-11 the release gate on macuahuitl replaced the operator's local autoincremented v56.9.11.3 with the tree's v56.9.5.1 label, under TILLANDSIAS_SKIP_VERSION_BUMP=1, and the release runbook that names --ci-full as THE GATE never says the gate mutates the release host
+    context: |
+      MEASURED (macuahuitl, 2026-09-11). Before the release gate: tillandsias
+      --version = v56.9.11.3 (the operator's local build from the 2026-09-11
+      antigravity cycle, autoincremented per the local-build rule). Ran
+      TILLANDSIAS_SKIP_VERSION_BUMP=1 ./build.sh --ci-full twice as the
+      merge-to-main-and-release step-3 gate (21:01Z-21:22Z green). After:
+      tillandsias --version = v56.9.5.1 — the tree's VERSION at the time. The
+      log's last lines: "Gate stamp recorded", then "[build] Pre-build CI/CD
+      validation passed — continuing to install". SKIP_VERSION_BUMP skips the
+      bump; nothing skips the install.
+
+      The binary IS HEAD code, so functionally nothing regressed; the LABEL
+      went backwards by six days of local builds. The tray's update logic and
+      the operator's own "which build am I on" both key on that label, and the
+      operator was not told: the runbook (step 3) says "THE GATE. This is the
+      whole safety net now" and nothing about installing anything.
+
+      Two acceptable closures, the packet does not pick: (a) --ci-full stops
+      at the gate and a separate flag installs, so the release runbook's gate
+      is read-only on the release host; or (b) the runbook says in step 3 that
+      the gate installs, tells the operator to note the installed version
+      first, and the coordinator re-runs the local install afterwards (never
+      under SKIP_VERSION_BUMP, the local-build rule). Either way the surprise
+      ends.
+    exit_criteria:
+      - "running the release gate on a host does not change the output of tillandsias --version on that host, OR the runbook's step 3 states that it does and what to do about it; pre-fix result: FAILS (both halves absent)"
+      - "the gate-fast-refusals fixture, or a new arm beside it, pins whichever closure is chosen so a later refactor cannot silently re-couple gate and install; pre-fix result: FAILS"
+      - "NEGATIVE CONTROL: ./build.sh --install still installs, and the gate's verdict (pass rates, stamp) is unchanged by the fix"
+    events:
+      - type: filed
+        ts: "2026-09-11T22:30:09Z"
+        agent_id: "linux-macuahuitl-claude-20260911t191740z"
+        host: macuahuitl
+        summary: |
+          Filed by the coordinator that hit it while cutting v56.9.11.1. The
+          operator's local build on macuahuitl needs re-installing by the
+          operator's own flow; the coordinator did not do it (SKIP_VERSION_BUMP
+          installs are forbidden, and the alternative dirties the tree).

@@ -1,0 +1,102 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: compaction-folds-status-by-timestamp-while-the-runtime-fold-folds-it-by-closure-ladder-maximum-so-a-compacted-downgrade-is-reverted-by-any-older-high-water-fragment
+    order: 1123-k3mq
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [rust, plan, coordination, multi-host]
+    estimated_hours: 3
+    verifiable_closure: cargo test -p tillandsias-plan compact
+    owned_files:
+      - crates/tillandsias-plan/src/main.rs
+    title: |
+      the `status` field is folded by TWO DIFFERENT RULES — compaction writes the newest set-field value into the base row (accepting a downgrade), while the runtime fold takes the closure-ladder MAXIMUM over base plus fragments and never consults a timestamp — so a coordinator's compacted release-to-ready is silently reverted by any older fragment sitting higher on the ladder
+    context: |
+      FOUND on yoga 2026-09-12 during the fleet restart, on order 1115-yvrq.
+      A returning host and a coordinator disagreed about a packet's status and
+      BOTH were reading the ledger correctly.
+
+      THE LIVE CASE, all three facts simultaneously true at e792ac2de:
+        plan/index.yaml:82267-82268  base row          status: ready
+          (written by compaction, carrying macuahuitl's set-field of
+           2026-09-11T19:51:39Z releasing the expired claim)
+        plan/index.d/20260906t134556z-0f4702b1-yoga.yaml  value=completed
+          ts="2026-09-06T13:45:56Z"   — FIVE DAYS OLDER
+        tillandsias-plan status 1115-yvrq  ->  completed
+
+      The base row is NEWER than the fragment and says `ready`; the fold
+      answers `completed`. So the coordinator's release did not take, and the
+      selector kept offering the packet's row as closed.
+
+      THE MECHANISM IS NOT "A CRDT THAT FORGETS ITS CLOCK", which was the first
+      hypothesis and is refutable in one command. MEASURED on a scratch ledger
+      (base `ready`, no clock; two status fragments), binary
+      target/release/tillandsias-plan at e792ac2de:
+
+        base(ready) + frag(completed, ts=2020)              -> completed
+        frag(verified, ts=2020) + frag(completed, ts=2026)  -> verified   <-- decisive
+        frag(completed, ts=2020) + frag(verified, ts=2026)  -> verified
+        frag(completed, ts=2020) + frag(in_progress,ts=2026)-> completed
+
+      The second line is the one that settles it: the OLDER fragment wins when
+      it sits higher on the ladder, and the NEWER one wins when it does. That
+      is a maximum over `implemented < completed < verified < done`, not a
+      last-write-wins over `ts`. Timestamps are not consulted for `status` at
+      all — a fold that ignored only the BASE row's clock would still have
+      answered `completed` on line 2, and it did not.
+
+      So the runtime fold is a monotone join over a closure ladder, which is a
+      DEFENSIBLE CRDT and is very likely deliberate — it is why `set-field`
+      refuses a downgrade at the CLI with "moves DOWN the closure ladder ...
+      the only path down is a falsified event: re-run with --reopen-evidence
+      (650-dq6u)". The defect is not that rule. The defect is that COMPACTION
+      DOES NOT APPLY IT: it folded a `ready` value over a `completed` one and
+      wrote the result into the base row as fact. One field, two rules, and
+      the cheaper rule runs in the path that produces the artifact every host
+      reads first.
+
+      WHY IT IS P1 RATHER THAN A CURIOSITY. The failure is silent and it
+      targets exactly the rows a coordinator has just touched. Every claim
+      released by the 2026-09-11 reconciliation is exposed to the same revert
+      the moment a host that was offline returns with an older high-water
+      fragment: 1083-gzqj, 1084-x8ya, 1098-q7bk, 1109-t8kw, 1115-yvrq
+      (released) and 1074-96z9, 1105-h8vr (closed). The fleet had been
+      rate-limited for days, so returning hosts with stale fragments is the
+      expected condition, not the edge case. A coordinator gets `ok:` from
+      set-field, the compaction writes the value, and the fold hands the old
+      answer back — with no warning anywhere in the chain.
+
+      NOTE FOR WHOEVER FIXES IT: `--reopen-evidence` is the sanctioned descent
+      and it works end to end (yoga used it at 2026-09-12T01:58:29Z to move
+      1115-yvrq completed -> in_progress, and the fold now answers
+      in_progress). So the ladder is not the problem and should not be removed
+      to make this go away.
+    exit_criteria:
+      - "compaction and the runtime fold apply the SAME rule to `status`: a base row produced by compaction, re-folded with the fragments it compacted, yields the value compaction wrote; pre-fix result: FAILS (base `ready` at plan/index.yaml:82268 re-folds to `completed`)"
+      - "a downgrade that compaction cannot legitimately apply is REFUSED or RECORDED rather than written silently — the coordinator learns their release did not take; pre-fix result: FAILS (set-field returned ok:, compaction wrote `ready`, the fold still answers `completed`, nothing reported)"
+      - "NEGATIVE CONTROL, load-bearing: the ladder keeps its teeth. An older `verified` fragment must still beat a newer `completed` one, and `--reopen-evidence` must still be the only path down. A fix that makes `status` last-write-wins would pass criterion 1 by breaking 650-dq6u and would let any stale host silently reopen finished work; pre-fix result: PASSES today and must still pass after"
+      - "the rule that survives is STATED where a reader meets it — the fold is a monotone join over implemented < completed < verified < done, and timestamps do not order `status` — because two maintainers already read this field as last-write-wins on the same day"
+    events:
+      - type: filed
+        ts: "2026-09-12T02:05:00Z"
+        agent_id: "linux-yoga-claude-20260912t013000z"
+        host: yoga
+        summary: |
+          Filed by yoga during the fleet restart, at macuahuitl's direction,
+          after the two hosts disagreed about 1115-yvrq's status.
+
+          The coordinator's stated claim was "compaction folds a set-field LWW
+          value into the base row WITHOUT its timestamp, so any fragment
+          however old outranks the folded value — a CRDT that forgets its
+          clock", with a proposed negative control that two fragments of
+          different ts fold to the newer one. That control was RUN FIRST and
+          it FAILED: an older `verified` beats a newer `completed`. The
+          timestamp is not the axis. Refiled with the measured mechanism —
+          a closure-ladder maximum in the runtime fold against a
+          timestamp-ordered write in compaction — because the two diagnoses
+          have different fixes, and the proposed one (restore the clock) would
+          have broken the 650-dq6u ratchet it was meant to repair.
