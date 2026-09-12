@@ -200,6 +200,16 @@ repository" and looks like a missing asset.
 scripts/release-preflight.sh || { echo "preflight refused — do NOT merge"; exit 1; }
 ```
 
+**The gate INSTALLS (1122-6sqz).** `--ci-full` ends with "continuing to
+install" and puts the tree's launcher on the host that ran it, under
+`TILLANDSIAS_SKIP_VERSION_BUMP=1` too — that flag skips the bump, nothing skips
+the install. On a coordinator desktop that replaces the operator's local build
+with the tree's VERSION label: measured 2026-09-11 on macuahuitl, v56.9.11.3
+became v56.9.5.1 (HEAD code, older label). Operator ruling 2026-09-12: the
+label is a monotonic counter and simply rolls forward on the next local build,
+"CRDT style" — so note `tillandsias --version` before the gate, expect it to
+change, and do not re-install for the coordinator under SKIP_VERSION_BUMP.
+
 `release-preflight.sh` carries the two checks that used to live inside
 `release.yml` (VERSION monotonicity, retired CLI flags) plus the plan-ledger and
 actions-budget gates. It prints one line: `ok:release-preflight` or
