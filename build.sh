@@ -1629,6 +1629,37 @@ if [[ "$FLAG_CHECK" == true ]]; then
         [[ -f "$SCRIPT_DIR/scripts/gate-stamp.sh" ]]; then
         _memo_verdict="$(bash "$SCRIPT_DIR/scripts/gate-stamp.sh" memo-check check 2>/dev/null)" || _memo_verdict=""
         case "$_memo_verdict" in
+            "ok:gate-fresh-except-plan "*)
+                # ORDER 1127-waxf. The code is still vouched for; only the plan
+                # ledger moved, and the stamp's digest deliberately cannot see
+                # that (930-i6x4). Run exactly the guards that read those paths
+                # and nothing else.
+                #
+                # WHY NOT JUST RE-GATE: a full gate for every fragment is the
+                # cost 930-i6x4 removed, and re-imposing it here would trade one
+                # defect for the nine-commits-inside-one-gate problem. WHY NOT
+                # SKIP: these two guards are the only thing that reads a
+                # fragment, and skipping them is how a 'completed' event beside
+                # a status that folds 'ready' reached trunk on 2026-09-12 and
+                # froze every host's gate for an hour.
+                _info "ok:gate-fresh-except-plan (stamped ${_memo_verdict#ok:gate-fresh-except-plan })"
+                _info "  Code is unchanged since that passing gate; the plan ledger moved, so the ledger guards run."
+                if ! _run bash "$SCRIPT_DIR/scripts/check-fragment-status-loss.sh" 2>&1; then
+                    _error "a fragment declares a status the fold does not apply — write a status: LWW entry instead (plan/index.d/README.md)"
+                    exit 1
+                fi
+                _info "Fragment status-loss check passed"
+                if [[ -x "$SCRIPT_DIR/target/release/tillandsias-plan" ]] || command -v tillandsias-plan >/dev/null 2>&1; then
+                    if ! _run bash -c '. "$0/scripts/plan-binary-probe.sh"; PLAN="$(resolve_plan_binary)" || exit 0; "$PLAN" check --strict-fragments' "$SCRIPT_DIR" 2>&1; then
+                        _error "the plan ledger does not fold cleanly (1127-waxf) — see the verdict above"
+                        exit 1
+                    fi
+                    _info "Plan ledger check passed"
+                fi
+                trap - EXIT
+                timing_emit build-check-memoized-plan check "$_CHECK_T0" 0 || true
+                exit 0
+                ;;
             "ok:gate-fresh "*)
                 _info "ok:gate-fresh (stamped ${_memo_verdict#ok:gate-fresh }; TILLANDSIAS_FORCE_CHECK=1 to re-run)"
                 _info "  Tree bytes and toolchain are unchanged since that passing gate; nothing re-run."
