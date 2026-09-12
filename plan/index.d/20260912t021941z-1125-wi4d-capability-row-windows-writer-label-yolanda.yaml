@@ -23,10 +23,14 @@ packets:
       scripts/host-capability-probe.sh:123-131 derives the writer label from forge | macos | linux_immutable | linux_mutable with no windows branch, so on a Windows host uname -s (MINGW64_NT-*) matches nothing and falls through to the else, and every capability row a Windows host has ever published claims host: linux_mutable while the accel document embedded in the SAME fragment says host_kind "windows"
     context: |
       MEASURED on yolanda, 2026-09-12, in one file. The row republished this
-      cycle — plan/index.d/20260912t014202z-capability-row-yolanda.yaml,
-      committed as c4f5d912e — says `host: linux_mutable` on line 10 and
-      `"host_kind": "windows"` on line 47. One fragment, two answers, and the
-      generator wrote both.
+      cycle was WITHDRAWN from this branch before landing (see the withdrawal
+      note below), so the evidence is quoted here rather than cited by path.
+      The generated fragment carried, in one file:
+
+          line 10:     host: linux_mutable
+          line 47:     "host_kind": "windows"
+
+      One fragment, two answers, and the generator wrote both.
 
       The derivation (scripts/host-capability-probe.sh:123-131) tests, in
       order: TILLANDSIAS_HOST_KIND=forge, then `uname -s` = Darwin, then
@@ -54,8 +58,8 @@ packets:
       above at :119 — so the label can come from the probe's own answer instead
       of a fourth uname guess. Prefer that to adding a MINGW64* pattern.
     exit_criteria:
-      - "the writer label has a windows branch and a Windows host's --fragment emits `host: windows`; pre-fix result: FAILS (c4f5d912e line 10 says linux_mutable, line 47 of the same file says windows)"
-      - "the Windows rows on trunk are regenerated: yolanda's (c4f5d912e) and esme's when it lands"
+      - "the writer label has a windows branch and a Windows host's --fragment emits `host: windows`; pre-fix result: FAILS (the generated row said host: linux_mutable while its own embedded document said host_kind windows)"
+      - "the Windows rows on trunk are regenerated once a Windows host can publish one at all: yolanda's was withdrawn unlanded (it wedges the push, see the withdrawal note) and esme's is not yet filed"
       - "NEGATIVE CONTROL: the linux_mutable, linux_immutable, macos and forge labels are unchanged — a host that legitimately answers linux_mutable still does; pre-fix result: PASSES (the defect adds no branch, so the control must stay green across the fix and is the only thing distinguishing a fix from a relabel-everything)"
     events:
       - type: filed
@@ -74,3 +78,16 @@ packets:
           been a closure that cannot run — the exact shape
           check-declared-closures-added.sh (885-92iu) exists to refuse.
           Adding that fixture is in-scope work for this packet.
+
+          WITHDRAWAL NOTE. The row fragment that produced this reproduction
+          was removed from the branch before landing and never reached
+          trunk, so nothing immutable was rewritten. It had to go: the fold
+          drops a `capabilities:` row for a host+locus the compacted base
+          does not already carry, which makes the corpus PARTIAL, and
+          scripts/release-preflight.sh then refuses under --strict-fragments
+          with blocked:plan-ledger-incomplete — which the pre-push hook
+          enforces, so publishing the row wedged every push from this host.
+          Measured: with the fragment present the preflight exits 1 on
+          blocked:plan-ledger-incomplete naming that one dropped entry; with
+          it moved aside, ok:release-preflight, exit 0. That coupling is
+          filed separately; this packet is only about the wrong label.
