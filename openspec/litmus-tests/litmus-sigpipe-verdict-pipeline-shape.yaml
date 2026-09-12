@@ -36,8 +36,16 @@ critical_path:
     timeout_ms: 120000
     expected_behavior: "ok:sigpipe-verdict-pipelines-fixture:11"
 
+  # `-eq`, NOT `=` — BSD wc PADS ITS COUNT AND THIS FAILED ON EVERY macOS HOST.
+  # `echo "$out" | wc -l` prints "       1" on BSD/macOS and "1" on GNU, so the
+  # string comparison this line used to make was false wherever the padding
+  # exists: the enforcer was clean, emitted exactly one verdict line, and the
+  # step reported FAIL anyway. Measured 2026-09-12 on tlatoanis-macbook-air —
+  # string-compare FAILS, numeric -eq PASSES, same command, same output.
+  # Never string-compare a count; the padding is invisible in a diff and the
+  # failure accuses the thing being measured (order 1130-i6xj, eighth idiom).
   - step: "the enforcer is clean on this tree and emits exactly one verdict line"
-    command: "out=$(bash scripts/check-sigpipe-verdict-pipelines-added.sh 2>/dev/null); echo \"$out\" | grep -qE '^ok:sigpipe-verdict-added:([0-9]+ checked|base-unavailable)$' && [ \"$(echo \"$out\" | wc -l)\" = 1 ] && echo 'ok: one-line-verdict'"
+    command: "out=$(bash scripts/check-sigpipe-verdict-pipelines-added.sh 2>/dev/null); echo \"$out\" | grep -qE '^ok:sigpipe-verdict-added:([0-9]+ checked|base-unavailable)$' && [ \"$(echo \"$out\" | wc -l)\" -eq 1 ] && echo 'ok: one-line-verdict'"
     timeout_ms: 60000
     expected_behavior: "ok: one-line-verdict"
 

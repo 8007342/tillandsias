@@ -225,6 +225,28 @@ while IFS= read -r f; do
                           "plain touch (mtime=now) when the file must be CURRENT"
                 fi ;;
         esac
+        # EIGHTH IDIOM: STRING-COMPARING A wc COUNT. BSD wc PADS — `wc -l`
+        # prints "       1" on macOS and "1" on GNU — so `[ "$(… | wc -l)" = 1 ]`
+        # is false wherever the padding exists, while `-eq` is right everywhere.
+        # This cost a red on every macOS host in
+        # litmus-sigpipe-verdict-pipeline-shape.yaml: the enforcer was clean,
+        # emitted exactly one verdict line, and the step reported FAIL anyway.
+        # The padding is invisible in a diff and the failure accuses the thing
+        # being measured rather than the comparison, which is what makes it
+        # worth a pattern rather than a code review.
+        case "$t" in
+            *"wc -l"*|*"wc -c"*|*"wc -w"*)
+                case "$t" in
+                    # A line that STRIPS the whitespace first is already correct —
+                    # spec-index-ensure.sh:524 pipes through `tr -d '[:space:]'`
+                    # before comparing, and flagging it would be the same false
+                    # accusation as flagging a BSD-first fallback chain.
+                    *"tr -d"*|*"tr -s"*) : ;;
+                    *'" = '*|*'" != '*|*"\" = "*|*"\" != "*)
+                        _flag "$f" "$n" "string-comparing a wc count (BSD PADS: \"       1\" != \"1\")" \
+                              "use -eq / -ne, never = / !=" ;;
+                esac ;;
+        esac
         case "$t" in
             *"readlink -f"*)
                 { _has_fallback "$t" "&& pwd" || _has_fallback "$t" "greadlink"; } && : || \

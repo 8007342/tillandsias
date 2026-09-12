@@ -56,6 +56,16 @@ _pre_fix_has() { # _pre_fix_has <commit> <path> <pattern> <label>
     fi
 }
 
+# THESE FOUR CALLS ARE FLAGGED BY THE GUARD ITSELF, DELIBERATELY, AND REMOVING
+# THEM REMOVES THE PROOF. The pattern arguments below ARE the idioms — a literal
+# 'touch -t 202609120600', a "sed -i", a 'grep -Rl' — so the guard counts them
+# like any other non-comment line carrying an idiom, and two of them are in the
+# 23/14 baseline (measured at e5d5ac0af, macOS and Linux agreeing exactly).
+# That is correct behaviour, not a defect: a test whose SUBJECT is a bad idiom
+# is indistinguishable from a file containing one, and exempting files by name
+# would give the guard a hole. If you "clean these up" you delete the HALF-1
+# arms, which are the only evidence the guard catches anything at all — leaving
+# a green advisory whose patterns might match nothing.
 _pre_fix_has 5b27fea61 scripts/audit-guard-activation.sh \
     'grep -Rl' "HALF 1: pre-fix tree carried grep -Rl in CODE (1087-h2z9)"
 _pre_fix_has 737bd10c5 scripts/test-plan-binary-freshness.sh \
