@@ -358,7 +358,17 @@ while IFS= read -r row; do
         cdetail="${cdetail}  ${f}: packet '${pid}' has no obligation in its own bytes; another fragment or the base index supplies one — accepted on the FOLDED packet (1071-adhj)"$'\n'
     else
         violations=$((violations + 1))
-        detail="${detail}  ${f}: packet '${pid}' carries no scorable obligation — add a verifiable_closure naming a litmus:<test>, or an explicit 'unscoreable: <reason>' (977-448j)"$'\n'
+        # NAME THE NEW-TEST CASE AND ITS EXIT. A packet whose DELIVERABLE IS
+        # THE TEST is refused from BOTH sides and neither message said so: this
+        # guard refuses it for naming no litmus, and if the filer then names the
+        # one the packet will write, check-declared-closures-added.sh refuses it
+        # for naming a test nothing defines (885-92iu) and build.sh exits 1. The
+        # attractive wrong turn is to declare the pin and let it dangle, which
+        # is 1068-cxmf's standing defect, already four instances deep. Measured
+        # 2026-09-12 filing 1130-i6xj: both refusals, in succession, same row.
+        # The bind is INTENDED; only the silence about the exit was not
+        # (1136-n8sh).
+        detail="${detail}  ${f}: packet '${pid}' carries no scorable obligation — add a verifiable_closure naming a litmus:<test>, or an explicit 'unscoreable: <reason>' (977-448j). IF THIS PACKET'S DELIVERABLE IS THE TEST ITSELF, pinning a name nothing defines yet will be refused by 885-92iu — use 'unscoreable: unpinnable-until-the-guard-exists', name the future litmus filename in it, and write that litmus in the same commit as the thing it tests (1136-n8sh)"$'\n'
     fi
 done < "$_PENDING"
 
