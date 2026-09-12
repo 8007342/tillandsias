@@ -594,3 +594,14 @@ surface another host's claim names (`tillandsias-plan expire-claims
   state in the distro and a locally built tray. The mechanism is closed on
   both VM platforms; the promotable closure is the smoke of the CI-built tag
   on each, which needs the operator's per-run destruction consent.
+- **Two hosts' changes to one mechanism, verified against each other BEFORE
+  the second landed** (lenovinha, on yoga's 1128-j9fc widening): merged
+  baf53e287 and re-ran the guard on the merged base rather than trusting the
+  pre-merge green — `ok:plan-binary-probe-usage:22 eligible of 1043 scanned
+  [scripts=9/570 litmus=13/422 entry=0/51]` — so yoga's new entry-point
+  population is clean and lenovinha's hook, which now names candidate paths
+  in its stale-validator search, is eligible and compliant because it
+  resolves through the probe. First time tonight the composition was checked
+  ahead of the land instead of discovered after it. 1129-4su6 lands with its
+  row OPEN on esme's end-to-end arm, which is structurally unreachable until
+  the refusal is on trunk.
