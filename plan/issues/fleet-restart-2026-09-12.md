@@ -616,3 +616,103 @@ surface another host's claim names (`tillandsias-plan expire-claims
   declaration parses). 1129-4su6 is landed at c44c55d26 and deliberately NOT
   closed: "the mechanism is on trunk" and "the mechanism works where it
   matters" are different claims, and esme's verbatim refusal is the second.
+- **An exemption describes what is allowed, not what is free** (lenovinha,
+  after a plan-only closure push moved trunk under the coordinator's relay
+  gate and cost it a re-integrate and a second 8-minute gate): "plan-only is
+  exempt" was true and still forced a full re-integration on whoever was
+  mid-gate. The question before any push during a freeze is not "am I
+  exempt" but "is anyone mid-gate", and the second has to be asked even when
+  the first answers yes. The coordinator then asked for a total hold, plan-
+  only included, for the relay's last minutes.
+- **The cut's first release gate refused on a litmus pinning the pre-fix
+  API shape** (macuahuitl, 1084-x8ya): `litmus:psk-input-parity-shape`
+  grepped for `channel_psk(` and could not see `channel_psk_for_guest(`, so
+  the converted hvsocket.rs matched only doc comments — "does not use
+  workspace VERSION for PSK" on a file that does. A fixture that encodes the
+  symptom's spelling as the contract. Fixed at 46bc11426 with both spellings
+  and a -A3 window; controls: pre-fix step FAILS on the post-fix tree (the
+  gate log), post-fix passes 3/3, post-fix FAILS on a copy with the version
+  literal replaced. The guest responder legitimately keeps a bare
+  `channel_psk(` — it has no digest to key to, it IS the digest's subject —
+  so the next tightening must not chase it. Cost: one 22-minute gate and a
+  30-minute later tag.
+- **Asking "unreachable by construction?" found the self-hash surviving on
+  one path** (macbookair, after the relay): `build.rs` refused only an EMPTY
+  digest while the runtime required exactly 64 hex, so a non-empty malformed
+  digest passed the build, returned None at runtime, and the `None =>` arm
+  derived from the host's own hash silently — 1084-x8ya reinstated with no
+  signal. Unreachable via `build-macos-tray.sh` only because the producer
+  happens to emit 64 hex. Closed at both ends on osx-next (ede57fcc0):
+  build.rs validates the runtime's shape and names the lengths; the None arm
+  is cfg-split and returns a named error on release. Rides the NEXT daily;
+  v56.9.12.2's row names it as a known defect shipping. A formatting delta
+  ended up inside the land's integrate merge (`--amend` after the integrate
+  had already created it) — named rather than rewritten mid-land.
+- **After `podman system reset`, the first metrics read on a host carrying
+  pre-2026-08-26 archive records in /tmp will refuse** (pirria): the reset
+  does not clear /tmp, so `violation:metrics-log-split` fires once with the
+  mv-aside remedy; correct behaviour, not a regression from the release —
+  told to every smoking host so nobody files it as one.
+- **The floor-tier treadmill, measured** (esme): a windows-next land merged
+  trunk at 09:13, gated green for 39 minutes, and was refused at 09:52 on
+  containment because trunk had moved to 8a45bd522 under it — the stamp was
+  valid, the merge premise beneath it was not. A green gate on that tier is
+  21-25 minutes at best, so against a trunk moving every few minutes the
+  platform branch can land only in the gaps. Ruling: esme switches to the
+  relay-ref shape for the rest of the cycle (push the gated tree to
+  `work/<order>`, yolanda merges it into windows-next on their next land),
+  converting a 39-minute exposure into a seconds-long merge on a fast host;
+  the one exception is the plan-only push that is lenovinha's 1129-4su6 arm,
+  which must leave esme's own push path.
+- **§1 of the smoke is not a non-destructive binary install** (pirria, on
+  cachyos, v56.9.12.2): `install.sh` runs the full init — 131 lines of
+  podman/vault output, a Vault bootstrap provisioning twelve policies and
+  AppRole roles, and a `tillandsias-vault` container left running on 8201.
+  Reversible, not nothing, and not what "curl-install and assert the tag"
+  describes; the coordinator had named it the safe half. The §1/§2 consent
+  line still holds (§2 destroys, §1 provisions), but the runbook must say
+  what §1 does so an operator agrees to the real thing. Also: on a fish
+  shell `${PIPESTATUS[0]}` expands to nothing and install_exit goes blank —
+  the runbook's §0 bash guard exists for exactly this and must sit at the top
+  of the §1 recipe, not only in §0. cachyos §1: 175 s, "Tillandsias
+  v56.9.12.2" verbatim, from v56.9.5.1; macuahuitl §1: 78 s, exact tag.
+- **v56.9.12.2 on Windows, CI-built tray: Ready in 38 s** (yolanda, weaker
+  arm, stated on the report's second line): §1 install_exit=0, tray reports
+  56.9.12.2 (8a45bd522); no `wsl --unregister` (consent not granted, asked
+  twice, not inferred from silence), re-injection forced and demonstrated
+  (local 4434eb13… before, published 85495603… after); provision Ready with
+  the control wire up in 38 s; diagnose LAST: phase=Ready, wire reachable,
+  ready_history=observed-ready where v56.9.12.1 read never-observed-ready on
+  the same host. Pairing evidenced two ways rather than asserted (the
+  injected guest is byte-identical to the asset CI staged; the NNpsk0
+  handshake succeeded). Answers "does CI-built keying work on Windows" —
+  yes; does not answer "does a pristine host reach Ready" — that is one
+  consent away. Report: smoke-e2e-findings-v56.9.12.2-2026-09-12-windows-yolanda.md.
+- **v56.9.12.2 §1 on the Windows floor host** (esme, N100/16 GB): install
+  exit 0 in 22 s, "tillandsias-tray 56.9.12.2 (8a45bd522)" verbatim, SHA-256
+  of the zip verified by the installer, evidence in a per-tag directory
+  cleared at start. The tray is still not on PATH after the install — a third
+  consecutive tag on which 1004-vsh2's fallback is load-bearing. On the
+  1129-4su6 arm esme caught their own false negative before sending it: a
+  plan-only push of `plan/issues/*.md` is validated without the plan binary
+  (`needs_yaml` is set only for `plan/index.d/`), so no staleness refusal
+  there is correct; the real arm is a push carrying one index.d fragment,
+  with the hook resolving a 2026-09-11 .exe that `plan_binary_is_stale`
+  reports STALE against Cargo.lock.
+- **v56.9.12.2 is STABLE** (macuahuitl, 10:52Z): macOS cold smoke with the
+  CI-built tray PASSED on macbookair — substrate zeroed, provisioned from
+  nothing, host had guest metrics at 38 s; three releases on that host by the
+  same procedure read v56.9.11.1 TIMED OUT, v56.9.12.1 TIMED OUT,
+  v56.9.12.2 ok. With yolanda's CI-tray Ready on Windows (in-distro arm) and
+  the Linux/Windows §1 installs, the daily was promoted: prerelease off,
+  releases/latest = v56.9.12.2, `stable` moved 341ab0010 → 8a45bd522.
+  Recorded gaps: the pristine-host Windows provision and the Linux reset path
+  await per-run consent. Found by the smoke's land: `touch -t 202609120600`
+  in `test-plan-binary-freshness.sh` (the control arm's stub `touch`; this morning's `-d`→`-t`
+  conversion) froze "current" to a literal that expired at 06:00Z — the stub
+  is now older than sources the fixture writes at run time, the control arm
+  inverts, and EVERY code land on EVERY host refuses (plan-only lands pass
+  only because the partial memo runs the ledger guards alone). A hardcoded
+  timestamp is a fixture with an expiry; sixth shape for 1130-i6xj, silent-
+  degrade class because it reads as a real staleness refusal. Fix: plain
+  `touch` (mtime = now), macbookair, relayed to trunk next.
