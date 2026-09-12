@@ -1,0 +1,12 @@
+# Gate step 1139-ipqt — data, not code (order 1072-b7eq).
+#
+# A closure is judged on what it NAMES, not on how YAML quoted it. A
+# double-quoted verifiable_closure scalar began with a quote character, matched
+# none of the anchored patterns, and a plainly scorable row was refused — while
+# the same words as a block scalar passed.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking a closure is judged on what it names, not how YAML quoted it (1139-ipqt)"
+STEP_SCRIPT="scripts/test-scorable-closure-quoting.sh"
+STEP_ERROR="the scorable-closure matcher has regressed: a quoted closure is refused for its quoting, or an empty one is laundered into a pass (1139-ipqt) — see the verdict line above"
+STEP_OK="Scorable-closure quoting passed"

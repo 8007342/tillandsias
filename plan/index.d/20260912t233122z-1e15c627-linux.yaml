@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-present-but-unusable-tool-makes-the-cheatsheet-ref-check-pass-having-examined-nothing
+    field: verifiable_closure
+    value: scripts/test-tool-dispatch-rejects-unusable-host-tool.sh passes (4/4 on lenovinha), and check-cheatsheet-refs.sh exits 2 not 0 with a broken host rg
+    ts: "2026-09-12T23:31:22Z"
+    host: linux
+
+events:
+  - packet_id: a-present-but-unusable-tool-makes-the-cheatsheet-ref-check-pass-having-examined-nothing
+    event:
+      type: note
+      ts: "2026-09-12T23:31:22Z"
+      host: linux
+      summary: |-
+        unscoreable discharged: the future litmus the row named is now written (1136-n8sh exit, first real customer)
