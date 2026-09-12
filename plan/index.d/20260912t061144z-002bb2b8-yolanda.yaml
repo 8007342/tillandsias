@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: two-timing-logs-on-one-host-so-every-recurrence-count-is-a-partition-presenting-as-a-total
+    field: next_action
+    value: 'why does `[ -d "$root/.git" ]` fail from the build distro — metrics_default_log''s checkout detection does not survive WSL/drvfs, so the real records go to the /tmp fallback (pirria owns; the host: unknown -> Yolanda transition in the same file is a second row for them)'
+    ts: "2026-09-12T06:11:44Z"
+    host: yolanda

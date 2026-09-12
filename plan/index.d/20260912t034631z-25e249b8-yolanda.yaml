@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-windows-release-job-refuses-its-own-per-host-arch-staging-because-the-placeholder-check-demands-both-arches-so-no-windows-tray-shipped-for-v56-9-11-1
+    field: status
+    value: completed
+    ts: "2026-09-12T03:46:31Z"
+    host: yolanda
+
+events:
+  - packet_id: the-windows-release-job-refuses-its-own-per-host-arch-staging-because-the-placeholder-check-demands-both-arches-so-no-windows-tray-shipped-for-v56-9-11-1
+    event:
+      type: completed
+      ts: "2026-09-12T03:46:31Z"
+      host: yolanda
+      summary: |-
+        status 'completed' with evidence_refs: 203d56218: run 34668648875 Windows job success, tillandsias-tray-56.9.12.1-windows-x64.zip 9,535,947 bytes; local packaging Built: with x86_64 embedded and aarch64 at 0; test-tray-asset-placeholder-refused 8/8 with PowerShell arms executed

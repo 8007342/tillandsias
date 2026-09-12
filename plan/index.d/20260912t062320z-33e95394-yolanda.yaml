@@ -1,0 +1,80 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-guest-whose-provisioning-completed-never-reaches-ready-and-the-host-has-no-way-to-ask-why
+    event:
+      type: progress
+      ts: "2026-09-12T06:23:20Z"
+      agent_id: windows-yolanda-claude-20260912t062320z
+      host: yolanda
+      summary: |
+        DEBUG-PAIR ARM, yolanda, 2026-09-12. PREDICTION STATED FIRST, as agreed: a
+        debug-built tray and a debug-built guest share DEV_ROOT_SEED (release_root_secret
+        is #[cfg(not(debug_assertions))]), so they should handshake — while the measured
+        release pair, whose self-hashes differ, cannot. Keying, not framing, is the
+        discriminator this arm tests.
+
+        RESULT: PREDICTION HELD.
+          [provision] RESULT: VM Ready — control wire up
+          DEBUGPAIR2_EXIT=0, 521 seconds
+        Against the release pair on this same host, same distro, same tag:
+          [provision] RESULT: FAILED — control-wire handshake did not succeed within
+          budget: hvsocket open: secure handshake failed: noise: input error
+          exit 1, 210 seconds
+        Same machine, same VM substrate, same v56.9.12.1 source. The only difference is
+        the build profile, which is the only thing that changes where the root secret
+        comes from. Keying is the mechanism; the transport and the framing are exonerated
+        without touching a release binary.
+
+        TWO VALIDITY CONTROLS, because an arm that cannot confirm its own setup proves
+        nothing:
+          1. the injected guest IS the feature-enabled debug build — 34,223,024 bytes,
+             sha256 ae53e2c4a5391246…, not the 14,550,224-byte release asset and not the
+             31,112,720-byte first attempt
+          2. the guest service is ACTIVE with its listener bound:
+             [tillandsias] vsock listener bound port=42420
+
+        FIRST ATTEMPT WAS INCONCLUSIVE AND IS RECORDED AS SUCH, not as a negative. I
+        built the debug guest with a bare `cargo build`, omitting --features listen-vsock
+        which scripts/build-guest-binaries.sh passes. The guest refused to start:
+          FATAL: --listen-vsock 42420 was requested but this binary was built WITHOUT
+          the listen-vsock feature... Refusing to run as a control-wire guest that
+          cannot serve the wire.
+        exit 78, service failed, no listener, so no handshake was ever attempted. Had
+        that guard not existed the guest would have started, bound nothing, and the run
+        would have failed in a way indistinguishable from a keying failure — I would
+        have reported "the debug pair also fails" and contradicted a root cause the
+        fleet had just pinned. The guard converted a false negative into a named cause.
+
+        A SECOND TRAP, worth the drill: injection is version-gated. GuestWiringOutcome
+        distinguishes SkippedVersionMatch from Reinjected precisely because "the guest's
+        binary is whatever some EARLIER tray put there". My debug guest reports the same
+        v56.9.12.1 as the installed release guest, so a provision would have SKIPPED
+        injection and paired a debug tray against a RELEASE guest — a mismatched pair
+        that fails, looking exactly like a refuted prediction. Forced Reinjected by
+        removing /usr/local/bin/tillandsias-headless first (the outcome's own doc says
+        absent triggers injection). No unregister and no reset were needed; the
+        destructive step I had asked the operator for turned out to be unnecessary once
+        the gate was read rather than assumed.
+
+        THE 1084-x8ya LOG LINE FIRED ON ITS FIRST REAL USE, and carried the triple:
+          [tillandsias] secure control wire REFUSED: early eof
+          (psk inputs: v=56.9.12.1, wire=3, hop=host-guest)
+        Note the variant: `early eof`, not Decrypt and not Input — a peer that closed
+        rather than a key or a length that disagreed, and the provision reached Ready
+        seconds later, so this is a probe connection closing, not the keying failure.
+        That is exactly the discrimination the line was added for: the guest now names
+        what it refused and why, and a reader can tell a benign disconnect from a PSK
+        mismatch without guessing. wire=3 and hop=host-guest are also now on the record
+        for the first time.
+
+        NOT A SUBSTITUTE FOR THE INTEGRATION PROOF. A release-built pair reaching Ready
+        on a real cold provision remains the closure that promotes; this arm only shows
+        the failure is keying-shaped.
