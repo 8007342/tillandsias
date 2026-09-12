@@ -12,6 +12,20 @@
 #   4. first-N does not kill the producer
 #   5. stderr is captured, not silently dropped
 set -uo pipefail
+
+# ORDER 1096-p3tn: NAME OUR OWN TIMING LOG. This fixture runs the litmus runner
+# from a scratch dir that is not a git checkout, so metrics_default_log
+# correctly falls back to /tmp — and the records it writes there carry the REAL
+# host name and real-looking step names, landing in the same
+# /tmp/tillandsias-timing.jsonl a reader would treat as live. Eleven fixtures
+# did this on every gate run, which is what actually manufactured the two-log
+# split 1096-p3tn was filed about (the sourcing stub it blamed never wrote a
+# line). metrics-log-path.sh's contract blesses this remedy: an explicit
+# TILLANDSIAS_*_LOG always wins, so a fixture that names its log keeps working
+# and stops polluting the shared one. The name is deliberately NOT
+# tillandsias-timing.jsonl so no reader can mistake fixture debris for data.
+export TILLANDSIAS_TIMING_LOG="${TILLANDSIAS_TIMING_LOG:-${TMPDIR:-/tmp}/tillandsias-timing-FIXTURES.jsonl}"
+
 cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 2
 . scripts/litmus-stdlib.sh
 fail=0
