@@ -806,10 +806,69 @@ attempt_plan_only_lane() {
                 return 1
             fi
         else
+            # 1124-7f3u CONSIDERED AND DELIBERATELY NOT CHANGED. The branch
+            # below refuses when the plan BINARY is absent; the symmetric move
+            # here would be to refuse when this CHECKER is absent, and it is
+            # wrong for a reason worth writing down rather than rediscovering.
+            #
+            # The binary is a BUILD ARTIFACT — commonly absent, on a floor host
+            # or a fresh checkout, which is exactly why its absence is a live
+            # hole. This checker is TRACKED IN THE REPO, so its absence is not a
+            # state a real checkout reaches; and if it ever did, build.sh:2597
+            # runs it unconditionally and the full gate fails on the missing
+            # file anyway. Refusing here would guard an unreachable state.
+            #
+            # It is not free, either: it would oblige every fixture that drives
+            # this lane with a fragment-bearing push to provision this script in
+            # its scratch tree. Measured — an earlier revision of this fix did
+            # refuse here, and broke test-gate-stamp-scope.sh case 7, whose tree
+            # legitimately provisions a minimal set. Scope kept to the binary,
+            # which is what 1124-7f3u is about.
             LANE_NOTES+=("scripts/check-fragment-status-loss.sh absent — skipped")
         fi
     else
-        LANE_NOTES+=("target/release/tillandsias-plan absent — fragment schema and status-loss checks skipped (yq tier validated every pushed blob: parse + !!map shape)")
+        # ORDER 1124-7f3u: A SKIP HERE IS A REFUSAL, because yq cannot stand in
+        # for what this block does.
+        #
+        # The fail-closed test at the top of this function (889-twhe) is
+        # satisfied by yq ALONE. That is right for the per-blob validation
+        # above, which asks "is this YAML, and is it a map" — yq answers that.
+        # It is wrong here. The two checks below are the FOLD: `check
+        # --strict-fragments` reads every fragment together, and
+        # check-fragment-status-loss.sh asks whether a status transition a
+        # fragment declares actually survives folding. Neither is a property of
+        # any single blob, and no YAML parser can compute either. So a host with
+        # yq and no plan binary passed the fail-closed test and then skipped the
+        # only checks that needed the thing it was missing.
+        #
+        # MEASURED 2026-09-12: yoga's honest reopen of 1115-yvrq reached
+        # origin/linux-next carrying a 'completed' event beside a status that
+        # folds as in_progress. build.sh --check refuses that shape
+        # (check-fragment-status-loss.sh exits 2 unbuilt, and build.sh runs it
+        # through _run, which honours the rc) — but a fragment-only push never
+        # runs build.sh, and a ledger reopen is EXACTLY a fragment-only push.
+        # Every host that then obeyed the pre-push merge rule was refused at its
+        # own gate for about an hour, for a shape this lane let through.
+        #
+        # "skipped" printed as a note beside a successful push reads as a pass
+        # (order 531, one hook deep). The lane already knows how to say the
+        # honest thing, and says it everywhere else in this function: full gate
+        # required.
+        if [[ $needs_yaml -eq 1 ]]; then
+            if [[ -n "$plan_not_runnable" ]]; then
+                echo "plan-only lane: not applicable — this push adds plan/index.d fragments and $plan_not_runnable exists but does NOT run here, so the fold and status-loss checks cannot run (fail closed; full gate required)" >&2
+                echo "  ${plan_why:-}" >&2
+            else
+                echo "plan-only lane: not applicable — this push adds plan/index.d fragments and no runnable tillandsias-plan resolved, so the fold and status-loss checks cannot run (fail closed; full gate required)" >&2
+                echo "  yq validates one blob's shape; it cannot fold the ledger, which is what these two checks read. 1124-7f3u." >&2
+            fi
+            return 1
+        fi
+        # No plan/index.d fragments in this push: there is no fold to check, so
+        # the absence of the binary costs this lane nothing. Scoped exactly as
+        # 889-twhe scoped the yq rule — refuse on a missing validator only when
+        # the push carries what that validator reads.
+        LANE_NOTES+=("no runnable tillandsias-plan resolved — fragment schema and status-loss checks not applicable (this push adds no plan/index.d fragments)")
     fi
 
     # The AUTHOR-SIDE fragment parse gate (order 698-7n6q). It was wired into

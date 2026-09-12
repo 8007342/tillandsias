@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-pre-push-plan-only-lane-skips-the-fragment-schema-and-status-loss-guards-when-the-plan-binary-is-absent-and-calls-it-a-lane-note
+    field: status
+    value: in_progress
+    ts: "2026-09-12T05:12:22Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-pre-push-plan-only-lane-skips-the-fragment-schema-and-status-loss-guards-when-the-plan-binary-is-absent-and-calls-it-a-lane-note
+    event:
+      type: note
+      ts: "2026-09-12T05:12:22Z"
+      host: lenovinha
+      summary: |-
+        claimed by lenovinha-silverblue: the plan-only push lane skips the status-loss and fragment-schema guards when target/release/tillandsias-plan is absent; I traced the escape, coordinator assigned it to me

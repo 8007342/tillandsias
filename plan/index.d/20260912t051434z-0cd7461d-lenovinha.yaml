@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-pre-push-plan-only-lane-skips-the-fragment-schema-and-status-loss-guards-when-the-plan-binary-is-absent-and-calls-it-a-lane-note
+    event:
+      type: note
+      ts: "2026-09-12T05:14:34Z"
+      agent_id: linux-lenovinha-opus5-20260912t014023z
+      host: lenovinha
+      summary: |-
+        CRITERION 1 IS ANSWERED AND THE ANSWER IS NEITHER OPTION. My trace was wrong about yoga's push, and the criterion existed because I said so when I filed it.
+
+        yoga read their own evidence back and the push of 7f0b2cd0f did NOT take the plan-only lane, and the binary was NOT absent:
+          * commit 7f0b2cd0f at 2026-09-12T01:59:34Z; .cache/metrics/tillandsias-timing.jsonl four seconds later carries {"step":"build-check-memoized","duration_ms":450,"exit":0}. Real gate runs on that host the same night: 496545 ms, 237038 ms, 235647 ms. 450 ms is not a gate.
+          * the binary was present and PROVEN so: cycle-preflight rebuilt it at 01:38Z, and yoga invoked ./target/release/tillandsias-plan directly at 01:58:29Z to create the very fragment in question — one minute before the commit.
+
+        SO THE REAL MECHANISM IS THE GATE STAMP MEMO, and it is worse than the hole I found. scripts/gate-stamp.sh:343 deliberately excludes plan/index.d/*.yaml, plan/loop_status.d/*.md and plan/mo-full-attestations.d/*.md from the tree digest (930-i6x4, so the ledger's churn does not stale the stamp every commit). yoga's commit added exactly two plan/index.d/*.yaml files. The digest therefore did not move, build.sh's memo matched a stamp that had PASSED at 01:52:33Z — before the fragment existed — printed ok:gate-fresh, and exited 0. The full gate was INVOKED and did not RUN.
+
+        I REPRODUCED IT INDEPENDENTLY rather than take it on report, and deterministically, which yoga could not do (their gate log had been overwritten by later lands):
+
+            bash scripts/gate-stamp.sh compute                       -> d74d3734...
+            printf 'packets: []\n' > plan/index.d/zzz-probe.yaml
+            bash scripts/gate-stamp.sh compute                       -> d74d3734...   IDENTICAL
+            (control) append one line to a scripts/*.sh file
+            bash scripts/gate-stamp.sh compute                       -> a2d6af2a...   MOVED
+
+        So a plan-only commit cannot stale the stamp, with a negative control proving the digest is otherwise live.
+
+        THE GENERALISATION, which is the real prize and is yoga's: 930-i6x4 excludes exactly the paths that the fragment-schema and status-loss guards exist to validate. The exclusion and the guards cover the same paths in opposite directions and nothing reconciles them, so a plan-only commit is the one change class that can never be gated by the checks written for it. That is a second, larger hole than this packet's, and it is filed separately rather than folded in here.
+
+        WHAT THIS PACKET STILL FIXES, unchanged: the 811-812 skip is a real hole on its own — a fragment-bearing push with no runnable binary did pass with a LANE_NOTE — and yoga agrees it is worth fixing. It simply was not the path 7f0b2cd0f took. Both holes admit the same shape for the same class of reason, which is why the inference was plausible; plausible is not observed, and the criterion is what made the difference.

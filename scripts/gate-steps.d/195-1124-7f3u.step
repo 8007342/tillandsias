@@ -1,0 +1,23 @@
+# Gate step 1124-7f3u — data, not code (order 1072-b7eq).
+#
+# WHY IN --check AND NOT ONLY IN --ci-full: this fixture pins the behaviour of
+# the PRE-PUSH HOOK, which is the trunk's only gate. A regression in the hook's
+# fail-closed rule is not visible from anywhere else — and the defect it pins
+# reached trunk precisely because the fast path skipped the check that would
+# have caught it. A guard for the gate has to run in the gate.
+#
+# 267ms measured on lenovinha, hermetic: local bare remote, no network, no
+# credentials, and a yq STUB so it cannot skip on a host without yq (this host
+# has none, on PATH or via tool-dispatch or in the builder toolbox).
+#
+# REGIME NOTE (1087-h2z9's lesson, applied before landing rather than after):
+# verified on linux/rootless only. No arm uses chmod 000, chown, or any other
+# construct root can bypass, so I expect root-parity on the WSL lane — but that
+# is an expectation from reading the arms, not a measurement, and it is written
+# here as the former.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the plan-only push lane fails closed without a fold validator (1124-7f3u)"
+STEP_SCRIPT="scripts/test-pre-push-plan-lane-fails-closed-without-binary.sh"
+STEP_ERROR="the plan-only lane admitted a fragment-bearing push it could not fold, or the fast lane stopped accepting a valid one (1124-7f3u) — see the arm above"
+STEP_OK="Plan-lane fail-closed check passed"

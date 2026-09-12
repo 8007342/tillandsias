@@ -435,6 +435,20 @@ for _p in $(printf '%s\n' "$_spec" | awk -F'|' '{print $4}' | tr ',' '\n' | sort
     [ -n "$_p" ] || continue
     _declared="$(printf '%s\n' "$_spec" \
         | awk -F'|' -v p="$_p" '$4 ~ "(^|,)" p "(,|$)" {print $1}' | sort -u)"
+    # THE PROBE'S FORGE CARVE-OUT, APPLIED TO THE DECLARED SET TOO
+    # (check-host-tools.sh:263-268): on a forge, openssl is skipped by the
+    # resolution loop entirely — neither counted present nor named missing,
+    # because ensure_ca_bundle early-returns on forge. Arm 8 below asserts the
+    # probe does not name it; WITHOUT this filter the partition property here
+    # re-imports the 1004-cp6p defect macuahuitl's carve-out retired on the
+    # probe side. RED first seen in a forge 2026-09-12 (this arm, linux):
+    #   declared=4 seen=3 out=[ok:host-tools:linux:gate:3 present ...]
+    # on the three mutable hosts TILLANDSIAS_HOST_KIND is unset, so this never
+    # changes their verdict; it only lets a CA-exempt forge satisfy the promise
+    # arm 8 already makes for it.
+    if [ "${TILLANDSIAS_HOST_KIND:-}" = forge ]; then
+        _declared="$(printf '%s\n' "$_declared" | grep -vx openssl || true)"
+    fi
     _n_declared="$(printf '%s\n' "$_declared" | grep -c .)"
     _out="$(PATH="$PATH" "$CHECK" --platform "$_p" 2>/dev/null)"
     # ORDER 1004-cp6p: the verdict now names both scopes, so the partition must
