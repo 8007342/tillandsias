@@ -1,0 +1,14 @@
+# Gate step 1136-n8sh — data, not code (order 1072-b7eq).
+#
+# Pins that the two closure guards name each other and the sanctioned exit. A
+# packet whose DELIVERABLE IS A NEW TEST is refused by 977-448j for naming no
+# litmus and by 885-92iu for naming one that does not resolve yet; the bind is
+# intended, and the exit is `unscoreable: unpinnable-until-the-guard-exists`.
+# Without this step, either message could lose its half and the fleet would
+# rediscover the bind by walking into it.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking both closure guards name the way out and each other (1136-n8sh)"
+STEP_SCRIPT="scripts/test-closure-guards-name-the-way-out.sh"
+STEP_ERROR="a closure guard no longer names the sanctioned exit or its counterpart, so a new-test packet is refused from both sides with no way out stated (1136-n8sh) — see the verdict line above"
+STEP_OK="Closure-guard way-out messages passed"

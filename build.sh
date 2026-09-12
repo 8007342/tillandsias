@@ -3449,6 +3449,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     for _step_file in "$SCRIPT_DIR"/scripts/gate-steps.d/*.step; do
         [ -e "$_step_file" ] || continue
         STEP_DESC=""; STEP_SCRIPT=""; STEP_ERROR=""; STEP_OK=""
+        STEP_SKIP_EXIT=""; STEP_SKIP_DESC=""
         # shellcheck disable=SC1090
         . "$_step_file"
         if [ -z "$STEP_DESC" ] || [ -z "$STEP_SCRIPT" ]; then
@@ -3460,7 +3461,29 @@ if [[ "$FLAG_CHECK" == true ]]; then
             exit 1
         fi
         _step "$STEP_DESC..."
-        if ! _run bash "$SCRIPT_DIR/$STEP_SCRIPT" 2>&1; then
+        # STEP_SKIP_EXIT (1087-h2z9 follow-up): a step may nominate ONE exit
+        # code that means "this check could not run here", as distinct from
+        # "this check ran and failed". Without it every non-zero exit printed
+        # STEP_ERROR, so a host merely lacking the tool was told a cheatsheet
+        # reference does not resolve — a content verdict about nothing that was
+        # examined, and it refused the land. The sibling tier check already had
+        # the right shape (it prints its own skip: line and exits 0); this
+        # gives the DATA-wired steps the same vocabulary.
+        #
+        # NEGATIVE CONTROL, load-bearing: the skip path is reached only on an
+        # EXACT match against the nominated code. Any other non-zero exit —
+        # notably exit 1, the genuine content failure — still takes the
+        # refusal branch below. A step that nominates nothing behaves exactly
+        # as it did before.
+        _step_rc=0
+        _run bash "$SCRIPT_DIR/$STEP_SCRIPT" 2>&1 || _step_rc=$?
+        if [ "$_step_rc" -ne 0 ] \
+           && [ -n "$STEP_SKIP_EXIT" ] \
+           && [ "$_step_rc" -eq "$STEP_SKIP_EXIT" ]; then
+            _info "skip:${STEP_SCRIPT##*/}:could-not-run (exit $_step_rc; ${STEP_SKIP_DESC:-the step nominated this code as could-not-run}; check not run — see the reason above)"
+            continue
+        fi
+        if [ "$_step_rc" -ne 0 ]; then
             _error "${STEP_ERROR:-$STEP_SCRIPT failed} — see the verdict line above"
             exit 1
         fi

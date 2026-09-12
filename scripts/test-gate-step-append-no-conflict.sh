@@ -144,6 +144,31 @@ done
     && ok "every .step declares all four fields non-empty — a truncated resolution cannot pass" \
     || bad "a .step is missing or has an empty field:$incomplete"
 
+# ── 6b. AN OPTIONAL STEP_SKIP_EXIT IS A BARE INTEGER AND IS NEVER 0 OR 1.
+#      The field lets a step nominate one exit code meaning "could not run
+#      here" (1087-h2z9 follow-up: absent rg read as a content failure and
+#      refused the land). Its whole safety rests on that code NOT being the
+#      code a genuine failure uses. 0 is success and would be unreachable; 1
+#      is the conventional content failure and nominating it would silently
+#      downgrade every real refusal in that step to a skip — the exact
+#      negative control the packet named. A non-integer would make the
+#      runner's arithmetic comparison error out mid-gate.
+badskip=""
+for f in "$ROOT"/scripts/gate-steps.d/*.step; do
+    [ -e "$f" ] || continue
+    grep -q '^STEP_SKIP_EXIT=' "$f" || continue
+    v="$(sed -n 's/^STEP_SKIP_EXIT=\"\{0,1\}\([^\"]*\)\"\{0,1\}$/\1/p' "$f")"
+    case "$v" in
+        ''|*[!0-9]*) badskip="$badskip ${f##*/}:not-an-integer($v)" ;;
+        0|1)         badskip="$badskip ${f##*/}:reserved($v)" ;;
+    esac
+    grep -q '^STEP_SKIP_DESC="..*"$' "$f" \
+        || badskip="$badskip ${f##*/}:no-STEP_SKIP_DESC"
+done
+[ -z "$badskip" ] \
+    && ok "every STEP_SKIP_EXIT is a bare integer other than 0 or 1, with a reason string — a content failure cannot be nominated as a skip" \
+    || bad "a STEP_SKIP_EXIT is unusable or would swallow a real failure:$badskip"
+
 # ── 7. NO TWO .step FILES SHARE A NUMERIC PREFIX. This is the blind spot the
 #      migration itself created, and it was found the only way it can be: two
 #      hosts picked 090 on the same day and nothing complained. 1072-b7eq made

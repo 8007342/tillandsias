@@ -11,3 +11,12 @@ STEP_DESC="Checking cheatsheet references resolve"
 STEP_SCRIPT="scripts/check-cheatsheet-refs.sh"
 STEP_ERROR="a cheatsheet reference does not resolve (1087-h2z9)"
 STEP_OK="Cheatsheet references passed"
+
+# Exit 2 from check-cheatsheet-refs.sh means "ripgrep is available neither on
+# this host nor in the tillandsias-builder toolbox" — nothing was examined.
+# Before this field existed, that tooling gap printed STEP_ERROR and refused the
+# land: a content verdict about zero references. Measured on esmeraldinha
+# 2026-09-12 (WSL2, no rg), LAND_EXIT=3. Exit 1 remains a genuine unresolved
+# reference and still refuses.
+STEP_SKIP_EXIT=2
+STEP_SKIP_DESC="ripgrep absent on this host and in the tillandsias-builder toolbox"

@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-data-wired-gate-step-cannot-say-could-not-run-so-a-tooling-gap-reads-as-a-content-verdict
+    event:
+      type: note
+      ts: "2026-09-12T23:14:44Z"
+      agent_id: linux-lenovinha-opus5-20260912t231444z
+      host: linux
+      summary: |
+        SIDE FINDING while landing this row, same family as the bug the row fixes: a
+        closure that IS scorable is refused for its YAML QUOTING, not its content.
+
+        check-scorable-obligation-added.sh anchors _scorable_p to the closure's FIRST
+        LINE with patterns like `scripts/*.sh*`. Written as a double-quoted scalar,
+        `verifiable_closure: "scripts/test-....sh passes (10/10)"`, the extracted first
+        line begins with the quote character, no pattern matches, and the row is
+        refused as carrying no scorable obligation. Rewritten as a block scalar (`|`)
+        with the same words, it passes. Measured here, both ways.
+
+        This is 994-8r3w's lesson in a third dialect — the verdict is correct about the
+        letter and wrong about the intent, and the author's available moves are to
+        learn an undocumented formatting rule or to write `unscoreable:` about a row
+        that is plainly scorable. Not fixed here (out of this story's scope, and the
+        fix is a one-line strip of surrounding quotes before matching, which deserves
+        its own fixture). Recorded so the next filer does not spend the same minutes,
+        and so whoever fixes it has the measurement rather than the anecdote.
