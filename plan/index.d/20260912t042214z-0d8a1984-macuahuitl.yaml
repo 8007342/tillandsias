@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-guest-whose-provisioning-completed-never-reaches-ready-and-the-host-has-no-way-to-ask-why
+    event:
+      type: finding
+      ts: "2026-09-12T04:22:14Z"
+      agent_id: linux-macuahuitl-claude-20260912t013351z
+      host: macuahuitl
+      summary: |
+        CROSS-PLATFORM, AND IT HOLDS THE STABLE PROMOTION (coordinator, 2026-09-12T04:30Z). esme-windows's curl-install smoke of v56.9.12.1 (N100/16 GB, Windows 11, WSL2, valid clean room per 804-ckst) FAILS deterministically at cold --provision-once: "hvsocket open: secure handshake failed: noise: input error", nine backoffs, 280 s then 162 s from a re-pristined base, distro registered and running, wire never handshakes; guest_wiring reports "skipped-version-match" with guest_version_before 56.9.12.1 while diagnose reports guest_version null. macbookair reproduced the macOS shape on the same tag: the guest asserts readiness at t=36 s (cold) and the host times out at 300 s never observing it — two releases, two thermal regimes, same outcome. The same host that fails today reached Ready in 117 s on v56.9.2.1.
+
+        WINDOW AND SUSPECT, stated as a hypothesis with its falsification: between v56.9.2.1 and v56.9.12.1 the control wire became encrypted (Noise) BY DEFAULT — 972-umik, e6a80609f "the control wire defaults to encrypted, through one reader" (crates/tillandsias-control-wire/src/secure_wire_mode.rs; env TILLANDSIAS_SECURE_CONTROL_WIRE, absent = ON, 'off' disables). e6a80609f is NOT in v56.9.4.1 and IS in v56.9.5.1; this packet was filed on 2026-09-05. "noise: input error" is the Noise length error macneo found (7a61eddb8). Neighbours in the same window: 54a9471a1 (WIRE_VERSION 3), ac41fc8c9 (discriminant pins), a55927754 (heartbeat liveness).
+
+        THE TEST HANDED TO THE FLEET: (A) on v56.9.12.1 with TILLANDSIAS_SECURE_CONTROL_WIRE=off exported to the tray (and to the guest if the tray does not propagate it), does provision reach Ready? (B) v56.9.4.1 pre-flip, expect Ready; (C) v56.9.5.1, expect the failure. Ready under (A) plus B/C agreeing = the flip is the regression and the fix is either propagating the mode to both ends or a handshake that fails LOUD naming the mode/version mismatch. Still failing under (A) = not the flip; the window narrows to the other three commits.
+
+        DECISION: v56.9.12.1 is not promoted to stable while Windows cannot provision and macOS cannot observe readiness; Linux (macuahuitl, full lane incl. a completed forge lane) and the macOS install/provision axis are green. The current stable stays v56.9.2.1 until a tag with a working wire on all three platforms exists.
