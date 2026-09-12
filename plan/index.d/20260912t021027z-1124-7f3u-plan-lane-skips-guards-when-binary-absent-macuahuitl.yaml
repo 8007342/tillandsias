@@ -1,0 +1,59 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-pre-push-plan-only-lane-skips-the-fragment-schema-and-status-loss-guards-when-the-plan-binary-is-absent-and-calls-it-a-lane-note
+    order: 1124-7f3u
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [pre-push, hooks, ledger, guard, fail-loud]
+    estimated_hours: 2
+    verifiable_closure: bash scripts/test-pre-push-empty-ref-list.sh
+    owned_files:
+      - scripts/hooks/pre-push-local-gate.sh
+    title: |
+      scripts/hooks/pre-push-local-gate.sh:811-812 nests the fragment-schema and status-loss checks under "the plan binary is present" and, when it is not, records "checks skipped" as a LANE_NOTE on an otherwise successful plan-only push, so a fragment-only push (which is exactly what a ledger reopen is) can carry a shape the full gate refuses onto trunk and freeze every other host's land
+    context: |
+      FOUND BY lenovinha 2026-09-12T02:10Z while the fleet was frozen. The
+      freeze itself: yoga's honest reopen of 1115-yvrq (a falsified event
+      beside the old completed event, status back to in_progress through
+      --reopen-evidence, 650-dq6u) reached origin/linux-next at 7f0b2cd0f;
+      scripts/check-fragment-status-loss.sh refused that shape ("has a
+      'completed' EVENT but folds as 'in_progress'"), and because
+      methodology's pre_push_gate makes every platform branch merge trunk
+      before every push, every host that obeyed it was refused at its gate
+      for about an hour. The coordinator taught the guard that a later
+      falsified event supersedes the closure (this commit).
+
+      HOW THE SHAPE GOT PAST yoga's OWN PUSH is this packet. lenovinha traced
+      it: check-fragment-status-loss.sh:81 prints violation:0 when no plan
+      binary resolves but EXITS 2, and build.sh:2597 runs it through _run,
+      which returns the child rc — so ./build.sh --check reds on an unbuilt
+      binary and the full gate is sound. The escape is the plan-only lane in
+      scripts/hooks/pre-push-local-gate.sh:811-812: the whole status-loss
+      block sits under an `if` on target/release/tillandsias-plan being
+      present, and the else branch appends "target/release/tillandsias-plan
+      absent — fragment schema and status-loss checks skipped" to LANE_NOTES
+      and lets the push through. A fragment-only push takes that lane and
+      skips the build. lenovinha inferred (did not observe) that yoga's push
+      took it; the coordinator has not confirmed which lane yoga's land used,
+      so the first exit criterion is the confirmation.
+
+      Not-a-check-that-could-not-run is the order-531 shape one hook deep:
+      "skipped" printed as a note beside a green push reads as a pass.
+    exit_criteria:
+      - "confirm from yoga's land log which lane 7f0b2cd0f's push took (plan-only lane with the binary absent, or the full gate with the binary present and the pre-fix guard simply accepting a shape it should not have); pre-fix result: FAILS (nobody has read that log)"
+      - "the plan-only lane refuses (full gate required) or resolves the binary through resolve_plan_binary / plan-binary-probe like the guard itself does, instead of testing one hardcoded target/release path and skipping; pre-fix result: FAILS (hook lines 811-812)"
+      - "a fixture arm drives a fragment-only push with the binary absent and asserts the refusal or the resolved run, never a LANE_NOTE beside success; pre-fix result: FAILS (no arm covers that branch)"
+      - "NEGATIVE CONTROL: a plan-only push with the binary present still takes the fast lane and runs both checks (lane speed is the reason the lane exists, 930-i6x4)"
+    events:
+      - type: filed
+        ts: "2026-09-12T02:10:27Z"
+        agent_id: "linux-macuahuitl-claude-20260912t013351z"
+        host: macuahuitl
+        summary: |
+          Filed by the coordinator from lenovinha's trace during the
+          2026-09-12 landing freeze; the guard fix that lifted the freeze is
+          in the same commit and does not close this hole.
