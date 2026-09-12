@@ -125,15 +125,28 @@ fn main() {
     //   - digests absent     : the sanctioned path always exports them.
     // Widening any of the three would red the fleet's gate to fix a macOS
     // keying bug, which is a trade nobody asked for.
+    // VALIDATE THE SHAPE THE RUNTIME ACTUALLY REQUIRES, not merely non-empty.
+    // guest_binary.rs::bundled_guest_digest() returns None unless the string is
+    // exactly 64 hex chars, and a None there falls back to the self-hash
+    // derivation — i.e. silently reinstates 1084-x8ya. An `is_empty()` check
+    // here would accept a truncated or whitespace-bearing digest, pass the
+    // build, and produce a release tray that cannot handshake, with no error at
+    // any point. That gap between what the build validates and what the runtime
+    // needs is precisely the silent-degrade class filed as 1130-i6xj, so it is
+    // closed rather than documented.
+    let well_formed = |d: &str| d.len() == 64 && d.chars().all(|c| c.is_ascii_hexdigit());
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     let is_release = std::env::var("PROFILE").unwrap_or_default() == "release";
     if target_os == "macos"
         && is_release
-        && (guest_digest_aarch64.is_empty() || guest_digest_x86_64.is_empty())
+        && !(well_formed(&guest_digest_aarch64) && well_formed(&guest_digest_x86_64))
     {
         panic!(
-            "release macOS tray built without the guest digests — build through \
-             scripts/build-macos-tray.sh, which builds the guests first"
+            "release macOS tray built without well-formed guest digests \
+             (need 64 hex chars each; got aarch64={} chars, x86_64={} chars) — \
+             build through scripts/build-macos-tray.sh, which builds the guests first",
+            guest_digest_aarch64.len(),
+            guest_digest_x86_64.len()
         );
     }
 
