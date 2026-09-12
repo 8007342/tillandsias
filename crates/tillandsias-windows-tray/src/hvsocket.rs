@@ -542,8 +542,6 @@ mod tests {
     /// "it failed".
     #[tokio::test]
     async fn a_guest_digest_mismatch_is_refused_not_carried() {
-        use tokio::io::AsyncWriteExt;
-
         // One byte apart is deliberate: the arm must fail on the KEY, not on
         // some incidental difference between two unrelated-looking arrays.
         let mut other_digest = TEST_GUEST_DIGEST;
