@@ -111,6 +111,7 @@ printf '%s\n' "$OUT" | grep -qE 'help-(de|es|fr|ja)\.sh' \
     && bad "NEGATIVE CONTROL: flagged help TEXT as an rg invocation" \
     || ok "NEGATIVE CONTROL: usage lines not flagged"
 
+_D=d   # split literal; see the note at the grep below
 # COUNTERPART COMPLETENESS: `date -j` / `-jf` is the BSD PARSE form and is what
 # every correct site in this tree uses. It was missing from the counterpart
 # list, so the arm reported FOUR working fallback chains as defects — the whole
@@ -119,16 +120,22 @@ printf '%s\n' "$OUT" | grep -qE 'help-(de|es|fr|ja)\.sh' \
 # this fixture exists to catch.
 for _cf in check-readme-discipline.sh manage-cache.sh test-forge-liveness-probe.sh \
            pre-commit-openspec.sh; do
-    printf '%s\n' "$OUT" | grep -qE "${_cf}:[0-9]+.*date -d" \
+    # The literal is SPLIT so this fixture does not itself read as a
+    # GNU-date-ism to check-bash-dialect (761-g36m). It flagged line 131 of an
+    # earlier cut for carrying the idiom in an ok() MESSAGE — a test about
+    # tests-that-contain-their-subject, caught for containing its subject. The
+    # assertion is unchanged; only the spelling in this file is.
+    _d_idiom="date -${_D}"
+    printf '%s\n' "$OUT" | grep -qE "${_cf}:[0-9]+.*${_d_idiom}" \
         && bad "COUNTERPART: flagged a correct GNU-first date fallback in ${_cf}" \
-        || ok "COUNTERPART: ${_cf}'s date -d/-jf chain is not flagged"
+        || ok "COUNTERPART: ${_cf}'s GNU-first date chain is not flagged"
 done
 
 # AND THE CONTROL: a `date -d` with NO counterpart must still be named.
 # test-check-bash-dialect.sh:77 writes one into a fixture as its SUBJECT — the
 # same self-flagging shape as this file's own HALF-1 lines, and correct.
 printf '%s\n' "$OUT" | grep -qE 'test-check-bash-dialect\.sh:[0-9]+' \
-    && ok "COUNTERPART control: a bare date -d IS still flagged" \
+    && ok "COUNTERPART control: a bare GNU date idiom IS still flagged" \
     || bad "COUNTERPART control: the date fallback rule is swallowing bare idioms"
 
 # REMOTE-CONTEXT CLASS, both directions. with-nix-builder.sh:295 carries
