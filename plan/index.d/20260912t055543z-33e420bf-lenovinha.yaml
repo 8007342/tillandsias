@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-gate-stamp-excludes-exactly-the-paths-whose-guards-it-memoizes-away-so-a-plan-only-commit-is-the-one-change-class-the-gate-cannot-check
+    field: status
+    value: in_progress
+    ts: "2026-09-12T05:55:43Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-gate-stamp-excludes-exactly-the-paths-whose-guards-it-memoizes-away-so-a-plan-only-commit-is-the-one-change-class-the-gate-cannot-check
+    event:
+      type: note
+      ts: "2026-09-12T05:55:43Z"
+      host: lenovinha
+      summary: |-
+        claimed by lenovinha-silverblue: I filed it and hold the reproduction; coordinator assigned, land slot fourth on linux-next

@@ -483,6 +483,48 @@ stamp_field() {
     return 1
 }
 
+# ORDER 1127-waxf — A SECOND DIGEST, OVER EXACTLY WHAT `compute` REFUSES TO SEE.
+#
+# `compute` deliberately skips plan/index.d/*.yaml, plan/loop_status.d/*.md and
+# plan/mo-full-attestations.d/*.md (930-i6x4, and that exclusion is right: it
+# stopped every sibling landing from staling a stamp that remained true of every
+# byte of code). Its SIDE EFFECT is that those are exactly the paths
+# check-fragment-status-loss.sh and `tillandsias-plan check --strict-fragments`
+# exist to validate — so a commit touching only them cannot stale the stamp, the
+# memo returns ok:gate-fresh, and the guards written for that change class never
+# run. The exclusion and the guards cover the same paths in opposite directions.
+#
+# MEASURED on lenovinha 2026-09-12, which is why this exists:
+#     (plant a terminal event on a packet that folds 'ready')
+#     scripts/check-fragment-status-loss.sh  -> rc=1, violation:fragment-status-loss:1
+#     ./build.sh --check                     -> rc=0 in 2026ms, ok:gate-fresh,
+#                                               and the guard appears 0 times in the log
+#
+# THE FIX IS IN THE MEMO, NEVER IN THE DIGEST — 1036-e5w9's rule, learned when a
+# digest-side attempt (1034-ihxw, reverted at 0a1419ffe) reintroduced the drvfs
+# deadlock. `compute` is untouched here and returns the same value before and
+# after this change.
+#
+# CONTENT ONLY, NO MODES. 889-8tcb's deadlock was a worktree MODE read on drvfs;
+# hashing bytes is not that, and these paths carry no meaningful exec bit. The
+# worktree is the right source because a fragment is typically written and
+# committed in one motion, and the memo must see it either way.
+gate_stamp_plan_digest() {
+    # One xargs, not a hash per file: the same shape `compute` uses at :446,
+    # for the same reason — a fork per path is what makes a guard too slow to
+    # keep on the memo path, and a guard that gets switched off for cost is the
+    # failure mode this whole packet is downstream of.
+    {
+        LC_ALL=C find "$REPO_ROOT/plan/index.d" -maxdepth 1 -type f -name '*.yaml' -print0 2>/dev/null
+        LC_ALL=C find "$REPO_ROOT/plan/loop_status.d" -maxdepth 1 -type f -name '*.md' -print0 2>/dev/null
+        LC_ALL=C find "$REPO_ROOT/plan/mo-full-attestations.d" -maxdepth 1 -type f -name '*.md' -print0 2>/dev/null
+    } | LC_ALL=C sort -z \
+      | xargs -0 -r "${GATE_STAMP_SHA256[@]}" 2>/dev/null \
+      | LC_ALL=C sed "s|$REPO_ROOT/||" \
+      | LC_ALL=C sort \
+      | "${GATE_STAMP_SHA256[@]}" | cut -d' ' -f1
+}
+
 stamp_is_v2() {
     [[ -f "$STAMP_FILE" ]] || return 1
     [[ "$(stamp_field version 2>/dev/null)" == "2" ]]
@@ -491,6 +533,11 @@ stamp_is_v2() {
 case "${1:-verify}" in
     compute)
         compute
+        ;;
+    plan-digest)
+        # Exposed so a fixture can assert the two digests move independently:
+        # `compute` must NOT see a plan fragment and this MUST. 1127-waxf.
+        gate_stamp_plan_digest
         ;;
     write)
         shift
@@ -590,6 +637,9 @@ case "${1:-verify}" in
             printf 'scope %s\n' "$scope_spec"
             printf 'dispatch %s\n' "$dispatch"
             printf 'toolchain %s\n' "$(gate_stamp_toolchain_digest)"
+            # 1127-waxf: what `compute` refuses to see, recorded separately so
+            # the memo can tell "nothing moved" from "only the ledger moved".
+            printf 'plan_digest %s\n' "$(gate_stamp_plan_digest)"
             printf 'stamped %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
         } > "$STAMP_FILE" || {
             echo "stale:cannot-write-stamp"
@@ -781,6 +831,33 @@ case "${1:-verify}" in
                 exit 1
                 ;;
         esac
+        # ── GUARD-OWNED PATHS THE DIGEST CANNOT SEE (order 1127-waxf) ────────
+        #
+        # Same shape as the mode-drift block above, one axis over: the memo keys
+        # on a digest that DELIBERATELY excludes plan/index.d/*.yaml and its
+        # siblings (930-i6x4), and those are precisely what
+        # check-fragment-status-loss.sh and `check --strict-fragments` read. So a
+        # plan-only commit could not stale the stamp and the guards written for
+        # it never ran.
+        #
+        # NOT `stale:`, AND THAT IS THE WHOLE DESIGN. Refusing the memo outright
+        # would re-impose the cost 930-i6x4 removed — a full gate for every
+        # fragment, which is the thing that made nine commits sit inside one
+        # ten-minute gate. This verdict says the CODE is still vouched for and
+        # only the ledger moved, so build.sh runs the two ledger guards (~1-2s)
+        # and nothing else. The cost argument survives; the hole does not.
+        recorded_plan="$(stamp_field plan_digest 2>/dev/null)"
+        if [[ -z "$recorded_plan" ]]; then
+            # Written before this order. Absent is not "assume unchanged" —
+            # the same rule the toolchain field above already follows. Costs one
+            # honest re-gate per host, once.
+            echo "stale:no-plan-digest-recorded"
+            exit 1
+        fi
+        if [[ "$recorded_plan" != "$(gate_stamp_plan_digest)" ]]; then
+            echo "ok:gate-fresh-except-plan $recorded_stamped"
+            exit 0
+        fi
         echo "ok:gate-fresh $recorded_stamped"
         ;;
     classify)
