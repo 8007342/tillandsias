@@ -5351,8 +5351,18 @@ fn main() {
             }
 
             for (label, tok) in &missing {
+                // 1136-n8sh: name the way out and the counterpart guard. A
+                // packet whose DELIVERABLE IS THE TEST is refused from both
+                // sides — 977-448j for naming no litmus, this guard for naming
+                // one nothing defines yet — and neither message used to
+                // mention the other or the sanctioned exit. The attractive
+                // wrong turn after reading only this line is to delete the
+                // pin, which lands straight back in 977-448j; the second wrong
+                // turn is to leave the pin dangling, which is 1068-cxmf's
+                // standing defect. The bind is intended; the silence was not.
                 eprintln!(
-                    "declared-closure-unresolvable: {label} declares litmus:{tok} — no litmus test declares that name."
+                    "declared-closure-unresolvable: {label} declares litmus:{tok} — no litmus test declares that name. \
+If this test is THIS packet's deliverable, do not delete the pin (977-448j then refuses the row for carrying no obligation) and do not leave it dangling (1068-cxmf): declare `unscoreable: unpinnable-until-the-guard-exists` instead, name {tok} in it as the future litmus filename, and write that litmus in the same commit as the thing it tests."
                 );
             }
             for (label, tok) in &unbound {
