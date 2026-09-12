@@ -777,3 +777,23 @@ surface another host's claim names (`tillandsias-plan expire-claims
   rather than a by-name exemption. One baseline, 23/14 at e5d5ac0af, both
   platforms. A measurement whose tree state is not stated, in the packet
   about measurements whose regime is not stated (macbookair's own words).
+- **ci-release 37/37 on macOS; neither standing red was in the code under
+  test** (macbookair, osx-next 8f004a77d): BSD `wc -l` pads its count in
+  every form, so a string compare against "1" failed on every Mac — the
+  sigpipe litmus fixed to `-eq`, an eighth idiom added with a `tr -d`
+  negative control, and the new arm immediately found a live red nobody had
+  reported (`test-capability-manifest-guard.sh` string-comparing a padded
+  count, "drifted token count differs" while the code was fine). And
+  litmus:tool-dispatch-lib: arm 4f asserted `= "RESOLVER-ABSENT"` where three
+  outcomes exist — `.` is a POSIX special builtin, so on bash 3.2 (every
+  macOS /bin/bash) a failed source under `set -e` terminates the shell
+  despite `|| true`; the old caller printed nothing, empty fell to the else
+  branch, and the arm reported the opposite of what happened. Changed to
+  `!= "RESOLVER-PRESENT"`, what it always meant. The property worth naming:
+  an assertion that enumerates fewer outcomes than exist does not merely
+  miss — it reports a specific falsehood, and both of today's did so in the
+  direction that accused the subject. Filed: 1135-z8gn (the 35-item GNU-ism
+  backlog with the 23/14 baseline, both hosts named, the ninth idiom `. FILE
+  || true` under set -e, unscoreable with its scorable slice named) and
+  1136-n8sh (the two ledger guards must name each other; the unresolvable
+  half is Rust in tillandsias-plan, the 977-448j half is a shell string).
