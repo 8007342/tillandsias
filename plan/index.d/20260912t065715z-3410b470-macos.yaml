@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: macos-model-cache-dies-with-the-vm-directory
+    field: next_action
+    value: 'DELIVERABLE PART 1 IS DONE — verified running on macbookair 2026-09-12: three virtiofs shares, ''model-cache on /root/.cache/tillandsias/models'', host dir vz.rs:1266. Do not re-implement it; the context block predates it. TWO THINGS REMAIN. (a) MEASUREMENT: the guest-side models-vs-images split on a POPULATED cache. Baseline captured on a fresh guest (rootfs 782M used, models 0, .tools absent, /var/lib/containers 12M); a real split needs a forge lane run that pulls the engine and a model, then --exec-guest du -sh, which now works on macOS after the 1084-x8ya keying fix. (b) SCOPE DECISION, not code: model_cache_dir() is $HOME/Library/Caches/tillandsias/models, i.e. under $CACHE_DIR, so destroyers D1 (build-install SKILL.md:297), D2 (smoke-curl SKILL.md:415-416) and D4 (uninstall.sh) still delete it — measured three times on macbookair tonight, host models dir now empty. The literal deliverable (survives rm -rf $VM_DIR) is met while the ~2.47 GB re-download still lands on every smoke run. Narrowing the skills to preserve the models dir changes clean-room semantics deliberately, so decide it rather than inherit it.'
+    ts: "2026-09-12T06:57:15Z"
+    host: macos
+
+events:
+  - packet_id: macos-model-cache-dies-with-the-vm-directory
+    event:
+      type: progress
+      ts: "2026-09-12T06:57:15Z"
+      host: macos
+      summary: |-
+        status 'DELIVERABLE PART 1 IS DONE — verified running on macbookair 2026-09-12: three virtiofs shares, 'model-cache on /root/.cache/tillandsias/models', host dir vz.rs:1266. Do not re-implement it; the context block predates it. TWO THINGS REMAIN. (a) MEASUREMENT: the guest-side models-vs-images split on a POPULATED cache. Baseline captured on a fresh guest (rootfs 782M used, models 0, .tools absent, /var/lib/containers 12M); a real split needs a forge lane run that pulls the engine and a model, then --exec-guest du -sh, which now works on macOS after the 1084-x8ya keying fix. (b) SCOPE DECISION, not code: model_cache_dir() is $HOME/Library/Caches/tillandsias/models, i.e. under $CACHE_DIR, so destroyers D1 (build-install SKILL.md:297), D2 (smoke-curl SKILL.md:415-416) and D4 (uninstall.sh) still delete it — measured three times on macbookair tonight, host models dir now empty. The literal deliverable (survives rm -rf $VM_DIR) is met while the ~2.47 GB re-download still lands on every smoke run. Narrowing the skills to preserve the models dir changes clean-room semantics deliberately, so decide it rather than inherit it.' (not terminal) with evidence_refs: verified by --exec-guest mount table and vz.rs:1266/1939-1963/2313-2314; three destructions run tonight
