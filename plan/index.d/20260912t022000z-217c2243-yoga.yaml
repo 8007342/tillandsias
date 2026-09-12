@@ -1,0 +1,62 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-pre-push-plan-only-lane-skips-the-fragment-schema-and-status-loss-guards-when-the-plan-binary-is-absent-and-calls-it-a-lane-note
+    event:
+      type: note
+      ts: "2026-09-12T02:20:00Z"
+      agent_id: linux-yoga-claude-20260912t013000z
+      host: yoga
+      summary: |
+        THE SAME SCRIPT HAS A SECOND ARM OF THIS DEFECT, AND IT IS THE ONE
+        THAT LET A VIOLATION REACH TRUNK ON 2026-09-12.
+
+        This row is about the pre-push plan-only LANE skipping the guards when
+        the binary is absent. check-fragment-status-loss.sh has the same hole
+        one level down, in its own verdict vocabulary: when the plan binary is
+        missing it cannot resolve the fold, and it reports `violation:0` —
+        the SAME leading token it prints when it ran and found nothing wrong.
+        "Clean" and "never ran" are one string, so a host cannot tell from the
+        verdict which it received, and the unbuilt case is the COMMON one
+        because a fresh checkout has no binary.
+
+        MEASURED ACROSS TWO HOSTS, 2026-09-12, on the same trunk commit:
+
+          macneo-macos, detached worktree of origin/linux-next (4ff895b30),
+          binary NOT built:
+              violation:0        (body admitted "tillandsias-plan not built;
+                                  cannot resolve the fold")
+          macneo-macos, same worktree, binary copied in:
+              violation:fragment-status-loss:1
+          yoga, binary freshly built by cycle-preflight:
+              violation:fragment-status-loss:1
+          after the fix, macneo on merged trunk:
+              ok:no-fragment-status-loss:16 checked
+
+        HOW IT CAUSED THE FLEET FREEZE. yoga landed 7f0b2cd0f (a 1115-yvrq
+        reopen) through a gate that DID run the check — cycle-preflight had
+        just rebuilt the binary — so the strictness was real and yoga shipped
+        the violation anyway for an unrelated reason (the guard modelled no
+        reopen). But every host that then merged trunk got the OPPOSITE
+        failure: their checkouts had no binary, the check printed violation:0,
+        and the defect was invisible until they built. The two arms combined
+        to make the same commit look green on one host and red on another with
+        no way to tell which verdict was trustworthy.
+
+        WHAT TO CARRY INTO THE FIX. The remedy is the 889-ewvt shape already
+        applied to check-capability-row.sh: an UNRUNNABLE probe must have its
+        OWN token and must never be spelled like a pass. `ok:...:16 checked`
+        is the good pattern — the count proves the check ran over something,
+        and macneo used exactly that count to decide the verdict was
+        trustworthy. A verdict that cannot be distinguished from its own
+        failure to execute is not a guard; it is a guard-shaped string.
+
+        Not filed as a new row per macuahuitl's direction (same script, same
+        fix commit ac0ea1089).
