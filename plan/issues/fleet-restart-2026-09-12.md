@@ -836,3 +836,30 @@ surface another host's claim names (`tillandsias-plan expire-claims
   is GNU-only. Loud-fail half (13 fixture entries, ≥3 deliberate subjects,
   ~8-9 real conversions) left on 1135-z8gn as a followable next_action; the
   class is stopped here to spend the budget elsewhere.
+
+## Autonomous drains (operator directive, 2026-09-12 evening)
+
+The operator restarted the fleet with fresh contexts and asked the coordinator
+to schedule `advance-work-from-plan` on trusted hosts and let them drain
+planned work autonomously. Cadence armed: macuahuitl runs a coordination pass
+every 2 h at :41 and a meta-orchestration cycle every 4 h at :09; macbookair
+drains macOS every 4 h at :20; yolanda drains Windows every 4 h at :50 and
+merges esme's `work/<order>` refs; esme runs the macOS-tray-on-Windows probe
+daily at 09:15 and a measurement-only drain every 8 h at :25; pirria finishes
+1134-u934 then a measurement-only drain every 8 h at :55 and is the Linux
+smoke host for future dailies. All crons are session-only and expire in 7
+days. Every host: claim before work, 6-10 packets per story, one gate per
+story, the sub-agent budget, report only on blockers, hazards and completed
+stories.
+
+- **The cycle checkout lock cannot see a native Windows PID** (yolanda, on
+  windows-next ae69e23a4): `cycle-checkout-lock.sh` classifies the anchor and
+  tests the recorded holder with `kill -0`, and under MSYS bash a native
+  Windows PID is not an MSYS PID, so a live claude.exe harness is stamped
+  `explicit-DEAD`, every recorded holder stale-reaps on the next read, and a
+  second lane reads `ok:checkout-lock:free` while the first holds it. The
+  verdict's FIX line tells the operator to put the variable on the command
+  line, which cannot help. Structural and permanent on Windows until the
+  liveness probe resolves native PIDs (tasklist/OpenProcess) behind the
+  is_live seam; yolanda owns it, esme verifies; one lane at a time per
+  Windows host meanwhile.
