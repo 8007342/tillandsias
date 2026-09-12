@@ -169,3 +169,241 @@ surface another host's claim names (`tillandsias-plan expire-claims
   self-hash, so a tray and a musl guest never share a key; it surfaced only
   once the wire was secure by default (post-v56.9.5.1) and only where a guest
   VM exists. Rulings, fix routing and the closure tests are on 1084-x8ya.
+- **A gate step with no path operand hangs on a piped stdin** (macbookair
+  found it, lenovinha named the mechanism, fixed on trunk at d15aaf3d4):
+  `scripts/check-cheatsheet-refs.sh` handed ripgrep globs, a pattern and
+  `--replace` but no path, so rg read stdin; under an inherited pipe that
+  never closes it blocks forever, and the trailing `|| true` never runs
+  because rg never returns. It presents as a land with no verdict, not a red
+  (43 min on macbookair). `< /dev/null` does NOT reproduce it (EOF); a FIFO
+  control does: pre-fix rc 124 under `< <(sleep 60)`, post-fix the script
+  returns. It was green everywhere it had ever run because every prior stdin
+  delivered EOF. lenovinha's rule, learned by breaking three regimes in one land and
+  adopted with that provenance: **promoting a check from `--ci-full` to
+  `--check` is a change of blast radius, not of frequency** —
+  it changes which hosts, which userlands and which stdin shapes run the step,
+  and 1087-h2z9's triage of 22 checks into `--check` produced four regime gaps
+  (root, no rg, BSD grep, split /bin) and this fifth one (stdin shape) in one
+  night. esme flipped sides mid-night by installing rg: from "refuses for lack
+  of rg" to "can hang" without ever having run the step; it takes the first
+  post-fix run as the positive control.
+- **A push quiet is an instrument, and one was enough**: a two-fix code land
+  from macuahuitl was refused three times as `attempts-exhausted` while origin
+  moved every ~2.5 min under an ~8 min gate; every loser pays a full gate to
+  re-enter a race it may lose again (yoga: two attempts at ~4 min each on a
+  Silverblue host). Under a ten-minute fleet-wide quiet the same land passed on
+  attempt 1. macbookair's corollary: a slow host is not a quiet host — it
+  pushes late, decoupled from any state it last observed, and is the worse
+  neighbour in a race. Landing order after the quiet was assigned per branch
+  (one host at a time per platform branch, each messaging its SHA to the next)
+  rather than a free-for-all.
+- **The agent harness kills its own background waiters under memory
+  pressure during a gate** (macuahuitl, twice in one land): two
+  `run_in_background` polling loops were stopped with "the system is running
+  low on memory" while `./build.sh --check` ran, though `free` showed 53 GiB
+  available. The `setsid nohup` land itself survived both kills, and a
+  Monitor task polling the same log did not get killed. Detach the long job,
+  and watch it with Monitor rather than a background shell.
+- **A correct guard landed alone breaks the fleet when the suite manufactures
+  the state it refuses** (pirria, 1096-p3tn): the packet blamed the metrics
+  split (`/tmp/tillandsias-timing.jsonl` beside the checkout's log) on a
+  best-effort sourcing stub. An `ls -l` before and after one gate caught the
+  real writer: litmus fixtures that build a scratch root without a `.git`,
+  symlink `scripts/` into it and EXECUTE from there without naming a log
+  (resolution follows the executed script's location, not the cwd — three
+  fixtures, not the eleven first claimed; the other eight patches are
+  defence-in-depth, and every step name in the nine preserved records maps to
+  those three), so `metrics_default_log`
+  takes its documented no-checkout `/tmp` fallback — deterministically, on
+  every host, every gate, exactly matching the packet's own 2026-09-06
+  evidence. The reader guard pirria wrote is right and would have refused
+  metrics on every host after every gate, because the gate recreates the
+  split it refuses — so the guard's FIRST firing is guaranteed and
+  fleet-wide, at the moment it lands, not probabilistically later. Ruling: guard and cause land together (each fixture names
+  its own scratch log), the packet's stated cause is recorded as falsified,
+  and the guard must not trip once per host on the stale `/tmp` file every
+  host already carries from tonight's gates.
+- **Watch a gate for a stall, not only for a verdict** (macbookair, after
+  reporting a dead land as "slow" twice): a hung gate never produces the
+  verdict a waiter is polling for, so "still gating" is indistinguishable from
+  "dead" to a watcher that only greps for `ok:`/`refused:`. macbookair's land
+  of e1100c919 ran under a watcher that polls the gate log's mtime and reports
+  STALL when it goes five minutes without advancing. One command; adopt it for
+  every detached gate. Also confirmed there: the host-qualified smoke report
+  filename holds — origin/osx-next carries three v56.9.12.1 reports side by
+  side (linux_immutable-lenovinha, linux_mutable-macuahuitl, macos-macbookair)
+  where two lanes collided on one name five hours earlier.
+- **A fixture green through both of its own defects** (lenovinha, 1127-waxf,
+  during the quiet window): the packet's fixture stayed 5/5 while the full
+  gate refused twice — once because `verifiable_closure:` was prose describing
+  a fixture instead of naming one (977-448j's refusal, fixed by naming
+  `scripts/test-gate-stamp-does-not-memoize-guard-owned-paths.sh` and its
+  pre-fix measurement, not by reaching for `unscoreable:`), and once because a
+  symmetric "refuse when the checker is absent" guard broke
+  `test-gate-stamp-scope.sh` case 7. The distinction behind the second: the
+  plan binary is a BUILD ARTIFACT, commonly absent, so its absence is a live
+  hole; the checker is TRACKED, so its absence is not a state a real checkout
+  reaches and `build.sh` would fail the full gate anyway. A guard on an
+  unreachable state is pure cost — it obliges every fixture driving the lane
+  to provision the file. Reverted with the reasoning left in the file. The
+  contrast case, same night: `issue-capture-lane`'s CONTROL arm also objected,
+  and there the change was KEPT and the arm taught a third verdict — its intent
+  is qualification (a fragment is not turned away as outside the allowlist),
+  and a fail-closed refusal is not a qualification failure; folding it into
+  `bad` would have pinned the pre-1124 behaviour as the contract. Both looked
+  identical from outside ("my change broke someone's fixture"); only one was
+  overreach, and the test that separates them is "is this a state a real
+  checkout reaches", which differs for artifacts and tracked files even when
+  the code shape is identical. Neither
+  defect was visible from the fixture that owns the packet; only the run that
+  contained the other checks saw them, which is the claim 1127-waxf makes.
+- **The first Windows host back paid nine land attempts and six real gate
+  refusals, none of them noise** (yolanda, landed at 42551c649): the
+  proxy-permissive-port guard scanned a 14 MB binary because `--include`
+  after `--` is inert (1127-apa8, fixed); publishing a capability row wedged
+  every push with plan-ledger-incomplete (1128-4ffr); ripgrep was absent from
+  a WSL toolbox nothing provisions (1129-xm5z); `chmod 000` does not constrain
+  root so no Windows gate could pass the spec-index arm (1129-3yv7, fixed);
+  a fragment closed itself with no evidence (fixed); and the guard auditor
+  read five orphans through Windows symlink materialisation (trunk fix
+  7b9b58e55). Each refusal was a defect the fleet did not know it had. What
+  esme inherits for free from that land is the list above; what no commit
+  can do for a host is install rg in its build distro.
+- **Fleet rule until 1127-waxf lands: a plan-only land proves nothing about
+  the ledger guards** (yoga, applied by lenovinha and macuahuitl): a commit
+  touching only `plan/index.d/*.yaml` cannot stale the gate stamp, so
+  `./build.sh --check` memoizes out and the fragment-schema and status-loss
+  guards never execute — the exact path 1115-yvrq's reopen took when it froze
+  the fleet. Before every plan-only land, run by hand and report the COUNTS,
+  not a bare verdict (violation:0 cannot distinguish clean from never-ran):
+  `scripts/check-fragment-status-loss.sh` (`ok:no-fragment-status-loss:<n>
+  checked`) and `tillandsias-plan check --strict-fragments` (`ok: <n>
+  packets`).
+- **Refusing a caller that had not asked the question** (pirria, three times
+  in one night, named as a standing shape): an empty-variable check that would
+  have refused a correctly anchored CLAUDE_PID path (caught by yoga's negative
+  control); a source-time refusal of a caller that had already named its logs
+  (caught by `test-memo-hit-observability` arm 3); and, shipped in 68d404947,
+  a metrics split guard placed BEFORE `cycle-metrics.sh`'s subcommand branches,
+  so a TIMING-log split refused an unrelated FLOW append and
+  `test-cycle-flow-emit-idempotency.sh` failed 12 scenarios on a host
+  carrying the night's fixture debris — clean on pirria only because the
+  control that proved the writer fix had cleared /tmp first. CORRECTED within
+  the hour by lenovinha: that fixture runs in NEITHER `--check` nor the land
+  path — its only caller is a litmus test (748-tkjx keeps litmus out of
+  `--check`), so the blast radius is litmus runs and `--ci-full`, not lands;
+  lenovinha's gate was green with 99 lines of debris present and the fixture
+  absent from a 4759-line log. The coordinator broadcast the land-blocker
+  reading to six hosts before checking which gate runs the fixture — the
+  n=1-without-its-regime shape, again. The divergence file answered "which
+  gate runs this" in one grep; it doubles as orphan detection for
+  `test-*.sh`, which the guard auditor cannot see. Fix: the guard is
+  scoped to the reporting path (`--emit-*` never reaches it), arm 9c pins both
+  halves; landed ahead of the queue, with a one-line workaround broadcast
+  (remove `/tmp/tillandsias-timing.jsonl` when its litmus-record count equals
+  its line count). That condition earned its keep within the hour: on yolanda the file
+  was a THIRTY-TWO DAY timing ledger (4756 lines, 921 litmus), real
+  build-check records from 2026-08-11 on, because that host's real records
+  land in the /tmp fallback — checkout detection fails there, which is a
+  separate 1096-p3tn finding. Moved aside with a dated suffix, never deleted. Each instance was caught by someone else's control or an
+  instruction, none by the author's own review: treat it as a standing hazard
+  for guards written under time pressure — a guard fires where a NUMBER IS
+  PUBLISHED, not where a record is appended. Third writer category found by
+  the enumeration: `scripts/litmus-run-one.sh` symlinks `.git` into its
+  scratch root, so `metrics_default_log` resolves to that temp dir's own
+  `.cache/metrics` and the records are silently discarded on exit — neither
+  shared nor misleading, and exactly why it never polluted /tmp while the
+  eleven fixtures (scratch roots without `.git`) did.
+- **Three population gaps in one night, all the same shape** (lenovinha):
+  a guard's verdict covers the files it enumerates, and three guards each
+  omit a class the night needed. `audit-guard-activation.sh` enumerates
+  `check-*.sh` only, so an orphaned `test-*.sh` is invisible to it and the
+  divergence file (`scripts/gate-divergence-declared.txt`) is what actually
+  answers "does this fixture run in either gate" — one grep.
+  `check-plan-binary-probe-usage.sh` walks `scripts/` and the litmus corpus
+  and not `build.sh`, so lenovinha's first 1127-waxf arm — a hardcoded
+  `target/release/tillandsias-plan` exec-bit test (721-nyev: an exec bit is a
+  claim, not evidence) with a `|| exit 0` skip-that-reads-as-pass — sat in
+  the gate's own entry point while the guard built to refuse that construct
+  reported `ok:21 eligible of 990`. Its header already records one earlier
+  silent scoping; the defect was narrowed, not closed. Filed as its own row
+  rather than widened inside 1127-waxf. The arm is now unconditional through
+  `resolve_plan_binary` with a violation line; the skip was a second opinion
+  on a question `check-fragment-status-loss.sh` already settles one line above.
+- **The ripgrep fix is verified on Windows** (esme, the positive control):
+  on a host that had rg installed that night and had never executed the
+  step, under an inherited pipe with no stdin redirection, the gate printed
+  `OK: 577 cheatsheet references resolved.` and returned. No per-phase timing
+  line: `TILLANDSIAS_GATE_PROFILE=1` prints its table at the END of a gate and
+  this gate aborted later, so the flag only pays out on a gate that finishes.
+- **Sixth regime gap: the 1124-7f3u lane fixture's premise depends on
+  CARGO_TARGET_DIR** (esme found it, lenovinha diagnosed it against the
+  coordinator's wrong guess): "arm1: the lane admitted a fragment-bearing
+  push it could not fold (rc=0)" on the Windows lane. The coordinator expected
+  the root-versus-chmod shape of 1129-3yv7; no arm in that fixture uses a
+  permission bit. `resolve_plan_binary` reads three inputs and checks
+  CARGO_TARGET_DIR FIRST (783-jdeh); the fixture unset only
+  TILLANDSIAS_PLAN_BIN, and every forge and `with-wsl2-builder.sh` export
+  CARGO_TARGET_DIR to an absolute directory holding a real binary, so arm 1's
+  premise ("no runnable binary") was false before the arm began and the lane
+  correctly accepted. Reproduced on Linux rootless with the variable exported
+  — esme's line verbatim — which rules the root diagnosis out rather than
+  doubting it. Fix (c8d1d2686): `env -u TILLANDSIAS_PLAN_BIN -u
+  CARGO_TARGET_DIR`, root-proof because it removes an input instead of
+  relying on a permission root ignores; 5/5 with the hostile variable
+  exported and 5/5 clean, no skip. The tell that separates the two shapes:
+  ask whether the arm's premise uses a PERMISSION or an ENVIRONMENT — an
+  unset is only as complete as the list of what to unset (889-twhe's "the
+  environment quietly does not reproduce the condition", one variable over).
+- **The timing-ledger predicate was wrong on both Windows hosts** (yolanda,
+  esme): yolanda 4756 lines / 921 litmus over 32 days; esme 1289 / 279 over
+  27 days including the 40 build-check records its own CARGO_BUILD_JOBS
+  packet cites. Two hosts checked, two real ledgers: on Windows every record
+  lands in the /tmp fallback because checkout detection fails from the build
+  distro. Nobody deletes; the only remedy is mv-aside, and only when the
+  guard actually blocks a run. A remedy whose safety is a conditional relayed
+  between hosts at 06:00 is one paste from being run unconditionally (esme).
+- **The debug pair reaches Ready where the release pair cannot** (yolanda,
+  1084-x8ya): same host, distro, v56.9.12.1 source and VM substrate; debug
+  tray + debug guest (shared `DEV_ROOT_SEED`) → "VM Ready — control wire up"
+  in 521 s; release pair → "noise: input error" in 210 s. The only variable is
+  the build profile, which is the only thing that changes where the root
+  secret comes from: keying is the mechanism, transport and framing are
+  exonerated, macbookair's root cause is confirmed from the other direction.
+  Validity controls: the injected guest is the feature-enabled debug build
+  (size and digest checked) and its vsock listener bound. Two traps recorded
+  as the same shape as the night's others: a guest built with a bare
+  `cargo build` lacks `listen-vsock` and refuses to start (exit 78) — without
+  that guard it would have bound nothing and failed indistinguishably from a
+  keying failure; and injection is version-gated (`SkippedVersionMatch`), so a
+  debug guest reporting the same version would have been skipped and the arm
+  would have paired a debug tray with a release guest. Forced re-injection by
+  removing the guest binary; the `wsl --unregister` requested of the operator
+  was withdrawn as unnecessary after reading `GuestWiringOutcome`. The new
+  refusal log line discriminated on first use: `early eof` (a probe closing)
+  followed by Ready, not a key disagreement.
+- **The non-reproducing host did the work** (lenovinha, on the sixth regime
+  gap): both the coordinator and the fixture's author started from the root
+  diagnosis, and what settled it was yolanda being UNABLE to reproduce esme's
+  red on a clean Windows host — that eliminated platform and build lane as
+  the variable and turned "it fails on Windows" into "a runnable ELF exists
+  at that path for any historical reason". Ask the host that cannot reproduce
+  what it sees, not only the one that can.
+- **The keying fix's completeness criterion was wrong and its site count was
+  wrong in both lanes** (yolanda, macbookair): corrected on 1084-x8ya — no
+  bare `channel_psk(` call remains is the criterion (the version stays in the
+  HKDF info), and each lane has ONE production call site with the rest inside
+  test functions.
+- **A gate check gives different verdicts on an unchanged tree** (yoga, found
+  while widening `check-plan-binary-probe-usage.sh` for 1128-j9fc): ten runs of
+  the ORIGINAL guard on one tree report `scripts=7/568` seven times and
+  `scripts=8/568` three times; the patched guard flakes the same way. Exactly
+  one file flips eligibility — `test-fragment-status-loss.sh`, seen 2/8 — so a
+  violation there is found by coin flip. Refuted by measurement: ugrep (GNU
+  grep forced, still flakes), SIGPIPE under pipefail (the pipeline extracted
+  verbatim is 20/20 and 30/30 in a while-read loop), the file's bytes.
+  Reproducible in situ, not in isolation, mechanism open. Ruling: the
+  widening lands honestly scoped (a population fix that names its
+  population, not a trustworthy refusal), the flake is its own row with the
+  numbers, yoga takes it next; closure is twenty consecutive runs giving one
+  verdict and a planted violation found 20/20.

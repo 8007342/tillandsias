@@ -1,0 +1,98 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-pre-push-plan-only-lane-validates-a-current-ledger-with-whatever-plan-binary-resolves-however-stale
+    order: 1129-4su6
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [pre-push, hooks, ledger, plan-binary, fail-loud]
+    estimated_hours: 3
+    verifiable_closure: |
+      bash scripts/test-plan-binary-freshness.sh
+
+      Extended with an arm that drives the pre-push plan-only lane with a
+      deliberately STALE plan binary resolvable and asserts the lane refuses
+      or refreshes, never that it validates silently.
+
+      PRE-FIX RESULT: FAILS. scripts/hooks/pre-push-local-gate.sh:556 calls
+      resolve_plan_binary, not ensure_fresh_plan_binary, and no staleness
+      check exists anywhere on that path.
+    owned_files:
+      - scripts/hooks/pre-push-local-gate.sh
+    title: |
+      scripts/hooks/pre-push-local-gate.sh:556 resolves the plan binary with resolve_plan_binary and never checks freshness, so the lane that vouches for pushed ledger bytes can fold a current ledger with an arbitrarily old instrument — measured on esmeraldinha as an EIGHT-DAY-STALE ELF that runs, is preferred over a .exe rebuilt the previous day, and would be the lane's fold validator
+    context: |
+      FOUND BY esme 2026-09-12 while investigating a failing arm of the
+      1124-7f3u fixture, and escalated by them above that arm — correctly, the
+      arm's red is the least of it. Confirmed on lenovinha by reading the path.
+
+      esme's measurement on esmeraldinha (Windows host, gate runs as root
+      inside the tillandsias-build WSL2 distro, checkout on drvfs):
+
+        target/release/tillandsias-plan      ELF 64-bit LSB pie  3,291,344 b  Sep  4 12:15
+        target/release/tillandsias-plan.exe  PE32+               4,239,872 b  Sep 11 19:33
+        ./target/release/tillandsias-plan capabilities -> exit 0, RUNNABLE
+
+      The ELF is eight days old, runs, and sits BEFORE the .exe in
+      resolve_plan_binary's candidate order, so in-distro it wins over a binary
+      rebuilt the previous day.
+
+      THE GAP, confirmed by reading rather than inferred: the lane calls
+      `resolve_plan_binary` (:556). It never calls `ensure_fresh_plan_binary`,
+      and nothing else on that path calls `plan_binary_is_stale`. Both
+      functions EXIST in scripts/plan-binary-probe.sh — is_stale compares the
+      binary's mtime against crates/tillandsias-plan and Cargo.lock, and
+      ensure_fresh rebuilds when stale — and six other scripts use ensure_fresh
+      (check-fragment-events-land.sh, check-mo-full-attestations.sh,
+      check-resumable-claim-dirt.sh, archive-plan-packets.sh and two fixtures).
+      The lane is the one consumer that skipped it, and it is the consumer
+      standing in front of the trunk.
+
+      WHY THIS IS NOT COSMETIC: the lane uses that binary to validate the bytes
+      being pushed — `validate-yaml` and `yaml-type` per blob (:643, :647) and
+      `check --strict-fragments` over the fold (:777). A binary predating a
+      schema or fold change accepts shapes the current one refuses. That is not
+      hypothetical this week: the status-loss guard's understanding of a reopen
+      after falsification changed on 2026-09-12 (ac0ea1089), so an instrument
+      from 2026-09-04 answers a question whose correct answer has since moved.
+
+      THE MIRROR IMAGE OF A KNOWN DEFECT. plan-binary-probe.sh's own comments
+      describe the dual-binary locus where "the thing touched was not the thing
+      resolved, the .exe stayed stale forever" (1030-i2p8). This is that
+      reversed: the ELF is resolved in-distro while the refresh path maintained
+      the .exe. The locus-native ordering is doing exactly what it was written
+      to do; what is missing is anyone asking whether the winner is current.
+
+      YOLANDA'S CAUTION, RELAYED AND ENDORSED: do NOT close this by deleting
+      the ELF on one host. That is the same shape as the proposed rm of the
+      /tmp timing ledger earlier tonight — removing a real artifact to satisfy
+      a predicate that is wrong about what it is looking at, on the one host
+      where someone happened to look. If a stale artifact in the checkout is a
+      problem it wants a rebuild-or-clean policy, not a quiet rm so a fixture
+      goes green.
+
+      NOT REPRODUCIBLE ON yolanda: no ELF at that path, only the .exe, because
+      that host never built into the checkout before the CARGO_TARGET_DIR
+      redirect applied. So the predicate is not "Windows" and not "a build lane
+      that writes Linux artifacts into the checkout" — it is "a runnable ELF
+      exists at that path for any historical reason", a property of the tree's
+      accumulated state. The redirect (with-wsl2-builder.sh:276) then
+      GUARANTEES nothing ever overwrites or cleans it.
+    exit_criteria:
+      - "the plan-only lane refuses, refreshes, or names the staleness before validating pushed bytes with a stale binary; pre-fix result: FAILS (:556 resolve_plan_binary, no freshness check on the path)"
+      - "the decision is NAMED: ensure_fresh (may rebuild, costs time in a hook) versus is_stale-and-refuse (cheap, refuses where the lane cannot fix itself). The lane is a PUSH-TIME path, so a silent cargo build inside a git hook is a real cost and the tradeoff must be argued, not assumed"
+      - "NEGATIVE CONTROL: a lane run with a CURRENT binary still takes the fast path at the same cost — the 930-i6x4 lane-speed argument survives"
+      - "verified on esmeraldinha, the host that HAS the dual-binary configuration; yolanda cannot reproduce it and a green run there proves nothing about this defect"
+    events:
+      - type: filed
+        ts: "2026-09-12T06:25:58Z"
+        agent_id: "linux-lenovinha-opus5-20260912t014023z"
+        host: lenovinha
+        summary: |
+          Filed by lenovinha from esme's measurement on esmeraldinha plus
+          confirmation by reading the lane's resolution path. Escalated out of
+          the 1124-7f3u fixture arm esme was investigating: the arm's red was
+          the fixture noticing, and this is what it noticed.

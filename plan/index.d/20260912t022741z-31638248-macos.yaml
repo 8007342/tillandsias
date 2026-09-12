@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-guest-whose-provisioning-completed-never-reaches-ready-and-the-host-has-no-way-to-ask-why
+    event:
+      type: note
+      ts: "2026-09-12T02:27:41Z"
+      agent_id: macos-tlatoanis-macbook-air-opus5-20260912t022741z
+      host: macos
+      summary: |-
+        SECOND-REGIME REPRODUCTION on tlatoanis-macbook-air (darwin 25.6.0, Apple Silicon, 10 cores/16 GiB) against PUBLISHED release v56.9.11.1, during the macOS curl-install smoke follow-up. SYMPTOM CONFIRMED: --diagnose --json --with-metrics returns wait_phase_ready timeout after 300s (phase never reached Ready), metrics_status=error:wire-read; --exec-guest hangs indefinitely (killed at ~8min). Both match this packet. WHAT IS NEW, and it moves the fault line: the guest asserts readiness in 4.66s and the host that booted it still times out 300s later. Host-captured serial console, boot 02:19:50Z: tillandsias-headless-ready.service (control-wire readiness assertion) Finished at t=4.657962s with vsock listener bound port=42420; vault bootstrap complete t=12.114401s; liveness re-ensured 2 containers t=16.009225s; guest still alive and logging at t=135.9s. So the fault is downstream of GUEST READINESS, not merely downstream of provisioning (1055-e8ie) -- the host cannot observe a readiness the guest has already asserted. DATAPOINT AGAINST THE SKEW HYPOTHESIS, stated as a constraint not a refutation: this guest was cold-provisioned today from this very release, whose guest_binary_staged_sha256 == guest_binary_bundle_sha256 == 4176b146e012da914929af9ba62f3ab5651eaa1950af72836b38543a33114574 (staged_matches_bundle=true), so the provision drew from a staged binary unskewed from the host, and the handshake still fails. Any surviving skew explanation must say how skew arises when staged and bundle agree at provision time. Criterion 1 remains UNMET here exactly as this packet predicts: this lane cannot hash the binary the guest is RUNNING. NOT REPRODUCED: the 'noise: input error' signature. It is emitted host-side per poll and --diagnose --with-metrics prints only the final timeout; the guest serial console contains no occurrence. So this confirms the packet's SYMPTOM on a second host WITHOUT confirming its stated MECHANISM -- capture host-side per-poll output deliberately, it is not in the default --diagnose path. ONE BOOT IS CONFOUNDED AND MUST NOT BE USED: the first (cold) boot's 300s expiry was measured while a full ./build.sh --check ran on the same 10 cores against an 8 vCPU VM allocation; recorded only so a reader finding that timeout in this host's logs knows it was loaded. The clean measurement is the idle warm boot above. No true cold first-boot number from this host: that needs another destroy+reprovision of an operator workstation, which the coordinator ruled out -- it belongs to macneo's preserved images or a dedicated smoke host. Full write-up: plan/issues/smoke-e2e-followup-v56.9.11.1-dmg-and-metrics-2026-09-12.md

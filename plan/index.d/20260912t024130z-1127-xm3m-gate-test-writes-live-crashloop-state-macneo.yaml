@@ -1,0 +1,112 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macneo-macos 2026-09-12 after tracing an unexplained write of the
+# host's live crashloop.state to a unit test inside the pre-push gate.
+packets:
+  - packet_id: a-unit-test-in-the-pre-push-gate-writes-the-hosts-live-crashloop-state-with-a-synthetic-ready-so-every-macos-push-destroys-the-guest-evidence-the-gate-is-supposed-to-protect
+    order: 1127-xm3m
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: macos
+    capability_tags: [macos, tests, gate, guest-state, fail-loud, evidence-integrity]
+    estimated_hours: 3
+    verifiable_closure: cargo test -p tillandsias-macos-tray
+    owned_files:
+      - crates/tillandsias-macos-tray/src/action_host.rs
+      - crates/tillandsias-macos-tray/src/diagnose.rs
+    title: |
+      `cargo test -p tillandsias-macos-tray` writes ~/Library/Application Support/tillandsias/crashloop.state with a SYNTHETIC Ready phase, so every ./build.sh --check — the pre-push gate — silently overwrites the live guest's crash-loop history on every push from a Mac, and writes `ever_ready 1` over a guest that has never been ready
+    context: |
+      FOUND 2026-09-12 on macneo, not by looking for it. The 1084-x8ya restart
+      cycle noticed crashloop.state had been rewritten mid-session and asked
+      what wrote it. The answer was a unit test, and the file it wrote is the
+      evidence a macOS guest packet reads.
+
+      THE CHAIN, each link read rather than assumed:
+        crates/tillandsias-macos-tray/src/action_host.rs:3727
+          fn apply_vm_status_syncs_menu_state_status_text_for_rebuilds()
+          calls apply_vm_status(VmPhase::Ready, true, ...) — a SYNTHETIC phase,
+          the point of the test being the menu chip, not the guest.
+        -> action_host.rs:2602  note_crashloop_observation(...)
+        -> action_host.rs:2483  det.save(&crate::diagnose::crashloop_state_path())
+        -> diagnose.rs:83       crashloop_state_path() = image_root().join("crashloop.state")
+        -> diagnose.rs:68       image_root() = $HOME/Library/Application Support/tillandsias
+      `image_root()` reads HOME and offers NO override — no env var, no
+      parameter — so a unit test and the live tray resolve the same path by
+      construction. diagnose.rs:75-81 says so in its own words: the file "the
+      long-lived tray process updates on each VM-status observation", which is
+      exactly what the test now impersonates.
+
+      MEASURED, with the eliminations that preceded it:
+        tillandsias --capabilities alone ............. UNCHANGED (mtime + bytes)
+        cargo test -p tillandsias-headless
+          --features tray,listen-vsock ............... UNCHANGED (731 tests
+              across 13 binaries actually ran — the tail read "running 0 tests"
+              for the last binary, and an unchanged verdict from a run that
+              tested nothing would have proved nothing)
+        cargo test -p tillandsias-macos-tray ......... MUTATED (135 tests)
+        bisected to the ONE test above ............... MUTATED, reproducibly
+
+      DECISIVE CONTROL, and it is the reason this is filed as fact rather than
+      suspicion. The real crashloop.state was moved aside, its absence
+      confirmed, and that single test run alone. It CREATED the file from
+      nothing:
+        tillandsias-crashloop-state v1
+        written_at <run time>
+        window_secs 180
+        threshold 3
+        ever_ready 1
+        last_phase ready
+      The test's file was then deleted and the original restored; a diff
+      against a pre-experiment copy is identical, so the host was left as
+      found.
+
+      WHY p1 RATHER THAN A TEST-HYGIENE NIT. ./build.sh --check runs the
+      workspace, and ./build.sh --check IS the pre-push gate every host runs
+      before every push (land-on-platform-branch.sh runs it once per attempt,
+      so a retrying land writes it repeatedly). On macOS that means:
+        1. The gate destroys the evidence it exists to protect. Any packet
+           measuring guest readiness — 1084-x8ya is the live one — has its
+           primary artefact rewritten by the act of pushing work on it.
+        2. It writes the FALSE direction. `ever_ready 1` / `last_phase ready`
+           is precisely the content that says "this guest has booted fine". A
+           developer whose guest is genuinely crash-looping gets that written
+           over their real history by a GREEN test run, and macOS `--diagnose`
+           READS this file for its crash-loop verdict (diagnose.rs:75-78), so
+           the lie is then reported back to the operator as a verdict.
+        3. It already cost real evidence: the 1084-x8ya preserved evidence set
+           cloned at 2026-09-12T02:07Z carries a crashloop.state written by
+           this test, not by the guest, because a land gate had already run.
+      This is the 823-u3k9 / 889-ewvt family seen from the other side: not a
+      probe that reports about itself, but a TEST that writes the thing a probe
+      later reads, so the probe faithfully reports the test's fiction.
+    exit_criteria:
+      - "no test in the workspace writes under $HOME — `cargo test -p tillandsias-macos-tray` leaves ~/Library/Application Support/tillandsias/crashloop.state byte-identical and mtime-unchanged; pre-fix result: FAILS (mtime moves; with the file absent the test CREATES it with ever_ready 1 / last_phase ready)"
+      - "the crash-loop state path is injectable — image_root() honours an override, or the poll path takes the state path as a parameter — so the test exercises the chip logic against a temp root and the production path is unchanged"
+      - "NEGATIVE CONTROL, and it is the one that must not regress: a REAL tray still writes the REAL file. A live tray observing phases must update ~/Library/Application Support/tillandsias/crashloop.state exactly as today — a fix that makes the test pass by severing the write is the defect inverted, and --diagnose would then read a file nobody maintains"
+      - "NEGATIVE CONTROL: with the override set to a temp root, the test still FAILS if apply_vm_status stops syncing MenuState.status_text — i.e. the test keeps testing what it was written to test (action_host.rs:3752-3766)"
+      - "a guard fails the build if any test resolves a $HOME-rooted production path, so the next instance is caught by the gate rather than by a host noticing its guest state moved"
+    events:
+      - type: filed
+        ts: "2026-09-12T02:41:30Z"
+        agent_id: "macos-macneo-claude-20260912t024130z"
+        host: tlatoanis-macbook-neo
+        summary: |
+          Filed by macneo-macos 2026-09-12. Traced from an unexplained mtime on
+          the host's live crashloop.state during the fleet-restart cycle;
+          coordinator macuahuitl named two candidates, both were eliminated by
+          measurement, and continuing past the eliminations found the real
+          writer in a third place neither candidate covered. Pinned to one test
+          by bisection and confirmed by a create-from-nothing control. Ruled by
+          macuahuitl to stand alone rather than fold into 1084-x8ya, because it
+          breaks every macOS packet that measures guest state.
+
+          RETRACTION RECORDED HERE because it was published before the cause was
+          known: macneo reported to the fleet that "the guest has REACHED READY"
+          on the strength of ever_ready 1 in this file. That was WRONG — the
+          line was written by this test's synthetic Ready. 1084-x8ya's premise
+          (a guest whose provisioning completed and that never reaches Ready) is
+          intact, and the inference that (c) might no longer reproduce is
+          withdrawn.

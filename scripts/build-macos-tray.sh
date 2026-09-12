@@ -78,6 +78,56 @@ say "version: $VERSION  short: $VERSION_SHORT  min_macos: $MIN_MACOS"
 say "staging router sidecar (build artifact — not committed) …"
 bash "$ROOT/scripts/build-sidecar.sh" >&2
 
+# ── 3b. Guest binaries FIRST, and their digests ─────────────────────────
+#
+# ORDER 1084-x8ya — THE ORDERING IS THE POINT, DO NOT MOVE THIS BELOW THE TRAY
+# BUILD. The tray must be keyed to the guest it ships: the guest self-hashes
+# the binary it runs, so the host has to derive its half of the host↔guest PSK
+# from the SHA-256 of that same guest asset. That digest therefore has to be
+# known while the TRAY is compiling, because build.rs bakes it in — and it must
+# never be read from a host file at runtime, or the host would agree with
+# whatever guest happens to be on disk and hide exactly the skew that must stay
+# visible.
+#
+# Until 2026-09-12 the guests were built in step 5, AFTER the tray, as part of
+# .app assembly. At tray-build time the guest did not exist yet, so build.rs
+# could not have hashed it even if it had tried — and every host derived from
+# its own exe instead. The handshake then failed on every macOS and Windows
+# install with a perfectly equal (build_version, wire_version, hop) triple.
+#
+# The binaries land in target-guest/ here; step 5 copies them into the bundle.
+GUEST_ASSET_AARCH64="tillandsias-headless-aarch64-unknown-linux-musl"
+GUEST_ASSET_X86_64="tillandsias-headless-x86_64-unknown-linux-musl"
+
+build_guest_binary() {
+    local target="$1"
+    local asset_name="$2"
+    local bin_path="$ROOT/target/${target}/release/tillandsias"
+    say "cargo zigbuild --release -p tillandsias-headless --features listen-vsock --target ${target} …"
+    cargo zigbuild --release -p tillandsias-headless --features listen-vsock --target "$target" --bin tillandsias >&2
+    [[ -x "$bin_path" ]] || die "expected guest binary at $bin_path after zigbuild"
+    # Canonical staging, which the litmus:guest-binary-embed-integrity contract
+    # (scripts/build-guest-binaries.sh --verify) reads: this script bypasses
+    # build-guest-binaries.sh, and an empty target-guest/ failed that litmus on
+    # every macOS host sweep.
+    install -m 0755 "$bin_path" "$ROOT/target-guest/$asset_name"
+}
+
+guest_digest() { # guest_digest <asset_name> -> lowercase hex sha256
+    shasum -a 256 "$ROOT/target-guest/$1" | awk '{print $1}'
+}
+
+mkdir -p "$ROOT/target-guest"
+build_guest_binary "aarch64-unknown-linux-musl" "$GUEST_ASSET_AARCH64"
+build_guest_binary "x86_64-unknown-linux-musl" "$GUEST_ASSET_X86_64"
+
+# Exported for crates/tillandsias-macos-tray/build.rs. A release macOS tray
+# REFUSES TO BUILD without these (it would otherwise be a tray that cannot
+# handshake with its own guest), so the refusal names this script.
+export TILLANDSIAS_GUEST_DIGEST_AARCH64_MUSL="$(guest_digest "$GUEST_ASSET_AARCH64")"
+export TILLANDSIAS_GUEST_DIGEST_X86_64_MUSL="$(guest_digest "$GUEST_ASSET_X86_64")"
+say "guest digests: aarch64=${TILLANDSIAS_GUEST_DIGEST_AARCH64_MUSL:0:12}… x86_64=${TILLANDSIAS_GUEST_DIGEST_X86_64_MUSL:0:12}…"
+
 # ── 4. Build ────────────────────────────────────────────────────────────
 say "cargo build --release -p tillandsias-macos-tray …"
 cargo build --release -p tillandsias-macos-tray >&2
@@ -120,26 +170,22 @@ fi
 GUEST_DIR="$APP/Contents/Resources/guest"
 mkdir -p "$GUEST_DIR"
 
-build_guest_binary() {
-    local target="$1"
-    local asset_name="$2"
-    local bin_path="$ROOT/target/${target}/release/tillandsias"
-    say "cargo zigbuild --release -p tillandsias-headless --features listen-vsock --target ${target} …"
-    cargo zigbuild --release -p tillandsias-headless --features listen-vsock --target "$target" --bin tillandsias >&2
-    [[ -x "$bin_path" ]] || die "expected guest binary at $bin_path after zigbuild"
-    cp "$bin_path" "$GUEST_DIR/$asset_name"
-    chmod 0755 "$GUEST_DIR/$asset_name"
-    # Mirror into the canonical target-guest/ staging so the
-    # litmus:guest-binary-embed-integrity contract (scripts/
-    # build-guest-binaries.sh --verify) holds on macOS-built checkouts too
-    # — this script bypasses build-guest-binaries.sh, and an empty
-    # target-guest/ failed that litmus on every macOS host sweep.
-    install -m 0755 "$bin_path" "$ROOT/target-guest/$asset_name"
-}
-mkdir -p "$ROOT/target-guest"
+# Built in step 3b, BEFORE the tray, so their digests could be baked into it
+# (order 1084-x8ya). Copy, do not rebuild: a rebuild here could produce bytes
+# that differ from the ones the tray was keyed to, which is the same
+# handshake failure with a harder-to-see cause.
+for asset in "$GUEST_ASSET_AARCH64" "$GUEST_ASSET_X86_64"; do
+    install -m 0755 "$ROOT/target-guest/$asset" "$GUEST_DIR/$asset"
+done
 
-build_guest_binary "aarch64-unknown-linux-musl" "tillandsias-headless-aarch64-unknown-linux-musl"
-build_guest_binary "x86_64-unknown-linux-musl" "tillandsias-headless-x86_64-unknown-linux-musl"
+# The tray is keyed to these exact bytes. Prove the bundled copy still hashes
+# to what was exported before the tray compiled, so a mismatch is caught here
+# rather than as an unexplained "phase never reached Ready" on an operator's
+# machine.
+[[ "$(guest_digest "$GUEST_ASSET_AARCH64")" == "$TILLANDSIAS_GUEST_DIGEST_AARCH64_MUSL" ]] \
+    || die "bundled aarch64 guest does not match the digest the tray was keyed to"
+[[ "$(guest_digest "$GUEST_ASSET_X86_64")" == "$TILLANDSIAS_GUEST_DIGEST_X86_64_MUSL" ]] \
+    || die "bundled x86_64 guest does not match the digest the tray was keyed to"
 
 # ── 6. Ad-hoc codesign with entitlements ────────────────────────────────
 ENTITLEMENTS="$ROOT/crates/tillandsias-macos-tray/assets/Tillandsias.entitlements"

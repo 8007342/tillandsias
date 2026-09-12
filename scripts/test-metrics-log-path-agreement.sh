@@ -242,6 +242,37 @@ else
 fi
 rm -rf "$SD"
 
+# ── arm 9c: the split guard must NOT touch the append subcommands. ──────────
+# Found by measurement after 1096-p3tn first landed, and it was a real
+# regression: the guard sat before the subcommand branches, so a TIMING-log
+# split refused an unrelated --emit-flow. With the /tmp debris every host
+# carried that night, test-cycle-flow-emit-idempotency.sh failed 12 scenarios.
+# The emit paths are best-effort by contract — they must never take down the
+# step they measure — and --emit-flow does not even read the timing log. The
+# split matters when numbers are PUBLISHED, not when a record is appended.
+if [ -e /tmp/tillandsias-timing.jsonl ]; then
+    ok "SKIPPED arm 9c (a real /tmp/tillandsias-timing.jsonl exists; declining rather than overwrite it)"
+else
+    printf '{"ts":"2026-01-01T00:00:00Z","step":"fixture","phase":"f","duration_ms":1,"host":"fixture"}\n' \
+        > /tmp/tillandsias-timing.jsonl
+    emit_rc=0
+    (cd "$ROOT" && bash scripts/cycle-metrics.sh --emit-timing step=arm9c phase=f duration_ms=1 \
+        >/dev/null 2>&1) || emit_rc=$?
+    if [ "$emit_rc" -eq 0 ]; then
+        ok "CONTROL: --emit-* is unaffected by a split — an append never takes down the step it measures"
+    else
+        bad "--emit-timing refused (rc=$emit_rc) over a timing-log split — the guard is coupling an append to a reader's problem"
+    fi
+    rep_rc=0
+    (cd "$ROOT" && bash scripts/cycle-metrics.sh >/dev/null 2>&1) || rep_rc=$?
+    if [ "$rep_rc" -ne 0 ]; then
+        ok "CONTROL: the REPORTING path still refuses the same split (rc=$rep_rc) — the scoping did not disarm the guard"
+    else
+        bad "the reporting path stopped refusing a split — scoping the guard disarmed it"
+    fi
+    rm -f /tmp/tillandsias-timing.jsonl
+fi
+
 printf 'metrics-log-path-agreement: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1
 printf 'ok:metrics-log-path-agreement:%d\n' "$pass"
