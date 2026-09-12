@@ -243,18 +243,132 @@ REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 # Falls back to `/tmp` when there is no writable checkout to write into, so a
 # forge or a bare invocation outside a repo keeps working exactly as before.
 # The rule itself lives in one file so a writer and a reader cannot drift apart
-# — which is the defect this fixes. Sourced best-effort: if it is unavailable
-# the old /tmp behaviour is preserved rather than the script failing.
+# — which is the defect this fixes.
+#
+# ORDER 1096-p3tn: A WRITER THAT CANNOT RESOLVE THE CANONICAL PATH MUST SAY SO,
+# NOT PICK ONE. This used to source best-effort (`|| true`) and, on failure,
+# define a stub returning /tmp/<name>. The file is present in every checkout,
+# so SOME invocations sourced it and some did not, and the ones that did not
+# wrote to a second log that looked exactly like the first.
+#
+# MEASURED on pirria 2026-09-06 (the v56.9.5.1 floor smoke):
+#     /tmp/tillandsias-timing.jsonl             99 lines  01:29:18Z..22:42:43Z
+#     .cache/metrics/tillandsias-timing.jsonl  162 lines  22:15:13Z..06:31:44Z
+#     spans OVERLAP, BOTH files carry BOTH hosts, step sets near-disjoint
+# so `runs=` and `skippable:` were computed over a PARTITION while presenting
+# as TOTALS. Reading the wrong half yields a SMALLER NUMBER, not an error, and
+# a smaller number is a legitimate value for that field — which is precisely
+# why nothing caught it. Sibling of methodology
+# `agreement_at_zero_is_not_a_remedy`.
+#
+# THE DISTINCTION THIS PRESERVES, and it is load-bearing: metrics_default_log's
+# OWN /tmp fallback — "there is no writable checkout, so use /tmp" — is correct,
+# documented, and must keep working; a forge or an out-of-repo call depends on
+# it. What refuses here is the case where the RULE FILE ITSELF is unavailable,
+# i.e. we cannot even ask the question. Conflating the two would refuse every
+# out-of-repo invocation and break the forge.
 # shellcheck source=scripts/metrics-log-path.sh
 . "$SCRIPT_DIR/metrics-log-path.sh" 2>/dev/null || true
-command -v metrics_default_log >/dev/null 2>&1 || {
-    metrics_default_log() { printf '/tmp/%s' "$1"; }
-}
+# THE REFUSAL IS LAZY, and that is not a detail. A caller that has named every
+# log it uses (TILLANDSIAS_TIMING_LOG etc.) has already answered the question
+# the rule file exists to answer, and does not need the file at all — the memo
+# fixture runs a sed-mutated COPY of this script out of a scratch dir for
+# exactly that reason. Refusing at source time would refuse a caller who
+# supplied the answer, which is the same error as refusing a correctly-anchored
+# path: it punishes a correct invocation and teaches people around the check.
+# So the refusal lives INSIDE the default resolver and fires only if something
+# actually has to be DEFAULTED.
+if ! command -v metrics_default_log >/dev/null 2>&1; then
+    metrics_default_log() {
+        echo "refused:metrics:unresolvable-log-path" >&2
+        {
+            echo "  scripts/metrics-log-path.sh could not be sourced from:"
+            echo "    $SCRIPT_DIR/metrics-log-path.sh"
+            echo "  That file is the ONE rule saying where a metrics log lives, and"
+            echo "  this invocation needs it to default a path for '''${1:-?}'''."
+            echo "  The old behaviour — silently substituting /tmp/<name> — produced"
+            echo "  a SECOND live log whose numbers presented as totals (1096-p3tn)."
+            echo "  Refusing instead: a writer that cannot resolve the canonical"
+            echo "  path must say so, not pick one."
+            echo "  FIX: restore the file, or name the log explicitly, in which case"
+            echo "  this rule is not needed at all —"
+            echo "    TILLANDSIAS_TIMING_LOG=<path> $0 ..."
+        } >&2
+        exit 2
+    }
+fi
 _metrics_default_log() { metrics_default_log "$1" "$REPO_ROOT"; }
 
 USAGE_LOG="${TILLANDSIAS_EXPERT_USAGE_LOG:-$(_metrics_default_log forge-expert-usage.jsonl)}"
 FLOW_LOG="${TILLANDSIAS_CYCLE_FLOW_LOG:-$(_metrics_default_log tillandsias-cycle-flow.jsonl)}"
 TIMING_LOG="${TILLANDSIAS_TIMING_LOG:-$(_metrics_default_log tillandsias-timing.jsonl)}"
+
+# ── ORDER 1096-p3tn: a SECOND live timing log makes every count a partition ──
+# The refusal above closes the path that CREATES a second log. This closes the
+# path that READS one half of a split that already exists: on a host carrying
+# both files, `runs=` and `skippable:` are computed over one of them and
+# published as totals, and the hourly cross-host recurrence audit (1001-q3zf)
+# compares those totals ACROSS hosts. A low `runs=` then reads as "this step is
+# rare" rather than "I read half the log", and nothing in the output can tell
+# the two apart.
+#
+# ONLY ON A DEFAULTED PATH. metrics-log-path.sh's contract is that an explicit
+# TILLANDSIAS_*_LOG always wins and "every fixture that names its own log keeps
+# working untouched" — and every fixture does set it, deliberately creating the
+# very condition this guard looks for. Firing unconditionally would red the
+# whole suite on a state the fixtures construct on purpose. So: if the caller
+# named the log, the caller owns the question.
+#
+# NOT AUTO-MERGED, and that is a decision rather than an omission. Reconciling
+# two logs with overlapping spans is an operator judgement about which records
+# are authoritative; a metrics reader that happens to notice a split is the
+# wrong actor to make it. This refuses to report a partition as a total and
+# stops there.
+#
+# /tmp IS VOLATILE, WHICH IS WHY "declare the old one historical" IS NOT A PLAN:
+# pirria measured 99 records in /tmp on 2026-09-06 and the file was GONE by
+# 2026-09-12, cleared by a reboot, taking 1074-96z9's own hit/miss records with
+# it. A second log is not merely misplaced; it is being lost.
+if [ -z "${TILLANDSIAS_TIMING_LOG:-}" ]; then
+    _tl_base="$(basename "$TIMING_LOG")"
+    _tl_other=""
+    case "$TIMING_LOG" in
+        /tmp/*) _tl_other="$REPO_ROOT/.cache/metrics/$_tl_base" ;;
+        *)      _tl_other="/tmp/$_tl_base" ;;
+    esac
+    if [ -n "$_tl_other" ] && [ "$_tl_other" != "$TIMING_LOG" ] && [ -s "$_tl_other" ]; then
+        _tl_n_here="$(wc -l < "$TIMING_LOG" 2>/dev/null || echo 0)"
+        _tl_n_there="$(wc -l < "$_tl_other" 2>/dev/null || echo 0)"
+        echo "violation:metrics-log-split:$TIMING_LOG=$_tl_n_here:$_tl_other=$_tl_n_there" >&2
+        {
+            echo "  TWO live timing logs on this host. Every runs= and skippable:"
+            echo "  computed from either one is a PARTITION presenting as a TOTAL,"
+            echo "  and the cross-host recurrence audit compares them as totals."
+            echo "  Refusing to publish numbers that cannot say which half they saw."
+            echo ""
+            echo "  MOST LIKELY CAUSE ON A HOST THAT GATED BEFORE 1096-p3tn LANDED:"
+            echo "  fixture debris. Until that packet, eleven scripts/test-litmus-*.sh"
+            echo "  fixtures ran the litmus runner from a scratch dir, and their records"
+            echo "  landed in the shared log carrying the REAL host name — so they are"
+            echo "  indistinguishable by eye. CHECK BEFORE DELETING:"
+            echo "      grep -c '\"step\":\"litmus' $_tl_other"
+            echo "      wc -l < $_tl_other"
+            echo "  If those two numbers MATCH, every record is fixture debris and the"
+            echo "  file is safe to remove:"
+            echo "      rm $_tl_other"
+            echo "  If they DIFFER, real records are mixed in. Do not delete blindly."
+            echo ""
+            echo "  DECIDE, then re-run: merge the two, or delete the one you are"
+            echo "  declaring historical. Note that /tmp is VOLATILE — a reboot has"
+            echo "  already destroyed one host's half (1096-p3tn) — so declaring a"
+            echo "  /tmp log historical means accepting it will vanish, not keeping it."
+            echo "  To read one deliberately, name it and this guard stands down:"
+            echo "    TILLANDSIAS_TIMING_LOG=$TIMING_LOG $0 ..."
+        } >&2
+        exit 2
+    fi
+    unset _tl_base _tl_other _tl_n_here _tl_n_there
+fi
 
 # ── --emit-timing: append one build/test/litmus DURATION record (packet 682-emvg)
 # Best-effort by construction, mirroring --emit-flow above and mcp-usage-log.sh:
