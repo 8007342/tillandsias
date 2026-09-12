@@ -36,8 +36,140 @@ const MAX_PLAINTEXT_CHUNK: usize = 16384;
 /// headroom; a peer advertising more is rejected (a malformed/hostile frame).
 const MAX_CIPHERTEXT_FRAME: usize = MAX_PLAINTEXT_CHUNK + 256;
 
+/// WHICH QUESTION a failed handshake is asking. Order 1084-x8ya: every
+/// `snow::Error` used to collapse into one `InvalidData` carrying `noise: {e}`,
+/// so `secure control wire handshake failed: noise: input error` was the whole
+/// diagnosis on both macOS (vsock) and Windows (hvsocket) — and the three
+/// causes below want three different investigations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HandshakeFailure {
+    /// The peer sent nothing we can read as a Noise message. It is not a
+    /// crypto disagreement: the peer may be speaking PLAINTEXT, may have
+    /// written an explicit refusal (the guest's order-137 `Unauthorized`
+    /// notice is plaintext and lands here), or may not be serving the wire.
+    /// Ask what the peer is speaking — see [`HandshakeError::peer_frame`],
+    /// which carries the bytes so a caller that knows the plaintext framing
+    /// can decode and report the peer's own words.
+    PeerSentNoUsableFrame,
+    /// The peer spoke Noise and we disagreed cryptographically. With NNpsk0
+    /// the PSK is mixed at the first message, so this is the version-bound
+    /// PSK failing to match: compare `build_version`, `wire_version` and the
+    /// secure-wire MODE on both ends.
+    CryptoDisagreement,
+    /// This end could not start or finish its own handshake. Nothing was
+    /// learned about the peer.
+    LocalMisconfiguration,
+}
+
+impl HandshakeFailure {
+    /// Stable token for logs and assertions. The three MUST be distinguishable
+    /// in the reported text — that is this type's whole reason to exist.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::PeerSentNoUsableFrame => "peer-sent-no-usable-frame",
+            Self::CryptoDisagreement => "crypto-disagreement",
+            Self::LocalMisconfiguration => "local-misconfiguration",
+        }
+    }
+
+    fn classify(e: &snow::Error) -> Self {
+        match e {
+            // Malformed/absent input: says nothing about crypto.
+            snow::Error::Input => Self::PeerSentNoUsableFrame,
+            // The peer's key material did not agree with ours.
+            snow::Error::Decrypt | snow::Error::Dh => Self::CryptoDisagreement,
+            // Pattern/Init/Prereq/State (and Kem under `hfs`) are all this
+            // end's own setup. Matched as a catch-all deliberately: a new
+            // snow variant must read as "our problem" rather than silently
+            // becoming a claim about the peer.
+            _ => Self::LocalMisconfiguration,
+        }
+    }
+
+    fn guidance(self) -> &'static str {
+        match self {
+            Self::PeerSentNoUsableFrame => {
+                "the peer sent no readable Noise frame — it may be speaking plaintext, \
+                 refusing us, or not serving the control wire at all; if it wrote a \
+                 plaintext refusal, decode peer_frame and report the peer's own message"
+            }
+            Self::CryptoDisagreement => {
+                "either the version-bound PSK does not match (compare \
+                 build_version, wire_version and the secure-wire mode on both \
+                 ends) or the peer sent a PLAINTEXT refusal long enough to \
+                 fail the AEAD check — decode peer_frame first and report the \
+                 peer's own message if it parses"
+            }
+            Self::LocalMisconfiguration => "this end could not run the handshake",
+        }
+    }
+}
+
+/// A classified handshake failure. Carried INSIDE an `io::Error` so no shared
+/// signature changes (`client_handshake`/`server_handshake` still return
+/// `io::Result`, and the linux/windows callers of `Client::handshake` are
+/// untouched); a caller that wants the classification downcasts:
+///
+/// ```ignore
+/// if let Some(h) = err.get_ref().and_then(|e| e.downcast_ref::<HandshakeError>()) {
+///     match h.failure { /* ... */ }
+/// }
+/// ```
+#[derive(Debug)]
+pub struct HandshakeError {
+    /// Which question to ask next.
+    pub failure: HandshakeFailure,
+    /// `snow`'s own Display text, preserved verbatim so nothing is lost.
+    pub snow: String,
+    /// The bytes the peer actually sent, when a frame was read and rejected.
+    /// `None` when we never got one (or when the failure was ours). This is
+    /// what lets a caller recognise a plaintext refusal that Noise cannot
+    /// parse — `tillandsias-secure-channel` deliberately does not depend on
+    /// `tillandsias-control-wire`, so the decode belongs to the caller.
+    pub peer_frame: Option<Vec<u8>>,
+}
+
+impl std::fmt::Display for HandshakeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // `noise: {snow}` is kept as a SUBSTRING so existing greps still hit,
+        // but it is no longer the whole message.
+        write!(
+            f,
+            "[{}] noise: {} — {}",
+            self.failure.as_str(),
+            self.snow,
+            self.failure.guidance()
+        )?;
+        if let Some(frame) = &self.peer_frame {
+            write!(f, " (peer sent {} byte(s))", frame.len())?;
+        }
+        Ok(())
+    }
+}
+
+impl std::error::Error for HandshakeError {}
+
 fn snow_err(e: snow::Error) -> io::Error {
-    io::Error::new(io::ErrorKind::InvalidData, format!("noise: {e}"))
+    snow_err_with_frame(e, None)
+}
+
+fn snow_err_with_frame(e: snow::Error, peer_frame: Option<Vec<u8>>) -> io::Error {
+    let failure = HandshakeFailure::classify(&e);
+    // The io::ErrorKind now discriminates too, for callers that never
+    // downcast: InvalidData was applied to every variant before.
+    let kind = match failure {
+        HandshakeFailure::PeerSentNoUsableFrame => io::ErrorKind::InvalidData,
+        HandshakeFailure::CryptoDisagreement => io::ErrorKind::PermissionDenied,
+        HandshakeFailure::LocalMisconfiguration => io::ErrorKind::Other,
+    };
+    io::Error::new(
+        kind,
+        HandshakeError {
+            failure,
+            snow: e.to_string(),
+            peer_frame,
+        },
+    )
 }
 
 async fn write_hs_frame<S: AsyncWrite + Unpin>(stream: &mut S, msg: &[u8]) -> io::Result<()> {
@@ -83,7 +215,12 @@ where
     write_hs_frame(&mut stream, &buf[..n]).await?;
     // <- e, ee
     let msg = read_hs_frame(&mut stream).await?;
-    hs.read_message(&msg, &mut buf).map_err(snow_err)?;
+    // Order 1084-x8ya: keep the bytes. When the responder refuses us it writes
+    // a PLAINTEXT notice (vsock_server.rs order-137 contract) that lands here
+    // and cannot parse as Noise; without the frame the caller can only report
+    // "input error" and the peer's actual message is lost.
+    hs.read_message(&msg, &mut buf)
+        .map_err(|e| snow_err_with_frame(e, Some(msg.clone())))?;
 
     let transport = hs.into_transport_mode().map_err(snow_err)?;
     Ok(EncryptedStream::new(stream, transport))
@@ -132,7 +269,10 @@ where
         Ok(msg) => msg,
         Err(err) => return Err((stream, err)),
     };
-    if let Err(err) = hs.read_message(&msg, &mut buf).map_err(snow_err) {
+    if let Err(err) = hs
+        .read_message(&msg, &mut buf)
+        .map_err(|e| snow_err_with_frame(e, Some(msg.clone())))
+    {
         return Err((stream, err));
     }
     // -> e, ee
@@ -552,5 +692,126 @@ mod tests {
             res2_t.read_message(&ct[..clen2], &mut pt).is_err(),
             "a tampered ciphertext frame MUST fail the AEAD integrity check"
         );
+    }
+
+    // ─── order 1084-x8ya: the handshake failure must say WHICH failure ──────
+    //
+    // Pre-fix, every arm below reported the same `noise: …` string, so a host
+    // seeing `secure control wire handshake failed: noise: input error` could
+    // not tell "the guest is refusing me" from "the guest disagrees about the
+    // PSK" from "I am misconfigured". These three assert the arms are reported
+    // DIFFERENTLY, which is the closure criterion.
+
+    /// Pull the classification back out of the `io::Error`.
+    fn classified(err: &io::Error) -> &HandshakeError {
+        err.get_ref()
+            .and_then(|e| e.downcast_ref::<HandshakeError>())
+            .expect("handshake errors must carry a HandshakeError")
+    }
+
+    /// ARM 1 — the peer writes a well-framed but non-Noise blob. This is the
+    /// shape of the guest's order-137 plaintext `Unauthorized` refusal, and
+    /// the bytes MUST survive so the caller can decode and quote the peer.
+    #[tokio::test]
+    async fn peer_plaintext_refusal_is_reported_as_peer_frame_not_bare_noise_error() {
+        let (c, mut s) = tokio::io::duplex(64 * 1024);
+        // Stand in for a ControlEnvelope: this crate cannot depend on
+        // tillandsias-control-wire, which is exactly why the caller needs the
+        // raw bytes rather than a decoded message.
+        let notice = b"secure control wire required: the version-bound \
+                       secure-channel handshake failed";
+        let server = tokio::spawn(async move {
+            let mut len = [0u8; 2];
+            s.read_exact(&mut len).await.unwrap();
+            let n = u16::from_be_bytes(len) as usize;
+            let mut first = vec![0u8; n];
+            s.read_exact(&mut first).await.unwrap();
+            write_hs_frame(&mut s, notice).await.unwrap();
+            // Hold the stream so the client's read cannot fail as EOF instead.
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        });
+
+        // `expect_err` would need `EncryptedStream: Debug`; match instead.
+        let err = match client_handshake(c, &psk("0.3.260701.1")).await {
+            Ok(_) => panic!("a plaintext notice is not a Noise frame and must not handshake"),
+            Err(e) => e,
+        };
+        let h = classified(&err);
+        // MEASURED, and it is the reason `peer_frame` is not optional polish:
+        // a plaintext refusal of this length is long enough to reach the AEAD
+        // check, so snow reports Decrypt and the CLASSIFICATION ALONE is
+        // indistinguishable from a genuine PSK mismatch. (Only a very short
+        // blob reads as Input.) So the class cannot be the discriminator —
+        // the bytes are. A caller that can decode the plaintext framing must
+        // try `peer_frame` FIRST and report the peer's own words; only if it
+        // does not decode is this really a crypto disagreement.
+        assert_eq!(
+            h.failure,
+            HandshakeFailure::CryptoDisagreement,
+            "measured behaviour: a full-length plaintext frame fails the AEAD \
+             check; got {h}"
+        );
+        assert_eq!(
+            h.peer_frame.as_deref(),
+            Some(&notice[..]),
+            "the peer's bytes MUST survive — without them the caller cannot \
+             tell a REFUSAL from a PSK mismatch, and the guest's own message \
+             is lost behind a generic noise error"
+        );
+        server.await.unwrap();
+    }
+
+    /// ARM 2 — a real Noise peer whose version-bound PSK differs. The
+    /// RESPONDER is where NNpsk0 detects this (the PSK is mixed at the first
+    /// message), so this is asserted on the server side.
+    #[tokio::test]
+    async fn wrong_psk_is_reported_as_crypto_disagreement() {
+        let (c, s) = tokio::io::duplex(64 * 1024);
+        let client = tokio::spawn(async move {
+            // A DIFFERENT build_version ⇒ a different PSK (see
+            // psk_differs_across_build_version in lib.rs).
+            let _ = client_handshake(c, &psk("0.3.260630.1")).await;
+        });
+
+        let err = match server_handshake(s, &psk("0.3.260701.1")).await {
+            Ok(_) => panic!("a mismatched PSK must not complete the handshake"),
+            Err(e) => e,
+        };
+        let h = classified(&err);
+        assert_eq!(
+            h.failure,
+            HandshakeFailure::CryptoDisagreement,
+            "a PSK mismatch is a version/mode question, not 'the peer sent \
+             nothing usable'; got {h}"
+        );
+        let _ = client.await;
+    }
+
+    /// ARM 3 — the arms must not read alike. This is the assertion the packet
+    /// actually asks for: pre-fix both printed `noise: …` and nothing else.
+    #[tokio::test]
+    async fn the_three_failures_are_reported_differently() {
+        let short = snow_err_with_frame(snow::Error::Input, Some(vec![0u8; 3]));
+        let crypto = snow_err_with_frame(snow::Error::Decrypt, None);
+        let local = snow_err_with_frame(
+            snow::Error::Prereq(snow::error::Prerequisite::LocalPrivateKey),
+            None,
+        );
+
+        let (a, b, c) = (short.to_string(), crypto.to_string(), local.to_string());
+        assert_ne!(a, b, "short-frame and crypto failures must not read alike");
+        assert_ne!(b, c, "crypto and local failures must not read alike");
+        assert_ne!(a, c, "short-frame and local failures must not read alike");
+
+        assert!(a.contains("peer-sent-no-usable-frame"), "got {a}");
+        assert!(b.contains("crypto-disagreement"), "got {b}");
+        assert!(c.contains("local-misconfiguration"), "got {c}");
+
+        // snow's own words are preserved rather than replaced.
+        assert!(a.contains("noise:"), "the original text must survive: {a}");
+
+        // The ErrorKind discriminates too, for callers that never downcast.
+        assert_eq!(short.kind(), io::ErrorKind::InvalidData);
+        assert_eq!(crypto.kind(), io::ErrorKind::PermissionDenied);
     }
 }
