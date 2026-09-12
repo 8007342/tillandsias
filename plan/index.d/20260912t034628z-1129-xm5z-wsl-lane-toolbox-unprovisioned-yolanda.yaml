@@ -1,0 +1,115 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-windows-wsl-build-lane-is-a-toolbox-nothing-provisions-and-ripgrep-is-undeclared-in-the-host-tools-manifest-so-the-gate-discovers-it-twenty-minutes-in
+    order: 1129-xm5z
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: windows
+    capability_tags: [windows, ci, guards, toolbox, wsl]
+    estimated_hours: 2
+    owned_files:
+      - scripts/check-host-tools.sh
+      - scripts/with-tillandsias-builder.sh
+      - scripts/with-wsl2-builder.sh
+    verifiable_closure: |
+      bash scripts/check-host-tools.sh names ripgrep as a required gate tool
+      with the remedy that works on the lane the gate actually runs in, so a
+      host missing rg is told at PREFLIGHT rather than by a gate refusal.
+      Mechanically, on a Windows host whose tillandsias-build distro has no
+      rg: check-host-tools.sh must fail naming rg BEFORE ./build.sh --check
+      reaches the cheatsheet step. Today it answers ok:host-tools and the
+      refusal arrives ~20 minutes later from check-cheatsheet-refs.sh.
+      NEGATIVE CONTROL: with rg present the manifest check stays green and
+      does not emit a remedy for a tool the host already has (the manifest
+      header at :146 warns against exactly that).
+    title: |
+      scripts/check-cheatsheet-refs.sh hard-requires ripgrep and refuses the gate without it, but ripgrep is absent from check-host-tools.sh's 12-tool manifest, and on Windows the gate re-execs into the tillandsias-build WSL2 distro which nothing provisions — with-tillandsias-builder.sh's init set names ripgrep but is podman-only, so on a Windows host that list is dead code and the missing tool surfaces as a gate refusal twenty minutes in
+    context: |
+      MEASURED on yolanda, 2026-09-12, as a LAND REFUSAL during the fleet
+      restart, roughly twenty minutes into ./build.sh --check:
+
+        error: ripgrep (rg) is available neither on this host nor in the
+               tillandsias-builder toolbox. Install rg, or add it to the
+               toolbox init set in scripts/with-tillandsias-builder.sh.
+
+      rg was present on the WINDOWS side (15.2.0) and absent inside the
+      tillandsias-build WSL2 distro, which is where the gate executes —
+      scripts/native-scratch-dir.sh:7 records that re-exec, and the openssl
+      row of the manifest records it again.
+
+      TWO DEFECTS, ONE SYMPTOM, AND THEY NEED FIXING SEPARATELY.
+
+      (1) THE REMEDY THE ERROR OFFERS IS ALREADY DONE AND DOES NOT HELP.
+      with-tillandsias-builder.sh:334-343 already installs `jq yq ripgrep
+      openssl` — but via `toolbox run --container`, i.e. podman. A Windows
+      host has no podman (cycle-preflight reports
+      services-no-podman:skip:unsupported-host), so that init set is dead
+      code there. The lane that runs the gate is the WSL distro and nothing
+      provisions it from that list. Two provisioning paths, one package
+      list, and only one path reads it. An operator following the error's
+      own instruction edits a file that will never run on their host.
+
+      (2) THE FAILURE ARRIVES AT THE WRONG TIME. check-host-tools.sh exists
+      to answer "does this host have what the gate needs" BEFORE the gate
+      spends twenty minutes finding out. Its manifest declares twelve tools
+      (git, timeout, cargo, rustc, pkg-config, openssl, codesign, shasum,
+      zig, cargo-zigbuild and the two musl targets) with a remedy each.
+      ripgrep is not among them, though a gate step refuses outright without
+      it. So the check answers ok:host-tools on a host the gate will refuse.
+
+      That is precisely the failure mode the manifest's own openssl row was
+      written about: "Without it that test dies with os error 2 ELEVEN
+      MINUTES into the run, long after this step passed." The lesson was
+      recorded and the manifest was not swept for other instances of it.
+      A preflight that is incomplete is not merely less useful than a
+      complete one — it actively licenses the belief that the host is ready.
+
+      SCOPE, MEASURED NOT GUESSED. The manifest holds 12 rows; rg makes 13.
+      I did not audit the remaining gate steps for further undeclared tools,
+      and that audit is in scope for this packet: the openssl row proves
+      this is a recurring shape, not a one-off, and the honest closure is a
+      sweep rather than one row.
+
+      SECOND OBSERVATION, SEPARATE AND NOT YET EXPLAINED. The same
+      check-cheatsheet-refs.sh reports a DIFFERENT CORPUS SIZE depending on
+      which side of the boundary it runs from, both green:
+        Git Bash on the Windows host : OK: 577 cheatsheet references resolved.
+        inside tillandsias-build     : OK: 491 cheatsheet references resolved.
+      86 references are visible to one and not the other. Both pass, so
+      nothing is red today, but a reference check whose corpus depends on
+      the caller's filesystem view cannot be relied on to have checked what
+      a reader assumes it checked — and the gate's answer is the 491 one.
+      Not chased on the night it was found; recorded so it is not
+      rediscovered as a mystery.
+    exit_criteria:
+      - "check-host-tools.sh declares ripgrep with a remedy valid for the WSL lane; pre-fix result: FAILS (12 rows, rg absent, check answers ok:host-tools on a host whose gate then refuses)"
+      - "a Windows host whose build distro lacks rg is told at preflight, not by a gate refusal ~20 minutes in; pre-fix result: FAILS (measured: the refusal came from check-cheatsheet-refs.sh mid-gate)"
+      - "the WSL build lane is provisioned from the same package list as the podman toolbox, or the two lists are made one; pre-fix result: FAILS (with-tillandsias-builder.sh:334-343 is podman-only and unreachable on Windows)"
+      - "the remaining gate steps are swept for other tools required but undeclared — the openssl row shows this shape recurs; pre-fix result: UNKNOWN, never audited"
+      - "NEGATIVE CONTROL: on a host that HAS rg the manifest check stays green and emits no remedy for a tool already present (:146 warns against that exact noise); pre-fix result: PASSES, must not regress"
+    events:
+      - type: filed
+        ts: "2026-09-12T03:46:28Z"
+        agent_id: "windows-yolanda-claude-20260912t034628z"
+        host: yolanda
+        summary: |
+          Found as a gate refusal on the first Windows host up since
+          2026-09-06, landing the 1122-xi2f confirmation. Filed at the
+          coordinator's direction (macuahuitl-fedora).
+
+          Unblocked by provisioning the LANE rather than the workstation:
+          dnf install -y ripgrep inside the tillandsias-build distro, which
+          methodology multi_host_development.toolbox_first_scripts.rule
+          permits because the rule forbids a host package install only WHEN
+          A TOOLBOX CAN CARRY THE TOOL, and here the toolbox demonstrably
+          cannot. Nothing was installed on the operator's Windows system.
+
+          Verified in the environment that actually failed, not the
+          convenient one: running the check from Git Bash passed instantly
+          and proved nothing, because rg exists on the Windows side. Re-run
+          INSIDE the distro it answers OK: 491 cheatsheet references
+          resolved. That difference in where a check is run is the same
+          distinction this packet is about.

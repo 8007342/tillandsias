@@ -63,10 +63,29 @@ fn main() {
     // placeholder in August would otherwise never be told again.
     let assets_dir = manifest_dir_path.join("assets");
     let _ = std::fs::create_dir_all(&assets_dir);
+    // ORDER 1126-w8rq. The PLACEHOLDER FILE still gets created for both
+    // arches — `cargo check` on a host that will never package depends on
+    // that. The WARNING is scoped to the arch this build actually embeds.
+    //
+    // 1122-xi2f narrowed the packaging check to $hostGuestArch because
+    // build-windows-tray.ps1 RESETS the non-host arch to a zero-byte
+    // placeholder on purpose (order 282). Warning about that arch told the
+    // reader a correct build should have been refused, citing a refusal that
+    // no longer happens — and its premise was wrong anyway, since an x86_64
+    // tray does not embed the aarch64 asset and cannot be no-op'd by it.
+    //
+    // Scoping restores the warning's truth rather than deleting it: for the
+    // arch that IS embedded, every clause below still holds, refusal
+    // included. An empty CARGO_CFG_TARGET_ARCH keeps the old both-arches
+    // behaviour, so a missing variable degrades to noisy, never to silent.
+    let embedded_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
     for arch in ["x86_64", "aarch64"] {
         let bin = assets_dir.join(format!("tillandsias-headless-{arch}-unknown-linux-musl"));
         if !bin.exists() {
             let _ = std::fs::write(&bin, b"");
+        }
+        if !embedded_arch.is_empty() && arch != embedded_arch {
+            continue;
         }
         let is_placeholder = std::fs::metadata(&bin)
             .map(|m| m.len() == 0)
@@ -82,6 +101,65 @@ fn main() {
         }
     }
 
+    // ORDER 1084-x8ya. EXPORT THE EMBEDDED GUEST'S DIGEST so the host can key
+    // the control wire to the guest it actually ships, instead of to itself.
+    //
+    // release_root_secret() hashes current_exe(). The host is tillandsias-tray.exe
+    // and the guest is tillandsias-headless: DIFFERENT FILES, so their digests can
+    // never be equal, so under NNpsk0 the msg1 PSK never matches and the handshake
+    // cannot succeed on any release pair. Measured on yolanda 2026-09-12:
+    // tray d912454f…ecd34eb9 against guest 3d27e306…cb35f2f, same tag, same CI run.
+    //
+    // The host therefore derives from THE GUEST BYTES IT EMBEDS, known here at
+    // build time. The guest keeps self-hashing, so the two agree by construction:
+    // whatever this tray injects is what this tray keys to. A guest running any
+    // other bytes — fetched, stale, swapped — mismatches and is refused, loudly,
+    // which is the fail-closed shape this packet wanted.
+    //
+    // WHY Option AND NOT A HARD ERROR HERE. build.rs writes a zero-byte
+    // placeholder above so `cargo check` compiles on hosts that will never
+    // package, and the gate runs exactly that on Linux. Failing the build on a
+    // placeholder would red every non-packaging host. Hashing the placeholder
+    // would be worse: an empty file has a perfectly valid SHA-256, and a
+    // valid-looking key derived from nothing is precisely the silent-substitution
+    // shape this packet also removed from WORKSPACE_VERSION. So the placeholder
+    // case exports None and the runtime refuses with a named cause. Packaging
+    // already refuses a placeholder for the embedded arch (1059-ry6t), so the
+    // real release path cannot reach None.
+    let digest_arch = if embedded_arch.is_empty() {
+        "x86_64".to_string()
+    } else {
+        embedded_arch.clone()
+    };
+    let digest_asset = assets_dir.join(format!(
+        "tillandsias-headless-{digest_arch}-unknown-linux-musl"
+    ));
+    println!("cargo:rerun-if-changed=assets/tillandsias-headless-{digest_arch}-unknown-linux-musl");
+    let digest_src = match std::fs::read(&digest_asset) {
+        Ok(bytes) if !bytes.is_empty() => {
+            use sha2::{Digest, Sha256};
+            let d = Sha256::digest(&bytes);
+            let body = d
+                .iter()
+                .map(|b| format!("0x{b:02x}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!(
+                "/// SHA-256 of the guest binary this tray embeds (order 1084-x8ya).\n\
+                 /// `None` when the asset is the build.rs placeholder: the runtime\n\
+                 /// refuses rather than keying to the hash of an empty file.\n\
+                 pub const EMBEDDED_GUEST_SHA256: Option<[u8; 32]> = Some([{body}]);\n"
+            )
+        }
+        _ => "/// SHA-256 of the guest binary this tray embeds (order 1084-x8ya).\n\
+              /// `None` here: the asset is absent or the zero-byte placeholder.\n\
+              pub const EMBEDDED_GUEST_SHA256: Option<[u8; 32]> = None;\n"
+            .to_string(),
+    };
+    let digest_out = std::path::PathBuf::from(std::env::var("OUT_DIR").unwrap_or_default())
+        .join("embedded_guest_digest.rs");
+    std::fs::write(&digest_out, digest_src).expect("write embedded_guest_digest.rs");
+
     // Read the workspace VERSION file and expose it as WORKSPACE_VERSION so
     // `--diagnose --json` reports the release version (`0.2.260528.1`) rather
     // than the crate's static `Cargo.toml` `version = "0.1.0"`. The crate
@@ -89,10 +167,26 @@ fn main() {
     // the single source of truth (the install/build scripts already quote
     // it). This is set UNCONDITIONALLY (before the windows-target gate)
     // so cross-checks from Linux also have the env var available.
+    // ORDER 1084-x8ya. THIS MUST NOT SILENTLY SUBSTITUTE. WORKSPACE_VERSION is
+    // not merely a display string: hvsocket.rs passes it to channel_psk() as
+    // the version half of the host-guest PSK binding, and the guest derives its
+    // half from include_str!(VERSION).trim() with NO fallback. So a failed read
+    // here used to bind the host to CARGO_PKG_VERSION ("0.1.0" for this crate)
+    // while the guest bound the real release, producing a PSK mismatch with no
+    // build error, no warning, and a runtime symptom ("noise: input error")
+    // that names no version at all. A PSK input that can quietly become a
+    // different value must not be expressible; an unreadable VERSION is a
+    // broken checkout, which is a build failure, not a default.
     let version_file = manifest_dir_path.join("../../VERSION");
-    let workspace_version = std::fs::read_to_string(&version_file)
-        .map(|s| s.trim().to_string())
-        .unwrap_or_else(|_| env!("CARGO_PKG_VERSION").to_string());
+    let workspace_version = match std::fs::read_to_string(&version_file) {
+        Ok(s) => s.trim().to_string(),
+        Err(e) => panic!(
+            "cannot read {} ({e}) — WORKSPACE_VERSION binds the host-guest control-wire PSK \
+             (see crates/tillandsias-windows-tray/src/hvsocket.rs), so substituting \
+             CARGO_PKG_VERSION here would silently mismatch the guest's key (1084-x8ya)",
+            version_file.display()
+        ),
+    };
     println!("cargo:rerun-if-changed=../../VERSION");
     println!("cargo:rustc-env=WORKSPACE_VERSION={workspace_version}");
 

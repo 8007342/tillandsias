@@ -41,7 +41,10 @@ cross-platform story evolves.
 
 ## Working dir
 
-`C:/Users/bullo/src/tillandsias`
+The windows host's checkout of this repo, written below as `<CHECKOUT>`.
+Resolve it on the host rather than assuming a literal path — it is
+`C:/Users/bullo/claudia/tillandsias` on esmeraldinha, and has differed per
+host. Run the steps from that directory.
 
 ## Steps
 
@@ -61,7 +64,10 @@ $env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"
 cargo build -p tillandsias-macos-tray --release
 ```
 
-Capture both stdout and the cargo exit code. The build is EXPECTED to fail.
+Capture both stdout and the cargo exit code. The build is EXPECTED to
+SUCCEED as a stub: the crate is fully cfg-gated for non-macOS, so exit 0 is
+the healthy steady state and a non-zero exit is the escalation case. The
+Step 3 table below is authoritative.
 
 ### 3. Classify the outcome
 
@@ -161,10 +167,10 @@ only.
 ### 6. Commit + push
 
 ```bash
-git add plan/diagnostics/build-macos-tray-from-windows-YYYY-MM-DD.md
+git add plan/issues/probe-macos-tray-on-windows-findings-YYYY-MM-DD.md
 [ -f plan/issues/tray-convergence-coordination.md ] && \
   git add plan/issues/tray-convergence-coordination.md
-git commit -m "diagnostics(windows-next): build-macos-tray-from-windows YYYY-MM-DD"
+git commit -m "diagnostics(windows-next): probe-macos-tray-on-windows YYYY-MM-DD"
 git push origin windows-next
 ```
 
@@ -179,3 +185,14 @@ and whether an escalation note was filed.
   case (UNEXPECTED + shared-crate-impact) that warrants escalation. The
   classification list will need refinement as Rust ecosystem changes — e.g.
   if `objc2_virtualization` ever ships a Windows-stub that fails differently.
+- **2026-09-12:** three defects found by running the skill verbatim on
+  esmeraldinha (order: coordinator macuahuitl-fedora, this cycle). (1) Step 2
+  said the build was "EXPECTED to fail", contradicting the Step 3 table and the
+  prose above it and inverting the probe's meaning for a top-down reader — the
+  cfg-gating landed after that line was written. (2) The working dir was a
+  literal `C:/Users/bullo/src/tillandsias`, which is not this host's checkout,
+  so step 1 failed verbatim; it is now a `<CHECKOUT>` placeholder. (3) Step 6
+  `git add`ed only the legacy `plan/diagnostics/` path while step 4 designates
+  `plan/issues/` as current, so a verbatim run committed NOTHING and silently
+  dropped its own findings — which is the likely reason no findings file
+  existed before today. Step 6 now adds the step 4 path.

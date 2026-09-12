@@ -1,0 +1,109 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-spec-index-demotion-arms-cannot-be-constructed-as-root-so-every-windows-gate-failed-them-unconditionally-once-1087-h2z9-wired-the-step-into-check
+    order: 1129-3yv7
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: windows
+    capability_tags: [windows, ci, guards, gate]
+    estimated_hours: 1
+    owned_files:
+      - scripts/test-spec-index-durable-tier-demotion.sh
+    verifiable_closure: |
+      bash scripts/test-spec-index-durable-tier-demotion.sh exits 0 as root
+      AND as a non-root user, and the two chmod-000 arms still RUN for the
+      non-root one. Measured both ways in the tillandsias-build distro:
+      as root -> ok:test-spec-index-durable-tier-demotion:5-passed:2-skipped-root
+      as nobody -> ok:test-spec-index-durable-tier-demotion:7-passed
+      NEGATIVE CONTROL, and it is the arm that matters: the non-root run must
+      keep PASSING those two arms, not skip them — a fix that skipped
+      everywhere would delete 1003-v3dc's teeth while printing green.
+    title: |
+      scripts/test-spec-index-durable-tier-demotion.sh builds its negative condition with `chmod 000`, which does not constrain euid 0, so both demotion arms fail for every root caller — and the Windows gate re-execs as `wsl.exe -u root`, so every Windows host failed ./build.sh --check unconditionally from the moment 1087-h2z9 wired the step into --check
+    context: |
+      MEASURED on yolanda, 2026-09-12, as the FOURTH successive land refusal
+      of the fleet restart, ~25 minutes into ./build.sh --check:
+
+        FAIL  unreadable volume is a DEMOTION, not an absence
+        FAIL  the demotion reason names the volume
+        fail:test-spec-index-durable-tier-demotion:2-failed
+
+      The arm constructs its negative condition at :86 with
+      `mkdir -p "$denied/vol"; chmod 000 "$denied"` and expects the resolver
+      to fail to stat the child. Root traverses a 000 parent. Measured
+      directly in the distro the gate runs in:
+
+        whoami=root euid=0
+        ROOT CAN STAT chmod-000 path -> the test's premise cannot hold as root
+
+      So the resolver correctly finds the volume, correctly reports no
+      demotion, and the assertions fail for a reason that has nothing to do
+      with the behaviour under test. The test was not detecting a defect; its
+      premise was unconstructible for the user running it. There was no EUID
+      guard in the file.
+
+      BLAST RADIUS: THE WHOLE WINDOWS LANE. land-on-platform-branch.sh
+      re-execs the gate as `wsl.exe -d tillandsias-build -u root ... exec bash
+      ./build.sh --check` (read off ps during this cycle). Every Windows gate
+      is euid 0, so these two arms failed on every Windows host, every run.
+      No Windows host could land anything at all.
+
+      WHEN IT BROKE, which is not when it was written. The test dates from
+      dcc50ff27 (2026-09-04, lenovinha, "not-permitted is not absent"), but it
+      was absent from --check until 1087-h2z9 triaged it in as
+      scripts/gate-steps.d/180-1087-h2z9.step (cf3b5c68b, 2026-09-11). That
+      step's own comment says it was "Measured green and cheap on b026372ff"
+      — measured on Linux, where the gate is not root. So this is a
+      WIRING-TIME regression for the Windows lane, not a 09-04 one, and the
+      distinction matters: the code was correct where it was written and
+      correct where it was measured, and became load-bearing on a platform
+      neither of those covered. Both Windows hosts were down 09-06 to 09-12,
+      so the first Windows host back was the first to run it.
+
+      THE FIX IS THE PROJECT'S OWN IDIOM, not a new invention.
+      test-tray-asset-placeholder-refused.sh states it: a probe that cannot
+      run its own arm must say so rather than fail the tree — which is how
+      its PowerShell arms skip on Linux and run on Windows. So the two arms
+      now skip WITH A NAMED REASON when euid is 0 and run unchanged for
+      everyone else.
+
+      WHAT WOULD HAVE MADE THIS FIX A LIE, and how it was falsified. A skip
+      that fired everywhere would print green while deleting the teeth. So
+      the fix was measured on both sides of its own condition:
+        as root   -> ok:...:5-passed:2-skipped-root   (exit 0)
+        as nobody -> ok:...:7-passed                  (exit 0, both arms RAN)
+      The non-root run is the load-bearing one: it proves the arms still
+      execute and still pass where the rootless-podman shape 1003-v3dc fixes
+      actually occurs. The unskipped verdict token is byte-identical to what
+      this test has always emitted, and a host that skipped an arm cannot
+      print the same line as one that ran it — the skip is visible in the
+      verdict, not hidden behind an unchanged green.
+
+      NOT ATTEMPTED, deliberately: running the Windows gate as non-root. That
+      is a larger change to the lane with its own risks and needs its own
+      evidence; it is not a prerequisite for the arms to be honest.
+    exit_criteria:
+      - "the test exits 0 as root with the two unconstructible arms skipped and named; pre-fix result: FAILS (fail:test-spec-index-durable-tier-demotion:2-failed, gate refused)"
+      - "the test exits 0 as a non-root user with those two arms RUN and PASSED; post-fix measured: ok:test-spec-index-durable-tier-demotion:7-passed as nobody"
+      - "a Windows host can pass ./build.sh --check and land; pre-fix result: FAILS (no Windows host could land anything)"
+      - "NEGATIVE CONTROL: the skip is scoped to euid 0 only — a non-root host that regressed to skipping would print the skipped token, which differs from the original; pre-fix result: N/A, post-fix pinned by the two measurements above"
+    events:
+      - type: filed
+        ts: "2026-09-12T03:46:24Z"
+        agent_id: "windows-yolanda-claude-20260912t034624z"
+        host: yolanda
+        summary: |
+          Found as the fourth successive land refusal of the 2026-09-12 fleet
+          restart, blocking every Windows host. Diagnosed, proposed to the
+          coordinator, and implemented only after explicit sign-off —
+          "the gate refused and I changed the gate" is the one move that
+          needs a second pair of eyes.
+
+          Attribution was done with git log on the introducing commit rather
+          than by assuming the test was new, and then CORRECTED: the file
+          dates from 2026-09-04, but the step that runs it was wired on
+          2026-09-11, so the Windows lane broke at wiring time. Reporting the
+          file's date alone would have pointed lenovinha at the wrong day.

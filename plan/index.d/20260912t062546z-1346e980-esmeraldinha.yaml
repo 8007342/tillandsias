@@ -1,0 +1,56 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: two-timing-logs-on-one-host-so-every-recurrence-count-is-a-partition-presenting-as-a-total
+    event:
+      type: artifact
+      ts: "2026-09-12T06:25:46Z"
+      agent_id: windows-esmeraldinha-opus5-20260912t062546z
+      host: esmeraldinha
+      summary: |
+        artifact: second host row for the /tmp timing-ledger fallback — ESMERALDINHA
+
+        MEASURED 2026-09-12 inside the tillandsias-build WSL2 distro, where the gate
+        runs (checkout on drvfs at /mnt/c, gate re-execs as euid 0):
+
+          /tmp/tillandsias-timing.jsonl
+          total lines          1289
+          litmus lines          279   (21.6%)
+          non-debris           1010   (78.4%)
+          span                 2026-08-16T22:27:08Z .. 2026-09-12T03:47:45Z  (27 days)
+          non-litmus families  45 checking-for-newly-added..., 41 build-preamble,
+                               40 build-check, 29 writing-the-gate-stamp,
+                               29 staging-router-sidecar..., 29 running-clippy-strict-l...,
+                               29 running-clippy-strict-i..., 29 reporting-windows-only-...
+
+        Sits beside yolanda's row (4756 total, 921 litmus, 32 days). Two Windows hosts
+        measured, both MAJORITY-REAL. The debris predicate circulated as a workaround —
+        "equal counts of total and litmus lines means it is fixture debris, so rm is
+        safe" — was FALSE on 100% of the hosts it was tested against. That is the row's
+        point: not two unlucky hosts, but a Windows host's /tmp timing ledger being
+        normally a real ledger.
+
+        THE COST SHAPE IS WHAT MAKES IT MATTER. Not "a file was lost" but "a month of
+        trend data was lost silently, surfacing only when someone asks a question it can
+        no longer answer". The concrete instance on this host: those 40 build-check
+        records are the trend data this host's CARGO_BUILD_JOBS packet cites for its
+        21m41s-25m17s floor-gate bracket. Running the remedy would have deleted the
+        evidence underneath a measurement already in the ledger, and nobody would have
+        noticed for weeks, because a timing ledger is not read until a trend is wanted.
+
+        CORROBORATION of the detection mechanism: the host field is inconsistent WITHIN
+        the single file — most records carry "host":"unknown", later ones carry
+        "host":"Esmeraldinha". yolanda reports the same transition ("unknown" early,
+        "Yolanda" late). Two hosts showing the identical shape makes this corroboration
+        of one detection failure rather than a separate defect.
+
+        DISPOSITION HERE: nothing deleted, nothing moved. Per macuahuitl the only
+        permitted remedy is mv-aside, and only when the guard actually blocks a run; on
+        this host it has not. The scoped fix is pirria's.
