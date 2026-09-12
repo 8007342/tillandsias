@@ -748,3 +748,91 @@ surface another host's claim names (`tillandsias-plan expire-claims
   the generic rebuild remedy cleared the staleness in 2m16s — one tree, two
   loci, two opposite correct answers; the orphaned Sep 4 ELF is removed on
   the refusal's own reasoning and the row is closed verified.
+- **The portability advisory landed with a baseline, not a zero** (macbookair,
+  1130-i6xj, osx-next 91b04268d): the first run found 35 genuine pre-existing
+  GNU-only idioms unrelated to the night (stat -c ×14, sed -i ×13, date -d ×5,
+  readlink -f ×2; sampled bare `sed -i` in bump-version.sh, delegate-outcome.sh
+  and ensure-nvidia-cdi.sh), so "zero on the fixed tree" would have made the
+  closure un-passable and therefore deleted; the closure is per-instance and
+  the 23 silent-degrade / 12 loud-fail split prints on every gate as a
+  baseline that must not climb. The guard's own four false positives (a
+  correct BSD-first `stat -f || stat -c` chain, the repo's GNU/BSD absorption
+  layer, help text, `grep -r` over the canonical skills/ tree) and one in the
+  fixture (a negative control matching its own advice string) are pinned as
+  negative controls; 102 s → 6 s by a glob pre-filter. Three structural facts
+  for the next litmus author: a new litmus must be bound in
+  openspec/litmus-bindings.yaml or nothing runs it (660-ryhn class); steps go
+  under `critical_path:`; each `command:` is a single-line double-quoted
+  scalar, which is why the convention is a thin litmus over a test-*.sh
+  fixture. Two pre-existing macOS reds found by stash-and-rerun: BSD `wc -l`
+  pads its count so a string compare against "1" fails on every Mac (eighth
+  idiom: string-comparing a wc count; macbookair fixes it), and
+  litmus:tool-dispatch-lib (diagnosis pending). The Linux gate then printed
+  loud-fail=14 against macbookair's 12; macbookair suspected a platform
+  difference in their own guard, the coordinator suspected a moved tree, and
+  the byte-identical 14-entry lists on both platforms at the same commit
+  settled it: the 12 was measured before `test-portability-idioms.sh`
+  existed, and that fixture's :61/:63 carry the idioms as test SUBJECTS, so
+  the guard flags its own proof — deliberately, with a comment saying so
+  rather than a by-name exemption. One baseline, 23/14 at e5d5ac0af, both
+  platforms. A measurement whose tree state is not stated, in the packet
+  about measurements whose regime is not stated (macbookair's own words).
+- **ci-release 37/37 on macOS; neither standing red was in the code under
+  test** (macbookair, osx-next 8f004a77d): BSD `wc -l` pads its count in
+  every form, so a string compare against "1" failed on every Mac — the
+  sigpipe litmus fixed to `-eq`, an eighth idiom added with a `tr -d`
+  negative control, and the new arm immediately found a live red nobody had
+  reported (`test-capability-manifest-guard.sh` string-comparing a padded
+  count, "drifted token count differs" while the code was fine). And
+  litmus:tool-dispatch-lib: arm 4f asserted `= "RESOLVER-ABSENT"` where three
+  outcomes exist — `.` is a POSIX special builtin, so on bash 3.2 (every
+  macOS /bin/bash) a failed source under `set -e` terminates the shell
+  despite `|| true`; the old caller printed nothing, empty fell to the else
+  branch, and the arm reported the opposite of what happened. Changed to
+  `!= "RESOLVER-PRESENT"`, what it always meant. The property worth naming:
+  an assertion that enumerates fewer outcomes than exist does not merely
+  miss — it reports a specific falsehood, and both of today's did so in the
+  direction that accused the subject. Filed: 1135-z8gn (the 35-item GNU-ism
+  backlog with the 23/14 baseline, both hosts named, the ninth idiom `. FILE
+  || true` under set -e, unscoreable with its scorable slice named) and
+  1136-n8sh (the two ledger guards must name each other; the unresolvable
+  half is Rust in tillandsias-plan, the 977-448j half is a shell string).
+- **Both proposed template slices had zero live defects, and both times the
+  guard's knowledge was the cause** (macbookair, osx-next 8b401ecae):
+  readlink -f — one instance runs inside a `podman run … -c` string
+  (Linux context, needed TRANSITIVE tracking across a 35-line assignment
+  chain to exempt, pinned in both directions), the other is on a Darwin that
+  carries `-f`; `date -d` — four correct GNU-first chains falling back to
+  BSD `date -j`, which the counterpart list did not know, and one fixture
+  subject. An incomplete counterpart list does not under-report, it accuses
+  working code. Honest baseline 20 silent / 13 loud at 8b401ecae, seven
+  first-run entries never defects; the real classes are `stat -c` (14) and
+  `sed -i` (13), sampled real (claim-ledger-node.sh falls back to EMPTY
+  rather than BSD and yields a blank mtime on macOS). Fixed on the way:
+  plan-binary-probe.sh's same-artefact compare answered "same" having
+  compared two empty substitutions where readlink -f is absent — now refuses
+  on an empty side, dormant on today's fleet. The land was refused by
+  check-bash-dialect because the fixture's ok() message carried a literal GNU
+  idiom: a test about tests that contain their subject, caught containing
+  its subject, both guards correct; fixed by splitting the literal, the
+  offered allowlist entry declined. Third time today the cheap path was the
+  wrong one — dangle a litmus pin, delete a detector to zero a class, add an
+  allowlist entry: each one line, each passes the gate, each spends someone
+  else's future.
+- **The sed -i silent-degrade half closed; the false alarm was the finding**
+  (macbookair, osx-next bc2875709, baseline 20/13 → 15/13): four production
+  conversions to the temp-file form, with the consequence measured on BSD —
+  `delegate-outcome.sh` marks a record filed so a later cycle does not
+  double-file it; the old form failed with "invalid command code f" and left
+  filed=no, so the next cycle filed it again. `bump-version.sh` was the
+  false alarm: its `sed -i` already sits inside a GNU/BSD dialect branch
+  whose author solved more than `-i` — BSD sed rejects the `0,/re/` address
+  as a SILENT no-op (exit 0, file unchanged) — so a naive conversion would
+  have removed the warning and left the real defect on the script that bumps
+  the release version. Reading the lines first was the only thing between
+  the template and that outcome. Third false-positive class: an idiom inside
+  a dialect branch, exempted by a bounded six-line window, never file-level.
+  Also measured: BSD sed supports `/re/,+2d`; not every GNU-looking address
+  is GNU-only. Loud-fail half (13 fixture entries, ≥3 deliberate subjects,
+  ~8-9 real conversions) left on 1135-z8gn as a followable next_action; the
+  class is stopped here to spend the budget elsewhere.

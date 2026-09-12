@@ -122,7 +122,12 @@ pruned=0
 for p in $(grep -oE 'hostPath: +[^ ]+' "$CDI_DIR/nvidia.yaml" | awk '{print $2}' | sort -u); do
     [ -e "$p" ] && continue
     esc=$(printf '%s' "$p" | sed 's/[\/&]/\\&/g')
-    sed -i "/hostPath: ${esc}$/,+2d" "$CDI_DIR/nvidia.yaml"
+    # TEMP FILE, NOT `sed -i` (1135-z8gn). The `,+2` address IS portable —
+    # measured: BSD sed handles /re/,+2d correctly — so `-i` was the only
+    # defect here. Linux-only in practice (NVIDIA CDI), converted anyway: a
+    # script's portability should not rest on where it happens to run today.
+    sed "/hostPath: ${esc}$/,+2d" "$CDI_DIR/nvidia.yaml" > "$CDI_DIR/nvidia.yaml.tmp" \
+        && mv "$CDI_DIR/nvidia.yaml.tmp" "$CDI_DIR/nvidia.yaml"
     pruned=$((pruned + 1))
     echo "  pruned absent mount: $p" >&2
 done

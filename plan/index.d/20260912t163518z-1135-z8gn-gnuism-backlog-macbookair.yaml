@@ -1,0 +1,116 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-thirty-seven-standing-gnu-only-idioms-the-advisory-found-on-its-first-run
+    order: 1135-z8gn
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [portability, macos, windows, gate, fail-loud]
+    estimated_hours: 6
+    owned_files:
+      - scripts
+    depends_on:
+      - gnu-only-shell-idioms-reach-trunk-green-and-freeze-a-whole-platform-one-host-at-a-time
+    unscoreable: |
+      UNPINNABLE AS A SINGLE LITMUS, and saying so beats inventing one. The
+      closure is "the baseline goes DOWN and never up", which is a trend across
+      commits, not a property of one tree — no single run can assert it. The
+      advisory already prints the count on every gate, which is the mechanism;
+      what a claimer adds is the DOWNWARD movement plus, per fix, the arm that
+      proves the fixed line behaves on both dialects.
+
+      WHAT WOULD MAKE A SLICE SCORABLE: take one idiom class, fix every
+      instance of it, and pin a litmus asserting the guard reports ZERO of that
+      class. `readlink -f` (2 instances) or `date -d` (5) is a sensible first
+      slice. Do not pin "the total is N": the total legitimately includes this
+      packet's own fixture (see below), so a literal-total pin breaks the next
+      time anyone writes a test about an idiom.
+    verifiable_closure: ""
+    title: |
+      the portability advisory found 37 standing GNU-only idioms on its very first run — stat -c ×14, sed -i ×13, date -d ×5, readlink -f ×2 — none of them from the night that prompted it, and three sampled at random were real latent breakage
+    context: |
+      BASELINE: 23 silent-degrade / 14 loud-fail, measured at e5d5ac0af (the
+      relay of osx-next 91b04268d) on BOTH macOS (tlatoanis-macbook-air) and
+      Linux (macuahuitl), agreeing EXACTLY — same 14 file:line entries on both,
+      `comm` reporting zero on either side.
+
+      THAT AGREEMENT WAS ITSELF A CORRECTION. An earlier figure of mine, 23/12,
+      was reported as a possible regime difference. It was not: the 23/12
+      predated scripts/test-portability-idioms.sh entering the tree, and that
+      fixture's two HALF-1 pattern arguments are the whole delta. I had compared
+      a number from one tree state against another host's from a different one
+      and called it a platform bug — the same unstated-regime error this packet's
+      parent exists to catch. Recorded so nobody re-derives it, and so 12→14 is
+      never read as a climb.
+
+      SAMPLED AND CONFIRMED REAL, three at random, all bare GNU-only `sed -i`
+      with no fallback — they do nothing on BSD and report success:
+        scripts/bump-version.sh:158        rewrites a crate version during release
+        scripts/delegate-outcome.sh:286    flips filed=no to filed=yes in a record
+        scripts/ensure-nvidia-cdi.sh:125   edits a CDI yaml (Linux-only in practice)
+      The first two are the worrying ones: a release-path script and a
+      record-keeping script that would silently no-op on any macOS host.
+
+      SILENT-DEGRADE FIRST, because that is where the danger is (lenovinha's
+      split). 23 instances across 14 production scripts:
+        clamp-ca-material.sh ×7, generate-evidence-bundle.sh ×2, and one each in
+        bump-version.sh, check-readme-discipline.sh, claim-ledger-node.sh,
+        delegate-outcome.sh, ensure-nvidia-cdi.sh, hash-image-sources.sh,
+        manage-cache.sh, materialize-macos-tar-to-img.sh, plan-binary-probe.sh,
+        release-preflight.sh, update-convergence-dashboard.sh,
+        with-nix-builder.sh
+      A production script fails on the host that RUNS it, with no error, and the
+      wrong answer looks exactly like the right one.
+
+      LOUD-FAIL, 14 instances across 10 fixtures:
+        test-litmus-mutation-arm-guard.sh ×3, test-source-slice-bounds.sh ×2,
+        test-portability-idioms.sh ×2 (SEE BELOW — deliberate), and one each in
+        test-check-bash-dialect.sh, test-codex-oauth-restore.sh,
+        test-forge-liveness-probe.sh, test-gate-stamp-memoization.sh,
+        test-hash-image-sources.sh, test-mode-only-regression-887-bz88.sh,
+        test-provider-device-auth.sh
+      A fixture fails on the host that runs it, by name. Expensive but
+      self-announcing — and TWO SUCH FIXTURES WERE ALREADY RED ON EVERY macOS
+      HOST when the advisory landed, both closed on 2026-09-12 and neither in
+      the code under test: test-capability-manifest-guard.sh string-compared a
+      padded `wc` count, and litmus:tool-dispatch-lib's arm 4f enumerated two
+      outcomes where bash 3.2 produces a third. The backlog is not theoretical.
+
+      TWO ENTRIES ARE THIS PACKET'S OWN FIXTURE AND MUST NOT BE "CLEANED UP".
+      test-portability-idioms.sh:61 and :63 pass 'touch -t 202609120600' and
+      "sed -i '/^plan_digest" as PATTERN ARGUMENTS to the pre-fix arms. The
+      guard counts them correctly — a test whose SUBJECT is a bad idiom is
+      indistinguishable from a file containing one — and deleting them removes
+      the only evidence the guard catches anything. No name-based exemption was
+      added on purpose: a guard that exempts files has a hole. The lines carry a
+      comment saying so.
+
+      A NINTH IDIOM IS KNOWN AND NOT YET IMPLEMENTED, found while closing arm
+      4f: `. FILE || true` under `set -e` is NOT SAFE ON BASH 3.2. `.` is a
+      POSIX special builtin, so a failed source terminates the shell
+      immediately on every macOS /bin/bash while bash 5 honours the `|| true`.
+      Silent-degrade: the script dies mid-file with no message and whatever it
+      was about to assert never runs. Worth an arm.
+    deliverable: |
+      The baseline goes DOWN. Per fix: use the portable form, and where the
+      behaviour differs by dialect add or extend an arm that proves the fixed
+      line works on both — a conversion with no arm is how the `grep -R` repair
+      travelled wrong (GNU-correct, BSD-broken) and how this morning's
+      `touch -d` → `-t` conversion shipped a literal timestamp with an expiry.
+      A FIX TRAVELLING WITH A NEW DEFECT ATTACHED is its own failure mode and
+      has now happened twice in one day.
+    next_action: >
+      Take ONE idiom class end to end rather than grazing the list — readlink -f
+      (2) or date -d (5) is a sensible first slice — and pin a litmus asserting
+      the guard reports zero of that class. Prefer the SILENT-DEGRADE files
+      first: bump-version.sh:158 and delegate-outcome.sh:286 are a release-path
+      and a record-keeping script that silently no-op on macOS today. Re-measure
+      the baseline after each slice and record the tree AND host with it; a bare
+      number invites the 12→14 misreading that already happened once.
+    provenance: |
+      Filed by macbookair (macos) 2026-09-12 at the coordinator's instruction,
+      from the first run of scripts/check-portability-idioms.sh (order
+      1130-i6xj). Counts verified identical on macOS and Linux at e5d5ac0af.

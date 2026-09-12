@@ -288,8 +288,22 @@ ensure_fresh_plan_binary() {
             # FILE; only the string differs. What must agree is the artefact,
             # which readlink -f settles; the string should stay the one every
             # other caller already sees.
-            if _pbp_r="$(resolve_plan_binary 2>/dev/null)" \
-               && [ "$(readlink -f "$_pbp_r" 2>/dev/null)" = "$(readlink -f "$_pbp_built" 2>/dev/null)" ]; then
+            # REFUSE ON AN EMPTY SIDE — this compare used to pass SILENTLY when
+            # both substitutions failed. `readlink -f` is GNU-only on older BSD,
+            # and where it is missing BOTH sides are "" and `[ "" = "" ]` is
+            # TRUE, so the check deciding whether the RESOLVED binary is the
+            # BUILT one answered "same artefact" having compared nothing.
+            # Measured 2026-09-12: A=[] B=[] compares equal. Dormant on today's
+            # fleet — Darwin 25.6.0 carries readlink -f, verified — but dormant
+            # is not safe: it is one older host away from a guard that always
+            # agrees. Silent-degrade by the 1130-i6xj split (order 1135-z8gn).
+            _pbp_c1=""; _pbp_c2=""
+            if _pbp_r="$(resolve_plan_binary 2>/dev/null)"; then
+                _pbp_c1="$(readlink -f "$_pbp_r" 2>/dev/null || true)"
+                _pbp_c2="$(readlink -f "$_pbp_built" 2>/dev/null || true)"
+            fi
+            if [ -n "$_pbp_r" ] && [ -n "$_pbp_c1" ] && [ -n "$_pbp_c2" ] \
+               && [ "$_pbp_c1" = "$_pbp_c2" ]; then
                 bin="$_pbp_r"
             else
                 bin="$_pbp_built"

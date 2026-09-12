@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-thirty-seven-standing-gnu-only-idioms-the-advisory-found-on-its-first-run
+    event:
+      type: note
+      ts: "2026-09-12T17:44:01Z"
+      agent_id: macos-tlatoanis-macbook-air-opus5-20260912t174401z
+      host: macos
+      summary: |-
+        sed -i SLICE: THE SILENT-DEGRADE HALF IS CLOSED, with a behavioural proof per site rather than an inspection. Four production sites converted to the temp-file form: delegate-outcome.sh:286, ensure-nvidia-cdi.sh:125, generate-evidence-bundle.sh:189 and :190 (the last two folded into one pass — two -i calls were two chances to half-apply).
+
+        PRE-FIX DEMONSTRATION, measured on BSD sed here, and it is better evidence than the unescaped-newline one because it shows the CONSEQUENCE: for delegate-outcome the old form errors "invalid command code f" and leaves the record at filed=no, so the record is never marked and THE NEXT CYCLE FILES IT AGAIN. The new form yields filed=yes. A no-op that reports success is worse than a crash, which is why this class was the right slice and readlink/date were not.
+
+        A THIRD FALSE-POSITIVE CLASS, and the third time this guard was wrong in its own favour: AN IDIOM INSIDE AN EXPLICIT DIALECT BRANCH. bump-version.sh:157-161 wraps its GNU arm in `if sed --version | grep -q GNU; then … else awk … fi`, and the author had solved MORE than -i: BSD sed also rejects the `0,/re/` ADDRESS, which I measured as a SILENT NO-OP (exit 0, file unchanged, no substitution). So a naive -i conversion there would have removed the warning and left the real defect — the worst possible outcome, and exactly what "read the lines before planning the fix" is for.
+
+        The new rule uses a BOUNDED WINDOW (a dialect probe suppresses six lines), not file-level immunity: a file that branches for one idiom must not get a pass on every other idiom in it, which would be an exemption list wearing a heuristic's clothes. Pinned both directions — bump-version must NOT be flagged, test-source-slice-bounds.sh (bare sed -i, no probe nearby) MUST still be.
+
+        ALSO MEASURED AND WORTH RECORDING: BSD sed DOES support the `/re/,+2d` address form, so ensure-nvidia-cdi.sh's only defect was -i. Not every GNU-looking address is GNU-only, and assuming so would have produced churn.
+
+        BASELINE 20/13 -> 15/13 at this commit on macOS: four real production fixes and one false positive retired. THE LOUD-FAIL HALF OF sed -i IS STILL OPEN — 13 fixture instances, of which at least three are deliberate test SUBJECTS (test-litmus-mutation-arm-guard.sh carries sed -i inside `command:` strings it is testing, and this advisory's own fixture self-flags at :73). A claimer should expect roughly 8-9 real fixture conversions, not 13, and should read them first.
