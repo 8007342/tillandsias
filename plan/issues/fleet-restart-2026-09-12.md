@@ -304,8 +304,16 @@ surface another host's claim names (`tillandsias-plan expire-claims
   its line count). That condition earned its keep within the hour: on yolanda the file
   was a THIRTY-TWO DAY timing ledger (4756 lines, 921 litmus), real
   build-check records from 2026-08-11 on, because that host's real records
-  land in the /tmp fallback — checkout detection fails there, which is a
-  separate 1096-p3tn finding. Moved aside with a dated suffix, never deleted. Each instance was caught by someone else's control or an
+  land in the /tmp fallback. Moved aside with a dated suffix, never deleted.
+  (Corrected twice by yolanda: checkout detection WORKS from the build
+  distro; and splitting /tmp by TIMESTAMP rather than record type shows every
+  non-litmus record predates .cache's first line — last real /tmp record
+  2026-08-26T04:07Z, first .cache record 04:49Z the same day, zero real
+  records since. /tmp is an ARCHIVE of pre-changeover history plus fixture
+  debris; .cache is the live log. pirria's falsification holds on Windows
+  too. The coordinator relayed the first inference to pirria as a reopening
+  within minutes and had to un-tell it: a large count reads as current and
+  is not, and only the timestamp split can tell.) Each instance was caught by someone else's control or an
   instruction, none by the author's own review: treat it as a standing hazard
   for guards written under time pressure — a guard fires where a NUMBER IS
   PUBLISHED, not where a record is appended. Third writer category found by
@@ -358,9 +366,11 @@ surface another host's claim names (`tillandsias-plan expire-claims
 - **The timing-ledger predicate was wrong on both Windows hosts** (yolanda,
   esme): yolanda 4756 lines / 921 litmus over 32 days; esme 1289 / 279 over
   27 days including the 40 build-check records its own CARGO_BUILD_JOBS
-  packet cites. Two hosts checked, two real ledgers: on Windows every record
-  lands in the /tmp fallback because checkout detection fails from the build
-  distro. Nobody deletes; the only remedy is mv-aside, and only when the
+  packet cites. Two hosts checked, two real ledgers. (yolanda later refuted the "checkout detection fails" reading with
+  one-command tests, then the "concurrent writer" reading with a timestamp
+  split: /tmp is pre-2026-08-26 history plus fixture debris, nothing real
+  since; the two files are an archive and a live log, and a reader of either
+  sees a fraction nobody announces.) Nobody deletes; the only remedy is mv-aside, and only when the
   guard actually blocks a run. A remedy whose safety is a conditional relayed
   between hosts at 06:00 is one paste from being run unconditionally (esme).
 - **The debug pair reaches Ready where the release pair cannot** (yolanda,
@@ -536,3 +546,51 @@ surface another host's claim names (`tillandsias-plan expire-claims
   yolanda for the cold two-binary provision (the distro holds only debug-pair
   artifacts and has never reached Ready; tillandsias-build is untouched);
   yolanda runs the weaker in-distro re-injection arm meanwhile, labelled.
+- **The archiver ruby fixture flakes in situ on two hosts with opposite ruby
+  layouts** (macuahuitl rc=1 with ruby on the host AND in the tillandsias-builder toolbox, measured; yoga rc=3 with ruby
+  absent on the host and present in the toolbox): the same gate run passes
+  the 4/4 could-not-run verdict fixture at ~:4045 and fails
+  `test-archiver-ruby-could-not-run.sh`'s positive control at ~:4679;
+  standalone the failing fixture passes 5/5 on both hosts, repeatedly. Two
+  full gates lost to it tonight. yoga's hypothesis, recorded as a hypothesis
+  with its prediction: the positive control's outcome depends on WHICH
+  execution context the gate hands that step (host vs toolbox dispatch, or
+  a PATH that differs between the two invocations), so the two call sites
+  should disagree about `command -v ruby`. Different mechanism from the
+  SIGPIPE flake in 1130-qk7d (fixed, 15/15). yoga takes it after 1128-j9fc
+  lands; first move is printing `command -v ruby`, the host kind and the
+  dispatch path at both call sites inside the gate, before changing anything.
+  Sharpened by yoga from the fixture's own logic: arm 4 skips only on the
+  CONJUNCTION rc=3 AND "no usable ruby", and yoga's gate hit rc=3 without
+  that string — so inside the gate the ARCHIVER itself returns could-not-run
+  with a different reason (standalone on the same tree it is rc=0, 305/305),
+  and the fixture merely notices. First move on both hosts is therefore to
+  print `$out2`, which the fixture already captures at :67 and discards at
+  :74. Separate cause under the same fixture's name: arm 5 fails if plan_tmp,
+  plan_tmp_bak, scripts/archive-plan-packets-check.rb or toolbox exist in the
+  worktree — exactly what an interrupted land leaves behind — so "the refusal
+  path left scratch state" (macuahuitl) may be a second mechanism, not the
+  ruby one.
+  Sharpened by yoga from the fixture's own logic: arm 4 skips only on the
+  CONJUNCTION rc=3 AND "no usable ruby", and yoga's gate hit rc=3 without
+  that string — so inside the gate the ARCHIVER itself returns could-not-run
+  with a different reason (standalone on the same tree it is rc=0,
+  305/305), and the fixture merely notices. First move on both hosts is
+  therefore to print ``, which the fixture already captures at :67 and
+  discards at :74. Separate cause under the same fixture's name: arm 5 fails
+  if plan_tmp, plan_tmp_bak, scripts/archive-plan-packets-check.rb or
+  toolbox exist in the worktree — exactly what an interrupted land leaves
+  behind — so "the refusal path left scratch state" (macuahuitl) may be a
+  second mechanism, not the ruby one.
+- **A keyed release pair reaches Ready on Windows** (yolanda, 1084-x8ya):
+  "VM Ready — control wire up" in 77 s with a release tray whose
+  EMBEDDED_GUEST_SHA256 (read from the generated embedded_guest_digest.rs,
+  not inferred from the staged asset) equals the digest of the guest injected
+  into the distro (4434eb13…, 14,910,776 bytes); the same host's unkeyed
+  release run earlier died at Connecting in 210 s with two necessarily
+  different self-hashes. Both binaries release profile, guest built with
+  build-guest-binaries.sh's exact flags, re-injection proven (the pre-removal
+  digest was the debug one). Labelled the WEAKER arm by its author: prior
+  state in the distro and a locally built tray. The mechanism is closed on
+  both VM platforms; the promotable closure is the smoke of the CI-built tag
+  on each, which needs the operator's per-run destruction consent.
