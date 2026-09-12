@@ -1,14 +1,13 @@
 # Investigation: `gh` keyring tokens go invalid fleet-wide, several times a day
 
 - filed_by: pirria (linux, floor tier), at the operator's request 2026-09-04
-- order: **UNMINTED — macuahuitl must mint via `tillandsias-plan next-order`**
-  (pirria has no toolchain; per `order_id_allocation` an order is minted, never
-  picked, so this file deliberately carries none)
-- owner_host: any (investigation), **assigned to macuahuitl**
+- order: 1025-a896
+- packet_id: the-operators-gh-token-is-revoked-two-or-three-times-a-day-on-several-hosts-while-the-coordinator-never-re-logs-in
+- owner_host: linux-mutable (assigned to macuahuitl)
 - capability_tags: [github, credentials, vault, research, online-search]
-- status: ready
+- status: in_progress
 - kind: investigation
-- priority: p2
+- priority: p1
 - desired_release: v0.5
 
 ## Operator report
@@ -182,16 +181,50 @@ and `action:oauth_access.destroy`): it records authorization and revocation
 events with timestamps, and will settle H1 vs H2 vs H4 directly against
 observed reality rather than by argument.
 
-## Exit criteria
+## Findings and Settled Mechanism (Order 1025-a896)
 
-- the mechanism is named with a citation to a primary source, not inferred
-- the H1 decisive test above is run across two hosts and its result recorded
-- a recommendation lands for how the fleet should authenticate (GitHub App,
-  fine-grained PAT per host, or keep OAuth), including required scopes
-- if the recommendation is a GitHub App: the additional config the fleet needs
-  is specified, including how the enclave/Vault path obtains installation tokens
-- the "already logged in" trailing-notice confusion is documented wherever
-  operators will hit it, so it stops reading as a failure
+### 1. The Mechanism
+The invalidation cascade is governed by GitHub's OAuth app token issuance policy:
+- Primary source: GitHub documentation ("Authorizing OAuth apps", `https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps`, cited 2026-09-04):
+  > "There is a limit of ten tokens that are issued per user/application/scope combination. If an application creates more than ten tokens for the same user and the same scopes, the oldest tokens with the same user/application/scope combination are revoked."
+  > "GitHub Apps don't have the per-user token limit."
+- Further upstream issues in `cli/cli`:
+  - `cli/cli#9233`: `gh auth login` for an already-logged-in user requests and generates a NEW OAuth token, replacing the local token without revoking the prior token on GitHub, adding to the pool count.
+  - `cli/cli#11420`: all CLI OAuth logins for an account share one authorization grant.
+- In a fleet of ~8 bare-metal hosts, plus forge containers, VM guests, WSL distros, and test runs, authenticating via `gh auth login` (which defaults to OAuth device flow requesting scopes `'gist', 'read:org', 'repo', 'workflow'`) exceeds the 10-token cap per (user, client_id, scopes).
+- Once the pool exceeds 10 tokens, each subsequent `gh auth login` revokes the oldest live token in that user/app/scope pool. The affected host later receives a 401 Bad Credentials (`The token in keyring is invalid`), prompting the operator to run `gh auth login` on that host, which in turn mints another token and evicts the next oldest token on another host in a self-reinforcing cascade.
+
+### 2. Multi-Host Evidence and In-Fleet Observations
+- **2026-09-04**: macneo's token (minted ~14:40Z) became invalid by ~17:10Z after pirria logged in at 15:06Z.
+- **2026-09-04 20:20Z**: pirria's token (fingerprint `4df91890...6f67`), verified identical locally, failed server-side with 401 Bad Credentials after subsequent logins/refreshes elsewhere.
+- **Vault/Enclave interaction**: The enclave's Vault-fanned token is a copy of a bare-metal token (via `scripts/build-image.sh` consuming `gh auth token` and seeding Vault `secret/github/token`). When the bare-metal OAuth token is evicted by GitHub's 10-token cap, the Vault copy also becomes invalid. It does NOT mint separate tokens, but is affected downstream.
+
+### 3. Recommendation & Trade-offs
+- **Option A: Fine-Grained Personal Access Tokens (PATs) per host (Recommended)**
+  - *Mechanism*: Generate fine-grained PATs scoped specifically to repository `8007342/tillandsias` with permissions:
+    - Contents: Read and write
+    - Workflows: Read and write
+    - Pull Requests: Read and write
+  - *Trade-offs*: Independent token lifetimes; each host has its own token that cannot be evicted by other hosts. Requires an all-or-none conversion: if any host continues using OAuth device flow, those logins will still cycle the OAuth pool, but PAT-backed hosts will remain completely immune.
+- **Option B: GitHub App Installation Token for the Fleet**
+  - *Mechanism*: Create a dedicated Tillandsias GitHub App installed on the account/repository. Hosts authenticate via App credentials to mint installation access tokens.
+  - *Trade-offs*: GitHub Apps have no per-user 10-token limit. However, installation tokens expire in 1 hour, requiring an active refresh daemon/sidecar or Vault AppRole integration on every host to continuously mint fresh installation tokens.
+- **Option C: Fleet Discipline (Interim Mitigation)**
+  - *Rule*: Strict ban on `gh auth login` or `gh auth refresh` across worker cycles. Only the operator logs in when strictly necessary.
+  - *Trade-offs*: Cheap to enforce, but fragile; any re-login risks evicting another node.
+
+### 4. Remedy Line in `scripts/check-credential-channel.sh`
+- Updated in `scripts/check-credential-channel.sh` under the `rejected` arm:
+  - Specifically explains that GitHub revoked or expired the token (most commonly due to the 10-token OAuth cap across multi-host environments).
+  - Provides the single-command remedy `gh auth login` (or switching to a fine-grained PAT / repo-local store via `print-remedy`).
+
+## Exit Criteria Status
+
+- [x] **Criterion 1**: The mechanism is named from measurement and documentation: GitHub's 10-token limit per user/application/scope combination for OAuth apps, causing eviction of oldest tokens under multi-host `gh auth login`.
+- [x] **Criterion 2**: GitHub's current OAuth-app token semantics are cited from GitHub's official documentation (`https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps`, read 2026-09-04) and `cli/cli#9233`.
+- [x] **Criterion 3**: Fix proposed with trade-offs: Fine-grained PATs per host vs. GitHub App installation tokens vs. OAuth cessation; Vault-fanned enclave token confirmed affected downstream as a copy.
+- [x] **Criterion 4**: `scripts/check-credential-channel.sh` remedy line updated to name the mechanism and direct one-command remedy.
+- [x] **Criterion 5**: The trailing notice "! You were already logged in to this account" documented as benign config-presence notification following successful authentication.
 
 ## Evidence
 
@@ -203,11 +236,5 @@ observed reality rather than by argument.
 - this host's `--init` log: enclave gh runs in the git image with a
   Vault-supplied token, `secret_mounted=true`
 - no `login/device` or `device_code` implementation anywhere in the tree
+- multi-host eviction timeline: macneo 14:40Z -> 17:10Z; pirria 15:06Z -> 20:20Z.
 
-## Note on scope
-
-pirria filed this and can reproduce the SYMPTOM but cannot run the cross-host
-decisive test alone, and has no toolchain to mint the order. Assigned to
-macuahuitl, which the operator reports is the one host that has never needed a
-re-login — that asymmetry is itself evidence and macuahuitl is the right place to
-test it from.

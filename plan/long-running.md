@@ -35,6 +35,7 @@ cycle that changes a listed packet's phase, status, or verification tally.
 | 829-dkuc | `periodic-deslopification-sweep` | ready | not yet recorded | not yet recorded |
 | 917-6iwv | `local-expert-system-in-toolboxes-on-accelerated-hosts` | ready | not yet recorded | not yet recorded |
 | 917-zkge | `per-host-nix-cache-rollout` | accumulating (v0.6 attractor — slices only, never drained/closed) | operator's release cadence | forge cold-land wall-time metric (headline); per-host ensure+verify rows as they land |
+| 1087-h2z9 | `the-gate-every-host-must-pass-is-blind-to-nine-defects-the-release-gate-sees-once-a-day` | ready (lenovinha's slice on origin/work/1087-h2z9, 2026-09-05, unmerged; PR #109 tracks the release-gate reds it names) | — | not yet recorded |
 
 Protocol summary (canonical: `long_running_packets` in
 `methodology/distributed-work.yaml`):

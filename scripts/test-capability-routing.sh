@@ -17,6 +17,17 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 2
 SEL="scripts/select-work-batch.sh"
 fail() { echo "FAIL: $*" >&2; exit 1; }
+# 1034-whsp's cross-branch check makes every selector run fold the three
+# platform branches' ledgers, and this fixture runs the selector a dozen
+# times: measured on an idle macuahuitl 2026-09-11, 185s wall against the
+# spec's 120s budget, where the 2026-09-04 runs took 28-47s. The fixture
+# asserts ROUTING, not claims — the cross-branch fold has its own fixture
+# (scripts/test-selector-drops-cross-branch-claims.sh) — so it is stubbed
+# through the selector's own seam. Hermetic-by-seams, as the header says.
+_xb_stub="$(mktemp "${TMPDIR:-/tmp}/xbranch-stub.XXXXXX")"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$_xb_stub"; chmod +x "$_xb_stub"
+export TILLANDSIAS_XBRANCH_CHECK="$_xb_stub"
+trap 'rm -f "$_xb_stub"' EXIT
 
 # The eight announced fleet identities (from packet 847-wgy4), as a fixture
 # roster in the --hosts projection shape: <host>\t<tier>\t<accels>.

@@ -1,0 +1,55 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-windows-release-job-refuses-its-own-per-host-arch-staging-because-the-placeholder-check-demands-both-arches-so-no-windows-tray-shipped-for-v56-9-11-1
+    order: 1122-xi2f
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: windows
+    capability_tags: [windows, release, ci, tray, guest-embed]
+    estimated_hours: 1
+    unscoreable: no Linux fixture can execute PowerShell (test-tray-asset-placeholder-refused.sh skips its PowerShell arms here); the pin is the next release.yml Windows job publishing tillandsias-tray-<v>-windows-x64.zip, and a Windows host running scripts/build-windows-tray.ps1 against a staged x86_64 guest with the aarch64 asset at its order-282 zero-byte reset
+    owned_files:
+      - scripts/build-windows-tray.ps1
+    title: |
+      scripts/build-windows-tray.ps1 stages only the host architecture's guest and resets the other arch to a zero-byte placeholder by design (order 282), while the 1059-ry6t placeholder check added on 2026-09-05 (d47fcfc09) demands BOTH arches non-empty, so every Windows release build since then throws at line 231 and v56.9.11.1 shipped with no Windows tray
+    context: |
+      MEASURED: release run 34649585604 (v56.9.11.1, 2026-09-11), Windows job
+      103439175869, step 9 "Build + package the Windows tray". The workflow's
+      staging step downloaded both source-matched guests (x86_64 14,550,224
+      bytes, aarch64 13,440,176 bytes, both listed under target-guest/). The
+      script's order-282 loop then embedded x86_64 ("Staged guest binary into
+      assets (x86_64 host)") and reset the aarch64 asset to 0 bytes — on
+      purpose, so a stale copy cannot bloat the exe by ~40 MB. Then the
+      1059-ry6t check iterated @('x86_64', 'aarch64'), found aarch64 at 0
+      bytes, and threw "guest asset is a placeholder". cargo had already
+      finished the release build (4m 21s). The Linux and macOS jobs of the
+      same run succeeded and published; the run concluded failure on this job
+      alone. v56.9.5.1 (2026-09-05T02:22Z) was the last cut BEFORE d47fcfc09
+      landed, which is why it had a Windows tray and this one does not.
+
+      The two halves of one script disagree about what a correct assets/ dir
+      looks like, and both are right about their own concern: 282 keeps the
+      exe small, 1059 refuses a silent no-op tray. The reconciliation is that
+      the check must cover exactly the arch the build embeds ($hostGuestArch),
+      which keeps 1059's teeth for the binary that ships and stops refusing
+      the placeholder 282 writes deliberately.
+    exit_criteria:
+      - "the placeholder check and the staging loop agree: the check covers exactly the arch the build embeds ($hostGuestArch); pre-fix result: FAILS (job 103439175869 throws with x86_64 staged and aarch64 at its designed 0-byte reset)"
+      - "the next release.yml Windows job publishes tillandsias-tray-<v>-windows-x64.zip and the run concludes success; pre-fix result: FAILS (34649585604 concluded failure on the Windows job)"
+      - "NEGATIVE CONTROL: with the x86_64 asset itself a 0-byte placeholder the build still throws — 1059-ry6t keeps its teeth for the embedded arch (a Windows host runs test-tray-asset-placeholder-refused.sh arms 1-2, which Linux skips)"
+    events:
+      - type: filed
+        ts: "2026-09-11T22:30:09Z"
+        agent_id: "linux-macuahuitl-claude-20260911t191740z"
+        host: macuahuitl
+        summary: |
+          Filed by the Linux coordinator that cut v56.9.11.1. The one-line
+          narrowing of the check (foreach over @($hostGuestArch)) lands in the
+          same commit as this filing, applied BLIND from Linux: the Linux
+          arms of test-tray-asset-placeholder-refused.sh pass (6/6) but its
+          PowerShell arms skip here, so a Windows host must confirm criterion
+          3 before this closes. Both Windows hosts have been down since
+          2026-09-06; the next daily cut is the first real test.

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: periodic-deslopification-sweep
+    event:
+      type: progress
+      ts: "2026-09-11T20:53:23Z"
+      agent_id: linux-macuahuitl-claude-20260911t191740z
+      host: macuahuitl
+      summary: |
+        WIRED, NOT BUILT (macuahuitl 2026-09-11). scripts/check-deslop-sweep-health.sh, the sweep's own ritual detector (3b16c92b6, 2026-09-06), shipped invoked by nothing; audit-guard-activation flagged it as the one orphan of 122 on the 2026-09-11 release gate. It now runs from scripts/local-ci.sh as a REPORT (exit 0 either way, log at /tmp/deslop-sweep-health.log), the same shape as check-tray-string-corpus-drift. Today's verdict: unknown:deslop-health:sweeps=1 — kill-rule needs 2 scoring sweeps, refutation band needs 4 with findings, net-negative and filing-cap have no record fields yet. The sweep itself is DUE (check-deslop-due: order=1119 last=834 delta=285 hours=546) and was NOT run this cycle; the protocol (criteria 4+) is still this packet's open work.

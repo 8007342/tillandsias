@@ -587,11 +587,12 @@ credential_channel_verdict() {
         echo "[check-credential-channel] THE TOKEN WAS REJECTED BY GITHUB — the keyring is not the problem." >&2
         echo "  \`gh api user\` returned 401 against the stored credential. The secret was" >&2
         echo "  retrieved fine; GitHub refused it. Look at the ACCOUNT, not the keyring:" >&2
-        echo "  the token is expired, revoked, or had its scopes/SSO authorisation withdrawn." >&2
+        echo "  the token was revoked, expired, or evicted by GitHub's 10-token OAuth app" >&2
+        echo "  cap across multi-host logins (order 1025-a896)." >&2
         echo "  gh's own message says \"The token in keyring is invalid\", which names the" >&2
         echo "  layer it OBSERVED rather than the one that FAILED (894-scxy). Three hosts" >&2
         echo "  diagnosed the keyring from that string on 2026-08-25; the keyring was healthy." >&2
-        echo "  REMEDY:  gh auth refresh   # or: gh auth login" >&2
+        echo "  REMEDY:  gh auth login" >&2
         echo "  Then re-run this guard. Do NOT go looking at secret-service." >&2
         echo "blocked:credential-rejected-by-github"
         return 1 ;;

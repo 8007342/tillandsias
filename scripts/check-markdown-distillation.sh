@@ -24,7 +24,12 @@ allowed_path() {
     # roots is allowed only for runtime command or skill surfaces" — but the
     # allowlist never learned about them, so the gate failed on a file class it
     # was written to allow.
-    AGENTS.md|GEMINI.md|.github/copilot-instructions.md) return 0 ;;
+    # CODEX.md joined the same class on 2026-09-11 (440cde994): a fourth name
+    # for the one AGENTS.md document, a symlink like GEMINI.md, added so Codex
+    # discovers the forge-awareness block. It shipped through a green --check
+    # because this policy runs only in --ci-full (1087-h2z9); the release gate
+    # caught it the same day.
+    AGENTS.md|GEMINI.md|CODEX.md|.github/copilot-instructions.md) return 0 ;;
     # PRIVACY.md — the Microsoft Store submission requires a public privacy
     # policy URL (Partner Center rejects a listing without one), and that URL
     # points at this file's GitHub blob at repo root. Moving it into docs/

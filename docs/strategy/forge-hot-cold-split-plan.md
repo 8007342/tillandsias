@@ -66,7 +66,7 @@ clear; not yet wrapped in an OpenSpec change.
   `LaunchContext` site (handlers.rs:277, 884, 2009, 3334, 3698, 4537, 4818;
   runner.rs:555).
 - `build_podman_args()`: when profile is forge-shaped, append
-  `--tmpfs=/home/forge/src:size=<budget>m,mode=0755`.
+  `--tmpfs=/home/forge/src:size=<budget>m,mode=0777`.
 - New `src-tauri/src/preflight.rs`: `check_host_ram(required_mb) -> Result<(),
   PreflightError>` reads `/proc/meminfo` (Linux) / `host_statistics64` (macOS) /
   `GlobalMemoryStatusEx` (Windows). Returns `Err` if `MemAvailable < required * 1.25`.
