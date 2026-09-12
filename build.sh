@@ -2972,6 +2972,21 @@ if [[ "$FLAG_CHECK" == true ]]; then
         esac
     fi
 
+    # ADVISORY, never a gate (1130-i6xj). Shell idioms that pass on the host
+    # that wrote them and fail somewhere else: SEVEN landed across three hosts
+    # on 2026-09-12, every one green on trunk before it bit, four of them
+    # freezing a platform apiece. A check able to freeze a platform in order to
+    # fix them would cost more than it saves, so this only COUNTS — and the
+    # count is split silent-degrade first, because a hook that quietly stops
+    # guarding is worse than a fixture that fails by name.
+    if [ -x scripts/check-portability-idioms.sh ] || [ -f scripts/check-portability-idioms.sh ]; then
+        _portability="$(bash scripts/check-portability-idioms.sh 2>/dev/null | head -1 || true)"
+        case "$_portability" in
+            portability-idioms:*silent-degrade=0*loud-fail=0) : ;;
+            portability-idioms:*) _warn "$_portability (see scripts/check-portability-idioms.sh; not a gate)" ;;
+        esac
+    fi
+
     # ORDER 656-spux. Every host compiles for itself and nothing else, so
     # cfg-gated code is verified by exactly the platform that cannot exercise
     # the other arms. This builds the workspace for ONE non-host target on hosts

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: gnu-only-shell-idioms-reach-trunk-green-and-freeze-a-whole-platform-one-host-at-a-time
+    field: verifiable_closure
+    value: 'litmus:gnuism-advisory-names-the-known-instances — now WRITTEN and BOUND, so the unscoreable-until-the-guard-exists state is discharged as its own text instructed. The litmus wraps scripts/test-portability-idioms.sh (15 arms, PASS 15/15 on macOS): BOTH HALVES per-instance — the guard names grep -Rl, the expired literal timestamp and sed -i on the git blobs that CARRIED them (5b27fea61^, 737bd10c5^, 26d007bf4^), and names none of those four files on the fixed tree — plus four FALSE-ACCUSATION controls, each a real false positive found by reading the guard''s own output, plus a cost arm. NOT ''zero on the fixed tree'', and that restatement is deliberate: the guard''s first run found 35 GENUINE pre-existing instances (stat -c x14, sed -i x13, date -d x5, readlink -f x2) unrelated to 2026-09-12, so demanding zero would make the closure un-passable until an unrelated backlog is cleared, which is how a closure becomes a thing people delete.'
+    ts: "2026-09-12T15:53:39Z"
+    host: macos
+
+events:
+  - packet_id: gnu-only-shell-idioms-reach-trunk-green-and-freeze-a-whole-platform-one-host-at-a-time
+    event:
+      type: progress
+      ts: "2026-09-12T15:53:39Z"
+      host: macos
+      summary: |-
+        status 'litmus:gnuism-advisory-names-the-known-instances — now WRITTEN and BOUND, so the unscoreable-until-the-guard-exists state is discharged as its own text instructed. The litmus wraps scripts/test-portability-idioms.sh (15 arms, PASS 15/15 on macOS): BOTH HALVES per-instance — the guard names grep -Rl, the expired literal timestamp and sed -i on the git blobs that CARRIED them (5b27fea61^, 737bd10c5^, 26d007bf4^), and names none of those four files on the fixed tree — plus four FALSE-ACCUSATION controls, each a real false positive found by reading the guard's own output, plus a cost arm. NOT 'zero on the fixed tree', and that restatement is deliberate: the guard's first run found 35 GENUINE pre-existing instances (stat -c x14, sed -i x13, date -d x5, readlink -f x2) unrelated to 2026-09-12, so demanding zero would make the closure un-passable until an unrelated backlog is cleared, which is how a closure becomes a thing people delete.' (not terminal) with evidence_refs: litmus bound in openspec/litmus-bindings.yaml, parses (ok:litmus-parseable:4 steps), executes in the ci-release suite, and passes; guard wired as an advisory in build.sh
