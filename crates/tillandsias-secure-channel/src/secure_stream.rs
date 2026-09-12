@@ -776,7 +776,10 @@ mod tests {
     async fn the_three_failures_are_reported_differently() {
         let short = snow_err_with_frame(snow::Error::Input, Some(vec![0u8; 3]));
         let crypto = snow_err_with_frame(snow::Error::Decrypt, None);
-        let local = snow_err_with_frame(snow::Error::Prereq(snow::error::Prerequisite::LocalPrivateKey), None);
+        let local = snow_err_with_frame(
+            snow::Error::Prereq(snow::error::Prerequisite::LocalPrivateKey),
+            None,
+        );
 
         let (a, b, c) = (short.to_string(), crypto.to_string(), local.to_string());
         assert_ne!(a, b, "short-frame and crypto failures must not read alike");

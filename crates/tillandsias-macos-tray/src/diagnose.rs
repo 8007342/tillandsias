@@ -3777,7 +3777,9 @@ mod tests {
     /// nobody maintains.
     #[test]
     fn production_image_root_is_unchanged_without_a_guard() {
-        let home = std::env::var_os("HOME").map(std::path::PathBuf::from).unwrap();
+        let home = std::env::var_os("HOME")
+            .map(std::path::PathBuf::from)
+            .unwrap();
         assert_eq!(
             super::image_root(),
             home.join("Library/Application Support/tillandsias"),
