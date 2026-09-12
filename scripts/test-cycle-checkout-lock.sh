@@ -91,6 +91,36 @@ else
 fi
 rm -rf "$D" "$SD"
 
+
+# ── 6. ORDER 1098-q7bk: the BARE invocation, which no arm above exercises. ──
+# Every arm above supplies TILLANDSIAS_CYCLE_HOLDER_PID, so the line an agent
+# actually types -- `bash scripts/cycle-checkout-lock.sh acquire` -- could not
+# make this fixture red. The default anchor is this script's own $PPID, which
+# for an agent invocation is the tool-call wrapper shell: dead within seconds,
+# so the next acquire stale-reclaims and two lanes share one checkout with
+# `ok:checkout-lock:acquired` printed to both.
+#
+# A fixture has no tool-call boundary to cross, so the boundary is SIMULATED by
+# a wrapper process that acquires and then exits. Without that simulation the
+# defect is invisible in-process: the acquiring shell is still alive when the
+# assertion runs and the lock looks healthy.
+D="$(scratch)"
+W="$D/w.sh"
+printf '#!/usr/bin/env bash\ncd "%s" && bash "%s" acquire --lane bare --source s\n' "$D" "$LOCKSH" > "$W"
+out="$(env -u TILLANDSIAS_CYCLE_HOLDER_PID bash "$W" 2>/dev/null | tail -1)"
+case "$out" in
+    refused:checkout-lock:no-holder-pid)
+        ok "bare acquire refuses instead of anchoring to a pid that dies" ;;
+    ok:checkout-lock:acquired:*)
+        held="$(cat "$D/.git/tillandsias-cycle.lock.d/pid" 2>/dev/null)"
+        if [ -n "$held" ] && kill -0 "$held" 2>/dev/null; then
+            ok "bare acquire produced a lock with a live holder"
+        else
+            bad "bare acquire returned '$out' but holder $held is already dead -- the next acquire stale-reclaims: two lanes, one checkout"
+        fi ;;
+    *) bad "bare acquire: unexpected verdict: $out" ;;
+esac
+
 if [ "$fail" -eq 0 ]; then
     echo "ok:checkout-lock-fixture:all"
     exit 0

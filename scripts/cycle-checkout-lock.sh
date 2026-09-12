@@ -206,6 +206,24 @@ done
 
 case "$cmd" in
     acquire)
+        # ORDER 1098-q7bk — REFUSE rather than anchor to a pid that dies with
+        # the tool call. The default below ($PPID of THIS script) resolves to
+        # the tool-call wrapper shell for an agent invocation, so the lock's
+        # holder is dead within seconds and the next acquire stale-reclaims it:
+        # two lanes in one checkout, with `ok:checkout-lock:acquired` printed to
+        # both. Measured across a real tool-call boundary 2026-09-06: bare
+        # acquire recorded pid 2637692, `status` from the NEXT call answered
+        # ok:checkout-lock:free, and a second lane acquired the same checkout.
+        # Every documented caller already passes the variable, so refusing
+        # breaks no existing lane and closes the silent path.
+        if [ -z "${TILLANDSIAS_CYCLE_HOLDER_PID:-}" ]; then
+            echo "refused:checkout-lock:no-holder-pid"
+            {
+              echo "  Pass the anchor from YOUR shell, not this script's:"
+              echo "    TILLANDSIAS_CYCLE_HOLDER_PID=\$PPID scripts/cycle-checkout-lock.sh acquire ..."
+            } >&2
+            exit 2
+        fi
         # 1. The atomic claim among prompt lanes.
         if ! mkdir "$LOCKD" 2>/dev/null; then
             if dir_lock_live; then
