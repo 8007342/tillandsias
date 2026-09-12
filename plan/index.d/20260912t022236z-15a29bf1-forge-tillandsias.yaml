@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-ledger-has-more-than-one-place-to-look-and-every-reader-looks-in-one-so-five-writes-landed-somewhere-nothing-consults
+    event:
+      type: progress
+      ts: "2026-09-12T02:22:36Z"
+      agent_id: forge-forge-tillandsias-opencode-20260912t022236z
+      host: forge-tillandsias
+      summary: |
+        ARM 2 (blocker in prose) implemented in scripts/test-ledger-write-reaches-its-reader.sh (forge-tillandsias, 2026-09-12 cycle).
+
+        WHAT LANDED. A new report function blocked_in_prose_orders() scans a `ready` packet's event summaries and exit criteria for a closed marker list (blocked|blocker|cannot proceed|cannot start|no host can|no host may|requires the operator|operator-authorised|waiting on) and prints the ORDER token of any hit. The mechanical definition is deliberately conservative and REPORTS, never withholds — a hit names the order and the fleet judges prominence, exactly the packet's non-negotiable. Two new fixtures: 900-blk (blocker only in a note summary) and 900-crt (blocker only in an exit criterion), both `ready`; the negative control is the existing 900-heal plus 900-land/900-clm over-report guards. Fixture count for the denominator arm rose 4 -> 6.
+
+        PRE-FIX RED (report call commented out), as the packet's next_action item 1 demands, captured verbatim:
+          FAIL: arm2: blocker-in-note-summary (900-blk) was NOT reported
+          FAIL: arm2: blocker-in-exit-criterion (900-crt) was NOT reported
+          exit 1
+        (Iteration defect worth recording: the first version of the function printed the PACKET_ID, not the order token, so the arm asserted `900-blk` against `blocked-in-prose-pkt` and echoed exactly the miss this packet is named for — a write that lands somewhere the reader isn't looking. The RED run on that first version produced the same two FAIL lines. Rewrote to capture the `order:` field per block.)
+
+        POST-FIX GREEN: 15 arm assertions, exit 0; the script also self-tests green, and a scan over the LIVE ledger reports ZERO ready packets carrying a blocker marker in prose today — both reference instances (317, 1070-qi2e) were re-statused, so the only RED this arm can show is the fixture's, which is why the packet said the fixture must provide it.
+
+        ARM 4 cross-reference arm added per next_action item 2 (the stronger of the two options): a one-assertion PRESENCE arm grep -qF for the exact check label `obligation in a correction fragment satisfies the FOLDED packet` inside scripts/test-scorable-obligation-gate.sh. Matched on the check-name, not a whole-file grep, because that guard's header discusses correction fragments at length and a naive grep is the 1055-6yp8 false-positive shape. This satisfies closure's "one arm per instance": a refactor that removes 1071-adhj's delivery now fails THIS script.
