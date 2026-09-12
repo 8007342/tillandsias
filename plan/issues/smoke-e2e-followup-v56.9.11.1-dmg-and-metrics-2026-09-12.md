@@ -1,6 +1,6 @@
 # Smoke E2E follow-up — `v56.9.11.1` macOS: the DMG path and a `--with-metrics` boot
 
-Follow-up to `plan/issues/smoke-e2e-findings-v56.9.11.1-2026-09-12.md` (landed
+Follow-up to `plan/issues/smoke-e2e-findings-v56.9.11.1-2026-09-12-macos-macbookair.md` (landed
 `8b9ac62ed`), closing the two gaps that report listed under NOT CHECKED. Run at
 the coordinator's direction on `tlatoanis-macbook-air`, darwin 25.6.0, Apple
 Silicon, 10 cores / 16 GiB.
