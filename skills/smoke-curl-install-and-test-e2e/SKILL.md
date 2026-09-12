@@ -729,6 +729,74 @@ if ($diag.PSObject.Properties.Name -contains 'version') {
 
 ---
 
+## 3b — Stop the substrate and assert every container exits cleanly
+
+**Run this after §3, before §4.** It is where order `1134-u934` was found and
+it costs one stop.
+
+**Why it is its own step rather than a line in §3.** §3 asserts that a
+pristine `--init` reaches a healthy state, and it did — the run that filed
+`1134-u934` was §1/§2/§3 all PASS with zero occurrences of every failure class
+§3 enumerates. The defect was in SHUTDOWN, so a lane that stops at "init was
+clean" cannot see it in principle, however carefully it reads `03-init.log`.
+It was found only by looking at what the tray's own `Graceful shutdown
+completed` line actually produced: `tillandsias-vault  Exited (137)` — killed
+after stalling the full 30 s grace — next to `tillandsias-proxy  Exited (0)`
+in the same shutdown.
+
+**Assert BOTH halves, per container.** Elapsed alone passes a container that
+exits fast for a bad reason; exit code alone passes one that burns the whole
+grace and is then reported 0. 137 specifically means the grace expired and the
+container was SIGKILLed.
+
+```bash
+# Linux. Record the grace each container declares — they differ — then stop
+# them all and read what podman recorded, container by container.
+podman ps --format '{{.Names}}' | tee target/smoke-e2e/3b-running.txt
+for c in $(cat target/smoke-e2e/3b-running.txt); do
+  grace="$(podman inspect "$c" --format '{{.Config.StopTimeout}}')"
+  t0="$(date +%s)"
+  podman stop -t "$grace" "$c" >/dev/null 2>&1
+  t1="$(date +%s)"
+  printf '%s elapsed=%ss grace=%ss exit=%s oom=%s\n' "$c" "$((t1 - t0))" "$grace" \
+    "$(podman inspect "$c" --format '{{.State.ExitCode}}')" \
+    "$(podman inspect "$c" --format '{{.State.OOMKilled}}')"
+done | tee target/smoke-e2e/3b-shutdown.txt
+
+# The verdict. A non-zero exit OR an elapsed at/above the grace is a finding
+# per container, not a run-level FAIL — the enclave is already destroyed and
+# rebuilt by this point, so §4 may still proceed on a clean §3.
+awk '{
+  split($2, e, "="); split($3, g, "="); split($4, x, "=")
+  if (x[2] != 0 || e[2] + 0 >= g[2] + 0) { print "FINDING: " $0; bad++ }
+} END { printf "3b: %d container(s) did not stop cleanly\n", bad + 0 }' \
+  target/smoke-e2e/3b-shutdown.txt | tee target/smoke-e2e/3b-verdict.txt
+```
+
+A container that fails here is a **`plan/issues` work packet per §5**, and the
+packet must name the process tree, not just the exit code — read it from the
+running container BEFORE the stop:
+
+```bash
+podman exec <container> sh -c 'for p in /proc/[0-9]*; do echo "$(basename $p) $(cat $p/comm 2>/dev/null)"; done'
+```
+
+`1134-u934` is why. Its entrypoint was a PID-1 shell that trapped nothing, and
+the pid it held was `tee`'s rather than the server's, because `$!` after a
+backgrounded PIPELINE is the LAST stage. The obvious one-line trap forwarding
+to that pid signals `tee`, leaves the 30 s and the 137 exactly as they are, and
+**looks correct**. The tree (`1 bash / 10 vault / 11 tee`) is what separates
+the two, and it is not readable from the script's text.
+
+`scripts/test-vault-shutdown-forwards-sigterm.sh` is the standing single-
+container form of this step for vault, and exits 3 (`could-not-run`) rather
+than 0 on a host with no provisioned enclave.
+
+> **macOS and Windows.** The substrate is a Virtualization.framework VM and a
+> WSL2 distro, not host podman, so the loop above runs INSIDE the guest or not
+> at all. Neither lane asserts guest-container shutdown today; that is a
+> stated gap, not a silent pass — record it rather than reporting 3b clean.
+
 ## 4 — Forge continuous-enhancement run (only if Step 3 was clean)
 
 ```bash
