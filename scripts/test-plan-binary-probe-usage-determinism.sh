@@ -23,6 +23,15 @@
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GUARD="$ROOT/scripts/check-plan-binary-probe-usage.sh"
+
+# PORTABLE MILLISECONDS. `date +%s%N` is a GNU-ism: BSD date SUCCEEDS with
+# garbage output rather than failing, so an exit-code guard cannot catch it
+# (761-g36m) — the same "a failure that reads as success" shape this fixture's
+# own subject is about. scripts/timing-log.sh already solves it: %3N with digit
+# validation, degrading to seconds*1000. Use the shared one rather than a fourth
+# private copy (704-zcgi).
+. "$ROOT/scripts/timing-log.sh" 2>/dev/null || true
+command -v timing_now_ms >/dev/null 2>&1 || timing_now_ms() { date +%s 2>/dev/null | awk '{printf "%d000", $1}' 2>/dev/null || echo 0; }
 RUNS="${TILLANDSIAS_DETERMINISM_RUNS:-20}"
 fail=0
 
@@ -64,9 +73,9 @@ if [ ! -f "$md/scripts/test-fragment-status-loss.sh" ]; then
     echo "FAIL: scripts/test-fragment-status-loss.sh is absent — this arm has no subject and cannot detect anything"
     fail=1
 else
-    _t0="$(date +%s%N)"
+    _t0="$(timing_now_ms)"
     verdicts="$(for _ in $(seq "$RUNS"); do PLAN_PROBE_ROOT="$md" bash "$GUARD" 2>/dev/null; done | sort -u)"
-    _ms=$(( ($(date +%s%N) - _t0) / 1000000 ))
+    _ms=$(( $(timing_now_ms) - _t0 ))
     count="$(printf '%s\n' "$verdicts" | grep -c .)"
     if [ "$count" = 1 ]; then
         echo "ok: ${RUNS} runs agree in ${_ms}ms ($(printf '%s' "$verdicts" | head -1))"
