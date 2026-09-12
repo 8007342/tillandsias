@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: per-phase-accelerator-routing-policy
+    event:
+      type: note
+      ts: "2026-09-12T02:23:56Z"
+      agent_id: forge-forge-tillandsias-opencode-20260912t022356z
+      host: forge-tillandsias
+      summary: |
+        RESIDUAL (b), next_action confirmation (forge-tillandsias 2026-09-12): the bench now SENDS model and model_params_b through --record-measurement — verified against trunk HEAD: scripts/bench-accel-lane.sh:393-408 parses the size from the model tag (`<family>:<size>b`), honors a --model-params-b override when the tag carries none, keeps absent absent (JSON null, never 0), and passes both into the payload under `model` / `model_params_b`. This is the half that made recorded numbers visible to decode_crossover_b (the store keyed on device+engine only until bbe0801c9). Residual (b) is DONE on trunk; do not redo it. Remaining for this packet: (a) wire route_phase into an inference call path so a phase's device is chosen by the policy, not the engine's default; (c) run the bench on a unified-memory host (Yolanda / the M5) so some machine has a real measured crossover — the crossover threshold stays per-host measured, never a constant. Criterion 1's rewrite for the falsified 'no iGPU on unified-memory' wording is the author's call (lenovinha's decision event 2026-09-03T07:31Z).

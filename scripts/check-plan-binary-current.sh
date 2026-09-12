@@ -80,7 +80,66 @@ _arms="$(printf '%s' "$_out" | sed -n 's/^expire-claims-write-is-opt-in: \([0-9]
 _pass="${_arms%/*}"; _fail="${_arms#*/}"
 
 if [ "$_fail" = 0 ]; then
-    echo "ok:plan-binary-write-is-opt-in:$BIN arms=$_pass/0 copies=$_copies path=${_path_copy:-<none-on-PATH>}"
+    # ── SECOND AXIS: role_satisfies (order 1115-yvrq) ──────────────────────
+    #
+    # WHY A SECOND AXIS EXISTS AT ALL. This guard probes ONE behaviour and its
+    # verdict says so, which is the honesty the 1079-qb8k rewrite bought. But
+    # 1115-yvrq shipped a skill change telling every host to pass its PRECISE
+    # role (`linux-immutable`, not `linux`), and that instruction is only safe
+    # against a current binary. Against the old matcher — which asked whether
+    # the packet's requirement CONTAINED the host role — a precise role matches
+    # almost nothing: MEASURED on yoga, `--claimable-by linux-immutable`
+    # returned 172 rows before the fix and 301 after.
+    #
+    # So a host that pulls trunk, reads the new skill, and has not rebuilt
+    # loses 129 packets SILENTLY. No error, no empty result — just a shorter
+    # queue that reads as a quiet ledger. That is the worst available failure
+    # shape and it is exactly the interval when an agent is draining work.
+    #
+    # A scratch ledger, never the real one: two packets differing only in the
+    # requirement they state.
+    _rw="$(mktemp -d)"
+    mkdir -p "$_rw/plan/index.d"
+    {
+        printf 'plan_index:\n  version: v1\n  root: plan/\n  steps:\n'
+        printf '    - packet_id: needs-platform\n      order: 900-plat\n      title: "t"\n      status: ready\n      kind: fix\n      pickup_role: linux\n      depends_on: []\n'
+        printf '    - packet_id: needs-mutable\n      order: 900-mut\n      title: "t"\n      status: ready\n      kind: fix\n      pickup_role: linux-mutable\n      depends_on: []\n'
+    } > "$_rw/plan/index.yaml"
+    _rows="$("$BIN" --index "$_rw/plan/index.yaml" select-rows --status ready \
+        --claimable-by linux-immutable --limit 50 2>/dev/null)"
+    rm -rf "$_rw"
+
+    # THE SPECIFIC SATISFIES THE GENERAL: an immutable host must be offered the
+    # platform packet. This is the arm a stale binary fails — it returns
+    # NEITHER row, because "linux-immutable" is not a substring of "linux".
+    case "$_rows" in
+        *needs-platform*) : ;;
+        *)
+            echo "stale:plan-binary-role-matcher-inverted:$BIN copies=$_copies" >&2
+            {
+                echo "  This binary does not offer a platform-scoped packet to a host"
+                echo "  declaring a precise role. It is matching claimability as"
+                echo "  CONTAINMENT rather than SATISFACTION (pre-1115-yvrq)."
+                echo "  A host following the current skill — which says to pass"
+                echo "  linux-immutable or linux-mutable — silently loses about 129"
+                echo "  packets against this binary. Measured on yoga 2026-09-06:"
+                echo "  --claimable-by linux-immutable returned 172 rows before the"
+                echo "  fix and 301 after."
+                echo "  REMEDY: scripts/cycle-preflight.sh in the FOREGROUND, then"
+                echo "  re-run this check and report the verdict rather than the word fixed."
+            } >&2
+            exit 1 ;;
+    esac
+    # AND THE SIBLING REQUIREMENT IS STILL REFUSED — without this arm the check
+    # above is satisfied by a matcher that returns everything.
+    case "$_rows" in
+        *needs-mutable*)
+            echo "stale:plan-binary-offers-mutable-only-work-to-an-immutable-host:$BIN copies=$_copies" >&2
+            echo "  A packet requiring linux-mutable was offered to linux-immutable (1115-yvrq)." >&2
+            exit 1 ;;
+    esac
+
+    echo "ok:plan-binary-write-is-opt-in+role-satisfies:$BIN arms=$_pass/0 copies=$_copies path=${_path_copy:-<none-on-PATH>}"
     exit 0
 fi
 # 5/16 IS NOT PARTIAL SAFETY. The fixture's own header records that two of its

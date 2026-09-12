@@ -1,0 +1,52 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-checkout-locks-bare-invocation-is-the-line-agents-type-and-no-fixture-can-make-it-red
+    event:
+      type: completed
+      ts: "2026-09-12T03:18:15Z"
+      agent_id: linux-pirria-claude-20260912t022150z
+      host: pirria
+      summary: |-
+        LANDED as e09d1711b on origin/linux-next, 2026-09-12, by pirria-cachyos. Verified: e09d1711b is an ancestor of origin/linux-next, and origin's copies carry the refusal, the mutation control, and the updated arm 6.
+
+        OPTION (a) TAKEN, as item 3 required a choice and a statement of which: a minimal fix that makes the new arm green WITHOUT moving the anchor, landed together with the arm, so item 4's gate consequence never arose — no host saw a red instant litmus and nothing had to be parked behind an env knob.
+
+        WHAT THE FIX IS. The bare acquire now REFUSES (refused:checkout-lock:no-holder-pid, exit 2) instead of acquiring over an anchor that dies with the tool call. It keys on anchor_source matching invoking-shell-UNVERIFIED*, NOT on TILLANDSIAS_CYCLE_HOLDER_PID being empty. That distinction is the whole fix and it is easy to get wrong: the salvaged draft tested the variable, and since 1091-zh6d CLAUDE_PID is a VERIFIED anchor, so testing the variable would have refused a correctly-anchored harness invocation and turned the CLAUDE_PID-only negative control in test-cycle-lock-attested-release.sh red. Refusing a correct path is worse than the original bug, because it pushes callers toward the bare form the refusal exists to stop. Verified all three paths by hand: bare -> refused rc=2; CLAUDE_PID only -> ok:checkout-lock:acquired; explicit recipe -> ok:checkout-lock:acquired.
+
+        PRE-FIX EVIDENCE, measured against PRISTINE origin/linux-next before the fix existed (git show origin/linux-next:scripts/cycle-checkout-lock.sh), bare acquire in a subshell that then exits:
+            warn:checkout-lock:acquired-unverified-anchor:prompt:134628
+            recorded holder pid 134628 -> DEAD once the subshell returned
+            status from a fresh subshell -> ok:checkout-lock:free
+        The lock evaporated across the boundary while the verdict told the caller it had acquired.
+
+        THE ARM HAS PERMANENT TEETH, which is better than the one-time red the packet asked for. Arm 7 is a MUTATION CONTROL in the same fixture: it strips the refusal from a scratch copy of the lock script and re-runs arm 6's exact scenario against the mutant, asserting the pre-fix script acquires over a dead holder. Its output, which is the "pre-fix result: FAILS" record:
+            ok: MUTATION: the pre-fix script acquires over dead holder 137136 -- arm 6 is red without the fix (pre-fix result: FAILS)
+        It guards both drift directions (refusal still present after the strip / acquire body removed / mutant does not parse) and refuses to prove anything rather than passing vacuously if the awk terminator moves. Same shape as the mutation arms in test-check-credential-channel.sh (876-exg2, 877-mynm), with one deliberate difference: 876-exg2's mutant fails LOUDLY so its arm asserts on a verdict string, while this defect fails QUIETLY -- the mutant prints a warn: that reads like a caveat -- so the assertion is on the HOLDER BEING DEAD, which is arm 6's own predicate.
+
+        RESULTS: test-cycle-checkout-lock.sh -> ok:checkout-lock-fixture:all (13 arms). test-cycle-lock-attested-release.sh -> ok:cycle-lock-attested-release-fixture:11 (11 passed, 0 failed), and it ran inside ./build.sh --check in the landing gate, also 11/0.
+
+        SAME-COMMIT UPDATE to yoga's fixture, as item 3(a) requires and with yoga-silverblue's explicit ACK given before the edit and re-confirmed after seeing the diff: arm 6's expectation warn: -> refused:, the old warn: kept as an explicit bad() branch so a regression to warn-and-acquire is NAMED rather than falling into the catch-all, and one assertion added — that the refused acquire leaves no lock directory behind. That last is not decoration: a refusing acquire that still created the dir would hand the next lane a stale lock to reap and reintroduce 873-zcim through the fix itself. Arms 7 and 8 untouched and verified green.
+
+        The refusal message names the variable, gives the full command line, and says why $PPID and not $$ — inside a tool-invoked shell $$ is that shell, which is about to exit, so it anchors the lock to the very process whose death is the bug. That wording is yoga's, from that host's experience, on the reasoning that the bare form is tempting precisely because the correct invocation is not obvious, so the next person should get the fix from the error rather than from the test file. skills/advance-work-from-plan (the packet's other owned file) now documents the refusal and that a refusal means you do NOT hold the checkout.
+
+        Item 5 honoured: pid_is_self_or_ancestor's tri-state (return 2 = could-not-determine) is untouched.
+
+        TWO PREMISE CORRECTIONS THIS PACKET HANDS FORWARD.
+
+        1. ITEM 6's, as asked: at HEAD, test-cycle-lock-attested-release.sh has 2 HOLDER_PID-free invocations (lines 178, 198); only test-cycle-checkout-lock.sh had 0. The packet's premise #1 ("all eleven invocations in BOTH fixtures") was true when filed and stopped being true at 25ec242dc.
+
+        2. NOT ASKED FOR, AND MORE IMPORTANT: item 2's literal assertion is UNREACHABLE under option (a) and always was. It asks `status` to answer skip:overlap-lock-held:*, but a refusal takes NO lock, so status correctly answers ok:checkout-lock:free. Only MOVING the anchor could satisfy item 2 as written — and item 3 puts that out of scope for a measured reason (dir_lock_live's 3h over-hold on a session harness, 2026-08-26). A reader who tries to satisfy item 2 literally will reach for the anchor, which is precisely the trap this packet exists to avoid. The arm's predicate is therefore a DISJUNCTION: refused, OR acquired and still held by a live holder; "acquired + evaporated" is the only failure. This is written into arm 6's header so the next reader meets it there too.
+
+        SALVAGE RESULT, closing item 7: pirria's draft was NOT lost and did not need re-implementing. It was in this host's git stash as stash@{0}, base 1b40b8929, put there by a `reset: moving to HEAD` ONE SECOND after the stash, after which the session ended. Preserved verbatim as 09535a607 on work/1098-q7bk before any modification. THE TRANSFERABLE LESSON: a clean working tree is not proof a draft is gone. This host reported `git status` clean for six days while the work sat in the stash, and the coordinator's ledger correctly recorded "no work/1098-q7bk ref, salvage/pirria/* predates it" — every one of which was true and none of which implied absence. Check `git stash list` and `git reflog` before concluding a host lost its work.
+
+        The draft did NOT contain the PID-1 mutant control the 1102-e4tk fragment describes; it is not on this host in any dangling object (all seven checked are pre-rebase duplicates of landed work, none from 09-06). 1102-e4tk remains ready and unclaimed and is not blocked by this.
+
+        SCOPE HONESTY: the draft's own comment claimed the bare path printed a plain ok:checkout-lock:acquired. That predated 1091-zh6d and was stale on arrival; it was rewritten against today's code rather than landed as found.

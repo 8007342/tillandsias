@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-gate-every-host-must-pass-is-blind-to-nine-defects-the-release-gate-sees-once-a-day
+    field: status
+    value: verified
+    ts: "2026-09-12T03:28:56Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-gate-every-host-must-pass-is-blind-to-nine-defects-the-release-gate-sees-once-a-day
+    event:
+      type: completed
+      ts: "2026-09-12T03:28:56Z"
+      host: lenovinha
+      summary: |-
+        status 'verified' with evidence_refs: cf3b5c68b: as-wired on origin/linux-next — scripts/test-gate-divergence-is-declared.sh prints ok:gate-divergence-declared:16 with no untriaged note (0 rows, BASELINE_UNTRIAGED=0); TILLANDSIAS_FORCE_CHECK=1 ./build.sh --check exit 0 with all 16 STEP_OK lines, 317s; audit-guard-activation.sh population=122 active=122 orphan=0 verdict=ok
+  - packet_id: the-gate-every-host-must-pass-is-blind-to-nine-defects-the-release-gate-sees-once-a-day
+    event:
+      type: note
+      ts: "2026-09-12T03:28:56Z"
+      host: lenovinha
+      summary: |-
+        all 22 undecided gate differences triaged: 16 wired, 5 excluded-with-reason, 1 phantom fixed at source

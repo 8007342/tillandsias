@@ -1,0 +1,13 @@
+# Gate step — data, not code (order 1072-b7eq). Wired by 1087-h2z9.
+#
+# Triaged from scripts/gate-divergence-declared.txt, where it sat `untriaged`
+# since 2026-09-06: present in --ci-full, absent from --check, nobody decided.
+# Measured green and cheap on b026372ff (Spec-index tier demotion), so the honest verdict is to run
+# it where every host lands rather than once a day on the release gate.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf): a binding assembled
+# from a variable is invisible to every name-based scan.
+STEP_DESC="Checking spec-index durable-tier demotion"
+STEP_SCRIPT="scripts/test-spec-index-durable-tier-demotion.sh"
+STEP_ERROR="an unreadable volume is reported as absent, not demoted (1087-h2z9)"
+STEP_OK="Spec-index tier demotion passed"

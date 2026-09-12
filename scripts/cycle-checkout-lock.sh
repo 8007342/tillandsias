@@ -243,6 +243,49 @@ done
 
 case "$cmd" in
     acquire)
+        # ORDER 1098-q7bk — REFUSE an UNVERIFIED anchor rather than acquire
+        # over it. 1091-zh6d made this path say so (warn:, below); a warning
+        # printed to a lane that then keeps working still leaves two lanes in
+        # one checkout, because the lock it took is already dead. Refusing is
+        # the only outcome that makes the bare path SAFE without moving the
+        # anchor — and moving the anchor is out of scope for a measured reason
+        # (dir_lock_live's 3h over-hold on a session harness, 2026-08-26).
+        #
+        # MEASURED on pirria 2026-09-12 against pristine origin/linux-next,
+        # bare acquire in a subshell that then exits:
+        #     warn:checkout-lock:acquired-unverified-anchor:prompt:134628
+        #     recorded holder 134628 -> DEAD once the subshell returned
+        #     status from a fresh subshell -> ok:checkout-lock:free
+        # The lock evaporated across the boundary while the verdict said the
+        # caller held it.
+        #
+        # KEYED ON anchor_source, NOT on TILLANDSIAS_CYCLE_HOLDER_PID being
+        # empty. CLAUDE_PID is a verified anchor since 1091-zh6d, so testing
+        # the variable would refuse the harness path that resolves correctly
+        # and break the CLAUDE_PID-only control in
+        # test-cycle-lock-attested-release.sh. Only the invoking-shell
+        # fallback is refused; explicit and harness-env still acquire, and a
+        # dead EXPLICIT anchor keeps its existing warn.
+        case "$anchor_source" in
+            invoking-shell-UNVERIFIED*)
+                echo "refused:checkout-lock:no-holder-pid"
+                {
+                    echo "  ANCHOR: $anchor_source — this lock would be anchored to the shell"
+                    echo "  that invoked the script, which dies when your tool call returns."
+                    echo "  It would stale-reap immediately and the next lane would read"
+                    echo "  ok:checkout-lock:free while you are still working (1098-q7bk)."
+                    echo "  REFUSED rather than acquired: you do NOT hold this checkout."
+                    echo "  FIX: put the variable on the command line, in YOUR shell —"
+                    echo "    TILLANDSIAS_CYCLE_HOLDER_PID=\$PPID $0 acquire --lane <l> --source <s>"
+                    echo "  \$PPID, NOT \$\$: inside a tool-invoked shell \$\$ is that shell, which"
+                    echo "  is about to exit — it would anchor the lock to the very process"
+                    echo "  whose death is this bug. \$PPID is the harness that spans the cycle."
+                    echo "  A claude harness exports CLAUDE_PID and needs neither."
+                    echo "  See skills/advance-work-from-plan section 1b."
+                } >&2
+                exit 2
+                ;;
+        esac
         # 1. The atomic claim among prompt lanes.
         if ! mkdir "$LOCKD" 2>/dev/null; then
             if dir_lock_live; then

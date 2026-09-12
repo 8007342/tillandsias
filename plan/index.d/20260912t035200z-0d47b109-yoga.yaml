@@ -1,0 +1,90 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-skill-tells-every-linux-host-to-pass-role-linux-so-an-immutable-host-is-offered-mutable-only-work
+    event:
+      type: progress
+      ts: "2026-09-12T03:52:00Z"
+      agent_id: linux-yoga-claude-20260912t013000z
+      host: yoga
+      summary: |
+        ITEMS 4, 5 AND 6 DONE ON AN IMMUTABLE HOST (yoga, Fedora Silverblue,
+        read-only /usr), 2026-09-12. The code fix (9663efd3b, role_satisfies)
+        landed on origin at e792ac2de after five days unpushed; this event
+        closes the verification the 2026-09-06 completion skipped.
+
+        ITEM 6 — REAL RUN, batch line pasted rather than described.
+        `scripts/select-work-batch.sh linux` on yoga:
+
+          batch: epic=socket-audit-master role=linux release=v0.5 size=9
+          budget=10 score=22.394 seed=silverblue-unknown-amd+npu-yoga-20260912
+          pick=1/8 route=rank:7/8:width=8
+          urgent=the-ledger-has-more-than-one-place-to-look-...
+          triage: eligible=268 grouped=173 ungrouped=95 epics=11
+          urgency_unscored=16 caps_filtered=5 tier_filtered=1 accel_bringup=npu
+
+        ITEM 4 — NEGATIVE CONTROL, AND THE PACKET'S OWN WARNING WAS RIGHT.
+        The live ledger CANNOT serve as the negative control, exactly as
+        next_action item 4 predicted. Measured on the live ledger today:
+
+          --claimable-by linux             rows=312
+          --claimable-by linux-immutable   rows=312
+          --claimable-by linux_immutable   rows=312
+          --claimable-by linux-mutable     rows=312
+          --claimable-by linux_mutable     rows=312
+          --claimable-by macos             rows=190
+          --claimable-by any               rows=179
+
+        and 594-gqeu (`pickup_role: linux_mutable`) is absent from ALL FIVE
+        linux queries INCLUDING `linux_mutable` itself, which would offer it
+        if role were the reason. So its absence is release/dependency/lease
+        filtering, not the matcher. A green "not offered" against the live
+        ledger would have proved nothing — which is why the control is a
+        SEEDED two-row ledger, per the packet's instruction to simulate an
+        eligible mutable-tagged row.
+
+        ITEM 5 — THE PIN, WITH TEETH SHOWN IN BOTH DIRECTIONS. The fixture
+        lives in scripts/check-plan-binary-current.sh as a second axis beside
+        the write-is-opt-in arms: a scratch ledger holding exactly two ready
+        rows, `needs-platform` (pickup_role: linux) and `needs-mutable`
+        (pickup_role: linux-mutable), asked `--claimable-by linux-immutable`.
+        It asserts BOTH directions — the platform row MUST be offered (the
+        specific satisfies the general) and the mutable row MUST NOT be
+        (otherwise a matcher returning everything would pass).
+
+        PRE-FIX RESULT: FAILS, demonstrated on a binary built for this purpose
+        rather than inferred. Worktree at 317c35f7b (the parent of 9663efd3b,
+        verified to contain zero occurrences of `role_satisfies`), built with
+        cargo --release:
+
+          PRE-FIX  select-rows --claimable-by linux-immutable -> NEITHER ROW
+          POST-FIX same seeded ledger                        -> needs-platform ONLY
+
+          guard vs PRE-FIX binary:
+            stale:plan-binary-role-matcher-inverted:...  exit 1
+          guard vs CURRENT binary:
+            ok:plan-binary-write-is-opt-in+role-satisfies:... arms=16/0 copies=1
+
+        The pre-fix binary returning NEITHER row is the defect in one line:
+        under containment matching "linux-immutable" is not inside "linux", so
+        a host declaring a precise role is offered nothing at all. Note this
+        had to be built to be shown — the copy at ~/.local/bin already carried
+        the fix (a leftover from the 09-06 work, not the released artifact),
+        so testing against it would have "passed" while proving nothing.
+
+        WHAT REMAINS OPEN, deliberately, and it is item 2 of the next_action:
+        the three-spelling reconciliation is NOT closed here. 594-gqeu and
+        685-26wm still carry `linux_mutable` with an underscore while packets
+        elsewhere use hyphens, and 482c carries the prose "linux mutable host
+        with Podman and /dev/dri". role_satisfies accepts both separators, so
+        nothing is unroutable today and the fix is not urgent — but the data is
+        still inconsistent and a future exact-match change would break it.
+        Whoever picks that up should treat it as its own normalisation pass,
+        not as part of this closure.

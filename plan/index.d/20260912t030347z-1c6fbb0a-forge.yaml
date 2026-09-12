@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-ledger-has-more-than-one-place-to-look-and-every-reader-looks-in-one-so-five-writes-landed-somewhere-nothing-consults
+    event:
+      type: note
+      ts: "2026-09-12T03:03:47Z"
+      agent_id: forge-forge-tillandsias-opencode-20260912t030347z
+      host: forge
+      summary: |-
+        REREAD THIS WITH THE RESET IN MIND. A `git reset` at 2026-09-12T02:48:41Z (reflog, HEAD@{0}) clobbered the FIRST implementations of ARM 2 + ARM 4 and the test-host-tools.sh forge arm-6 fix — all three lived only in the working tree. The progress event above was written before that reset and describes the same code, so it still stands: this note records that the implementation was RE-APPLIED and RE-VERIFIED in the same cycle (fresh RED: FAIL arm2 blocker-in-note-summary (900-blk) was NOT reported / FAIL arm2 blocker-in-exit-criterion (900-crt) was NOT reported, exit 1; then GREEN, 15 arm assertions, exit 0) and lands in the cycle's push, on top of the claim fragment that its own earlier fork did not push.
+
+        ALSO IN THIS PUSH: the arm-6 forge carve-out gap Fix (test-host-tools.sh partition arm counted the forge-exempt openssl, declared=4 seen=3, RED on a CA-exempt forge) — the carve-out macuahuitl filed on this packet now ends where the probe's does; and the Findings issue for both plus the 1064-r8fv hooksPath shadowing and the writer-unidentified git reset (plan/issues/forge-gate-reset-and-hookspath-findings-2026-09-12.md). Moral for the fork: COMMIT code before gating in a forge — the gate validates the committed tree, and any uncommitted tracked edit is disposable until committed.

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-checkout-locks-bare-invocation-is-the-line-agents-type-and-no-fixture-can-make-it-red
+    field: next_action
+    value: Landed as e09d1711b on origin/linux-next 2026-09-12. Nothing left for this packet; see the closing event for the two premise corrections it hands forward.
+    ts: "2026-09-12T03:17:59Z"
+    host: pirria
+
+events:
+  - packet_id: the-checkout-locks-bare-invocation-is-the-line-agents-type-and-no-fixture-can-make-it-red
+    event:
+      type: note
+      ts: "2026-09-12T03:17:59Z"
+      host: pirria
+      summary: |-
+        closing 1098-q7bk

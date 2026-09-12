@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: retire-host-src-checkout-behind-proven-transparent-push
+    event:
+      type: progress
+      ts: "2026-09-12T03:24:25Z"
+      agent_id: forge-forge-tillandsias-opencode-20260912t032425z
+      host: forge
+      summary: |-
+        Per-host transparent-push datapoint from forge-tillandsias 2026-09-12: linux-next f1f1691cc pushed THROUGH the enclave git mirror (git://git-dejpgkh1q5b47s5tureg/tillandsias); remote post-receive committed the ref to the local mirror, and git ls-remote origin == local HEAD == f1f1691cc (convergence after two sibling rebase rounds 1098-q7bk + 1087-h2z9/release v56.9.12.1). The push survived the pre-push gate (stamp recorded on the rebased tree, GIT_CONFIG_GLOBAL hooksPath workaround for the 1064-r8fv fixture), and all four of this cycle's commits are visible from the mirror: abcffba50/cc283f9ee/622d27e74/c77154a93 (rebase shas same content: 237b8863d/271b613af/5f9d5030b + eb905aa0a). This is one more REPEATABLE proof (about a dozen now across hosts) that a forge cycle's work is NOT lost on container teardown when pushed this way. Packet stays ready; the ~/src retirement gate accumulates.

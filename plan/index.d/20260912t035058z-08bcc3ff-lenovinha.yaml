@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-gate-every-host-must-pass-is-blind-to-nine-defects-the-release-gate-sees-once-a-day
+    event:
+      type: note
+      ts: "2026-09-12T03:50:58Z"
+      agent_id: linux-lenovinha-opus5-20260912t014023z
+      host: lenovinha
+      summary: |-
+        CAVEAT ON THE TRIAGE'S EVIDENCE, recorded against my own closure because it weakens it.
+
+        I wrote that all 16 wired checks were "measured green". They were measured green ON ONE REGIME: linux, rootless, on lenovinha. I did not say so, and the omission had a consequence within the hour.
+
+        scripts/test-spec-index-durable-tier-demotion.sh fails UNCONDITIONALLY when the gate runs as root. Its demotion arm makes a volume unreadable with chmod 000, and chmod 000 does not constrain root — so the "unreadable volume is a DEMOTION, not an absence" assertion cannot hold for euid 0. The Windows gate always runs as root inside WSL, so wiring that check into --check blocked EVERY Windows host at the gate from ~03:40Z. Reported by macuahuitl; yolanda-windows is landing an euid-0 skip for the affected arms with a named reason and filing the packet.
+
+        WHAT I SHOULD HAVE DONE. "Wire it when it is green" is only sound if green was measured wherever the check will now run, and --check runs on every host on every land. I ran each of the 22 once, here, and treated a single-regime pass as the property. The honest verdict would have been "green on linux/rootless; unverified on root and on the Windows lane", and that is a different claim from the one I recorded.
+
+        WORTH KEEPING FOR THE NEXT TRIAGE OF THIS KIND: the failure was not in the triage's judgement about which checks belong in --check — that still looks right for 15 of the 16 — but in the scope of the measurement behind the word "green". A check moving from --ci-full to --check changes WHICH HOSTS RUN IT, and that is exactly the axis a single-host measurement cannot see. This is the same shape as the packet this order is about: a difference between two gates that only one of them can observe.
+
+        The ratchet is unaffected: untriaged stays 0, and the fix is an arm-level skip inside a wired check rather than a row returning to undecided.

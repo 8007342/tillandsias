@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# freshness: auditor=forge-forge-tillandsias-opencode-20260912t022452z date=2026-09-12 verdict=updated scope=order 1080-4deb ARM 2 (blocker-in-prose) + ARM 4 (1071-adhj cross-reference presence) landed after a worktree reset clobbered the first implementation; re-applied and re-verified in the same cycle
 # freshness: added 2026-09-06 macneo-macos (order 1080-4deb)
 # @trace order:1080-4deb
 #
@@ -102,6 +103,25 @@ cat >> "$_fx/ledger.yaml" <<'YAML'
     desired_release: v0.5
     pickup_role: linux
     priority: p2
+  - packet_id: blocked-in-prose-pkt
+    order: 900-blk
+    status: ready
+    desired_release: v0.5
+    pickup_role: linux
+    priority: p2
+    events:
+      - type: note
+        ts: "2026-09-10T00:00:00Z"
+        host: fixture-host
+        summary: "release cannot proceed until the integrator re-baselines; waiting on a maintainer"
+  - packet_id: blocked-in-criterion-pkt
+    order: 900-crt
+    status: ready
+    desired_release: v0.5
+    pickup_role: linux
+    priority: p2
+    exit_criteria:
+      - the operator-authorised override expired and no host may land this
 YAML
 
 # The reachability oracle, isolated so both the fixture and the real run use
@@ -194,6 +214,28 @@ report_ready_but_claimed() {   # <index-path> <fragments-dir>
         awk -v c="$claimed" 'BEGIN{n=split(c,cs,"\n"); for(i=1;i<=n;i++) have[cs[i]]=1} $4 in have {print $3}'
 }
 
+# ------------------------------------------------------------ ARM 2 REPORTER --
+# A BLOCKER MARKER IN PROSE is a write that lands where the order reader does
+# not look: a note summary or an exit criterion saying the packet CANNOT
+# PROCEED while the status row still reads `ready`. This is 1080-4deb's family
+# again — the status the sweep reads and the prose the packet actually says
+# pointing opposite ways, with no error anywhere.
+#
+# The marker list is deliberately CLOSED and mechanical, and the scan REPORTS,
+# never withholds: a hit names the order and the fleet judges prominence, which
+# is the packet's non-negotiable (a checker that requires consensus on severity
+# empties the ready set). Only `ready` packets are scanned, so a blocker noted
+# on a completed or in-progress row is out of scope by construction.
+blocked_in_prose_orders() {   # <index-path>
+    awk -v m='blocked|blocker|cannot proceed|cannot start|no host can|no host may|requires the operator|operator-authorised|waiting on' '
+        /^  - packet_id:/    { order=""; status=""; next }
+        /^    order:/        { order=$2 }
+        /^    status:/       { status=$2 }
+        status == "ready" && order != "" && /summary:/ && $0 ~ m { print order }
+        status == "ready" && order != "" && /^ +- /  && $0 ~ m { print order }
+    ' "$1" | sort -u
+}
+
 # ------------------------------------------------- NEGATIVE CONTROL (FIRST) --
 # A healthy packet — status matching its events, no landed fix — must produce
 # NO report. This runs before every arm and its failure makes them all vacuous.
@@ -218,17 +260,17 @@ else
     ok "negative-control is not vacuous: the checker can fire"
 fi
 
-# ----------------------------------------------- DENOMINATOR MUST BE KNOWN --
+# ------------------------------------------------------- DENOMINATOR MUST BE KNOWN --
 # A count with an unstated denominator is not falsifiable, and a silently
 # truncated one reports zero while looking clean. The fixture ledger has
-# exactly four ready packets; if the reader cannot see them all, every arm
+# exactly six ready packets; if the reader cannot see them all, every arm
 # below is measuring a sample and saying nothing about it.
 _seen="$(ready_orders "$_fx/ledger.yaml" | wc -l | tr -d ' ')"
-if [ "$_seen" != 4 ]; then
-    bad "denominator: expected 4 ready fixture packets, the reader saw $_seen — arms would measure a sample"
+if [ "$_seen" != 6 ]; then
+    bad "denominator: expected 6 ready fixture packets, the reader saw $_seen — arms would measure a sample"
     exit 1
 fi
-ok "denominator: the reader sees all 4 fixture ready packets"
+ok "denominator: the reader sees all 6 fixture ready packets"
 
 # --------------------------------------------------------------- ARM 3 ------
 # A packet whose status is `ready` while a commit whose SUBJECT names its order
@@ -283,6 +325,53 @@ if printf '%s\n' "$_claimed" | grep -qxF '900-rel'; then
     bad "arm1: a claim resolved by a typed release was reported (over-reporting)"
 else
     ok "arm1: a released claim is not reported (status matches its events)"
+fi
+
+# --------------------------------------------------------------- ARM 2 ------
+# A blocker marker in a `ready` packet's prose must be REPORTED, exactly as the
+# negative control guarantees the healthy packet stays silent. RED pre-fix:
+# with the report disabled this arm printed
+#   FAIL: arm2: blocker-in-note-summary (900-blk) was NOT reported
+#   FAIL: arm2: blocker-in-exit-criterion (900-crt) was NOT reported
+# (exit 1) — the checker agreeing at zero while the fixture plainly carries
+# both markers.
+_prose="$(blocked_in_prose_orders "$_fx/ledger.yaml")"
+if printf '%s\n' "$_prose" | grep -qxF '900-blk'; then
+    ok "arm2: blocker-in-note-summary (900-blk) is reported"
+else
+    bad "arm2: blocker-in-note-summary (900-blk) was NOT reported"
+fi
+if printf '%s\n' "$_prose" | grep -qxF '900-crt'; then
+    ok "arm2: blocker-in-exit-criterion (900-crt) is reported"
+else
+    bad "arm2: blocker-in-exit-criterion (900-crt) was NOT reported"
+fi
+if printf '%s\n' "$_prose" | grep -qxF '900-heal'; then
+    bad "arm2: a healthy packet was reported by the prose scan (over-reporting)"
+else
+    ok "arm2: the prose scan does not report healthy packets"
+fi
+if printf '%s\n' "$_prose" | grep -qxF '900-land'; then
+    bad "arm2: a marker-free ready packet was reported by the prose scan (over-reporting)"
+else
+    ok "arm2: the prose scan does not report marker-free ready packets"
+fi
+if printf '%s\n' "$_prose" | grep -qxF '900-clm'; then
+    bad "arm2: a claim-carrying packet was reported by the prose scan (over-reporting)"
+else
+    ok "arm2: the prose scan is independent of the claim check (900-clm silent)"
+fi
+
+# --------------------------------------------------------------- ARM 4 ------
+# The CROSS-REFERENCE arm (closure item (b)): 1071-adhj discharges the ARM-4
+# property on the scorable-obligation sled WITH a check label this exact text.
+# A refactor that drops it must fail HERE, not only on the sled that owned it,
+# so this script keeps a presence arm on the label rather than a whole-file
+# grep (that guard's header discusses correction fragments at length).
+if grep -qF 'obligation in a correction fragment satisfies the FOLDED packet' "$ROOT/scripts/test-scorable-obligation-gate.sh"; then
+    ok "arm4: the 1071-adhj discharge label is present in test-scorable-obligation-gate.sh"
+else
+    bad "arm4: the 1071-adhj discharge label is missing from test-scorable-obligation-gate.sh"
 fi
 
 echo "ok:ledger-write-reaches-its-reader:$_n arm assertion(s)"

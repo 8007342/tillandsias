@@ -63,7 +63,7 @@ set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 DECL="scripts/gate-divergence-declared.txt"
-BASELINE_UNTRIAGED=22   # 2026-09-06. May fall, never rise.
+BASELINE_UNTRIAGED=0    # 2026-09-12 (1087-h2z9: all 22 triaged). May fall, never rise.
 
 [ -f "$DECL" ] || { echo "violation:gate-divergence-undeclared:0"; echo "  $DECL is missing — the declaration IS the mechanism" >&2; exit 1; }
 [ -f build.sh ] && [ -f scripts/local-ci.sh ] || { echo "violation:gate-divergence-undeclared:0"; echo "  build.sh or scripts/local-ci.sh missing" >&2; exit 1; }
