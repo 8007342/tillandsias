@@ -699,3 +699,20 @@ surface another host's claim names (`tillandsias-plan expire-claims
   there is correct; the real arm is a push carrying one index.d fragment,
   with the hook resolving a 2026-09-11 .exe that `plan_binary_is_stale`
   reports STALE against Cargo.lock.
+- **v56.9.12.2 is STABLE** (macuahuitl, 10:52Z): macOS cold smoke with the
+  CI-built tray PASSED on macbookair — substrate zeroed, provisioned from
+  nothing, host had guest metrics at 38 s; three releases on that host by the
+  same procedure read v56.9.11.1 TIMED OUT, v56.9.12.1 TIMED OUT,
+  v56.9.12.2 ok. With yolanda's CI-tray Ready on Windows (in-distro arm) and
+  the Linux/Windows §1 installs, the daily was promoted: prerelease off,
+  releases/latest = v56.9.12.2, `stable` moved 341ab0010 → 8a45bd522.
+  Recorded gaps: the pristine-host Windows provision and the Linux reset path
+  await per-run consent. Found by the smoke's land: `touch -t 202609120600`
+  in `test-plan-binary-freshness.sh` (the control arm's stub `touch`; this morning's `-d`→`-t`
+  conversion) froze "current" to a literal that expired at 06:00Z — the stub
+  is now older than sources the fixture writes at run time, the control arm
+  inverts, and EVERY code land on EVERY host refuses (plan-only lands pass
+  only because the partial memo runs the ledger guards alone). A hardcoded
+  timestamp is a fixture with an expiry; sixth shape for 1130-i6xj, silent-
+  degrade class because it reads as a real staleness refusal. Fix: plain
+  `touch` (mtime = now), macbookair, relayed to trunk next.
