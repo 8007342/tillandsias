@@ -1,0 +1,75 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-closure-evidence-gate-costs-one-process-per-fragment-that-differs-from-the-base-so-a-behind-worktree-pays-half-an-hour-and-a-current-one-pays-nothing
+    event:
+      type: progress
+      ts: "2026-09-12T07:51:45Z"
+      agent_id: linux-pirria-claude-20260912t022150z
+      host: pirria
+      summary: |-
+        MEASUREMENT BEFORE DESIGN — pirria (4x Alder Lake-N, the floor host), 2026-09-12.
+        Two full gate runs, TILLANDSIAS_GATE_PROFILE=1 TILLANDSIAS_FORCE_CHECK=1, 182
+        profiled phases each.
+
+        WARM vs COLD: THERE IS NO DIFFERENCE, and that is the first finding.
+            run 1 (cold) ... 635s total
+            run 2 (warm, immediately after) ... 637s total   (+0.3%)
+            top phases agree to within 1%: selector-drops 109.3 / 109.8s;
+            workspace tests 106.3 / 105.6s; ruby-could-not-run 66.8 / 67.3s
+        The gate is CPU-bound, not cache-bound, on this host. Running it twice costs
+        twice. Any proposal that assumes a second run is cheap is wrong here, and the
+        floor host is where that assumption would break first.
+
+        THE CLOSURE-EVIDENCE STEP HAS NO STEADY-STATE COST AT ALL.
+            0.0s  Checking that added fragment closures carry evidence (686-7qcm)...
+            ok:closure-evidence:0 checked
+        0.0s in BOTH runs, unranked among 182 phases. On a current tree it is free. The
+        expensive phases are elsewhere entirely and none of them is this one.
+
+        SO THE DEFECT IS PURELY A PENALTY FOR BEING BEHIND. Measured per-invocation
+        cost, mean of 5, on this host:
+            ./target/release/tillandsias-plan closure-evidence-check <frag>  ...  460 ms
+            ./target/debug/tillandsias-plan   closure-evidence-check <frag>  ... 2575 ms
+        Projected against fragments named by the diff:
+                                0 frag      24 frag        650 frag
+            release             0.0s         11.0s          299.0s  ( 5.0 min)
+            debug               0.0s         61.8s         1673.8s  (27.9 min)
+        650 is the count for a worktree 140 commits behind origin/linux-next, because
+        compaction DELETES fragments and a behind tree therefore sees every
+        since-compacted fragment as ADDED.
+
+        THE DEBUG PROJECTION MATCHES THE ORIGINAL OBSERVATION TO A ROUNDING ERROR:
+        27.9 min projected vs ~28 min observed. That confirms both the mechanism and
+        which binary that run used.
+
+        CORRECTION TO THIS PACKET AS I FILED IT. I wrote the cost as "one process per
+        fragment at 2906 ms" without saying that the constant is BINARY-DEPENDENT and
+        varies 5.6x. scripts/plan-binary-probe.sh prefers ./target/release; my original
+        28-minute run hit the debug binary only because the release binary did not yet
+        exist in that checkout. A host that has built release pays ~5 min for the same
+        650 fragments, not ~28. The defect is real either way, but it is six times
+        smaller on a host with a release build, and a fix designed against the 28-minute
+        figure would be designed against the worst case rather than the common one.
+
+        WHAT THIS MEANS FOR THE FIX, stated as measurement rather than design:
+          - There is nothing to optimise in the steady state; 0.0s cannot be improved.
+          - Batching would help only the behind case, and there it saves N-1 process
+            spawns AND N-1 ledger re-parses. Which of those dominates is NOT settled by
+            these numbers: 460 ms per invocation on a release binary is far more than a
+            bare fork, so a parse is clearly in there, but I have not separated them.
+            That separation is the measurement a fix should be designed against, and it
+            wants a second host.
+          - Whatever is done, a host that is 140 commits behind is about to merge
+            anyway, so the work may be redundant rather than merely slow.
+
+        NOT MEASURED, stated so nobody assumes it: the parse/spawn split above; the
+        cost on any host but this one; and whether the 650 figure is typical or an
+        artefact of one unusually long gap. One host, one gap, two runs.

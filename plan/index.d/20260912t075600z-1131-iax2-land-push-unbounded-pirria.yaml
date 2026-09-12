@@ -1,0 +1,167 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by pirria-cachyos 2026-09-12 from macneo's measurements; fix landed in
+# the same push. Order corrected before landing: this work carried "1129" in
+# draft comments, which collides with lenovinha's 1129-4su6.
+packets:
+  - packet_id: the-lands-push-has-no-timeout-so-a-blocked-credential-helper-costs-the-whole-land-and-reports-a-success-shaped-exit
+    order: 1131-iax2
+    status: completed
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [fail-loud, land, macos, credentials, fixture]
+    estimated_hours: 3
+    verifiable_closure: bash scripts/test-land-push-bounded.sh
+    owned_files:
+      - scripts/land-on-platform-branch.sh
+      - scripts/test-land-push-bounded.sh
+    title: |
+      MEASURED on macneo: `git push` inside the land has no timeout, so a credential helper blocked on a keychain item ACL hung it twice for 2362s and 2360s, ended only by the outer land bound — leaving a zero-byte push log, no verdict, and a SUCCESS-SHAPED exit that reads as a land which simply stopped
+    context: |
+      FOUND by macneo 2026-09-11 on tlatoanis-macbook-neo, twice in one night,
+      while landing osx-next. Measured rather than recalled throughout; every
+      number below is that host's.
+
+      WHAT A READER SEES. The land output ends here, with nothing after it:
+          land: attempt 1 — push
+          [exited with code 0]
+      Exit 0, because the pipeline ends in `tail` — the second bug this script's
+      own header documents. So the failure is not merely silent, it is
+      SUCCESS-SHAPED.
+
+      THE HANG. `git push` has no timeout of its own. The helper was
+      `osxkeychain`, configured in /opt/homebrew/etc/gitconfig — NOT
+      ~/.gitconfig, so someone checking the obvious place concludes there is no
+      helper at all. `sample` showed it blocked in SecItemCopyMatching ->
+      SecKeychainItemCopyContent -> CSSM_DecryptDataFinal.
+
+      THE CAUSE IS NOT A LOCKED KEYCHAIN, and two drafts of the remedy said it
+      was before four probes settled it: show-keychain-info, list-keychains and
+      the item METADATA all read fine, securityd responsive, keychain already
+      unlocked — only the DECRYPT hung. What remains is the stored item's own
+      access policy waiting on a confirmation the land's session cannot present
+      or answer. NOT ESTABLISHED, deliberately: that approving the item from a
+      session which can answer is the cure. Nobody has executed it. macneo
+      declined to run it on the operator's machine, which is the right
+      boundary, and the remedy therefore names the cause and stops.
+
+      NO SELF-RECOVERY. Afterwards, with no land running, the helper alone
+      still hangs: `printf 'protocol=https\nhost=github.com\n\n' | timeout 20
+      git credential-osxkeychain get` -> rc=124, zero output.
+
+      "GIT WORKS HERE" IS NOT EVIDENCE. `git fetch` succeeded all night, because
+      anonymous read never consults the helper. A diagnostic that tests
+      connectivity with a fetch reports healthy while every push hangs.
+
+      REPRODUCTION PRECONDITION, easy to miss: the pre-push hook can refuse
+      BEFORE the push reaches credentials. On a branch without trunk merged the
+      hang appears to be gone when the helper was simply never reached.
+    next_action: |
+      Landed. What is left is confirmation on a real blocked helper THROUGH the
+      script (macneo has offered and the state persists until their operator
+      approves the item): the verdict line verbatim, the exit code (7, not 0 and
+      not 124), which bounder resolved, whether the Homebrew prefix was on PATH,
+      the push log size, and a survivor sweep AFTER return. A negative result
+      there is more valuable than a confirmation and should be reported as-is.
+    exit_criteria:
+      - "a push that produces no output and hits its bound emits refused:land:push-emitted-nothing:<bound> and exits 7; pre-fix result: FAILS (the pre-fix script hangs until killed, rc=124, asserted by the fixture's mutation arm)"
+      - "the fixture's positive control proves the fake git was actually invoked, so a green cannot mean the test missed"
+      - "the bound is overridable and the refusal says so, so a legitimately slow host is not refused"
+      - "NEGATIVE CONTROL: a push that returns quickly with an empty log does NOT borrow this remedy (the guard requires empty AND bound-hit)"
+    events:
+      - type: completed
+        ts: "2026-09-12T07:58:00Z"
+        agent_id: "linux-pirria-claude-20260912t022150z"
+        host: pirria
+        evidence_refs:
+          - "bash scripts/test-land-push-bounded.sh -> ok:land-push-bounded:6 (6 passed, 0 failed), including the positive control that the fake git was invoked and the mutation control asserting the pre-fix script hangs until killed (rc=124)"
+          - "bash scripts/test-metrics-log-path-agreement.sh -> ok:metrics-log-path-agreement:14"
+          - "macneo 2026-09-11/12: GIT_TERMINAL_PROMPT=0 timeout 30 git push origin osx-next -> rc=124 at 31s, 0-byte log, no surviving osxkeychain|remote-https|git push|git-credential process — the bound propagates three processes down against a real ACL-blocked helper"
+        summary: |
+          Landed with the fix in the same push. The closure covers the GUARD and
+          its fixture, which are pinned by the arms above.
+
+          NOT COVERED BY THIS CLOSURE, stated so the rung is not read wider than
+          it is: nobody has yet run the fix END TO END through the script
+          against a real blocked helper. macneo has offered that and the state
+          persists until their operator approves the keychain item. The arms
+          prove the mechanism and the wiring on a fake; they do not prove the
+          integration on the real failure. If that run contradicts any of this,
+          the rung should come back down.
+
+          Also not fixed by this packet: a macOS host with no Homebrew coreutils
+          has neither timeout nor gtimeout, so the push stays unbounded there and
+          the script says so rather than pretending.
+      - type: filed
+        ts: "2026-09-12T07:56:00Z"
+        agent_id: "linux-pirria-claude-20260912t022150z"
+        host: pirria
+        summary: |
+          Filed with the fix. Every measurement is macneo's; pirria wrote the
+          guard and the fixture.
+
+          THE TREE PROPAGATES — the finding that decided whether this guard was
+          fixable at all. macneo measured a bare bound against the REAL blocked
+          helper: `GIT_TERMINAL_PROMPT=0 timeout 30 git push origin osx-next`
+          -> rc=124 at 31s, 0-byte log, and afterwards nothing matching
+          osxkeychain|remote-https|git push|git-credential survives. So a
+          timeout around `git push` reaches three processes down and no
+          `timeout -k` is needed. Had it NOT propagated, the guard would have
+          returned a verdict while a helper kept running, and no wording could
+          have fixed that.
+
+          THE VERDICT CARRIES THE BOUND, NOT THE ELAPSED. macneo's 30s bound
+          returned at 31s: timeout signals at the bound, teardown lands in the
+          next tick. A verdict reading 300 on one host and 301 on another
+          cannot be pinned by a fixture and would eventually be filed as a bug.
+
+          macOS SHIPS NO `timeout`. It exists on that host only via Homebrew
+          coreutils, and `env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin sh -c
+          'command -v timeout'` finds nothing — so a bare `command -v` answers
+          about the CALLER'S PATH, not the host, and a land from the stripped
+          LaunchServices PATH (980-xcaf) would silently go unbounded on a host
+          that HAS the tool. The bounder therefore resolves timeout OR gtimeout,
+          on PATH and then in the Homebrew prefixes. Where neither exists the
+          script SAYS the push is unbounded rather than pretending, and this
+          defect persists there — the macOS lane without brew coreutils is not
+          fixed by this packet and should not be counted as such.
+
+          A DECLARATION GAP FALLS OUT OF THIS, and it is not filed here:
+          check-host-tools.sh:100 declares `timeout` as a gate prerequisite for
+          macos ONLY, naming check-credential-channel.sh as its sole consumer.
+          This bound makes it a LINUX dependency too and nothing widens the
+          scope. That is INCOMPLETE SCOPE rather than absence — distinct from
+          rg, which macneo measured as genuinely undeclared. The structural
+          weakness is that the row records ONE consumer, so a second consumer on
+          another platform's path goes undeclared silently.
+
+          TWO THINGS THE FIXTURE ALMOST GOT WRONG, recorded because both were
+          caught by controls rather than by review:
+          1. The positive control fired TWICE during development. The fake git
+             was never invoked, and every other arm would have passed.
+             land-on-platform-branch.sh:41 resolves ROOT from its own
+             BASH_SOURCE, so running it from a scratch clone still inspected the
+             operator's checkout and refused dirty-worktree before reaching the
+             push. A SCRATCH CLONE IS NOT ISOLATION unless the script under test
+             is copied into it — a trap for anyone writing a fixture for any of
+             these scripts.
+          2. The mutation arm went red when the bounder resolution was added,
+             because its strip no longer covered the whole guard. It said "arm 1
+             has no teeth", which is exactly right. Fixed with an explicit
+             `# END ORDER 1131-iax2 push bound` marker, documented IN the script
+             as load-bearing for the fixture.
+
+          NO FIXTURE SEAM. An earlier cut added a skip-the-gate knob to the land
+          script. macneo objected; the objection stood up, and the resolution
+          was to REMOVE the knob rather than harden it — the fixture drops a
+          stand-in build.sh into its scratch clone instead, so the production
+          script keeps no bypass at all.
+
+          NEAR-MISS WORTH KEEPING: macneo saw SecurityAgent in the process list,
+          read its etime as ~2h38m, noticed that matched the stall, and was one
+          message from reporting that the approval dialog was on screen. They
+          checked `lstart` first — it started 4.5 hours BEFORE the stall and
+          proves nothing. Their own lesson, recorded in their words: when a
+          number agrees with your hypothesis, read it from a different field
+          before you quote it.

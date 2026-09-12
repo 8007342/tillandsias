@@ -31,7 +31,7 @@
 # Exit: 0 landed (verified against origin) | 1 dirty tree | 2 rebase conflict
 #       3 gate failed | 4 attempts exhausted | 5 auth failed
 #       6 push failed for a reason retrying cannot fix
-#       7 push emitted nothing and hit its bound (1129: blocked credential
+#       7 push emitted nothing and hit its bound (1131-iax2: blocked credential
 #         helper — the push hangs forever and the log stays zero-byte)
 set -uo pipefail
 
@@ -246,7 +246,7 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
     # full gate run each time. Measured 2026-08-23: an expired GitHub token cost
     # four gate cycles and reported "origin moved" for all of them.
     _plog="${TMPDIR:-/tmp}/land-push.$$.log"
-    # ORDER 1129: BOUND THE PUSH. `git push` has no timeout of its own, and a
+    # ORDER 1131-iax2: BOUND THE PUSH. `git push` has no timeout of its own, and a
     # credential helper that blocks makes it hang FOREVER — the outer land
     # timeout is the only thing that ends it, and what it produces is a
     # zero-byte push log, no verdict, and (because this script's own header
@@ -329,7 +329,7 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
         # exactly as it was on the hosts most likely to hit it — the macOS lane
         # is where the keychain hang was measured. An honest message is much
         # better than silence, but it is not a fix, and the packet says so.
-        echo "land: warn — no 'timeout' or 'gtimeout' found; push is UNBOUNDED on this host (1129)" >&2
+        echo "land: warn — no 'timeout' or 'gtimeout' found; push is UNBOUNDED on this host (1131-iax2)" >&2
         echo "land:        install GNU coreutils to bound it: brew install coreutils" >&2
         git push origin "$BRANCH" > "$_plog" 2>&1
         rc=$?
@@ -382,7 +382,7 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
         } >&2
         rm -f "$_plog"; exit 7
     fi
-    # END ORDER 1129 push bound — this marker is load-bearing: the mutation
+    # END ORDER 1131-iax2 push bound — this marker is load-bearing: the mutation
     # control in test-land-push-bounded.sh strips from the ORDER banner to here
     # to rebuild the pre-fix (unbounded) push. If it moves, that arm refuses to
     # prove anything rather than passing vacuously.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @trace order:1129
+# @trace order:1131-iax2
 #
 # test-land-push-bounded.sh — a push that blocks forever must produce a named
 # refusal within a bound, not silence and a success-shaped exit.
@@ -127,17 +127,17 @@ fi
 # Without this, arm 1 could pass on a script that never blocked in the first
 # place. The mutant strips the bound, and must NOT produce the refusal; it must
 # be killed by the fixture's own timeout (124).
-MUT="$W/repo/scripts/pre-1129-land.sh"
+MUT="$W/repo/scripts/pre-1131-land.sh"
 # Rebuild the PRE-fix push: strip the whole guard, banner to end marker, and
 # put back the two unbounded lines it replaced.
-awk '/# ORDER 1129: BOUND THE PUSH\./{skip=1; print "    git push origin \"$BRANCH\" > \"$_plog\" 2>&1"; print "    rc=$?"; next}
-     /# END ORDER 1129 push bound/{skip=2; next}
+awk '/# ORDER 1131-iax2: BOUND THE PUSH\./{skip=1; print "    git push origin \"$BRANCH\" > \"$_plog\" 2>&1"; print "    rc=$?"; next}
+     /# END ORDER 1131-iax2 push bound/{skip=2; next}
      skip==2 && /^    # control in test-land-push-bounded/{next}
      skip==2 && /^    # to rebuild the pre-fix/{next}
      skip==2 && /^    # to here/{next}
      skip==2 && /^    # prove anything/{skip=0; next}
      skip==1{next} {print}' "$LAND_UNDER_TEST" > "$MUT"
-if grep -q 'ORDER 1129: BOUND THE PUSH' "$MUT"; then
+if grep -q 'ORDER 1131-iax2: BOUND THE PUSH' "$MUT"; then
     bad "MUTATION: the strip left the bound in place — arm 2 proves nothing"
 elif ! bash -n "$MUT" 2>/dev/null; then
     bad "MUTATION: the reconstructed pre-fix script does not parse — arm 2 proves nothing"
