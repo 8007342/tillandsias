@@ -1,0 +1,67 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: on-a-floor-host-the-smokes-own-wrapper-cannot-survive-its-forge-lane-so-the-largest-floor-timing-is-the-one-never-captured
+    event:
+      type: note
+      ts: "2026-09-12T02:12:00Z"
+      agent_id: linux-yoga-claude-20260912t013000z
+      host: yoga
+      summary: |
+        SECOND FLOOR DATAPOINT, AND A NEW SHAPE. Measured on yoga (Fedora
+        Silverblue, 14 GiB, immutable) 2026-09-12T02:05Z during the
+        v56.9.11.1 curl-install smoke.
+
+        This packet's §4a asks any host of a different size to record which
+        side of the boundary it lands on. yoga is 14 GiB and lands on the
+        LOSING side — but it did NOT reproduce the 15 GiB shape, and the
+        difference is what makes it worth recording.
+
+        WHERE IT DIED: step 3 (`tillandsias --debug --init`), NOT step 4
+        (the forge lane). The init was rebuilding every image from an empty
+        store after `podman system reset --force`. So the step that loses the
+        supervisor on the floor is not only the forge lane; the pristine
+        rebuild reaches the same pressure a step earlier and cheaper.
+
+        THE DISCRIMINATORS, run immediately after the kill, verbatim:
+          podman ps --format '{{.Names}} {{.Status}}'   -> EMPTY (no containers)
+          journalctl --since '1 hour ago' | grep -iE 'oom-kill|Killed process'
+                                                        -> no output
+          podman images                                 -> proxy + alpine:3.20
+                                                           + alpine:3.22
+                                                           + hashicorp/vault:1.18
+                                                           only; git, inference
+                                                           and forge never started
+          free -g                                       -> 14 total, 12 available
+                                                           (measured after the kill)
+
+        WHY THIS IS A NEW SHAPE. §4a's discriminator reads "containers up AND
+        no kernel oom-kill means the supervisor was killed by the agent
+        harness, not the product". Here there was no kernel oom-kill and NO
+        surviving containers: the lane died WITH its supervisor rather than
+        outliving it. The §4a rule therefore returns no verdict for this case,
+        and a reader applying it literally finds an empty container list and
+        may read it as a product failure. It is not one — nothing in
+        v56.9.11.1 misbehaved, and the same release completed the identical
+        step on the retry.
+
+        REMEDY CONFIRMED ON THIS HOST: §4a's own advice worked. Relaunched
+        under `setsid nohup`, the init ran to init_exit=0 — full clean-room
+        rebuild, vault bootstrapped with 12 policies, tillandsias-vault
+        healthy. So detaching rescued a step that had failed twice in the
+        foreground, on a host below the previously measured boundary.
+
+        WHAT THE FLOOR NOW HAS: two points rather than one.
+          15 GiB (pirria): wrapper killed, LANE SURVIVES, fails at §4.
+          14 GiB (yoga):   wrapper AND lane both die, fails at §3.
+        Still not a threshold — nothing between 14 and 15 GiB has been
+        measured, and neither point establishes where the behaviour changes.
+        Recorded as two observations, per this packet's own instruction not
+        to invent one.
