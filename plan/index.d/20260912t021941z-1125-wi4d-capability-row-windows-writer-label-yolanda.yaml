@@ -1,0 +1,76 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: host-capability-probe-has-no-windows-writer-label-so-every-windows-capability-row-ever-written-claims-host-linux-mutable-while-its-own-document-says-windows
+    order: 1125-wi4d
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: windows
+    capability_tags: [windows, capability-matrix, routing, probe]
+    estimated_hours: 1
+    owned_files:
+      - scripts/host-capability-probe.sh
+    verifiable_closure: |
+      bash scripts/host-capability-probe.sh --fragment on a Windows host emits
+      `host: windows`; today it emits `host: linux_mutable`. Mechanically:
+      bash scripts/host-capability-probe.sh --fragment | grep -q '^    host: windows$'
+      (exit 0 after the fix, exit 1 before it — run on a Windows host, where
+      uname -s is MINGW64_NT-*). The linux/macOS labels are unchanged, pinned
+      by the same command run on those hosts.
+    title: |
+      scripts/host-capability-probe.sh:123-131 derives the writer label from forge | macos | linux_immutable | linux_mutable with no windows branch, so on a Windows host uname -s (MINGW64_NT-*) matches nothing and falls through to the else, and every capability row a Windows host has ever published claims host: linux_mutable while the accel document embedded in the SAME fragment says host_kind "windows"
+    context: |
+      MEASURED on yolanda, 2026-09-12, in one file. The row republished this
+      cycle — plan/index.d/20260912t014202z-capability-row-yolanda.yaml,
+      committed as c4f5d912e — says `host: linux_mutable` on line 10 and
+      `"host_kind": "windows"` on line 47. One fragment, two answers, and the
+      generator wrote both.
+
+      The derivation (scripts/host-capability-probe.sh:123-131) tests, in
+      order: TILLANDSIAS_HOST_KIND=forge, then `uname -s` = Darwin, then
+      /run/ostree-booted or rpm-ostree, then else. `uname -s` under Git Bash
+      on Windows is MINGW64_NT-10.0-26200, which matches no branch, so Windows
+      takes the else and is labelled linux_mutable. There is no windows case
+      to take.
+
+      WHY THIS IS NOT COSMETIC. 847-wgy4 routes work by capability, and the
+      writer label is how a row says what KIND of host published it. A missing
+      row routes nothing; a mislabelled row routes confidently and wrongly —
+      the 889-ewvt argument about drift, arriving through the generator rather
+      than through staleness. 889-ewvt taught check-capability-row.sh to
+      compare a committed row against a live one, but both sides of that
+      comparison are folded from this same generator, so a label the generator
+      gets wrong is wrong identically on both sides and reads as `ok:`. My row
+      answered ok:capability-row-current:yolanda with the wrong label in it.
+      A truth check cannot catch a defect upstream of both its inputs.
+
+      SCOPE. Both Windows hosts have been down since 2026-09-06 and the matrix
+      was silent for 5 of 7 hosts before 850-bif2, so this has likely mislabelled
+      every Windows row that has ever existed rather than a recent regression.
+      The fix has a non-guessing form available: the document already carries
+      .host.host_kind ("windows"), which the script reads for host_id two lines
+      above at :119 — so the label can come from the probe's own answer instead
+      of a fourth uname guess. Prefer that to adding a MINGW64* pattern.
+    exit_criteria:
+      - "the writer label has a windows branch and a Windows host's --fragment emits `host: windows`; pre-fix result: FAILS (c4f5d912e line 10 says linux_mutable, line 47 of the same file says windows)"
+      - "the Windows rows on trunk are regenerated: yolanda's (c4f5d912e) and esme's when it lands"
+      - "NEGATIVE CONTROL: the linux_mutable, linux_immutable, macos and forge labels are unchanged — a host that legitimately answers linux_mutable still does; pre-fix result: PASSES (the defect adds no branch, so the control must stay green across the fix and is the only thing distinguishing a fix from a relabel-everything)"
+    events:
+      - type: filed
+        ts: "2026-09-12T02:19:41Z"
+        agent_id: "windows-yolanda-claude-20260912t021941z"
+        host: yolanda
+        summary: |
+          Found on yolanda during the 2026-09-12 fleet restart, while
+          republishing an expired capability row for the 1122-xi2f drill —
+          the republish is what produced the reproduction. Filed at the
+          coordinator's direction (macuahuitl-fedora).
+
+          Filed with a script-form closure, NOT the litmus name the
+          assignment suggested: no fixture under scripts/test-*.sh pins this
+          generator and the probe has no self-test, so naming one would have
+          been a closure that cannot run — the exact shape
+          check-declared-closures-added.sh (885-92iu) exists to refuse.
+          Adding that fixture is in-scope work for this packet.
