@@ -23,6 +23,15 @@ description: >
   flock), cross-arm B (the driver skips while a prompt lane holds the dir
   and fires after release — no false lockout), and the overlap refusal
   recorded durably OUTSIDE the contended checkout.
+
+  ORDER 1137-da83 adds the LIVENESS arms (suite arms 8-9). Note their regime
+  before reading a green as coverage: they are MSYS-ONLY and skip loudly on
+  linux and darwin, because the defect they pin is the existence of a second
+  pid space. On a Windows host they measure that `kill -0` calls a running
+  native pid dead, that the probe under test sees it, and that a sibling lane
+  is consequently refused instead of reading the checkout free. Everywhere
+  else this litmus pins what it always pinned, plus the `pid-probe` step
+  below, which answers on every host.
 severity: high
 size: instant
 
@@ -38,7 +47,12 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: checkout-lock-parses"
 
-  - step: "the full two-sided suite: lifecycle, named refusals, stale reclaim, BOTH cross-arm directions, external refusal record"
+  - step: "the LIVENESS PRIMITIVE answers for this shell, on any host — exposed as a subcommand for the same reason ppid-probe is, so a host where it is wrong says so directly instead of through a confident wrong lock verdict"
+    command: "scripts/cycle-checkout-lock.sh pid-probe | cut -d: -f1-3"
+    timeout_ms: 5000
+    expected_behavior: "ok:pid-probe:live"
+
+  - step: "the full two-sided suite: lifecycle, named refusals, stale reclaim, BOTH cross-arm directions, external refusal record, and (msys only) the native-pid liveness arms with their mutation controls"
     command: "bash scripts/test-cycle-checkout-lock.sh | tail -1"
-    timeout_ms: 60000
+    timeout_ms: 120000
     expected_behavior: "ok:checkout-lock-fixture:all"
