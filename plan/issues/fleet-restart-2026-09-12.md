@@ -2665,3 +2665,23 @@ stories.
   unleased) on direct knowledge that lenovinha is landing it — the claim
   is invisible because lenovinha's credential is dead; no Linux host
   should take it from the selector until lenovinha pushes.
+- **1149-vgn2 fixed: the cold probe now checks the fallback share** (yoga,
+  ok:land:5260aa172, attested 2ad2fb5c7): probe-credential-cold-state.sh
+  read only the keychain, so pirria (no keychain item; a
+  fallback_vault-shamir-share-v1 keeping every reset warm since 2026-09-01)
+  was certified `credential-state:cold`, and the verdict's own text asserted
+  "--init will re-initialize and the resync path IS exercised" — the exact
+  inference 900-z3kv was filed to stop, one level down inside 900-z3kv's own
+  instrument, wired into the smoke skill. Now it checks the fallback location
+  and reports warm with the file's path and mtime (existence and mtime only,
+  criterion 4); both cold verdicts state that no fallback was found, so a
+  cold verdict says what it CHECKED. Arm 8 plants a fallback with a busctl
+  stub that succeeds and returns no items (an empty keychain, not an
+  unaskable question); arm 9 removes it to prove cold is still reachable
+  (without it a probe that merely stopped saying cold would pass);
+  mutation-verified (keychain-only reds arm 8 by name). yoga checked rather
+  than assumed that their own host is unaffected (no fallback_* there). The
+  900-z3kv slice's next_action now names three locations and the
+  criterion-3 phrasing: plant EACH, assert cold only when ALL THREE are
+  gone — clearing two and calling it cold is the one-direction assertion
+  that produced the row. The probe fix stands under (a) or (b).
