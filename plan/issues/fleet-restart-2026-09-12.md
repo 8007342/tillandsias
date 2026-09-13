@@ -1108,3 +1108,29 @@ stories.
   yoga (6071c346d); the [low-end] linux queue is empty, so pirria's cadence
   runs the due de-slop sweep (306 orders since the last) as its standing
   tier work, and 1004-4xie's role corrected to windows.
+- **No Windows host could pass the gate: a stale .exe outranked the fresh
+  ELF in a run-don't-stat probe** (esme, 1140-d6ni; 67.5 minutes to a FALSE
+  refusal): `resolve_target_binary` tries `$name.exe` before `$name`; inside
+  tillandsias-build both artefacts sit side by side, WSL interop is now
+  enabled so the Sep-4 PE32+ RUNS and is accepted, and the Windows binary
+  joins `/mnt/c/...` with a backslash — check-cheatsheet-tiers refuses
+  "cheatsheets/ directory not found" on a tree with 244 tracked entries.
+  1030-i2p8 fixed exactly this for resolve_plan_binary ("locus-native
+  artefact first") and its comment predicted the masking would lift; the
+  sibling never got the reorder. yoga lands the one-line reorder with a
+  stub-.exe arm; the row also names yolanda's silent cargo-absent SKIP that
+  reports `ok:` while the check never ran — the worse half, since the reorder
+  alone removes the loud signal and leaves the silent gap. esme deleted the
+  stale untracked artefact (ephemeral build output, not consent-class).
+- **The floor-tier plan-only window** (esme, measured): a plan-only push
+  takes the plan-only lane only on a tree origin/windows-next already
+  contains; merging trunk to satisfy containment turns it into a union
+  needing the stamp (the 68-minute gate), and a first push of a `work/`
+  ref has no remote base to diff so the hook must demand the full gate (the
+  hook is right; the advice was unreachable). A floor Windows host can push
+  plan-only only in the window right after a capable host's land brings
+  windows-next up to trunk and before trunk moves on. Standing rule:
+  yolanda's lands carry esme's plan-only work as a matter of course; esme
+  pushes directly only when the window is open, never a union gate for a
+  plan-only change. Five harness waiters were reaped for memory during the
+  4050 s gate; it survived because it ran under setsid inside the distro.
