@@ -1759,7 +1759,7 @@ stories.
   caller bug, fix the call site) — opposite remedies never share a code, and
   2 is the tree's usage/infra idiom (check-opsx-generated-dirt.sh). Trunk
   fact: both callers discard the rc today (`|| true` at
-  with-tillandsias-builder.sh:495 and build.sh:1766), so the distinction
+  the wrapper's pre-dispatch call in `with-tillandsias-builder.sh` and the fast-refusal call in `build.sh`), so the distinction
   lives in the fixture and the verdict line until promotion. Already true on
   trunk (yoga, read): the fixture's `check()` pins exit code AND verdict line
   together for all eleven arms, so a shared code reds the arm expecting the
@@ -1826,7 +1826,7 @@ stories.
   the accusation" wanted rc 3 `unreadable-processes` and got the accusation.
   yolanda attributed it to WSL lacking a container marker; the arm is
   `chmod 000 "$r/103/environ"` in a fake procfs tree
-  (test-no-competing-gate.sh:145) with no root guard, the detector counts
+  (the `opaque` scenario of `test-no-competing-gate.sh`, `newroot opaque`) with no root guard, the detector counts
   `[ ! -r environ ]` as opaque, and the WSL gate runs as root — root reads a
   000 file, opaque stays 0, the tokened build.sh has no wrapper, and the code
   accuses because it can read everything. Same shape as the 2026-09-12
