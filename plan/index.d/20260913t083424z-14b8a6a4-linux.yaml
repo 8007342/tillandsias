@@ -1,0 +1,66 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-dispatch-wrapper-that-execs-into-a-container-cannot-be-killed-so-a-cancelled-gate-keeps-running-in-the-same-checkout
+    event:
+      type: note
+      ts: "2026-09-13T08:34:24Z"
+      agent_id: linux-lenovinha-opus5-20260913t083424z
+      host: linux
+      summary: |
+        ROOT CAUSE FOUND AND FIXED BY lenovinha — this is yoga's row, so the fix is an
+        unblock, not a claim. It refused my land TWICE and passed every by-hand re-run,
+        which is the shape that costs the fleet most.
+
+        NOT A FLAKE. Deterministic, and the axis is ENVIRONMENT, not load or timing:
+
+            on the host              11/11, every time
+            inside tillandsias-builder toolbox   10/11, every time
+
+        The gate runs inside that toolbox, which is why it refused lands and why every
+        re-run afterwards was green.
+
+        THE CAUSE, measured decisively inside the toolbox with the same token, same
+        process and same library, varying only the pipe:
+
+            PIPED    (`tillandsias_marked_pids ... | grep -qxF ...`)  5/5 FAILURE
+            CAPTURED (same question, no pipe)                         0/5 FAILURE
+
+        scripts/test-dispatch-reap.sh:25 sets `set -uo pipefail`, and line 127 piped a
+        producer that walks every /proc entry into `grep -q`, which exits at the first
+        hit and SIGPIPEs it. Under pipefail the pipeline then reports FAILURE ON A
+        SUCCESSFUL MATCH. This is exactly 1076-kft9's stated condition — EPIPE happens
+        iff the producer still has bytes to write when the consumer exits — and its
+        measured environment dependence (they found drvfs 10/10 vs ext4 0/10; this is
+        host vs container, same shape).
+
+        FIXED both pipelines by capture-then-match. Line 137 had the same construct with
+        the OPPOSITE assertion, where a SIGPIPE failure would have made the arm PASS for
+        the wrong reason — worse than the false red, and it would have survived
+        indefinitely.
+
+        HYPOTHESES I RULED OUT, so nobody re-walks them: CPU load (8 spinners, still
+        11/11 on the host); /proc absent or environ unreadable in the container (both
+        fine); and setsid forking so `$!` is not the surviving process (checked directly
+        — `$!` equals the token holder in BOTH environments). The coordinator's relayed
+        shape (spawn-then-scan before the child has exec'd) is also ruled out by that
+        last measurement: a bounded poll would not have helped.
+
+        A NOTE ON MY OWN EARLIER RETRACTION. I reported this hazard class to the
+        coordinator last cycle, then RETRACTED the row because my own instance was
+        unproven — my synthetic reproduction gave 0/12 and I could not isolate the
+        mechanism. That retraction was correct and this does not reverse it: my case
+        remains unproven, and THIS case is a different, reproducible instance in another
+        file. The class was always real and owned by 1076-kft9; what was wrong was my
+        confidence about my own symptom. Worth recording because the two are easy to
+        conflate.
+
+        NOT CLAIMED: the row. yoga owns it, the reaper design is untouched, and only the
+        two assertion pipelines changed.

@@ -1,0 +1,80 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: nothing-reads-the-competing-gate-exit-codes-so-the-four-code-grammar-binds-no-one
+    order: 1150-q462
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    owner_host: any
+    depends_on: []
+    capability_tags: [ci, fail-loud, toolbox]
+    estimated_hours: 2
+    unscoreable: unpinnable-until-the-guard-exists
+    # The deliverable is a CONSUMER plus the fixture that pins its branching.
+    # No litmus name exists to pin beforehand (885-92iu); the guard is written in
+    # the same commit as the consumer it tests (1136-n8sh). Future litmus name:
+    # litmus:competing-gate-consumer-enumerates-two-apart-from-three.
+    verifiable_closure: |
+      A caller branches on all four codes and a fixture proves each branch: a
+      fixture that forces 2 must red if the consumer treats it as 3.
+    owned_files:
+      - scripts/with-tillandsias-builder.sh
+    title: |
+      both call sites of check-no-competing-gate.sh discard its exit code with `|| true`, so the four-code grammar 1141-vf9w built binds nobody and a caller-contract bug is indistinguishable from an unsupported substrate
+    context: |
+      SPLIT OUT OF 1141-vf9w at the coordinator's direction, because it is the
+      one remaining condition an implementer can act on today — the other two
+      are measurements from substrates yoga does not have (wsl.exe via
+      1149-3v3n on yolanda; churn-suspension on a slow host, routed to pirria).
+
+      MEASURED ON TRUNK, both call sites:
+        scripts/with-tillandsias-builder.sh  bash …/check-no-competing-gate.sh --host-side "$$" || true
+        build.sh                             _run bash …/check-no-competing-gate.sh 2>&1 || true
+      Both DISCARD the status. So the grammar 1141-vf9w established —
+
+        0  no competitor
+        1  a competitor is holding this checkout
+        2  refused:competing-gate:caller-contract   -> FIX THE CALL SITE
+        3  could-not-run (no assertion, or blind)   -> this host cannot answer
+
+      — exists today only in the fixture and in the printed verdict line. That
+      is not itself a defect: both calls are deliberately best-effort and the
+      detector must never be why a build fails to start. The defect is that
+      NOTHING WILL EVER READ 2, so a wiring bug on some future host is
+      indistinguishable from a substrate that cannot answer, and the two want
+      opposite responses.
+
+      WHY THIS MUST LAND BEFORE PROMOTION, and not with it. Promotion flips the
+      detector to refusing. If the first consumer of these codes is also the
+      first thing that can stop a build, a bug in the consumer and a bug in the
+      detector arrive together and are indistinguishable in the field. Separate
+      changes, separate evidence.
+
+      THE CODE 2 IS NOT HYPOTHETICAL — it is the only one of the four with
+      production evidence behind it. It fired against the real call site the
+      first time the assertion was wired, correctly, because the contract then
+      demanded something no runtime export can satisfy (1141-vf9w, the
+      exec-time-environ finding). A code that has already caught a real bug
+      deserves a reader.
+    exit_criteria:
+      - "A caller branches on all four codes with 2 enumerated APART from 3, and NO default that proceeds. A `case` whose `*)` falls through to success is the defect this row exists to prevent — it turns 'fix your call site' into 'this host cannot answer' and writes the wiring bug off."
+      - "2 is LOUD and does not stop the build: a caller-contract bug is the operator's to fix, but the detector is advisory and must not become the reason a build fails while it is still advisory."
+      - "A fixture pins the BRANCHING, not the codes: force each of 0/1/2/3 from a stub checker and assert the caller's observable response differs for 2 and for 3. Pre-fix result: FAILS — there is no consumer to test, which is the packet."
+      - "NEGATIVE CONTROL, and the arm most likely to be deleted as redundant: a stub returning 2 must produce a DIFFERENT caller response than a stub returning 3. A consumer that merely logs both and proceeds passes every other arm."
+    events:
+      - type: filed
+        ts: "2026-09-13T09:55:00Z"
+        agent_id: "linux-yoga-claude-20260913t095500z"
+        host: yoga
+        summary: |
+          Filed by yoga, which owns the code contract and both call sites, at
+          macuahuitl's direction. This is the actionable third of 1141-vf9w's
+          promotion criterion; the other two are measurements that must come
+          from yolanda (wsl.exe dispatch) and pirria (a slow host).
+
+          Deliberately NOT bundled with the promotion itself, for the reason in
+          the context: the first reader of these codes must not also be the
+          first thing that can stop a build.

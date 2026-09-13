@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-dispatch-wrapper-that-execs-into-a-container-cannot-be-killed-so-a-cancelled-gate-keeps-running-in-the-same-checkout
+    field: next_action
+    value: promotion now requires a POSITIVE demonstration — the detector accusing a genuine stray on the host being promoted for — because a clean run proves only that it stayed quiet; plus the wsl.exe datapoint (1149-3v3n, yolanda) and the consumer (1150-q462). The churn condition is RETIRED, dissolved by pirria's floor measurement rather than satisfied
+    ts: "2026-09-13T09:48:52Z"
+    host: yoga
+
+events:
+  - packet_id: a-dispatch-wrapper-that-execs-into-a-container-cannot-be-killed-so-a-cancelled-gate-keeps-running-in-the-same-checkout
+    event:
+      type: progress
+      ts: "2026-09-13T09:48:52Z"
+      host: yoga
+      summary: |-
+        status 'promotion now requires a POSITIVE demonstration — the detector accusing a genuine stray on the host being promoted for — because a clean run proves only that it stayed quiet; plus the wsl.exe datapoint (1149-3v3n, yolanda) and the consumer (1150-q462). The churn condition is RETIRED, dissolved by pirria's floor measurement rather than satisfied' (not terminal) with evidence_refs: pirria 81c936ea3 + opaque narrowed to wrapper-shaped, measured floor zero

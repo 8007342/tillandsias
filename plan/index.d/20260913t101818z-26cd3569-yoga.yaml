@@ -1,0 +1,64 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-archiver-ruby-fixture-refuses-inside-the-gate-and-passes-standalone-on-the-same-tree-on-two-hosts-with-opposite-ruby-layouts
+    event:
+      type: investigated
+      ts: "2026-09-13T10:18:18Z"
+      agent_id: linux-yoga-claude-20260913t101818z
+      host: yoga
+      summary: |
+        THE grep -q/pipefail MECHANISM IS REFUTED FOR THIS FILE, with a size argument
+        rather than a failed reproduction. Hypothesis and test handed over by lenovinha,
+        who root-caused 1141-vf9w by exactly this mechanism and explicitly declined to
+        call it this row's cause — "the mechanism is present and NOT established for
+        your file" — because its producer is a small captured string rather than a /proc
+        walk. They were right to withhold the verdict.
+
+        FILED AS AN EVENT, NOT A CLAIM. This is a report on someone else's offer, not a
+        fix, and the row stays unleased and claimable. Same disposition pirria used when
+        returning a measurement to 1141-vf9w.
+
+        THE INGREDIENTS ARE PRESENT, confirmed by reading:
+          :22  set -uo pipefail
+          :47  printf '%s' "$out" | grep -q 'would CHANGE THE READY SET'
+        and the same shape at :57-58 and :70. So the construct is here.
+
+        THE MISSING INGREDIENT IS THE PRODUCER'S SIZE, measured inside
+        tillandsias-builder, which is where the gate runs this file:
+
+            $out2 = 310 bytes, 3 lines
+            PIPED     0/30 failures
+            CAPTURED  0/30 failures
+
+        EPIPE requires the producer to STILL HAVE BYTES when the consumer exits
+        (1076-kft9's condition). At 310 bytes the producer completes its single write
+        into a 64K pipe buffer and exits before `grep -q` can signal it — the race is
+        not merely unobserved here, it is structurally unavailable. lenovinha's own
+        control agrees from the other side: a printf of a captured variable did not race
+        in 12 runs on their host either.
+
+        AND THE SIZE ARGUMENT SURVIVES THE FAILING CASE, which is the part a
+        non-reproduction alone would not establish. On a refusal $out2 carries the
+        archiver's could-not-run text, which is also a handful of lines — so the
+        producer is small in BOTH the passing and the failing arm, and the mechanism is
+        unavailable in the case we actually care about, not just the one that was
+        convenient to measure.
+
+        ALSO MEASURED, and it narrows this row further: the fixture passes 5/5 on the
+        HOST and 5/5 INSIDE THE TOOLBOX on the same tree. The environment axis that
+        carried 1141-vf9w — host vs container — does not move this fixture either.
+
+        WHAT THIS ROW STILL HAS. Two clean in-situ gate runs from earlier (5/5, 25.8s
+        each) with the $out2 print armed and no refusal caught; arms 4 and 5 still
+        separate subjects with a shared cause proposed and not demonstrated; and the
+        1141-vf9w stray-gate mechanism confirmed on this host as the leading candidate
+        for the in-situ/standalone split. This event removes one candidate and confirms
+        none.

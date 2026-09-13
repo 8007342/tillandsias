@@ -2,7 +2,7 @@
 tags: [inference, ollama, local-models, runtime, gpu]
 languages: []
 since: 2026-04-26
-last_verified: 2026-04-27
+last_verified: 2026-09-13
 sources:
   - https://github.com/ollama/ollama/blob/main/docs/api.md
 authority: high
@@ -14,7 +14,7 @@ summary_generated_by: hand-curated
 bundled_into_image: false
 committed_for_project: false
 pull_recipe: see-section-pull-on-demand
-# freshness: auditor=forge-antigravity-20260812t1500z date=2026-08-12 verdict=refreshed scope=re-validated: ollama API endpoints (/api/generate, /api/chat, /api/pull, /api/embed, /api/version, /api/tags), port 11434, OLLAMA_HOST env var, tier table T0-T4, and json format patterns verified sound and matching current runtime
+# freshness: auditor=forge-tillandsias-20260913t0830z date=2026-09-13 verdict=updated scope=re-validated live: /api/version,/api/tags,/api/embed and the models.json tier table all verified; corrected the engine baseline (was "ollama 0.5.x" — the image pins v0.34.0 at images/inference/entrypoint.sh:308 and a live forge measured 0.33.2); noted OLLAMA_HOST was unset in the 2026-09-13 forge environment despite the pre-set claim
 ---
 
 # Local inference inside the forge
@@ -26,9 +26,14 @@ pull_recipe: see-section-pull-on-demand
 
 - Ollama API reference: <https://github.com/ollama/ollama/blob/main/docs/api.md> — fetched 2026-04-27, used to verify `/api/version`, `/api/tags`, `/api/generate`, `/api/chat`, `/api/pull`, `/api/embed` (the current endpoint; `/api/embeddings` is superseded), `/api/ps`. Streaming response shape (newline-delimited JSON, last chunk carries `done:true` + timing) confirmed against the doc.
 - Tillandsias model tier definitions: `images/default/config-overlay/ollama/models.json` (canonical tier list, baked into every forge image).
-- **Last updated**: 2026-04-27
+- **Last updated**: 2026-09-13
 
-**Version baseline**: ollama 0.5.x (forge image's pinned version), API revision dated above.
+**Version baseline**: the forge image pins `v0.34.0` at
+`images/inference/entrypoint.sh:308` (TO BUMP comment, 1118-d3b6). A live forge
+measured `{"version":"0.33.2"}` against /api/version 2026-09-13 — the pin is
+authoritative; a running forge's engine may trail it until its image is rebuilt.
+Either way, the engine is NOT "0.5.x" as this file once claimed; any agent
+branching on the baseline should read the pin, not this prose.
 **Use when**: an agent inside the forge needs to call a local LLM — for triggers, summarisation, code generation, or as a routing layer between a fast classifier and a heavyweight model.
 
 ## Quick reference
@@ -36,7 +41,7 @@ pull_recipe: see-section-pull-on-demand
 | Concern | Answer |
 |---|---|
 | **Endpoint URL** | `http://inference:11434` (DNS alias on the enclave bridge — works from every forge container) |
-| **Env var** | `$OLLAMA_HOST` is pre-set in the forge — agents that read it get the right URL automatically |
+| **Env var** | `$OLLAMA_HOST` points at the right URL where pre-set; if unset, fall back to `http://inference:11434` (observed unset in a 2026-09-13 forge). Never hard-code `localhost` |
 | **Verify alive** | `curl -fsS $OLLAMA_HOST/api/version` → `{"version":"..."}` |
 | **List installed models** | `curl -fsS $OLLAMA_HOST/api/tags \| jq '.models[].name'` |
 | **One-shot completion** | `curl -fsS $OLLAMA_HOST/api/generate -d '{"model":"qwen2.5:0.5b","prompt":"hi","stream":false}' \| jq -r .response` |
