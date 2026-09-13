@@ -1,0 +1,76 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# A CORRECTION to 20260913t010620z-1141-5pgh-...-pirria.yaml, written as a new
+# fragment per plan/index.d/README.md rather than amending that file.
+events:
+  - packet_id: a-hard-killed-gate-orphans-a-test-probe-under-cheatsheets-and-the-next-gate-refuses-it-as-an-untracked-image-source
+    event:
+      type: note
+      ts: "2026-09-13T01:35:00Z"
+      agent_id: "linux-pirria-claude-20260912t022150z"
+      host: pirria
+      summary: |
+        THE ROW'S "NOT ESTABLISHED" IS NOW ANSWERED, and the answer makes the
+        row's framing too small. Read this before acting on its next_action.
+
+        The row said: "NOT ESTABLISHED ... WHICH process removed the two files
+        afterwards ... if something already sweeps them, the fix may be
+        ordering rather than wording." Neither branch was right. Nothing swept
+        them and no ordering is involved.
+
+        MEASURED on pirria after filing:
+
+          pid 3047429  bash ./build.sh --check   STAT S<s  ELAPSED 12:15
+                       PPID 3047426 = conmon
+          child        scripts/test-archiver-ruby-could-not-run.sh
+
+        A gate I had "stopped" twelve minutes earlier was STILL RUNNING. The
+        gate re-execs itself into the tillandsias-builder toolbox container via
+        `toolbox run` -> `podman exec`; killing the host-side wrapper reaps the
+        wrapper only, and the container-side build.sh is parented by conmon and
+        survives. SIGTERM to it was inert; SIGKILL on the pid and its child
+        ended it. The probe files under cheatsheets/ were written by that
+        surviving gate WHILE a second gate was checking the tree — not
+        orphaned by a killed one and not swept by anything.
+
+        SO THE FILING WAS RIGHT ABOUT THE SYMPTOM AND WRONG ABOUT THE CAUSE.
+        It also cleared scripts/test-gate-step-skip-exit.sh, which remains
+        correct — but for the wrong reason. The row reasoned "SIGKILL is the
+        whole point, no trap can catch it". The fixture's trap never had the
+        chance to be the question: the fixture was not being killed at all, it
+        was running normally inside a gate nobody could see.
+
+        THE REAL DEFECT IS FILED ELSEWHERE AND IS p1, not p3: the surviving
+        container-side gate. It landed on trunk as 1132-r4mt's mechanism
+        (9999e706a, reproduced independently on yoga; drill note 1c88f7a68),
+        with macuahuitl's own instance now legible — a gate refusing on
+        test-archiver-ruby-could-not-run.sh for scratch state a SECOND gate
+        was writing, while the same fixture passes 5/5 standalone. yoga owns
+        the fix: propagate the wrapper's termination into the container, plus
+        a gate-level lock that discriminates a stray from a legitimate nested
+        run by ppid (conmon vs the `podman exec` that launched it). pirria is
+        the floor-tier verifier when it lands.
+
+        WHAT SURVIVES OF THIS ROW, and why it is not withdrawn: 747-knbp's
+        refusal still names a remedy that is wrong for this input. A leftover
+        test probe is refused with an explanation about image rebuilds
+        orphaning the launch tag, which sends the reader to image-tag
+        machinery when the file's own name says what it is. That is worth
+        fixing on its own terms — it is what made a two-gate collision read as
+        an image-source problem and cost the diagnosis an hour. But it is
+        COSMETIC RELATIVE TO THE CAUSE, and anyone who takes this row believing
+        the wording is the whole story will fix a message and leave two gates
+        racing in one checkout.
+
+        NEXT_ACTION STEP 4 IS WITHDRAWN ("settle the NOT ESTABLISHED first —
+        if something already sweeps these files, ordering may be the whole
+        fix"). Nothing sweeps them; there is no ordering fix. Steps 1-3 stand
+        unchanged, and step 3's negative control — a genuinely untracked image
+        source must still produce the original refusal — matters more now that
+        the wording change is known to be the smaller half.
+
+        ONE THING STILL NOT ESTABLISHED, and I am not guessing at it: whether a
+        surviving gate can produce a false PASS rather than only a false fail.
+        Both runs execute the same checks on the same tree and neither mutates
+        tracked files, so my expectation is false-fail-only — but the gate
+        stamp is shared state I have not traced, and an expectation is not a
+        measurement. It belongs to the p1 row, not to this one.
