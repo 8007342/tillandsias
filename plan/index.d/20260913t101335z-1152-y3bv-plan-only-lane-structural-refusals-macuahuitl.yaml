@@ -1,0 +1,70 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by the macuahuitl coordinator on 2026-09-13 from three hosts' refusals
+# of the plan-only lane in one night: macneo (the mandated trunk merge pulls
+# trunk-gated non-plan paths into the outgoing diff), pirria (the staleness
+# check requires a cargo build on the gate-free lane), esme (1146-xs6s, the
+# staleness remedy names a wrong artifact).
+packets:
+  - packet_id: the-plan-only-lane-is-not-gate-free-on-the-hosts-it-was-built-for-because-a-trunk-merge-pulls-gated-paths-into-the-diff-and-the-staleness-check-needs-cargo
+    order: 1152-y3bv
+    status: ready
+    kind: bugfix
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [hooks, plan-only-lane, floor-tier, forge, tooling]
+    estimated_hours: 4
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable IS the lane change and its fixture. Future litmus scripts/test-plan-only-lane-structural.sh; the claimer writes it in the same commit and moves this text into verifiable_closure: (1) an outgoing diff whose only non-plan paths are byte-identical to origin/linux-next's version takes the plan-only lane (pre-fix result: FAILS — macneo 2026-09-13, a one-line claim push refused to the full gate after the mandated trunk merge); (2) a plan-only push validates with a plan binary whose staleness is judged against the fragment-validation surface, or with a fetched validator, so no cargo build is required (pre-fix result: FAILS — pirria 2026-09-13, 'the resolved plan binary is STALE (full gate required)', remedy cargo build, 54.8 s warm by luck); NEGATIVE CONTROL: a non-plan path that DIFFERS from origin/linux-next still forces the full gate, and a change to the validator's own sources still refuses a stale binary."
+    owned_files:
+      - scripts/hooks/pre-push-local-gate.sh
+      - scripts/check-plan-binary-current.sh
+      - scripts/test-plan-only-lane-structural.sh
+    title: |
+      The plan-only push lane exists so floor hosts and forges can file ledger records without a cargo gate, and in one night three of them were refused by it for structural reasons: the mandated origin/linux-next merge pulls non-plan paths that trunk already gated into the outgoing diff (macneo), the 1129-4su6 staleness check demands a rebuilt plan binary on exactly the hosts that cannot afford one (pirria), and its remedy names an artifact that cannot help (esme, 1146-xs6s).
+    context: |
+      MEASURED 2026-09-13. macneo: a one-line claim push was refused because
+      the pre-push merge of origin/linux-next brought a non-plan file into
+      the outgoing diff; a full gate for a claim. Structural, not a one-off:
+      any cycle where trunk added a non-plan file since the host's last merge
+      pays it. pirria: after a trunk pull, the lane answered "plan-only lane:
+      REFUSED — the resolved plan binary is STALE (full gate required)";
+      the remedy `cargo build --release -p tillandsias-plan` took 54.8 s with
+      warm deps, which is luck about target/, not a property of the lane — a
+      floor host with a cold target/ or no toolchain has no move short of
+      --no-verify, which is forbidden. esme (1146-xs6s): the staleness remedy
+      selects a candidate newer than the RESOLVED binary rather than the
+      SOURCE and honours TILLANDSIAS_PLAN_BIN on existence alone; two
+      failure modes, no success mode on Windows.
+
+      1129-4su6's reasoning stands: a stale binary can accept a fragment
+      shape current rules refuse. The fix is not to drop the check but to
+      scope it. WHAT TO BUILD. (1) In the lane's path classification, a
+      non-plan path in the outgoing diff whose blob equals
+      origin/linux-next's blob is trunk's, already gated there, and not the
+      pusher's to gate; only paths that differ from trunk count against the
+      lane. (2) Staleness for the plan-only lane is judged against the
+      validator surface — a recorded hash of the source files that implement
+      validate-yaml, check --strict-fragments and the fragment checkers —
+      rather than mtime of all of main.rs; a change elsewhere in the crate
+      does not stale the validator. Alternatively the lane fetches a
+      validator built by a fat host (release asset or a work ref) when the
+      local one is stale. (3) The remedy text names what will actually
+      satisfy the check on this host (1146-xs6s folds in here if its claimer
+      agrees, else stays its own row).
+
+      NOT IN SCOPE: weakening the full gate for code paths, or accepting a
+      fragment the current validator refuses.
+    exit_criteria:
+      - 'a plan-only push whose non-plan outgoing paths are byte-identical to origin/linux-next takes the lane without a build stamp (pre-fix result: FAILS — full gate demanded)'
+      - 'a plan-only push with a plan binary older than an unrelated main.rs change, but current against the validator surface, takes the lane (pre-fix result: FAILS — stale, cargo build demanded)'
+      - 'NEGATIVE CONTROL: a non-plan path differing from trunk still forces the full gate; a validator-source change still refuses a stale binary; both pinned in the fixture'
+      - 'the refusal text names the exact command that satisfies the check on the refusing host, verified on one floor host (pirria or esme) by a plan-only push that succeeds without cargo'
+    events:
+      - type: filed
+        ts: "2026-09-13T10:13:35Z"
+        agent_id: "linux-macuahuitl-fable-20260913t101335z"
+        host: macuahuitl
+        summary: |
+          Filed by the coordinator from macneo's, pirria's and esme's
+          refusals in one night; lane policy, not a host finding.
