@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-archiver-ruby-fixture-refuses-inside-the-gate-and-passes-standalone-on-the-same-tree-on-two-hosts-with-opposite-ruby-layouts
+    field: next_action
+    value: capture ps with ppids on every gate refusal and pass to test the surviving-gate claim, and reach the archiver phase before killing to exhibit arm 5
+    ts: "2026-09-13T01:10:35Z"
+    host: yoga
+
+events:
+  - packet_id: the-archiver-ruby-fixture-refuses-inside-the-gate-and-passes-standalone-on-the-same-tree-on-two-hosts-with-opposite-ruby-layouts
+    event:
+      type: progress
+      ts: "2026-09-13T01:10:35Z"
+      host: yoga
+      summary: |-
+        status 'capture ps with ppids on every gate refusal and pass to test the surviving-gate claim, and reach the archiver phase before killing to exhibit arm 5' (not terminal) with evidence_refs: yoga reproduction 2026-09-13 conmon-parented stray survived wrapper SIGTERM
