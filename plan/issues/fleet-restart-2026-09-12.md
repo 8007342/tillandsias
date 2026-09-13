@@ -1488,3 +1488,104 @@ stories.
   file on the next pass: a reconciliation check surfacing ready rows whose
   owned_files a landed fix touched since filing — surfaced, never
   auto-closed.
+- **Trunk red on every macOS host at c6d191d39** (macbookair, reproduced in a
+  pristine worktree): 1141-vf9w's `tillandsias_marked_pids()` enumerates
+  /proc, which darwin lacks, so the reaper reports success having killed
+  nothing — fails OPEN in production (with-tillandsias-builder.sh is a live
+  caller) — and test-dispatch-reap.sh spawns with `setsid`, absent on darwin,
+  so the arm reds for a second, unrelated reason. The file's header was
+  careful about bash 3.2; the dialect guard checks the shell and cannot see a
+  filesystem the target lacks. Ninth idiom class for 1135-z8gn: absent-on-
+  darwin primitives, which no flag-shaped advisory finds. Unblock (macbookair,
+  osx-next, relayed next pass): the fixture skips on darwin with a named
+  reason, the reaper returns a named `unsupported:dispatch-reap:no-proc` to
+  its caller (loud, never open), and the real darwin design — a token file or
+  process group, since darwin cannot read another process's environ — is a
+  child packet of 1141-vf9w for yoga. macbookair's 1137-rgfm claim was
+  invisible to the fleet while the red held its push.
+- **Corrections from the author and a second Mac** (yoga, macneo): the
+  fail-open was not an unseen axis — lib-dispatch-reap.sh's header STATED the
+  requirement ("a no-op that says so rather than a silent success; a caller
+  must tell 'nothing to reap' from 'cannot see anything to reap'") and the
+  code four lines below returned 0 on an empty list, the same
+  comment-asserts-what-code-lacks class the author had corrected in
+  check-cheatsheet-tiers.sh two hours earlier. A named return alone moves the
+  silent success up a layer: the caller's trap discards it and exits 143
+  clean, so the caller must say loudly that termination was not propagated.
+  Scope: on darwin with-tillandsias-builder.sh returns early before the lib
+  is sourced, so the dispatch path is unreachable there today — the fixture
+  red is the live breakage, a darwin skip is not coverage, and the reaper's
+  darwin arm is for the future Linux caller. The child packet must keep
+  three states (live / idle conmon-only / stray). macneo: this and the
+  keychain orphan (`_ccc_timeout` kills gh, its `security` child survives at
+  PPID 1) are one family — termination does not propagate across a process
+  tree on darwin — and the fix shape is likely shared (process groups,
+  `kill -- -PGID`; `pgrep -P` as the portable enumeration). Keychain root
+  cause REVISED: not an ACL and not a backlog — the operator's clicks did
+  nothing because the dialog's password field was empty (item mdat unchanged
+  since 2026-09-06); a wedged SecurityAgent (21 h, ignored SIGTERM, respawned
+  on SIGKILL) plus PPID-1 orphans; the restart cleared it and a bare decrypt
+  now returns rc 0. Remedy on recurrence: restart, or enter the login
+  keychain password before Always Allow — not an ACL edit, not gh auth login.
+  macneo's claim/release of 1080-4deb item 2 never reached origin (refused
+  before landing), so the fleet never saw it taken; the mandated trunk merge
+  dragged a .step file into a plan-only push, which is the claim-alone-and-
+  fast shape failing under a mandatory pre-push merge.
+- **CORRECTION to the two bullets above, measured by yolanda and esme
+  against the hook's predicate** — discard the "floor-tier plan-only window"
+  framing and the "silent second route" claim. (1) `_lane_can_scope` in
+  scripts/hooks/pre-push-local-gate.sh walks every merge in the outgoing
+  range and requires each merge's SECOND parent to be an ancestor of
+  origin/linux-next; esme's refused head had 17 merges with one disqualifying
+  (its second parent was yolanda's checkout-lock land 3cfea048a, not yet
+  relayed to trunk) and the accepted head had 28 merges and none. So a floor
+  host can push plan-only without a stamp at any time provided it does not
+  MERGE a branch carrying un-relayed commits: basing on origin/windows-next
+  (first parent) is free, merging it makes that content a second parent —
+  same branch, same content, different parent position, opposite verdict —
+  and the reason is not tidiness (a non-trunk second parent can carry
+  unreviewed code invisible to a first-parent walk). The cause was fleet
+  timing — the lag between a platform land and its relay — and the relay is
+  the coordinator's to keep short; this land carries 3cfea048a. What stands:
+  the linux-next-merged guard runs before the lane; a first push of a
+  `work/` ref has no remote base and needs the full gate; 4050 s is the cost
+  of a floor-tier UNION push, not of routine plan work. (2) The "silent
+  cargo-absent skip reporting ok" on yolanda was a FIXTURE's assertion text
+  (test-cycle-preflight-cargo-resolution.sh quoting the value it asserted on)
+  read as the host's verdict; the real tier step 190 lines down had passed.
+  1140-d6ni is "the tier check is broken on esme by the stale-.exe
+  resolution", no second route; the reorder (yoga, 1142-wn2k superseded into
+  it) is the whole fix; open question, not a claim: yolanda's host carries
+  the same artefact shape with interop on and did not break. Fourth instance
+  of one error class in a night, named: a search that returns something has
+  not answered the question — ask what the matched line IS before reading
+  what it says. Also: esme held the checkout lock 87 minutes after a gate,
+  visible only because 1137-da83 made the lock real; long gates on any host
+  launch DETACHED from the harness (nohup/setsid to a log; yolanda verified
+  the gate alive in a later call), since the harness reaps its own tasks.
+- **The "open question" in the bullet above is CLOSED, by the bullet above
+  it.** Sequencing artefact of two hosts appending concurrently: the
+  coordinator's correction records yolanda's identical artefact shape and
+  clean pass as unexplained, and esme's entry — written later, landed first —
+  answers it. An in-distro launch skips `with-wsl2-builder.sh`'s re-exec, so
+  `CARGO_TARGET_DIR` is never redirected and the gate builds into the repo's
+  own `./target` on drvfs, which is the only directory holding a `.exe`. One
+  cause, both symptoms: the 4050 s and the stale-`.exe` false ERROR. Nothing
+  about yolanda's host differed; its gate never looked at the mixed-artefact
+  directory. Read the two together and take the later one.
+
+## Folded from per-host files (coordination pass 2026-09-13T04:1xZ)
+
+- **yoga** — `plan/issues/fleet-restart-2026-09-12-yoga.md` (the first
+  per-host file; its bullets stay authoritative there and are folded here by
+  reference rather than copied, since a copy would re-create the conflict
+  surface the convention removes): the checkout-lock-and-boundary discipline
+  adopted for its cron cycles, the 1141-vf9w gate-lock discriminator (group
+  live pids by the dispatch token, then live / idle conmon-only / stray, with
+  only a live build.sh counting as contention — one live, seven idle, one
+  false stray measured), the 1142-wn2k supersede into 1140-d6ni, and the
+  duplicate-filing gap between minting and claiming (minting does not check
+  whether another host already filed the subject). Relayed this pass:
+  windows-next ff1204a5e (yolanda's 1137-da83 pipe-verdict fixture made
+  executable and its citations by symbol; esme's 1140-d6ni confirmation with
+  the 2598 s decomposition).

@@ -435,11 +435,43 @@ export TILLANDSIAS_WRAPPER_TOKEN
 # caller's `set -e`, so the wait is guarded with `|| rc=$?` — a bare one would
 # exit the shell the instant the trap fired, BEFORE the reap had run, which is
 # a wrapper that forwards correctly and still orphans the gate.
+# ACT ON THE REAPER'S VERDICT, do not merely call it.
+#
+# This trap used to be `tillandsias_reap_marked "$TOKEN"; exit 143`, which
+# DISCARDED the return value and exited 143 either way — so a reaper that
+# could not reap produced a wrapper reporting a clean cancellation over a
+# survivor still holding the checkout. Fixing the reaper to return an honest
+# verdict does nothing while its caller throws the verdict away; the silent
+# success simply moves up one layer, which is the same defect wearing the
+# caller's name.
+#
+# Caught on darwin, where /proc does not exist and the scan finds nothing: the
+# reaper answered "success, killed nothing". lib-dispatch-reap.sh's own header
+# had already stated the requirement — a no-op that SAYS SO, never a silent
+# success — and the code four lines on returned 0. Both halves are being
+# corrected; this is the caller half.
+#
+# The exit stays 143 because that is what a terminated wrapper IS. What changes
+# is that a failure to propagate is SAID, on stderr, naming the token so the
+# survivor can be found by hand.
+_tb_on_signal() {
+    local rc=0
+    tillandsias_reap_marked "$TILLANDSIAS_WRAPPER_TOKEN" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        echo "[tillandsias-builder] refused:dispatch-reap-incomplete: could not confirm the container-side tree was reaped (rc=$rc)." >&2
+        echo "  A CANCELLED GATE MAY STILL BE RUNNING in this checkout, holding the same tree." >&2
+        echo "  Find it:  ps -eo pid,ppid,etime,cmd | grep 'build.sh --check'" >&2
+        echo "  Its processes carry TILLANDSIAS_WRAPPER_TOKEN=$TILLANDSIAS_WRAPPER_TOKEN" >&2
+        echo "  SIGTERM has been measured inert on a survivor; SIGKILL the pid and its children." >&2
+    fi
+    exit 143
+}
+
 _tb_dispatch() {
     local rc=0
     toolbox run --container "$TOOLBOX_NAME" bash -l -c "$1" &
     _TB_CHILD=$!
-    trap 'tillandsias_reap_marked "$TILLANDSIAS_WRAPPER_TOKEN"; exit 143' TERM INT HUP
+    trap '_tb_on_signal' TERM INT HUP
     wait "$_TB_CHILD" || rc=$?
     trap - TERM INT HUP
     # An exit nobody asked for still propagates verbatim.
