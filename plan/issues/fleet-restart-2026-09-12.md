@@ -1983,3 +1983,69 @@ stories.
   cross path) can compile the Linux arms on darwin, since a plain
   `--target x86_64-unknown-linux-musl` check dies in ring's build script
   before reaching the crate.
+- **Partly stale, and the live half was quieter than the original defect**
+  (lenovinha, 1123-k3mq closed at c93139300; third kind of stale row for
+  1144-jfr5's evidence): criterion 1 was already met by 7c83653ec
+  (686-7qcm, compaction applies the closure ladder), verified by the
+  recorded pre-fix failure not reproducing; criterion 2 WAS live — once
+  compaction refused a rung-lowering write it dropped the write AND deleted
+  the fragment carrying it, in silence (`ok: compacted 1 fragment(s)`, zero
+  words about the discarded value), so a coordinator releasing an expired
+  claim got ok from set-field, ok from compact, a ledger still `completed`,
+  and no record anywhere. The original defect at least left the wrong value
+  visible in the base. Now compact reports the packet, the refused value,
+  the winner, the host and the exact `set-field … --reopen-evidence` command
+  — the remaining half of 1115-yvrq. Deliberately not done: last-write-wins
+  status (would let a stale high-water fragment silently reopen finished
+  work; 650-dq6u). 23/23, mutation-scored, one of three tests is the
+  evidence. Fleet rule from lenovinha's repeated mistake (twice in one
+  night, two crates): INSERT RUST TESTS ANCHORED ON THE `#[test]` LINE,
+  never the `fn` line — anchoring on fn double-registers the new test and
+  strips the attribute from the neighbour, silently disabling it while the
+  suite reads green; verify by ENUMERATION, never the pass count.
+- **The zigbuild cross-check works and catches the actual defect**
+  (macbookair, measured): `cargo zigbuild -p tillandsias-headless --target
+  x86_64-unknown-linux-musl` → rc 101, six E0063 at exactly the six Linux
+  arms; the lane already requires zig + cargo-zigbuild
+  (scripts/build-macos-tray.sh). Rule: zigbuild the guest target before
+  landing a change to a cfg-split file. Boundary: 6 of 8 arms — no Windows
+  target is installed on macOS, so the two Windows arms need yolanda or
+  esme; plain `cargo check --target x86_64-unknown-linux-musl` dies in
+  ring's build script for want of a cross C toolchain and never reaches the
+  crate. Nearly sent `E0063 count = 0` while the build was still compiling —
+  fifth absent-result-read-as-negative instance, caught. Decision recorded:
+  macuahuitl lands the fix (it was committed here before the question);
+  macbookair does not touch the file and re-runs zigbuild after merging
+  trunk for the 0-errors arm. Two hosts, one file, heads-up before writing.
+- **The unstageable-symlink axis is the git, not the filesystem** (yolanda,
+  full matrix on one drvfs path): Git Bash cannot CREATE a dangling symlink
+  (MSYS emulation copies the target); WSL creates it; WSL git stages it
+  (rc 0, `A dangling`); Git for Windows cannot index it (rc 128,
+  `open("dangling"): Function not implemented`). The salvage skip is a
+  Git-for-Windows property reachable only when a non-MSYS tool created the
+  path; written as drvfs the row would have sent a reproducer to WSL to
+  conclude the skip is dead code. Wording corrected in the landing; the
+  test-only seam is the only portable construction. Three fixtures in one
+  night wrong about their own setup and green on the host that wrote them —
+  yolanda's argument for cross-substrate gating. Coordinator cadence gap,
+  named: `sweep-salvage-refs.sh` in report mode found 11 refs, 10 UNSEEN by
+  the ledger (two from `salvage/unknown/`, one of yoga's from 2026-08-26) —
+  the consumer 874-w2gc added has not been run on a cadence; `--apply` and
+  the deletion of yolanda's now-redundant
+  `salvage/yolanda/20260913-823-u5zf` (ancestry confirmed by them) are
+  coordinator writes for the next pass. 823-u5zf landed windows-next
+  4061856c8: the argv work was already landed and the next_action stale;
+  what was open was the closure's own observable being inert (`--forge`
+  exits before `init_tracing()` on the only headless path); pinned with a
+  mutation control repaired twice (matched its own source; then passed by
+  reading its own doc comment).
+- **This cycle's land** (macuahuitl, ok:land:67009ea3b, second launch): the
+  first launch was refused by the bash-dialect guard (761-g36m) — the new
+  salvage loop's `"${paths_to_stage[@]}"` under `set -u` dies on bash 3.2
+  when nothing is staged; the 3.2-clean `${arr[@]+"${arr[@]}"}` idiom fixed
+  it, dialect check and fixture green, relaunched, attempt 1 ok. The gate
+  caught on this host what would otherwise have been macOS's to find: the
+  sub-agent wrote bash-4 idiom, the coordinator's own fixture run did not
+  see it, the guard did. Landed together: the osx-next relay with its Linux
+  compile fixed forward, 1146-z8ux and 1146-8j7i completed, 1147-6xqs filed,
+  the loop-status fragment, and the held coordination records.
