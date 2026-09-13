@@ -2961,3 +2961,160 @@ stories.
   check and the flip-on-hand-off are not in the step yet (coordinator's next
   cycle) and a hand-off without them is the 1140-d6ni shape. No host idle;
   no host reported since 12:11Z except by message (all folded above).
+- **1157-ghmi closed** (macuahuitl, 6160ed8de): the coverage guard now reads a
+  LWW_CHANNELS const (which lww_entries iterates) unioned with its literal
+  scan, and demands the fields probe; deleting the probe reds it, a planted
+  code-literal with no probe reds it by name. THE NEAR-MISS ON THE WAY: the
+  widened assertion's own doc comment quotes the literal shape it scans
+  for, and the first run matched the author's prose and demanded a probe
+  for "…" — the pin-reads-its-own-comment shape (823-u5zf, 1118-dwgx),
+  reproduced by the coordinator inside the guard being fixed for blindness;
+  the scanner now strips comment lines first (yolanda's rule: strip in the
+  guard, leave the comment in place as the control). And a malformed
+  mutation: a literal planted inside a string with an escaped quote cannot
+  match the pattern, so the negative control read "ok" until the site was
+  planted in code — a control that cannot fail proves nothing (esme's
+  discriminating-pair rule). Also this cycle: the stale-row pass gained
+  the closed-on check (fixture 11/11) and the coordination step its three
+  hand-off rules; the workers' skill gained the claim positive control
+  (943-unii); 1144-jfr5 progress recorded, owned_files pass left.
+- **lenovinha is pushing again** (ok:land:beff45e60 — the ten-commit
+  backlog — and ok:land:83c84b56e, the closure): 1130-8zxn completed,
+  ahead 0, clean; yolanda's post-fix line `ok:capability-row-current:yolanda`
+  rc 0 matched the prediction lenovinha wrote before the run, none of the
+  three failure signatures; esme's mixed-pair leg is the only one
+  outstanding. The credential item comes off the operator's list.
+- **1157-ghmi's class is wider than its guard** (lenovinha, from yolanda's
+  question "do other consumers hardcode one channel?", measured): four
+  consumers iterate lww_entries (all fragments.rs, correct after the fix);
+  THREE hardcode `doc.get("status").and_then(as_sequence)` in main.rs —
+  carry_forward_gaps, and both scans in closure-evidence-check (the LWW
+  closure scan and the verifiable_closure reassignment scan) — so a
+  fields:-spelled write is invisible to each, and two of the three are
+  guards that FAIL OPEN (an unscanned write is never an offender; nothing is
+  indistinguishable from clean — every instance of this class found tonight
+  fails open, and that is the polarity of a scanner that misses an input).
+  The first site names the hazard and cites plan/index.d/README.md on the
+  line above the bug. Live exposure: yolanda's two fields: fragments
+  (997-e4v2, 793-zumy) are invisible to carry_forward_gaps now. Judged as
+  its own row (different mechanism: the canonical list exists and is not
+  canonical): the three sites use lww_entries, plus a scan-side guard —
+  no `.get("status")`/`.get("fields")` in the fragment-channel shape outside
+  lww_entries, matched on the declaration with a runtime-assembled needle
+  (980-ja2m) so it cannot trip on its own quoted history — after which a
+  fourth consumer cannot be written without the list or a red build.
+  Ruling on yolanda's question (they asked rather than acted): (c) — leave
+  both fields: fragments; the defect is in the readers and the row for
+  them is the coordinator's; re-spelling treats the symptom on the one host
+  that noticed. KNOWN AND TEMPORARY until that row lands:
+  carry_forward_gaps will fire a false advisory on 997-e4v2 ("touched with
+  no next_action") because the correction is spelled under fields:, which
+  it cannot see — a reader who investigates will find a good next_action in
+  the fragment; the ADVISORY is not broken, the reader is. yolanda's
+  polarity observation for the row: an invisible input fails OPEN in a
+  consumer scanning for offenders (closure-evidence-check, 1157-ghmi,
+  1154-8ywc) and LOUD in one scanning for omissions (carry_forward_gaps);
+  the loud one is more dangerous per instance, because it trains people to
+  ignore the guard rather than fix the reader.
+- **A release-path guard silently dead on every BSD host** (macbookair,
+  1135-z8gn slice, heads-up given before writing, cleared): release-
+  preflight.sh's workflow-inventory guard uses `find … -printf '%f\n'
+  2>/dev/null | sort`; BSD find has no -printf, the error goes to
+  /dev/null, the set comes back empty, and the guard passes having
+  inventoried nothing. Two corrections from reading lines rather than
+  counts: date -d is NOT a slice — test-check-bash-dialect.sh writes it
+  into a fixture as the subject the guard must catch (like the deliberate
+  sed -i) — so 28 reported, three non-defects, 25 remediable, floor 3; the
+  count was revised 27 → 26 → 25, every revision downward and from reading
+  a line previously only counted: a count of pattern hits is not a count
+  of defects, and the gap closes only by reading. And the portability
+  advisory has a FALSE NEGATIVE on the documented-incident form: its
+  needle is the literal `"date -d "`, so `date -u -d "@123"` — the exact
+  shape that shipped test-ledger-ts-guard.sh broken on BSD — is not
+  flagged while the bash-dialect guard catches it; recorded on 1130-i6xj.
+- **900-z3kv (a) implemented, inert** (yoga, ok:land:b721b880e, attested
+  6a882f84e; row ready): scripts/clear-vault-host-credentials.sh, the Linux
+  sibling of the Windows clearer absent since 803-49re — one place,
+  best-effort, failures reported not fatal (a purge that aborts halfway
+  leaves more stale state than one that finishes noisily). FOUR ITEMS, THREE
+  LOCATIONS: the keychain holds vault-root-token-v1 as well as the share,
+  and vault_bootstrap.rs writes both as fallback files — the narrower
+  framing had travelled from the row into yoga's probe fix and their
+  summary of the relay. Safety half: installation-uuid-v1 (the Linux
+  counterpart of tillandsias-vm-uuid) is PRESERVED, said aloud, pinned by
+  its own arm — clearing it makes the next vault underivable, not
+  re-initialised; /etc/machine-id never touched. Criterion 3 both
+  directions 6/6, the reverse arm (a wipe path that does not clear leaves
+  the room detectably warm) being the half four legs lacked;
+  mutation-verified (over-clearing the anchor, skipping the data dir,
+  bypassing the consent gate — each 5/6); executed in a real gate (attempt
+  2's log, "PASS: clear-vault-host-credentials 6/6"). The gate step binds
+  the fixture, never the clearer. NOT WIRED into the documented reset, by
+  design: that step changes what a destructive run does and the operator's
+  override window on (a) is open. Ruling: it stays inert until the operator
+  confirms (a) — yoga wires it next cycle then — or says (b), in which case
+  the clearer is documented as deliberately not called.
+- **The cfg-split class a third time, in the other direction** (macbookair,
+  macOS gate red after the 14:11Z relay of 793-zumy): `wsl2_paravirtual_
+  gpu_reason` is `#[cfg(any(target_os = "linux", test))]`, its only
+  production caller is linux-gated, and 793-zumy retargeted the wsl2 test
+  onto the `_from` seam — so on macOS under cfg(test) the arm compiles a
+  function nothing calls and `-D dead-code` refuses; on Linux it is alive,
+  which is why the coordinator's relay gate was green. macbookair's
+  framing, recorded: a field missing from arms the compiler cannot see
+  (name_source) and a function present on an arm it can see with its
+  caller compiled out — one lesson, two directions, "the cfg you build
+  under decides what the compiler can judge". Assigned to macbookair
+  (cleared: nobody else in accel_probe.rs): drop `, test` from the cfg (the
+  arm existed for a test that no longer calls it), pristine-worktree
+  reproduction first, zigbuild the Linux target to confirm the production
+  caller keeps it alive, land through the tool; the coordinator's next
+  relay gates it on Linux. yolanda told for awareness; a production-entry
+  test, if wanted, is a later addition under 793-zumy, not a cfg to keep.
+  Their find -printf slice (2746ce14d) lands behind it; plan-only pushes
+  keep moving.
+  yolanda's account (theirs, confirmed structurally on their tree without a
+  macOS compile: one production call inside the linux-gated block, zero test
+  callers — the grep hit in the test region was a DOC COMMENT naming the
+  function, checked rather than counted): 935-6fzk put `, test` on that cfg
+  so the test could call the function on every host and said so in its
+  comment; the 793-zumy retarget moved the test onto the `_from` seam for a
+  good reason (the production entry reads the live filesystem, so asserting
+  it would pass on every loader-less host and go RED on esmeraldinha, the
+  only host that can verify the packet) and removed the only call the arm
+  existed to permit. What they did wrong, precisely: they hit E0425 on the
+  same gate an hour earlier, read 935-6fzk's comment, applied it correctly
+  to their three new functions, and did not ask whether their OTHER change
+  had invalidated the premise for the original — a comment treated as a
+  rule to copy rather than a claim to re-check; the same shape as the
+  criterion-2 miss esme caught, twice in one cycle, both on a requirement
+  just read. Dropping `, test` is the right fix; the production entry
+  (a two-line wrapper: facts_at then _from) is then uncovered, and the
+  composition is where the halves get wired wrongly — later fix under
+  793-zumy, not now: `wsl2_paravirtual_gpu_reason_at(root)` with production
+  passing "/", the seam enumerate_render_nodes_at and wsl2_vulkan_facts_at
+  already use, so one fixture-rooted test covers the composition on every
+  host with the `, test` arm gone. Not folded into macbookair's in-flight
+  land unless macbookair wants it: two hosts reaching for one function is
+  how a fix gets written twice.
+  macbookair's correction on their own promise: the pristine-worktree
+  reproduction NEVER REACHED THE QUESTION — `cargo test --no-run` in the
+  detached worktree died in build.rs on the untracked runtime asset
+  (images/router/tillandsias-router-sidecar, 710-w9kc, "produce it with
+  scripts/build-sidecar.sh"), rc 101, zero mentions of the function —
+  inconclusive, not a refutation; the terminator check (rc present, zero
+  mentions) is what kept "no dead-code error" from being read as a
+  negative, the fifth absent-result instance tonight. Answered more
+  cheaply and more strongly instead: their commits touch no .rs, and the
+  sha256 of origin/linux-next's accel_probe.rs equals their working copy's
+  byte for byte — a byte-identical file under the same toolchain gets the
+  same verdict, no build needed. METHOD: when the question is "is this red
+  mine or trunk's", file identity settles it in a second where a
+  reproduction costs minutes and can fail for unrelated reasons. Note on
+  the instrument: build.rs's refusal is a good one (names the artifact,
+  cites the order, gives the command), and it makes a detached worktree a
+  poor instrument for anything that compiles this crate — two hosts
+  reached for it this session. Their fix: cfg narrowed, macOS test build
+  compiles clean (rc 0); suite and the Linux zigbuild run before landing;
+  the comment above the cfg records the open question for 793-zumy so the
+  next reader finds it rather than rediscovers it.

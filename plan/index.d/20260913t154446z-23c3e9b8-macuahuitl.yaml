@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-channel-coverage-guard-scans-source-literals-so-channels-the-folder-reads-through-a-loop-variable-are-invisible-to-it-and-it-stayed-green-through-1156-eif4
+    event:
+      type: completed
+      ts: "2026-09-13T15:44:46Z"
+      agent_id: linux-macuahuitl-fable-20260913t154446z
+      host: macuahuitl
+      summary: |
+        Landed at linux-next@6160ed8de (macuahuitl). LWW_CHANNELS const iterated by
+        lww_entries and read directly by the coverage assertion, unioned with the
+        literal scan; fields probe added. Controls measured: deleting the fields
+        probe reds the assertion (was green); a planted code-literal
+        frag.doc.get("nochannel") with no probe reds it naming "nochannel". Found
+        on the way: the widened assertion matched its own doc comment on first run
+        (a probe demanded for "…"), so the scanner now strips comment lines — the
+        pin-reads-its-own-comment shape, one more instance. Enumeration 86 fragments::
+        tests under --lib (unchanged; a probe entry, not a test); crate 310/41
+        green; clippy clean.
