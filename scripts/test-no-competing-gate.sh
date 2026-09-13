@@ -142,9 +142,20 @@ r="$(newroot opaque)"
 mkproc "$r" 101 tok-a "/usr/bin/conmon --api-version 1 -c abc"
 mkproc "$r" 102 tok-a "bash /repo/./build.sh --check"
 mkproc "$r" 103 tok-b "bash /repo/./build.sh --check"
-chmod 000 "$r/103/environ"
+# UNREADABLE BY STRUCTURE, NOT BY PERMISSION. This arm used to `chmod 000` the
+# environ, which assumes chmod denies the READER — false for root, which has
+# DAC_OVERRIDE, and a WSL distro runs as root by default. Measured under
+# `podman unshare`: uid 0 gets `[ -r <chmod-000> ]` = TRUE while uid 1000 gets
+# FALSE, so the arm passed on Linux hosts and RED yolanda's windows-next gate,
+# where the file was readable, the group looked headless and the classifier
+# accused — correctly, for the tree the fixture actually built. A dangling
+# symlink has nothing to read rather than permission to deny, so `[ -r ]` is
+# FALSE for uid 0 and uid 1000 alike and the arm means the same thing
+# everywhere. Second time this fixture claimed a regime it did not have; the
+# first was inheriting TOOLBOX_PATH from the gate's own container.
+rm -f "$r/103/environ"
+ln -s /nonexistent-so-there-is-nothing-to-read "$r/103/environ"
 out="$(run_check "$r")"; rc=$?
-chmod 644 "$r/103/environ" 2>/dev/null || true
 check "an unreadable process suspends the accusation" 3 "could-not-run:competing-gate:unreadable-processes" "$rc" "$out"
 
 total=$((pass+fail))
