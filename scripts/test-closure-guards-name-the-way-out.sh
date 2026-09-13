@@ -53,6 +53,11 @@ trap cleanup EXIT INT TERM
 if ! git worktree add --detach -q "$wt" HEAD 2>"$tmp/wterr"; then
     bad "could not create a throwaway worktree, so guard 1 could not be driven: $(head -1 "$tmp/wterr")"
 else
+    # Copy the WORKING-TREE guard over the committed one: the worktree exists
+    # to isolate the index, not to pin an older version of the code under test
+    # (see the same note in test-scorable-closure-quoting.sh).
+    cp "$ROOT/scripts/check-scorable-obligation-added.sh" \
+       "$wt/scripts/check-scorable-obligation-added.sh" 2>/dev/null || true
     frag="plan/index.d/$(date -u +%Y%m%dt%H%M%Sz)-9999-zzzz-closure-guard-probe.yaml"
     mkdir -p "$wt/plan/index.d"
     # A probe row with NO obligation of any kind — the shape guard 1 exists to
