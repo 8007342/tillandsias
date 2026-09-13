@@ -168,6 +168,65 @@ packets:
       Pre-fix demonstration is the `explicit-DEAD`-on-a-live-harness-pid
       transcript in context, above; esme's is the `harness-env-DEAD` transcript
       in their writeup, the same defect reached through the other anchor.
+
+      TWO RULES THIS ROW PAID FOR, both generalised from measurements on BOTH
+      Windows hosts rather than from one host's data points.
+
+      1. EXACTLY ONE PATH-CONVERSION GUARD, NEVER TWO (esme's formulation).
+         Under Git Bash a bare `/NH` is rewritten to a Windows path before the
+         exe sees it — the error is literally
+         `Invalid argument/option - 'C:/Program Files/Git/NH'`. Three guards
+         each fix that ALONE: MSYS_NO_PATHCONV=1, MSYS2_ARG_CONV_EXCL='*', or
+         doubling the slash. They do NOT compose, and belt-and-braces is the one
+         configuration that cannot work:
+
+           tasklist //NH ...                          -> rc=0, the CSV row
+           MSYS_NO_PATHCONV=1 tasklist //NH ...       -> rc=1, Invalid argument/option - '//NH'
+           MSYS2_ARG_CONV_EXCL='*' tasklist //NH ...  -> rc=1, same
+
+         `//NH` is not an escape — it is an input the conversion layer collapses
+         to `/NH`. Suppress that layer by ANY means and the exe receives a
+         literal `//NH`. So: suppress the conversion and pass single-slash, or
+         keep the conversion and pass double-slash. Found by arm 8c-pre's own
+         third outcome on its first run, which reported "the oracle COULD NOT
+         ASK" rather than "the pid is dead" — the entire reason that outcome
+         exists.
+
+      2. NEVER READ A LAND OR GATE VERDICT THROUGH A PIPE; `| tail` REPORTS
+         TAIL'S STATUS. That is the rule; the rest of this item is why it needed
+         to be one.
+
+         `rc=$?` after a pipeline is the last command's status, and `head`/`tail`
+         are the two commands most likely to be there. THREE FALSE CLAIMS IN ONE
+         HOUR, two hosts, three different commands, every one made while both
+         hosts were actively reasoning about a liveness probe that answers
+         confidently about the wrong process:
+
+           - esme: `tasklist ... | head -2; echo rc=$?` read head's 0. Caught
+             before reporting. Had it been reported it would have been a FALSE
+             CONFIRMATION of yolanda's identical wrong reading.
+           - yolanda: the same mistake on the same primitive, published to a peer
+             as a measured two-host difference in tasklist. There was no
+             difference; both hosts return rc=1.
+           - yolanda: `land-on-platform-branch.sh | tail -25` read the pipeline's
+             0, and two parties were told the land tool reports success over a
+             refused gate. It had exited 3 and named its gate log. That tool's
+             header exists BECAUSE someone once shipped exactly that bug, so it
+             was accused of the defect it was written to prevent, by a reading
+             that had the defect.
+
+         Capture into a variable (`out="$(cmd 2>&1)"; rc=$?`), or use
+         `${PIPESTATUS[0]}`, or `set -o pipefail`. The trap is that head/tail are
+         what you reach for to make output READABLE: the habit that makes a
+         measurement legible is the habit that corrupts it.
+
+         NOTHING STRUCTURAL CAUGHT ANY OF THE THREE — not a gate, not a test. One
+         was caught by re-reading one's own command, one by a peer flagging a
+         disagreement they declined to explain away, one by checking a claim
+         before filing a row on it. The operational half: flag a disagreement you
+         cannot explain instead of smoothing it, and check a claim against the
+         tool before filing against the tool. Agreement between two sources is
+         not evidence when both share a method.
     events:
       - type: claim
         host: yolanda

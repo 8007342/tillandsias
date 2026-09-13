@@ -862,10 +862,24 @@ stories.
   `explicit-DEAD`, every recorded holder stale-reaps on the next read, and a
   second lane reads `ok:checkout-lock:free` while the first holds it. The
   verdict's FIX line tells the operator to put the variable on the command
-  line, which cannot help. Structural and permanent on Windows until the
-  liveness probe resolves native PIDs (tasklist/OpenProcess) behind the
-  is_live seam; yolanda owns it, esme verifies; one lane at a time per
-  Windows host meanwhile.
+  line, which cannot help. FIXED as 1137-da83, landed 3cfea048a on
+  windows-next (commits 80de8e0a1 and 971c70f07). Found independently within one hour by both Windows hosts,
+  from opposite anchors — yolanda via an explicit TILLANDSIAS_CYCLE_HOLDER_PID,
+  esme via CLAUDE_PID. The shipped probe is esme's `ps -W` WINPID predicate,
+  NOT the tasklist/OpenProcess this entry first prescribed: `kill -0` still
+  answers first, so the change is a no-op off Windows by construction. Two
+  things the fix needed that the diagnosis did not predict — `mark-attested`
+  had to accept anchor equality before walking ancestry (the walk climbs MSYS
+  pids and the lock records a native one, so a correct liveness probe alone
+  would have made it refuse `held-by-other` about the cycle's own lock), and
+  the fixture's independent oracle needed a third outcome, "could not ask",
+  distinct from "dead". The one-lane-at-a-time rule for Windows hosts can be
+  retired once esme's verification lines are in. FIRST LIVE PROOF, unprompted:
+  the coordinator's 4h cron fired on yolanda while that very land was mid-gate
+  and was refused `skip:overlap-lock-held:lane=prompt pid=12388`. An hour
+  earlier the same call answered `ok:checkout-lock:free` on both Windows hosts
+  no matter what was running — so the guard's first real contention on this
+  host was refused correctly by the fix that was landing at the time.
 - **macneo can push again; the probe leaked the token** (macneo, osx-next
   369c67add, four commits landed attempt 1, the secure_stream.rs union merged
   clean): the operator approved the keychain ACL and the 20-second probe
@@ -875,3 +889,25 @@ stories.
   echo rc=$?`. macneo flagged rotation to the operator; the drill's earlier
   probe text is corrected above. Crons on every host are session-only and
   expire 2026-09-19; the cadence must be re-armed on session start.
+- **Never read a land or gate verdict through a pipe; `| tail` reports tail's
+  status** (yolanda and esme, 2026-09-12). THREE FALSE CLAIMS IN ONE HOUR, two
+  hosts, three different commands: esme read `tasklist ... | head -2; echo
+  rc=$?` as tasklist's 0 (it exits 1) and caught it before reporting; yolanda
+  made the identical mistake on the same primitive and published it to a peer
+  as a measured two-host difference that did not exist; yolanda then read
+  `land-on-platform-branch.sh | tail -25` as exit 0 and told two parties the
+  land tool reports success over a refused gate. It had exited 3 and named its
+  gate log — and that tool's header exists BECAUSE someone once shipped exactly
+  that bug, so it was accused of the defect it was written to prevent, by a
+  reading that had the defect. esme was about to file a row against it.
+  Capture into a variable (`out="$(cmd 2>&1)"; rc=$?`), or `${PIPESTATUS[0]}`,
+  or `set -o pipefail`. Same family as the macneo probe entry above — there the
+  rc was the signal and stdout the secret; here the rc is the thing the pipe
+  silently replaces. The trap is that `head`/`tail` are what you reach for to
+  make output READABLE, so the habit that makes a measurement legible is the
+  habit that corrupts it. NOTHING STRUCTURAL CAUGHT ANY OF THE THREE: one was
+  caught by re-reading one's own command, one by a peer flagging a disagreement
+  they declined to explain away, one by checking a claim before filing a row on
+  it. So the second half of the rule is social — flag a disagreement you cannot
+  explain rather than smoothing it, because agreement between two sources is
+  not evidence when both share a method.
