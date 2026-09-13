@@ -75,7 +75,7 @@ Branch `osx-next`. Drill: tree clean, `ok:salvage-not-needed`.
   at the tool that enumerates targets. **Packet is macneo's to file.**
 
 - **The gh keychain dialog is a FIXTURE, not the credential guard doing its
-  job.** macneo's trace. `build.sh:3335` -> `scripts/test-host-tools.sh` ->
+  job.** macneo's trace. `build.sh`'s host-tools step -> `scripts/test-host-tools.sh` ->
   the prover table row runs the REAL `check-credential-channel.sh` as an
   unconditional 1004-x9ua control run, reaching `gh auth status` ->
   `security find-generic-password -s gh:github.com -w` -> decrypt -> ACL. So a
@@ -100,7 +100,7 @@ Branch `osx-next`. Drill: tree clean, `ok:salvage-not-needed`.
   `vault-shamir-share-v1`); it never names `gh:github.com` and invokes no `gh`,
   and neither does `build-macos-tray.sh`. That matches
   `host-shell-architecture.security.no-host-credentials@v1` (MUST, measurable).
-  BUT `crates/tillandsias-core/src/secrets.rs:105` `read_github_token()` shells
+  BUT `crates/tillandsias-core/src/secrets.rs` `read_github_token()` shells
   out to `gh auth token`. It is unreachable today — its only caller,
   `check_and_refresh_github_token()`, has zero callers repo-wide — yet that
   function's doc comment reads *"This should be called at application
