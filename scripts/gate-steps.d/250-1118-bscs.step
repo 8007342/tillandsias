@@ -1,0 +1,13 @@
+# Gate step 1118-bscs — data, not code (order 1072-b7eq).
+#
+# Two confinements of the same shape: a capability left open because nothing
+# currently uses it. The credential helper handed a live GitHub token to any
+# caller (it trusted how it was invoked); the permissive proxy port listened on
+# 0.0.0.0 with allowlist-free egress, reachable from every enclave container
+# whether or not anything routed there.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the push token is GitHub-https-only and the permissive proxy port is loopback (1118-bscs)"
+STEP_SCRIPT="scripts/test-credential-and-proxy-confinement.sh"
+STEP_ERROR="a GitHub token can reach a non-GitHub host or travel over http, or the permissive proxy port is reachable from the enclave again (1118-bscs) — see the verdict line above"
+STEP_OK="Credential and proxy confinement passed"

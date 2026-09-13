@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: squid-permissive-port-and-git-credential-origin-confinement
+    field: status
+    value: completed
+    ts: "2026-09-13T04:05:01Z"
+    host: linux
+
+events:
+  - packet_id: squid-permissive-port-and-git-credential-origin-confinement
+    event:
+      type: completed
+      ts: "2026-09-13T04:05:01Z"
+      host: linux
+      summary: |-
+        status 'completed' with evidence_refs: scripts/test-credential-and-proxy-confinement.sh 9/9 at gate step 250-1118-bscs; 2/9 against the reverted artifacts with all seven exfiltration/binding arms red; check-proxy-permissive-port-routing.sh still ok
+  - packet_id: squid-permissive-port-and-git-credential-origin-confinement
+    event:
+      type: note
+      ts: "2026-09-13T04:05:01Z"
+      host: linux
+      summary: |-
+        host+protocol validated whole-string in the credential helper (fail closed); http_port 3129 bound to 127.0.0.1
