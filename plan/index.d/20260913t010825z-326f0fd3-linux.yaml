@@ -1,0 +1,98 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: retire-host-src-checkout-behind-proven-transparent-push
+    event:
+      type: progress
+      ts: "2026-09-13T01:08:25Z"
+      agent_id: linux-lenovinha-opus5-20260913t010825z
+      host: linux
+      summary: |
+        STEP 1 LAUNCH-SIDE: RUN ON LENOVINHA. One criterion half PASSES, one CANNOT BE
+        CONFIRMED AS WRITTEN, and the run surfaced a live defect that undercuts the
+        cloud model. Reporting all three rather than the headline.
+
+        COMMAND: tillandsias --cloud 8007342/tillandsias --bash < /dev/null, from the
+        INSTALLED binary v56.9.12.1, CWD /var/home/lenovinha/claudia/tillandsias.
+        Bounded at 420s; exit 124 is the TIMEOUT KILLING AN INTERACTIVE SHELL that had
+        nothing to read, not a launch failure — the forge came up fully.
+
+        1. THE PERMISSION-DENIED TRIGGER IS FIXED. PASSES.
+           Pre-fix result on the row: 'fatal: could not create work tree dir
+           /home/forge/src/tillandsias: Permission denied'. Observed here instead:
+             Cloning into '/home/forge/src/tillandsias'...
+             remote: Enumerating objects: 100767, done.
+             Receiving objects: 100% (100767/100767), 142.51 MiB | 83.49 MiB/s, done.
+             Resolving deltas: 100% (68136/68136), done.
+           A complete clone into the tmpfs at /home/forge/src/tillandsias. The 0755->0777
+           change in 440cde994 does what it was meant to. The forge banner rendered, the
+           project mounted at /home/forge/src/tillandsias, no ~/src mount.
+
+        2. THE OBSERVABILITY STRINGS THE ROW ASKS FOR DO NOT APPEAR. NOT CONFIRMED.
+           next_action names 'cloud: ephemeral project resolved' / 'Ephemeral cloud
+           project' as the confirmation, and records that ZERO host logs fleet-wide
+           contain them. After a SUCCESSFUL cloud launch on this host, they are still
+           absent — grep over the full 71-line capture finds neither. So the count is
+           still zero, and it is no longer evidence the path has never run: the path DID
+           run, and does not print those strings. Either they were never in the shipped
+           binary or they were renamed. Whoever owns the cutover should fix the
+           EXPECTATION on this row rather than keep hunting for the strings, because as
+           written this criterion cannot be met by a working system.
+
+        3. THE CLOUD LAUNCH GOT NO MIRROR REDIRECT. This is the finding, and it is
+           defect 2b's consequence measured rather than predicted. Verbatim:
+             WARNING: cannot determine the git origin for project 'tillandsias'
+               (git config --get remote.origin.url exited Some(128)).
+               The forge will launch WITHOUT a mirror redirect, so in-container
+               `git push` will target the upstream directly and fail on credentials.
+           Reproduced exactly, outside the launcher:
+             $ git -C tillandsias config --get remote.origin.url
+             fatal: cannot change to 'tillandsias': No such file or directory
+             rc=128                         <- the Some(128) the launcher reported
+           The relative dummy path is resolved against PROCESS CWD, and there is no
+           ./tillandsias there.
+
+           THE HAZARD IS WORSE THAN 'a stray ./tillandsias would be read', which is how
+           next_action 2b describes it. Demonstrated here:
+             $ mkdir -p $W/tillandsias && git -C $W/tillandsias init
+             $ git -C $W/tillandsias remote add origin https://example.invalid/NOT-THE-REAL-REPO.git
+             $ cd $W && git -C tillandsias config --get remote.origin.url
+             https://example.invalid/NOT-THE-REAL-REPO.git
+             rc=0
+           So the failure is not merely "no redirect". With any directory named
+           `tillandsias` under the launching CWD, the launcher reads that repo's origin
+           with rc=0 and configures the forge's mirror redirect from it — silently, and
+           with no signal distinguishing it from the real project. The two outcomes are
+           "the enclave's push path is unconfigured" and "the enclave's push path is
+           configured from an unrelated repository", and which one you get depends on
+           the directory you happened to launch from.
+
+           NOT FIXED HERE: 1119-w2rj (macuahuitl) owns the cloud-mode launch defects
+           including 2a/2b. Flagged to that host. Recorded on this row because it bears
+           directly on criterion 1 — a cloud forge WITHOUT a working mirror redirect
+           cannot perform the transparent push this packet exists to prove.
+
+        4. SEED UNRESOLVED, as 2a predicts and as named in my claim before running, so
+           it is not read backwards into a result:
+             SEED UNRESOLVED: no project path was given ... falls back to UPSTREAM'S
+             DEFAULT BRANCH (typically `main`)
+           Under 965-rb3v a main-seeded forge on this project cannot commit. No commit
+           was attempted; a failure there would have been that defect, not this proof.
+
+        CONFOUND STATED: ~/src/tillandsias EXISTS on lenovinha (separate from the
+        working checkout at ~/claudia/tillandsias). The closure asks for a forge on a
+        host with NO ~/src/<project>, which is criterion 4 and operator-only. Nothing
+        observed suggests the launch used it — the warning shows origin resolution
+        failing rather than falling back to it — but this run does not discharge the
+        no-~/src condition, and should not be recorded as if it did.
+
+        HOST RESTORED: lane containers (tillandsias-git-tillandsias,
+        tillandsias-inference, tillandsias-tillandsias-forge-maintenance) stopped;
+        vault/router/proxy/builder left as found. No podman reset, no destructive step.

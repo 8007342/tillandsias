@@ -1,0 +1,12 @@
+# Gate step 1138-bb5r — data, not code (order 1072-b7eq).
+#
+# resolve_tool must not hand back a tool that is present and cannot run. The
+# defect was a FALSE PASS in the shared resolver — check-cheatsheet-refs.sh
+# exited 0 having examined zero references — and every consumer of the one
+# dispatch definition inherited it.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking a present-but-unusable host tool is not resolved as available (1138-bb5r)"
+STEP_SCRIPT="scripts/test-tool-dispatch-rejects-unusable-host-tool.sh"
+STEP_ERROR="resolve_tool accepts a present-but-unusable host tool again, so a guard can pass having examined nothing (1138-bb5r) — see the verdict line above"
+STEP_OK="Unusable-host-tool rejection passed"

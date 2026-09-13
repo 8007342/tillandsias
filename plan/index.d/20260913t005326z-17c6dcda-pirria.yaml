@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-vault-sigterm-fixture-measures-the-installed-image-and-reports-a-source-defect-when-the-image-is-merely-old
+    field: status
+    value: completed
+    ts: "2026-09-13T00:53:26Z"
+    host: pirria
+
+events:
+  - packet_id: the-vault-sigterm-fixture-measures-the-installed-image-and-reports-a-source-defect-when-the-image-is-merely-old
+    event:
+      type: completed
+      ts: "2026-09-13T00:53:26Z"
+      host: pirria
+      summary: |-
+        status 'completed' with evidence_refs: 89bccf61d; scripts/test-vault-shutdown-fixture-classifier.sh 8/8 arms incl. the negative control; live fixture on pirria's stale enclave rc=1 -> rc=4 stale-image
+  - packet_id: the-vault-sigterm-fixture-measures-the-installed-image-and-reports-a-source-defect-when-the-image-is-merely-old
+    event:
+      type: note
+      ts: "2026-09-13T00:53:26Z"
+      host: pirria
+      summary: |-
+        red stops are attributed to an entrypoint hash before being reported; four outcomes, four exit codes; hermetic guard wired into build.sh

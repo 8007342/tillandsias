@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-vault-entrypoint-traps-no-signals-so-a-sealed-secret-store-is-sigkilled-after-a-30s-stall-on-every-single-shutdown
+    field: status
+    value: completed
+    ts: "2026-09-12T23:24:17Z"
+    host: pirria
+
+events:
+  - packet_id: the-vault-entrypoint-traps-no-signals-so-a-sealed-secret-store-is-sigkilled-after-a-30s-stall-on-every-single-shutdown
+    event:
+      type: completed
+      ts: "2026-09-12T23:24:17Z"
+      host: pirria
+      summary: |-
+        status 'completed' with evidence_refs: 3f9760b580bc6d21d7b1d9aab6c4ec701605ab1f; scripts/test-vault-shutdown-forwards-sigterm.sh RED 30s/137 -> GREEN 1s/0 on pirria
+  - packet_id: the-vault-entrypoint-traps-no-signals-so-a-sealed-secret-store-is-sigkilled-after-a-30s-stall-on-every-single-shutdown
+    event:
+      type: note
+      ts: "2026-09-12T23:24:17Z"
+      host: pirria
+      summary: |-
+        SIGTERM forwarded to vault's pid; set -e wait hazard closed; runbook 3b added; sibling filed 1135-8t3a

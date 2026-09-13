@@ -1,0 +1,73 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-hard-killed-gate-orphans-a-test-probe-under-cheatsheets-and-the-next-gate-refuses-it-as-an-untracked-image-source
+    order: 1141-5pgh
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [gates, diagnosis, fail-loud]
+    estimated_hours: 1
+    unscoreable: |
+      unpinnable-until-the-guard-exists. The check is runnable — leave a file
+      named cheatsheets/zzz-skip-exit-probe-<n>.md in the tree and run the
+      747-knbp step — but no litmus binds the refusal's WORDING, which is the
+      thing this row is about, and asserting the current message would pin the
+      defect. Whoever fixes it writes that control.
+    owned_files:
+      - scripts/check-image-source-tracking.sh
+    title: |
+      MEASURED on pirria: a gate killed mid-run leaves cheatsheets/zzz-skip-exit-probe-<pid>.md behind, and the NEXT gate refuses at 747-knbp with "an image rebuild can orphan the tag the installed binary launches by" — a true sentence about a real risk, attached to a leftover test probe, which sends the reader to the image-tag machinery instead of to `rm`
+    context: |
+      MEASURED 2026-09-13 on pirria, cost one full ~14-minute gate:
+
+        error: untracked image source files:
+          cheatsheets/zzz-skip-exit-probe-3381362.md
+          cheatsheets/zzz-skip-exit-probe-3381454.md
+        [build] an image rebuild can orphan the tag the installed binary
+          launches by — every forge launch would be dead on arrival (747-knbp)
+
+      THE FIXTURE IS NOT AT FAULT AND MUST NOT BE "FIXED".
+      scripts/test-gate-step-skip-exit.sh:85 writes that probe deliberately,
+      and it already cleans up correctly: `probe=""` at :43, a `cleanup()` that
+      removes it, and `trap cleanup EXIT INT TERM` at :45. The orphans came
+      from gates killed with a signal no trap can catch — two interrupted runs
+      on this host, whose pids are in the two filenames. Adding another trap
+      buys nothing; SIGKILL is the whole point.
+
+      WHAT IS ACTUALLY WRONG IS THE DIAGNOSIS. 747-knbp's refusal is about
+      untracked files under an IMAGE SOURCE directory, and its explanation —
+      an image rebuild orphaning the launch tag — is true and important for the
+      case it was written for. For a leftover test probe it is a stranger's
+      emergency: the reader is pointed at image-tag machinery when the remedy
+      is `rm`. The file's own name says what it is (`zzz-skip-exit-probe-`),
+      and the check could say so.
+
+      WHY IT IS WORTH A ROW AT p3. It costs a full gate on the slowest hosts,
+      which are the ones most likely to interrupt a gate in the first place —
+      the floor tier interrupts because the gate is long, and then pays another
+      gate to learn that a test probe was lying around. It is not a correctness
+      defect and nothing is at risk; it is a refusal that names the wrong
+      remedy.
+
+      NOT ESTABLISHED, and deliberately not guessed at: WHICH process removed
+      the two files afterwards. They were present when the gate reached
+      747-knbp and the tree was clean minutes later, and pirria did not delete
+      them by hand. A later step may sweep them, or a killed run's trap may
+      have fired late. Whoever takes this row should find out before assuming
+      the debris is permanent — if something already sweeps it, the fix may be
+      ordering rather than wording.
+    next_action: |
+      1. Reproduce: `touch cheatsheets/zzz-skip-exit-probe-99999.md` and run the
+         747-knbp step. It must refuse — that part is correct.
+      2. Change only the DIAGNOSIS: when every untracked path matches a known
+         test-probe pattern, say so and name `rm` as the remedy, instead of the
+         image-tag explanation. When any path does NOT match, the existing
+         refusal is right and must be unchanged.
+      3. The negative control is the half that matters: a genuinely untracked
+         image source file must STILL produce the original refusal with the
+         original explanation. A pattern match that swallowed a real untracked
+         source would trade a confusing message for a silent one.
+      4. Settle the NOT ESTABLISHED above first — if something already sweeps
+         these files, ordering may be the whole fix.

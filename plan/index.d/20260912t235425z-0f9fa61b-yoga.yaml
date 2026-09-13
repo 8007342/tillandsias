@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-recurring-loops-gate-and-the-release-gate-are-different-tiers
+    event:
+      type: progress
+      ts: "2026-09-12T23:54:25Z"
+      agent_id: linux-yoga-opus5-20260912t235425z
+      host: yoga
+      summary: |
+        CRITERION 1b ARMED on macuahuitl, 2026-09-12: a daily 09:09 local cron runs the
+        scheduled ci-full when no cut ran in the previous 24 hours, and reads
+        check-release-tier-freshness.sh before and after — so the guard this row
+        delivered is what observes the cadence this row named.
+
+        THE ROW STAYS OPEN, and the reason is the same one that made me split the
+        decision from the arming in the first place. That cron is SESSION-ONLY with a
+        7-day expiry, like the rest of tonight's. A session cron is a real mechanism,
+        which a ledger entry was not — but it dies with its session, so the cadence is
+        currently only as durable as one host's Claude session. The follow-up is a
+        DURABLE timer (systemd timer or equivalent) that survives a session ending.
+
+        CLOSURE CONDITION, so nobody has to re-derive it: this row closes when
+        check-release-tier-freshness.sh on macuahuitl reads a fresh green from a
+        NON-CUT run. That is stronger than "the cron exists" — a cron that fires and
+        fails, or that never fires because a cut ran every day, leaves the delta
+        unexercised exactly as before, and the guard is what tells those apart.
