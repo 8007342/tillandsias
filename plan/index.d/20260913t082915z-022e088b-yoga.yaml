@@ -1,0 +1,66 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-dispatch-wrapper-that-execs-into-a-container-cannot-be-killed-so-a-cancelled-gate-keeps-running-in-the-same-checkout
+    event:
+      type: investigated
+      ts: "2026-09-13T08:29:15Z"
+      agent_id: linux-yoga-claude-20260913t082915z
+      host: yoga
+      summary: |
+        MY FIXTURE REFUSED AN INNOCENT DIFF ON lenovinha, and I could NOT reproduce the
+        race. Both halves are the report; the fix rests on construction, not on a
+        reproduction I do not have.
+
+        WHAT THEY MEASURED: land refused at attempt 1 on test-dispatch-reap.sh, `FAIL: a
+        marked process is found by its token`, 10/11 — and the same tree, same commit,
+        standalone immediately after was 11/11 three times. Their diff touched nothing
+        near dispatch. That is 1132-r4mt's own symptom, "passes alone, fails in the
+        gate", reproduced by the fixture written for 1132-r4mt's cause. The load was
+        their gate; my lands were elsewhere.
+
+        WHAT I COULD NOT DO. macuahuitl's shape is the fork/exec window:
+        `/proc/<pid>/environ` is the EXEC-TIME environment, so between fork and exec the
+        pid exists carrying the PARENT's environ and no token, and a scan in that window
+        finds it untokened. I tried to open that window deliberately — removed the
+        `sleep 0.3` entirely and ran the suite 18 times, 8 idle and 10 under six
+        spinning CPU hogs. ZERO failures. So the mechanism is unrefuted and
+        unreproduced here, and I am not recording it as confirmed.
+
+        WHY I FIXED IT ANYWAY, and this is the whole argument: a fixed `sleep` between
+        spawning a process and asserting about it is a race BY CONSTRUCTION. Lengthening
+        it cannot make it correct, only less often wrong, and when it is wrong it
+        refuses an innocent diff on a host that is not mine and is invisible to whoever
+        re-runs by hand. The defect does not need to be reproduced to be removed; it
+        needs to be removed to stop costing other hosts their lands.
+
+        THE FIX IS THE ROW'S OWN RULE, applied to the setup for the third time: wait for
+        the PREMISE, do not sleep and hope. `await_marked` polls until the token is
+        actually visible for that pid, bounded at five seconds, and FAILS LOUDLY on
+        timeout instead of asserting over a premise that never became true.
+
+        AND IT CLOSED A VACUOUS PASS NOBODY HAD NOTICED. Arm 3 is the negative control —
+        "a differently-marked process is NOT in this token's kill set" — and it was
+        satisfied whenever pb had not exec'd YET, because "absent from A's set" is
+        implied by "absent from every set". Under exactly the load that makes arm 2
+        flaky, arm 3 was passing for free. It now waits for pb under its OWN token
+        first, so the negative control asserts something. That is a second defect the
+        same fixed sleep was hiding, in the opposite direction: arm 2 fails spuriously,
+        arm 3 passes spuriously, both from the same missing synchronisation.
+
+        TEETH VERIFIED: with the token export removed, the poll times out and reds by
+        name rather than hanging or passing. Restored 9/9, and 8/8 clean under load.
+
+        A PROCESS NOTE ON MYSELF, since it happened twice in this one investigation:
+        `pkill -f 'while :; do :; done'` matched THIS shell's own command line and killed
+        my session mid-command, twice, the second time leaving a mutated fixture in the
+        tree that I nearly committed. A matcher over a set containing itself reports
+        itself — my own note, and I still reached for the pattern instead of the pid.
+        Killing by PID with an explicit `$$` exclusion is the form that does not.
