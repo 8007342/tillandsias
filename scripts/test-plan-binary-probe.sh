@@ -113,8 +113,39 @@ else
     echo "ok case5: a binary failing 'capabilities' is refused"
 fi
 
+# ── CASE 6: resolve_target_binary prefers the LOCUS-NATIVE artefact ──────────
+# ORDER 1142-wn2k. On a shared Windows/WSL checkout both artefacts sit in one target
+# dir, and with interop enabled BOTH run inside the distro — so candidate ORDER,
+# not runnability, decides which is returned. This pins the ELF winning when
+# both answer.
+#
+# REGIME: hermetic. Both stubs are scripts that exit 0, so both "run" on this
+# host; the arm is about ordering and asserts nothing about real binaries or
+# about this host's locus. No absolute moment is encoded.
+#
+# THE .exe STUB MUST BE RUNNABLE, and that is the whole arm. If it were made
+# unrunnable the ELF would win by default and the test would pass against the
+# PRE-FIX order too — a green that asserts nothing (1041-up99). The pre-fix
+# order returns the .exe here, which is what esme measured in production.
+mkdir -p "$tmp/locus/target/debug"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$tmp/locus/target/debug/tillandsias-policy"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$tmp/locus/target/debug/tillandsias-policy.exe"
+chmod +x "$tmp/locus/target/debug/tillandsias-policy" "$tmp/locus/target/debug/tillandsias-policy.exe"
+got="$( CARGO_TARGET_DIR="" PATH="/usr/bin:/bin" bash -c \
+    ". '$PROBE'; resolve_target_binary tillandsias-policy debug '$tmp/locus'" 2>/dev/null || true )"
+case "$got" in
+    *"/tillandsias-policy")
+        echo "ok case6: the ELF wins over a runnable .exe in the same dir (1142-wn2k)" ;;
+    *"/tillandsias-policy.exe")
+        echo "FAIL case6: the .exe was returned over a runnable ELF — the pre-fix order (1142-wn2k)"
+        fail=1 ;;
+    *)
+        echo "FAIL case6: neither candidate resolved (got '$got')"
+        fail=1 ;;
+esac
+
 if [ "$fail" -ne 0 ]; then
     echo "FAIL: plan-binary-probe fixture"
     exit 1
 fi
-echo "PASS: plan-binary-probe fixture (order 783-jdeh) 5/5"
+echo "PASS: plan-binary-probe fixture (orders 783-jdeh, 1142-wn2k) 6/6"
