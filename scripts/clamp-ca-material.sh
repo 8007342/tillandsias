@@ -2,6 +2,33 @@
 # ORDER 998-qrwu: the CA directory comes from the ONE declaration
 # (images/default/ca-path.txt), never a literal — see scripts/lib-ca-path.sh.
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-ca-path.sh"
+
+# ORDER 1135-z8gn (macbookair 2026-09-13). PORTABLE MODE READ.
+#
+# THIS SCRIPT DID NOT WORK ON macOS AT ALL, and the advisory's count of "7
+# stat -c instances" undersold it. `stat -c` is GNU-only; BSD stat rejects it
+# outright (`stat: illegal option -- c`, rc=1). So on every macOS host
+# clamp_dir/clamp_file returned 1, the caller reported
+# `violation:ca-material:cannot chmod ...`, and `--selftest` exited 1 with five
+# failures and raw usage text on stderr. MEASURED here before this change.
+#
+# The counterpart is `stat -f '%Lp'`, which is what the fleet already uses
+# (scripts/test-default-vault-cli-security.sh, scripts/hash-image-sources.sh).
+# MEASURED on this host against known modes, with the system stat forced:
+#   /usr/bin/stat -f '%Lp'  ->  700, 600, 644   (no zero padding)
+# so the selftest's literal "700"/"600"/"644" comparisons keep their meaning.
+#
+# BOTH FORMS ON ONE LINE is deliberate and not merely tidy:
+# check-portability-idioms.sh's _has_fallback matches the counterpart on the
+# SAME LINE, so a wrapper whose fallback sat on a second line would still be
+# flagged. One line, one helper, seven call sites cleared.
+#
+# NOT PUT IN lib-ca-path.sh: that file is shared with other consumers and this
+# change has no business widening their surface. If a third script needs it,
+# that is the moment to promote it.
+_mode_of() { # _mode_of <path> -> octal permission bits, or non-zero if neither form works
+    stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1" 2>/dev/null
+}
 # @trace spec:secret-rotation, spec:proxy-container
 #
 # clamp-ca-material.sh — re-clamp CA material that a PRE-FIX binary created
@@ -46,7 +73,7 @@ _private_names() { printf '%s\n' intermediate.key vault.key; }
 
 _clamp_dir() {
     local dir="$1" mode
-    mode="$(stat -c '%a' "$dir" 2>/dev/null)" || return 1
+    mode="$(_mode_of "$dir")" || return 1
     [ "$mode" = "700" ] && return 2   # already
     chmod 700 "$dir" 2>/dev/null || return 1
     return 0
@@ -55,7 +82,7 @@ _clamp_dir() {
 _clamp_key() {
     local f="$1" mode
     [ -f "$f" ] || return 2
-    mode="$(stat -c '%a' "$f" 2>/dev/null)" || return 1
+    mode="$(_mode_of "$f")" || return 1
     [ "$mode" = "600" ] && return 2   # already
     chmod 600 "$f" 2>/dev/null || return 1
     return 0
@@ -69,11 +96,11 @@ _run() {
     fi
     if [ "$check_only" = "1" ]; then
         local offenders=0 mode
-        mode="$(stat -c '%a' "$dir" 2>/dev/null)"
+        mode="$(_mode_of "$dir")"
         [ "$mode" = "700" ] || offenders=$((offenders + 1))
         while IFS= read -r name; do
             [ -f "$dir/$name" ] || continue
-            mode="$(stat -c '%a' "$dir/$name" 2>/dev/null)"
+            mode="$(_mode_of "$dir/$name")"
             [ "$mode" = "600" ] || offenders=$((offenders + 1))
         done < <(_private_names)
         if [ "$offenders" -gt 0 ]; then
@@ -125,12 +152,12 @@ if [ "$MODE" = "--selftest" ]; then
         ok:ca-material:clamped:*) : ;;
         *) echo "SELFTEST-FAIL: fix did not report a clamp ($out)"; fail=1 ;;
     esac
-    [ "$(stat -c '%a' "$tmp/ca")" = "700" ] || { echo "SELFTEST-FAIL: dir not 700"; fail=1; }
-    [ "$(stat -c '%a' "$tmp/ca/intermediate.key")" = "600" ] || { echo "SELFTEST-FAIL: key not 600"; fail=1; }
+    [ "$(_mode_of "$tmp/ca")" = "700" ] || { echo "SELFTEST-FAIL: dir not 700"; fail=1; }
+    [ "$(_mode_of "$tmp/ca/intermediate.key")" = "600" ] || { echo "SELFTEST-FAIL: key not 600"; fail=1; }
 
     # The PUBLIC cert must be left alone: over-clamping it breaks squid and
     # vault-cli's require_cacert for no security gain.
-    [ "$(stat -c '%a' "$tmp/ca/intermediate.crt")" = "644" ] \
+    [ "$(_mode_of "$tmp/ca/intermediate.crt")" = "644" ] \
         || { echo "SELFTEST-FAIL: public cert was clamped"; fail=1; }
 
     # Idempotent: a second run reports already-clamped, not another change.

@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: periodic-deslopification-sweep
+    event:
+      type: completed
+      ts: "2026-09-13T19:12:15Z"
+      agent_id: linux-macuahuitl-fable-20260913t191215z
+      host: macuahuitl
+      summary: |
+        First supervised run landed at linux-next@f4b9496a0 (macuahuitl, under the
+        operator's explicit budget): protocol written as skills/deslop-sweep;
+        corpus 29 dead-env-branch findings; 11 sonnet pairing agents + 1 opus judge
+        (1,024,451 sub-agent tokens, 918 s fan-out, ~22 min end to end, ~110k
+        coordinator tokens). Record: examined 29, confirmed 6, refuted 6 (all
+        detector blind spots), inconclusive 2, filed 5 (<= cap, retractions 6 >=
+        5), net_lines -49. Every landed deletion re-verified on trunk by the
+        coordinator (the workers' worktrees were based on a stale commit). Protocol
+        findings on the row, from the run: the net-negative rule applied per
+        mutation drops every DOCUMENT verdict (12 of 29), so knobs cannot be
+        cleared until 1169-zw44 lets a registry line count; diffs are taken from
+        worktrees, never from returned text; the workers' verdicts are candidates.
+        Criteria 4+ (protocol + first supervised run with the kill rule,
+        net-negative diff, filing cap, refutation band, record) are met; the
+        ritual detector scores the record.

@@ -65,12 +65,15 @@ share, so the keychain↔volume resync brick (see git history `738059bc`) is par
 of what this smoke exercises — if init bricks, that is a finding, not a failure
 to hide.
 
-**On Linux that paragraph is NOT true today, and a run must say which state it
-was in (order 900-z3kv).** `podman system reset --force` empties the podman
+**On Linux this is true only because the reset now CLEARS the host-held
+credentials (order 900-z3kv). Step 2 runs
+`scripts/clear-vault-host-credentials.sh` after emptying the store; without it
+the paragraph above was false.** `podman system reset --force` empties the podman
 store — containers, volumes AND images — but it does not reach the HOST
 KEYCHAIN. Vault then recovers the pre-existing Shamir share and logs `preserving
-existing data volume (Shamir share present in keychain)`, so the resync path
-above is **not exercised**. Measured independently on two Linux hosts with
+existing data volume (Shamir share present in keychain)`, so without the clearer the resync path
+above is **not exercised** — which is what every Linux pass silently carried
+until 900-z3kv wired it. Measured independently on two Linux hosts with
 differently-aged shares (yoga, created 2026-06-15; lenovinha, created
 2026-07-08), which makes it a property of the Linux lane rather than one host's
 dirty state — and it means every Linux "clean room" pass since at least 2026-06

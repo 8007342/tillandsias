@@ -1,0 +1,56 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by the macuahuitl coordinator on 2026-09-13 from lenovinha's read-only
+# root cause of the Silverblue update failure the operator reported fleet-wide.
+packets:
+  - packet_id: silverblue-hosts-layering-akmods-fail-depsolve-whenever-the-base-kernel-outruns-the-updates-repo-and-the-symptom-reads-as-ready-then-fails-then-nothing-staged
+    order: 1165-g6wx
+    status: ready
+    kind: docs
+    priority: p3
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [silverblue, rpm-ostree, fleet, operations, cheatsheet]
+    estimated_hours: 1
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is a cheatsheet entry and a read-only probe. Future litmus scripts/test-silverblue-update-skew-probe.sh; the claimer writes it in the same commit and moves this text into verifiable_closure: scripts/probe-silverblue-update-skew.sh (read-only) reports skew:akmods-kernel-devel-matched:<offered-kernel> when `rpm-ostree upgrade --check` offers a kernel bump, `akmods` is layered, and the rpm-ostreed journal's last Upgrade txn failed at depsolve naming kernel-devel-matched (pre-fix result: FAILS — no probe exists; the operator read the symptom as 'update ready, requires restart, fails to apply' on several hosts, lenovinha 2026-09-13 fourteen depsolve failures in two hours); NEGATIVE CONTROL: a host with no akmods layered, or no kernel bump offered, reports ok:no-skew."
+    owned_files:
+      - docs/cheatsheets/runtime/silverblue-updates.md
+      - scripts/probe-silverblue-update-skew.sh
+    title: |
+      On Silverblue, a host layering akmods (the NVIDIA stack drags it in) cannot apply a base update that bumps the kernel until the updates repo publishes kernel-devel-matched for that exact kernel: akmods' rich dependency `(kernel-devel-matched if kernel-core)` fires because kernel-core is present from the OSTree base, depsolve fails, nothing is staged, and the non-depsolving `--check` keeps saying "ready". Transient by construction; the decision (wait, temporarily unlayer, or pin) is the operator's, and the fleet needs to read the symptom correctly.
+    context: |
+      MEASURED on lenovinha 2026-09-13 (read-only): offered 44.20260913.0
+      carries kernel 7.2.4 → 7.2.5; journal "Txn Upgrade … failed: Could not
+      depsolve transaction; 4 problems detected" fourteen times 10:07-11:51
+      local; Problem 1: akmod-nvidia requires akmods; akmods-0.6.2-14.fc44
+      requires (kernel-devel-matched if kernel-core); every
+      kernel-devel-matched version refused because it requires a kernel-core
+      the base already provides and no repo kernel-core can be layered. The
+      updates metadata is dated 2026-09-12T00:52 and the base commit
+      2026-09-13T00:50: the image is a day ahead of the repo. No
+      ostree-finalize-staged entries, no /run/ostree/staged-deployment — the
+      failure precedes staging, which is why "ready, requires restart" (from
+      --check and GNOME Software) is followed by a failed apply and nothing
+      staged. The kmod matches the booted kernel; nothing is stale. yoga (no
+      akmods layered; rocm) is the scope test: a clean apply there confirms
+      akmods, not GPU.
+
+      WHAT TO BUILD: a cheatsheet entry (docs/cheatsheets/runtime/) that
+      names the symptom, the journal line to read, the rich dependency, and
+      the three remedies as the operator's decision; and a read-only probe
+      any Silverblue host can run at cycle start so the meta-orchestration
+      preamble reports skew instead of a host guessing. NOT IN SCOPE: any
+      deployment change by an agent.
+    exit_criteria:
+      - 'the cheatsheet names the depsolve line and the rich dependency, and states the three remedies as the operator''s (pre-fix result: FAILS — no entry; the fleet read it as a stale-kmod or a stuck apply)'
+      - 'the probe reports skew:… on a host with akmods layered and a kernel bump offered while kernel-devel-matched is absent from the repo, ok:no-skew otherwise, and never mutates the deployment'
+      - 'the meta-orchestration preamble runs the probe on immutable Linux and carries the verdict into the handoff'
+    events:
+      - type: filed
+        ts: "2026-09-13T18:55:13Z"
+        agent_id: "linux-macuahuitl-fable-20260913t185513z"
+        host: macuahuitl
+        summary: |
+          Filed by the coordinator from lenovinha's root cause; the credential
+          adjacency lenovinha raised was retracted by them after testing the
+          timeline, and is deliberately not part of this row.

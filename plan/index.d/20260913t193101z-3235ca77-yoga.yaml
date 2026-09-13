@@ -1,0 +1,67 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-linux-clean-room-reset-does-not-reach-the-host-keychain
+    event:
+      type: implemented
+      ts: "2026-09-13T19:31:01Z"
+      agent_id: linux-yoga-claude-20260913t193101z
+      host: yoga
+      summary: |
+        WIRED. The operator confirmed (a) and the override window is closed, so the
+        documented reset now clears the host-held credentials and the runbook's claim is
+        true for the first time since at least 2026-06.
+
+        THE OPERATOR'S REASONING, in their words, because it reframes this row's premise
+        rather than merely authorising it: the platform prefers IDEMPOTENCY over legacy
+        support — anything nuked on the way was meant to be nuked, like old configs from
+        stale code; the way to exercise the correct new code is a system reset as the
+        baseline, which is why `podman system reset --force` is not only allowed but
+        PREFERRED, and a full system reset is an abstraction layer to embrace.
+
+        That recasts what this row was about. The clearer is not a concession making the
+        reset destructive enough; it is making the reset ACTUALLY BE the baseline the
+        platform already assumes it is. The four legs that reported a clean room that
+        was not one were measuring the gap between that assumption and the reality.
+
+        TWO DESTROY PATHS, AND I ONLY FOUND ONE BY HAND.
+          scripts/e2e-step2-linux.sh   found by enumeration
+          run_smoke.sh                 found BY THE GUARD, at the repository root,
+                                       outside the skills/ and scripts/ directories I
+                                       had grepped
+        That is 803-49re's whole argument arriving on schedule: "Part A landed the
+        clearing in one script and there are TWO purge paths… a second copy is where the
+        fix does not go." I wrote the guard intending it to prevent a FUTURE second
+        copy, and it immediately found a PRESENT one I had missed. Enumeration by hand
+        is the thing the guard replaces, and it failed on its first outing.
+
+        EXECUTES, NOT MENTIONS, which is what keeps the guard honest. Of the .sh files
+        containing the string, exactly ONE executed it and four named it in comments —
+        including scripts/selective-tillandsias-reset.sh, which exists precisely to
+        AVOID a full reset. Counting a mention would have made three files violate for
+        discussing the thing correctly, and would have invited someone to "fix" them by
+        wiring a clearer into a comment. Pinned both ways: a destroy path that skips the
+        clearer reds by name (measured), and a comment-only file does not (measured).
+
+        DOCS UPDATED SO THE RUNBOOK NO LONGER ASSERTS AND THEN RETRACTS. The
+        curl-install skill said the resync path was exercised, then said on Linux that
+        is NOT true today. It now says it is true BECAUSE step 2 clears — one claim, no
+        retraction two paragraphs later. The build-install skill names the clearer
+        beside the reset, with the by-hand case called out: run the reset yourself and
+        you must run the clearer too or the room is not clean.
+
+        A RUN CAN NOW SAY WHICH STATE IT WAS IN (criterion 2): both paths tee
+        probe-credential-cold-state.sh into the findings, metadata only, never the
+        secret.
+
+        WHAT IS LEFT: nothing on this row that I can see. Criterion 1 decided and
+        ratified, 2 delivered by lenovinha's probe and now recorded per-run, 3 pinned
+        both directions, 4 honoured throughout, 5's negative control is the preserved
+        installation anchor with its own arm.
