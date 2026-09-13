@@ -183,8 +183,39 @@ _tree_hash=""; _image_hash=""
 if [ -r "$TREE_ENTRYPOINT" ]; then
     _tree_hash="$(sha256sum < "$TREE_ENTRYPOINT" 2>/dev/null | cut -d' ' -f1)"
 fi
-_image_hash="$(podman exec "$CONTAINER" cat /usr/local/bin/tillandsias-vault-entrypoint.sh 2>/dev/null \
-    | sha256sum 2>/dev/null | cut -d' ' -f1)"
+# HASHED ON THE HOST, ALWAYS. The only thing asked of the container is that it
+# hand over bytes — never that it compute anything. yoga measured why while
+# producing the baseline for this row: `podman exec tillandsias-vault
+# /usr/bin/grep ...` fails with "crun: executable file `/usr/bin/grep` not
+# found", because the hashicorp/vault base is minimal and does not ship it.
+# sha256sum happens to be present TODAY, which is luck rather than a property
+# anyone checked. Running the digest inside the container would therefore exit
+# non-zero on any image that drops the tool, and — this is the part that
+# matters — that failure would read as `cannot-attribute` on precisely the
+# host where the comparison is the thing needed.
+#
+# `podman cp` first, which asks the image for NOTHING: it reads the layer from
+# the host side, so an image with no shell and no coreutils still answers. It
+# is tried first for that reason and not merely as a fallback. `cat` is the
+# second arm, for a podman too old for `cp` on a running container. Note that
+# `podman cp <ctr>:<path> -` is deliberately NOT used: that emits a TAR whose
+# header carries mtimes, so hashing the stream would compare timestamps and
+# report `differs` for two byte-identical entrypoints — the failure this whole
+# row is about, reintroduced one layer down.
+_image_hash=""
+_cp_dir="$(mktemp -d 2>/dev/null)"
+if [ -n "$_cp_dir" ]; then
+    if podman cp "$CONTAINER:/usr/local/bin/tillandsias-vault-entrypoint.sh" \
+            "$_cp_dir/entrypoint.sh" >/dev/null 2>&1 \
+       && [ -s "$_cp_dir/entrypoint.sh" ]; then
+        _image_hash="$(sha256sum < "$_cp_dir/entrypoint.sh" 2>/dev/null | cut -d' ' -f1)"
+    fi
+    rm -rf "$_cp_dir"
+fi
+if [ -z "$_image_hash" ]; then
+    _image_hash="$(podman exec "$CONTAINER" cat /usr/local/bin/tillandsias-vault-entrypoint.sh 2>/dev/null \
+        | sha256sum 2>/dev/null | cut -d' ' -f1)"
+fi
 # `cat | sha256sum` of a MISSING file yields the hash of the empty string, which
 # would silently become a "differs" verdict on a container where exec is broken.
 # Pin that case to unknown by requiring a non-empty file.
