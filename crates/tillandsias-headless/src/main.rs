@@ -7047,6 +7047,13 @@ fn env_or(name: &str, fallback: &str) -> String {
 #[allow(clippy::too_many_arguments)]
 fn build_opencode_forge_args(
     project_path: &Path,
+    // ORDER 1119-w2rj: the REAL host checkout, or None in cloud mode. Distinct
+    // from `project_path`, which in cloud mode is the bare project name — fine
+    // for naming mounts, never safe for a `git -C`, which would resolve it
+    // against the launcher CWD and answer from a same-named directory there.
+    host_checkout: Option<&Path>,
+    // The origin the lane already resolved (cloud project or host checkout).
+    resolved_remote_url: Option<&str>,
     project_name: &str,
     mirror_id: Option<&str>,
     prompt: Option<&str>,
@@ -7299,26 +7306,44 @@ fn build_opencode_forge_args(
     // Detached HEAD / unreadable checkout → no env → guest behavior
     // byte-identical to before. Caveat: a REUSED (not recreated) container
     // carries creation-time env, so a stale seed is possible until recreate.
-    if let Some(seed) = read_host_project_current_branch(project_path) {
-        // 763-munc mechanism slice: a validation lane must not look clean
-        // without its seed's staleness stated in the same output. Verdict is
-        // unconditional; REFUSAL is opt-in via
-        // TILLANDSIAS_SEED_STALENESS_MAX_BEHIND (the refuse-vs-auto-ff
-        // DEFAULT is the operator decision the packet holds open, and this
-        // launcher is shared fleet-wide — a hard default here would change
-        // sibling hosts' behavior unattended).
-        report_seed_resolved(project_path, &seed);
-        // 965-rb3v second rung. Seeding from a non-platform branch is never
-        // intended on a project that has them, and `main` in particular yields
-        // a forge that cannot commit at all.
-        report_seed_not_platform_branch(project_path, &seed);
-        report_seed_staleness(project_path, &seed);
-        args.push("--env".into());
-        args.push(format!("TILLANDSIAS_FORGE_SEED_BRANCH={seed}"));
+    // ORDER 1119-w2rj: EVERY read below is gated on a real checkout — not just
+    // the branch read. report_seed_staleness runs its own `git -C`, so in cloud
+    // mode it was a second live read against the bare name with the same
+    // CWD-capture hazard.
+    if let Some(checkout) = host_checkout {
+        if let Some(seed) = read_host_project_current_branch(checkout) {
+            // 763-munc mechanism slice: a validation lane must not look clean
+            // without its seed's staleness stated in the same output. Verdict is
+            // unconditional; REFUSAL is opt-in via
+            // TILLANDSIAS_SEED_STALENESS_MAX_BEHIND (the refuse-vs-auto-ff
+            // DEFAULT is the operator decision the packet holds open, and this
+            // launcher is shared fleet-wide — a hard default here would change
+            // sibling hosts' behavior unattended).
+            report_seed_resolved(checkout, &seed);
+            // 965-rb3v second rung. Seeding from a non-platform branch is never
+            // intended on a project that has them, and `main` in particular yields
+            // a forge that cannot commit at all.
+            report_seed_not_platform_branch(checkout, &seed);
+            report_seed_staleness(checkout, &seed);
+            args.push("--env".into());
+            args.push(format!("TILLANDSIAS_FORGE_SEED_BRANCH={seed}"));
+        } else {
+            // 965-rb3v: the unresolved case was silent, and silence renders
+            // identically to a deliberate `main` seed. Still injects nothing.
+            report_seed_unresolved(checkout);
+        }
     } else {
-        // 965-rb3v: the unresolved case was silent, and silence renders
-        // identically to a deliberate `main` seed. Still injects nothing.
-        report_seed_unresolved(project_path);
+        // CLOUD MODE. There is no host checkout, so this is not a failure to
+        // read one: "could not read a branch from the host checkout at <bare
+        // name>" described a path that was never meant to exist and invited a
+        // hunt for it. The mirror falls back to upstream's default branch, which
+        // 965-rb3v notes may be one this project cannot commit on — stated where
+        // it is true rather than dressed up as a broken working copy.
+        eprintln!(
+            "[tillandsias] [forge-launch] CLOUD MODE: no host checkout to read a seed branch \
+             from, so no TILLANDSIAS_FORGE_SEED_BRANCH is injected and the mirror HEAD falls \
+             back to UPSTREAM'S DEFAULT BRANCH (typically `main`)."
+        );
     }
     // Forge gitconfig injection (order 224): pre-populate global git config
     // with mirror redirect and safe.directory, bind-mounted
@@ -7327,7 +7352,9 @@ fn build_opencode_forge_args(
     // the forge. lib-common.sh's rewrite_origin_for_enclave_push detects the
     // pre-injected config and skips redundant writes.
     // @trace plan/issues/forge-gitconfig-quarantine-and-injection-2026-07-07.md
-    if let Some(gitconfig_path) = write_forge_gitconfig(project_name, mirror_id, project_path) {
+    if let Some(gitconfig_path) =
+        write_forge_gitconfig(project_name, mirror_id, host_checkout, resolved_remote_url)
+    {
         args.extend([
             "--mount".into(),
             format!(
@@ -10817,10 +10844,29 @@ async fn ensure_ssh_lane_sidecar(
 ///
 /// Returns `Some(path)` on success, `None` on any I/O error.
 /// @trace plan/issues/forge-gitconfig-quarantine-and-injection-2026-07-07.md
+/// `host_checkout` is `Some` only when a REAL host checkout exists (local
+/// mode) and `None` in cloud mode, where the project lives in the mirror and
+/// there is nothing on this filesystem to read. `resolved_remote_url` is the
+/// origin the lane already resolved and takes precedence over reading disk.
+///
+/// ORDER 1119-w2rj. Both replace a single `project_path` that was handed
+/// `PathBuf::from(project_name)` in cloud mode: a BARE RELATIVE NAME resolved
+/// against the launcher CWD. Measured on lenovinha from a real `--cloud` launch:
+///
+///   no ./tillandsias in cwd -> `git -C tillandsias config --get
+///                              remote.origin.url` exits 128 and the forge
+///                              launched WITHOUT a mirror redirect
+///   a stray ./tillandsias   -> the same read SUCCEEDS (rc 0) against that
+///                              unrelated repository, whose origin would then be
+///                              written into the forge gitconfig
+///
+/// The second is the dangerous one: silent, successful, indistinguishable from
+/// the real project, and decided by the directory the tray launched from.
 pub(crate) fn write_forge_gitconfig(
     project_name: &str,
     mirror_id: Option<&str>,
-    project_path: &Path,
+    host_checkout: Option<&Path>,
+    resolved_remote_url: Option<&str>,
 ) -> Option<PathBuf> {
     // Order 815-gdjk: XDG-first via the shared resolver.
     let forge_git_dir = tillandsias_core::cache_root::cache_root().join("forge-gitconfig");
@@ -10835,7 +10881,27 @@ pub(crate) fn write_forge_gitconfig(
     // origin could not be READ produces a forge that pushes at github.com and
     // fails with "could not read Username" while the banner claims the mirror
     // is wired. Those need opposite responses, so they must not look alike.
-    let resolution = resolve_host_project_origin(project_path);
+    // ORDER 1119-w2rj. ONE `resolution` for both modes, so the "why is there no
+    // redirect" block below keeps working and cloud mode gets a real reason
+    // rather than a borrowed one.
+    //
+    // THE RESOLVED URL WINS. In cloud mode it is the only source there is; in
+    // local mode the lane resolved it from this same checkout, so preferring it
+    // cannot disagree with what a fresh disk read would return.
+    let resolution = match (resolved_remote_url, host_checkout) {
+        (Some(url), _) => OriginResolution::Found(url.to_string()),
+        (None, Some(path)) => resolve_host_project_origin(path),
+        // CLOUD MODE WITH NOTHING RESOLVED. There is no checkout to fix, so the
+        // local-mode advice ("fix the checkout or install git") would send an
+        // operator hunting for something that is not supposed to exist — a
+        // second defect this order carries. Say what is actually true.
+        (None, None) => OriginResolution::Unresolvable(
+            "no origin was resolved for this cloud project and there is no host checkout to \
+             read one from — check that the cloud project resolved \
+             (TILLANDSIAS_PROJECT_REMOTE_URL) rather than looking for a local clone"
+                .to_string(),
+        ),
+    };
     let origin_url = match &resolution {
         OriginResolution::Found(url) => sanitize_forge_origin_url(url),
         OriginResolution::NoRemote => None,
@@ -10848,10 +10914,12 @@ pub(crate) fn write_forge_gitconfig(
                 "[tillandsias]   The forge will launch WITHOUT a mirror redirect, so in-container \
                  `git push` will target the upstream directly and fail on credentials."
             );
-            eprintln!(
-                "[tillandsias]   This is NOT the same as a project with no remote — resolution \
-                 failed. Fix the checkout or install git on this host."
-            );
+            if host_checkout.is_some() {
+                eprintln!(
+                    "[tillandsias]   This is NOT the same as a project with no remote — resolution \
+                     failed. Fix the checkout or install git on this host."
+                );
+            }
             None
         }
     };
@@ -12665,6 +12733,9 @@ fn run_opencode_mode(
         let diagnostics = std::env::args().any(|a| a == "--diagnostics");
         let opencode_args = build_opencode_forge_args(
             &project_path_resolved,
+            // 1119-w2rj: the real checkout or None — never the bare name.
+            canonical_path.as_deref(),
+            project_remote_url.as_deref(),
             project_name,
             Some(&opencode_mirror_id),
             prompt,
@@ -13795,6 +13866,9 @@ pub(crate) fn run_opencode_web_mode(
         // which is not the user's shell cwd.
         let opencode_args = build_opencode_forge_args(
             &project_path_resolved,
+            // 1119-w2rj: the real checkout or None — never the bare name.
+            canonical_path.as_deref(),
+            project_remote_url.as_deref(),
             project_name,
             Some(&opencode_web_mirror_id),
             prompt,
@@ -14712,6 +14786,11 @@ pub(crate) fn build_forge_agent_run_args(
 ) -> Vec<String> {
     build_forge_agent_run_args_with_vault(
         project_path,
+        // 1119-w2rj: the LOCAL-path launcher — every caller hands it a real
+        // checkout. A cloud tray launch does NOT come through here; it re-execs
+        // the binary with `--cloud` into the lane that resolves the remote URL.
+        Some(project_path),
+        None,
         project_name,
         mirror_id,
         certs_dir,
@@ -14728,6 +14807,13 @@ pub(crate) fn build_forge_agent_run_args(
 #[allow(clippy::too_many_arguments)]
 fn build_forge_agent_run_args_with_vault(
     project_path: &Path,
+    // ORDER 1119-w2rj: the REAL host checkout, or None in cloud mode. Distinct
+    // from `project_path`, which in cloud mode is the bare project name — fine
+    // for naming mounts, never safe for a `git -C`, which would resolve it
+    // against the launcher CWD and answer from a same-named directory there.
+    host_checkout: Option<&Path>,
+    // The origin the lane already resolved (cloud project or host checkout).
+    resolved_remote_url: Option<&str>,
     project_name: &str,
     mirror_id: Option<&str>,
     certs_dir: &Path,
@@ -14888,12 +14974,30 @@ fn build_forge_agent_run_args_with_vault(
     // every agent lane so the guest's clone_project_from_mirror checks out
     // the launch-gated branch on ALL clone transports. No branch readable →
     // no env → guest behavior unchanged.
-    if let Some(seed) = read_host_project_current_branch(project_path) {
-        spec = spec.env("TILLANDSIAS_FORGE_SEED_BRANCH", seed);
+    // ORDER 1119-w2rj: EVERY read below is gated on a real checkout — not just
+    // the branch read. report_seed_staleness runs its own `git -C`, so in cloud
+    // mode it was a second live read against the bare name with the same
+    // CWD-capture hazard.
+    if let Some(checkout) = host_checkout {
+        if let Some(seed) = read_host_project_current_branch(checkout) {
+            spec = spec.env("TILLANDSIAS_FORGE_SEED_BRANCH", seed);
+        } else {
+            // 965-rb3v: see build_opencode_forge_args — same silent-unresolved
+            // hazard on this lane, same loud notice, same no-env behaviour.
+            report_seed_unresolved(checkout);
+        }
     } else {
-        // 965-rb3v: see build_opencode_forge_args — same silent-unresolved
-        // hazard on this lane, same loud notice, same no-env behaviour.
-        report_seed_unresolved(project_path);
+        // CLOUD MODE. There is no host checkout, so this is not a failure to
+        // read one: "could not read a branch from the host checkout at <bare
+        // name>" described a path that was never meant to exist and invited a
+        // hunt for it. The mirror falls back to upstream's default branch, which
+        // 965-rb3v notes may be one this project cannot commit on — stated where
+        // it is true rather than dressed up as a broken working copy.
+        eprintln!(
+            "[tillandsias] [forge-launch] CLOUD MODE: no host checkout to read a seed branch \
+             from, so no TILLANDSIAS_FORGE_SEED_BRANCH is injected and the mirror HEAD falls \
+             back to UPSTREAM'S DEFAULT BRANCH (typically `main`)."
+        );
     }
     // Every OAuth-credentialed agent lane mounts a scoped Vault token so its
     // entrypoint can restore the opaque provider document. OpenCode re-execs
@@ -15024,7 +15128,9 @@ fn build_forge_agent_run_args_with_vault(
     // /home/forge/.config/git — the file is owned by Tillandsias, stored
     // outside the project workspace, and bind-mounted read-only.
     // @trace plan/issues/forge-gitconfig-quarantine-and-injection-2026-07-07.md
-    if let Some(gitconfig_path) = write_forge_gitconfig(project_name, mirror_id, project_path) {
+    if let Some(gitconfig_path) =
+        write_forge_gitconfig(project_name, mirror_id, host_checkout, resolved_remote_url)
+    {
         spec = spec.bind_mount(
             gitconfig_path.display().to_string(),
             "/home/forge/.gitconfig",
@@ -15343,8 +15449,18 @@ fn run_forge_agent_cli_mode(
 
     let dummy_path = PathBuf::from(project_name);
     let effective_path = canonical_path.as_deref().unwrap_or(&dummy_path);
+    // 1119-w2rj: resolve the origin the way the OpenCode lane does — from the
+    // cloud project when there is no checkout — instead of letting the builder
+    // run `git -C <bare-name>` against the launcher CWD.
+    let cloud_env_remote_url = std::env::var("TILLANDSIAS_PROJECT_REMOTE_URL")
+        .ok()
+        .filter(|s| !s.is_empty());
+    let project_remote_url =
+        resolve_project_remote_url(canonical_path.as_deref(), cloud_env_remote_url.as_deref());
     let forge_args = build_forge_agent_run_args_with_vault(
         effective_path,
+        canonical_path.as_deref(),
+        project_remote_url.as_deref(),
         project_name,
         mirror_identity.as_deref(),
         &certs_dir,
@@ -17524,6 +17640,9 @@ mod tests {
     fn the_live_forge_argv_satisfies_the_hardening_envelope() {
         let argv = build_opencode_forge_args(
             std::path::Path::new("/tmp/probe-project"),
+            // 1119-w2rj: a real on-disk checkout in this test.
+            Some(std::path::Path::new("/tmp/probe-project")),
+            None,
             "probe-project",
             None,
             None,
@@ -17867,6 +17986,13 @@ mod tests {
     /// the value. A writer outside the lock reintroduces the mid-test
     /// var-drop this exists to end.
     static PODMAN_SEAM_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// ORDER 1119-w2rj. `set_current_dir` is PROCESS-GLOBAL and Rust runs tests
+    /// as threads in one process, so a test that moves the CWD races every other
+    /// test that touches a relative path. Serialised the same way ENV_LOCK
+    /// serialises environment mutation. Any test that changes the working
+    /// directory must hold this and restore the original before releasing it.
+    static CWD_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     fn podman_seam_lock() -> std::sync::MutexGuard<'static, ()> {
         PODMAN_SEAM_LOCK.lock().unwrap_or_else(|e| e.into_inner())
@@ -22275,6 +22401,9 @@ mod tests {
         ] {
             let argv = build_opencode_forge_args(
                 &PathBuf::from("/tmp/project"),
+                // 1119-w2rj: a real on-disk checkout in this test.
+                Some(&PathBuf::from("/tmp/project")),
+                None,
                 "alpha",
                 None,
                 prompt,
@@ -22666,6 +22795,9 @@ mod tests {
 
         let args = build_opencode_forge_args(
             &PathBuf::from("/tmp/project"),
+            // 1119-w2rj: a real on-disk checkout in this test.
+            Some(&PathBuf::from("/tmp/project")),
+            None,
             "alpha",
             None,
             None, // no prompt → interactive lane
@@ -22689,6 +22821,9 @@ mod tests {
         // Prompted (non-interactive) lane allocates no tty and needs none.
         let prompted = build_opencode_forge_args(
             &PathBuf::from("/tmp/project"),
+            // 1119-w2rj: a real on-disk checkout in this test.
+            Some(&PathBuf::from("/tmp/project")),
+            None,
             "alpha",
             None,
             Some("one shot"),
@@ -22724,6 +22859,9 @@ mod tests {
         let certs = PathBuf::from("/tmp/ca");
         let opencode = build_opencode_forge_args(
             &project,
+            // 1119-w2rj: a real on-disk checkout in this test.
+            Some(&project),
+            None,
             "alpha",
             None,
             Some("delegated opencode"),
@@ -22736,6 +22874,9 @@ mod tests {
         );
         let codex = build_forge_agent_run_args_with_vault(
             &project,
+            // 1119-w2rj: a real on-disk checkout in this test.
+            Some(&project),
+            None,
             "alpha",
             None,
             &certs,
@@ -22762,6 +22903,9 @@ mod tests {
 
         let web = build_opencode_forge_args(
             &project,
+            // 1119-w2rj: a real on-disk checkout in this test.
+            Some(&project),
+            None,
             "alpha",
             None,
             Some("detached web seed"),
@@ -22780,6 +22924,9 @@ mod tests {
         restore.remove("TILLANDSIAS_AGENT_RESULT_FORMAT");
         let unstructured = build_opencode_forge_args(
             &project,
+            // 1119-w2rj: a real on-disk checkout in this test.
+            Some(&project),
+            None,
             "alpha",
             None,
             Some("ordinary prompt"),
@@ -22823,6 +22970,9 @@ mod tests {
 
         let opencode = build_opencode_forge_args(
             &project,
+            // 1119-w2rj: a real on-disk checkout in this test.
+            Some(&project),
+            None,
             "alpha",
             None,
             None,
@@ -22835,6 +22985,9 @@ mod tests {
         );
         let agent = build_forge_agent_run_args_with_vault(
             &project,
+            // 1119-w2rj: a real on-disk checkout in this test.
+            Some(&project),
+            None,
             "alpha",
             None,
             &certs,
@@ -22856,6 +23009,9 @@ mod tests {
         std::fs::create_dir_all(&no_repo).expect("mkdir");
         let opencode = build_opencode_forge_args(
             &no_repo,
+            // 1119-w2rj: a real on-disk checkout in this test.
+            Some(&no_repo),
+            None,
             "alpha",
             None,
             None,
@@ -22868,6 +23024,9 @@ mod tests {
         );
         let agent = build_forge_agent_run_args_with_vault(
             &no_repo,
+            // 1119-w2rj: a real on-disk checkout in this test.
+            Some(&no_repo),
+            None,
             "alpha",
             None,
             &certs,
@@ -22950,6 +23109,9 @@ mod tests {
         let certs = tmp.path().join("ca");
         let opencode = build_opencode_forge_args(
             &project,
+            // 1119-w2rj: a real on-disk checkout in this test.
+            Some(&project),
+            None,
             "alpha",
             None,
             None,
@@ -22962,6 +23124,9 @@ mod tests {
         );
         let agent = build_forge_agent_run_args_with_vault(
             &project,
+            // 1119-w2rj: a real on-disk checkout in this test.
+            Some(&project),
+            None,
             "alpha",
             None,
             &certs,
@@ -23287,6 +23452,9 @@ mod tests {
         let build = |mode: ForgeMode| {
             build_opencode_forge_args(
                 &project,
+                // 1119-w2rj: a real on-disk checkout in this test.
+                Some(&project),
+                None,
                 "alpha",
                 None,
                 Some("seed prompt"),
@@ -23777,6 +23945,9 @@ esac
         let _hm = HostMountEnvGuard::enable();
         let args = build_opencode_forge_args(
             &PathBuf::from("/tmp/project"),
+            // 1119-w2rj: a real on-disk checkout in this test.
+            Some(&PathBuf::from("/tmp/project")),
+            None,
             "alpha",
             None,
             Some("hello"),
@@ -23877,6 +24048,9 @@ esac
         // @trace plan/issues/forge-image-creation-vs-firstrun-split-research-2026-07-04.md (order 220)
         let args = build_opencode_forge_args(
             &PathBuf::from("/tmp/project"),
+            // 1119-w2rj: a real on-disk checkout in this test.
+            Some(&PathBuf::from("/tmp/project")),
+            None,
             "alpha",
             None,
             Some("hello"),
@@ -23899,6 +24073,9 @@ esac
         let _env = env_lock();
         let args = build_opencode_forge_args(
             &PathBuf::from("/tmp/project"),
+            // 1119-w2rj: a real on-disk checkout in this test.
+            Some(&PathBuf::from("/tmp/project")),
+            None,
             "alpha",
             None,
             None,
@@ -23929,6 +24106,9 @@ esac
         let _env = env_lock();
         let args = build_opencode_forge_args(
             &PathBuf::from("/tmp/project"),
+            // 1119-w2rj: a real on-disk checkout in this test.
+            Some(&PathBuf::from("/tmp/project")),
+            None,
             "alpha",
             None,
             None,
@@ -23954,6 +24134,9 @@ esac
         let _env = env_lock();
         let args = build_opencode_forge_args(
             &PathBuf::from("/tmp/project"),
+            // 1119-w2rj: a real on-disk checkout in this test.
+            Some(&PathBuf::from("/tmp/project")),
+            None,
             "alpha",
             None,
             Some("hello"),
@@ -24191,6 +24374,9 @@ esac
         ] {
             let args = build_forge_agent_run_args_with_vault(
                 &PathBuf::from("/tmp/project"),
+                // 1119-w2rj: a real on-disk checkout in this test.
+                Some(&PathBuf::from("/tmp/project")),
+                None,
                 "alpha",
                 None,
                 &PathBuf::from("/tmp/ca"),
@@ -24214,6 +24400,9 @@ esac
         for mode in [ForgeAgentMode::OpenCode, ForgeAgentMode::Maintenance] {
             let args = build_forge_agent_run_args_with_vault(
                 &PathBuf::from("/tmp/project"),
+                // 1119-w2rj: a real on-disk checkout in this test.
+                Some(&PathBuf::from("/tmp/project")),
+                None,
                 "alpha",
                 None,
                 &PathBuf::from("/tmp/ca"),
@@ -24241,6 +24430,9 @@ esac
         let prompt = "Use the /meta-orchestration skill";
         let with_prompt = build_forge_agent_run_args_with_vault(
             &PathBuf::from("/tmp/project"),
+            // 1119-w2rj: a real on-disk checkout in this test.
+            Some(&PathBuf::from("/tmp/project")),
+            None,
             "alpha",
             None,
             &PathBuf::from("/tmp/ca"),
@@ -24262,6 +24454,9 @@ esac
         // No prompt → interactive TUI, no prompt env.
         let no_prompt = build_forge_agent_run_args_with_vault(
             &PathBuf::from("/tmp/project"),
+            // 1119-w2rj: a real on-disk checkout in this test.
+            Some(&PathBuf::from("/tmp/project")),
+            None,
             "alpha",
             None,
             &PathBuf::from("/tmp/ca"),
@@ -24361,7 +24556,19 @@ esac
             (ForgeMode::Web, "opencode-web"),
         ] {
             let args = build_opencode_forge_args(
-                &project, "alpha", None, None, &certs, "1.2.3", mode, None, false, false,
+                &project,
+                // 1119-w2rj: a real on-disk checkout in this test.
+                Some(&project),
+                None,
+                "alpha",
+                None,
+                None,
+                &certs,
+                "1.2.3",
+                mode,
+                None,
+                false,
+                false,
             );
             let identity = format!("TILLANDSIAS_AGENT={expected}");
             assert!(
@@ -24853,6 +25060,9 @@ esac
         let _pseam = podman_false_seam();
         let args = build_forge_agent_run_args_with_vault(
             &PathBuf::from("/tmp/project"),
+            // 1119-w2rj: a real on-disk checkout in this test.
+            Some(&PathBuf::from("/tmp/project")),
+            None,
             "alpha",
             None,
             &PathBuf::from("/tmp/ca"),
@@ -24995,8 +25205,8 @@ esac
         std::fs::create_dir_all(cache.parent().unwrap()).expect("mkdir cache dir");
         std::fs::write(&cache, "ssh-ed25519 AAAATESTCAKEY host-ca\n").expect("write cache");
 
-        let path =
-            write_forge_gitconfig("laneproj", Some("abc123mid"), &proj).expect("config written");
+        let path = write_forge_gitconfig("laneproj", Some("abc123mid"), Some(&proj), None)
+            .expect("config written");
         let text = std::fs::read_to_string(&path).expect("read config");
 
         assert!(
@@ -25077,7 +25287,8 @@ esac
             .current_dir(&proj)
             .status();
 
-        let path = write_forge_gitconfig("noca", Some("abc123mid"), &proj).expect("config");
+        let path =
+            write_forge_gitconfig("noca", Some("abc123mid"), Some(&proj), None).expect("config");
         let text = std::fs::read_to_string(&path).expect("read");
         assert!(
             text.contains("SSH push lane ENABLED but NOT wired"),
@@ -25179,7 +25390,8 @@ esac
             return; // no git binary on this host; the resolver test covers the rest
         }
 
-        let path = write_forge_gitconfig("local-only", None, &proj).expect("config written");
+        let path =
+            write_forge_gitconfig("local-only", None, Some(&proj), None).expect("config written");
         let text = std::fs::read_to_string(&path).expect("read config");
         assert!(
             !text.contains("[url "),
@@ -25246,7 +25458,7 @@ esac
         // SAFETY: single-threaded test, no concurrent env reads.
         unsafe { std::env::set_var("HOME", tmp.path().to_string_lossy().as_ref()) }
 
-        let result = write_forge_gitconfig("test-project", None, &project_path);
+        let result = write_forge_gitconfig("test-project", None, Some(&project_path), None);
         assert!(result.is_some(), "write_forge_gitconfig should succeed");
         let config_path = result.unwrap();
 
@@ -25333,7 +25545,7 @@ esac
         // SAFETY: single-threaded test, no concurrent env reads.
         unsafe { std::env::set_var("HOME", tmp.path().to_string_lossy().as_ref()) }
 
-        let result = write_forge_gitconfig("ssh-test", None, &project_path);
+        let result = write_forge_gitconfig("ssh-test", None, Some(&project_path), None);
         assert!(result.is_some(), "write_forge_gitconfig should succeed");
         let contents =
             std::fs::read_to_string(result.as_ref().unwrap()).expect("read forge gitconfig");
@@ -25515,6 +25727,9 @@ esac
         );
         let raw_args = build_opencode_forge_args(
             &project_path,
+            // 1119-w2rj: a real on-disk checkout in this test.
+            Some(&project_path),
+            None,
             "alpha",
             None,
             None,
@@ -25588,6 +25803,9 @@ esac
         );
         let fail_closed_raw = build_opencode_forge_args(
             &project_path,
+            // 1119-w2rj: a real on-disk checkout in this test.
+            Some(&project_path),
+            None,
             "alpha",
             None,
             None,
@@ -26166,6 +26384,112 @@ esac
         assert!(
             err.contains("1119-w2rj"),
             "refusal must be traceable to the packet: {err}"
+        );
+    }
+
+    /// ORDER 1119-w2rj, THE ARM THAT WOULD HAVE CAUGHT THIS IN REVIEW.
+    ///
+    /// In cloud mode the builders used to receive `PathBuf::from(project_name)`
+    /// — a BARE RELATIVE NAME — and hand it to `git -C`. Measured on lenovinha
+    /// from a real `--cloud` launch, that produced two outcomes depending on
+    /// nothing but the directory the tray was launched from:
+    ///
+    ///   no ./tillandsias present -> rc 128, "launch WITHOUT a mirror redirect"
+    ///   a stray ./tillandsias    -> rc 0, origin read from THAT repository
+    ///
+    /// The second is the one worth a test: it is silent, it succeeds, and the
+    /// forge gitconfig would carry an unrelated repository's origin. This plants
+    /// exactly that trap — a decoy git repo named after the project, in the
+    /// process CWD, with a deliberately wrong origin — and asserts the written
+    /// config carries the RESOLVED cloud URL and never the decoy.
+    #[test]
+    fn cloud_mode_gitconfig_ignores_a_stray_same_named_repo_in_the_cwd() {
+        let _cwd_guard = CWD_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let temp = tempfile::tempdir().expect("tempdir");
+        let decoy = temp.path().join("strayproj");
+        std::fs::create_dir_all(&decoy).expect("mkdir decoy");
+        let git_ok = std::process::Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(&decoy)
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if !git_ok {
+            eprintln!(
+                "skipping cloud_mode_gitconfig_ignores_a_stray_same_named_repo_in_the_cwd: git unavailable"
+            );
+            return;
+        }
+        let remote_ok = std::process::Command::new("git")
+            .args([
+                "remote",
+                "add",
+                "origin",
+                "https://github.com/example/DECOY-WRONG-REPO.git",
+            ])
+            .current_dir(&decoy)
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        assert!(remote_ok, "decoy remote add failed");
+
+        let original = std::env::current_dir().expect("cwd");
+        std::env::set_current_dir(temp.path()).expect("enter temp cwd");
+        // The cloud lane resolved this; it is what the forge must be told.
+        let resolved = "https://github.com/example/REAL-CLOUD-REPO.git";
+        let written = write_forge_gitconfig("strayproj", None, None, Some(resolved));
+        std::env::set_current_dir(&original).expect("restore cwd");
+
+        let path = written.expect("config written");
+        let text = std::fs::read_to_string(&path).expect("read config");
+        assert!(
+            !text.contains("DECOY-WRONG-REPO"),
+            "the forge gitconfig took its origin from a same-named directory in the \
+             launcher CWD — this is the 1119-w2rj defect; got:\n{text}"
+        );
+        assert!(
+            text.contains("REAL-CLOUD-REPO"),
+            "the forge gitconfig must carry the RESOLVED cloud origin; got:\n{text}"
+        );
+
+        // CONTROL: the trap is real, not a decoy nobody could have stepped in.
+        // Reproduce the PRE-FIX call exactly — the bare relative project name as
+        // the checkout, which is what `PathBuf::from(project_name)` produced —
+        // and show the decoy's origin does reach the config. Without this, the
+        // assertions above would pass just as happily against a resolver that
+        // never consults the filesystem at all, and the test would be pinning
+        // nothing.
+        let original = std::env::current_dir().expect("cwd");
+        std::env::set_current_dir(temp.path()).expect("enter temp cwd");
+        let prefix_shaped =
+            write_forge_gitconfig("strayproj", None, Some(Path::new("strayproj")), None);
+        std::env::set_current_dir(&original).expect("restore cwd");
+        let control_text =
+            std::fs::read_to_string(prefix_shaped.expect("control config")).expect("read control");
+        assert!(
+            control_text.contains("DECOY-WRONG-REPO"),
+            "CONTROL FAILED: passing the bare project name as the checkout did NOT pick up the \
+             stray repo, so this test no longer reproduces the 1119-w2rj hazard and its other \
+             assertions prove nothing; got:\n{control_text}"
+        );
+    }
+
+    /// The other half of the measured pair: cloud mode with NOTHING resolved
+    /// must write no redirect AND must not advise fixing a checkout that cannot
+    /// exist. A `None`/`None` call must also never consult the filesystem, so the
+    /// decoy planted here has to be ignored without any CWD gymnastics.
+    #[test]
+    fn cloud_mode_gitconfig_with_no_resolved_origin_states_the_cloud_reason() {
+        let path = write_forge_gitconfig("nocloudorigin", None, None, None)
+            .expect("config written even with no redirect");
+        let text = std::fs::read_to_string(&path).expect("read config");
+        assert!(
+            text.contains("THE ORIGIN COULD NOT BE RESOLVED"),
+            "an unresolved cloud origin must be stated as a FAULT in the artifact; got:\n{text}"
+        );
+        assert!(
+            text.contains("cloud project"),
+            "the reason must name the CLOUD case rather than a missing checkout; got:\n{text}"
         );
     }
 
@@ -27653,6 +27977,9 @@ esac
     fn forge_container_spec_mounts_only_per_lane_mcp_dir() {
         let args = build_forge_agent_run_args_with_vault(
             &PathBuf::from("/tmp/project"),
+            // 1119-w2rj: a real on-disk checkout in this test.
+            Some(&PathBuf::from("/tmp/project")),
+            None,
             "testproj",
             None,
             &PathBuf::from("/tmp/ca"),
