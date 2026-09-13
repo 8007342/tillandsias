@@ -1,0 +1,70 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+fields:
+  - packet_id: cloud-only-migration-interrupted-local-src-still-load-bearing
+    field: next_action
+    value: >
+      CORRECTED 2026-09-13 (yolanda), by reading the code rather than the
+      packet. The 2026-09-04 next_action's ordered plan is STALE ON ITS FIRST
+      TWO STEPS; only the macOS half and the cross-tray removal remain, and
+      NEITHER IS WINDOWS-LANE WORK. (1) "wire the tmpfs FIRST" is DONE:
+      forge_hot_src_tmpfs is called in production from
+      build_forge_agent_run_args_with_vault as spec.tmpfs(...), on the
+      clone-only lane, with a rationale comment explaining why the host-mount
+      arm is excluded, and a test pins the call site by name. The claim that
+      compute_hot_budget has zero callers is still true of THAT function, but
+      the fourth hot path is emitted at the launch site, which is what the
+      container_profile comment always said. (2) "delete the mount SECOND" is
+      DONE for the WSL lane: wsl_lifecycle's provisioning test asserts
+      home-forge-src.mount appears in no CODE line, comment-blind by
+      construction. (3) WHAT REMAINS, both off this lane: the VZ unit in
+      tillandsias-vm-layer's vz.rs still carries `After=home-forge-src.mount`
+      with a test asserting it does — that file is `#[cfg(target_os =
+      "macos")]`, so it compiles nowhere but osx-next and cannot be verified on
+      a Windows host; and the twelve-file menu/type removal, which the original
+      next_action already flagged as unfinishable here because macos-tray's
+      action_host.rs and menu_disabled_v2.rs do not type-check on yolanda.
+      Re-target to osx-next or a coordinator union pass. The heads-up on
+      host-shell menu_state.rs / menu_action.rs, which all three trays consume,
+      still stands.
+    host: yolanda
+    ts: "2026-09-13T12:45:00Z"
+
+events:
+  - packet_id: cloud-only-migration-interrupted-local-src-still-load-bearing
+    event:
+      type: progress
+      host: yolanda
+      agent: windows-yolanda-claude-20260913t082232z
+      ts: "2026-09-13T12:45:00Z"
+      note: >
+        NOT CLAIMED, AND DELIBERATELY SO. plan_next offered this as p1 windows
+        work; I scoped it before claiming and found no windows-lane work left in
+        it, so a claim would have separated the packet from the fleet and then
+        handed most of it straight back. Status stays `ready` for a host that
+        can actually finish it.
+
+        MEASURED, by symbol: forge_hot_src_tmpfs is defined in
+        tillandsias-headless's main.rs and CALLED there from
+        build_forge_agent_run_args_with_vault — a top-level production function,
+        not inside a test module — as `spec.tmpfs(forge_hot_src_tmpfs(project_name))`,
+        with a second test elsewhere in the same file asserting that call site
+        exists by name. So the first ordered step has both an implementation and
+        a pin.
+
+        The WSL half of the second step is likewise done, and its pin is already
+        comment-blind: wsl_lifecycle's test strips lines beginning `//` before
+        asserting home-forge-src.mount appears nowhere, and its failure message
+        says outright that "the explanatory comment naming it is expected and is
+        not code". Worth noting because that is the same guard shape 823-u5zf
+        and 1118-dwgx each had to learn the hard way — here it was already
+        practice.
+
+        The reason the next_action went stale is ordinary and worth naming: it
+        was written 2026-09-04 as a PLAN, the plan's first two steps were then
+        executed by someone, and nothing re-read the plan afterwards. A packet
+        whose next_action is a multi-step sequence decays one step at a time and
+        reads as fully open until a host checks each step against the code.
+      evidence_refs:
+        - "tillandsias-headless main.rs: forge_hot_src_tmpfs called from build_forge_agent_run_args_with_vault as spec.tmpfs(...), production scope, plus a test asserting the call site by name"
+        - "tillandsias-windows-tray wsl_lifecycle.rs: provisioning test asserts home-forge-src.mount appears in no code line, comment-blind"
+        - "tillandsias-vm-layer vz.rs: still emits After=home-forge-src.mount with a test asserting it; file is #[cfg(target_os = \"macos\")] so cargo check -p tillandsias-vm-layer on Windows compiles the crate without it"

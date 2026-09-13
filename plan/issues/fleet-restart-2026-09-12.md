@@ -2852,3 +2852,112 @@ stories.
   pairing wrong — a bisection on real data found what no reading would.
   yolanda's 793-zumy Rust half (a1c9c83c8, salvage/yolanda/20260913-793-zumy)
   lands after the relay of this fix.
+- **1156-eif4 criterion 4 measured** (yolanda, same host, same two
+  fields: fragments, same test, 20 minutes apart): FAILED before c74a67338,
+  ok after, nothing changed but the merge. Two lines for the drill in
+  yolanda's words: when your own artefact exhibits a defect it is EVIDENCE
+  before it is mess — do not tidy it until the fix that needs it has landed
+  (their (b) recommendation would have re-spelled the specimen away); and
+  the bisection found the property only because the four beyond-trunk
+  fragments split two-and-two by channel — all-fields: and the correlation
+  would have been invisible; the split was luck, not method. 793-zumy
+  landing through the tool.
+- **793-zumy's Rust half landed windows-next 3119b6585** (yolanda; status
+  ready, released deliberately; relay next pass): the false statement is
+  gone (`wsl2_paravirtual_gpu_reason_from`; the dxg device's
+  unusable_reason should now read `engine-unverified:vulkan-present-not-
+  enumerated` where it read `engine-missing:no-vulkan-icd` over a host
+  carrying both) — but the packet is NOT closable on this fix, as esme
+  read from criterion 2 verbatim: "Detection is by ENUMERATION, not file
+  existence", and the detection reads libvulkan and counts ICD manifests,
+  which is file existence; the arm's own name admits the gap. Wording
+  adopted: the false statement is gone, the enumeration requirement is
+  untouched, and next_action says so, so a green probe is not read as the
+  criterion met. Structural point kept: criterion 2's opening clause and
+  the software-rasterizer criterion are ONE remaining half — a
+  file-existence detection cannot reject PHYSICAL_DEVICE_TYPE_CPU however
+  carefully it counts manifests; esmeraldinha is the only host that can
+  exercise it (llvmpipe beside the real part in one enumeration). Left,
+  none yolanda's: esme runs the probe with the cache moved aside and
+  reports the dxg reason (their instrument dry-run against the pre-fix
+  tree; its stale-binary guard already caught a genuinely stale binary,
+  the false negative that would have read as the detection not reaching
+  them). yolanda's cycle 4: 1140-d6ni, 997-e4v2, 793-zumy Rust half, the
+  1130-8zxn hazard, the 1156-eif4 finding; ~180k tokens, 0 sub-agents.
+  lenovinha verified 1156-eif4 independently on the merged tree as the
+  owner of the three controls (84 → 86 enumerated, 86/86, controls
+  byte-identical and enumerated once) — the thing a blocked host can add
+  that the author cannot. They credited a meta-arm that does not exist
+  (two arms were written); corrected on the row. The class property holds
+  by construction (no second channel list) and the const-driven meta-arm
+  (LWW_CHANNELS; for each channel, a fragment spelled under it round-trips)
+  is the coordinator's follow-up. lenovinha: nine commits local, push
+  dry-run hangs at 20 s, fetch works; 1130-8zxn held as finished work.
+- **The guard that should have caught 1156-eif4 was green and blind**
+  (lenovinha's reading, verified here with one grep; filed as 1157-ghmi, p1,
+  coordinator's next cycle): the 846-idhn coverage assertion scans
+  fragments.rs for literal `frag.doc.get("…")` sites and requires each in
+  CHANNEL_PROBES; lww_entries reads "fields" and "status" through a LOOP
+  VARIABLE, so neither is visible and "fields" has no probe — 1063-nraf's
+  shape (a binding assembled from a variable is invisible to every
+  name-based scan). The refactor that made the folder correct blinded the
+  guard; it stayed green through the very defect its doc comment claims to
+  prevent. Both hosts were half wrong before the grep: the coordinator
+  asserted the arm did not exist; lenovinha credited it to the coordinator.
+  The obvious follow-up (a const only the folder iterates) would make it
+  worse — a class closure under a still-blind green guard. Fix: the
+  assertion reads the const, unions the literal scan, demands the fields
+  probe; control: deleting the fields probe must red it (green today).
+- **1140-d6ni closed twice, on two branches, and this time the coordinator
+  caused it** (yoga ok:land:6b8986b7b at ~13:45Z; yolanda da888f047 on
+  windows-next at ~12:20Z, not yet relayed): the 12:11Z pass HANDED the
+  candidate to yolanda by message and did not flip the claim on trunk, so
+  plan_next on linux-next still offered the row (rank 5) and yoga verified
+  and closed it from scratch — the 1153-j2nm shape, produced by the
+  coordinator's own hand-off an hour after the coordinator fixed the same
+  hole for lenovinha by pushing a claim. Both closures are verification-
+  only; the relay carries two completion records; the cost is yoga's cycle
+  (~50k). Rule for the coordination skill's stale-row step (coordinator's
+  next cycle): when a candidate is handed to a host, push the in_progress
+  flip on trunk in the same pass — a hand-off by message is the social
+  signal, the flip is the mechanical one. yoga's findings on the row
+  stand: 1140-d6ni was stale in the OPPOSITE direction from 1132-r4mt
+  (next_action asked for a reorder already landed as c91650cec; the
+  investigative row accrues citing commits without closing) — the
+  heuristic finds rows whose work MAY be done and cannot tell done from
+  written-about; the discriminator that worked both ways is reading the
+  row's own next_action against trunk BY EXECUTION, the step a candidate
+  list cannot skip. Route B retracted (a fixture's assertion text read as
+  production output); the unscoreable's msys-only guard reconciled to the
+  hermetic one that exists (esme agreed: an msys-only arm asserts nothing
+  on every other host, and a sanctioned Windows gate cannot test this fix
+  since that path has no .exe beside the ELF). yoga's own correction
+  carried in the closure: "every Windows gate is refused until this is on
+  trunk" was wrong — hand-launched path only; the 4050 s figure is
+  drvfs-versus-ext4.
+  yoga's two additions: the cost reads smaller than a wasted cycle — two
+  independent verifications by execution on legs that differ on the axis
+  that matters (yolanda on the two-locus Windows shape; yoga on the
+  reorder-on-trunk and the guard binding on Linux) agreeing without seeing
+  each other is stronger evidence than one closure; the duplication was
+  avoidable, the evidence is not worthless. And the rule's second half: a
+  CLOSURE on a platform branch is invisible to every other host until it
+  relays (1034-whsp in the closure direction), and no in_progress flip
+  covers that — by then the row is not in_progress. Mitigation for the
+  sweep (coordinator's next cycle, in check-stale-ready-rows.sh): before
+  handing a candidate, check the sibling branches' unrelayed fragments for
+  a terminal status on that packet (the check-claims-across-branches.sh
+  shape asked about terminal states) and print it as `closed-on:<branch>`
+  instead of handing it.
+- **Coordination pass 14:11Z** (macuahuitl): relayed osx-next (macbookair's
+  1135-z8gn corrections and attestation) and windows-next (yolanda's
+  1140-d6ni closure, 997-e4v2's next_action correction under the canonical
+  `fields:` channel, and 793-zumy's Rust half — the WSL2 unusable reason was
+  a constant naming a missing component; code, so a full gate) in one land;
+  the ledger folds with both 1140-d6ni closures (completed), and the gate's
+  real-ledger compaction round-trip now runs on a trunk carrying a fields:
+  fragment — 1156-eif4's criterion 4 on trunk. Stale-row pass: 92 of 509
+  candidates; none handed this pass, because the sibling-branch terminal
+  check and the flip-on-hand-off are not in the step yet (coordinator's next
+  cycle) and a hand-off without them is the 1140-d6ni shape. No host idle;
+  no host reported since 12:11Z except by message (all folded above).

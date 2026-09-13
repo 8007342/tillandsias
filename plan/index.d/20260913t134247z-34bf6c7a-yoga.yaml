@@ -1,0 +1,82 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-cheatsheet-tier-check-protects-neither-windows-host-by-two-independent-routes
+    event:
+      type: completed
+      ts: "2026-09-13T13:42:47Z"
+      agent_id: linux-yoga-claude-20260913t134247z
+      host: yoga
+      summary: |
+        CLOSED. Verified by execution against current trunk, not from recall. Flagged by
+        the stale-ready sweep, and it was stale in the OPPOSITE direction from the usual
+        false positive: the work is done and the row still asked for it. Its next_action
+        read "Land the reorder in resolve_target_binary ... this is the whole fix", and
+        that reorder landed hours ago — so any host taking this row from the selector
+        would have set out to redo landed work. It was ranked #5 when I picked it up.
+
+        VERIFIED, each by execution:
+
+          THE FIX IS ON TRUNK, by content rather than by a verdict line:
+              git show origin/linux-next:scripts/plan-binary-probe.sh
+              -> for candidate in "$dir/$name" "$dir/$name.exe"
+          locus-native first, matching resolve_plan_binary (1030-i2p8). Landed
+          c91650cec.
+
+          CONFIRMED IN PRODUCTION BY esme, in the configuration that broke — the mixed
+          target dir with both artefacts present. resolve_target_binary returned the
+          ELF, and check-cheatsheet-tiers printed "by tier: bundled=154,
+          distro-packaged=0, pull-on-demand=74, unset=0 / OK: all tier checks passed"
+          against the same tree that had said "cheatsheets/ directory not found". They
+          claimed the CONTENT line rather than an exit code, their PIPESTATUS having
+          come back empty through nested wsl.exe quoting — the honest call.
+
+          THE GUARD EXISTS, PASSES AND IS WIRED: case 6 of
+          scripts/test-plan-binary-probe.sh, 6/6, bound literally at build.sh's
+          `_run bash "$SCRIPT_DIR/scripts/test-plan-binary-probe.sh"` — route (1) of the
+          two this row names. Verified by reading the binding, since the row itself
+          warns that an unwired fixture is a file rather than a gate (1068-cxmf).
+
+          ROUTE B IS RETRACTED, not unmet. yolanda withdrew the cargo-absent half: the
+          `skip:cheatsheet-tiers:cargo-absent` line they had quoted was
+          test-cycle-preflight-cargo-resolution.sh's own ASSERTION TEXT, not production
+          output, and their real tier step passed with 228 validated. So the row reduces
+          to one route and the reorder is the whole of it, as its own corrected
+          next_action says.
+
+        RECONCILING THE ONE MISMATCH, so nobody hunts for a file that will never exist.
+        This row's `unscoreable` names a FUTURE LITMUS FILENAME —
+        scripts/test-target-binary-resolves-locus-native.sh, msys-only, SKIPPING where
+        WSL interop is off. What was built instead is case 6 of the existing
+        test-plan-binary-probe.sh, hermetic: two RUNNABLE stubs in one directory, the
+        extensionless one required to win. Deliberate, and esme agreed: an msys-only arm
+        that skips where interop is off asserts NOTHING on every host that is not
+        esmeraldinha in that configuration, and interop state is precisely what masked
+        this defect for months. The hermetic arm pins the ORDERING on every host in the
+        fleet, independent of anyone's environment. Mutation-verified with the diff
+        proven non-empty first — restoring the pre-fix order reds case 6 by name.
+
+        AND THE REASON THE HERMETIC ARM MATTERS MORE THAN THE TRANSCRIPT: a sanctioned
+        Windows gate CANNOT test this fix. That path exports CARGO_TARGET_DIR to an ext4
+        dir carrying Linux artefacts only, so the probe never sees two runnable
+        candidates and a green there is silent about the ordering. Case 6 is the only
+        artefact in the tree that can go red if someone reverts the order; esme's
+        transcript demonstrates one host's accidental configuration and cannot be re-run
+        by anyone who does not reproduce that accident.
+
+        A CORRECTION THIS ROW SHOULD CARRY: I relayed "every Windows gate is refused
+        until this is on trunk" to three hosts. That was WRONG. The defect was reachable
+        only on the hand-launched path against the mixed drvfs ./target; the sanctioned
+        path could not reach it. The fix is right; my account of its blast radius was
+        not, and the 4050s figure is drvfs-versus-ext4 rather than floor-tier-versus-any.
+
+        DUPLICATE ORDER, recorded so the ledger has one live row: 1142-wn2k is the same
+        defect, minted by me before esme's row reached me, and is superseded into this
+        one. This row carries the pre-fix transcript and is the one to read.

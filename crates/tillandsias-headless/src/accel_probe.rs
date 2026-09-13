@@ -1023,8 +1023,85 @@ fn wsl2_paravirtual_gpu(dxg_present: bool, dri_present: bool, already_found: boo
 /// build loses the production value. Order 935-6fzk found this from macOS,
 /// where the Linux-only caller vanishes and nothing else references it.
 #[cfg(any(target_os = "linux", test))]
-fn wsl2_paravirtual_gpu_reason() -> &'static str {
-    "engine-missing:no-vulkan-icd"
+/// ORDER 793-zumy. What actually stops the dxg device being reachable — the
+/// PURE half, unit-tested, in the shape `amd_gpu_disposition` already uses on
+/// this file's AMD arm.
+///
+/// THIS USED TO BE AN UNCONDITIONAL STRING LITERAL. `enumerate_gpus` assigned
+/// `engine-missing:no-vulkan-icd` to EVERY dxg device, and nothing read
+/// `icd.d`, `libvulkan`, or an enumeration result — so the probe stated a cause
+/// it had not looked for. On esmeraldinha that statement is simply false: that
+/// host carries a Vulkan loader and the stock Fedora mesa-vulkan-drivers ICD
+/// set, unprovisioned, and enumerates Microsoft Direct3D12 (Intel UHD) as an
+/// INTEGRATED_GPU via DRIVER_ID_MESA_DOZEN over /dev/dxg. A constant cannot be
+/// wrong on one host and right on another; it was wrong everywhere and
+/// coincidentally matched the hosts nobody had checked.
+///
+/// THE VERDICT IS STILL DELIBERATELY UNCHANGED — `usable` stays false and the
+/// class stays cpu-only. Deciding a dxg device is USABLE requires enumerating
+/// it and rejecting PHYSICAL_DEVICE_TYPE_CPU / DRIVER_ID_MESA_LLVMPIPE, which
+/// is criterion 2's other half and needs a host that can enumerate. This change
+/// stops the probe asserting a false CAUSE; it does not promote the device.
+///
+/// WHY THE THIRD ARM IS NOT `engine-missing`. Criterion 2 requires that word
+/// verbatim for the case it describes — hardware present, no runtime to reach
+/// it — and both missing arms keep it. When the loader AND an ICD are present
+/// the engine is NOT missing, and saying so would be the same false statement
+/// with a new spelling. `engine-unverified` says what is true: something is
+/// installed, nothing has enumerated it yet. The owning packet should object
+/// here if criterion 2 was meant to cover that case too.
+fn wsl2_paravirtual_gpu_reason_from(loader_present: bool, icd_count: usize) -> String {
+    match (loader_present, icd_count) {
+        (false, _) => "engine-missing:no-vulkan-loader".to_string(),
+        (true, 0) => "engine-missing:no-vulkan-icd".to_string(),
+        (true, _) => "engine-unverified:vulkan-present-not-enumerated".to_string(),
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+/// The IO half: what is actually on disk. `root` is a parameter ONLY so tests
+/// can point it at a fixture tree — production passes "/" — which is the same
+/// seam `enumerate_render_nodes_at` uses and for the same reason: a test that
+/// read the real filesystem would assert whatever this machine happens to have,
+/// which is the vacuous-green shape this file has been bitten by before.
+///
+/// Both ICD directories are read because the loader reads both: the packaged
+/// set lives under /usr/share and local overrides under /etc. Counting `.json`
+/// entries rather than listing them keeps this a fact-gatherer — the decision
+/// belongs in the pure function above, not here.
+fn wsl2_vulkan_facts_at(root: &std::path::Path) -> (bool, usize) {
+    // The loader's SONAME, not the -dev symlink: `libvulkan.so` without the
+    // version suffix is shipped by the development package and can be present
+    // on a host that cannot actually load an ICD.
+    let loader_present = [
+        "usr/lib/x86_64-linux-gnu/libvulkan.so.1",
+        "usr/lib64/libvulkan.so.1",
+        "usr/lib/libvulkan.so.1",
+    ]
+    .iter()
+    .any(|rel| root.join(rel).exists());
+
+    let icd_count = ["usr/share/vulkan/icd.d", "etc/vulkan/icd.d"]
+        .iter()
+        .filter_map(|rel| std::fs::read_dir(root.join(rel)).ok())
+        .flatten()
+        .flatten()
+        .filter(|e| {
+            e.path()
+                .extension()
+                .is_some_and(|x| x.eq_ignore_ascii_case("json"))
+        })
+        .count();
+
+    (loader_present, icd_count)
+}
+
+#[cfg(any(target_os = "linux", test))]
+/// Production entry point: gather the facts from the live filesystem, then
+/// decide. Kept as a thin seam so the decision stays testable without IO.
+fn wsl2_paravirtual_gpu_reason() -> String {
+    let (loader, icds) = wsl2_vulkan_facts_at(std::path::Path::new("/"));
+    wsl2_paravirtual_gpu_reason_from(loader, icds)
 }
 
 /// Order 850-bif2, the pure decision half of the AMD arm (unit-tested):
@@ -2934,7 +3011,7 @@ fn enumerate_gpus() -> Vec<DeviceRecord> {
                 // the class stays cpu-only: nothing here makes the GPU reachable
                 // today, and inflating the class would place GPU work on a host
                 // that cannot run it — the opposite failure, and the worse one.
-                unusable_reason: Some(wsl2_paravirtual_gpu_reason().to_string()),
+                unusable_reason: Some(wsl2_paravirtual_gpu_reason()),
                 policy_unscheduled: None,
                 // No lane: unreachable from the container AND from host-native
                 // code in the guest, because no Vulkan ICD is installed to
@@ -5857,29 +5934,123 @@ mod tests {
     /// missing translation layer, which is provisioning, not silicon.
     ///
     /// Read the sibling test below before trusting either: it renders a
-    /// TEST-SUPPLIED reason and therefore cannot pin production at all. This one
-    /// asserts the shipped value, and was confirmed to go red against the old
-    /// literal before it went green.
+    /// TEST-SUPPLIED reason and therefore cannot pin production at all.
+    ///
+    /// RETARGETED 793-zumy: this asserted `wsl2_paravirtual_gpu_reason()`, which
+    /// was a constant and is now a DETECTION reading the live filesystem. Left
+    /// as it was, the test would pass on any host without a Vulkan loader —
+    /// including this one — and go RED on esmeraldinha, which carries a loader
+    /// and an ICD set and is the only host that can verify this packet at all.
+    /// A test that reds on the verification host and greens everywhere else is
+    /// worse than no test. It now drives the PURE half with supplied facts, so
+    /// its verdict is a property of the code rather than of whoever ran it.
+    ///
+    /// REGIME: pure function, no IO, no host state, no wall-clock.
     #[test]
     fn the_wsl2_unusable_reason_names_the_missing_engine_not_the_missing_render_node() {
-        let reason = wsl2_paravirtual_gpu_reason();
+        // BOTH missing arms must carry criterion 2's verbatim word.
+        for (loader, icds, arm) in [(false, 0usize, "no loader"), (true, 0, "loader, no ICD")] {
+            let reason = wsl2_paravirtual_gpu_reason_from(loader, icds);
+            assert!(
+                reason.starts_with("engine-missing"),
+                "criterion 2 requires the verbatim word `engine-missing` for the {arm} arm; got {reason}"
+            );
+            // The red herring must not come back.
+            assert!(
+                !reason.contains("dri-render-node"),
+                "the reason blames a render node WSL2 never creates: {reason}"
+            );
+            // A provisioning statement should name its own remedy, like the
+            // sibling rocm-runtime-missing / intel-compute-runtime-missing do.
+            assert!(
+                reason.contains("vulkan"),
+                "the reason should name WHICH engine is missing: {reason}"
+            );
+        }
 
-        // Criterion 2 requires this word verbatim.
-        assert!(
-            reason.starts_with("engine-missing"),
-            "criterion 2 requires the verbatim word `engine-missing`; got {reason}"
+        // AND THE TWO MISSING ARMS MUST BE DISTINGUISHABLE. Before this packet
+        // every dxg device got `no-vulkan-icd` whether or not a loader existed,
+        // so the reason named a remedy that would not have helped a host with
+        // no loader at all.
+        assert_ne!(
+            wsl2_paravirtual_gpu_reason_from(false, 0),
+            wsl2_paravirtual_gpu_reason_from(true, 0),
+            "a missing loader and a missing ICD need different remedies and must not share a reason"
         );
-        // The red herring must not come back.
+    }
+
+    /// 793-zumy: the arm that makes this a detection rather than a constant.
+    /// esmeraldinha HAS a loader and an ICD set, so `engine-missing` is simply
+    /// false there — it was the shipped answer anyway, on every host.
+    ///
+    /// REGIME: pure function, no IO, no host state, no wall-clock.
+    #[test]
+    fn a_present_loader_and_icd_is_not_reported_as_a_missing_engine() {
+        let reason = wsl2_paravirtual_gpu_reason_from(true, 1);
         assert!(
-            !reason.contains("dri-render-node"),
-            "the reason blames a render node WSL2 never creates: {reason}"
+            !reason.starts_with("engine-missing"),
+            "with a loader and an ICD present the engine is not missing; got {reason}"
         );
-        // A provisioning statement should name its own remedy, like the sibling
-        // rocm-runtime-missing / intel-compute-runtime-missing values do.
         assert!(
-            reason.contains("vulkan"),
-            "the reason should name WHICH engine is missing: {reason}"
+            reason.contains("unverified"),
+            "the honest statement is that nothing has enumerated it yet; got {reason}"
         );
+    }
+
+    /// 793-zumy, the IO half against a FIXTURE TREE — never the real /usr,
+    /// which would assert whatever this machine happens to carry.
+    ///
+    /// REGIME: hermetic, tempdir-rooted, no host state, no wall-clock.
+    #[test]
+    fn wsl2_vulkan_facts_read_the_icd_directories_the_loader_reads() {
+        let root = std::env::temp_dir().join(format!(
+            "tillandsias-vulkan-facts-{}-{}",
+            std::process::id(),
+            line!()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        let share = root.join("usr/share/vulkan/icd.d");
+        let etc = root.join("etc/vulkan/icd.d");
+        std::fs::create_dir_all(&share).unwrap();
+        std::fs::create_dir_all(&etc).unwrap();
+
+        // Empty directories are NOT an ICD set.
+        let (loader, icds) = wsl2_vulkan_facts_at(&root);
+        assert!(!loader, "fixture has no loader");
+        assert_eq!(icds, 0, "empty icd.d directories are not an ICD");
+
+        // A non-json file must not count — the loader reads manifests, and a
+        // README in that directory is not one.
+        std::fs::write(share.join("README"), b"not a manifest").unwrap();
+        assert_eq!(
+            wsl2_vulkan_facts_at(&root).1,
+            0,
+            "a non-json file in icd.d must not read as an ICD"
+        );
+
+        // BOTH directories count, because the loader reads both.
+        std::fs::write(share.join("dzn_icd.x86_64.json"), b"{}").unwrap();
+        std::fs::write(etc.join("local_override.json"), b"{}").unwrap();
+        assert_eq!(
+            wsl2_vulkan_facts_at(&root).1,
+            2,
+            "packaged and local ICD manifests must both be seen"
+        );
+
+        // The loader arm keys on the SONAME, not the -dev symlink.
+        std::fs::create_dir_all(root.join("usr/lib64")).unwrap();
+        std::fs::write(root.join("usr/lib64/libvulkan.so"), b"").unwrap();
+        assert!(
+            !wsl2_vulkan_facts_at(&root).0,
+            "libvulkan.so without the version suffix is the -dev symlink, not a loadable runtime"
+        );
+        std::fs::write(root.join("usr/lib64/libvulkan.so.1"), b"").unwrap();
+        assert!(
+            wsl2_vulkan_facts_at(&root).0,
+            "libvulkan.so.1 is the loader the ICD is dlopened by"
+        );
+
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     /// NOTE: this test cannot pin the production reason — it supplies its own.
