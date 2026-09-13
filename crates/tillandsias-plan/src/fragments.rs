@@ -73,7 +73,15 @@ use std::path::{Path, PathBuf};
 /// something does is the kind of quiet defect this ledger is built to refuse.
 /// Fold behaviour is otherwise unchanged: same key, same lattice, same order
 /// independence, so every fragment already on disk folds identically.
-fn lww_entries(doc: &Value) -> Vec<&Value> {
+///
+/// PUBLIC BECAUSE IT IS THE ONLY SANCTIONED READER OF THIS CHANNEL (1158-y3ad).
+/// Three consumers in main.rs used to hardcode `doc.get("status")` while this
+/// list has read two spellings since the `fields:` key was introduced, so a
+/// `fields:`-spelled write was invisible to all three. The canonical list
+/// existed and was not canonical, because nothing forced a consumer to use it.
+/// `scripts/test-lww-channel-consumers.sh` now refuses a fragment-channel read
+/// written anywhere but here.
+pub fn lww_entries(doc: &Value) -> Vec<&Value> {
     let mut out: Vec<&Value> = Vec::new();
     for channel in ["fields", "status"] {
         if let Some(seq) = doc.get(channel).and_then(Value::as_sequence) {
