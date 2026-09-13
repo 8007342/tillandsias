@@ -1,0 +1,60 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-dispatch-wrapper-that-execs-into-a-container-cannot-be-killed-so-a-cancelled-gate-keeps-running-in-the-same-checkout
+    event:
+      type: investigated
+      ts: "2026-09-13T09:13:11Z"
+      agent_id: linux-yoga-claude-20260913t091311z
+      host: yoga
+      summary: |
+        THE MECHANISM THIS ROW'S PARENT EXPLICITLY RULED OUT WAS IN THE INSTRUMENT THIS
+        ROW BUILT. Cause found by lenovinha, and the closure is worth more than the fix.
+
+        1132-r4mt's filing event, 2026-09-12, in its own words: "Sibling by SYMPTOM to
+        1130-qk7d — a check that answers differently in situ than standalone — but NOT
+        by mechanism: 1130 was SIGPIPE in a `grep -q` pipeline and cannot explain a ruby
+        positive control. Filed as its own row for that reason; a row titled for one
+        mechanism is a poor home for another."
+
+        That dismissal was CORRECT about the archiver. And the fixture written under
+        this row — the child investigation of exactly that packet — then failed by
+        precisely the dismissed mechanism, with precisely the same symptom, and refused
+        innocent lands on lenovinha for it. Ruling a mechanism out for the SUBJECT says
+        nothing about whether it is in the INSTRUMENT you build to study the subject.
+
+        WHAT lenovinha MEASURED, varying only the pipe, inside tillandsias-builder where
+        the gate runs this file, same token, same process, same library:
+            tillandsias_marked_pids | grep -qxF   -> 5/5 reported FAILURE on a real match
+            capture, then match                   -> 0/5 reported FAILURE
+        Under this file's `set -o pipefail`, `grep -q` exits at the first hit and
+        SIGPIPEs the producer still walking /proc; pipefail takes the producer's death
+        as the pipeline's status. On the HOST it passes either way — which is why it
+        refused lands and why every by-hand re-run afterwards was green. 1076-kft9's
+        class, environment-dependent as drvfs-vs-ext4 there and host-vs-container here.
+
+        AND MY FIX WAS WRONG FOR THIS CASE IN A WAY WORTH RECORDING. I replaced the
+        fixed sleeps with `await_marked`, and await_marked polled BY PIPING INTO
+        grep -q — the same defective construct. So in the container it could only ever
+        time out: lenovinha measured 10/13. Alone, my change would have converted an
+        intermittent false failure into a DETERMINISTIC one. The poll was the right
+        instinct for a real class (a fixed sleep before an assertion is a race by
+        construction) and simply not this case, and I could not reproduce the race in
+        18 attempts because there was no race to reproduce — the flake was the pipe.
+        That is the second time this row has taught me that failing to reproduce is
+        evidence about the hypothesis, not a licence to fix on construction alone and
+        stop looking.
+
+        WHAT LANDED, 47271ced5, keeps my file as the base — my arms, my awaits, the
+        pb/pc vacuity fix — and applies capture-before-matching to the helper and to the
+        one remaining raw pipeline, where a SIGPIPE failure would have made the NEGATIVE
+        control pass for the wrong reason. Combined 11/11 in the container and on the
+        host, arm accounting by enumeration. Verified on merge here: zero raw
+        `marked_pids | grep` pipelines remain in the file.
