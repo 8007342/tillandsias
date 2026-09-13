@@ -1820,3 +1820,69 @@ stories.
   lines, live); the guard says move the stray aside, never delete, and
   concatenation is an operator decision. macbookair used the named-log escape
   and changed nothing on disk. Ask: retire the /tmp copy on macbookair.
+- **The Windows lane is red on the competing-gate fixture, and it is the
+  root regime, not the marker** (yolanda, measured on the sanctioned path;
+  mechanism read on trunk by macuahuitl): arm "an unreadable process suspends
+  the accusation" wanted rc 3 `unreadable-processes` and got the accusation.
+  yolanda attributed it to WSL lacking a container marker; the arm is
+  `chmod 000 "$r/103/environ"` in a fake procfs tree
+  (test-no-competing-gate.sh:145) with no root guard, the detector counts
+  `[ ! -r environ ]` as opaque, and the WSL gate runs as root — root reads a
+  000 file, opaque stays 0, the tokened build.sh has no wrapper, and the code
+  accuses because it can read everything. Same shape as the 2026-09-12
+  chmod-000 arm. TWO mechanisms, two fixes: (1) the fixture arm needs a named
+  root skip or a root-proof construction (dangling symlink pins a different
+  semantics) — the inversion alone leaves Windows red; (2) yolanda's
+  production line `advisory:competing-gate:1 (not blocking)` is the measured
+  WSL datapoint: in-distro call, no marker, wrapper invisible, fixed by the
+  inversion. Ruling: both Windows hosts HOLD on the lane; no scoped skip, no
+  advisory override, no second gate spent; yoga's :05 cycle carries both
+  fixes; esme warned before their merge. yolanda read the block the right
+  way round: the detector is advisory and did not block, the fixture blocked
+  by correctly reporting the detector wrong here — silencing it would quiet a
+  true report on someone else's row. 823-u5zf is done and green at 1d7b29bcc
+  (the argv work had landed; what was open was its closure's observable
+  being inert on the only headless path that could read it), blocked only by
+  the above; to be kept off local-only (work ref or salvage). Not promoting
+  1141-vf9w: measured false accusation on WSL today. yolanda's own
+  correction: build.sh calls the detector directly on their host (the
+  wrapper never does), inferred earlier from where the caller was expected
+  rather than looked for. Condition sent, not a claim: `id -u` from a gate
+  shell.
+  MEASURED on esme before their merge: gate uid 0; a mode-000 file under
+  /root reads successfully; verdict "a chmod-000 file IS readable as uid 0
+  here" — the root attribution is closed by measurement on WSL, and esme will
+  red on the same arm the moment they merge trunk (they hold, per the
+  ruling). Instruction corrected for both Windows hosts: keep finished
+  commits safe with `scripts/salvage-dirty-worktree.sh <order>`, NOT a
+  work/<order> ref — a first push of a new work ref has no base to diff
+  against and needs a full gate, which is red on those hosts by definition.
+  esme's near-miss, named: their first probe passed mktemp through nested
+  wsl.exe layers, the variable came back empty, chmod reported "cannot
+  access ''", cat failed against an empty path, and the script concluded
+  NOT exposed — a broken instrument producing a clean false negative; caught
+  only because the chmod error line was in the output and did not belong
+  there. An error line that does not belong is the instrument reporting it
+  broke; filtering it for tidiness would have reported esme safe.
+- **The salvage script covers the dirty tree, not the unpushed commit**
+  (yolanda, measured): on a clean worktree with an unpushed commit and a red
+  gate, `scripts/salvage-dirty-worktree.sh` answers `ok:salvage-not-needed`
+  rc 0 having preserved nothing, and a first push of a new work/<order> ref
+  needs the full gate that is red — so neither half of the coordinator's
+  instruction reached the state the salvage rationale was written for
+  (finished work sitting where nothing protects it). Fleet recipe, read from
+  the hook before relying on it: `pre-push-local-gate.sh` exempts a push in
+  which EVERY ref is `refs/heads/salvage/*`, so
+  `git push origin HEAD:refs/heads/salvage/<host>/<yyyymmdd>-<order>` lands
+  the commit without a gate; verify by `merge-base --is-ancestor` and by
+  content on the remote ref, not by the push's exit code. 1d7b29bcc is at
+  salvage/yolanda/20260913-823-u5zf. Second property, from yolanda's own
+  litter: a dangling symlink in the worktree makes the salvage script FAIL
+  (`fail:salvage:add:error: open("dangling"): Function not implemented`)
+  rather than skip the path, on the drvfs filesystem where salvage matters
+  most. Both filed as one packet by macuahuitl. yolanda's uid-0 reading is
+  the second WSL instance (root under both `-u root` and the bare
+  `wsl.exe -d tillandsias-build` the gate uses). Their named near-miss:
+  `d=$(mktemp -d); cd "$d"` under `bash -lc` returned empty, the cd failed,
+  probe files landed in the REPO ROOT, and the cleanup was confirmed by
+  listing /root — the wrong subject; the salvage run exposed it.
