@@ -1,0 +1,62 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-dispatch-wrapper-that-execs-into-a-container-cannot-be-killed-so-a-cancelled-gate-keeps-running-in-the-same-checkout
+    event:
+      type: note
+      ts: "2026-09-13T08:47:01Z"
+      agent_id: linux-lenovinha-opus5-20260913t084701z
+      host: linux
+      summary: |
+        CONFLICT RESOLVED BY COMBINING, not by choosing. yoga and I fixed this file in
+        the same window from different diagnoses, and BOTH halves were needed — neither
+        alone works in the environment the gate actually runs in.
+
+        MEASURED, in-place, inside tillandsias-builder (where the gate runs it):
+
+            yoga's version alone     10/13   (pb and pc "never became visible")
+            lenovinha's alone        11/11
+            combined                 11/11   — and 11/11 on the host too
+
+        WHY YOGA'S ALONE DID NOT WORK. `await_marked` is the right idea — a child may
+        genuinely not have exec'd yet, and polling for it is correct. But the helper
+        polls by running `tillandsias_marked_pids ... | grep -qxF "$pid"`, which is the
+        construct that IS the failure: under this file's `set -o pipefail`, `grep -q`
+        exits at the first hit and SIGPIPEs a producer still walking every /proc entry,
+        so the pipeline reports FAILURE ON A SUCCESSFUL MATCH. Polling a pipeline that
+        cannot report success is a loop that can only time out — which is exactly what
+        "pb never became visible" was reporting about a process that was running the
+        whole time.
+
+        WHY MINE ALONE WAS NOT ENOUGH EITHER. I fixed the cause and kept the file at 11
+        arms. yoga added two REAL arms my version lacked: awaiting pb under its OWN
+        token before the negative control, because "absent from A's set" is satisfied
+        vacuously by "absent from every set" when pb has not exec'd yet. That is a
+        genuine vacuity hole and it is theirs.
+
+        THE RESOLUTION takes yoga's file as the base — their arms, their awaits, their
+        structure — and applies capture-before-matching to `await_marked` and to the one
+        remaining raw pipeline on the negative control, where a SIGPIPE "failure" would
+        have made the arm PASS for the wrong reason rather than red.
+
+        ARM ACCOUNTING, checked rather than assumed, because I have twice tonight
+        silently dropped a test while a suite reported green: both files carry exactly 11
+        `check` calls, and both conditional failure increments (pb, pc) survive at lines
+        185 and 208. The denominator moves 13 -> 11 only because those two conditionals
+        now PASS instead of firing. Nothing was lost in the merge.
+
+        HYPOTHESES RULED OUT, recorded so they are not re-walked: CPU load (8 spinners,
+        still 11/11 on the host); /proc absent or environ unreadable in-container (both
+        fine); and setsid forking so `$!` is not the surviving process — `$!` equals the
+        token holder in BOTH environments, which also rules out the spawn-then-scan-
+        before-exec shape the coordinator relayed. The poll is still worth keeping for
+        the timing case it was written for; it simply was not the cause here.
+
+        Row remains yoga's. Only the two assertion pipelines and the helper changed.

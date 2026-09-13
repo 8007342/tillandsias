@@ -113,6 +113,52 @@ spawn_marked() {
 
 alive() { kill -0 "$1" 2>/dev/null; }
 
+# WAIT FOR THE PREMISE, DO NOT SLEEP AND HOPE. These arms used a fixed
+# `sleep 0.3` between spawning a marked process and scanning for it, which is a
+# race by construction: `/proc/<pid>/environ` is the EXEC-TIME environment, so
+# between fork and exec the pid exists carrying the PARENT's environ and no
+# token. The window is tiny — I could not reproduce it on yoga in 18 attempts,
+# including under six spinning CPU hogs with the wait removed entirely — but
+# lenovinha's gate refused an innocent diff at `FAIL: a marked process is found
+# by its token`, 10/11, and the same tree standalone was 11/11 three times. A
+# fixed sleep cannot be made correct by lengthening it; it can only be made
+# less likely to be wrong, and it is invisible to whoever re-runs by hand.
+#
+# So poll until the condition the arm depends on is TRUE, and FAIL LOUDLY if it
+# never becomes true rather than asserting over a premise that was never
+# established — the rule this row produced, applied to the setup again.
+await_marked() { # await_marked <pid> <token>; 0 if the token appears, 1 on timeout
+    local pid="$1" token="$2" i marked
+    for ((i = 0; i < 100; i++)); do
+        # CAPTURE, THEN MATCH (1076-kft9). This read
+        # `tillandsias_marked_pids ... | grep -qxF "$pid"`, and under the
+        # `set -o pipefail` at the top of this file that pipeline reports
+        # FAILURE ON A SUCCESSFUL MATCH: `grep -q` exits at the first hit and
+        # SIGPIPEs the producer, which is still walking every /proc entry.
+        #
+        # MEASURED 2026-09-13, inside tillandsias-builder (where the GATE runs
+        # this file), same token, same process, same library, varying only the
+        # pipe:
+        #     PIPED    5/5 reported FAILURE
+        #     CAPTURED 0/5 reported FAILURE
+        # On the host it passes either way, which is why this read as a flake:
+        # it refused innocent lands and every by-hand re-run afterwards was
+        # green.
+        #
+        # The poll below is still right — a child may genuinely not have exec'd
+        # yet — but polling a pipeline that cannot report success is a loop that
+        # can only time out: every one of its 100 iterations "failed" in the
+        # toolbox, which is why the awaits below reported that pb and pc never
+        # became visible when both were running the whole time.
+        marked="$(tillandsias_marked_pids "$token" 2>/dev/null)"
+        if printf '%s\n' "$marked" | grep -qxF "$pid"; then
+            return 0
+        fi
+        sleep 0.05
+    done
+    return 1
+}
+
 TOKEN_A="test-a-$$-${RANDOM}"
 TOKEN_B="test-b-$$-${RANDOM}"
 
@@ -123,23 +169,7 @@ t1="$(tillandsias_dispatch_token)"; t2="$(tillandsias_dispatch_token)"
 
 # 2. A marked process is FOUND by its token.
 pa="$(spawn_marked "$TOKEN_A")"
-sleep 0.3
-# ORDER 1076-kft9, MEASURED HERE 2026-09-13. This was
-# `tillandsias_marked_pids ... | grep -qxF ...`, and under `set -o pipefail`
-# (line 25) that pipeline reports FAILURE ON A SUCCESSFUL MATCH: `grep -q` exits
-# at the first hit and SIGPIPEs the producer, which is still walking /proc.
-# EPIPE happens iff the producer still has bytes to write when the consumer
-# exits, so it is environment-dependent — and this gate runs INSIDE the
-# tillandsias-builder toolbox, where it reproduces every time.
-#
-#   inside the toolbox, same token, same library:
-#     PIPED    (grep -q under pipefail)  5/5 reported FAILURE
-#     CAPTURED (same question, no pipe)  0/5 reported FAILURE
-#
-# On the host it passes, which is why this read as a flake: it refused innocent
-# lands and every by-hand re-run afterwards was green. Capture, then match.
-_marked_a="$(tillandsias_marked_pids "$TOKEN_A")"
-printf '%s\n' "$_marked_a" | grep -qxF "$pa"; check "a marked process is found by its token" $?
+await_marked "$pa" "$TOKEN_A"; check "a marked process is found by its token" $?
 
 # 3. THE NEGATIVE CONTROL, and the reason a marker is used instead of a command
 #    line at all: a process marked with a DIFFERENT token must be invisible
@@ -148,11 +178,16 @@ printf '%s\n' "$_marked_a" | grep -qxF "$pa"; check "a marked process is found b
 #    failure than the orphan it is fixing. This arm is the only one that fails
 #    for that mistake; every other arm passes with an argv matcher.
 pb="$(spawn_marked "$TOKEN_B")"
-sleep 0.3
-# Same hazard, opposite assertion: here a SIGPIPE-induced failure would make the
-# arm pass for the wrong reason, which is worse than a false red.
-_marked_a2="$(tillandsias_marked_pids "$TOKEN_A")"
-if printf '%s\n' "$_marked_a2" | grep -qxF "$pb"; then false; else true; fi
+# Wait for pb under its OWN token first. Without this the negative control
+# passes vacuously whenever pb has not exec'd yet — "absent from A's set"
+# would be satisfied by "absent from every set", which asserts nothing.
+if ! await_marked "$pb" "$TOKEN_B"; then
+    fail=$((fail+1)); echo "FAIL: pb never became visible under its own token — the negative control would have asserted nothing"
+fi
+# Same hazard, opposite assertion: a SIGPIPE-induced "failure" would make this
+# arm PASS vacuously — worse than a false red, and it would survive indefinitely.
+_marked_a="$(tillandsias_marked_pids "$TOKEN_A")"
+if printf '%s\n' "$_marked_a" | grep -qxF "$pb"; then false; else true; fi
 check "a differently-marked process is NOT in this token's kill set" $?
 
 # 4. The reap kills the marked tree.
@@ -170,7 +205,7 @@ tillandsias_reap_marked "$TOKEN_B" >/dev/null 2>&1
 # 6. AN EMPTY TOKEN MATCHES NOTHING. A reaper that treated "" as a wildcard
 #    would kill every process on the host the first time a token went unset.
 pc="$(spawn_marked "$TOKEN_A")"
-sleep 0.3
+await_marked "$pc" "$TOKEN_A" || { fail=$((fail+1)); echo "FAIL: pc never became visible under its token"; }
 [ -z "$(tillandsias_marked_pids "")" ]; check "an empty token matches nothing" $?
 tillandsias_reap_marked "$TOKEN_A" >/dev/null 2>&1
 
