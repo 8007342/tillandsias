@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-thirty-seven-standing-gnu-only-idioms-the-advisory-found-on-its-first-run
+    event:
+      type: evidence
+      ts: "2026-09-13T19:55:34Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260913t195158z
+      host: macos
+      summary: |
+        SLICE LANDED: THE clamp-ca-material.sh CONCENTRATION, 7 SITES — and the advisory's count undersold it badly.
+
+        THE SCRIPT DID NOT WORK ON macOS AT ALL. `stat -c` is GNU-only and BSD stat rejects it outright (`stat: illegal option -- c`, rc=1), so clamp_dir and clamp_file returned 1 on every call, the caller reported `violation:ca-material:cannot chmod ...`, and the selftest failed. MEASURED before the change:
+
+            bash scripts/clamp-ca-material.sh --selftest   rc=1
+              SELFTEST-FAIL: fix did not report a clamp (violation:ca-material:cannot chmod ...)
+              stat: illegal option -- c        <- raw BSD usage text on stderr
+              SELFTEST-FAIL: dir not 700
+              SELFTEST-FAIL: key not 600
+              SELFTEST-FAIL: public cert was clamped
+              SELFTEST-FAIL: not idempotent
+              selftest:clamp-ca-material:FAIL
+
+        AFTER:
+            bash scripts/clamp-ca-material.sh --selftest   rc=0
+              selftest:clamp-ca-material:6 cases PASS
+
+        So this was not seven cosmetic idiom hits. A CA-material permission clamp — the thing that makes a key 600 and a directory 700 — was inert on this platform, and its own selftest said so to anyone who ran it. Whether any macOS host ever ran it is a separate question I have not answered; what is established is that it could not have worked if they did.
+
+        THE FIX is a one-line helper, `_mode_of`, using the counterpart the fleet already uses elsewhere (scripts/test-default-vault-cli-security.sh, scripts/hash-image-sources.sh):
+            stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1" 2>/dev/null
+        BOTH FORMS ON ONE LINE DELIBERATELY: check-portability-idioms.sh's `_has_fallback` matches the counterpart on the SAME LINE, so a wrapper whose fallback sat on a second line would still be flagged. Not promoted into lib-ca-path.sh — that file is shared and this change has no business widening other consumers' surface.
+
+        VERIFIED THE OUTPUT FORMATS RATHER THAN ASSUMING THEM, because the selftest compares against literal "700"/"600"/"644": /usr/bin/stat -f '%Lp' prints exactly 700, 600, 644 on this host — no zero padding — so those comparisons keep their meaning. I forced the system stat for that check after the bfs incident earlier today; here `stat` on PATH is in fact /usr/bin/stat, no shadowing, and I confirmed it rather than relying on it.
+
+        BASELINE: silent-degrade 15 -> 8, loud-fail unchanged at 12. Total 27 -> 20, and clamp-ca-material.sh now reports ZERO entries.
+
+        STANDING AT THIS TREE: 20 reported, THREE non-defects unchanged and still not to be "fixed" (check-ripgrep-available.sh's rg --version, an advisory false positive on 1130-i6xj; test-portability-idioms.sh's sed -i and test-check-bash-dialect.sh's date -d, both fixture SUBJECTS the guards must catch), so 17 GENUINELY REMEDIABLE, FLOOR 3.
+
+        Remaining by class: sed -i 9, stat -c 7, readlink -f 2, plus the two singleton non-defects.
