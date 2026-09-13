@@ -1096,7 +1096,38 @@ fn wsl2_vulkan_facts_at(root: &std::path::Path) -> (bool, usize) {
     (loader_present, icd_count)
 }
 
-#[cfg(any(target_os = "linux", test))]
+// ORDER 1135-z8gn follow-up (macbookair 2026-09-13), authorised by the
+// coordinator; the substance belongs to 793-zumy.
+//
+// THIS WAS `#[cfg(any(target_os = "linux", test))]` AND THE `test` ARM IS NOW
+// A LIE. It existed so a test could reach this function without a Linux
+// target. 793-zumy then RETARGETED that test onto the `_from` seam below —
+// its own comment says so — which left the arm compiling a function that, off
+// Linux, nothing calls at all: the production caller is itself linux-gated.
+//
+// On Linux the function stays alive through that production caller, so the
+// gate there never saw it. On macOS under `cfg(test)` it is dead code, and
+// `-D dead-code` refused every macOS land until this line changed. The
+// compiler was right both times; the two hosts were simply being asked
+// different questions.
+//
+// THE PRODUCTION ENTRY POINT IS NOW UNCOVERED, AND THAT IS DELIBERATE HERE.
+// Confirmed by 793-zumy's author (yolanda, 2026-09-13): the wrapper WAS meant
+// to stay covered, and after this cfg drop nothing covers its two lines —
+// their tree shows one production call inside the linux-gated block, zero test
+// callers, and the only grep hit in the test region is a doc comment.
+//
+// The remedy is theirs and is a LATER SLICE under 793-zumy, not this change: a
+// `wsl2_paravirtual_gpu_reason_at(root)` seam with production passing "/",
+// matching what the neighbouring probes already do, so ONE fixture-rooted test
+// covers it on every host instead of a cfg arm that only pretends to. Kept
+// separate on purpose — two hosts reaching into one function is the collision
+// this fleet has now had twice.
+//
+// A cfg arm kept alive for a caller that no longer exists is not coverage; it
+// is the appearance of coverage, which is worse, because it is what stopped
+// anyone noticing the wrapper was untested.
+#[cfg(target_os = "linux")]
 /// Production entry point: gather the facts from the live filesystem, then
 /// decide. Kept as a thin seam so the decision stays testable without IO.
 fn wsl2_paravirtual_gpu_reason() -> String {

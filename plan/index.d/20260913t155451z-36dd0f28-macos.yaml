@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: gnu-only-shell-idioms-reach-trunk-green-and-freeze-a-whole-platform-one-host-at-a-time
+    event:
+      type: evidence
+      ts: "2026-09-13T15:54:51Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260913t155115z
+      host: macos
+      summary: |
+        SECOND ADVISORY DEFECT, a FALSE NEGATIVE this time, and it is on the form with a documented incident.
+
+        The date detector matches the literal substring `"date -d "`, so ANY INTERVENING FLAG defeats it. Measured in a scratch repo with two planted files, this advisory's own copy:
+            date -d yesterday      -> FLAGGED
+            date -u -d "@123"      -> NOT FLAGGED
+
+        scripts/test-check-bash-dialect.sh's own comment names that exact variant: "date -d with INTERVENING flags is caught (the gap that let test-ledger-ts-guard.sh's `date -u -d \"@epoch\"` ship broken on BSD)". So the bash-dialect guard catches it and this advisory does not — and the form it misses is the one that already shipped broken once.
+
+        Not implementing: this guard is not mine. Suggested shape, beside the flag-only narrowing already recorded: match `date` followed by any run of short flags before `-d`, rather than the fixed two-token string. The dialect guard has already solved this and can be read for the pattern.
+
+        A THIRD OBSERVATION FROM THE SAME SESSION, about what this advisory can and cannot see. Its header says a PATH-dependent tool identity is a runtime fact the scan cannot see. Confirmed live, and worse than "cannot see": on this host `find` is `bfs 4.1.1` ahead of /usr/bin/find, and bfs SUPPORTS -printf. So a test of the unfixed release-preflight line PASSED through bfs and FAILED through /usr/bin/find on the same machine in the same minute. The advisory correctly flagged the line as non-portable; a human verifying that flag by running it would have concluded the advisory was wrong. The scan is right and the naive verification is wrong, which is a worse failure than a silent blind spot because it discredits a correct finding. Worth a line in the advisory's own output or header: verify a BSD-form flag with an ABSOLUTE interpreter path, never with the bare name.

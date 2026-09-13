@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-thirty-seven-standing-gnu-only-idioms-the-advisory-found-on-its-first-run
+    field: next_action
+    value: 'find -printf IS CLOSED (release-preflight.sh, one instance, was silently dead on BSD). Standing at this tree: 27 reported, 24 GENUINELY REMEDIABLE, FLOOR IS 3 — three reported entries are not defects and must NOT be ''fixed'': scripts/check-ripgrep-available.sh''s rg --version (advisory false positive, recorded on 1130-i6xj), scripts/test-portability-idioms.sh''s sed -i and scripts/test-check-bash-dialect.sh''s date -d (both are fixture SUBJECTS the guards must catch). NO SINGLETON CLASSES REMAIN. The next slice is the concentration: scripts/clamp-ca-material.sh carries 7 of the 14 stat -c, so one file halves the largest class; the portable form is a stat wrapper in litmus-stdlib.sh or wc -c. Then the remaining stat -c across build-sidecar.sh, claim-ledger-node.sh, hash-image-sources.sh, materialize-macos-tar-to-img.sh, update-convergence-dashboard.sh, test-codex-oauth-restore.sh. TWO RULES THIS ROW HAS PAID FOR: (1) READ EVERY FLAGGED LINE before converting it — the remediable count has gone 27 to 26 to 25 to 24 across three sessions, every revision downward, every one from reading a line previously only counted; a count of pattern hits is not a count of defects. (2) VERIFY A BSD FORM WITH AN ABSOLUTE INTERPRETER PATH, never the bare name — this host has bfs on PATH as find, which supports -printf, so the unfixed line PASSED through bfs and FAILED through /usr/bin/find on the same machine in the same minute. A macOS host is not automatically a BSD-userland host.'
+    ts: "2026-09-13T15:55:08Z"
+    host: macos
+
+events:
+  - packet_id: the-thirty-seven-standing-gnu-only-idioms-the-advisory-found-on-its-first-run
+    event:
+      type: note
+      ts: "2026-09-13T15:55:08Z"
+      host: macos
+      summary: |-
+        find -printf closed; 24 remediable, floor 3; no singletons left; clamp-ca-material.sh's 7 stat -c is the next concentration
