@@ -1,0 +1,50 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-dispatch-wrapper-that-execs-into-a-container-cannot-be-killed-so-a-cancelled-gate-keeps-running-in-the-same-checkout
+    event:
+      type: investigated
+      ts: "2026-09-13T07:18:18Z"
+      agent_id: linux-yoga-claude-20260913t071818z
+      host: yoga
+      summary: |
+        ADDENDUM, and it re-frames the event above rather than adding to it. I wrote
+        that fixture arm's cause as "root bypasses DAC". yolanda's framing is better and
+        I am recording theirs: THREE DIFFERENT MECHANISMS produce a chmod-based negative
+        control that quietly does not deny, and naming only one sends the next reader to
+        the wrong conclusion.
+
+          1. NTFS under Git Bash IGNORES the mode entirely — chmod is a no-op there.
+             From yolanda's notes, 2026-09-03: two false GREEN results in one evening,
+             one theirs and one esmeraldinha's.
+          2. ROOT overrides it — DAC_OVERRIDE. WSL distros run as root by default.
+             Measured on two hosts: `podman unshare` here, and inside tillandsias-build
+             on yolanda's host (whoami=0, chmod000 readable=TRUE).
+          3. And the Silverblue case passes only because the fixture HAPPENS to run as
+             uid 1000 — a passing arm resting on an unstated precondition, which is the
+             same defect as the other two wearing a green.
+
+        Framed as "root bypasses DAC", the next person to hit the NTFS instance
+        concludes the fix does not apply to them and writes another chmod arm. The
+        general rule, which the dangling symlink satisfies and a uid check does not:
+        PROVE THE FAILURE YOU INJECTED ACTUALLY OCCURRED before believing a negative
+        result. A negative control that asserts the code survives an EACCES, having in
+        fact proven it survives a SUCCESSFUL operation, is worse than no control — it
+        reports coverage of the path it never took.
+
+        VERIFIED ON THE THIRD SUBSTRATE BY THE HOST IT BLOCKED, which is the strongest
+        form available here: yolanda measured the dangling symlink reading FALSE for
+        uid 0 inside tillandsias-build, so the fix is confirmed where the defect
+        appeared and not only where it was written.
+
+        AND THE WSL DATAPOINT IS STILL UNTAKEN. The arm that failed there was testing
+        MY assumption about chmod, not the detector's behaviour on that substrate, so
+        the unreadable-process path on WSL remains unexercised. Neither of us is banking
+        it, and the promotion criterion should not count it.
