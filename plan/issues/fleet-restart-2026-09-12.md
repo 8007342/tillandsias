@@ -2961,3 +2961,20 @@ stories.
   check and the flip-on-hand-off are not in the step yet (coordinator's next
   cycle) and a hand-off without them is the 1140-d6ni shape. No host idle;
   no host reported since 12:11Z except by message (all folded above).
+- **1157-ghmi closed** (macuahuitl, 6160ed8de): the coverage guard now reads a
+  LWW_CHANNELS const (which lww_entries iterates) unioned with its literal
+  scan, and demands the fields probe; deleting the probe reds it, a planted
+  code-literal with no probe reds it by name. THE NEAR-MISS ON THE WAY: the
+  widened assertion's own doc comment quotes the literal shape it scans
+  for, and the first run matched the author's prose and demanded a probe
+  for "…" — the pin-reads-its-own-comment shape (823-u5zf, 1118-dwgx),
+  reproduced by the coordinator inside the guard being fixed for blindness;
+  the scanner now strips comment lines first (yolanda's rule: strip in the
+  guard, leave the comment in place as the control). And a malformed
+  mutation: a literal planted inside a string with an escaped quote cannot
+  match the pattern, so the negative control read "ok" until the site was
+  planted in code — a control that cannot fail proves nothing (esme's
+  discriminating-pair rule). Also this cycle: the stale-row pass gained
+  the closed-on check (fixture 11/11) and the coordination step its three
+  hand-off rules; the workers' skill gained the claim positive control
+  (943-unii); 1144-jfr5 progress recorded, owned_files pass left.
