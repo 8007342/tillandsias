@@ -151,11 +151,30 @@ A candidate is a `ready` row whose order a landed commit SUBJECT cites as
 work (`fix(`, `feat(`, `close(`, `test(`, `record(`, `style(`, `docs(`,
 `refactor(`). MEASURED on the first run (2026-09-13): 93 of 509 ready rows.
 That list is evidence somebody believed they were working the row; it is
-NOT a verdict — e357f3f87 cited three orders and completed two, and a row
-can be `ready` on purpose after a release (1141-vf9w). The pass reports the
-count and up to five candidates it can hand to a host WITH the exit criteria
-to verify by execution; it never sets a status itself. The fuzzier
-owned_files pass the row also asks for is not built yet.
+NOT a verdict — e357f3f87 cited three orders and completed two, a row can be
+`ready` on purpose after a release (1141-vf9w), and a trend-closure or
+multi_cycle row is cited by every slice while correctly staying ready
+(1135-z8gn). The pass reports the count and up to five candidates it hands
+to a host WITH the exit criteria to verify by execution; it never sets a
+status itself. The fuzzier owned_files pass the row also asks for is not
+built yet.
+
+Three rules learned on 2026-09-13, each from a wasted cycle:
+
+- **A hand-off is a claim flip on trunk.** Handing a candidate by message
+  separates nobody: 1140-d6ni was handed to yolanda at 12:11Z, closed by them
+  on windows-next at 12:20Z, and closed again from scratch by yoga at 13:45Z
+  from a plan_next that still offered it. Every hand-off ends with
+  `set-field <order> status in_progress --host <host> --evidence … --reason
+  "handed by the coordinator …"` pushed through the plan-only lane, and the
+  control `tillandsias-plan next <role> | grep -c <order>` → 0.
+- **A closure on a platform branch is invisible until the relay.** The check
+  prints `closed-on:<branch>` for a candidate whose packet carries a terminal
+  status in a sibling branch's unrelayed fragments; never hand those — relay
+  them.
+- **Print the folded title, never the base fragment's.** An amended row keeps
+  its original title in the immutable base; `tillandsias-plan status <order>`
+  folds it. 1140-d6ni's base title was the claim its own amendments retracted.
 
 ## Shape & Assign Actionable Work
 

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-channel-coverage-guard-scans-source-literals-so-channels-the-folder-reads-through-a-loop-variable-are-invisible-to-it-and-it-stayed-green-through-1156-eif4
+    event:
+      type: claim
+      ts: "2026-09-13T15:39:28Z"
+      agent_id: linux-macuahuitl-fable-20260913t153928z
+      host: macuahuitl
+      summary: |
+        Claimed by the macuahuitl meta-orchestration cycle (2026-09-13T15:39:28Z): the coverage guard reads LWW_CHANNELS, the fields probe, the mutation and negative controls.

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-channel-coverage-guard-scans-source-literals-so-channels-the-folder-reads-through-a-loop-variable-are-invisible-to-it-and-it-stayed-green-through-1156-eif4
+    field: status
+    value: in_progress
+    ts: "2026-09-13T15:39:29Z"
+    host: macuahuitl
+
+events:
+  - packet_id: the-channel-coverage-guard-scans-source-literals-so-channels-the-folder-reads-through-a-loop-variable-are-invisible-to-it-and-it-stayed-green-through-1156-eif4
+    event:
+      type: progress
+      ts: "2026-09-13T15:39:29Z"
+      host: macuahuitl
+      summary: |-
+        status 'in_progress' (not terminal) with evidence_refs: linux-next@695f3003d
+  - packet_id: the-channel-coverage-guard-scans-source-literals-so-channels-the-folder-reads-through-a-loop-variable-are-invisible-to-it-and-it-stayed-green-through-1156-eif4
+    event:
+      type: note
+      ts: "2026-09-13T15:39:29Z"
+      host: macuahuitl
+      summary: |-
+        claimed for cycle 2026-09-13T15:39:28Z by linux-macuahuitl-fable-20260913t153928z

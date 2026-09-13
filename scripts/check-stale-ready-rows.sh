@@ -29,19 +29,23 @@
 #                    `ready` output); the fixture uses this to stay hermetic
 #     --repo         run in another checkout (fixture)
 # Output (stdout), grammar pinned by the fixture:
-#   stale-candidate:<order>:<n-commits>:<newest-sha>     one per candidate
+#   stale-candidate:<order>:<n-commits>:<newest-sha>                       one per candidate
+#   stale-candidate:<order>:<n-commits>:<newest-sha>:closed-on:<branch>    the packet carries a
+#       terminal status in that sibling branch's unrelayed fragments — relay it, never hand it
 #   ok:stale-ready-rows:<candidates>/<ready-rows>:pass=cites-order
 # Exit 0 always — advisory; the coordination pass reads it. Exit 2 on usage.
 # bash 3.2 clean (761-g36m): no mapfile, no associative arrays.
 set -u
 
-ref="HEAD"; orders_file=""; repo="."
+ref="HEAD"; orders_file=""; repo="."; siblings="origin/osx-next origin/windows-next"; trunk="origin/linux-next"
 while [ $# -gt 0 ]; do
     case "$1" in
         --ref) ref="$2"; shift 2 ;;
         --orders-file) orders_file="$2"; shift 2 ;;
         --repo) repo="$2"; shift 2 ;;
-        *) echo "usage: $0 [--ref rev] [--orders-file file] [--repo dir]" >&2; exit 2 ;;
+        --siblings) siblings="$2"; shift 2 ;;      # space-separated refs; "" disables
+        --trunk) trunk="$2"; shift 2 ;;
+        *) echo "usage: $0 [--ref rev] [--orders-file file] [--repo dir] [--siblings 'ref ref'] [--trunk ref]" >&2; exit 2 ;;
     esac
 done
 cd "$repo" || { echo "usage: --repo $repo is not a directory" >&2; exit 2; }
@@ -49,14 +53,31 @@ cd "$repo" || { echo "usage: --repo $repo is not a directory" >&2; exit 2; }
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/stale-ready-rows.XXXXXX")" || exit 2
 trap 'rm -rf "$tmp"' EXIT INT TERM
 
+# Each line: <order>[<TAB><packet_id>]. The packet_id is what a sibling
+# branch's status fragment names, so the closed-on check needs it.
 if [ -n "$orders_file" ]; then
     grep -v -E '^\s*(#|$)' "$orders_file" > "$tmp/orders"
 else
     # shellcheck disable=SC1091
     . scripts/plan-binary-probe.sh 2>/dev/null || { echo "ok:stale-ready-rows:0/0:pass=cites-order:no-plan-binary-probe"; exit 0; }
     PLAN="$(resolve_plan_binary 2>/dev/null)" || { echo "ok:stale-ready-rows:0/0:pass=cites-order:no-plan-binary"; exit 0; }
-    "$PLAN" ready 2>/dev/null | awk -F'\t' '$2=="ready"{print $1}' > "$tmp/orders"
+    "$PLAN" ready 2>/dev/null | awk -F'\t' '$2=="ready"{print $1 "\t" $3}' > "$tmp/orders"
 fi
+
+# THE CLOSURE DIRECTION (yoga, 2026-09-13): a closure recorded on a platform
+# branch is invisible to plan_next everywhere else until the relay, and a
+# candidate handed in that window is closed twice (1140-d6ni). Gather the
+# sibling branches' fragments that trunk does not have and grep them for a
+# terminal status per packet_id, so the candidate line can say closed-on.
+: > "$tmp/sibling-terminal"
+for sib in $siblings; do
+    git rev-parse --verify -q "$sib" >/dev/null 2>&1 || continue
+    for path in $(git diff --name-only "$trunk...$sib" -- plan/index.d 2>/dev/null); do
+        git show "$sib:$path" 2>/dev/null \
+            | awk -v sib="$sib" '/packet_id:/{pid=$NF} /^[[:space:]]*field: status/{f=1} /^[[:space:]]*value: (completed|verified|archived)/{ if (f && pid) print pid "\t" sib; f=0 }' \
+            >> "$tmp/sibling-terminal"
+    done
+done
 
 # One history walk, then a per-order grep over it: 500 ready rows must not
 # mean 500 history walks.
@@ -64,7 +85,8 @@ git log --format='%h %s' "$ref" 2>/dev/null \
     | grep -E '^[0-9a-f]+ (fix|feat|close|test|record|style|docs|refactor)\(' > "$tmp/work" || true
 
 candidates=0; rows=0
-while IFS= read -r order; do
+while IFS= read -r line; do
+    order="${line%%	*}"; pid="${line#*	}"; [ "$pid" = "$line" ] && pid=""
     [ -n "$order" ] || continue
     rows=$((rows + 1))
     # (<order>) or (<a>, <order>, <b>): the order bounded by ( , or ) so 278
@@ -73,7 +95,15 @@ while IFS= read -r order; do
     [ -n "$hits" ] || continue
     n="$(printf '%s\n' "$hits" | grep -c .)"
     newest="$(printf '%s\n' "$hits" | head -1 | cut -d' ' -f1)"
-    echo "stale-candidate:${order}:${n}:${newest}"
+    closed=""
+    if [ -n "$pid" ]; then
+        closed="$(awk -F'\t' -v p="$pid" '$1==p{print $2; exit}' "$tmp/sibling-terminal")"
+    fi
+    if [ -n "$closed" ]; then
+        echo "stale-candidate:${order}:${n}:${newest}:closed-on:${closed#origin/}"
+    else
+        echo "stale-candidate:${order}:${n}:${newest}"
+    fi
     candidates=$((candidates + 1))
 done < "$tmp/orders"
 

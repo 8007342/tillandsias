@@ -73,17 +73,32 @@ use std::path::{Path, PathBuf};
 /// something does is the kind of quiet defect this ledger is built to refuse.
 /// Fold behaviour is otherwise unchanged: same key, same lattice, same order
 /// independence, so every fragment already on disk folds identically.
-///
+/// The LWW channels a fragment may carry. `fields:` is the canonical
+/// spelling; `status:` is the alias `set-field` emits (642-fedr). This list
+/// is a named const rather than a literal in the loop below because the
+/// coverage assertion in `compaction_text_tests` reads it: a channel read
+/// through a loop variable never appears as a literal `.get("…")`, so a
+/// source-text scan alone cannot see it (1063-nraf; 1157-ghmi — the guard
+/// stayed green while compaction dropped fields:-spelled corrections).
+pub(crate) const LWW_CHANNELS: &[&str] = &["fields", "status"];
+
 /// PUBLIC BECAUSE IT IS THE ONLY SANCTIONED READER OF THIS CHANNEL (1158-y3ad).
-/// Three consumers in main.rs used to hardcode `doc.get("status")` while this
-/// list has read two spellings since the `fields:` key was introduced, so a
-/// `fields:`-spelled write was invisible to all three. The canonical list
-/// existed and was not canonical, because nothing forced a consumer to use it.
+/// Three consumers in main.rs hardcoded `doc.get("status")` while this list has
+/// read two spellings all along, so a `fields:`-spelled write was invisible to
+/// all three — silently in the two scans that look for offenders, and LOUDLY in
+/// the one that looks for an omission, which reported a missing next_action on
+/// a packet whose next_action had been set. The canonical list existed and was
+/// not canonical, because nothing forced a consumer to use it.
 /// `scripts/test-lww-channel-consumers.sh` now refuses a fragment-channel read
-/// written anywhere but here.
+/// written anywhere but here, so a fourth consumer cannot reintroduce it.
+///
+/// The const above and this `pub` are two halves of one guarantee and arrived
+/// from two hosts in the same window: the const makes the channel set legible
+/// to a source-text scan that cannot see a loop variable; the `pub` makes it
+/// the only place a consumer may read from. Neither alone closes the class.
 pub fn lww_entries(doc: &Value) -> Vec<&Value> {
     let mut out: Vec<&Value> = Vec::new();
-    for channel in ["fields", "status"] {
+    for channel in LWW_CHANNELS {
         if let Some(seq) = doc.get(channel).and_then(Value::as_sequence) {
             out.extend(seq.iter());
         }
@@ -4355,15 +4370,35 @@ plan_index:
         }
     }
 
-    /// THE ASSERTION THAT GENERALISES. Read this file's own source, find every
-    /// top-level key the folder pulls out of a fragment, and require it to be
-    /// covered above. Adding a channel to the folder without adding a probe
-    /// fails here — which is the only mechanism that makes the next channel
-    /// safe rather than merely making this one safe.
+    /// THE ASSERTION THAT GENERALISES — from TWO inputs. (1) Read this file's
+    /// own source and find every literal `frag.doc.get("…")` / `d.doc.get("…")`
+    /// site. (2) Read `LWW_CHANNELS` directly. The union must be covered by
+    /// `CHANNEL_PROBES`. The literal scan alone was blind (1157-ghmi):
+    /// `lww_entries` reads its channels through a loop variable, so "fields"
+    /// and "status" never appeared as literals, "fields" had no probe, and
+    /// this assertion stayed green while compaction silently dropped
+    /// fields:-spelled corrections (1156-eif4) — a binding assembled from a
+    /// variable is invisible to every name-based scan (1063-nraf). Adding a
+    /// channel to either input without a probe fails here, which is the only
+    /// mechanism that makes the next channel safe rather than this one.
     #[test]
     fn the_set_of_fragment_channels_under_test_is_the_set_the_folder_reads() {
-        let src = include_str!("fragments.rs");
+        // COMMENTS ARE STRIPPED BEFORE THE SCAN. The doc comment above quotes
+        // the literal shape it looks for, and the first run of this widened
+        // assertion matched its own prose and demanded a probe for "…" — the
+        // pin-reads-its-author's-comment shape (823-u5zf, 1118-dwgx). Code
+        // lines only; the mutation control that plants a literal site plants
+        // it in code.
+        let src_code: String = include_str!("fragments.rs")
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("//"))
+            .collect::<Vec<&str>>()
+            .join("\n");
+        let src = src_code.as_str();
         let mut read: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        for channel in LWW_CHANNELS {
+            read.insert((*channel).to_string());
+        }
         for (pat, _) in [("frag.doc.get(\"", 0), ("d.doc.get(\"", 0)] {
             let mut rest = src;
             while let Some(i) = rest.find(pat) {
@@ -4401,6 +4436,13 @@ plan_index:
         (
             "status",
             "status:\n  - packet_id: alpha\n    field: status\n    value: implemented\n    \
+             ts: \"2026-02-02T00:00:00Z\"\n    host: probe\n",
+        ),
+        (
+            // The canonical LWW spelling, reachable only by hand-writing a
+            // fragment — the one that had no probe (1157-ghmi).
+            "fields",
+            "fields:\n  - packet_id: alpha\n    field: next_action\n    value: probed through the canonical channel\n    \
              ts: \"2026-02-02T00:00:00Z\"\n    host: probe\n",
         ),
         (
