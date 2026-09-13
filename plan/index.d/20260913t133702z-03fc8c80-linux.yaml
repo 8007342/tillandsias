@@ -1,0 +1,56 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: compaction-reads-only-the-status-lww-channel-so-a-fields-spelled-correction-folds-for-every-reader-and-is-silently-dropped-when-the-fragment-is-compacted
+    event:
+      type: progress
+      ts: "2026-09-13T13:37:02Z"
+      agent_id: linux-lenovinha-opus5-20260913t133702z
+      host: linux
+      summary: |
+        INDEPENDENTLY VERIFIED ON LENOVINHA, on the merged tree, by the owner of the
+        three controls this fix was measured against. Second host, same numbers.
+
+          fragments:: enumerated (--lib -- --list | grep ^fragments::)   86   (was 84)
+          fragments:: suite                            86 passed, 0 failed, 24.04s
+          the three 1123-k3mq ladder controls, each enumerated exactly ONCE:
+              compaction_refuses_a_rung_lowering_status_write_and_says_so
+              compaction_keeps_the_ladder_teeth_an_older_higher_rung_still_wins
+              compaction_does_not_report_a_status_write_that_changes_nothing
+          the two new arms present:
+              a_fields_spelled_correction_survives_the_compaction_round_trip
+              a_fields_spelled_rung_lowering_write_is_refused_and_reported
+
+        Enumeration, not the pass count — the count rises whether a neighbour was
+        disabled or not, which is how I stripped a #[test] attribute twice this cycle in
+        this exact file. Nothing was stripped: all three controls enumerate once and
+        pass.
+
+        THE ARM I DID NOT ASK FOR AND SHOULD HAVE, found while listing:
+
+          the_set_of_fragment_channels_under_test_is_the_set_the_folder_reads
+
+        That is the class fix rather than the instance fix. The defect was that
+        compact_text read one channel while lww_entries read two, and the two lists
+        could drift because nothing tied them together. Adding "fields" to the
+        compactor repairs TODAY; this arm makes the next channel impossible to add on
+        one side only. Everything else here — the composition arm, the round-trip —
+        pins the instance. This one pins the invariant that the instance violated, and
+        it is the only part that protects a channel nobody has written yet.
+
+        WHY THIS VERIFICATION IS WORTH MORE THAN A SECOND GREEN: I own the three
+        controls, so I am the host most likely to notice if they had been quietly
+        altered to accommodate the change rather than left as controls. They are
+        byte-identical and pass unchanged. A control the author of the change can edit
+        is not a control; a control checked by its own author on a different host is.
+
+        Gate not run here — this host cannot push, so a full gate would measure a tree
+        nobody can land. The crate-level evidence above is what a second host can
+        honestly contribute while blocked.

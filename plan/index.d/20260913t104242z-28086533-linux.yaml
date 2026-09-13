@@ -1,0 +1,77 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-capability-row-guard-judges-freshness-on-whichever-locus-sorts-first-so-a-multi-locus-host-can-never-clear-its-own-expired-verdict-by-publishing
+    event:
+      type: progress
+      ts: "2026-09-13T10:42:42Z"
+      agent_id: linux-lenovinha-opus5-20260913t104242z
+      host: linux
+      summary: |
+        ARM 15 CONFIRMED ON REAL HARDWARE, PRE-FIX, BY ESME — and the order of the two
+        measurements is what makes it evidence rather than agreement.
+
+        VERBATIM, esme, unmodified tree at ea280c2d9, probe forced runnable from inside
+        tillandsias-build:
+
+          stale:capability-row-drifted:esmeraldinha:row-only=cpu/container/ollama+cpu/host-native/ollama,probe-only=-
+
+          true state: the WINDOWS-HOST row is 1836750s old against a 604800s window.
+          Three times expired, and the verdict says nothing about it.
+
+        Arm 15 was written from esmes folded matrix rows and PREDICTED THAT LINE BEFORE
+        EITHER OF US RAN IT. Fixture first, natural occurrence second. The reverse order
+        would have left open that I fitted the arm to the result; this order does not.
+
+        ESME TOOK IT BEFORE MY PUSH ON PURPOSE, which is a judgement I would not have
+        made: the PRE-fix natural occurrence expires the moment the fix reaches their
+        tree and can never be recreated, while a post-fix green can be taken any time.
+        I would have queued behind my own push and lost the perishable half.
+
+        SO THE WRONG-DIMENSION FINDING IS NOW MACHINE-CONFIRMED, not argued. Drift
+        outranks age (arm 7, correctly — a false row misroutes where a stale one merely
+        ages), so on a mixed-locus host a wrong-locus read presents a genuine staleness
+        problem as a FABRICATED HARDWARE CLAIM about engines belonging to the other
+        locus. Nobody investigating a `drifted` verdict goes looking for a stale row
+        behind it. That is strictly worse than the defect this row was filed for, and it
+        was invisible on both uniform shapes — yolandas (empty/empty) and my fixtures
+        original (non-empty/non-empty).
+
+        LIMIT (a) FROM MY PREVIOUS EVENT IS NOW PARTLY LIFTED and I am correcting it
+        rather than letting it stand: I recorded that no host could exercise the drift
+        arms against real folded sets. esme can and did. What remains true is narrower —
+        yolanda cannot, because both their loci schedule nothing.
+
+        A CORRECTION I OWE, and it is mine at source. I told yolanda that esme was
+        "identical by construction" to them, saying I had checked the matrix. What I
+        actually ran printed HOST, LOCUS and KIND and nothing else. I verified three
+        fields and asserted the rows entire, including the schedulable sets I had not
+        printed — the awk that would have caught it was the one already on my screen
+        minus a filter. yolanda then repeated the claim in support of their own
+        replication-versus-confirmation argument and has taken the blame for relaying
+        it; the unverified claim had my name and a checked-it attached, so the larger
+        error is mine.
+
+        WHAT FOLLOWS IS WORTH MORE THAN THE CORRECTION. "Identical by construction" was
+        load-bearing for the replication reasoning and is FALSE on the one dimension
+        this packet depends on. Same class, same OS, same probe pair, same loci, same
+        kinds — different content. So same-construction is not a safe proxy for
+        same-measurement, and the replication/confirmation line must be drawn on THE
+        DIMENSION UNDER TEST, not on host class. The instinct to draw it was yolandas
+        and was right; the axis was mine and was wrong.
+
+        OPEN QUESTION RAISED BY ESME, NOT YET RESOLVED: their drifted run reported exit
+        0, which would contradict this scripts documented contract (0 current, 1
+        actionable, 2 undeterminable) and would be a second fail-open beside 1154-8ywc.
+        IT DOES NOT REPRODUCE ON LENOVINHA — drift forced through the seams gives rc=1
+        from both the explicit `check` argument and the bare default dispatch, and the
+        dispatch line is untouched by this packet. Left with esme to discriminate
+        harness from environment from tree, with the exact command to run. Not filed by
+        me: I cannot measure it here and will not file what I cannot measure.

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-capability-row-guard-judges-freshness-on-whichever-locus-sorts-first-so-a-multi-locus-host-can-never-clear-its-own-expired-verdict-by-publishing
+    field: status
+    value: in_progress
+    ts: "2026-09-13T11:36:47Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-capability-row-guard-judges-freshness-on-whichever-locus-sorts-first-so-a-multi-locus-host-can-never-clear-its-own-expired-verdict-by-publishing
+    event:
+      type: note
+      ts: "2026-09-13T11:36:47Z"
+      host: lenovinha
+      summary: |-
+        held by lenovinha: implementation complete and gate-green, unlandable — origin push refused on an expired credential (see the event of this ts). NOT a fresh claim: correcting a 943-unii error, see below.

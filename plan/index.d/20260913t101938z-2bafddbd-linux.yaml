@@ -1,0 +1,71 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-capability-row-guard-judges-freshness-on-whichever-locus-sorts-first-so-a-multi-locus-host-can-never-clear-its-own-expired-verdict-by-publishing
+    event:
+      type: progress
+      ts: "2026-09-13T10:19:38Z"
+      agent_id: linux-lenovinha-opus5-20260913t101938z
+      host: linux
+      summary: |
+        FIXED, with the teeth measured before and after.
+
+        THE FIX. Every row accessor in the guard keyed on `host:<h>` alone and took
+        whichever row came first — which is whichever locus sorts first. Three sites,
+        not the one the row names: row_ts, row_schedulable, and the presence check. All
+        three now key on `host:<h>\tlocus:<l>\t`.
+
+        WHERE THE LOCUS COMES FROM, and this was the design question. NOT re-derived
+        here from TILLANDSIAS_HOST_KIND: this scripts own header already warns about the
+        704-zcgi shape (three scripts re-implement one probe, all three wrong the same
+        way), and a local copy of the probes rule would fail in exactly this bugs
+        manner — grading a host against a locus it never writes. Instead the locus is
+        READ OFF THE LIVE FOLD, which is the probe answering the question itself,
+        through the same capability-matrix subcommand that folded the committed row. The
+        two sides of every comparison are then keyed by construction rather than by
+        agreement. A live fold with no locus for this host is an instrument fault and
+        reads `unavailable:live-row-has-no-locus` — never a guessed row.
+
+        FOUR ARMS, 13/13, EACH FAILING PRE-FIX (measured by splicing the new arms onto
+        the old guard body and running it in place — arms 1-9 unchanged, 10-13 all FAIL):
+
+          10  fresh own-locus row + 8-day foreign row  ->  ok
+              pre-fix: stale:...:age=694800s, the age of a row this host was not
+              writing. The publish the verdict demanded could not clear the verdict.
+          11  NEGATIVE CONTROL, and it caught more than I expected. Own-locus row
+              GENUINELY expired, foreign row fresh -> still expired, and the age is
+              asserted EXACTLY (694800s, not the foreign rows 3600s) because a fix
+              reading the wrong row emits the right TOKEN here and only the number
+              gives it away. Pre-fix this answered ok: — so the old guard was not
+              merely over-reporting staleness on multi-locus hosts, it was also
+              UNDER-reporting it. Staleness was silently retired in both directions.
+          12  own locus never published, foreign row present -> due:, not ok:. This is
+              the hole the NARROW fix opens: host-only presence lets the host past,
+              locus-aware ts finds nothing, `[ -n "$ts" ]` skips the age check, and a
+              host that has never published is told it is current.
+          13  foreign locus advertises a GPU this locus lacks -> ok:, not drifted. Two
+              probes, two machines, one node name. Unioning the loci made the OTHER
+              machines GPU read as this one lying about a GPU — fixing only row_ts
+              would have swapped a permanent `expired` for a permanent `drifted`.
+
+        WHY NO ARM 1-9 COULD HAVE CAUGHT THIS: the fixtures row maker writes a single
+        bare-metal row. Nine arms measured on the one host shape that has exactly one
+        row. Same lesson as 1087-h2z9 — green on the measuring shape is not green
+        fleet-wide.
+
+        GRAMMAR DELIBERATELY UNCHANGED. `due:no-capability-row:<h>` does not gain a
+        locus suffix even though the guard now knows one: the remedy is the same single
+        `--fragment` publish and consumers parse this grammar. The only new token is an
+        `unavailable:` variant, which the existing `unavailable:[a-z-]+` arm covers.
+
+        Live on lenovinha (single locus): ok:capability-row-current:lenovinha.
+        Wrapper fixture (859-b2zc identity): 9 passed, 0 failed, untouched.
+        Both Windows hosts are unblocked by this — yolanda and esmeraldinha each carry
+        two loci today and neither could clear its verdict by publishing.

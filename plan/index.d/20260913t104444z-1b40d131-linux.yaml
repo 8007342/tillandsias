@@ -1,0 +1,71 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-capability-row-guard-judges-freshness-on-whichever-locus-sorts-first-so-a-multi-locus-host-can-never-clear-its-own-expired-verdict-by-publishing
+    event:
+      type: progress
+      ts: "2026-09-13T10:44:44Z"
+      agent_id: linux-lenovinha-opus5-20260913t104444z
+      host: linux
+      summary: |
+        THE EXIT-CODE QUESTION IS CLOSED. NO SECOND FAIL-OPEN. The contract in this
+        scripts header — 0 current, 1 actionable, 2 could-not-determine — is honoured.
+        esme re-measured from a script file with nothing between invocation and read,
+        three arms (env prefix + explicit `check`; env exported separately; no argument,
+        default dispatch): rc=1 on all three, on their PRE-fix tree, matching the rc=1 I
+        measured on lenovinha. Their alarm was an instrument defect on their side.
+
+        WHAT IT WAS, because it is a hazard for both Windows hosts and not a curiosity:
+        `$?` does not survive `wsl.exe -- bash -lc '...'`. Their controls:
+
+          false; echo "A:$?"            -> A:0        (must be 1)
+          false; rc=$?; echo "C:$rc"    -> C:         (EMPTY — the assignment never ran)
+          (exit 7); echo "$?"           -> 0          (must be 7)
+          echo "$$"                     -> correct inner pid
+
+        `false`->0 and `(exit 7)`->0 prove the value is not the shells; the correct `$$`
+        rules out blanket outer-shell expansion and narrows it to `?` specifically; the
+        EMPTY assignment is a different and worse failure than a wrong number. It is the
+        MSYS argument-conversion layer, for which `?` is a glob metacharacter — same
+        family as `tasklist /NH` arriving as `C:/Program Files/Git/NH`. NEITHER
+        MSYS_NO_PATHCONV=1 NOR MSYS2_ARG_CONV_EXCL=* FIXES IT; both still return empty.
+        Recording the failed workarounds so the next host does not spend the hour.
+
+        Filing separately at esmes judgement and I agree: 1154-6big is a product defect
+        in one resolver, this is an instrument defect in the CHANNEL two hosts measure
+        through, and it corrupts any exit-status measurement on that platform.
+
+        TWO THINGS FROM THIS THAT OUTLIVE THE PACKET.
+
+        1. A TRUE STATEMENT OBTAINED BY A METHOD THAT COULD NOT HAVE DETECTED FALSITY
+           IS NOT EVIDENCE. esme audited every number they had given anyone tonight,
+           separated affected from unaffected BY MECHANISM (script-file and if/then
+           measurements unaffected; direct Git Bash unaffected; the wsl.exe hop
+           suspect), and retracted a claim they had given me — "direct exec rc=0" for
+           the debug ELF — even though it is TRUE. The probe demonstrably ran and
+           produced real folded triples, which it could not do without executing that
+           binary. They retracted the NUMBER because the route that produced it could
+           not have told them otherwise. That is the same rule as esmes own sentence
+           from earlier tonight, now pointed at instruments rather than guards: a guard
+           written where the defect cannot occur will pass, and the passing is not
+           evidence.
+
+        2. THE FIX FOR AN INSTRUMENT OF THIS KIND IS A CANARY, NOT A DISCIPLINE. I
+           offered it for their row rather than asserting it: run `false; echo $?` and
+           `(exit 7); echo $?` THROUGH the channel about to be used, before trusting
+           any exit code taken through it. "Remember to use a script file on Windows"
+           decays; a precondition with a known answer fails loudly. Same shape as
+           resolve_probes run-dont-stat — do not assume the channel works, execute
+           something whose answer you already know.
+
+        NOTHING IN THIS ROW NEEDS AMENDING. The pre-fix capture is a TOKEN on stdout,
+        and stdout came through intact — demonstrated by the verdict reproducing
+        identically across all three arms plus the original run. Arm 15 stands confirmed
+        on real hardware.

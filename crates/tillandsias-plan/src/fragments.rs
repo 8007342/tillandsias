@@ -1228,10 +1228,15 @@ pub fn compact_text(index: &Path) -> Result<CompactionText, String> {
     // ORDER 1123-k3mq: status writes the ladder refuses, so the caller can say so.
     let mut discarded_status: Vec<(String, String, String, String)> = Vec::new();
     for frag in &fragments {
-        let Some(us) = frag.doc.get("status").and_then(Value::as_sequence) else {
-            continue;
-        };
-        for u in us {
+        // BOTH LWW channels, exactly as `lww_entries` folds them. This read
+        // used to be `doc.get("status")` alone, so a fragment written with the
+        // canonical `fields:` spelling folded for every reader and was
+        // INVISIBLE here: compaction rendered a base without the correction,
+        // then deleted the fragment that carried it. Isolated on yolanda
+        // 2026-09-13 by removing fragments one at a time — perfect correlation
+        // with the channel name — and caught by the real-ledger round-trip
+        // test, which is the whole reason that test exists.
+        for u in lww_entries(&frag.doc) {
             let (Some(pid), Some(field), Some(value)) = (
                 u.get("packet_id").and_then(Value::as_str),
                 u.get("field").and_then(Value::as_str),
@@ -3966,6 +3971,69 @@ plan_index:
                 .unwrap_or_else(|| panic!("base item lost or reordered: {b:?}"));
             idx += pos + 1;
         }
+    }
+
+    /// A correction written under the CANONICAL `fields:` channel folds for
+    /// every reader (lww_entries lists it first) and used to be invisible to
+    /// compaction, which read `status:` alone — the candidate rendered without
+    /// it, folded to a different state, and the fragment carrying the intent
+    /// was deleted. Isolated on yolanda 2026-09-13 by removing fragments one at
+    /// a time. Pre-fix result: FAILS at assert_fold_equivalent.
+    #[test]
+    fn a_fields_spelled_correction_survives_the_compaction_round_trip() {
+        let d = scratch("fields-channel");
+        let index = d.join("plan/index.yaml");
+        std::fs::write(
+            d.join("plan/index.d/20260913t1245z-aaaa-h1.yaml"),
+            "fields:\n  - packet_id: alpha\n    field: next_action\n    value: the first two steps are done; nothing left is windows-lane\n    ts: \"2026-09-13T12:45:00Z\"\n    host: yolanda\n",
+        )
+        .expect("fields fragment");
+
+        let c = compact_text(&index).expect("compaction runs");
+        assert!(
+            c.candidate.contains("nothing left is windows-lane"),
+            "the fields:-spelled correction must reach the rendered base; pre-fix it was silently dropped"
+        );
+        assert_fold_equivalent(&index, COMMITTED);
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// The two fixes meet rather than coexist (lenovinha, 1123-k3mq): a
+    /// rung-lowering status write spelled under `fields:` was invisible twice
+    /// over — neither compacted NOR reported as discarded, since the reporting
+    /// branch sat inside the same `status:`-only read. After the channel list
+    /// is shared it is refused AND reported, like its `status:`-spelled twin.
+    #[test]
+    fn a_fields_spelled_rung_lowering_write_is_refused_and_reported() {
+        let d = scratch("fields-rung");
+        let index = d.join("plan/index.yaml");
+        std::fs::write(
+            &index,
+            "plan_index:\n  steps:\n    - packet_id: subject\n      order: 9991-bbbb\n      status: completed\n      title: t\n",
+        )
+        .expect("write base");
+        std::fs::write(
+            d.join("plan/index.d/20260913t1246z-bbbb-h2.yaml"),
+            "fields:\n  - packet_id: subject\n    field: status\n    value: ready\n    ts: \"2026-09-13T12:46:00Z\"\n    host: coordinator\n",
+        )
+        .expect("fields fragment");
+
+        let c = compact_text(&index).expect("compaction runs");
+        assert!(
+            !c.candidate.contains("status: ready"),
+            "a rung-lowering write must be refused whichever channel spelled it"
+        );
+        assert_eq!(
+            c.discarded_status.len(),
+            1,
+            "the refused fields:-spelled write must be REPORTED, not dropped in silence (the composition of 1123-k3mq with the channel fix)"
+        );
+        let (pid, discarded, retained, host) = &c.discarded_status[0];
+        assert_eq!(pid, "subject");
+        assert_eq!(discarded, "ready");
+        assert_eq!(retained, "completed");
+        assert_eq!(host, "coordinator");
+        let _ = std::fs::remove_dir_all(&d);
     }
 
     /// The rendered text must parse to EXACTLY the same packets (and per-packet

@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: compaction-reads-only-the-status-lww-channel-so-a-fields-spelled-correction-folds-for-every-reader-and-is-silently-dropped-when-the-fragment-is-compacted
+    event:
+      type: note
+      ts: "2026-09-13T13:38:59Z"
+      agent_id: linux-macuahuitl-fable-20260913t133859z
+      host: macuahuitl
+      summary: |
+        CORRECTION to the previous note: the meta-arm
+        the_set_of_fragment_channels_under_test_is_the_set_the_folder_reads DOES
+        exist (fragments.rs, added under 846-idhn, part of the 84) — the
+        coordinator asserted its absence without a grep, lenovinha credited it to
+        the wrong author, one grep settled both. And it has been GREEN throughout
+        while blind: it scans this file's source for literal `frag.doc.get("…")` /
+        `d.doc.get("…")` sites and requires each name in CHANNEL_PROBES, so the
+        channels lww_entries reads through a loop variable ("fields", "status")
+        are invisible to it and "fields" has no probe (1063-nraf: a binding
+        assembled from a variable is invisible to every name-based scan). The
+        refactor that made the folder correct blinded the guard meant to police
+        it, and its doc comment still claims to be the mechanism that makes the
+        next channel safe. Filed separately (the guard's blindness is a different
+        defect from the compactor's read); the proposed LWW_CHANNELS const goes
+        into the GUARD'S input, not only the folder.
