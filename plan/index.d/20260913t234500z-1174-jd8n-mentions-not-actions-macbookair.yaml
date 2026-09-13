@@ -1,0 +1,91 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-portability-advisory-counts-mentions-not-actions-and-over-reports-the-one-fixture-whose-subject-is-that-distinction
+    order: 1174-jd8n
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [portability, gate, fail-loud, guard-validity]
+    estimated_hours: 3
+    owned_files:
+      - scripts/check-portability-idioms.sh
+    verifiable_closure: |
+      bash scripts/check-portability-idioms.sh reports ZERO entries for
+      scripts/test-litmus-mutation-arm-guard.sh, and its own fixture
+      scripts/test-portability-idioms.sh still reports its deliberate subject
+      lines. Both halves required: the first is the fix, the second proves the
+      fix did not reach it by exempting files.
+    title: |
+      check-portability-idioms.sh counts MENTIONS rather than ACTIONS, so it flags idioms inside heredoc fixture data, comments and message strings — and the file it over-reports most is the one whose entire subject is that exact distinction
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-09-13 while working 1135-z8gn's
+      sed -i class. Of NINE reported sed -i sites, only FIVE are executed
+      shell. The other four are text:
+
+        scripts/test-portability-idioms.sh   1  the advisory's own fixture,
+                                                deliberate subject matter
+        scripts/test-litmus-mutation-arm-guard.sh  3  see below
+
+      THE IRONY IS THE FINDING. test-litmus-mutation-arm-guard.sh is the
+      fixture for order 901-jtvi, whose subject is stated in its own comment:
+      "A comment naming sed -i is not a caller". Its three flagged lines are
+        - a `sed -i` inside `cat > ... <<'YAML'` heredoc fixture data, written
+          verbatim to a litmus file and never executed by this script;
+        - a `sed -i` inside a COMMENT within another such heredoc;
+        - a `sed -i` inside a `bad "..."` failure-message string.
+      So the portability advisory commits, against that fixture, precisely the
+      defect that fixture exists to prove the litmus guard does NOT commit.
+
+      CONFIRMED BY EXECUTION, not by reading: that fixture runs rc=0 with ZERO
+      `sed:` errors on a BSD-userland host. If any of the three were executed
+      shell, BSD sed would have errored, as it did in every genuine instance.
+      Execution is the discriminator that reading alone does not give you.
+
+      NOT A LINE-NUMBER DEFECT. One of the three is reported at :102 while the
+      `sed -i` sits at :104. That is CORRECT: 102 opens a backslash-continued
+      logical line and the advisory reports the logical line's first number. I
+      checked because it looked like a mis-citation and it is not.
+
+      SAME SHAPE AS 1169-zw44, tonight's dead-env detector blind spot, where
+      the detector read its own comments as reads. Two independent guards, one
+      week, both unable to tell a mention from an action.
+
+      WHY IT MATTERS BEYOND THE COUNT. 1135-z8gn's baseline is the number the
+      fleet steers that backlog by, and a claimer working from it will open a
+      file, find the flagged line inside a heredoc, and either "fix" fixture
+      data — destroying the evidence a sibling guard depends on — or lose the
+      time working out why they should not. The count has already been revised
+      downward at every re-measure by a reader who looked at what the pattern
+      actually matched; this is the mechanism behind that.
+    deliverable: |
+      A discriminator between a MENTION and an ACTION, applied before flagging.
+      The shapes that must stop being flagged, all confirmed present today:
+        - lines inside a quoted heredoc (`<<'EOF'` / `<<"EOF"`), which are data
+        - text after an unquoted `#` comment marker
+        - text inside a string argument to a message/echo/printf call
+      The shape that must KEEP being flagged: a real command, including one
+      inside an unquoted heredoc that will be expanded, and including the
+      advisory's own fixture's deliberate subject lines.
+
+      THE FIXTURE IS THE HARD PART AND IT ALREADY EXISTS. The advisory's own
+      scripts/test-portability-idioms.sh carries deliberate idiom patterns as
+      the SUBJECT of its arms, and 1135-z8gn records that they must stay
+      countable — no file-name exemption, because "a guard that exempts files
+      has a hole". So the discriminator must be structural (is this position
+      data or code?), not positional (is this file special?).
+    next_action: >
+      Start from the shell lexer this needs rather than from another regex: the
+      three shapes above are all "is this byte inside a string/heredoc/comment",
+      which a line-oriented pattern cannot answer and will keep getting wrong.
+      Read 901-jtvi's guard first — the litmus mutation-arm check already makes
+      the mention-versus-action distinction for its own domain and may hand you
+      the discriminator rather than a second implementation of it. Prove the fix
+      on the two files named in verifiable_closure, in both directions.
+    provenance: |
+      Filed by macbookair (macos) 2026-09-13 while converting 1135-z8gn's sed -i
+      class. Counts measured on this host; the mention-versus-action split was
+      established by EXECUTING the over-reported fixture and observing zero sed
+      errors, not by reading it. Cited by symbol and by file.

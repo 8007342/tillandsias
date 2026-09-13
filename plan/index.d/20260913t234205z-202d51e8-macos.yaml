@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-thirty-seven-standing-gnu-only-idioms-the-advisory-found-on-its-first-run
+    field: next_action
+    value: 'sed -i EXECUTED SITES ARE DONE (5 converted; one of them, test-mode-only-regression-887-bz88.sh, had been reporting ''arm 3 has teeth'' in green while its mutation silently never applied). Its arm now PROVES the mutant differs (cmp -s) before asserting — apply that pattern to any mutation arm you touch, per 829-dkuc; the temp-file form alone does not stop the next non-portable edit failing open. REMAINING sed -i entries are all MENTIONS, not actions, and must NOT be converted: test-portability-idioms.sh''s deliberate subject, and three in test-litmus-mutation-arm-guard.sh inside heredoc fixture data, a comment, and a bad() message — filed as 1174-jd8n against the advisory. NEXT REAL WORK: stat -c, 7 left across build-sidecar.sh, claim-ledger-node.sh, hash-image-sources.sh, materialize-macos-tar-to-img.sh, update-convergence-dashboard.sh, test-codex-oauth-restore.sh — use the _mode_of pattern from clamp-ca-material.sh for MODE, and stat -f%z || stat -c%s for SIZE. Then readlink -f (2, plan-binary-probe.sh) via cd $(dirname X) && pwd. RUN EACH SCRIPT''S OWN SELFTEST BEFORE AND AFTER: that is how the fail-open arm was found, and how clamp-ca-material.sh was found wholly inert. SEPARATE, NOT MINE, NOT PART OF THIS CLASS: test-gate-stamp-memoization.sh still fails ''combined dispatch: memo_taken=no rc=2 (want 124)'', byte-identical before and after my change.'
+    ts: "2026-09-13T23:42:05Z"
+    host: macos
+
+events:
+  - packet_id: the-thirty-seven-standing-gnu-only-idioms-the-advisory-found-on-its-first-run
+    event:
+      type: note
+      ts: "2026-09-13T23:42:05Z"
+      host: macos
+      summary: |-
+        sed -i executed sites done; remaining entries in that class are mentions (1174-jd8n); stat -c is next at 7
