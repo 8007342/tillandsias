@@ -510,8 +510,10 @@ mod tests {
         // cannot satisfy the assertion — the defect was precisely that the only
         // call site sat in a block this path never reaches.
         let fn_body = body
-            .split_once("
-fn ")
+            .split_once(
+                "
+fn ",
+            )
             .map_or(body, |(before, _)| before);
         // STRIP COMMENT LINES BEFORE SEARCHING, and this is the whole lesson of
         // the packet this test belongs to. The first draft asserted on the raw
@@ -526,8 +528,10 @@ fn ")
             .lines()
             .filter(|l| !l.trim_start().starts_with("//"))
             .collect::<Vec<_>>()
-            .join("
-");
+            .join(
+                "
+",
+            );
         assert!(
             code_only.contains("init_tracing()"),
             "forge_launch_once must call init_tracing() before launch_pty, or the              terminal= observable that 823-u5zf's closure depends on is written to              an uninitialised subscriber and silently lost on every headless launch"
