@@ -290,7 +290,28 @@ if [ ! -x "$OLLAMA_BIN" ] || [ ! -x "$OLLAMA_LIBDIR/llama-server" ] \
             # Gate the download on a proven egress probe with bounded backoff;
             # an egress that never comes up fails loud but stays non-fatal
             # (the fail-loud guard below + launcher soft-degrade handle it).
-            OLLAMA_URL="https://github.com/ollama/ollama/releases/latest/download/ollama-linux-${OLLAMA_ARCH}.tar.zst"
+            # ORDER 1118-bscs/1118-d3b6 — PINNED VERSION, VERIFIED DIGEST.
+            #
+            # This read `releases/latest/download/...`, which is not a version at
+            # all: whatever GitHub resolved at CONTAINER START was downloaded,
+            # extracted, and EXECUTED inside the enclave. Two containers from the
+            # same image, started an hour apart, could run different code, and
+            # nothing recorded which. There was no checksum of any kind.
+            #
+            # TO BUMP: change OLLAMA_VERSION and both digests together. The
+            # digests come from the release API and need no 1.4GB download:
+            #   curl -fsS https://api.github.com/repos/ollama/ollama/releases/tags/<tag> \
+            #     | jq -r '.assets[] | select(.name|test("ollama-linux-(amd64|arm64)\\.tar\\.zst$"))
+            #              | "\(.name) \(.digest)"'
+            # Leaving the version and a digest out of step fails closed below, so
+            # a half-done bump cannot ship.
+            OLLAMA_VERSION="v0.34.0"
+            case "$OLLAMA_ARCH" in
+                amd64) OLLAMA_SHA256="cf95886728959aa09910bb34de5cca1cc5a8f68003b5597197d3f2c2d57c0804" ;;
+                arm64) OLLAMA_SHA256="6a9e5b3650c2024d8a78da86b23876f6eea238657a3262d7e5ec0f3688c5d28e" ;;
+                *)     OLLAMA_SHA256="" ;;
+            esac
+            OLLAMA_URL="https://github.com/ollama/ollama/releases/download/${OLLAMA_VERSION}/ollama-linux-${OLLAMA_ARCH}.tar.zst"
             _egress_ok=0
             _egress_delay=2
             for _attempt in 1 2 3 4 5; do
@@ -312,6 +333,38 @@ if [ ! -x "$OLLAMA_BIN" ] || [ ! -x "$OLLAMA_LIBDIR/llama-server" ] \
                     || echo "[inference] download failed AFTER proven egress — genuine failure, not a proxy race" >&2
             else
                 echo "[inference] FATAL: proxy egress never became ready within bounded backoff (5 probes) — skipping self-install this launch" >&2
+            fi
+            # VERIFY BEFORE EXTRACTING, AND FAIL CLOSED. The payload below is
+            # unpacked and executed, so this is the last point at which an
+            # unexpected artifact can be refused.
+            #
+            # DELIBERATELY UNLIKE scripts/install.sh, which says "sha256sum not
+            # found; skipping checksum verification" and proceeds. That is a
+            # defensible usability trade on a USER'S HOST, where the alternative
+            # is an install that cannot run at all. It is the wrong trade here:
+            # this is an enclave that EXECUTES what it fetched, and a missing
+            # verifier is a reason to refuse, never a reason to trust. Skipping
+            # on absence would leave the integrity gate switched off on exactly
+            # the hosts whose tooling is unusual enough to lack sha256sum.
+            if [ "$_ollama_dl" -eq 0 ]; then
+                if [ -z "$OLLAMA_SHA256" ]; then
+                    echo "[inference] FATAL: no pinned SHA-256 for arch '$OLLAMA_ARCH' — refusing to execute an unverified engine (1118-d3b6)" >&2
+                    _ollama_dl=1
+                elif ! command -v sha256sum >/dev/null 2>&1; then
+                    echo "[inference] FATAL: sha256sum unavailable — cannot verify the engine payload, refusing to execute it (1118-d3b6)" >&2
+                    _ollama_dl=1
+                else
+                    _got_sha="$(sha256sum "$TMP_O/ollama.tar.zst" 2>/dev/null | cut -d" " -f1)"
+                    if [ "$_got_sha" != "$OLLAMA_SHA256" ]; then
+                        echo "[inference] FATAL: engine digest mismatch for $OLLAMA_VERSION/$OLLAMA_ARCH — refusing to execute (1118-d3b6)" >&2
+                        echo "[inference]   expected $OLLAMA_SHA256" >&2
+                        echo "[inference]   got      ${_got_sha:-<none>}" >&2
+                        rm -f "$TMP_O/ollama.tar.zst"
+                        _ollama_dl=1
+                    else
+                        echo "[inference] engine payload verified: $OLLAMA_VERSION/$OLLAMA_ARCH sha256 ok"
+                    fi
+                fi
             fi
             if [ "$_ollama_dl" -eq 0 ]; then
                 # Two STREAMING passes over the .zst (list, then extract) instead of
@@ -384,11 +437,42 @@ elif [ -e /dev/kfd ]; then
     GPU_STATUS="AMD ROCm"
 fi
 
+# ORDER 1118-d3b6 — NPU TELEMETRY, REPORTED HONESTLY RATHER THAN IMPLIED.
+#
+# openspec/specs/inference-container/spec.md:165-179 specifies "NPU tier rows
+# are additive and engine-gated", with N1/N2 selected only when
+# `spec:accel-capability-probe` reports a usable NPU. Before this line the string
+# `npu` appeared NOWHERE in this entrypoint: the spec described telemetry the
+# runtime never emitted, and the silence read as "the rows are satisfied" to
+# anyone checking. A spec claiming a capability the runtime does not report is
+# the same defect class as configuration asserting what the code does not do.
+#
+# PASSTHROUGH IS DEFERRED, NOT IMPLEMENTED, and the row's deliverable permits
+# exactly that ("Implement OR DEFER NPU device passthrough"). No --device flag
+# routes an NPU into this container today, and adding one is a feature behind
+# accel-capability-probe rather than a bug fix. What is fixed here is the LIE OF
+# OMISSION: the banner now states what is actually true, so a reader comparing
+# spec to runtime sees `none (passthrough not implemented)` instead of nothing
+# at all and drawing their own conclusion.
+#
+# DEVICE NODES, not a probe: Intel VPU/NPU presents as /dev/accel/accel* (and
+# older stacks as /dev/vpu*), AMD XDNA as /dev/xdna*. Absence of a node is
+# reported as absence of a usable NPU, which is the honest reading — this
+# container cannot see a device nobody passed in.
+NPU_STATUS="none (passthrough not implemented — 1118-d3b6)"
+for _npu_node in /dev/accel/accel0 /dev/vpu0 /dev/xdna0; do
+    if [ -e "$_npu_node" ]; then
+        NPU_STATUS="device present at ${_npu_node} (engine support unverified)"
+        break
+    fi
+done
+
 echo "========================================"
 echo "  tillandsias inference"
 echo "  listening on :11434"
 echo "  models:  $OLLAMA_MODELS"
 echo "  GPU:     $GPU_STATUS"
+echo "  NPU:     $NPU_STATUS"
 echo "========================================"
 
 # @trace spec:inference-container, spec:zen-default-with-ollama-analysis-pool
