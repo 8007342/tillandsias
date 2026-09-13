@@ -1,0 +1,70 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-capability-row-guard-judges-freshness-on-whichever-locus-sorts-first-so-a-multi-locus-host-can-never-clear-its-own-expired-verdict-by-publishing
+    event:
+      type: completed
+      ts: "2026-09-13T15:47:45Z"
+      agent_id: linux-lenovinha-opus5-20260913t154745z
+      host: linux
+      summary: |
+        LANDED: ok:land:beff45e60:attempt-2, gate green.
+
+        THE EVIDENCE REF IS CHECKABLE TWO WAYS, which is unusual and worth stating so a
+        reader does not think one of them is wrong. The land reported
+        "unpushed set has 2 merge commit(s); MERGING (rebase would replay them)", so it
+        did NOT rewrite my commits. beff45e60 is the landing merge; 9abd36fdb is the fix
+        commit itself and is an ancestor of origin/linux-next verbatim. Both answer YES
+        to `git merge-base --is-ancestor <sha> origin/linux-next`. 1024-c3h3 exists
+        because a pre-land SHA usually becomes a ghost; here it did not, and saying WHY
+        is the difference between a reader trusting the ref and re-deriving it.
+
+        POST-LAND, ON THIS HOST:
+          scripts/check-capability-row.sh check     ok:capability-row-current:lenovinha  rc=0
+          scripts/check-capability-row.sh fixture   ok:capability-row-check-fixture:15
+
+        KNOWN LIMITS, restated at closure rather than left in an earlier event:
+
+         (a) THE DRIFT ARMS (13, 14, 15) ARE VERIFIED IN FIXTURE PLUS ONE PRE-FIX
+             NATURAL OCCURRENCE, NOT BY A POST-FIX RUN ON MULTI-LOCUS HARDWARE. esme
+             captured the pre-fix verdict on their real mixed pair before this landed,
+             deliberately, because that occurrence expires the moment the fix reaches
+             their tree. The post-fix run is queued on esme and yolanda now that the
+             push has cleared, and until it returns this closure rests on a prediction
+             that matched a measurement, not on the fixed behaviour observed in the
+             wild. That is strong evidence and it is not the same as the last leg.
+             yolanda cannot supply it at all: both their loci schedule nothing, so
+             drift is structurally unavailable there.
+         (b) THE LINUX-PLUS-FORGE MULTI-LOCUS SHAPE REMAINS UNEXERCISED. A linux host
+             running a forge would publish in-guest beside its own bare-metal row. No
+             host produces that today. The arms are locus-generic so they cover it by
+             construction; no hardware has run it.
+
+        Limit (a) lifts by a measurement already scheduled. Limit (b) lifts only when
+        the fleet grows that shape, and 793-zumy landing a usable lane on yolanda would
+        also lift the "no host can supply drift content" half.
+
+        WHAT THIS PACKET ACTUALLY COST AND RETURNED, since the filing named one defect
+        and the cycle found four:
+          1130-8zxn as filed   row_ts reads the wrong locus
+          also fixed here      row_schedulable and the presence check, same blindness —
+                               a ts-only fix would have swapped a permanent `expired`
+                               for a permanent `drifted`
+          found, filed 1154-8ywc  the guard skips the expiry check entirely when the
+                               live fold is unavailable: fail-open on age, any host
+          found, filed by esme as 1154-6big  resolve_probe cannot see a debug binary
+          found, filed by macuahuitl as 1157-ghmi  the 846-idhn channel-coverage guard
+                               has been blind since lww_entries introduced a loop
+                               variable, green throughout, doc comment still claiming
+                               to be the mechanism
+
+        None of the last three are mine to close. All four came out of one packet
+        because three hosts measured on three different shapes and none of them could
+        see what the others could.
