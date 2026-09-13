@@ -162,6 +162,42 @@ pub struct DeviceRecord {
     pub cpu_cores: Option<CpuCores>,
     pub system_ram_gb: Option<f64>,
 
+    /// Where `name` CAME FROM: `measured` | `placeholder` (order 1137-rgfm).
+    ///
+    /// THE DENY-LIST COULD NOT BE MADE CORRECT, which is why this is a field
+    /// and not another string comparison. `hardware_fingerprint` refused a
+    /// placeholder by listing the ones someone had already found —
+    /// `d.name != "Host CPU" && d.name != "unknown"` — a list written from the
+    /// WINDOWS defect (805-r98w). `Apple Silicon CPU` is a different
+    /// placeholder, so it passed a check whose entire purpose is to catch
+    /// placeholders. A deny-list of the ones you know inherits every one you
+    /// do not, and the next platform arm adds a third.
+    ///
+    /// The probe knows which it emitted; nothing downstream can recover it from
+    /// the string. So the probe says so. This is the same shape as
+    /// `memory_bandwidth_source` two fields up ("soc-table" | "measured" |
+    /// "unknown") and the same shape as `is_battery_present: Option<bool>`
+    /// (803-r8u4): make the absent case EXPRESSIBLE rather than inferring it
+    /// from a value that cannot carry it.
+    ///
+    /// WHY A PLACEHOLDER NAME IS NOT MERELY UNTIDY. `hardware_fingerprint`
+    /// hashes `cpu:{vendor}/{name}/{cores}` and `gpu:{vendor}/{name}`. On
+    /// Apple silicon those were byte-identical across the whole fleet, so the
+    /// fingerprint collapsed to core count plus RAM class and could not
+    /// separate an M1 from an M5. `capability-matrix --by-hardware` re-keys the
+    /// fleet on that fingerprint and reports control=yes|no per hardware GROUP,
+    /// so a measurement taken on one Mac would be read as covering another —
+    /// 808-43mw's "two WSL2 guests share one kernel_release" failure, on a
+    /// different field.
+    ///
+    /// `serde(default)` yields `None` for every document filed before this
+    /// existed, and `None` means "this probe did not say" — never "measured".
+    /// The fingerprint refuses on `None` only when the name ALSO looks like a
+    /// known placeholder, so old documents keep their current behaviour
+    /// instead of all becoming unidentifiable at once.
+    #[serde(default)]
+    pub name_source: Option<String>,
+
     /// Whether this device's memory is ITS OWN or the host's: `unified` |
     /// `discrete` | `None` (order 964-r98h).
     ///
@@ -700,6 +736,32 @@ fn enumerate_npus_checked() -> Option<Vec<DeviceRecord>> {
 /// `sysctl -n hw.memsize` -> `17179869184` -> 16.00 GiB.
 ///
 /// GiB, not GB, matching the Windows arm's divisor: both divide by 1024^3.
+/// The CPU's real part name on macOS, or `None` when the query did not answer
+/// (order 1137-rgfm).
+///
+/// `machdep.cpu.brand_string` answers `Apple M5` on this host. The arm used to
+/// hard-code the FAMILY string "Apple Silicon CPU", which is byte-identical on
+/// every Apple silicon Mac in the fleet — so `hardware_fingerprint`'s
+/// `cpu:{vendor}/{name}/{cores}` component carried no information and the
+/// fingerprint collapsed to core count plus RAM class.
+///
+/// A failed query returns `None` and the caller KEEPS the family literal: the
+/// old string is useless for identity but is not a lie about capability, and
+/// the absent case must stay distinguishable from a measured one. That is what
+/// `name_source` records.
+#[cfg(target_os = "macos")]
+fn macos_cpu_brand() -> Option<String> {
+    let out = Command::new("sysctl")
+        .args(["-n", "machdep.cpu.brand_string"])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let name = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if name.is_empty() { None } else { Some(name) }
+}
+
 #[cfg(target_os = "macos")]
 fn macos_system_ram_gb() -> Option<f64> {
     let out = Command::new("sysctl")
@@ -731,6 +793,15 @@ fn enumerate_cpu() -> DeviceRecord {
     let mut ram_gb = None;
     #[cfg_attr(not(target_os = "linux"), allow(unused_mut, unused_assignments))]
     let mut cpu_name = "Host CPU".to_string();
+    // ORDER 1137-rgfm. `placeholder` until an arm MEASURES the name. Every arm
+    // that fails to read one leaves this alone, so the honest default is the
+    // pessimistic one and a new platform arm cannot acquire `measured` by
+    // forgetting to set it.
+    #[cfg_attr(
+        not(any(target_os = "linux", target_os = "macos", target_os = "windows")),
+        allow(unused_mut, unused_assignments)
+    )]
+    let mut name_source = "placeholder".to_string();
     #[cfg_attr(not(target_os = "linux"), allow(unused_mut, unused_assignments))]
     let mut vendor = "unknown".to_string();
 
@@ -743,6 +814,7 @@ fn enumerate_cpu() -> DeviceRecord {
                     && let Some((_, v)) = line.split_once(':')
                 {
                     cpu_name = v.trim().to_string();
+                    name_source = "measured".to_string(); // 1137-rgfm
                     if cpu_name.contains("Intel") {
                         vendor = "intel".to_string();
                     } else if cpu_name.contains("AMD") {
@@ -783,7 +855,15 @@ fn enumerate_cpu() -> DeviceRecord {
         logical_cores = num_cpus();
         physical_cores = logical_cores;
         vendor = "apple".to_string();
+        // ORDER 1137-rgfm. The family literal survives ONLY as the fallback for
+        // a query that did not answer; a measured part name replaces it and
+        // says so. Keeping the literal rather than inventing one preserves the
+        // distinction the whole field exists for.
         cpu_name = "Apple Silicon CPU".to_string();
+        if let Some(brand) = macos_cpu_brand() {
+            cpu_name = brand;
+            name_source = "measured".to_string();
+        }
         flags.push("neon".to_string());
         // ORDER 803-r8u4: this arm used to stop above, leaving `system_ram_gb`
         // null on every macOS row. A failed query leaves it null exactly as
@@ -822,6 +902,7 @@ fn enumerate_cpu() -> DeviceRecord {
                         (f[1].trim().parse::<u32>(), f[2].trim().parse::<u32>())
                     {
                         if !name.is_empty() && phys > 0 && log > 0 {
+                            name_source = "measured".to_string(); // 1137-rgfm
                             got = Some((
                                 name,
                                 phys,
@@ -894,6 +975,7 @@ fn enumerate_cpu() -> DeviceRecord {
         }),
         system_ram_gb: ram_gb,
         memory_model: None,
+        name_source: Some(name_source),
     }
 }
 
@@ -1631,10 +1713,38 @@ pub fn hardware_fingerprint_checked(
     let mut missing: Vec<String> = Vec::new();
 
     // A CPU name the probe filled in with a placeholder identifies nothing.
-    // "Host CPU" is what the Windows path emits today; "unknown" vendor is the
-    // matching tell.
+    //
+    // ORDER 1137-rgfm — THIS ASKS THE PROBE, AND FALLS BACK TO THE DENY-LIST.
+    // It used to be the deny-list alone:
+    //     d.name != "Host CPU" && d.name != "unknown"
+    // written from the Windows defect (805-r98w), which is the only shape a
+    // deny-list can have — the placeholders someone already tripped over. It
+    // therefore passed `Apple Silicon CPU`, a placeholder emitted by a
+    // different arm, in a check whose entire purpose is to catch placeholders.
+    // Every new platform arm can add a third, and the guard cannot know.
+    //
+    // `name_source` moves the question to the only party that can answer it:
+    // the probe knows whether it MEASURED the name or filled one in, and
+    // nothing downstream can recover that from the string. `Some("measured")`
+    // is identifying; `Some("placeholder")` is refused no matter how specific
+    // the string looks.
+    //
+    // THE DENY-LIST STAYS FOR `None`, deliberately. A document filed before
+    // this field existed says nothing about provenance, and treating that
+    // silence as "placeholder" would make every stored document in the fleet
+    // unidentifiable the day this lands — a correctness change that reads as an
+    // outage. For those rows the old test is exactly as good as it ever was.
+    // The list is not extended with "Apple Silicon CPU": a macOS probe new
+    // enough to emit that string is new enough to set `name_source`, so adding
+    // it would only mask the field being unset.
     let cpu_named = doc.devices.iter().any(|d| {
-        d.device_class == "cpu" && !d.name.is_empty() && d.name != "Host CPU" && d.name != "unknown"
+        d.device_class == "cpu"
+            && !d.name.is_empty()
+            && match d.name_source.as_deref() {
+                Some("measured") => true,
+                Some(_) => false,
+                None => d.name != "Host CPU" && d.name != "unknown",
+            }
     });
     if !cpu_named {
         missing.push("cpu model name (probe emitted a placeholder)".to_string());
@@ -2554,6 +2664,14 @@ fn enumerate_gpus() -> Vec<DeviceRecord> {
             // machine that can run it, not a measurement standing in for one.
             system_ram_gb: macos_system_ram_gb(),
             memory_model: Some("unified".to_string()),
+            // ORDER 1137-rgfm. "Apple Metal GPU" is a FAMILY literal, identical
+            // on every Apple silicon Mac, so the fingerprint's
+            // `gpu:{vendor}/{name}` component discriminates nothing. Naming a
+            // real Metal device needs a framework call rather than a sysctl and
+            // is NOT done here; what is done is refusing to let the literal
+            // pass as measured. The honest label is the one the deny-list could
+            // never apply to a name nobody had seen before.
+            name_source: Some("placeholder".to_string()),
         });
     }
 
@@ -5004,6 +5122,9 @@ mod tests {
             cpu_cores: None,
             system_ram_gb: None,
             memory_model: None,
+            // 1137-rgfm: None = this fixture states no provenance, so the
+            // pre-field deny-list still judges it, exactly as before.
+            name_source: None,
         }
     }
 
@@ -5791,6 +5912,9 @@ mod tests {
             cpu_cores: None,
             system_ram_gb: None,
             memory_model: None,
+            // 1137-rgfm: None = this fixture states no provenance, so the
+            // pre-field deny-list still judges it, exactly as before.
+            name_source: None,
         }
     }
 
@@ -5867,6 +5991,87 @@ mod tests {
     ///
     /// MEASURED on tlatoanis-macbook-air (Apple M5) 2026-09-12:
     /// `is_battery_present: true`, `system_ram_gb: 16.0`.
+    /// ORDER 1137-rgfm. The CPU name must be THIS Mac's part, not the family
+    /// literal every Apple silicon host shares.
+    ///
+    /// It asserts against `machdep.cpu.brand_string` read independently, rather
+    /// than against a hard-coded "Apple M5" — pinning the string would red on
+    /// every other Mac in the fleet for being a different correct machine, and
+    /// pinning `!= "Apple Silicon CPU"` would accept any OTHER placeholder,
+    /// which is the deny-list mistake this order exists to remove.
+    ///
+    /// MEASURED on tlatoanis-macbook-air 2026-09-13: brand_string `Apple M5`;
+    /// before this change the record read `Apple Silicon CPU`, identical on
+    /// every Apple silicon Mac, so the fingerprint's cpu component carried no
+    /// information at all.
+    #[test]
+    #[cfg(target_os = "macos")]
+    // @trace order:1137-rgfm, spec:accel-capability-probe
+    fn macos_cpu_name_is_the_real_part_not_a_family_placeholder() {
+        let brand =
+            macos_cpu_brand().expect("machdep.cpu.brand_string must answer on a macOS host");
+        let cpu = enumerate_cpu();
+
+        assert_eq!(
+            cpu.name, brand,
+            "the record must carry the measured part name, not a family literal"
+        );
+        assert_eq!(
+            cpu.name_source.as_deref(),
+            Some("measured"),
+            "a measured name must SAY it was measured; the deny-list could not \
+             tell a new placeholder from a real part (1137-rgfm)"
+        );
+
+        // The fingerprint must now accept this document. Before 1137-rgfm it
+        // accepted it too — for the wrong reason, because "Apple Silicon CPU"
+        // was simply not on the deny-list.
+        assert!(
+            !cpu.name.is_empty() && cpu.name != "Apple Silicon CPU",
+            "the family literal survives only as the unmeasured fallback"
+        );
+    }
+
+    /// ORDER 1137-rgfm, the half that does NOT need a macOS host: a device
+    /// declaring `placeholder` is refused however specific its name looks, and
+    /// a device declaring nothing falls back to the old deny-list so documents
+    /// filed before the field keep their behaviour.
+    #[test]
+    // @trace order:1137-rgfm, spec:accel-capability-probe
+    fn a_declared_placeholder_is_refused_however_plausible_the_name() {
+        let mut doc = schedulable_gpu_doc();
+
+        // A name no deny-list would ever carry, declared as a placeholder.
+        for d in doc.devices.iter_mut().filter(|d| d.device_class == "cpu") {
+            d.name = "Apple M5".to_string();
+            d.name_source = Some("placeholder".to_string());
+        }
+        assert!(
+            hardware_fingerprint_checked(&doc).is_err(),
+            "a declared placeholder must be refused even when the string looks \
+             like a real part — that is the whole point of asking the probe"
+        );
+
+        // The same document, measured, is identifying.
+        for d in doc.devices.iter_mut().filter(|d| d.device_class == "cpu") {
+            d.name_source = Some("measured".to_string());
+        }
+        assert!(
+            hardware_fingerprint_checked(&doc).is_ok(),
+            "a measured name must be accepted"
+        );
+
+        // Provenance absent: the pre-field deny-list still judges it.
+        for d in doc.devices.iter_mut().filter(|d| d.device_class == "cpu") {
+            d.name_source = None;
+            d.name = "Host CPU".to_string();
+        }
+        assert!(
+            hardware_fingerprint_checked(&doc).is_err(),
+            "an old document naming a known placeholder is refused as before"
+        );
+    }
+
     #[test]
     #[cfg(target_os = "macos")]
     // @trace order:803-r8u4, spec:accel-capability-probe
@@ -6308,6 +6513,9 @@ mod tests {
                 cpu_cores: None,
                 system_ram_gb: None,
                 memory_model: Some(mm.to_string()),
+                // 1137-rgfm: None = this fixture states no provenance, so the
+                // pre-field deny-list still judges it, exactly as before.
+                name_source: None,
             }
         }
 
