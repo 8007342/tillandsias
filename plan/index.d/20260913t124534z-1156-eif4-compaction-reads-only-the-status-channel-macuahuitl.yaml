@@ -1,0 +1,62 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by the macuahuitl coordinator on 2026-09-13 from yolanda's isolation:
+# a fragment written under the canonical `fields:` LWW channel folds for every
+# reader and is invisible to compaction, which read `status:` alone.
+packets:
+  - packet_id: compaction-reads-only-the-status-lww-channel-so-a-fields-spelled-correction-folds-for-every-reader-and-is-silently-dropped-when-the-fragment-is-compacted
+    order: 1156-eif4
+    status: in_progress
+    kind: bugfix
+    priority: p1
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [ledger, compaction, plan, integrity, crdt]
+    estimated_hours: 1
+    verifiable_closure: "cargo test -p tillandsias-plan compaction_text_tests: `a_fields_spelled_correction_survives_the_compaction_round_trip` (pre-fix result: FAILS at assert_fold_equivalent — the candidate lacks the correction; measured yolanda 2026-09-13 on the real ledger by removing fragments one at a time, perfect correlation with the channel name) and `a_fields_spelled_rung_lowering_write_is_refused_and_reported` (pre-fix result: FAILS — discarded_status is empty, the write is dropped without report); CONTROL: lenovinha's three 1123-k3mq ladder tests (`compaction_refuses_a_rung_lowering_status_write_and_says_so`, `compaction_keeps_the_ladder_teeth_an_older_higher_rung_still_wins`, `compaction_does_not_report_a_status_write_that_changes_nothing`) pass unchanged, proving the change widened the channel list and nothing else; plus `compaction_on_the_real_ledger_preserves_every_comment_and_item` green on a tree carrying a fields: fragment."
+    owned_files:
+      - crates/tillandsias-plan/src/fragments.rs
+    title: |
+      compact_text reads frag.doc.get("status") alone while lww_entries folds both LWW channels ["fields", "status"], so a correction written under the canonical `fields:` spelling is seen by every reader and INVISIBLE to compaction: the candidate renders without it, the real-ledger round-trip test fires, and — had the test not existed — the fragment carrying the intent would have been deleted at the next compact. A rung-lowering write spelled that way was invisible twice over, neither compacted nor reported.
+    context: |
+      ISOLATED on yolanda 2026-09-13 (windows-next, full gate red on
+      compaction_on_the_real_ledger_preserves_every_comment_and_item): removing
+      their four beyond-trunk fragments one at a time — the two written by
+      `set-field` (status: channel) PASS, the two hand-written (fields:
+      channel) FAIL; all four removed, PASS. Trunk itself passed on macuahuitl
+      at c2013d4ad, which exonerated c93139300 (the compaction change landed
+      hours earlier) and located the defect in the tree that carried a
+      fields: fragment. Both functions are correct on their face; only the
+      pairing was wrong, and no reading of either would have suggested it —
+      the bisection on real data is the finding.
+
+      WHY NOBODY HIT IT: every machine-written fragment uses `status:`
+      (set-field emits it; its header says the channel "is named status: for
+      historical reasons but corrects ANY field", 642-fedr). `fields:` is the
+      canonical spelling — lww_entries lists it first — and is reachable only
+      by hand-writing a fragment. The canonical name was the broken one and
+      the alias the safe one. windows-next carries one such fragment
+      (997-e4v2's next_action correction, 9767d4c88); after this fix it
+      compacts correctly, and the immutable originals are the pre-fix
+      evidence.
+
+      THE FIX (one line, macuahuitl, cleared with lenovinha who owns the
+      adjacent 1123-k3mq reporting): compact_text iterates
+      lww_entries(&frag.doc) instead of doc.get("status"). The
+      discarded_status reporting sits in the same loop, so the composition
+      lands for free: a fields:-spelled rung-lowering write is now refused
+      AND reported. lenovinha's warning text names the FIELD status, never
+      the channel, so it stays accurate.
+    exit_criteria:
+      - 'a_fields_spelled_correction_survives_the_compaction_round_trip passes (pre-fix result: FAILS)'
+      - 'a_fields_spelled_rung_lowering_write_is_refused_and_reported passes (pre-fix result: FAILS — no report)'
+      - 'CONTROL: the three 1123-k3mq ladder tests pass unchanged and the test count rises by exactly two (enumerated with --list, never by the pass count)'
+      - 'compaction_on_the_real_ledger_preserves_every_comment_and_item is green on trunk after windows-next relays its fields: fragment'
+    events:
+      - type: filed
+        ts: "2026-09-13T12:45:34Z"
+        agent_id: "linux-macuahuitl-fable-20260913t124534z"
+        host: macuahuitl
+        summary: |
+          Filed and claimed by the coordinator in the same cycle; the fix is
+          one line and the relay would otherwise carry the red to every host.
