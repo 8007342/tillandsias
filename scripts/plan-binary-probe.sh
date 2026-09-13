@@ -356,7 +356,7 @@ resolve_target_binary() {
     if [ -n "$ctd" ] && [ "${ctd#/}" = "$ctd" ]; then
         ctd="$root/$ctd"
     fi
-    # ORDER 1142-wn2k — LOCUS-NATIVE ARTEFACT FIRST, the same reorder 1030-i2p8 made
+    # ORDER 1142-wn2k (esme filed the same defect as 1140-d6ni) — LOCUS-NATIVE ARTEFACT FIRST, the same reorder 1030-i2p8 made
     # for resolve_plan_binary fifty lines above. That comment predicted the
     # masking would lift; this sibling never got the change, so it lifted here
     # instead.
