@@ -1,0 +1,88 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: windows-lane-sends-a-verbatim-argv-and-drops-its-escaping-workarounds
+    field: status
+    value: completed
+    host: yolanda
+    ts: "2026-09-13T06:45:00Z"
+    reason: >
+      The argv work was already landed; what was open was the closure, and its
+      observable turned out to be inert on the only path that could read it.
+      Fixed, measured with a before/after control, and pinned with a mutation
+      control. See the events below.
+
+events:
+  - packet_id: windows-lane-sends-a-verbatim-argv-and-drops-its-escaping-workarounds
+    event:
+      type: completed
+      host: yolanda
+      agent: windows-yolanda-claude-20260913t042403z
+      ts: "2026-09-13T06:45:00Z"
+      evidence_refs:
+        - "tray.log, post-fix: `spawning in-VM PTY terminal=windows-terminal intent=Shell project=\"tillandsias\"` — the closure's 'observed opening in Windows Terminal rather than conhost', on a headless host for the first time"
+        - "before/after control on the SAME command (`--forge tillandsias --shell`, both returning ok:forge-launch:tillandsias, exit 0): tray.log 45534 -> 45534 bytes pre-fix (no record), 45534 -> 45648 post-fix"
+        - "code-vs-comment scan: argv_survives_wt_reparse = 3 occurrences, ALL comments (pty/mod.rs, notify_icon.rs x2); wt_safe_title = 0 occurrences anywhere; 0 code occurrences of either"
+        - "cargo test -p tillandsias-windows-tray headless_forge_launch_initialises_tracing_before_spawning -> ok (1 passed); mutation control with the call removed and the comment block intact -> FAILED; restored -> ok"
+      summary: >
+        THE ARGV WORK WAS ALREADY DONE. The packet's next_action said "the tray
+        still flattens into `bash -lc`" and that was stale: every occurrence of
+        that shape in notify_icon.rs sits past the `#[cfg(test)]` boundary, and
+        one of them is a NEGATIVE CONTROL asserting launch_spec never emits it.
+        launch_pty's own comment records the verbatim-argv change and the
+        deletion of the argv_survives_wt_reparse guard. I first misread those
+        grep hits as production and had to correct myself against the test-module
+        boundary.
+
+        WHAT WAS ACTUALLY OPEN, and it was not the implementation. A previous
+        yolanda cycle had found that the closure's "observed opening in Windows
+        Terminal" could not be answered by any of three observables (the
+        WindowsTerminal process count never moves because wt reuses one process;
+        wsl.exe parentage vanishes when a lane into a missing project exits;
+        the log carried no spawn record), and installed a `terminal=` field
+        emitted from the SAME branch that selects the spawn, with the stated
+        aim that "one line makes it checkable by any host forever, including
+        headless ones and CI".
+
+        IT WAS NOT CHECKABLE. `--forge` exits in main's early-flag block, which
+        runs BEFORE `notify_icon::init_tracing()`, so on the only headless path
+        that reaches launch_pty the line went to an uninitialised subscriber.
+        Measured: a successful `--forge tillandsias --shell` returned
+        ok:forge-launch:tillandsias and exit 0 while tray.log did not grow by
+        one byte. A GUI click wrote the line; every automated caller silently
+        did not. The observable installed to make the closure checkable was
+        inert on exactly the path that would check it.
+
+        THE FIX is `notify_icon::init_tracing()` at the top of
+        forge_launch_once. init_tracing ends in `try_init()` with the result
+        discarded, and this path exits before the tray's own call, so there is
+        no conflict.
+
+        THE PIN, and its first version was WRONG IN THE PACKET'S OWN SHAPE. A
+        source-scan test asserted the call exists inside forge_launch_once. It
+        passed against a mutant with the call deleted, because the doc comment
+        above it mentions `init_tracing()` in prose — a scan that cannot tell
+        code from commentary measures the commentary. It also, in its first
+        draft, matched its own source: the marker it searched for is a string
+        literal in the test, and the test sits earlier in the file than the
+        function, so a forward `split_once` found the test and asserted about
+        it. Both are fixed (rsplit_once, and comment lines stripped before the
+        match) and the mutation control now goes red with the call removed.
+      note: >
+        ON THE CLOSURE'S OWN WORDING, recorded rather than quietly satisfied:
+        "a source scan finds no argv_survives_wt_reparse and no wt_safe_title"
+        cannot pass as literally written, and not because work remains.
+        wt_safe_title is gone entirely, and argv_survives_wt_reparse survives
+        in exactly three COMMENTS that record why the guard was deleted —
+        load-bearing history a future reader needs. A literal grep still finds
+        them. Read comment-blind, which is the only reading that measures what
+        the closure means, both halves pass: 0 code occurrences of either
+        symbol. Deleting the comments to make a grep go green would trade real
+        history for a passing scan, and this repository already has the rule
+        that comments a pin splits on are source.
+
+        This is the same defect as the pin's first draft above, and as
+        1141-vf9w's detector accusing every gate it could not recognise: a
+        check whose predicate cannot distinguish its subject from something
+        that merely mentions its subject. Worth a follow-up row if a third
+        instance appears; two is a coincidence I am not going to generalise
+        from on my own.
