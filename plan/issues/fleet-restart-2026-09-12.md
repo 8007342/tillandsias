@@ -1050,3 +1050,35 @@ stories.
   rc 0) and takes the packet to close it, with criterion 4 in the forge they
   already have; 776-jcf3's observability strings do not exist on a working
   launch and its expectation is being amended with that run.
+- **Ratified: the deletion gate for a salvage ref is per-line accounting**
+  (macneo, 1080-4deb): ancestry cannot authorise deleting a ref whose content
+  was restored by relay (the tip's commit is on no branch) and byte-identity
+  is unpassable once trunk evolves a file, so the gate is: every line the tip
+  carries over its merge base that trunk lacks is accounted for as superseded
+  by a NAMED successor or present under a rename, the accounting written on
+  the row BEFORE the deletion, re-verified against a fresh fetch immediately
+  before the irreversible act. This ref cleared it (seven denominator-guard
+  lines kept and widened, two signature comments under a rename, one loose
+  grep replaced by the anchored match at 112ea637c) and is deleted, confirmed
+  absent with a positive control on ls-remote. A control that has since
+  merged is a control that cannot fail.
+- **The narrow override is the question the hook is asking** (macneo): the
+  pre-push refusal under 874-w2gc offered `TILLANDSIAS_SALVAGE_DELETE_OK=1`
+  and, two lines later, mentioned `git push --no-verify` under "this hook is
+  the trunk's only gate". Not equivalent, and the text did not say so: the
+  narrow one keeps every other check running (no-stale-base-revert,
+  main-branch-affordance, linux-next-merged still printed on the delete); the
+  broad one pushes the same bytes and discards all three, and on a day with a
+  stale base lands a real defect. Refusals must name the narrow override and
+  say `--no-verify` is not it.
+- **The surviving gate reproduced on a third host, with the protocol
+  sharpened** (yoga): kill the wrapper → host side reaped, container-side
+  build.sh alive under conmon with a live child; SIGTERM inert, SIGKILL
+  reaps. Refinements: a relaunched gate may be a stamped no-op
+  (`ok:gate-fresh`) so a clean `ps` then proves nothing — force it; the
+  discriminator is the PPID (conmon versus the launching podman exec), true
+  before any kill; where the toolbox shares the host PID namespace one `ps`
+  suffices. Arm 5 of 1132-r4mt stays a proposed cause, not a demonstrated
+  one; the earlier "relaunch passed" samples may have been stamped no-ops.
+  yoga takes pirria's wrapper-propagation row plus a gate-level lock; pirria
+  verifies on the floor tier.
