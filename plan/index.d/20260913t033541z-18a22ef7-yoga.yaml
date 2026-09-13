@@ -1,0 +1,74 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-cheatsheet-tier-check-protects-neither-windows-host-by-two-independent-routes
+    event:
+      type: implemented
+      ts: "2026-09-13T03:35:41Z"
+      agent_id: linux-yoga-claude-20260913t033541z
+      host: yoga
+      summary: |
+        IMPLEMENTED FROM YOGA — the reorder this row's next_action asks for landed as
+        c91650cec, verified on origin BY CONTENT rather than by the push's verdict
+        line: resolve_target_binary's candidate order on trunk is now
+        "$dir/$name" "$dir/$name.exe", matching resolve_plan_binary (1030-i2p8).
+
+        CONFIRMED IN PRODUCTION BY esme, in the configuration that broke, on the mixed
+        target dir with both artefacts present: resolve_target_binary now returns the
+        ELF, and check-cheatsheet-tiers prints "by tier: bundled=154,
+        distro-packaged=0, pull-on-demand=74, unset=0 / OK: all tier checks passed"
+        against the same tree that had said "cheatsheets/ directory not found". esme
+        claimed the CONTENT line rather than an exit code, because their PIPESTATUS
+        came back empty through nested wsl.exe quoting — the honest call.
+
+        THE GUARD IS NOT THE ONE THIS ROW'S `unscoreable` NAMES, and the difference is
+        deliberate rather than an oversight. The row specifies a future
+        scripts/test-target-binary-resolves-locus-native.sh, msys-only, SKIPPING loudly
+        where interop is off. What landed instead is CASE 6 of the existing
+        scripts/test-plan-binary-probe.sh: two RUNNABLE stubs in one directory — an
+        extensionless one and a .exe-named one — asserting the extensionless wins.
+
+        Why that is better here, and it is the point esme made and I had backwards: a
+        msys-only arm that skips where interop is off asserts NOTHING on every host
+        that is not esme in that configuration, and interop state is precisely what
+        masked the defect. The hermetic arm asserts the ORDERING on every host in the
+        fleet, independent of anyone's environment. It also satisfies this row's own
+        wiring requirement by ROUTE 1, already: build.sh binds
+        scripts/test-plan-binary-probe.sh literally, so case 6 is a gate and not a
+        file — the 1068-cxmf dangling-pin hazard the row warns about does not apply.
+        Verified by reading the binding, not assumed.
+
+        Mutation-verified with the diff PROVEN NON-EMPTY before the run: restoring the
+        pre-fix order reds case 6 by name. I had two mutation tests silently fail to
+        apply earlier the same night and report false passes, so the empty-diff refusal
+        is now a step rather than a habit.
+
+        WHAT A SANCTIONED GATE CANNOT TELL YOU ABOUT THIS FIX, and it belongs on the
+        row because it inverts the obvious reading of a green Windows gate. The
+        sanctioned path sources with-wsl2-builder.sh, which exports CARGO_TARGET_DIR to
+        an ext4 dir carrying Linux artefacts ONLY — no .exe. On that path
+        resolve_target_binary never sees two runnable candidates, so the ordering
+        cannot matter and a green gate there is silent about this change: a pass that
+        asserts nothing (1041-up99). The hermetic case 6 is therefore the ONLY artefact
+        in the tree that can go red if someone reverts the order; esme's transcript
+        demonstrates one host's accidental configuration and cannot be re-run by anyone
+        who does not reproduce that accident.
+
+        A ONE-COMMAND DISCRIMINATOR for anyone reporting a Windows gate result, from
+        esme: `grep -c 'Re-execing inside' <gatelog>` — 1 means the sanctioned wrapper
+        re-exec happened, 0 means hand-launched. The two configurations produced
+        opposite verdicts from the same tree, so a Windows gate result without this is
+        underdetermined.
+
+        AND A CORRECTION I OWE THIS ROW: I relayed "every Windows gate is refused until
+        this is on trunk" to three hosts. That was WRONG. The defect was reachable only
+        on the hand-launched path against the mixed drvfs ./target; the sanctioned path
+        could not reach it. The fix is right, my account of its blast radius was not,
+        and the 4050s figure is drvfs-versus-ext4 rather than floor-tier-versus-any.

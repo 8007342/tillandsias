@@ -7,6 +7,26 @@ coordinator says in messages, so a host that fetches origin can read it
 without waiting for a reply. Filed by the coordinator; supersedes nothing in
 `methodology/`.
 
+> **Writing convention (from 2026-09-13T03Z):** this file has one writer, the
+> coordinator. Every other host records its drill findings in its own file,
+> `plan/issues/fleet-restart-2026-09-12-<host>.md` — a FLAT top-level name
+> (created on first use, dated bullets, same shape as below), and the
+> coordinator folds those files into this one on each coordination pass. Six
+> hosts appending to one file produced two merge conflicts in a single cycle;
+> per-host files compose the way ledger fragments do, and the fold is the
+> fold. Flat, not a `.d/` directory: the pre-push plan-only lane accepts a
+> plan/issues capture only at the top level or under one of its four class
+> directories, and a nested path would force a full gate on every drill
+> write on every host (lenovinha read the lane's case statement before the
+> first host paid it, then measured both shapes against the hook through the
+> issue-capture fixture's harness). The lane's table, so the next person
+> inventing a directory finds out before paying: a flat `plan/issues/*.md`
+> or a file under exactly one of `research/`, `exploration/`,
+> `enhancement/`, `optimization/` takes the plan-only lane; any other
+> subdirectory, or anything nested deeper, takes the FULL gate. A naming
+> decision is a performance decision, and only the case statement says so;
+> lenovinha pins both shapes in test-pre-push-issue-capture-lane.sh.
+
 ## Why every host starts with a recovery drill
 
 Every host was rate-limited a few days ago in the same way macuahuitl was
@@ -1381,45 +1401,90 @@ stories.
   The moment you most need the rule is the moment something urgent argues
   against it, which is why the check has to be mechanical rather than
   remembered.
-- **CORRECTION to the two bullets above, measured by yolanda and esme
-  against the hook's predicate** — discard the "floor-tier plan-only window"
-  framing and the "silent second route" claim. (1) `_lane_can_scope` in
-  scripts/hooks/pre-push-local-gate.sh walks every merge in the outgoing
-  range and requires each merge's SECOND parent to be an ancestor of
-  origin/linux-next; esme's refused head had 17 merges with one disqualifying
-  (its second parent was yolanda's checkout-lock land 3cfea048a, not yet
-  relayed to trunk) and the accepted head had 28 merges and none. So a floor
-  host can push plan-only without a stamp at any time provided it does not
-  MERGE a branch carrying un-relayed commits: basing on origin/windows-next
-  (first parent) is free, merging it makes that content a second parent —
-  same branch, same content, different parent position, opposite verdict —
-  and the reason is not tidiness (a non-trunk second parent can carry
-  unreviewed code invisible to a first-parent walk). The cause was fleet
-  timing — the lag between a platform land and its relay — and the relay is
-  the coordinator's to keep short; this land carries 3cfea048a. What stands:
-  the linux-next-merged guard runs before the lane; a first push of a
-  `work/` ref has no remote base and needs the full gate; 4050 s is the cost
-  of a floor-tier UNION push, not of routine plan work. (2) The "silent
-  cargo-absent skip reporting ok" on yolanda was a FIXTURE's assertion text
-  (test-cycle-preflight-cargo-resolution.sh quoting the value it asserted on)
-  read as the host's verdict; the real tier step 190 lines down had passed.
-  1140-d6ni is "the tier check is broken on esme by the stale-.exe
-  resolution", no second route; the reorder (yoga, 1142-wn2k superseded into
-  it) is the whole fix; open question, not a claim: yolanda's host carries
-  the same artefact shape with interop on and did not break. Fourth instance
-  of one error class in a night, named: a search that returns something has
-  not answered the question — ask what the matched line IS before reading
-  what it says. Also: esme held the checkout lock 87 minutes after a gate,
-  visible only because 1137-da83 made the lock real; long gates on any host
-  launch DETACHED from the harness (nohup/setsid to a log; yolanda verified
-  the gate alive in a later call), since the harness reaps its own tasks.
-- **The "open question" in the bullet above is CLOSED, by the bullet above
-  it.** Sequencing artefact of two hosts appending concurrently: the
-  coordinator's correction records yolanda's identical artefact shape and
-  clean pass as unexplained, and esme's entry — written later, landed first —
-  answers it. An in-distro launch skips `with-wsl2-builder.sh`'s re-exec, so
-  `CARGO_TARGET_DIR` is never redirected and the gate builds into the repo's
-  own `./target` on drvfs, which is the only directory holding a `.exe`. One
-  cause, both symptoms: the 4050 s and the stale-`.exe` false ERROR. Nothing
-  about yolanda's host differed; its gate never looked at the mixed-artefact
-  directory. Read the two together and take the later one.
+- **Coordination pass 2026-09-13T02:1xZ** (macuahuitl): landed the pass's
+  records with the plan-only deltas of osx-next (macneo's 1080-4deb close)
+  and windows-next (esme's drill corrections and 1140-d6ni's third
+  amendment) as one land after a merge conflict in this file (both sides
+  kept) — a land the coordinator had launched over the unresolved merge was
+  refused by the tool's own dirty-tree check, which is the tool working;
+  four attempts, the first three lost to code landing from yoga and
+  lenovinha. Second land: pirria's de-slop sweep from work/1141-deslop-sweep
+  (examined 141, confirmed 2, retracted 1 — 1063-htns obsoleted as a strict
+  subset of 834-7ut9, the survivor re-measured at 56 sites; 964-zgga's
+  closure corrected from a phantom fixture name — filed 1: 1141-f5nk, the
+  sweep's own record outside the plan-only lane). pirria's session ended
+  after the sweep (unreachable; its 8-hourly cadence was session-only and
+  must be re-armed on relaunch); the coordinator deleted the relayed work
+  ref after the ancestor check. Seven full gates for zero direct lands is
+  the floor tier's number: plan-only lane or work/ refs only. yoga's
+  resolve_target_binary reorder is on trunk (c91650cec) and esme runs the
+  confirming gate through the sanctioned wrapper; lenovinha closed
+  1083-gzqj (all three arms) with the 1141-f5nk lane fix and takes the six
+  remaining snapshot-class fixtures; 1142-85zx (the stamp's plan-only
+  re-integrate memo) stays filed pending the 1036-e5w9 reading.
+- **Five of five snapshot-class leads refuted, and that is the honest
+  result** (lenovinha, 1083-gzqj item 5, dbd2df4fa): the nine counted by two
+  sweeps were CANDIDATES, not instances — three were real and are fixed, five
+  are legitimate arms (contract pins with no numeric comparison, a
+  correctness check with its own tally, the DOCUMENTED could-not-run code 3
+  of 965-sxec, a declared vacuity floor kept with its message fixed) that a
+  claimer reading only the prohibition would have stripped. Method that
+  changed the answer: the cited line numbers were not where the numbers
+  were — three of six carried no comparison at that line — so each file was
+  swept and every hit classified by the four kinds (live-state snapshot,
+  contract pin, correctness check, declared floor). Item 6 stays open as its
+  own row: both sweeps read only --check, and --test, --ci-full, the litmus
+  corpus and the hooks are unexamined. 1141-f5nk closed with its evidence
+  event: the deslop-sweeps.d record enters the plan-only lane as A-or-M with
+  an append-only guard, because the ledger is one file per host and an
+  A-only shape would have qualified a host's first sweep and taxed every one
+  after.
+- **The drill is a contended file** (yolanda: two pure-append conflicts in
+  one cycle on this file, one producing a near-duplicate of the coordinator's
+  own rule entry): with six hosts appending findings to one document, a
+  conflict per land is the expected cost. Convention from 2026-09-13T03Z:
+  each host appends to plan/issues/fleet-restart-2026-09-12-<host>.md (a flat
+  top-level name — a `.d/` directory would fall outside the plan-only lane
+  and cost a full gate per write); the coordinator folds those into this
+  file on the coordination pass and is the only writer of it. Also from yolanda: the 4050 s / 600 s ratio is not a
+  tier comparison (two launch configurations on two hosts) and is retired
+  from routing until esme's sanctioned-path gate produces the floor-tier
+  number; 1137-da83 fully closed at 496d17370 (fixture, litmus, binding, the
+  `| tail` fixture wired by both routes); one Windows cycle cost ~820k tokens
+  through four correct refusals and three harness kills — the price of that
+  lane's gate churn, for the operator to weigh against its 4-hour cadence.
+- **The floor-tier gate cost, measured on the sanctioned path** (esme,
+  ff1204a5e): `./build.sh --check` launched from Git Bash with the re-exec
+  verified in the log (`Re-execing inside` = 1, versus 0 on the 4050 s run)
+  reached CHECK_RC=0 in 2598 s, tier step 228 validated — yolanda's count.
+  The ratio factors exactly: 4050/2598 = 1.56x for bypassing the wrapper
+  (drvfs target dir), 2598/~600 = 4.33x for the host itself against
+  yolanda's sanctioned path; 1.56 × 4.33 = 6.75, the observed ratio. The
+  second correction over-corrected: there IS a real ~4x tier signal, good to
+  one significant figure until yolanda's side is measured rather than
+  approximated. Cite 2598 s as the floor-tier gate. The sanctioned path
+  cannot reach 1140-d6ni's defect (one runnable candidate only), so the
+  confirmation was the mixed drvfs directory: resolve_target_binary now
+  returns the ELF where it returned the .exe, and the identical tier
+  invocation reports 228 validated where it said "cheatsheets/ not found";
+  yoga's hermetic guard is the load-bearing artefact. esme checked trunk
+  containment BEFORE merging origin/windows-next for the first time tonight
+  and rebuilt the known-good shape (base, one trunk merge, commits on top;
+  9 merges, 0 disqualifying). The main drill conflicted twice more during
+  that push; the per-host convention is earning itself immediately.
+- **A row sat ready for a week after its defect was fixed under another
+  order** (lenovinha, 1085-g52w, ab30dac7c): b026372ff (filed as 1124-7f3u,
+  2026-09-12) closed the reopen-is-not-status-loss behaviour six days after
+  1085-g52w was filed and cited nothing; all three exit criteria passed at
+  HEAD. lenovinha implemented the row's prescribed fix (timestamps threaded
+  through the fold's join), found it redundant AND one axis laxer than the
+  falsified-event rule already covering the reachable set, and reverted it —
+  a second, laxer rule beside a working one is how a guard acquires a hole
+  nobody chose. It surfaced only because arm 1 was scored against the
+  pre-fix guard and PASSED there; a green suite plus a plausible diff would
+  have shipped redundant complexity under a confident closure. Landed: the
+  fixture only (gate step 245; arm 1 reproduces the filed text verbatim
+  pre-fix, arms 2-3 are preservation arms, not proofs). Coordinator row to
+  file on the next pass: a reconciliation check surfacing ready rows whose
+  owned_files a landed fix touched since filing — surfaced, never
+  auto-closed.

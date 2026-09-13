@@ -279,6 +279,41 @@ else
 fi
 reset_to_remote
 
+# ── 1d. THE DRILL CONVENTION IS A PINNED PROPERTY, NOT A COINCIDENCE. ──────
+#      Per-host drill records are FLAT top-level names,
+#      plan/issues/fleet-restart-<date>-<host>.md. That shape was chosen because
+#      it qualifies for this lane TODAY with no lane change — but it qualifies
+#      only as a consequence of which directories the class arm above happens to
+#      list. Narrow those arms later for the Reduction Engine's own purposes and
+#      six hosts silently start paying a full gate per drill note, with no signal
+#      beyond pushes getting slow.
+#
+#      MEASURED BEFORE THE CONVENTION WAS ADOPTED: the first proposal was a
+#      nested plan/issues/fleet-restart-<date>.d/<host>.md, and it is REFUSED —
+#      one directory down, but not one of the four class directories. Both
+#      shapes are pinned here so the choice between them cannot silently invert.
+printf -- '- 2026-09-13 lenovinha: drill note\n' > plan/issues/fleet-restart-2026-09-12-lenovinha.md
+G add -A >/dev/null; G commit -q -m "flat per-host drill note"
+out="$(run_guard)"
+lane_qualified "$out" \
+    && ok "the FLAT per-host drill name qualifies for the lane (the adopted convention)" \
+    || bad "the flat per-host drill name was turned away, so every host now pays a full gate per drill note: $(grep -m1 'not applicable' <<<"$out")"
+reset_to_remote
+
+# CONTROL: the shape that was rejected must STAY rejected. Without this, arm 1d
+# would keep passing on a lane that had started accepting everything, and would
+# certify the convention on the strength of a lane with no boundaries left.
+mkdir -p plan/issues/fleet-restart-2026-09-12.d
+printf -- '- 2026-09-13 lenovinha: drill note\n' > plan/issues/fleet-restart-2026-09-12.d/lenovinha.md
+G add -A >/dev/null; G commit -q -m "nested .d per-host drill note"
+out="$(run_guard)"
+if lane_qualified "$out"; then
+    bad "CONTROL: the nested .d/ shape now QUALIFIES — the class arm has widened, and arm 1d above no longer proves the convention was the reason the flat name is cheap"
+else
+    ok "CONTROL: the nested .d/ shape still takes the full gate, so 1d is about the NAME and not about a permissive lane"
+fi
+reset_to_remote
+
 # ── 2. (d) THE NEGATIVE CONTROL: a capture whose citations violate 881-29me
 #      must FALL BACK to the full gate. Without this arm the lane is a hole.
 printf 'The const lives at `main.rs:1136-1145`.\n' > plan/issues/bad-capture.md

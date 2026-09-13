@@ -1,0 +1,12 @@
+# Gate step 1085-g52w — data, not code (order 1072-b7eq).
+#
+# The behaviour this pins was fixed by b026372ff (filed as 1124-7f3u) and had NO
+# fixture: a sanctioned reopen must land, an unapplied closure must not, and a
+# closure racing a reopen must not. The reopen path is walked rarely, which is
+# exactly why it broke unnoticed for the fleet once and would again.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking a sanctioned reopen is history, not status loss (1085-g52w)"
+STEP_SCRIPT="scripts/test-reopen-is-history-not-loss.sh"
+STEP_ERROR="a reopen is refused as status loss (no host can land a correction), or an unapplied closure is now accepted (the guard lost its subject) (1085-g52w) — see the verdict line above"
+STEP_OK="Reopen-is-history check passed"

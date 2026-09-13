@@ -31,13 +31,59 @@ case "${1:-}" in
     *) echo "usage: $0 get|store|erase" >&2; exit 1 ;;
 esac
 
-# Drain stdin (git sends protocol/host/path). We do not branch on it: this
-# helper is wired per-invocation by the relay for one specific remote, so
-# answering unconditionally is correct and avoids parsing a format we would
-# then have to keep in sync.
+# ORDER 1118-bscs — THE HOST IS VALIDATED BEFORE ANY TOKEN IS RETURNED.
+#
+# This block used to drain stdin and deliberately not branch on it: "this helper
+# is wired per-invocation by the relay for one specific remote, so answering
+# unconditionally is correct". That reasoning is about how the helper is CALLED
+# TODAY, and a credential helper must not rest on an assumption about its
+# caller. Anything that reaches this script — a misconfigured remote, a URL an
+# attacker influenced, a second caller added later by someone who did not read
+# that comment — received a live GitHub token for an arbitrary host.
+#
+# The stated cost of checking was "parsing a format we would then have to keep
+# in sync". The format is git's documented credential protocol: `key=value`
+# lines terminated by a blank line. It has been stable for the life of the
+# helper, and `host=` is the one field needed here.
+#
+# FAIL CLOSED. An absent host, an unparseable host, or any host outside the
+# allowlist REFUSES. The failure mode of guessing here is handing a push token
+# to whoever asked, so silence is not an option and neither is a default-allow.
+_cred_host=""
+_cred_protocol=""
 while IFS= read -r _line; do
     [ -n "$_line" ] || break
+    case "$_line" in
+        host=*)     _cred_host="${_line#host=}" ;;
+        protocol=*) _cred_protocol="${_line#protocol=}" ;;
+    esac
 done
+
+# HTTPS ONLY. A token handed over cleartext http is disclosed in transit, and
+# git will happily ask for one if a remote says so.
+if [ -n "$_cred_protocol" ] && [ "$_cred_protocol" != "https" ]; then
+    echo "git-credential-tillandsias: refusing to supply a token over '${_cred_protocol}' (https only, 1118-bscs)" >&2
+    exit 1
+fi
+
+# The allowlist is GitHub's credential-bearing hosts and nothing else. Compared
+# WHOLE, never by suffix: a suffix test would accept `evil-github.com` and
+# `github.com.attacker.net`, which is the exact shape this check exists to
+# refuse. Port suffixes are stripped first because git may send `host=h:443`.
+case "$_cred_host" in
+    *:*) _cred_host="${_cred_host%:*}" ;;
+esac
+case "$_cred_host" in
+    github.com|api.github.com) ;;
+    "")
+        echo "git-credential-tillandsias: no host= in the credential request; refusing (1118-bscs)" >&2
+        exit 1
+        ;;
+    *)
+        echo "git-credential-tillandsias: refusing to supply the GitHub token to host '${_cred_host}' (1118-bscs)" >&2
+        exit 1
+        ;;
+esac
 
 command -v vault-cli >/dev/null 2>&1 || {
     echo "git-credential-tillandsias: vault-cli unavailable" >&2
