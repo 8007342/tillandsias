@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-credential-helpers-host-pin-refuses-the-vault-agent-relay-fixtures-example-upstream-so-the-release-tier-is-red-on-a-fixture-no-check-gate-runs
+    field: status
+    value: completed
+    ts: "2026-09-13T17:07:10Z"
+    host: linux
+
+events:
+  - packet_id: the-credential-helpers-host-pin-refuses-the-vault-agent-relay-fixtures-example-upstream-so-the-release-tier-is-red-on-a-fixture-no-check-gate-runs
+    event:
+      type: completed
+      ts: "2026-09-13T17:07:10Z"
+      host: linux
+      summary: |-
+        status 'completed' with evidence_refs: 7a6f8c5f6
+  - packet_id: the-credential-helpers-host-pin-refuses-the-vault-agent-relay-fixtures-example-upstream-so-the-release-tier-is-red-on-a-fixture-no-check-gate-runs
+    event:
+      type: note
+      ts: "2026-09-13T17:07:10Z"
+      host: linux
+      summary: |-
+        landed ok:land:7a6f8c5f6:attempt-1. Fixed in the FIXTURE, not the helper: images/git/git-credential-tillandsias.sh is byte-unchanged. 7 cases PASS including a new in-situ pin arm with its own negative control; teeth measured by neutering the allowlist.

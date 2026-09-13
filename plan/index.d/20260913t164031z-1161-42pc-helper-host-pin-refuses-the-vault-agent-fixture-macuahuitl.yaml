@@ -1,0 +1,58 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by the macuahuitl coordinator on 2026-09-13 from the release-tier
+# exercise (890-27mv): the credential helper's host pin (1118-bscs) refuses
+# the vault-agent relay fixture's example upstream host, so ci-full is red on
+# a fixture no host's --check runs.
+packets:
+  - packet_id: the-credential-helpers-host-pin-refuses-the-vault-agent-relay-fixtures-example-upstream-so-the-release-tier-is-red-on-a-fixture-no-check-gate-runs
+    order: 1161-42pc
+    status: in_progress
+    kind: bugfix
+    priority: p1
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [ci, litmus, release, credential, git-mirror, security]
+    estimated_hours: 2
+    verifiable_closure: "litmus:git-mirror-vault-agent-auto-auth passes in the pre-build litmus on a host with podman (pre-fix result: FAILS — 'initial relay transaction failed'; relay-1.log: 'git-credential-tillandsias: refusing to supply the GitHub token to host github.example.invalid (1118-bscs)'; measured macuahuitl 2026-09-13 in ci-full local-ci-20260913T161117Z and standalone); NEGATIVE CONTROL: the 1118-bscs fixture still refuses a token request for an arbitrary host — the seam the relay fixture uses must be an explicit test-only allow (an env var the fixture sets to its fake upstream host), never a widening of the production default."
+    owned_files:
+      - scripts/test-git-mirror-vault-agent-auto-auth.sh
+      - images/git/git-credential-tillandsias.sh
+    title: |
+      1118-bscs pinned the credential helper to github.com so it stops answering any caller with a live token; litmus:git-mirror-vault-agent-auto-auth relays to https://github.example.invalid/org/repo.git and the helper now refuses it, so the release tier (ci-full) has been red on this fixture since the fix landed and nothing in ./build.sh --check runs it. The security fix is right; the fixture needs an explicit test-only host seam, and the fixture must keep proving the helper refuses everyone else.
+    context: |
+      MEASURED on macuahuitl 2026-09-13, release-tier exercise
+      local-ci-20260913T161117Z (rc 1, 7 litmus reds) and then standalone:
+      case 1 ok (AppRole material reaches tmpfs files, never Agent argv), then
+      "FAIL: initial relay transaction failed"; the relay log, surfaced by a
+      temporary patch: "[relay] Atomic push to https://github.example.invalid/
+      org/repo.git FAILED: git-credential-tillandsias: refusing to supply the
+      GitHub token to host 'github.example.invalid' (1118-bscs)". Deterministic,
+      not environmental. The fix landed as a security correction (the helper
+      answered any caller); the fixture's fake upstream is exactly the caller
+      the pin exists to refuse.
+
+      WHAT TO BUILD. A test-only seam the fixture sets explicitly (for
+      example TILLANDSIAS_GIT_CREDENTIAL_ALLOW_HOST=github.example.invalid)
+      that the helper honours only when set and logs when honoured, so the
+      production default stays github.com; the fixture sets it beside its
+      fake upstream. The 1118-bscs fixture keeps its refusal arm for an
+      arbitrary host with the seam unset, and gains an arm that the seam
+      does not leak: set for host A, a request for host B is still refused.
+
+      WHY p1: the release tier is the only gate that runs this fixture, so
+      every daily cut from here is red on it until fixed, and the 890-27mv
+      exercise exists to surface exactly this. NOT IN SCOPE: widening the
+      production pin.
+    exit_criteria:
+      - 'litmus:git-mirror-vault-agent-auto-auth passes in ci-full on macuahuitl (pre-fix result: FAILS — refusing to supply the GitHub token to host github.example.invalid)'
+      - 'the 1118-bscs fixture still refuses an arbitrary host with the seam unset, and refuses host B when the seam names host A (pre-fix result: the second arm does not exist)'
+      - 'the seam is named in the helper''s header and in the relay fixture beside the fake upstream, with 1118-bscs cited'
+    events:
+      - type: filed
+        ts: "2026-09-13T16:40:31Z"
+        agent_id: "linux-macuahuitl-fable-20260913t164031z"
+        host: macuahuitl
+        summary: |
+          Filed and handed to lenovinha (owner of 1118-bscs) by the coordinator,
+          with the claim flip pushed in the same pass per the hand-off rule.

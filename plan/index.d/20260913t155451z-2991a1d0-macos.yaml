@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-thirty-seven-standing-gnu-only-idioms-the-advisory-found-on-its-first-run
+    event:
+      type: evidence
+      ts: "2026-09-13T15:54:51Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260913t155115z
+      host: macos
+      summary: |
+        SLICE LANDED: THE find -printf CLASS IS CLOSED, one instance, and it was on the release path.
+
+        scripts/release-preflight.sh inventories .github/workflows and refuses unexpected files. The line used `-printf '%f\n'` with `2>/dev/null`. BSD find has no -printf: it errors, the redirect swallows the error, the set comes back EMPTY, `unexpected` is empty, and the refusal never fires. A workflow-inventory guard that inventoried nothing and passed — silent-degrade, in release-preflight, on every stock macOS host. Now `-exec basename {} \;`, which is POSIX and identical on both dialects.
+
+        FALSIFIED with the EXACT line read back out of the file, against a planted intruder, under the system find:
+            PATH=/usr/bin:/bin, which find -> /usr/bin/find
+            new (from the file)  unexpected=[INTRUDER.yml]   catches
+            old (-printf)        old=[]                      silently passes
+        Advisory after the fix: find -printf class reports ZERO instances; baseline 16/12=28 -> 15/12=27 at this tree.
+
+        MY FIRST MEASUREMENT OF THIS SAID THE OPPOSITE, and the reason belongs in this row. Run without forcing PATH, the UNFIXED line caught the intruder — so the defect appeared not to exist. `find` on this host is `bfs 4.1.1`, a third implementation that supports -printf, sitting ahead of /usr/bin/find on PATH. Same machine, same minute, same line, opposite verdicts depending only on which `find` resolved. This row's parent advisory names "a PATH-dependent tool identity (ugrep/rg installed as grep)" as a RUNTIME fact its scan cannot see; this is that fact inverting a test result rather than merely hiding one. TWO CONSEQUENCES: a macOS host is not automatically a BSD-userland host, and any arm that means to test the BSD form must force the interpreter (absolute path, or PATH=/usr/bin:/bin) rather than trusting the platform name.
+
+        COUNT REVISED AGAIN, DOWNWARD AGAIN, and this one corrects my own recommendation from last cycle. scripts/test-check-bash-dialect.sh:77 is
+            printf '#!/usr/bin/env bash\ndate -d yesterday +%%Y\n' > "$TMP/dated.sh"
+        followed by `expect "date-d-refused" ... 1`. It WRITES the idiom into a fixture as the subject the guard must catch; fixing it destroys the test. Same class as test-portability-idioms.sh's deliberate sed -i. I named date -d as one of the two remaining singleton slices last cycle — that was wrong, and it was wrong for the reason this row keeps rediscovering: I had counted the line without reading it.
+
+        STANDING AT THIS TREE: 27 reported, THREE non-defects (rg --version advisory false positive; sed -i deliberate; date -d deliberate), 24 genuinely remediable, FLOOR IS 3. The remediable figure has now gone 27 -> 26 -> 25 -> 24 across three sessions, every revision downward, every one from reading a line previously only counted. That is a property of the baseline, not of anyone's attention: A COUNT OF PATTERN HITS IS NOT A COUNT OF DEFECTS, and the gap closes only by reading.

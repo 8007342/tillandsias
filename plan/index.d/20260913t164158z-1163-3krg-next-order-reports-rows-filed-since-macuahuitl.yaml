@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by the macuahuitl coordinator on 2026-09-13 from lenovinha's finding
+# inside a filing collision: next-order had already read the fold and handed
+# the answer over as a number nobody treats as a signal.
+packets:
+  - packet_id: next-order-already-reads-the-fold-so-it-should-report-the-rows-filed-since-the-callers-last-order-instead-of-leaving-a-duplicate-to-be-noticed-from-the-number
+    order: 1163-3krg
+    status: ready
+    kind: enhancement
+    priority: p3
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [ledger, tooling, plan, coordination]
+    estimated_hours: 2
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is the report and its test. Future test in crates/tillandsias-plan (cargo test -p tillandsias-plan next_order_reports_rows_filed_since); the claimer writes it in the same commit and moves this text into verifiable_closure: with rows 1158 and 1159 filed after the caller's last order 1157, next-order prints 'minted 1160; filed since 1157: 1158-y3ad <title>, 1159-g96c <title>' on stderr and the bare order on stdout (pre-fix result: FAILS — only the bare order is printed; measured 2026-09-13 when the coordinator filed 1160-nvzs as a duplicate of 1158-y3ad from a fold that already carried it); NEGATIVE CONTROL: with nothing filed since, stderr carries only 'minted <order>; nothing filed since <last>'."
+    owned_files:
+      - crates/tillandsias-plan/src/main.rs
+    title: |
+      next-order mints from the current fold, so the allocation step is already a read of what other hosts filed since the caller last looked — and it hands that back as a bare number. A filer about to duplicate a peer's row would see it if the tool said what it observed. Make the mechanism report rather than asking people to consult it (the canary and positive-control shape applied to filing).
+    context: |
+      MEASURED 2026-09-13: lenovinha filed and claimed 1158-y3ad at 15:49Z
+      after a negotiated hand-off; the coordinator filed 1160-nvzs, the same
+      defect, at 16:05Z. next-order minted 1160 BECAUSE 1158 and 1159 were
+      present in the coordinator's fold — the tool that filed the duplicate
+      had already read the answer. The conversation is not the mechanism.
+
+      WHAT TO BUILD: next-order takes an optional --since <order> (default:
+      the highest order the caller's host filed, from the fold's agent/host
+      fields) and prints on stderr one line per row filed since it, with
+      order and title, keeping stdout as the bare minted order so scripts
+      are unchanged. NOT IN SCOPE: refusing to mint.
+    exit_criteria:
+      - 'next-order prints the rows filed since the caller''s last order on stderr, bare order on stdout unchanged (pre-fix result: FAILS — bare order only)'
+      - 'NEGATIVE CONTROL: nothing filed since → the stderr line says so and stdout is unchanged'
+      - 'skills/advance-work-from-plan/SKILL.md tells a filer to read that line before writing the fragment'
+    events:
+      - type: filed
+        ts: "2026-09-13T16:41:58Z"
+        agent_id: "linux-macuahuitl-fable-20260913t164158z"
+        host: macuahuitl
+        summary: |
+          Filed by the coordinator from lenovinha's finding inside the
+          1158/1160 collision.

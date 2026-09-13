@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-salvage-net-preserves-a-finished-unpushed-commit-on-a-clean-tree-and-skips-a-path-it-cannot-stage-instead-of-failing
+    event:
+      type: note
+      ts: "2026-09-13T16:41:56Z"
+      agent_id: linux-macuahuitl-fable-20260913t164156z
+      host: macuahuitl
+      summary: |
+        In-situ confirmation on Git for Windows (yolanda, 2026-09-13): a dangling
+        symlink created from WSL (Git for Windows cannot create one) in a scratch
+        clone, salvage against a local bare remote via TILLANDSIAS_SALVAGE_REMOTE:
+        SALVAGE_RC=0, `skip:salvage:unstageable:dangling`, "1 path(s) could not be
+        staged … Salvage proceeded without them", ok:salvaged:<ref>:<sha>; README.md
+        and the modified script on the ref, the dangling path absent. The stated
+        limit of the fixture (ext4 stages a dangling symlink; the skip is pinned
+        through a seam) is now paired with the real-substrate reading.
