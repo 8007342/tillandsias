@@ -154,9 +154,28 @@ mkproc "$r" 103 tok-b "bash /repo/./build.sh --check"
 # everywhere. Second time this fixture claimed a regime it did not have; the
 # first was inheriting TOOLBOX_PATH from the gate's own container.
 rm -f "$r/103/environ"
-ln -s /nonexistent-so-there-is-nothing-to-read "$r/103/environ"
-out="$(run_check "$r")"; rc=$?
-check "an unreadable process suspends the accusation" 3 "could-not-run:competing-gate:unreadable-processes" "$rc" "$out"
+ln -s /nonexistent-so-there-is-nothing-to-read "$r/103/environ" 2>/dev/null || true
+# PROVE THE INJECTED FAILURE ACTUALLY OCCURRED — the rule this arm's own
+# history produced, applied to the SETUP rather than only to the assertion.
+#
+# The arm needs one property: that environ cannot be read. A dangling symlink
+# gives it, and so does an absent file; which of the two a substrate allows is
+# not the subject. But the arm must not proceed on the ASSUMPTION that either
+# worked. Measured by yolanda on WSL: `ln` failed with "No such file or
+# directory", the arm passed anyway on the absent file, and the suite printed
+# PASS — an arm passing for a reason other than the one it names, which is
+# exactly the defect this arm was rewritten to remove one commit earlier.
+# `ln`'s stderr went to the log and nothing read it.
+#
+# So assert the precondition. If NEITHER construction denies the read on this
+# substrate, the arm asserts nothing and must say so rather than pass.
+if [ -r "$r/103/environ" ]; then
+    fail=$((fail+1))
+    echo "FAIL: could not construct an unreadable environ on this substrate — neither a dangling symlink nor an absent file denied the read, so this arm would have asserted nothing"
+else
+    out="$(run_check "$r")"; rc=$?
+    check "an unreadable process suspends the accusation" 3 "could-not-run:competing-gate:unreadable-processes" "$rc" "$out"
+fi
 
 total=$((pass+fail))
 if [ "$fail" -eq 0 ]; then echo "PASS: competing-gate detector $pass/$total (1141-vf9w)"; exit 0; fi
