@@ -222,6 +222,63 @@ grep -q 'plan-only lane: validated plan/issues/new-capture.md' <<<"$out" \
     || bad "the accepted capture was not named in the push record"
 reset_to_remote
 
+# ── 1b. ORDER 1141-f5nk: a de-slop SWEEP RECORD qualifies, new and appended. ─
+#      829-dkuc makes recording a sweep a REQUIRED step, but this lane never
+#      listed plan/deslop-sweeps.d/, so the mandatory record took the whole push
+#      onto the full gate — pirria lost three ~950s gates to it. The incentive is
+#      the argument, exactly as 889-twhe argued for plan/issues: when the cheap
+#      path excludes a mandatory record, the cheapest way to satisfy the loop is
+#      to SKIP the record, and skipping it disarms 829-dkuc's kill rule, which
+#      reads this very ledger.
+mkdir -p plan/deslop-sweeps.d
+printf '# sweeps\n\n- 2026-09-13 lenovinha: examined 12 confirmed 0\n' > plan/deslop-sweeps.d/lenovinha.md
+G add -A >/dev/null; G commit -q -m "record a sweep"
+out="$(run_guard)"
+if lane_qualified "$out"; then
+    ok "a NEW plan/deslop-sweeps.d record qualifies for the lane (1141-f5nk)"
+else
+    bad "a new sweep record was turned away: $(grep -m1 'not applicable' <<<"$out")"
+fi
+# APPENDED, which is the common case: one file per host, so every sweep after
+# the first is an M. An A-only arm would have qualified the first sweep on a
+# host and taxed every one after it — the bug one layer down.
+printf -- '- 2026-09-13 lenovinha: examined 9 confirmed 1\n' >> plan/deslop-sweeps.d/lenovinha.md
+G add -A >/dev/null; G commit -q -m "append a second sweep"
+out="$(run_guard)"
+if lane_qualified "$out"; then
+    ok "an APPENDED sweep record qualifies (M, not just A)"
+else
+    bad "an appended sweep record was turned away: $(grep -m1 'not applicable' <<<"$out")"
+fi
+reset_to_remote
+
+# ── 1c. NEGATIVE CONTROL for 1141-f5nk: a REWRITE must fall back. ───────────
+#      The lane cannot tell a correction from erasing sweep history, and
+#      829-dkuc's kill rule counts those entries — so a removal is exactly the
+#      edit that must not ride a cheap lane.
+#
+#      THIS ARM PASSES IN BOTH STATES, AND THAT IS SAID OUT LOUD BECAUSE THE
+#      FIXTURE'S OWN HEADER RECORDS AN ARM THAT WAS GREEN AGAINST THE PRE-FIX
+#      HOOK. Measured here by reverting the hook: arms 1b FAILED pre-fix (the
+#      path was outside the allowlist, so nothing qualified) while THIS arm
+#      passed — because before the fix EVERYTHING fell back to the full gate,
+#      which is what it asserts. It therefore pins nothing on its own; it only
+#      has meaning next to 1b, where it distinguishes "qualifies" from
+#      "qualifies for anything". Do not cite it as independent evidence.
+mkdir -p plan/deslop-sweeps.d
+printf '# sweeps\n\n- 2026-09-13 lenovinha: examined 12 confirmed 0\n- 2026-09-13 lenovinha: examined 9 confirmed 1\n' > plan/deslop-sweeps.d/lenovinha.md
+G add -A >/dev/null; G commit -q -m "seed two sweep records"
+G push -q origin linux-next 2>/dev/null || true
+printf '# sweeps\n\n- 2026-09-13 lenovinha: examined 12 confirmed 0\n' > plan/deslop-sweeps.d/lenovinha.md
+G add -A >/dev/null; G commit -q -m "REWRITE: drop a sweep record"
+out="$(run_guard)"
+if grep -q 'plan-only lane clean' <<<"$out"; then
+    bad "NEGATIVE CONTROL BREACHED — an edit REMOVING a sweep record rode the lane"
+else
+    ok "a sweep-record REMOVAL falls back to the full gate (1141-f5nk)"
+fi
+reset_to_remote
+
 # ── 2. (d) THE NEGATIVE CONTROL: a capture whose citations violate 881-29me
 #      must FALL BACK to the full gate. Without this arm the lane is a hole.
 printf 'The const lives at `main.rs:1136-1145`.\n' > plan/issues/bad-capture.md

@@ -1,0 +1,12 @@
+# Gate step 1083-gzqj — data, not code (order 1072-b7eq).
+#
+# A number a gate compares against must have been CHOSEN, and the choice must be
+# written down. Pins the three snapshot-shaped assertions this order fixed, and
+# pins the NEGATIVE CONTROL that keeps the remedy from becoming a ban on
+# live-tree comparisons: a declared, stated vacuity floor must still pass.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking gate thresholds were chosen, not snapshotted (1083-gzqj)"
+STEP_SCRIPT="scripts/test-gate-thresholds-are-chosen.sh"
+STEP_ERROR="a gate fixture asserts a number nobody chose, or the declared-floor control was deleted along with the snapshots (1083-gzqj) — see the verdict line above"
+STEP_OK="Gate-threshold provenance passed"

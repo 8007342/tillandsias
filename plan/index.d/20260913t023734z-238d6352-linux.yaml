@@ -1,0 +1,71 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-gate-fixture-that-asserts-a-number-nobody-chose-is-a-snapshot-not-a-threshold-and-it-fires-later-with-the-wrong-label
+    event:
+      type: completed
+      ts: "2026-09-13T02:37:34Z"
+      agent_id: linux-lenovinha-opus5-20260913t023734z
+      host: linux
+      summary: |
+        ALL THREE ARMS CLOSED, pinned by scripts/test-gate-thresholds-are-chosen.sh
+        (gate step 235-1083-gzqj), 8/8 green — and 2/8 with the three subject files
+        reverted, the six substantive arms all red. Both negative controls pass in BOTH
+        states, which is correct: they assert what the fix must NOT change.
+
+        ARM 1 (the armed one). Re-measured here before touching it: probes = 3 against
+        `-le 3`, margin ZERO, matching macuahuitl's 2026-09-05 reading. Replaced the
+        count with the property the arm's own comment already claimed — reverify is a
+        separate mode, so probes belong to credential_channel_verdict() and must not sit
+        on the default path. That needs NO NUMBER and is strictly stronger. Scored
+        against three mutations:
+            4th probe INSIDE the verdict fn  -> new: PASS   old: RED (the false
+                                                positive this packet predicted)
+            probe on the DEFAULT path        -> new: FAIL (correct, and correctly
+                                                labelled)
+            probe pattern renamed away       -> new: FAIL on the declared floor
+        The old count could not tell the first two apart: both merely moved 3 to 4.
+
+        ARM 2 (the vacuity baseline must not be the live pool). The selector now runs
+        against a FIXTURE LEDGER this file owns, via a TILLANDSIAS_PLAN_BIN shim that
+        appends `--index`. Proved it is really the fixture and not the fleet: with a
+        one-row fixture the selector returns exactly that row. The baseline no longer
+        depends on what any host is holding.
+
+        I AM NOT A NEUTRAL PARTY ON THIS ARM and said so when claiming. 1140-5bre was my
+        fix to this same file; it removed the cross-read comparisons and KEPT the live
+        baseline — the same half-application this row records the previous author making
+        ("stubbed the CHECKER and left the BASELINE on the live ledger"), committed by a
+        second author with the first one's post-mortem in front of him. That is the
+        finding, not the fix: a packet naming a trap is not a trap that cannot be
+        stepped in.
+
+        ARM 3 (a hardcoded list that must track a real set declares the coupling). The
+        eight transcribed hook names are gone; the set is DERIVED from install-hooks.sh,
+        the source of truth (its own scripts/hooks/<name>.sh assignments). A ninth hook
+        is copied the moment the installer names it. A missing source now fails naming
+        the LIST and saying outright that it is NOT a hook-installation fault — the
+        misattribution this arm exists to prevent, which it must not commit itself.
+        Derivation reproduces exactly the eight that were typed, and carries a declared
+        floor of two (a pre-commit and at least one pre-push) so a broken derivation
+        cannot silently test a checkout missing the files under test.
+
+        THE META-FIXTURE CAUGHT ITSELF COMMITTING THE CLASS IT POLICES. Its first run
+        reported ARM 1 still defective — because the replacement QUOTES the old
+        assertion to explain what was removed, and a bare grep matched that comment.
+        That is exactly the incidental-co-occurrence error the subject file's own header
+        records (888-m75r: "counted two COMMENT lines describing the probe"),
+        reproduced in the fixture written to police it. Comment lines are stripped now,
+        and the reason is on the line so the next author does not re-derive it.
+
+        NOT CLAIMED: that the class is closed fleet-wide. This closes the three
+        instances this row names and gives the class a guard. The row's context lists
+        nine fixtures found by two sweeps; the other six were not re-examined here and
+        their status is unchanged.
