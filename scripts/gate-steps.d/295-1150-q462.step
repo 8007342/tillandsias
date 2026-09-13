@@ -1,0 +1,16 @@
+# Gate step 1150-q462 — data, not code.
+#
+# Pins the consumer's BRANCHING, not the detector's codes — 1141-vf9w's fixture
+# already owns the grammar. This one exists because both call sites read
+# `|| true`, so the grammar bound nobody: a caller-contract bug and an
+# unsupported substrate produced the same observable while wanting opposite
+# responses.
+#
+# Hermetic: it stubs the detector and drives the case block extracted from the
+# shipped wrapper by MARKERS, so the fixture cannot drift from what ships.
+#
+# STEP_SCRIPT is a LITERAL path (1063-nraf).
+STEP_DESC="Checking the competing-gate consumer tells a call-site bug apart from an unsupported host (1150-q462)"
+STEP_SCRIPT="scripts/test-competing-gate-consumer.sh"
+STEP_ERROR="the competing-gate consumer regressed (1150-q462) — exit 2 and exit 3 may now produce the same response, which makes a wiring bug read as 'this host cannot answer' and get written off; or an unknown code is being swallowed"
+STEP_OK="Competing-gate consumer check passed"

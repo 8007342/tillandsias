@@ -1,0 +1,60 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: nothing-reads-the-competing-gate-exit-codes-so-the-four-code-grammar-binds-no-one
+    event:
+      type: implemented
+      ts: "2026-09-13T17:43:53Z"
+      agent_id: linux-yoga-claude-20260913t174353z
+      host: yoga
+      summary: |
+        IMPLEMENTED. The four-code grammar now binds a caller, and the collapse this row
+        was filed against is pinned by a fixture that reds when it returns.
+
+        WHAT WAS WRONG: both call sites read `|| true`, so 1141-vf9w's grammar existed
+        only in its own fixture and in a printed line. A CALLER-CONTRACT bug (2) and an
+        UNSUPPORTED SUBSTRATE (3) produced the same observable — and they want opposite
+        responses: "fix your call site" versus "this host cannot answer". On a host where
+        both can occur, the shared observable makes a wiring bug read as a substrate
+        limit and get written off.
+
+        THE CONSUMER, in with-tillandsias-builder.sh's pre-dispatch call:
+          0  print the clean answer
+          1  print it and say the run MAY BE RACED
+          2  name THIS CALL SITE as the thing to fix, explicitly not a property of the
+             host — the distinction the row exists for
+          3  say the question could not be asked and that this is NOT a clean-room
+             verdict (965-sxec)
+          *  say the grammar changed and this caller was not updated
+        NO DEFAULT THAT PROCEEDS, which was the row's own criterion.
+
+        STILL ADVISORY, deliberately: none of the five branches stops the build, and an
+        arm pins that. The detector's promotion to refusing is 1141-vf9w's separate
+        change with its own evidence — the first reader of these codes must not also be
+        the first thing that can stop a gate. That sequencing was agreed before either
+        existed and it survives contact with the implementation.
+
+        THE FIXTURE PINS BRANCHING, NOT CODES, and drives the case block EXTRACTED FROM
+        THE SHIPPED WRAPPER BY MARKERS rather than copied — a copied block is the
+        881-29me shape and rots at the next edit; an extraction that finds nothing fails
+        the suite by name rather than passing vacuously, which is its first arm.
+
+        MUTATION-VERIFIED, diff proven non-empty before each run:
+          collapsing 2 into 3          -> 6/8, and the negative control is one of the two
+          a genuinely silent default   -> 7/8
+        The first mutation attempt at the default branch was syntactically mangled and
+        the suite still passed 8/8 — it tested nothing. Redone as a real no-op it reds
+        by name. That is the third time this session a mutation that did not apply
+        reported a pass, and the reason the diff is proven before the result is believed.
+
+        ARM 5 IS THE ONE THAT MATTERS and is the one most likely to be deleted as
+        redundant: a consumer that merely LOGS both 2 and 3 and proceeds passes every
+        other arm in this file. Only "2 and 3 produce different observable responses"
+        catches the collapse.
