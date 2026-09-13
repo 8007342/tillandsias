@@ -3071,6 +3071,16 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "MO-FULL attestation ledger check passed"
 
+    # Order 1148-3439. The salvage-refs ledger (plan/salvage-refs.d/) is the
+    # standing record the sweep files to now that its old target is archived;
+    # every line must parse and name a ref still on origin or marked deleted.
+    _step "Checking the salvage-refs ledger (1148-3439)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-salvage-refs-ledger.sh" 2>&1; then
+        _error "the salvage-refs ledger carries a malformed line or names a ref that is gone without a ' deleted' marker (plan/salvage-refs.d/)"
+        exit 1
+    fi
+    _info "salvage-refs ledger check passed"
+
     # Order 795-imz3. `if ! <pipeline>` verdicts invert under pipefail when the
     # consumer exits early (grep -q SIGPIPEs its producer), so the gate refuses
     # the shape outright across scripts/ and build.sh. The gate shipped in
