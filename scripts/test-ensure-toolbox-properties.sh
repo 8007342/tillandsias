@@ -253,6 +253,7 @@ _mutate_delegate() {
 _prop_creates_if_missing() {
     local include="$1" tag="$2"
     _fresh_env "$tag"
+    _last_include="$include"
     "$include" >"$OUT" 2>"$ERR"
     local rc=$?
     _last_rc=$rc
@@ -267,6 +268,7 @@ _prop_creates_if_missing() {
 _prop_idempotent() {
     local include="$1" tag="$2"
     _fresh_env "$tag"
+    _last_include="$include"
     "$include" >"$OUT" 2>"$ERR"
     local rc1=$?
     _last_rc=$rc1
@@ -355,6 +357,15 @@ _holds() {
             echo "  diag: fake calls.log:"; sed 's/^/    /' "$FT_STATE/calls.log" 2>/dev/null | head -12
             echo "  diag: include stderr (tail):"; tail -8 "$ERR" 2>/dev/null | sed 's/^/    /'
             echo "  diag: include stdout (tail):"; tail -4 "$OUT" 2>/dev/null | sed 's/^/    /'
+            # XTRACE RE-RUN: the first reproduction of the gate-only red showed
+            # rc=1 with EMPTY stderr and no toolbox call — nothing a reader could
+            # act on. Re-run the same include once with xtrace exported into
+            # every bash it spawns (SHELLOPTS is honoured by child bashes) and
+            # print the last lines: the exiting line names itself.
+            if [ -n "${_last_include:-}" ] && [ -x "${_last_include:-}" ]; then
+                ( export SHELLOPTS=xtrace PS4='+${BASH_SOURCE##*/}:${LINENO}: '; "$_last_include" >/dev/null 2>"$tmp/xtrace.$$" ) || true
+                echo "  diag: xtrace of the include (last 30 lines):"; tail -30 "$tmp/xtrace.$$" 2>/dev/null | sed 's/^/    /'
+            fi
         } >&2
         fail=$((fail + 1))
     fi
