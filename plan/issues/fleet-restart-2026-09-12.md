@@ -977,3 +977,33 @@ stories.
   `git update-index --chmod=+x` on trunk. Rule for the Windows hosts: after
   creating any scripts/*.sh, set the mode in the index explicitly before
   committing — a Windows gate cannot see that it is missing.
+- **The vault shutdown p1 is fixed on pirria and cannot land from there**
+  (1134-u934): SIGTERM forwarded to VAULT's pid, measured 30 s / exit 137 →
+  1 s / exit 0 against real containers, tee-pid trap ruled out by the process
+  tree in the log; a THIRD defect found on the way — under `set -e` a trapped
+  signal interrupts a bare `wait`, which returns 143 and exits the shell
+  before vault seals, so a correct trap plus a bare wait still stops
+  uncleanly; all waits guarded, the handler reaps vault, the subsequent-boot
+  early return shares one path. Fixture is live-container by design (a
+  `grep trap` fixture passes the wrong fix) and exits 3 without an enclave;
+  runbook §3b added; 1135-8t3a (inference has the same shape, READ not
+  measured) and 1136-u6nq filed. The floor host lost four 15-minute gates to
+  a trunk that moved inside every window: floor-tier code now lands by the
+  relay shape — push the gated tree to `work/<order>`, macuahuitl merges. Two
+  routed facts: the installed tray embeds the image sources
+  (EMBEDDED_RUNTIME_ASSETS), so NO host gets this fix until a daily is cut
+  from a trunk carrying it — cut-worthy; and a Cargo.lock newer than
+  target/debug/tillandsias-plan makes the set-field fixture refuse
+  `stale-plan-binary` on any host that pulls without cycle-preflight.
+- **The checkout lock is real on Windows** (yolanda, 1137-da83, windows-next
+  3cfea048a): first live proof unprompted — the coordinator's 4h cron fired
+  mid-land on yolanda and got `skip:overlap-lock-held`, refused by the very
+  fix that was landing, where an hour earlier the same call read free on
+  both Windows hosts whatever was running. esme's exec-bit sweep: 108 of 678
+  tracked *.sh are not 100755 and only the `[ -x ]` prover population can
+  break (three declared, clean after the fix); the rest is a latent hazard
+  resting on an invocation convention. The coordinator told both Windows
+  hosts the +x was "on trunk" while the relay carrying it was still gating —
+  two hosts idled on that premise until esme checked by ref (the
+  hand-peers-a-condition-not-a-local-SHA shape, under the coordinator's
+  name).
