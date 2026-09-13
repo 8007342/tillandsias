@@ -3388,3 +3388,127 @@ stories.
   automatic filing since 874-s8vf was archived. Trunk since the last pass:
   1161-42pc closed (lenovinha), 1150-q462 completed (yoga). Held row
   1164-cftu (auth-failed retry) lands with this pass.
+- **OPERATOR DECISIONS 2026-09-13 ~18:30Z**: 900-z3kv is (a) — the
+  documented reset clears the host-held share; yoga wires the clearer next
+  cycle. The principle, in the operator's words: the platform prefers
+  idempotency over legacy support; anything nuked on the way was meant to
+  be nuked, like old configs from stale code; the way to exercise the
+  correct new code is a system reset as the baseline, which is why `podman
+  system reset --force` is not only allowed but preferred, and a full system
+  reset is an abstraction layer to embrace. (The per-run consent for
+  destructive smokes on workstations, 1004-vsh2, is a separate ruling and
+  stands until the operator lifts it explicitly.) The fleet's GitHub token
+  will be rotated at the next fleet restart and upgrade. The stale /tmp
+  timing log on macbookair: approval relayed by the coordinator; macbookair
+  removes it and confirms.
+- **lenovinha is DOWN, and the Silverblue update is failing to apply**
+  (operator report): the host was prompting for credentials (consistent
+  with the intermittent auth-failed measured earlier — a credential helper
+  or keyring prompt, not an expired token); the rpm-ostree update is
+  blocked on kernel dependencies conflicting with layered packages, reads
+  "ready, requires restart", and fails to apply each time; other hosts
+  reportedly share it, so the Silverblue fleet (yoga, lenovinha) may
+  behave unexpectedly. yoga asked for `rpm-ostree status` as the
+  measurement. lenovinha's unclaimed rows (1154-8ywc, 1159-g96c) and its
+  cron are suspended until the host returns; nothing of theirs is
+  unpushed (ahead 0, clean, at last report).
+- **829-dkuc, why operator-paired**: the remaining half is the sweep
+  PROTOCOL — a scheduled run gated by check-deslop-due.sh that constructs
+  (mutation, predicted-observable) pairs per finding across the corpus; it
+  is a large fan-out over the tree, the shape that ended pirria's session
+  and the shape the operator's token directive bounds, so the row asks for
+  sweep-budget headroom or an operator-paired session before anyone spends
+  it. pickup_role any; the natural host is macuahuitl (strongest,
+  host-independent) under an explicit budget from the operator.
+  yoga's measurement (raw, read-only): State idle, booted 44.20260912.0
+  (kernel 7.2.4-200.fc44), rollback 44.20260911.0, nothing pending, staged
+  or failed; layered `google-chrome-stable rocm`, local package
+  opencode-1.18.19-1. `rpm-ostree upgrade --check` reports an available
+  44.20260913.0 (2 advisories, 44 upgraded) NOT attempted. Honest reading,
+  yoga's: this does not settle one-host-versus-fleet — yoga has not TRIED
+  the version lenovinha is stuck on; "healthy" means N-1, and a host that
+  never ran the thing is not evidence the thing works. Why yoga is the
+  right test anyway: lenovinha's symptom is kernel dependencies conflicting
+  with LAYERED packages, and yoga's `rocm` is kernel-coupled — a clean
+  upgrade with rocm layered refutes the fleet reading; the same failure
+  makes it a platform property. yoga did NOT stage it: staging a
+  deployment changes workstation state and needs a reboot, which is the
+  operator's call. Routed to the operator as a plain ask; yoga holds. If
+  lenovinha's layered set differs from yoga's, the difference is where the
+  conflict lives (unknown while lenovinha is down).
+  macbookair's stale /tmp timing log: DONE, off the operator's list — moved
+  aside first (the guard's preference), then deleted outright on the
+  operator's direct word in their session ("we embrace destructive resets,
+  our platform is idempotent and ephemeral by design"); described before
+  deletion (13 lines, 1843 bytes, 2026-09-12T06:22Z litmus step timings
+  under the host label Tlatoanis-MacBook-Air.local, all superseded by the
+  live log); live log untouched (30,534 lines). cycle-metrics.sh now runs
+  with no override and no two-logs refusal. Their caution on the skippable
+  view, kept: the workspace test step's saved_ms_upper (5.09M ms over 34
+  runs, 0% failures) is an UPPER BOUND on what skipping could save, not a
+  measured saving, and that step is the one most likely to catch the
+  cfg-split breakage that cost the lane two gates today — not to be acted
+  on without weighing that. `attention:experts-never-called` is the expert
+  telemetry (no expert lane used; substitution reported unknown by
+  design), not the timing log.
+  lenovinha is BACK (reported ~19:10Z after the operator's "down"): rpm-ostree
+  idle, booted 44.20260911.0, rollback 44.20260910.0, nothing pending or
+  mid-transaction — the failed apply left nothing staged. Layered:
+  akmod-nvidia kmod-nvidia xorg-x11-drv-nvidia(-cuda) gcc gh git btop
+  google-chrome-stable; the NVIDIA akmod/kmod stack is the layer class most
+  likely to block a base bump (a kmod built against one kernel does not
+  survive the next), and lenovinha (discrete GPU) versus yoga (iGPU+NPU,
+  rocm layered) differ on exactly that axis. ADJACENCY, not a claim: `gh`
+  is a LAYERED package on lenovinha; if the layer set was in flux during a
+  part-applied update, a gh-provided credential helper behaving
+  intermittently is no longer obviously a network blip — the two facts
+  belong together. lenovinha deliberately changed nothing (no upgrade,
+  rollback or layer change: an operator action on a machine someone uses).
+  Asked, read-only: upgrade --check (kernel bump?), the rpm-ostreed journal
+  for the failed apply's reason, kmod presence for non-booted kernels, and
+  which credential helper git uses plus gh's version. Then 1154-8ywc.
+  ROOT CAUSE of the Silverblue update failure (lenovinha, read-only, no
+  deployment change): REPO SKEW at DEPSOLVE, not a stale kmod. The offered
+  base 44.20260913.0 bumps the kernel 7.2.4 → 7.2.5; `akmods` carries the
+  rich dependency `(kernel-devel-matched if kernel-core)`, kernel-core is
+  present from the OSTree base so the conditional fires, and the updates
+  repo (metadata 2026-09-12T00:52) does not yet carry
+  kernel-devel-matched-7.2.5 for a base built 2026-09-13T00:50 — every
+  listed kernel-devel-matched is refused because no repo kernel-core can be
+  layered over an ostree base. The journal: "Txn Upgrade … failed: Could not
+  depsolve transaction; 4 problems detected", fourteen times today; no
+  finalize entries, no staged deployment — "ready, requires restart" comes
+  from the non-depsolving --check (rpm-ostree's own warning: "--check and
+  --preview may be unreliable") and GNOME Software; the apply then fails at
+  depsolve every time and stages nothing. TRANSIENT BY CONSTRUCTION;
+  self-clears when kernel-devel-matched-7.2.5-200 publishes. Remedies, all
+  the operator's: wait; upgrade with the NVIDIA layer temporarily removed;
+  or pin. The NVIDIA stack is implicated only because it drags in `akmods`;
+  a host layering akmods without NVIDIA fails identically; the kmod matches
+  the booted kernel and nothing is stale. Scope test: yoga has no akmods,
+  so a clean apply of 44.20260913.0 there confirms akmods-not-GPU — the
+  operator's call on their workstation. CREDENTIAL ADJACENCY RETRACTED by
+  lenovinha, tested before it propagated: pushes do authenticate through a
+  layered gh (`!/usr/bin/gh auth git-credential`, gh-2.97.0-2.fc44), but
+  every upgrade failed at depsolve before touching the deployment, /usr
+  unchanged since Sep 11, the layer set never in flux — adjacent in
+  mechanism, unrelated in time; the intermittent credential stays a blip of
+  unknown cause. Filed as a short operational row (docs, p3).
+- **829-dkuc: first supervised de-slop sweep, landed** (macuahuitl, under
+  the operator's budget; f4b9496a0): 29 findings, 11 sonnet pairing agents in
+  worktrees + 1 opus judge, 1,024,451 sub-agent tokens, 918 s fan-out,
+  ~22 min end to end; confirmed 6 deletions (net -49 lines, re-verified on
+  trunk: cargo 161/176/539 green, detector at 0 per variable), refuted 6
+  (every one a detector blind spot → four packets: env-prefix assignments
+  after `$(`, Rust reads with defaults bucketed as gating, Rust doc
+  comments and wrapper setters invisible, the detector's own comments
+  counted as reads), inconclusive 2, downgraded 15, one behavioural packet
+  (the forge launch nested in a never-taken conditional needs a fixture
+  first). Three protocol findings, in the skill: the workers' worktrees
+  were based on a STALE commit (the coordinator re-verifies on trunk); diffs
+  come from worktrees, never from size-capped returned text (a real
+  109-line deletion was downgraded on the artifact alone); and the
+  net-negative rule per mutation drops every DOCUMENT verdict, so 12 of 29
+  deliberate knobs stay listed until a registry line can count. The token
+  counter's first non-lenovinha record: token_max now names this sweep.
+  Filing collision avoided this time: next-order read before every filing.
