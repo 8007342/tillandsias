@@ -969,3 +969,11 @@ stories.
   this host landed 1119-w2rj criteria 1-3 (one sonnet sub-agent, 233,797
   tokens) and attested; 803-49re is parked in the ledger; the daily 09:09
   ci-full is armed.
+- **A prover authored on the Windows lane landed without its executable bit**
+  (relay of windows-next 5a7b5fe45): `scripts/check-ripgrep-available.sh`
+  arrived as mode 100644, and `test-host-tools.sh` requires `-x` on a prover,
+  so the relay's gate refused "prover for rg exists" on Linux while every
+  Windows gate had passed (MSYS does not enforce the bit). Fixed by
+  `git update-index --chmod=+x` on trunk. Rule for the Windows hosts: after
+  creating any scripts/*.sh, set the mode in the index explicitly before
+  committing — a Windows gate cannot see that it is missing.
