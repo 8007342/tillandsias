@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: cloud-mode-launches-bind-mount-a-relative-name-and-infer-cloud-from-the-environment-so-the-tray-observatorium-leaf-cannot-show-the-repo
+    field: next_action
+    value: 'Criterion 4: in a LAUNCHED forge prove uid 1000 can create /home/forge/src/<project> (execute, do not string-assert the mode=0777 tmpfs); then close the two residuals — build_opencode_forge_args''s read_host_project_current_branch and write_forge_gitconfig''s resolve_host_project_origin still receive project_path_resolved (a bare name in cloud mode) and need Option<&Path> plumbing; optional follow-up: seed /var/www/source from the mirror so cloud --observatorium works instead of refusing.'
+    ts: "2026-09-13T00:07:27Z"
+    host: macuahuitl
+
+events:
+  - packet_id: cloud-mode-launches-bind-mount-a-relative-name-and-infer-cloud-from-the-environment-so-the-tray-observatorium-leaf-cannot-show-the-repo
+    event:
+      type: note
+      ts: "2026-09-13T00:07:27Z"
+      host: macuahuitl
+      summary: |-
+        next_action for a distrustful stranger

@@ -101,6 +101,22 @@ surfaces=(
   # live production caller this list could not see, reported orphan=1 and
   # failing --ci-full on 2026-08-25. Same class as archive-plan-packets above.
   scripts/bench-inference-floor.sh
+  # ORDER 1129-xm5z, measured 2026-09-12 on esmeraldinha. The SAME class as the
+  # gate-steps.d migration at the top of this list, arriving through a third
+  # door: a binding DECLARED AS DATA in one file and EXECUTED from a variable
+  # in another.
+  #
+  # check-host-tools.sh's required_tools() SPEC carries a <prover> column, and
+  # scripts/test-host-tools.sh runs it as `bash "$ROOT/scripts/$prover"` — a
+  # path assembled from a variable, which 1063-nraf already names as invisible
+  # to every name-based scan. So the only LITERAL occurrence of a prover's
+  # basename is inside the SPEC table, and a newly added prover
+  # (check-ripgrep-available.sh) was reported orphan=1 while correctly wired
+  # and falsified by its own fixture.
+  #
+  # Listed for the same reason the .step directory is: the binding is real and
+  # the declaration is literal, so following it is cheap and stays honest.
+  scripts/check-host-tools.sh
   # ORDER 1049-s35z / 823-u5zf, measured 2026-09-06. Two more of the same class,
   # and they were reported as orphans for a full day while ACTIVELY GUARDING THE
   # TREE. Each is invoked by a fixture that is itself bound as a gate step:

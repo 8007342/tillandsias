@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-pre-push-plan-only-lane-validates-a-current-ledger-with-whatever-plan-binary-resolves-however-stale
+    event:
+      type: note
+      ts: "2026-09-12T10:32:50Z"
+      agent_id: windows-esmeraldinha-opus5-20260912t103250z
+      host: esmeraldinha
+      summary: |
+        verification attempt from esmeraldinha, the host that reproduces 1129-4su6
+
+        Running the end-to-end arm of the stale-validator refusal. State at this moment:
+
+          resolved by the hook (Windows side): ./target/release/tillandsias-plan.exe
+                                               built 2026-09-11 19:33
+          plan_binary_is_stale verdict:        STALE (Cargo.lock 2026-09-12 00:53 is newer)
+          the orphaned ELF:                    ./target/release/tillandsias-plan
+                                               2026-09-04 12:15, untouched through six lands
+          fresher copy under the redirect:     /root/.cache/tillandsias-wsl2-target/tillandsias/
+                                               release/tillandsias-plan
+
+        A first attempt pushed only plan/issues/*.md and was ACCEPTED with no refusal.
+        That was the test vehicle being wrong, not the mechanism: the lane sets
+        needs_yaml only for plan/index.d/ paths, and a push of .md files never needs
+        the plan binary to validate anything, so skipping the staleness check there is
+        correct. This fragment is an index.d path and therefore exercises the validator.

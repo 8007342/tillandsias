@@ -74,3 +74,57 @@ for the build-directory lock (`Blocking waiting for file lock on build
 directory` appeared at the head of this run). The probe and the preflight
 should not be run concurrently on this host, or the probe's wall-clock number
 stops being comparable day to day.
+
+---
+
+### 20260912T231021Z — ok
+
+- agent_id: esme-windows (esmeraldinha, Windows 11, N100/16GB — floor tier)
+- head_sha: 7ea7edcbc
+- cargo exit: 0
+- first error line: none
+- classification: expected (cfg-gated stub)
+- shared-crate impact: none
+
+**Findings**: second run of the day, on a newer head than the first. The tree
+was synced before building: `windows-next` fast-forwarded to
+`origin/windows-next` (4 commits), then `origin/linux-next` merged in (22
+commits, clean, no conflicts). The stub built green on that merged head, so
+the shared portion of `tillandsias-macos-tray` survives today's linux-next
+content — `menu_disabled_v2`, `terminal_attach`, `tillandsias-host-shell` and
+`tillandsias-control-wire` all compile from a non-macOS host at this head.
+
+Regime for the wall-clock number below: Windows-native NTFS checkout (not a
+drvfs path and not inside WSL), `--release`, warm target directory, no
+competing build — 49.50s, six crates recompiled. This is not comparable to the
+first run of the day, which contended with `scripts/cycle-preflight.sh` for the
+build-directory lock; it is the number to compare future uncontended runs
+against on this host.
+
+Three cargo-visible notes: no warnings were emitted, the lock contention
+reported by the earlier run did not recur, and nothing in the merge touched
+the crates this probe pins.
+
+**Cross-host visibility note**: N/A — nothing for the macos host to act on.
+The merge of `origin/linux-next` into `windows-next` is now the tested
+combination at this head, which is a slightly stronger statement than the
+earlier run made.
+
+**Next iteration ask**: the three skill defects raised by the earlier run today
+are fixed in `skills/probe-macos-tray-on-windows/SKILL.md` and recorded in its
+tuning log — Step 2 now says the build is expected to succeed, the working dir
+is a `<CHECKOUT>` placeholder resolved on the host, and Step 6 adds the
+`plan/issues/` path. This run followed the corrected skill verbatim and it
+committed its own findings, which is the behaviour the fix was for. The fourth,
+operational item stands unfixed and is the remaining ask: the probe and
+`scripts/cycle-preflight.sh` contend for the build-directory lock on this host,
+so the skill should say the two must not run concurrently if its wall-clock
+number is to stay comparable across days.
+
+Step 1 of the skill is also still slightly wrong in a way that did not change
+today's verdict: it does `git merge --ff-only origin/linux-next`, which aborts
+whenever `windows-next` carries any commit of its own — as it did here. The
+methodology's pre-push gate wants `origin/linux-next` *merged* into the
+platform branch, not fast-forwarded onto it. Suggested next-iteration edit:
+fast-forward to `origin/windows-next` first, then `git merge --no-edit
+origin/linux-next`.
