@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-ready-row-whose-owned-files-a-landed-fix-touched-since-filing-is-a-staleness-candidate-the-pass-must-surface
+    event:
+      type: progress
+      ts: "2026-09-13T15:42:21Z"
+      agent_id: linux-macuahuitl-fable-20260913t154221z
+      host: macuahuitl
+      summary: |
+        Second slice landed at linux-next@5cb645d3a (macuahuitl): the closed-on check —
+        a candidate whose packet carries a terminal status in a sibling branch's
+        unrelayed fragments prints :closed-on:<branch> and is relayed, never
+        handed (the closure-direction hole yoga named after 1140-d6ni was closed
+        twice). Fixture 11/11 with the simulated-sibling arm and its negative
+        control; the coordination step carries the three hand-off rules. Instrument
+        notes from the first pass's use: trend/multi_cycle rows are expected
+        citations (1135-z8gn refuted as a candidate); the discriminator that worked
+        in both directions is executing the row's own next_action against trunk
+        (1140-d6ni asked for landed work; 1132-r4mt for work never done); print the
+        folded title, never the base fragment's. LEFT: the owned_files pass
+        (criterion 1, 1085-g52w against b026372ff) and its negative control.
