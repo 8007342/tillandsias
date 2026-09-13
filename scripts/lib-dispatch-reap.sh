@@ -4,6 +4,14 @@
 # lib-dispatch-reap.sh — the ONE implementation of "carry TERMINATION across a
 # dispatch boundary", the sibling of lib-env-forward.sh.
 #
+# PLATFORM SUPPORT, READ THIS FIRST (1141-vf9w darwin arm, 2026-09-13): this
+# file works on hosts with /proc. On macOS it is UNSUPPORTED and says so —
+# `unsupported:dispatch-reap:no-proc`, non-zero to the caller — rather than
+# returning a quiet success having reaped nothing. See the NINTH IDIOM CLASS
+# note above tillandsias_dispatch_reap_supported for why no portability
+# advisory in the tree would have caught this, and the child packet of
+# 1141-vf9w for the darwin design that would make it work.
+#
 # WHY A SHARED FILE, ON THE FIRST BOUNDARY RATHER THAN THE SECOND. 891-5shq
 # exists because the toolbox boundary learned to forward the TILLANDSIAS_
 # namespace and the WSL boundary then received its own separate copy of the
@@ -67,8 +75,49 @@ tillandsias_dispatch_token() {
 # The GROUP is redirected here for the residue that passes access(2) and still
 # denies the read. An unreadable pid is never ours, so skipping it loses
 # nothing.
+# ORDER 1141-vf9w, darwin half (macbookair 2026-09-13).
+#
+# THE NINTH IDIOM CLASS, and it is why a flag-shaped advisory never found this:
+# ABSENT-ON-DARWIN PRIMITIVES. 1135-z8gn's advisory hunts GNU-vs-BSD FLAG
+# differences — `stat -c`, `sed -i`, `date -d`, `readlink -f` — where both hosts
+# have the tool and disagree about its options. `/proc` and `setsid` are not
+# that. They do not exist on macOS AT ALL, so there is no flag to normalise and
+# no invocation to rewrite; the code is simply addressing a kernel interface the
+# platform does not have. A grep for idiom flags returns clean on this file.
+#
+# The trap it set is worth naming, because the author of this file was being
+# careful about darwin: the header above chooses `read -r -d ''` over `mapfile`
+# BECAUSE macOS ships bash 3.2, and records that check-bash-dialect refused the
+# file once and "earned its keep". Every one of those statements is true. The
+# dialect guard checks the SHELL, and had nothing to say about a FILESYSTEM that
+# is absent on the target. Passing every dialect check is not the same as being
+# portable.
+#
+# MEASURED on tlatoanis-macbook-air (Apple M5, macOS 25.6.0) 2026-09-13:
+# `ls -d /proc` -> No such file or directory, and the glob `/proc/[0-9]*` does
+# not expand. Before this guard `tillandsias_marked_pids` therefore returned
+# EMPTY and `tillandsias_reap_marked` returned 0 having killed nothing — the
+# reaper reported success on every darwin host while providing none of the
+# protection this order exists to provide. That is a FAIL-OPEN, which is the one
+# outcome a termination-propagation guard must never have.
+#
+# WHAT IS NOT FIXED HERE, deliberately: darwin still has no working reaper. The
+# real design cannot be an environment marker at all — macOS cannot read another
+# process's environ without entitlements, so `/proc/<pid>/environ` has no darwin
+# equivalent to port to. A token FILE or a process GROUP is the shape that can
+# work. That is a design decision for this order's author and is filed as a
+# child packet rather than guessed at here. This change converts a silent lie
+# into a named refusal; it does not make darwin supported.
+tillandsias_dispatch_reap_supported() {
+    [ -d /proc ]
+}
+
 tillandsias_marked_pids() {
     local token="$1" d pid needle e
+    if ! tillandsias_dispatch_reap_supported; then
+        echo "unsupported:dispatch-reap:no-proc" >&2
+        return 2
+    fi
     [ -n "$token" ] || return 0
     needle="TILLANDSIAS_WRAPPER_TOKEN=$token"
     for d in /proc/[0-9]*; do
@@ -88,6 +137,19 @@ tillandsias_marked_pids() {
 
 tillandsias_reap_marked() {
     local token="$1" grace="${2:-20}" pids i left
+    # ORDER 1141-vf9w (darwin). NON-ZERO AND LOUD, never a quiet 0. The caller
+    # in scripts/with-tillandsias-builder.sh runs this from a
+    # `trap '... ; exit 143' TERM INT HUP`, so the status is not consumed as
+    # control flow there — which makes the STDERR line the part that carries
+    # the information, and is why it must not be suppressed. The distinction
+    # this preserves is the whole point: "nothing was reaped because nothing
+    # was running" (0, the normal path, arm 8) and "nothing was reaped because
+    # this platform cannot reap" (2) were the SAME answer before, and they
+    # require opposite responses.
+    if ! tillandsias_dispatch_reap_supported; then
+        echo "unsupported:dispatch-reap:no-proc — nothing was reaped; a cancelled dispatch may survive on this host (1141-vf9w)" >&2
+        return 2
+    fi
     pids="$(tillandsias_marked_pids "$token")"
     if [ -z "$pids" ]; then
         return 0
