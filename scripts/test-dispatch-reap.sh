@@ -27,6 +27,37 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 . "$ROOT/scripts/lib-dispatch-reap.sh"
 
+# ORDER 1141-vf9w, darwin arm (macbookair 2026-09-13).
+#
+# A SKIP HERE IS NOT COVERAGE, and this fixture must not be read as saying the
+# reaper works on macOS. It says the opposite: the reaper CANNOT work here yet,
+# so these arms would assert nothing and their red was an answer about the
+# platform rather than about the code. Exit 2 is the could-not-run code the
+# step's STEP_SKIP_EXIT nominates (1087-h2z9), so the gate prints a skip with a
+# named reason instead of the step's content verdict.
+#
+# TWO INDEPENDENT DARWIN ABSENCES, both measured on tlatoanis-macbook-air
+# (Apple M5, macOS 25.6.0) — either alone is enough to make the arms meaningless:
+#
+#   /proc     absent entirely. `ls -d /proc` -> No such file or directory, and
+#             the glob `/proc/[0-9]*` does not expand, so tillandsias_marked_pids
+#             finds nothing and arm 2 ("a marked process is found by its token")
+#             reds. This is the one that also broke the LIBRARY.
+#   setsid    absent from macOS. `spawn_marked` runs `setsid sleep 300 &`, which
+#             fails immediately, so `$!` is a pid that is already dead and arm 5
+#             ("the reap leaves a differently-marked process running") reds for a
+#             completely different reason than arm 2 — a dead pid, not a failed
+#             reap. Two causes, one verdict line, which is why reading the
+#             summary count alone misleads.
+#
+# The condition is probed from the host at run time; no platform is named by
+# uname and no version is pinned, so a darwin that grows /proc would run the
+# arms rather than skip them.
+if ! tillandsias_dispatch_reap_supported || ! command -v setsid >/dev/null 2>&1; then
+    echo "skip:dispatch-reap:no-proc-no-setsid — this platform has no /proc and/or no setsid; the reaper is unsupported here, which is NOT the same as passing (1141-vf9w)" >&2
+    exit 2
+fi
+
 pass=0; fail=0
 check() { # check <label> <condition-rc>
     if [ "$2" -eq 0 ]; then pass=$((pass + 1)); else fail=$((fail + 1)); echo "FAIL: $1"; fi
