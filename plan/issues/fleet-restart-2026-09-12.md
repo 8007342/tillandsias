@@ -3512,3 +3512,59 @@ stories.
   deliberate knobs stay listed until a registry line can count. The token
   counter's first non-lenovinha record: token_max now names this sweep.
   Filing collision avoided this time: next-order read before every filing.
+- **1171-ccf2 sharpened by yolanda before taking it**: route (b) is
+  unavailable — tillandsias-tray.exe exposes no capability-probe surface
+  (its CLI is provision/reset/forge/status/diagnose/logs/version), so
+  adding one is more work than route (a); route (a) ALREADY WORKS on
+  yolanda: `target/debug/tillandsias.exe --capabilities` rc 0 reports
+  accel_side=windows-host with the real AMD 860M and NPU rows, and
+  host-capability-probe.sh --fragment emits a well-formed windows-host
+  fragment. The difference is the same split as the .exe/ELF one: yolanda's
+  target/ holds a native PE because they ran cargo directly in Git Bash;
+  esme's holds an ELF because the sanctioned path (with-wsl2-builder's
+  re-exec into the distro) produces Linux artefacts. Neither host is
+  misconfigured; the sanctioned build path never produces the artefact the
+  windows-host locus needs. The fix is therefore a build/release change,
+  not a delivery: the Windows release carries tillandsias-headless.exe
+  beside the tray, or the probe resolves where a Windows install puts it; a
+  couriered binary rots at the next rebuild. yolanda takes it ahead of the
+  793-zumy wrapper because it unblocks a second host.
+- **The silent half of the Windows capability gap** (yolanda, found while
+  scoping 1171-ccf2; corrects their own "route (a) already works"): it
+  runs, and what it produces is WRONG. resolve_probe in
+  host-capability-probe.sh admits any candidate whose `--inference-tier`
+  exits 0; yolanda's ./target/release/tillandsias is a native PE dated
+  2026-08-29 that predates accel_side and the present-unusable vocabulary,
+  so the probe exits 0 and emits a well-formed fragment with zero
+  accel_side — and the ledger already carries it: yolanda's windows-host row
+  (2026-09-12T04:07Z) shows no GPU and no NPU on a host with an AMD 860M
+  and an NPU, both present-unusable per the current binary; the matrix
+  routes on that row now. Same command, two binaries, opposite answers.
+  Polarity: esme's missing binary refuses LOUD; yolanda's stale binary
+  publishes SILENT — the dangerous side; fixing only the loud half would
+  hand esme a path to publish quietly wrong rows too. Ruling: (1) its own
+  p1 row, yolanda's, first — resolve_probe refuses a candidate it cannot
+  show is current (vocabulary probe, mtime fallback), named refusal, and
+  the wrong row is republished as its closure; (2) the release carrying
+  tillandsias-headless.exe stays 1171-ccf2, after (1). esme's 793-zumy
+  lesson (correct token, live run, wrong binary) inside the probe's own
+  resolver.
+- **Silverblue scope confirmed** (yoga, after the operator ran the upgrade
+  there): yoga booted 44.20260913.0 on kernel 7.2.5 with rocm layered,
+  State idle, no failed or stuck deployment — noticed from the session
+  banner's kernel change and confirmed rather than inferred. Read narrowly
+  by yoga: it refutes "layered packages cannot take the new base" and says
+  nothing about WHICH package conflicts on lenovinha; combined with
+  lenovinha's root cause it says everything — yoga has no `akmods`, so the
+  rich dependency never fires. Two hosts DISAGREEING is the information
+  here (the variable is host configuration, not the platform), the mirror
+  of the rule that two hosts agreeing is one datapoint. Note for 1165-g6wx.
+  The sweep's land took four launches, three of them the coordinator's
+  misses and one a real rule: a skill must be linked into every runtime
+  directory the single-source check enumerates (.claude .opencode .codex
+  .github .gemini) — the standalone check reads TRACKED links, so it passed
+  on an untracked symlink and the gate refused; a kill command that carried
+  its own pattern killed the call before the remaining links were made;
+  and closing a multi_cycle packet must remove its plan/long-running.md row
+  in the same commit. Landed ok:land:b902c1a64 attempt 2. Stale-binary row
+  filed as 1172-dyvd (p1, yolanda, before 1171-ccf2).
