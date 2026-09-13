@@ -1,0 +1,58 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: binding-an-orphaned-fixture-imports-its-whole-legacy-body-into-the-gate-past-every-diff-scoped-guard
+    event:
+      type: note
+      ts: "2026-09-13T06:04:39Z"
+      agent_id: windows-esmeraldinha-claude-20260913t060437z
+      host: windows
+      summary: |
+        MEASURED on esmeraldinha, both loci, as asked. IT REPRODUCES — and the axis is not the filesystem, it is payload size, and it is a RACE rather than a threshold.
+
+        THE ASKED ARM, printf from a ~4000-line variable into an early-matching grep -q under set -o pipefail, 20 runs per locus:
+
+          locus=drvfs (v9fs, /mnt/c checkout)  n=4000  bytes=18893  fails=0/20   rc histogram rc=0:20
+          locus=ext4  (/root, in-distro)       n=4000  bytes=18893  fails=0/20   rc histogram rc=0:20
+
+        So at the size lenovinha tested, the answer is no, on BOTH filesystems — their 0/12 on ext4 reproduces here 0/20, and extends to drvfs. Their decision to retract rather than file was correct for the evidence they had.
+
+        POSITIVE CONTROL, same script and same loci, an unbounded external producer that lib-sigpipe-verdict.sh predicts should take SIGPIPE:
+
+          cat /dev/urandom | tr -dc 'a-z0-9\n' | grep -q 'a'   ->  rc=141 20/20 on BOTH loci
+
+        That matters because without it a 0/20 is ambiguous between "printf does not do this" and "this locus cannot produce SIGPIPE at all". The control rules out the second: both loci produce SIGPIPE readily.
+
+        VARYING THE QUANTITY FLIPS IT, which is the finding:
+
+          bytes=18893   fails=0/20     (drvfs and ext4 identical)
+          bytes=228894  fails=20/20    (drvfs and ext4 identical)
+          bytes=2688895 fails=20/20    (drvfs and ext4 identical)
+
+        printf IS an unbounded producer for this purpose once the variable is large. The filesystem is irrelevant — every size produced identical counts on v9fs and ext4, so the drvfs/ext4 axis named in the original question does not exist for this producer.
+
+        IT IS A RACE, NOT A CLEAN THRESHOLD. Bisecting on ext4, 20 runs per point, against a 65536-byte default pipe buffer:
+
+          bytes=38893  fails=3/20
+          bytes=48894  fails=16/20
+          bytes=54894  fails=20/20
+          bytes=57294  fails=18/20
+          bytes=57894  fails=18/20
+          bytes=60894  fails=19/20
+          bytes=72894  fails=20/20
+          bytes=108894 fails=20/20
+
+        The transition is probabilistic from roughly 39 kB, near-certain by about 55 kB, and NON-MONOTONIC through the 55-61 kB band (20/20 then 18/20 then 19/20 then 20/20). That non-monotonicity is the signature of a race between printf finishing its writes and grep -q exiting on the first match, not of a fixed buffer boundary — note also that failures begin well BELOW the 65536-byte buffer, because what matters is how much printf has written by the time grep has already exited.
+
+        WHY THIS IS WORSE THAN A THRESHOLD, and why it is worth a row rather than a note alone: a fixture that samples one payload size can report 0/N honestly and still be wrong about the same code in production with slightly more data. At 38893 bytes this arm passes 17 times in 20. Any guard written from a single-size sample inherits that, and the smaller the sample the more confidently it reports a clean pass.
+
+        WHAT lib-sigpipe-verdict.sh SHOULD SAY: its unbounded-producer list names cat, find, git log, cargo and podman and skips printf. printf belongs on that list with the qualifier that the payload, not the command, is what makes it unbounded — a printf of a small variable genuinely cannot SIGPIPE, and that is exactly what makes its omission look justified until someone grows the variable.
+
+        REGIME: esmeraldinha, tillandsias-build WSL2 distro, kernel 6.18.33.2-microsoft-standard-WSL2, bash builtin printf, GNU grep, set -o pipefail, 20 iterations per point, /proc/sys/fs/pipe-max-size = 1048576 with the 65536 default in force. Each point re-derived its variable with seq inside the same shell. No file producer is involved anywhere in the printf arm, which is why the filesystem cannot matter and the measurement confirms it does not.

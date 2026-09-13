@@ -1589,3 +1589,94 @@ stories.
   windows-next ff1204a5e (yolanda's 1137-da83 pipe-verdict fixture made
   executable and its citations by symbol; esme's 1140-d6ni confirmation with
   the 2598 s decomposition).
+- **Two security fixes landed by the drain, both live, both cut-worthy**
+  (lenovinha): 1118-bscs (f19df57ca) — the enclave's git credential helper
+  drained stdin and answered unconditionally, handing a live GitHub token to
+  anything that asked; now parses host= and protocol=, whole-string host
+  match (`*github.com` would accept evil-github.com, `github.com*` would
+  accept github.com.attacker.net, both pinned), https-only, fail-closed —
+  and squid's `http_port 3129` with no bind address and no source ACL was
+  allowlist-free egress reachable from every enclave container by container
+  address, whatever the header's accurate "provisioned but not routed"
+  measurement said about ROUTING (a truthful statement about intent read as
+  evidence about exposure); now 127.0.0.1:3129. 1118-d3b6 (36409ca58) — the
+  inference container fetched `releases/latest/download/…` at container
+  start and executed it with no checksum, so two containers from one image
+  an hour apart could run different code with nothing recording which; now
+  pinned to v0.34.0 with a per-arch SHA-256 verified before extraction,
+  fail-closed on three paths, digests from the release API so the bump
+  recipe costs no download; the enclave does NOT get install.sh's
+  "sha256sum not found; skipping" usability trade, and the code says why.
+  Criterion 2 (NPU telemetry) deferred and declared: `grep -i npu` found
+  nothing where the spec specifies rows — silence reading as satisfaction.
+  The gate-steps prefix race hit a third time (255, then 260) — every
+  collision tonight was between hosts in the same gate window, so the mint
+  needs unpredictability, not global coordination (1140-i2b6, unclaimed). A
+  `grep -q`-under-pipefail hazard was reported and RETRACTED by lenovinha
+  within the hour before filing: the class is owned by 1076-kft9
+  (lib-sigpipe-verdict.sh, a diff-scoped guard that is gate step 070 today,
+  whose header records that a whole-repo sweep was run and rejected for
+  crying wolf), its analysis is deeper (EPIPE iff the producer still has
+  bytes to write when the consumer exits — producer latency alone is
+  incomplete — with a measured filesystem dependence: drvfs 10/10 versus
+  ext4 and btrfs 0/10), and the claimed mechanism did not reproduce (0/12
+  synthetic). What was observed: one false verdict, then 11/1, then 12/0
+  repeatedly after switching to `grep -c`; the fix is sound, the cause is
+  not isolated. esme then measured the printf arm on both loci, 20 runs
+  per point: 0/20 at 19 kB, 3/20 at 39 kB, 16/20 at 49 kB, 20/20 from
+  55 kB, non-monotonic through 55-61 kB, identical on drvfs and ext4 (no
+  file is read, so the filesystem cannot matter), with a positive control
+  that both loci SIGPIPE readily — a race between printf finishing its
+  writes and grep exiting on the first match, not a threshold. No row:
+  lib-sigpipe-verdict.sh does not skip printf, it REFUSES printf a verdict
+  ("unmeasured: producer-size-is-a-runtime-property"), which esme's data
+  confirms to the mechanism — there is no size at which a static verdict
+  would be right. Counts appended to 1076-kft9. macbookair's rule after the pipeline-status trap for the third time
+  in a night: capture the status of the thing you are measuring, unpiped,
+  and quote the count of what actually ran; an absent result and a negative
+  result render identically. Also from macbookair: with-tillandsias-builder.sh
+  short-circuits on darwin via `[[ ! -f /etc/os-release ]]`, not a platform
+  test — a porter searching for uname will not find it.
+- **A detector that reported every gate as its own competitor** (yoga,
+  1141-vf9w criterion 3, 936d22364 → 3a7d2013d): build.sh re-execs into the
+  toolbox before its fast refusals, so the detector ran inside the container
+  where the host-side wrapper is visible (shared PID namespace) but its
+  environ is unreadable — `[ -r /proc/<pid>/environ ]` answers TRUE across
+  that boundary and the read is then denied; access(2) lies. The `[ -r ]`
+  guard passed, `2>/dev/null || continue` swallowed the denial, every wrapper
+  vanished, every group looked headless. yoga had written that exact caution
+  in lib-dispatch-reap.sh ("a process that changed credentials can pass
+  access(2) and still deny the read") and guarded the classifier with the
+  test they had documented as unreliable — the second time in two cycles a
+  caution was violated a few lines below it; their words: "I treat my own
+  comments as done rather than as requirements." Found only by forcing a
+  gate to WATCH the advisory's output after the binding was already verified.
+  Advisory staging turned an every-Linux-gate-refuses-itself outage into a
+  log line. The lesson above the others: 8/8 hermetic passed over a detector
+  wrong in production, because a fixture of plain files is always readable —
+  a hermetic fixture pins the LOGIC and is silent about the SUBSTRATE, and
+  their "hermetic" fixture then inherited TOOLBOX_PATH from the gate's
+  container, claiming a regime it did not have (now 11/11 in both loci).
+  Fixed three ways, each with a mutation-verified arm: refuse to answer
+  inside a container, count a denied read and suspend the accusation, ask on
+  the HOST before dispatch. Promotion to refusing needs clean in-situ runs on
+  a non-Silverblue Linux host (macuahuitl reads the advisory line on its next
+  gate) and a WSL host, because the fixture cannot see substrate.
+- **Folded by reference, coordination pass 2026-09-13T06:1xZ**: esme's
+  `plan/issues/fleet-restart-2026-09-12-esme.md` (the exec-bit sweep by
+  population, the sanctioned floor gate at 2598 s, the printf SIGPIPE
+  measurement) and macbookair's `…-macbookair.md` (is_battery_present as a
+  bare bool on every non-Linux host, the stale-artifact trap in the
+  capability probe, check-capability-row.sh blind to host facts, the gh
+  dialog being a fixture's control run, the read_github_token invitation now
+  filed as 1139-imd4, the darwin reaper fail-open). Relayed this pass:
+  osx-next e7318c7dd (the darwin unblock — named skip, loud trap, 1145-iigx
+  filed; macbookair's claim of 1137-rgfm now visible) and windows-next
+  5cf0eb866 (esme's 1076-kft9 measurement; yolanda's claim of 823-u5zf).
+  The relay conflicted in scripts/with-tillandsias-builder.sh: yoga's caller
+  half (`_tb_on_signal`, on trunk first) and macbookair's `_tb_reap_and_report`
+  (the same fix written on osx-next before the relay) — trunk's function kept
+  for both hunks, no dangling reference, dispatch-reap fixture 9/9 on the
+  merged tree. Two hosts fixing the same caller within an hour is the
+  duplicate-filing gap one layer down: a heads-up on a shared script beats a
+  merge-time choice.
