@@ -1,0 +1,84 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+fields:
+  - packet_id: accel-probe-blind-to-wsl2-paravirtualised-gpu
+    field: status
+    value: ready
+    host: yolanda
+    ts: "2026-09-13T13:15:00Z"
+  - packet_id: accel-probe-blind-to-wsl2-paravirtualised-gpu
+    field: next_action
+    value: >
+      RELEASED BACK TO READY 2026-09-13 by yolanda, who did the Rust half and
+      cannot do the rest. The detection the prior next_action asked for is
+      LANDED: wsl2_paravirtual_gpu_reason is no longer a string literal. It now
+      reads the live filesystem through wsl2_vulkan_facts_at and decides through
+      the pure, unit-tested wsl2_paravirtual_gpu_reason_from, which distinguishes
+      three states — no loader, loader but no ICD, and loader+ICD present (which
+      is NOT reported as engine-missing any more, because on esmeraldinha it is
+      not). SMALLEST NEXT ACTION IS NOW ESME'S AND NEEDS NO RUST: run the probe
+      on esmeraldinha and paste what the dxg device's unusable_reason says. It
+      should read engine-unverified:vulkan-present-not-enumerated there, where it
+      previously read engine-missing:no-vulkan-icd over a host that carries both.
+      MOVE ~/.cache/tillandsias/capabilities.json ASIDE FIRST AND RESTORE IT —
+      --capabilities serves that cache with nothing in the envelope saying so
+      (1139-xe5m), so an un-bypassed run replays an earlier provisioning state
+      and would show the old reason no matter what the code does. THEN criterion
+      2's remaining half — enumerate and reject PHYSICAL_DEVICE_TYPE_CPU /
+      DRIVER_ID_MESA_LLVMPIPE — which still needs a host that enumerates, i.e.
+      esmeraldinha, and is the only part of this packet that yolanda could never
+      verify. Criterion 1's operator gate remains lifted and yolanda's declined
+      ICD install remains the right call and is still not the route.
+
+events:
+  - packet_id: accel-probe-blind-to-wsl2-paravirtualised-gpu
+    event:
+      type: progress
+      host: yolanda
+      agent: windows-yolanda-claude-20260913t082232z
+      ts: "2026-09-13T13:15:00Z"
+      evidence_refs:
+        - "cargo test -p tillandsias-headless accel_probe -> 79 passed 0 failed (76 before; three added)"
+        - "MUTATION CONTROL: reverting the pure decision to the unconditional `engine-missing:no-vulkan-icd` literal reds BOTH the retargeted shape test and the new present-loader test; restored -> green"
+        - "the_wsl2_unusable_reason_names_the_missing_engine_not_the_missing_render_node retargeted off the live filesystem onto the pure function"
+        - "wsl2_vulkan_facts_read_the_icd_directories_the_loader_reads: hermetic fixture tree, asserts empty dirs are not an ICD, a non-json file is not a manifest, BOTH icd.d directories count, and libvulkan.so without the version suffix is the -dev symlink rather than a loadable runtime"
+      note: >
+        THE CONSTANT WAS WRONG EVERYWHERE AND COINCIDENTALLY MATCHED THE HOSTS
+        NOBODY HAD CHECKED. wsl2_paravirtual_gpu_reason returned
+        `engine-missing:no-vulkan-icd` unconditionally, assigned by enumerate_gpus
+        to every dxg device, while nothing in the probe read icd.d, libvulkan, or
+        an enumeration result. esme's measurement is what exposed it: esmeraldinha
+        carries a Vulkan loader and the stock mesa-vulkan-drivers ICD set,
+        unprovisioned, and enumerates an INTEGRATED_GPU via DRIVER_ID_MESA_DOZEN
+        over /dev/dxg — so the probe was naming a missing component that is
+        installed.
+
+        THE VERDICT IS DELIBERATELY UNCHANGED: usable stays false, the class
+        stays cpu-only, lanes stay empty. Promoting the device needs enumeration
+        and the software-rasterizer rejection, which is criterion 2's other half.
+        This change stops the probe asserting a false CAUSE; it does not claim
+        the GPU is reachable.
+
+        ONE JUDGEMENT CALL THE OWNER SHOULD OVERRULE IF IT IS WRONG. Criterion 2
+        requires the word `engine-missing` verbatim, and both missing arms keep
+        it. When loader AND ICD are present the engine is not missing, so that
+        arm returns `engine-unverified:vulkan-present-not-enumerated` instead.
+        Saying `engine-missing` there would be the original false statement in a
+        new spelling. If criterion 2 was meant to cover the present-but-
+        unenumerated case too, this arm is wrong and should be renamed rather
+        than the detection removed.
+
+        A TEST HAD TO BE RETARGETED, and the reason is worth recording. The
+        existing shape test asserted the production entry point, which was a
+        constant and is now a detection reading the live filesystem. Left alone
+        it would have passed on this host — Windows, no loader — and gone RED on
+        esmeraldinha, the only host that can verify this packet. A test that
+        greens everywhere except the verification host is worse than no test. It
+        now drives the pure half with supplied facts, so its verdict is a
+        property of the code rather than of whoever ran it.
+
+        ALSO: the new functions needed `#[cfg(any(target_os = "linux", test))]`,
+        the same gate the original carried. The first build failed E0425 because
+        the gate landed on only one of the three new items and an ungated caller
+        referenced a gated callee. 935-6fzk's comment explains why that gate has
+        both arms — without `test` the macOS gate fails on dead code, without
+        `linux` the Linux build loses the production value — and it still holds.
