@@ -1134,3 +1134,35 @@ stories.
   pushes directly only when the window is open, never a union gate for a
   plan-only change. Five harness waiters were reaped for memory during the
   4050 s gate; it survived because it ran under setsid inside the distro.
+- **CORRECTION to the two bullets above, measured by yolanda and esme
+  against the hook's predicate** — discard the "floor-tier plan-only window"
+  framing and the "silent second route" claim. (1) `_lane_can_scope` in
+  scripts/hooks/pre-push-local-gate.sh walks every merge in the outgoing
+  range and requires each merge's SECOND parent to be an ancestor of
+  origin/linux-next; esme's refused head had 17 merges with one disqualifying
+  (its second parent was yolanda's checkout-lock land 3cfea048a, not yet
+  relayed to trunk) and the accepted head had 28 merges and none. So a floor
+  host can push plan-only without a stamp at any time provided it does not
+  MERGE a branch carrying un-relayed commits: basing on origin/windows-next
+  (first parent) is free, merging it makes that content a second parent —
+  same branch, same content, different parent position, opposite verdict —
+  and the reason is not tidiness (a non-trunk second parent can carry
+  unreviewed code invisible to a first-parent walk). The cause was fleet
+  timing — the lag between a platform land and its relay — and the relay is
+  the coordinator's to keep short; this land carries 3cfea048a. What stands:
+  the linux-next-merged guard runs before the lane; a first push of a
+  `work/` ref has no remote base and needs the full gate; 4050 s is the cost
+  of a floor-tier UNION push, not of routine plan work. (2) The "silent
+  cargo-absent skip reporting ok" on yolanda was a FIXTURE's assertion text
+  (test-cycle-preflight-cargo-resolution.sh quoting the value it asserted on)
+  read as the host's verdict; the real tier step 190 lines down had passed.
+  1140-d6ni is "the tier check is broken on esme by the stale-.exe
+  resolution", no second route; the reorder (yoga, 1142-wn2k superseded into
+  it) is the whole fix; open question, not a claim: yolanda's host carries
+  the same artefact shape with interop on and did not break. Fourth instance
+  of one error class in a night, named: a search that returns something has
+  not answered the question — ask what the matched line IS before reading
+  what it says. Also: esme held the checkout lock 87 minutes after a gate,
+  visible only because 1137-da83 made the lock real; long gates on any host
+  launch DETACHED from the harness (nohup/setsid to a log; yolanda verified
+  the gate alive in a later call), since the harness reaps its own tasks.

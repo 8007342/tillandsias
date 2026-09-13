@@ -1,0 +1,128 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: capabilities-serves-a-cached-envelope-indistinguishably-from-a-measurement
+    order: 1139-xe5m
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [probe, fail-loud, false-negative, accel]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-headless/src/accel_probe.rs
+    title: |
+      `--capabilities` returns the on-disk cache when one exists and nothing in the envelope says so, so a stale provisioning state is indistinguishable from a current measurement on every host that reads it
+    context: |
+      MEASURED on esmeraldinha (windows host, WSL2 guest `tillandsias-build`)
+      while producing evidence for 793-zumy, with a debug build of
+      `tillandsias-headless` at probe_identity 56.9.12+27c4c20d14e70a9e.
+
+      `--capabilities` returns the contents of
+      `~/.cache/tillandsias/capabilities.json` when that file exists. The
+      envelope carries `probe_identity`, `hardware_fingerprint` and a
+      `timestamp`, and none of them says the answer was served rather than
+      measured.
+
+      HOW IT WAS ESTABLISHED, including the step that was wrong, because the
+      wrong step is the one a reader is most likely to repeat. Two consecutive
+      runs returned byte-identical envelopes (the only diff was a trailing
+      newline) carrying a timestamp ~20h behind the wall clock. That alone
+      proves NOTHING: both runs landed inside the same second, so identical
+      output is exactly what a correct probe would also produce. The first
+      inference drawn from it — a frozen clock — was unsound and is recorded
+      here as refuted.
+
+      What cannot be coincidence is the NANOSECONDS. The replayed timestamp was
+      `2026-09-12T03:29:40.356539631+00:00`, repeated digit for digit across
+      runs. `chrono::Utc::now()` does not reproduce a nanosecond field.
+
+      The decisive test moved the cache aside and re-ran, then restored it
+      unmodified with its original mtime:
+
+        cache present -> timestamp 2026-09-12T03:29:40.356539631+00:00
+        cache aside   -> timestamp 2026-09-13T00:06:19.927717658+00:00,
+                         agreeing with the wall clock to one second
+
+      WHY THIS IS P1 AND NOT A CACHING NICETY. 793-zumy exists because a probe
+      reported a hardware verdict that was false, and because 599-3b9h's
+      expectation "was derived from the same blind rubric it was checking, so
+      the observation confirmed the implementation rather than the hardware".
+      This is that failure one layer up: a host's PROVISIONING state, captured
+      at some earlier moment, is replayed as a current measurement. Any host
+      that has read `--capabilities` may have read a replay, and no reader can
+      tell. Fleet evidence derived from that command — including capability
+      matrix rows folded from the `capabilities:` channel — inherits the doubt
+      until the envelope can be asked which it is.
+
+      NOT A CLOCK DEFECT. The live envelope's timestamp agreed with the wall
+      clock, which argues against one. A separate unexplained anomaly is on the
+      record in the evidence document (two `date -u` reads either side of a
+      `sleep 5` returning the same second) and was deliberately not pursued.
+    deliverable: |
+      The envelope can be asked whether it was measured or served, and a
+      consumer that requires a measurement can demand one.
+
+        * DECIDE AND RECORD which of three shapes this takes, rather than
+          adding all of them: an explicit `source=cache|measured` field on the
+          envelope; a staleness bound after which the cache is not served; or a
+          bypass flag that forces a measurement. The field is the only one that
+          makes an ALREADY-COLLECTED envelope interpretable, which is what the
+          fleet's existing evidence needs; the other two only help future
+          readers. That argues for the field first and the others as options,
+          but the decision belongs to whoever owns the probe's caching.
+        * Whatever is chosen, a cached answer must remain distinguishable
+          WITHOUT access to the host that produced it — the matrix folds these
+          rows from other machines.
+        * A fixture that writes a cache file with a known timestamp, runs the
+          probe, and asserts the envelope names its source.
+
+      SCOPE NOTE: do NOT fix this by deleting the cache or disabling it. The
+      cache presumably exists for a reason this packet did not investigate, and
+      removing it would trade a silent-staleness defect for an unmeasured cost
+      on the floor tier, where the probe's own build was just measured at 27s
+      on a warm tree and 149s cold.
+    unscoreable: |
+      unpinnable-until-the-guard-exists. The closure is a property of a FIELD
+      THAT DOES NOT YET EXIST — the envelope has no way to say whether it was
+      served or measured, so any litmus named now resolves to nothing and
+      885-92iu refuses the row. This is the sanctioned exit (1136-n8sh).
+
+      FUTURE LITMUS FILENAME:
+      scripts/test-capabilities-envelope-names-its-source.sh — write a cache
+      file with a known timestamp, run the probe, assert the envelope reports
+      it was SERVED; then bypass or remove the cache, run again, assert the
+      envelope reports it was MEASURED. Write it in the same commit as the
+      field and move this text into verifiable_closure.
+
+      THE CLOSURE THE LITMUS MUST PIN, stated now so it is not weakened later:
+      the cached arm must be distinguishable from the measured arm by reading
+      the ENVELOPE ALONE — no filesystem access, no comparison against a second
+      run, and no knowledge of the producing host. A fixture that distinguishes
+      them by checking whether the cache file exists would pass while leaving
+      every folded matrix row exactly as ambiguous as it is today.
+    next_action: >
+      Decide the shape before writing anything — field, staleness bound, or
+      bypass flag — and record why, since only the field makes the fleet's
+      already-collected envelopes interpretable and that is the property the
+      capability matrix needs.
+    provenance: |
+      Found by esme-windows on esmeraldinha while running the accel probe under
+      an authorisation from macuahuitl-fedora for 793-zumy, and filed as its
+      own row on that orchestrator's direction rather than folded into
+      793-zumy: it is a different defect in a different mechanism, and it casts
+      doubt on evidence well beyond the one packet.
+
+      Full reproduction, the refuted first inference, and the 793-zumy findings
+      it sits beside:
+      plan/issues/research/wsl2-igpu-vulkan-over-dxg-esme-intel-vantage.md
+
+events:
+  - packet_id: capabilities-serves-a-cached-envelope-indistinguishably-from-a-measurement
+    event:
+      type: note
+      ts: "2026-09-13T00:08:29Z"
+      host: windows
+      summary: |-
+        Filed from esmeraldinha with the pre-fix demonstration already taken: cache present replays 2026-09-12T03:29:40.356539631+00:00, cache moved aside yields 2026-09-13T00:06:19.927717658+00:00 matching wall clock. evidence_refs: plan/issues/research/wsl2-igpu-vulkan-over-dxg-esme-intel-vantage.md

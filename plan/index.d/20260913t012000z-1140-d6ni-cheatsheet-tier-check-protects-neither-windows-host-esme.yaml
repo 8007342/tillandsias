@@ -1,0 +1,140 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-cheatsheet-tier-check-protects-neither-windows-host-by-two-independent-routes
+    order: 1140-d6ni
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [gate, fail-loud, portability, windows, false-negative]
+    estimated_hours: 3
+    owned_files:
+      - scripts/plan-binary-probe.sh
+      - scripts/check-cheatsheet-tiers.sh
+    unscoreable: |
+      unpinnable-until-the-guard-exists. Two arms are wanted and neither exists:
+      one that fails when resolve_target_binary returns a non-locus-native
+      artefact, and one that fails when the tier check reports ok: on a line
+      whose own text says the check did not run. Any litmus named now resolves
+      to nothing and 885-92iu refuses the row. Sanctioned exit per 1136-n8sh.
+
+      FUTURE LITMUS FILENAME:
+      scripts/test-target-binary-resolves-locus-native.sh — place a stale but
+      RUNNABLE non-native artefact beside a fresh native one and assert the
+      probe returns the native one. The arm must be msys-only and must SKIP
+      loudly where WSL interop is off, because interop state is exactly what
+      masked this until now.
+
+      WIRE IT IN THE SAME COMMIT THAT WRITES IT, by ONE of two routes, and name
+      which in the commit message: (1) an _run bash line in build.sh, or (2)
+      BOTH an openspec/litmus-tests/litmus-<name>.yaml definition AND an
+      openspec/litmus-bindings.yaml registry entry under the right spec_id.
+      Half of route 2 is the dangling-pin defect of 1068-cxmf, and
+      scripts/test-*.sh is not globbed by build.sh, so an unwired fixture is a
+      file rather than a gate.
+    title: |
+      check-cheatsheet-tiers protects neither Windows host: on esme it runs a stale PE32+ ahead of the fresh ELF and refuses falsely after 67.5 minutes, and on yolanda it reports ok: on a cargo-absent SKIP that never executes the check at all
+    context: |
+      MEASURED on BOTH Windows hosts, from opposite directions. The two failures
+      are independent, and a fix for either leaves the other live — which is why
+      this is one row and not two.
+
+      ROUTE A — esmeraldinha, LOUD AND WRONG. ./build.sh --check refused after
+      4050s with a mixed-separator path: a POSIX root joined with a BACKSLASH,
+      naming a cheatsheets directory that exists with 244 tracked entries and is
+      reachable from both loci.
+
+      check-cheatsheet-tiers.sh resolves its binary through
+      resolve_target_binary tillandsias-policy debug, whose candidate loop tries
+      the .exe BEFORE the extensionless path. It is a run-don't-stat probe, so
+      it returns the first candidate that RUNS. On a shared Windows/WSL checkout
+      both artefacts sit side by side; here the ELF was fresh from that same
+      gate and the PE32+ was eight days stale. WSL interop is ENABLED in
+      tillandsias-build today (the .exe exits 0, not 126), so the stale Windows
+      binary ran, received a /mnt/c repo root it cannot resolve, and
+      PathBuf::join produced a path valid on neither platform.
+
+      Pre-fix demonstration, same tree and same arguments, opposite verdicts:
+      the .exe reports the directory missing; the ELF passes silently.
+
+      ROUTE B — yolanda, QUIET AND WORSE. The same check on the other Windows
+      host does not run at all. From the gate log of the run that landed
+      3cfea048a: "ok: absent cargo reads as a SKIP, not an ERROR", with the skip
+      line "skip:cheatsheet-tiers:cargo-absent (no toolchain on this host; check
+      not run)". That host's cargo_resolve fails in this script's context, so
+      the check exits 0 having examined nothing, and a genuine cheatsheet tier
+      violation passes silently there. On esme cargo_resolve SUCCEEDS, which is
+      why esme took route A and yolanda never reached it. Yolanda's artefacts
+      are the same shape as esme's — a policy .exe beside an ELF in debug, and
+      an older .exe in release — so that host is exposed to route A as well and
+      has merely not arrived at it.
+
+      THE PREDICTION THIS FULFILS. Order 1030-i2p8 fixed exactly route A for the
+      SIBLING function resolve_plan_binary, reordering native-first under
+      "LOCUS-NATIVE ARTEFACT FIRST", and its comment records that the premise
+      was "MASKED on esmeraldinha, not absent: interop is disabled in that
+      distro today", adding that interop "is a per-distro setting that can be
+      turned back on without anyone touching this repository, which is why this
+      is fixed by ordering rather than left to the environment". The masking has
+      now lifted on BOTH Windows hosts; both answer rc=0. That packet named its
+      own recurrence mechanism correctly and fixed one of the two call sites.
+
+      WHY ROUTE B IS THE WORSE HALF, stated because the loud one will otherwise
+      absorb all the attention. Route A announces itself, blocks a land, and was
+      diagnosed in one sitting. Route B reports ok: on a line whose own text
+      says the check did not run, so a reader of a green board believes this
+      platform is covered when nothing examined it. Fixing only the reorder
+      repairs esme and leaves yolanda silently unprotected — a worse end state
+      than today, because the loud signal would be gone and the silent gap would
+      remain.
+    deliverable: |
+      The tier check either runs against a locus-native binary, or says out loud
+      that it did not run.
+
+        * scripts/plan-binary-probe.sh — reorder resolve_target_binary's
+          candidates to try the extensionless path before the .exe, matching
+          resolve_plan_binary. The safety argument carries over verbatim: it is
+          a run-don't-stat probe, so inside a Linux distro the ELF runs and the
+          .exe is skipped, and on the Windows side the ELF cannot execute and
+          the .exe is taken. No caller needs a flag naming its locus.
+        * DECIDE AND RECORD what a cargo-absent tier check should report. ok: is
+          wrong — 965-sxec and 1005-m6rz both established that could-not-run is
+          not a pass. It needs a verdict a board renders as ABSENT COVERAGE
+          rather than as green. That is a grammar decision, not a change to be
+          made in passing.
+        * Establish WHY cargo is unresolvable on yolanda in this context while
+          resolving on esme. That is a provisioning difference between two hosts
+          of the same platform, and it may be the real defect behind route B
+          rather than the reporting.
+
+      SCOPE NOTE: do NOT fix route A by deleting stale artefacts. That is local
+      hygiene on one host, it leaves the ordering defect live for every other
+      shared checkout, and the same masking will lift again elsewhere.
+    next_action: >
+      Land the reorder in resolve_target_binary first, since it is the change
+      1030-i2p8 already made next door and it unblocks the Windows lane's gate,
+      then decide the cargo-absent grammar — that half is what decides whether
+      this check has ever protected the platform at all.
+    provenance: |
+      Route A found by esme-windows on esmeraldinha when ./build.sh --check
+      refused a union push at 4050s. Route B contributed by yolanda-windows from
+      their own gate log and offered as evidence for this row rather than opened
+      as a second one. Neither Windows host edited the shared file while the
+      other's proposal was live: a one-line fix reached from two sides is how
+      two hosts manufacture a conflict.
+
+      Floor-tier measurement recorded alongside: ./build.sh --check is 4050s on
+      esmeraldinha against the /mnt/c drvfs checkout at CARGO_BUILD_JOBS=2,
+      against roughly 600s on yolanda. That 6x is the standing argument against
+      asking a Windows host to carry a union push.
+
+events:
+  - packet_id: the-cheatsheet-tier-check-protects-neither-windows-host-by-two-independent-routes
+    event:
+      type: note
+      ts: "2026-09-13T01:20:00Z"
+      host: windows
+      summary: |-
+        Filed with both routes measured and a pre-fix demonstration for route A: the stale PE32+ and the fresh ELF return opposite verdicts from the same tree and the same arguments. Interop confirmed rc=0 on BOTH Windows hosts, so the masking recorded in 1030-i2p8 has lifted fleet-wide. evidence_refs: scripts/plan-binary-probe.sh resolve_target_binary, scripts/check-cheatsheet-tiers.sh, order 1030-i2p8
