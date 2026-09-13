@@ -1007,3 +1007,18 @@ stories.
   two hosts idled on that premise until esme checked by ref (the
   hand-peers-a-condition-not-a-local-SHA shape, under the coordinator's
   name).
+- **A salvage branch named "integrated and deletable" held the only copy of
+  three fragments** (macneo, 1080-4deb, osx-next 7fe19c312): the row's own
+  next_action said to delete salvage/unknown/20260910-1080-4deb-arm1; its
+  tip 94f12eeb7 is an ancestor of NONE of the four branches (positive control
+  on a known-trunk commit), and it carried ARM 1's claim, progress and
+  release fragments that never reached trunk — the code landed, the
+  provenance did not, so "did this work land" answered yes off the gate step
+  while the record was missing. 1080-4deb's own subject one level up. The
+  three fragments are restored unmodified (fold verified undisturbed) and
+  relayed to linux-next by this pass; ONLY after that is the branch
+  deletable, and the corrected next_action says to re-run the four-branch
+  ancestor check rather than trust a sentence. Rule: a salvage ref is the one
+  ref whose deletion is unrecoverable by construction — "integrated" earns
+  the ancestor check every time, never the code check. Evidence:
+  plan/issues/salvage-branch-named-deletable-holds-the-only-copy-2026-09-13.md.
