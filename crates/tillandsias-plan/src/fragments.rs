@@ -1114,6 +1114,22 @@ pub struct CompactionText {
     /// Fragments compaction REFUSED to consume, with the records of theirs that
     /// the rendered candidate does not carry (order 843-624y).
     pub refused: Vec<(PathBuf, Vec<String>)>,
+    /// ORDER 1123-k3mq. Status writes compaction CONSUMED THE FRAGMENT FOR but
+    /// did not apply, because they move DOWN the closure ladder without a
+    /// falsified event. `(packet_id, discarded_value, retained_value, host)`.
+    ///
+    /// WHY THIS HAS TO BE REPORTED. 686-7qcm taught compaction the ladder, which
+    /// stopped it writing a lowered rung into the base. But the losing write is
+    /// then dropped AND ITS FRAGMENT IS DELETED, so the author's intent leaves
+    /// no trace anywhere: a coordinator releasing an expired claim gets `ok:`
+    /// from set-field, `ok: compacted N fragment(s)` from compact, and a ledger
+    /// that still says `completed`. Measured on a scratch ledger at HEAD — base
+    /// `completed`, fragment `ready`, compact prints one ok: line and zero words
+    /// about the value it threw away.
+    ///
+    /// Keeping the rung is correct; keeping it SILENTLY is what makes two
+    /// maintainers disagree about the same ledger and both be reading it right.
+    pub discarded_status: Vec<(String, String, String, String)>,
 }
 /// Format-preserving, text-level compaction.
 ///
@@ -1144,6 +1160,7 @@ pub fn compact_text(index: &Path) -> Result<CompactionText, String> {
             candidate: raw,
             consumed: Vec::new(),
             refused: Vec::new(),
+            discarded_status: Vec::new(),
         });
     }
     let merged = fold(&base, &fragments);
@@ -1208,6 +1225,8 @@ pub fn compact_text(index: &Path) -> Result<CompactionText, String> {
     //    the base text (a win over the same value needs no edit).
     let mut lww: std::collections::BTreeMap<String, (String, String, Value)> =
         std::collections::BTreeMap::new();
+    // ORDER 1123-k3mq: status writes the ladder refuses, so the caller can say so.
+    let mut discarded_status: Vec<(String, String, String, String)> = Vec::new();
     for frag in &fragments {
         let Some(us) = frag.doc.get("status").and_then(Value::as_sequence) else {
             continue;
@@ -1280,6 +1299,27 @@ pub fn compact_text(index: &Path) -> Result<CompactionText, String> {
             };
             if better {
                 lww.insert(key, (ts, host, value.clone()));
+            } else if field == "status" {
+                // The write LOST the ladder comparison. Record it with the value
+                // that beat it so the report can name both — "your `ready` did
+                // not take, `completed` stands" is actionable; "ok: compacted 1
+                // fragment" is not. Only a value that actually DIFFERS is worth
+                // reporting: re-asserting the rung a packet already holds is a
+                // no-op, not a discarded intention.
+                let retained = lww
+                    .get(&key)
+                    .map(|(_, _, v)| v.as_str().unwrap_or("").to_string())
+                    .or_else(|| {
+                        base_value(&base, pid, field)
+                            .as_ref()
+                            .and_then(Value::as_str)
+                            .map(str::to_string)
+                    })
+                    .unwrap_or_default();
+                let incoming = value.as_str().unwrap_or("").to_string();
+                if !incoming.is_empty() && incoming != retained {
+                    discarded_status.push((pid.to_string(), incoming, retained, host.clone()));
+                }
             }
         }
     }
@@ -1525,6 +1565,7 @@ pub fn compact_text(index: &Path) -> Result<CompactionText, String> {
         candidate,
         consumed,
         refused,
+        discarded_status,
     })
 }
 
@@ -2974,6 +3015,150 @@ packets:
         let c = compact(&base_doc, &index);
         assert_eq!(c.consumed.len(), 1, "exactly the one fragment present");
         assert!(packet_ids(&c.merged).contains(&"beta".to_string()));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// ORDER 1123-k3mq. Compaction and the runtime fold must apply the SAME
+    /// rule to `status`, and a write the ladder refuses must be REPORTED rather
+    /// than dropped in silence.
+    ///
+    /// The defect that produced this row: two hosts disagreed about one packet
+    /// and both were reading the ledger correctly. The base row said `ready`
+    /// (compaction, newer) and the fold answered `completed` (an older fragment
+    /// sitting higher on the ladder). 686-7qcm then taught compaction the
+    /// ladder, which fixed the corruption — and left the losing write being
+    /// dropped WITH ITS FRAGMENT DELETED, so a coordinator releasing a claim
+    /// got `ok:` twice and a ledger that had ignored them.
+    #[test]
+    fn compaction_refuses_a_rung_lowering_status_write_and_says_so() {
+        let dir = std::env::temp_dir().join(format!("tilland-k3mq-{}", std::process::id()));
+        let d = dir.join("plan");
+        std::fs::create_dir_all(d.join("index.d")).expect("mkdir");
+        let index = d.join("index.yaml");
+        let base = "plan_index:\n  steps:\n    - packet_id: subject\n      order: 9990-aaaa\n      status: completed\n      title: t\n";
+        std::fs::write(&index, base).expect("write base");
+        // A coordinator releasing an expired claim: newer ts, LOWER rung, and no
+        // falsified event to authorise the descent.
+        std::fs::write(
+            d.join("index.d").join("20260911t195139z-cccc-coord.yaml"),
+            "status:\n  - packet_id: subject\n    field: status\n    value: ready\n    ts: \"2026-09-11T19:51:39Z\"\n    host: coordinator\n",
+        )
+        .expect("write frag");
+
+        let c = compact_text(&index).expect("compaction runs");
+
+        // CRITERION 1: compaction applies the ladder, so the base keeps the rung
+        // and re-folding the result cannot revert it.
+        assert!(
+            !c.candidate.contains("status: ready"),
+            "compaction wrote a rung-lowering value into the base; the fold would revert it and the two rules have diverged again:\n{}",
+            c.candidate
+        );
+        assert!(
+            c.candidate.contains("status: completed"),
+            "the retained rung is missing from the compacted base:\n{}",
+            c.candidate
+        );
+
+        // CRITERION 2: the discarded write is RECORDED. Without this the
+        // fragment is deleted and the author's intent leaves no trace at all —
+        // which is strictly worse than the original corruption, because the
+        // corruption was at least visible in the base.
+        assert_eq!(
+            c.discarded_status.len(),
+            1,
+            "the refused status write was dropped silently; a coordinator cannot learn their release did not take"
+        );
+        let (pid, discarded, retained, host) = &c.discarded_status[0];
+        assert_eq!(pid, "subject");
+        assert_eq!(
+            discarded, "ready",
+            "the report must name the value that was refused"
+        );
+        assert_eq!(
+            retained, "completed",
+            "the report must name the value that beat it"
+        );
+        assert_eq!(host, "coordinator", "the report must name who wrote it");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// ORDER 1123-k3mq, NEGATIVE CONTROL — and the row calls it load-bearing.
+    ///
+    /// The tempting fix is to make `status` last-write-wins, which would satisfy
+    /// the "both rules agree" criterion by DELETING the ladder: any returning
+    /// host with a stale high-water fragment could then silently reopen finished
+    /// work, and `--reopen-evidence` would stop being the only path down
+    /// (650-dq6u). So the ladder must keep its teeth in BOTH directions.
+    #[test]
+    fn compaction_keeps_the_ladder_teeth_an_older_higher_rung_still_wins() {
+        let dir = std::env::temp_dir().join(format!("tilland-k3mq-neg-{}", std::process::id()));
+        let d = dir.join("plan");
+        std::fs::create_dir_all(d.join("index.d")).expect("mkdir");
+        let index = d.join("index.yaml");
+        std::fs::write(
+            &index,
+            "plan_index:\n  steps:\n    - packet_id: subject\n      order: 9990-aaaa\n      status: implemented\n      title: t\n",
+        )
+        .expect("write base");
+        // OLDER but HIGHER on the ladder.
+        std::fs::write(
+            d.join("index.d").join("20200101t000000z-aaaa-h1.yaml"),
+            "status:\n  - packet_id: subject\n    field: status\n    value: verified\n    ts: \"2020-01-01T00:00:00Z\"\n    host: h1\n",
+        )
+        .expect("write frag a");
+        // NEWER but LOWER. Under last-write-wins this would take; under the
+        // ladder it must not.
+        std::fs::write(
+            d.join("index.d").join("20260101t000000z-bbbb-h2.yaml"),
+            "status:\n  - packet_id: subject\n    field: status\n    value: completed\n    ts: \"2026-01-01T00:00:00Z\"\n    host: h2\n",
+        )
+        .expect("write frag b");
+
+        let c = compact_text(&index).expect("compaction runs");
+        assert!(
+            c.candidate.contains("status: verified"),
+            "the older HIGHER rung lost to a newer lower one — status has become last-write-wins and 650-dq6u's ratchet is gone:\n{}",
+            c.candidate
+        );
+
+        // A legitimate ASCENT must still apply, or the fix has simply frozen the
+        // field: implemented -> verified is the win above, and it changed the
+        // base from its starting value.
+        assert!(
+            !c.candidate.contains("status: implemented"),
+            "a legitimate rung ASCENT was refused; compaction is now frozen rather than monotone"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// ORDER 1123-k3mq. Re-asserting the rung a packet already holds is a no-op,
+    /// not a discarded intention — reporting it would train readers to ignore
+    /// the warning that matters.
+    #[test]
+    fn compaction_does_not_report_a_status_write_that_changes_nothing() {
+        let dir = std::env::temp_dir().join(format!("tilland-k3mq-noop-{}", std::process::id()));
+        let d = dir.join("plan");
+        std::fs::create_dir_all(d.join("index.d")).expect("mkdir");
+        let index = d.join("index.yaml");
+        std::fs::write(
+            &index,
+            "plan_index:\n  steps:\n    - packet_id: subject\n      order: 9990-aaaa\n      status: completed\n      title: t\n",
+        )
+        .expect("write base");
+        std::fs::write(
+            d.join("index.d").join("20260101t000000z-dddd-h1.yaml"),
+            "status:\n  - packet_id: subject\n    field: status\n    value: completed\n    ts: \"2026-01-01T00:00:00Z\"\n    host: h1\n",
+        )
+        .expect("write frag");
+
+        let c = compact_text(&index).expect("compaction runs");
+        assert!(
+            c.discarded_status.is_empty(),
+            "a same-value status write was reported as discarded; noise here teaches readers to skip the real warning: {:?}",
+            c.discarded_status
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
