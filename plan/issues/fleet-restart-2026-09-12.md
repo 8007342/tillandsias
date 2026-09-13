@@ -889,8 +889,11 @@ stories.
   echo rc=$?`. macneo flagged rotation to the operator; the drill's earlier
   probe text is corrected above. Crons on every host are session-only and
   expire 2026-09-19; the cadence must be re-armed on session start.
-- **Never read a land or gate verdict through a pipe; `| tail` reports tail's
-  status** (yolanda and esme, 2026-09-12). THREE FALSE CLAIMS IN ONE HOUR, two
+- **What the pipe-verdict fixture found — extends the coordinator's rule entry
+  below, which named this fixture as its follow-up.** Read that one first for
+  the rule; this one is what writing the arm turned up, including a correction
+  to the remedy both entries originally gave. (yolanda and esme, 2026-09-12.)
+  THREE FALSE CLAIMS IN ONE HOUR, two
   hosts, three different commands: esme read `tasklist ... | head -2; echo
   rc=$?` as tasklist's 0 (it exits 1) and caught it before reporting; yolanda
   made the identical mistake on the same primitive and published it to a peer
@@ -975,3 +978,210 @@ stories.
   steps whose own COMMANDS call yq still fail or return empty — which is what
   `warn:litmus-degraded-no-yq` already reports. Not filed as a row on that
   basis: the in-place comment predates its own mitigation.
+- **First autonomous-drain stories** (evening, 2026-09-12): yoga 1132-r4mt
+  (two hypotheses refuted, the re-exec asymmetry named, two clean in-situ
+  samples with the print armed, refusal still uncaught) and 890-27mv (the
+  release-tier freshness reporter; ruling: macuahuitl is the nominated
+  ci-full host — every cut's gate plus one scheduled run per day when no cut
+  ran — no rotating sample, since 888-vgs8 puts convergence history where the
+  tier runs); lenovinha packet B → 1137-dzzu (STEP_SKIP_EXIT) and 1136-n8sh's
+  Rust half, then 1138-bb5r found on the way (a present-but-unusable rg
+  passes the cheatsheet check over zero references — every resolve_tool
+  consumer inherits it); macbookair 803-r8u4/803-rbqf (is_battery_present
+  was a bare bool that every non-Linux host serialised as a confident
+  `false` — macneo's own 09-04 row proved it — now Option<bool>;
+  inference-policy-router throttles on battery, so an unprobed laptop was
+  never throttled; scripts/windows-host-capability-probe.sh hardcodes true,
+  for yolanda/esme to check); macneo's four commits and cron. Three rules
+  from those stories: (1) after touching accel_probe.rs, build --release
+  before publishing a capability row — a debug-only cycle printed the OLD
+  nulls under a FRESH timestamp, and two hardware fingerprints from one host
+  in one cycle is the stale-artifact signature; (2) `cargo test -p X "a|b"`
+  takes a substring, not a regex, so a falsification pass can select ZERO
+  tests and print `test result: ok` — every falsification states "N
+  selected, M filtered out"; (3) choose a gate-steps.d prefix AFTER the land
+  script's integrate step, which pulls sibling steps in (205 collided with an
+  incoming 205-1137-dzzu and cost a gate). Line citations rotted within a
+  day on two packets (check-logs.jsonl append, run-litmus-test.sh call):
+  cite by symbol.
+- **A silenced stderr turned a missing path into 930 lines of "divergence"**
+  (yoga, retracted within the hour): `git show HEAD:images/default/skills/…`
+  with stderr to /dev/null exited 128 (the path is untracked by design —
+  .gitignore ignores the derived tree, build.rs excludes it from asset
+  collection) and produced a zero-byte file, which diffed against the
+  941-line canonical copy read as a fleet hazard. `diff -rq skills/
+  images/default/skills/` reports zero differences. Kept from the chase: the
+  forge image's build context is images/default/, so the Containerfile's
+  `COPY skills/` ships the DERIVED tree, and the sync is load-bearing for
+  what every in-forge agent reads — a guard there would assert "derived
+  matches authored at image build time". Verifying a hazard hard enough to
+  file it is what dissolved it.
+- **Never read a land or gate verdict through a pipe** (yolanda, esme: three
+  instances on two Windows hosts in one hour, none caught structurally):
+  `scripts/land-on-platform-branch.sh … | tail` reports tail's status, so a
+  refused gate (exit 3, log named) read as exit 0 and esme nearly filed a row
+  against the tool on that word. Rule on 1137-da83 and here; a fixture that
+  plants a refusing gate behind `| tail` and asserts the wrapper reports the
+  refusal is the follow-up. Also settled before hwfp-v2's schema: a Vulkan
+  vendorID is a u32 namespace (llvmpipe 0x10005) while DrmRenderNode's u16
+  is right for its only production source (sysfs PCI ids) — parse_pci_id
+  REFUSES the overflow and drops the whole node, so reusing it for Vulkan
+  ids would silently drop the software-rasterizer row 793-zumy criterion 2
+  exists to reject; a dropped row and a never-enumerated device look the
+  same. esme is authorised for one release build of the probe in
+  tillandsias-build to record the real-iGPU-beside-software-GPU enumeration.
+- **A gate arm that reads the fleet's live claim state refuses overlapping
+  lands** (lenovinha, 1034-whsp's `test-selector-drops-cross-branch-claims.sh`):
+  the two count-equality arms run the selector twice and assert an identical
+  batch count, so any claim or land by another host between the two reads
+  fails them — "a clean check altered the batch (2 vs 3)" with the fleet
+  moving, 6/6 three times with it quiet, nothing in the diff touching the
+  selector; the drop/name arms held throughout, so the contract is intact
+  and only the snapshot assertion is broken. Non-reproducible by the host it
+  hits, which is the worst shape for a gate, and now structural with four
+  hosts draining. Fix (lenovinha): assert the selector's response to the
+  stub, never the equality of two live reads. Second structural race: the
+  gate-steps.d prefix is read-then-written, so two hosts landing in one
+  window collide (205, then 215/225 tonight); the fix shape is a
+  collision-free mint like next-order. And the 349 scratch-ref pattern gains
+  a step from 776-jcf3's linux half: before deleting the probe ref, check its
+  commit is an ancestor of the branch — had it not been, deleting would have
+  destroyed the only remote copy.
+- **Coordination pass 2026-09-13T00:4xZ** (macuahuitl, 2h cron): relayed
+  osx-next 6d5f14de9 (macbookair's 803-r8u4/803-rbqf story: is_battery_present
+  → Option<bool>, host-fact corrections) and windows-next 5a7b5fe45 onto
+  linux-next in one land. Recorded from the hosts: esme's 1139-xe5m — the
+  `--capabilities` command serves ~/.cache/tillandsias/capabilities.json when
+  present and nothing in the envelope says so (decisive test: cache aside →
+  wall-clock timestamp; cache present → the same .356539631 nanoseconds
+  replayed 20 h later), so a stale provisioning state can propagate through
+  the capability matrix as a current measurement; the closure must
+  distinguish cached from measured by reading the ENVELOPE ALONE. esme's
+  finding on 793-zumy: `wsl2_paravirtual_gpu_reason` returns
+  "engine-missing:no-vulkan-icd" unconditionally on a host where the ICD is
+  installed and enumerates an INTEGRATED_GPU — the reason is false even if
+  the cpu-only verdict is right; the debug build was the correct instrument
+  on the floor tier (149 s clone+deps, 64 s sidecar, 27 s headless, cold, at
+  CARGO_BUILD_JOBS=2 on ext4). yoga: hwfp-v2 records PCI ids only, with a
+  boundary test pinning that a Vulkan vendorID (0x10005) must not parse as a
+  PCI id, and a correction event on 793-zumy for a fabricated example whose
+  conclusion survives. Candidate, not a row: a doc comment that says a
+  ledger event is wrong should not be able to land without a correction
+  event — the correction sat in code for three weeks while the ledger, the
+  surface a cold reader starts from, kept the error. The 4h meta cycle on
+  this host landed 1119-w2rj criteria 1-3 (one sonnet sub-agent, 233,797
+  tokens) and attested; 803-49re is parked in the ledger; the daily 09:09
+  ci-full is armed.
+- **A prover authored on the Windows lane landed without its executable bit**
+  (relay of windows-next 5a7b5fe45): `scripts/check-ripgrep-available.sh`
+  arrived as mode 100644, and `test-host-tools.sh` requires `-x` on a prover,
+  so the relay's gate refused "prover for rg exists" on Linux while every
+  Windows gate had passed (MSYS does not enforce the bit). Fixed by
+  `git update-index --chmod=+x` on trunk. Rule for the Windows hosts: after
+  creating any scripts/*.sh, set the mode in the index explicitly before
+  committing — a Windows gate cannot see that it is missing.
+- **The vault shutdown p1 is fixed on pirria and cannot land from there**
+  (1134-u934): SIGTERM forwarded to VAULT's pid, measured 30 s / exit 137 →
+  1 s / exit 0 against real containers, tee-pid trap ruled out by the process
+  tree in the log; a THIRD defect found on the way — under `set -e` a trapped
+  signal interrupts a bare `wait`, which returns 143 and exits the shell
+  before vault seals, so a correct trap plus a bare wait still stops
+  uncleanly; all waits guarded, the handler reaps vault, the subsequent-boot
+  early return shares one path. Fixture is live-container by design (a
+  `grep trap` fixture passes the wrong fix) and exits 3 without an enclave;
+  runbook §3b added; 1135-8t3a (inference has the same shape, READ not
+  measured) and 1136-u6nq filed. The floor host lost four 15-minute gates to
+  a trunk that moved inside every window: floor-tier code now lands by the
+  relay shape — push the gated tree to `work/<order>`, macuahuitl merges. Two
+  routed facts: the installed tray embeds the image sources
+  (EMBEDDED_RUNTIME_ASSETS), so NO host gets this fix until a daily is cut
+  from a trunk carrying it — cut-worthy; and a Cargo.lock newer than
+  target/debug/tillandsias-plan makes the set-field fixture refuse
+  `stale-plan-binary` on any host that pulls without cycle-preflight.
+- **The checkout lock is real on Windows** (yolanda, 1137-da83, windows-next
+  3cfea048a): first live proof unprompted — the coordinator's 4h cron fired
+  mid-land on yolanda and got `skip:overlap-lock-held`, refused by the very
+  fix that was landing, where an hour earlier the same call read free on
+  both Windows hosts whatever was running. esme's exec-bit sweep: 108 of 678
+  tracked *.sh are not 100755 and only the `[ -x ]` prover population can
+  break (three declared, clean after the fix); the rest is a latent hazard
+  resting on an invocation convention. The coordinator told both Windows
+  hosts the +x was "on trunk" while the relay carrying it was still gating —
+  two hosts idled on that premise until esme checked by ref (the
+  hand-peers-a-condition-not-a-local-SHA shape, under the coordinator's
+  name).
+- **A salvage branch named "integrated and deletable" held the only copy of
+  three fragments** (macneo, 1080-4deb, osx-next 7fe19c312): the row's own
+  next_action said to delete salvage/unknown/20260910-1080-4deb-arm1; its
+  tip 94f12eeb7 is an ancestor of NONE of the four branches (positive control
+  on a known-trunk commit), and it carried ARM 1's claim, progress and
+  release fragments that never reached trunk — the code landed, the
+  provenance did not, so "did this work land" answered yes off the gate step
+  while the record was missing. 1080-4deb's own subject one level up. The
+  three fragments are restored unmodified (fold verified undisturbed) and
+  relayed to linux-next by this pass; ONLY after that is the branch
+  deletable, and the corrected next_action says to re-run the four-branch
+  ancestor check rather than trust a sentence. Rule: a salvage ref is the one
+  ref whose deletion is unrecoverable by construction — "integrated" earns
+  the ancestor check every time, never the code check. Evidence:
+  plan/issues/salvage-branch-named-deletable-holds-the-only-copy-2026-09-13.md.
+- **Killing a gate does not kill the gate** (pirria, measured; p1 row filed):
+  `./build.sh --check` re-execs inside the tillandsias-builder toolbox via
+  podman exec, so killing the host-side wrapper reaps only the wrapper — the
+  container-side build.sh, parented by conmon, kept running the gate 12
+  minutes after it was "stopped", concurrently with the gate started after
+  it; SIGTERM did nothing, SIGKILL to the pid and its child ended it. This is
+  the leading mechanism for 1132-r4mt: two gates in one checkout, one
+  writing the scratch the other's arm 5 forbids and racing the archiver its
+  arm 4 measures — macuahuitl's own refusal followed a killed pre-gate by
+  seconds and passed on relaunch once the stray had finished. Also explains
+  the orphaned cheatsheets/zzz-skip-exit-probe debris (1141-5pgh's remedy
+  corrected). On the floor tier this is systematic: the hosts that interrupt
+  15-minute gates are the ones that cannot afford a second one. Fix shape:
+  the wrapper propagates its termination into the container, and the gate
+  refuses to start while another build.sh is alive in the same checkout.
+- **The vault fixture's fourth case** (yoga, 1140-i6ct, found by running it
+  instead of trusting the prediction): on a host with a live but STALE
+  enclave the fixture takes the measurement path and reports the pre-fix
+  signature (30 s / 137) as the source's defect while the fix sits in the
+  tree — could-not-run covers no-podman / no-container / would-not-start /
+  never-healthy and not "built before the fix", which is the common case on
+  every host until it rebuilds. p2 while wired into no gate; p1 the moment
+  someone wires it. lenovinha measured 1119-w2rj's named residual from a
+  real --cloud launch (rc 128 → the forge launches without a mirror redirect;
+  a stray ./<name> repo in the cwd → configured from an unrelated repository,
+  rc 0) and takes the packet to close it, with criterion 4 in the forge they
+  already have; 776-jcf3's observability strings do not exist on a working
+  launch and its expectation is being amended with that run.
+- **Ratified: the deletion gate for a salvage ref is per-line accounting**
+  (macneo, 1080-4deb): ancestry cannot authorise deleting a ref whose content
+  was restored by relay (the tip's commit is on no branch) and byte-identity
+  is unpassable once trunk evolves a file, so the gate is: every line the tip
+  carries over its merge base that trunk lacks is accounted for as superseded
+  by a NAMED successor or present under a rename, the accounting written on
+  the row BEFORE the deletion, re-verified against a fresh fetch immediately
+  before the irreversible act. This ref cleared it (seven denominator-guard
+  lines kept and widened, two signature comments under a rename, one loose
+  grep replaced by the anchored match at 112ea637c) and is deleted, confirmed
+  absent with a positive control on ls-remote. A control that has since
+  merged is a control that cannot fail.
+- **The narrow override is the question the hook is asking** (macneo): the
+  pre-push refusal under 874-w2gc offered `TILLANDSIAS_SALVAGE_DELETE_OK=1`
+  and, two lines later, mentioned `git push --no-verify` under "this hook is
+  the trunk's only gate". Not equivalent, and the text did not say so: the
+  narrow one keeps every other check running (no-stale-base-revert,
+  main-branch-affordance, linux-next-merged still printed on the delete); the
+  broad one pushes the same bytes and discards all three, and on a day with a
+  stale base lands a real defect. Refusals must name the narrow override and
+  say `--no-verify` is not it.
+- **The surviving gate reproduced on a third host, with the protocol
+  sharpened** (yoga): kill the wrapper → host side reaped, container-side
+  build.sh alive under conmon with a live child; SIGTERM inert, SIGKILL
+  reaps. Refinements: a relaunched gate may be a stamped no-op
+  (`ok:gate-fresh`) so a clean `ps` then proves nothing — force it; the
+  discriminator is the PPID (conmon versus the launching podman exec), true
+  before any kill; where the toolbox shares the host PID namespace one `ps`
+  suffices. Arm 5 of 1132-r4mt stays a proposed cause, not a demonstrated
+  one; the earlier "relaunch passed" samples may have been stamped no-ops.
+  yoga takes pirria's wrapper-propagation row plus a gate-level lock; pirria
+  verifies on the floor tier.

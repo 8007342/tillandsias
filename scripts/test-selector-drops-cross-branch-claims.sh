@@ -84,13 +84,59 @@ else
 fi
 
 # ── 1. NOTHING HELD: the batch is untouched ───────────────────────────────
+#
+# ASSERTED FROM THIS RUN'S OWN OUTPUT, never by comparing two live reads
+# (1140-5bre). This arm used to require `n = n_base`, and n_base comes from a
+# SEPARATE invocation of the selector. The stub removes the cross-branch
+# checker's live dependency but not the LEDGER's: every claim, closure and land
+# by any host changes the ready set, so with four hosts draining, the two reads
+# straddle other people's writes and the counts differ for reasons that have
+# nothing to do with the subject. Measured: "a clean check altered the batch
+# (2 vs 3)" refused a real land while a sibling host was mid-land, and the same
+# fixture went 6/6 three times in a row minutes later with the fleet quiet.
+#
+# That is 1083-gzqj's shape — a number nobody chose, asserted as a threshold —
+# and the header above already predicted it for the cross-branch checker. The
+# subject here is WHAT THE SELECTOR DOES WITH THE STUB'S ANSWER, and that is
+# fully observable in one run: a clean answer must drop nothing and say nothing.
+#
+# "DROPS NOTHING" IS READ OFF THE ABSENCE OF A DROP NOTE, and that is sound only
+# because ARM 2 PINS THAT EVERY DROP IS NAMED. The three arms compose: weaken
+# arm 2 and arms 1 and 3 quietly stop meaning what they say. Anyone editing arm
+# 2 is editing the evidence these two rest on.
+#
+# THE PATTERN IS THE DROP SENTENCE, NOT THE `cross-branch:` PREFIX. That prefix
+# also carries the could-not-fold NOTICE ("says NOTHING about who holds these
+# packets"), which arm 3 requires to be present — so keying on the bare prefix
+# makes arms 1 and 3 contradict each other, and arm 3 fails on a correct
+# selector. Measured while writing this. $_DROP is the drop sentence arm 2 pins,
+# defined once so the two readings cannot drift apart.
+_DROP='^cross-branch: .* is claimed on a sibling branch'
+
 _stub clean
 out="$(_run)"
 n="$(printf '%s\n' "$out" | grep -c '^packet' || true)"
-if [ "$n" = "$n_base" ] && ! printf '%s' "$out" | grep -q '^cross-branch:'; then
-    ok "a clean sibling check leaves the batch unchanged and says nothing"
+if [ "${n:-0}" -ge 1 ] && ! printf '%s' "$out" | grep -qE "$_DROP"; then
+    ok "a clean sibling check leaves the batch alone and says nothing"
+elif [ "${n:-0}" -lt 1 ]; then
+    bad "a clean check emptied the batch — it said: $(printf '%s\n' "$out" | grep -m1 -E '^(refused|blocked|cross-branch):' || printf '(nothing typed)')"
 else
-    bad "a clean check altered the batch ($n vs $n_base) or printed a note"
+    bad "a clean check dropped a packet: $(printf '%s\n' "$out" | grep -m1 -E "$_DROP")"
+fi
+
+# ── 1b. NEGATIVE CONTROL for arm 1, and the reason it is not vacuous. The
+#       predicate above is "a batch survives AND no drop note". Run it against
+#       the HELD stub, where a drop genuinely happened: it must NOT hold. Without
+#       this, arm 1 would pass on a selector that had stopped checking anything
+#       at all, which is precisely the failure the count comparison was there to
+#       catch before it was removed for being unstable.
+_stub held
+ctl="$(_run)"
+ctl_n="$(printf '%s\n' "$ctl" | grep -c '^packet' || true)"
+if [ "${ctl_n:-0}" -ge 1 ] && ! printf '%s' "$ctl" | grep -qE "$_DROP"; then
+    bad "arm 1's predicate ALSO holds when packets were really dropped — it discriminates nothing"
+else
+    ok "CONTROL: arm 1's predicate fails when a drop really happened — it has teeth"
 fi
 
 # ── 2. HELD: every offered packet is dropped, and NAMED ───────────────────
@@ -109,13 +155,19 @@ else
 fi
 
 # ── 3. COULD-NOT-FOLD: fail open, loudly ──────────────────────────────────
+#
+# SAME CHANGE AS ARM 1 (1140-5bre): fail-open is asserted from this run — a
+# batch survives and nothing was dropped — not by matching a count taken from a
+# second live read. The property that keeps the fleet running is "a blip does
+# not stop the host", and an emptied batch is what stopping looks like; that is
+# directly observable here.
 _stub blind
 out="$(_run)"
 n="$(printf '%s\n' "$out" | grep -c '^packet' || true)"
-if [ "$n" = "$n_base" ]; then
+if [ "${n:-0}" -ge 1 ] && ! printf '%s' "$out" | grep -qE "$_DROP"; then
     ok "a checker that cannot look leaves the batch alone"
 else
-    bad "an unanswerable check changed the batch ($n vs $n_base) — a blip would stop the host"
+    bad "an unanswerable check emptied the batch or dropped from it — a blip would stop the host (packets=$n)"
 fi
 if printf '%s' "$out" | grep -q 'says NOTHING about who holds'; then
     ok "and it says the check could not run, rather than implying nothing is held"

@@ -1,0 +1,92 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-vault-sigterm-fixture-measures-the-installed-image-and-reports-a-source-defect-when-the-image-is-merely-old
+    order: 1140-i6ct
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    owner_host: any
+    depends_on: []
+    capability_tags: [testing, podman, vault, fail-loud]
+    estimated_hours: 2
+    unscoreable: unpinnable-until-the-guard-exists
+    verifiable_closure: |
+      On a host whose vault image predates the 1134-u934 fix, the fixture says
+      SO — it names the image vintage as the reason — instead of printing
+      "vault's shutdown path is the 1134-u934 defect".
+    owned_files:
+      - scripts/test-vault-shutdown-forwards-sigterm.sh
+    title: |
+      scripts/test-vault-shutdown-forwards-sigterm.sh asserts against the RUNNING container, so on any host whose enclave predates the fix it reports the fix as absent — which after 1134-u934 landed is every installed host until it rebuilds
+    context: |
+      MEASURED ON YOGA 2026-09-13, minutes after merging work/1134-u934 and
+      BEFORE any rebuild, with the fix present in the source tree:
+
+        bash scripts/test-vault-shutdown-forwards-sigterm.sh
+        measured: elapsed=30s exit_code=137 oom_killed=false grace=30s
+        bad: stop took 30s of a 30s grace — SIGTERM is not reaching vault (1134-u934)
+        bad: ExitCode 137 — the container was SIGKILLed at the end of the grace (1134-u934)
+        FAIL: vault's shutdown path is the 1134-u934 defect
+        rc=1
+
+      The verdict is FALSE ABOUT THE SOURCE and TRUE ABOUT THE HOST. yoga's
+      vault image was built 2026-09-11T19:09 local, 23 hours before the fix
+      existed, and the running container is that image. The entrypoint on disk
+      already carries the trap. The fixture measured what is INSTALLED and
+      reported it as a statement about what is COMMITTED.
+
+      WHY THIS IS NOT COSMETIC. The relay describing this fix said the fixture
+      "routes to exit 3 could-not-run elsewhere". It does not, and the
+      difference matters: could-not-run is reachable only for no-podman,
+      no-container, container-would-not-start, and never-became-healthy
+      (:44-:67). A host with a live but STALE enclave takes none of those — it
+      takes the measurement path and returns 1. So the honest trichotomy
+      (passes / cannot run / is broken) is missing its fourth case, and the
+      fourth case is the COMMON one immediately after this fix lands: the same
+      relay notes the tray embeds the image sources, so no installed host gets
+      the fix until the next daily is cut. Between now and then, every host
+      that runs this fixture by hand is told its source is broken when its
+      image is merely old.
+
+      THE CLASS, which is why it is worth a row rather than a comment: this is
+      host-dependent red before code defect. A fixture that measures a
+      deployed artifact while living in the repo that defines it will disagree
+      with its own tree for the whole interval between a fix landing and that
+      host rebuilding, and the disagreement is indistinguishable from the
+      defect it was written to catch. 965-sxec's rule applies unchanged — a
+      check that could not evaluate the thing it names must not report a
+      verdict about it.
+
+      NOT GATE-WIRED, and that is the only reason this is p2 rather than p1:
+      no build.sh step, no gate-steps.d entry, no local-ci check references it
+      (searched all three). It reds a human running it by hand, not the fleet's
+      landings. If anyone wires it into a gate before this row is fixed, it
+      reds every host whose image is behind trunk and the priority changes.
+    exit_criteria:
+      - "On a host with a live enclave whose image predates the fix, the fixture reports the VINTAGE as the reason and does not claim the 1134-u934 defect is present. Pre-fix result: FAILS, measured on yoga 2026-09-13 (rc=1, the transcript above) with the fix in the source tree."
+      - "The image-vintage check is evidence, not inference: compare something the IMAGE carries against something the TREE carries (image build timestamp vs the commit that last touched images/vault/entrypoint.sh, or a label baked at build time). Deciding from the host's git HEAD alone would pass on a host that never rebuilt, which is the exact case this row is about."
+      - "The four outcomes stay DISTINGUISHABLE in the exit code, not only in the prose: passes, could-not-run (no podman/container), stale-image, and genuinely-defective must not share an exit code. A stale image collapsing into either 0 or 1 recreates the defect in the other direction."
+      - "NEGATIVE CONTROL: on a host whose image DOES carry the fix, the fixture still detects a real regression — reverting the trap in the image must still produce the FAIL verdict. A vintage check that short-circuits the measurement would make the fixture unable to fail at all, which is worse than the defect it fixes."
+    events:
+      - type: filed
+        ts: "2026-09-13T00:15:00Z"
+        agent_id: "linux-yoga-opus5-20260913t001500z"
+        host: yoga
+        summary: |
+          Filed by yoga while landing the 1134-u934 relay for pirria. Found by
+          running the fixture as a pre-land sanity check, expecting the exit 3
+          the relay predicted, and getting a FAIL instead.
+
+          The fix itself is sound and was landed unchanged — pirria's two
+          hand-measurements (RED 30s/137 pre-fix, GREEN 1s/0 post-fix on a live
+          enclave) are the evidence for it, and this row does not question
+          them. This is about the fixture's verdict on a THIRD host, where the
+          source and the running image disagree.
+
+          Recorded against my own strong prior, which is the reason I checked
+          rather than assumed: a red here and a green on a peer is the shape
+          where the fixture's un-stubbed dependency is the suspect, not the
+          code. That prior was right this time.

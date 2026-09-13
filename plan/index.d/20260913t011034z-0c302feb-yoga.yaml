@@ -1,0 +1,81 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-archiver-ruby-fixture-refuses-inside-the-gate-and-passes-standalone-on-the-same-tree-on-two-hosts-with-opposite-ruby-layouts
+    event:
+      type: investigated
+      ts: "2026-09-13T01:10:34Z"
+      agent_id: linux-yoga-opus5-20260913t011034z
+      host: yoga
+      summary: |
+        CRITERION 2 ANSWERED — the mechanism REPRODUCED DELIBERATELY on yoga, the host
+        that filed this row, independently of pirria's and macuahuitl's observations.
+        Not a sighting this time: an experiment that starts a gate, kills the wrapper,
+        and watches what survives.
+
+        THE TREE, while a real gate was mid-run:
+          3171292  ppid 1200     toolbox run --container tillandsias-builder ...
+          3171549  ppid 3171292  podman ... exec ...
+          3171571  ppid 3171568  bash .../build.sh --check      <- NOT a child of podman exec
+          3185549  ppid 3171571  bash .../build.sh --check
+        3171568 is conmon. The container-side gate is already parented away from the
+        host-side wrapper BEFORE anything is killed — that is the whole defect, visible
+        in one ps.
+
+        THE KILL, SIGTERM to the wrapper chain, which is what Ctrl-C and a task stop
+        send:
+          host-side 3171290 + 3171292  -> reaped
+          container-side 3171571       -> ALIVE, ppid still 3171568, still working
+                                          (live child 3185549 and a tee writing
+                                          target/test-transcript-work...)
+        So the gate kept running in the same checkout with its launcher gone. Then, as
+        reported: SIGTERM to the stray itself did NOTHING (still listed 8s later);
+        SIGKILL to the pid and its child reaped it.
+
+        THREE REFINEMENTS TO THE PROPOSED PROTOCOL, each of which would otherwise cost
+        somebody a false answer.
+
+        1. THE FRESHNESS STAMP WILL FAKE A CLEAN RESULT, and this is the important one.
+           My first attempt exited in seconds with "ok:gate-fresh (stamped ...;
+           TILLANDSIAS_FORCE_CHECK=1 to re-run)" and NO gate ran at all. A ps taken
+           then shows no stray — a true observation about a gate that never started,
+           read as evidence about gates. Anyone reproducing this MUST pass
+           TILLANDSIAS_FORCE_CHECK=1 or they will record a clean negative from a
+           no-op. I nearly filed exactly that.
+
+        2. ONE ps SUFFICES ON THIS HOST, not two. The suggested check was "inside and
+           outside the toolbox". On yoga the toolbox SHARES THE HOST PID NAMESPACE —
+           `ps` inside it reports pid 1 as the host's systemd and 436 processes — so
+           both listings are the same listing. The stray is fully visible host-side.
+           Worth confirming per host rather than assuming; where it holds, the protocol
+           is half the work.
+
+        3. THE SIGNATURE IS ppid, NOT PRESENCE. A gate legitimately running has a
+           build.sh too. What distinguishes a stray is that its ppid is conmon rather
+           than the podman exec that launched it, which is true even while the launcher
+           still lives. So the recorded field should be ppid and the conmon pid, not
+           "a build.sh exists".
+
+        WHAT THIS RUN DOES NOT SHOW, stated because the absence is tempting to read.
+        The worktree was CLEAN afterwards — no plan_tmp, no plan_tmp_bak, no
+        archive-plan-packets-check.rb. That is NOT evidence about arm 5. I killed the
+        gate during the cargo-test phase, so it never reached the archiver; a kill
+        landing in the archiver phase is the case arm 5 describes and this experiment
+        did not produce it. Arms 4 and 5 still stand as separate subjects, now with a
+        shared CAUSE proposed rather than demonstrated: one stray explains both, but
+        only arm 4's race has been exhibited.
+
+        STANDING INSTRUCTION FOR THIS HOST from here on: on any gate refusal, record
+        `ps -eo pid,ppid,etime,cmd | grep -E 'build.sh --check|archive-plan-packets'`
+        WITH ppids before relaunching, and on passes too — the discriminating claim is
+        "a surviving gate on every refusal and none on every pass", which needs the
+        negative samples as much as the positive ones. Two clean in-situ passes are
+        already on this row from earlier tonight, taken before this mechanism was
+        known, and no ps was captured for them; they cannot serve as negatives.

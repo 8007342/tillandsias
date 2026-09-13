@@ -1,0 +1,104 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# A CORRECTION fragment (plan/index.d/README.md "Repairing a fragment"), plus
+# the row the correction itself turned up.
+packets:
+  # ── Correction to 20260912t231500z-...-pirria.yaml ────────────────────────
+  # Supplied here rather than edited in place; check-scorable-obligation-added
+  # asks whether the packet carries an obligation AS FOLDED (1071-adhj).
+  #
+  # NOTE THE ABSENT `order:` KEY, which the README's own example carries — see
+  # 1136-u6nq below. Omitted deliberately; with it, this file is refused.
+  - packet_id: the-inference-entrypoint-waits-on-ollama-with-no-trap-so-it-is-the-same-pid-1-shell-that-never-forwards-sigterm
+    unscoreable: |
+      unpinnable-until-the-guard-exists. The closure that row carries is
+      RUNNABLE — `TILLANDSIAS_VAULT_CONTAINER=tillandsias-inference bash
+      scripts/test-vault-shutdown-forwards-sigterm.sh` — but it is a script,
+      not a `litmus:<test>` any spec binds, so it is not scorable in the sense
+      977-448j means, and naming a litmus that does not exist would be the
+      dishonest form that order refuses.
+
+      WHAT WOULD MAKE IT SCORABLE, and this is the standing debt 1134-u934
+      exposed rather than created: NO litmus binds any enclave image's
+      SHUTDOWN path today. The whole class is unpinned, which is how a p1 sat
+      in a shipped image unseen while §1/§2/§3 of the release smoke all passed.
+      One litmus that stops each running container and asserts elapsed-under-
+      grace AND exit 0 would pin this row, 1134-u934 and every sibling at once;
+      the fixture is already written and takes its container from the
+      environment so that litmus has something to call.
+
+  # ── The row the correction turned up ─────────────────────────────────────
+  - packet_id: the-fragment-readmes-own-correction-example-carries-an-order-key-and-the-plan-orders-gate-then-refuses-the-packet-as-a-duplicate-of-itself
+    order: 1136-u6nq
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [plan, ledger, gates, docs]
+    estimated_hours: 1
+    unscoreable: |
+      unpinnable-until-the-guard-exists. The check is runnable today —
+      `cargo run -p tillandsias-policy -- plan-orders`, red then green around
+      the change — but no litmus binds it, and the negative control that
+      matters (a correction fragment in the README's documented shape must be
+      ACCEPTED) has no home until one exists. Whoever fixes this writes that
+      control; asserting the current behaviour would pin the defect.
+    owned_files:
+      - plan/index.d/README.md
+    title: |
+      MEASURED on pirria: a correction fragment written in the shape plan/index.d/README.md documents — packet_id + order + the corrected field — makes `plan-orders` report `duplicate-order` for that packet against ITSELF, and ./build.sh --check refuses; the two declarations fold to one packet but the gate counts them separately
+    context: |
+      FOUND by pirria 2026-09-12 while closing 1134-u934, by following the
+      README instead of improvising — which is the only reason it surfaced.
+
+      MEASURED. plan/index.d/README.md, "Repairing a fragment: write a
+      correction, never edit it", gives this example verbatim:
+
+          packets:
+            - packet_id: the-packet-being-repaired   # same id; that is what folds them
+              order: 1071-adhj
+              unscoreable: |
+                The field that was missing, supplied here rather than added in place.
+
+      A correction written in exactly that shape produced:
+
+          duplicate-order:1135-8t3a: <packet-id>(ready), <packet-id>(<missing status>)
+          plan-orders: 1 duplicate order group(s) contain open packets —
+            renumber the open packet(s) with a renumber event
+          [build] plan/index.yaml has open duplicate order tokens
+
+      Note WHAT IT IS COMPLAINING ABOUT: the same packet_id, twice, one from
+      the declaration and one from the correction. The fold is correct — they
+      are one packet — so the gate is counting DECLARATIONS where the rest of
+      the system counts PACKETS. The suggested remedy ("renumber the open
+      packet(s)") is actively wrong here: renumbering would make the correction
+      address a different packet and silently stop correcting anything.
+
+      WORKED AROUND, not fixed, in the fragment above: omitting `order:`
+      passes. That is a fine correction fragment, but it is not what the README
+      says to write, and the next agent following the README hits the same
+      refusal and has no way to know that omitting a documented key is the way
+      through. Two rules contradict each other, which is the shape the README's
+      own "If a gate tells you to edit in place, the gate is wrong" section
+      already names for check-scorable-obligation-added (1071-adhj) — this is a
+      second instance of it in the same directory.
+
+      WHY p3. It costs one confused agent per encounter and has a one-key
+      workaround; nothing is lost or mis-folded. It is filed because the cost
+      lands on exactly the agent who chose to follow the documentation.
+
+      NOT ESTABLISHED: which side should change. Either plan-orders folds by
+      packet_id before counting, or the README stops showing `order:` in the
+      correction example. Reading the fold, the gate looks like the one that is
+      wrong — but this row does not decide it, because plan-orders may be
+      counting declarations on purpose for a reason not read here.
+    next_action: |
+      1. Reproduce: write a two-line correction fragment carrying packet_id +
+         order for any existing packet and run
+         `cargo run -p tillandsias-policy -- plan-orders`.
+      2. Read why plan-orders counts declarations rather than folded packets
+         before changing it — a duplicate order across DIFFERENT packet_ids is
+         a real defect this gate exists to catch and must keep catching.
+      3. Whichever side changes, the negative control goes in with it: a
+         README-shaped correction fragment must be ACCEPTED, and two different
+         packets sharing an order must still be REFUSED.

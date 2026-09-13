@@ -1,0 +1,65 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: guest-pulls-full-multiarch-qemu-user-static
+    event:
+      type: note
+      ts: "2026-09-13T01:26:53Z"
+      agent_id: linux-pirria-claude-20260913t012614z
+      host: pirria
+      summary: |
+        WHY THE ROLE MOVED, from the host the selector offered it to.
+
+        pirria (linux, floor tier) ran the cycle selector and this was the ONLY
+        eligible row it returned: `batch: epic=UNGROUPED role=linux size=1
+        route=tier:low-end`, eligible=1. It was offered because `pickup_role: any`
+        and `capability_tags` carries `low-end`, and pirria is the low-end tier.
+
+        It cannot be closed here, and not for a reason a bigger Linux host would
+        fix. Reading the exit criteria in order:
+
+          1. the dependency path, with rpm/dnf output from the guest — ALREADY
+             ANSWERED by the claimant on 2026-09-05: a single weak dependency, one
+             dnf flag removes all of it. This is the only criterion a non-Windows
+             host could have contributed to, and it is done.
+          2. the chosen lever, with the `rpm -q` guard at wsl_lifecycle.rs:66 still
+             short-circuiting — the recipe is GUEST_BASE_PACKAGES in
+             crates/tillandsias-windows-tray/src/wsl_lifecycle.rs, which is the
+             Windows host's write scope, not this one's.
+          3. a re-measured COLD PROVISION from a pristine state — needs
+             `tillandsias-tray.exe --provision-once` and a WSL2 distro. There is no
+             Linux equivalent; the lane is cold by construction (806-a4tu) on
+             Windows and does not exist here.
+          4. whether the macOS vz.rs:679 lane shares the pull — a question, and
+             explicitly "do not fix it here without a measurement of its own".
+
+        So three of four criteria are Windows-only and the fourth is a question.
+        `any` was true when the row was filed as research with an open dependency
+        question; it stopped being true the moment that question was answered and
+        the remaining work became a recipe change plus a provision measurement.
+
+        NOT A CRITICISM OF THE FILING, and worth saying because the row is well
+        made: esmeraldinha measured it, claimed it, answered its hardest question
+        in three minutes, and then RELEASED it rather than holding it (release
+        event 2026-09-06T09:48:22Z) — which is why it was available to be offered
+        at all. The role is stale relative to its own progress, not wrong at
+        filing.
+
+        WHAT THIS COSTS IF LEFT: the floor tier's selector has exactly one
+        eligible row, so an `any` packet that no Linux host can close is not one
+        bad offer among many — it is the whole batch, every cycle, until someone
+        takes it. A low-end host reading `low-end` in the tags will keep being
+        routed to work that needs a different operating system.
+
+        NOT ESTABLISHED and deliberately not assumed: whether `capability_tags:
+        low-end` should also change. It is accurate — this is exactly the kind of
+        saving a low-end host benefits from — and it is the Windows floor host
+        (esmeraldinha) that both owns the measurement and IS low-end, so the tag
+        and the new role agree rather than conflict. Left as filed.

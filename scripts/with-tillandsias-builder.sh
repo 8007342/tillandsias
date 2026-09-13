@@ -389,6 +389,63 @@ PWD_QUOTED="$(printf '%q' "$(pwd)")"
 # kept in step by hand; sharing removes the possibility rather than detecting
 # the drift.
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-env-forward.sh"
+
+# ── ORDER 1141-vf9w: TERMINATION MUST CROSS THIS BOUNDARY TOO ──────────────
+#
+# This file used to `exec toolbox run ...`, which replaces the wrapper — so
+# there was no host-side process left to signal, and `toolbox run` is only a
+# thin client of `podman exec`. The container-side build.sh is parented by
+# CONMON, not by the client, so killing the host side reaps the client and
+# leaves the gate RUNNING in the same checkout.
+#
+# MEASURED ON YOGA 2026-09-13, a real gate mid-run:
+#     3171292 ppid 1200     toolbox run --container tillandsias-builder
+#     3171549 ppid 3171292  podman ... exec ...
+#     3171571 ppid 3171568  bash .../build.sh --check   <- conmon, NOT the client
+#     3185549 ppid 3171571  bash .../build.sh --check
+# SIGTERM to 3171290+3171292 reaped the host side; 3171571 stayed ALIVE with a
+# live child still writing a test transcript. SIGTERM to the STRAY did nothing
+# 8s later; SIGKILL to it and its child reaped it. pirria saw one still running
+# 12 minutes after its launcher was "stopped", with
+# test-archiver-ruby-could-not-run.sh as its live child, concurrent with a
+# second gate — which is how a gate refuses on this host and passes on the
+# relaunch with nothing changed (1132-r4mt arm 4's race). The same defect is
+# the env-forwarding lesson one axis over: that boundary did not carry FLAGS
+# inward, this one did not carry TERMINATION inward.
+#
+# A MARKER, NOT A PID WALK. The far side is reachable here only because a
+# toolbox shares the host PID namespace (verified on yoga: `ps` inside reports
+# pid 1 as the host's systemd). Even so, matching on a COMMAND LINE would kill
+# a legitimate concurrent gate, since a stray and a healthy gate run the same
+# argv. Every process of THIS dispatch carries a unique token in its
+# environment instead, forwarded by the TILLANDSIAS_ namespace above, so the
+# kill set is exactly this dispatch's tree and can never be another's.
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-dispatch-reap.sh"
+TILLANDSIAS_WRAPPER_TOKEN="$(tillandsias_dispatch_token)"
+export TILLANDSIAS_WRAPPER_TOKEN
+
+# The reap itself lives in lib-dispatch-reap.sh, NOT here: scripts/
+# with-wsl2-builder.sh dispatches the same way and has the same defect, and
+# 891-5shq's fourth criterion is that a second boundary must not be able to
+# reimplement a fix this one already made.
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-dispatch-reap.sh"
+
+# Run the dispatch as a CHILD and wait, so a signal has something to arrive at.
+# `wait` interrupted by a trap returns 128+signo, and this file runs under the
+# caller's `set -e`, so the wait is guarded with `|| rc=$?` — a bare one would
+# exit the shell the instant the trap fired, BEFORE the reap had run, which is
+# a wrapper that forwards correctly and still orphans the gate.
+_tb_dispatch() {
+    local rc=0
+    toolbox run --container "$TOOLBOX_NAME" bash -l -c "$1" &
+    _TB_CHILD=$!
+    trap 'tillandsias_reap_marked "$TILLANDSIAS_WRAPPER_TOKEN"; exit 143' TERM INT HUP
+    wait "$_TB_CHILD" || rc=$?
+    trap - TERM INT HUP
+    # An exit nobody asked for still propagates verbatim.
+    exit "$rc"
+}
+
 ENV_FORWARD="$(tillandsias_env_forward_prefix)"
 
 echo "[tillandsias-builder] Re-execing inside '$TOOLBOX_NAME' toolbox..."
@@ -402,8 +459,7 @@ if [[ "$_TB_DIRECT" == 1 ]]; then
         echo "usage: $SELF <command> [args...]" >&2
         exit 2
     fi
-    exec toolbox run --container "$TOOLBOX_NAME" \
-        bash -l -c "${ENV_FORWARD}export TILLANDSIAS_SKIP_TOOLBOX=1 ; cd $PWD_QUOTED && exec $ARGS_QUOTED"
+    _tb_dispatch "${ENV_FORWARD}export TILLANDSIAS_SKIP_TOOLBOX=1 ; cd $PWD_QUOTED && exec $ARGS_QUOTED"
 fi
 
 # Sourced from a build script: when `source`d, $0 and $@ are the calling
@@ -412,5 +468,4 @@ SCRIPT="$0"
 if [[ "$SCRIPT" != /* ]]; then
     SCRIPT="$(pwd)/$SCRIPT"
 fi
-exec toolbox run --container "$TOOLBOX_NAME" \
-    bash -l -c "${ENV_FORWARD}export TILLANDSIAS_SKIP_TOOLBOX=1 ; cd $PWD_QUOTED && exec bash $(printf '%q' "$SCRIPT") $ARGS_QUOTED"
+_tb_dispatch "${ENV_FORWARD}export TILLANDSIAS_SKIP_TOOLBOX=1 ; cd $PWD_QUOTED && exec bash $(printf '%q' "$SCRIPT") $ARGS_QUOTED"

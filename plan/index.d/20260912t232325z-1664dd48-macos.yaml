@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: accel-envelope-bare-cpu-only-verdict-and-macos-arm-gaps
+    event:
+      type: evidence
+      ts: "2026-09-12T23:23:25Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260912t232313z
+      host: macos
+      summary: |
+        IMPLEMENTED on macbookair (Apple M5, macOS 25.6.0). All three deliverables, in crates/tillandsias-headless/src/accel_probe.rs. Cite by symbol.
+
+        1. present-unusable now NAMES its obstruction. The macOS Metal DeviceRecord in `enumerate_gpus` dropped the `container` lane silently: unusable_reason was None, so a consumer saw a device that simply was not offered there with no way to learn why. It now carries `metal-not-reachable-from-linux-aarch64-guest`. The AMD arm set the precedent — `container-lane-unverified` sits beside `usable: true` — so this field carries the reason for a LANE restriction, not only for usable:false. The obstruction here is structural rather than unverified, and the string says so: the container on a macOS host runs inside the linux-aarch64 VZ guest, and there is no passthrough flag that would change the answer.
+
+        MEASURED CONSEQUENCE, and it is sharper than the packet anticipated. Before this change the envelope read `accel_gpu=present-unusable accel_reason=npu-not-enumerable-on-this-platform` — a present-unusable GPU explained by an NPU message, because the GPU carried no reason and the field fell through to the next device. The pairing was not merely incomplete, it was misleading. After: `accel_gpu=present-unusable accel_reason=metal-not-reachable-from-linux-aarch64-guest`.
+
+        2. system_ram_gb on the macOS arm — shared with 803-r8u4 via the new `macos_system_ram_gb()`; the Metal record carries it because unified memory makes physical RAM the GPU's budget. accel_mem_budget_gb moved from `-` to 16.
+
+        3. THE TAUTOLOGICAL TEST, which is the finding worth keeping. `test_macos_metal_lane_isolation` built its OWN DeviceRecord literal and asserted on that literal:
+              let metal_device = DeviceRecord { ... lanes: vec!["host-native"] ... };
+              assert!(!metal_device.lanes.contains(&"container".to_string()));
+        `enumerate_gpus` was never called. The test inspected a value it had just written, so if the production arm started advertising `container` tomorrow the test would stay green. A guard assembled only from what its author already believed inherits every omission in that belief; the fix is not a stronger assertion but a different SUBJECT — the probe's output instead of the test's input.
+
+        Rewritten in two halves because the subject is observable on one platform only. `test_macos_metal_lane_isolation` (cfg macos) now calls enumerate_gpus() and asserts on the enumerated Apple record: lanes exclude container, include host-native, unusable_reason is_some, memory_model == unified, system_ram_gb > 0. `the_macos_arm_cannot_advertise_the_container_lane` pins the same clauses by SOURCE on every platform — the fleet lands through Linux hosts, and a macOS-only test is no guard at all on the branch where most commits arrive. Same technique and same reason as 1090-8nh4's source assertion on detect_inference_tier. It ANCHORS FIRST on the PROBE-7 marker and fails loudly if the marker moved, because a scan that silently finds nothing is a guard that never fires and looks exactly like one that passes.
+
+        FALSIFICATION, four mutations, each red on BOTH halves and green again on restore, 1 test selected per run (506 filtered):
+          - macOS arm lanes += "container" -> runtime: 'PROBE-7: Metal must not be offered on the container lane: ["host-native", "container"]'; source: 'the macOS GPU arm names the container lane'
+          - memory_model -> None       -> both red
+          - unusable_reason -> None    -> both red
+        The runtime failure printing the ENUMERATED lanes is itself the proof the test now reads the production arm rather than a literal.
+
+        METHOD NOTE for the next host. The first falsification run reported PASS for two mutations that had in fact tested nothing: `cargo test -p X "a|b"` takes a SUBSTRING, not a regex, so it selected 0 tests and printed `test result: ok`. A mutation that never got tested is indistinguishable from a guard that never fires. Every count above is stated as 'N selected, 506 filtered out' for exactly that reason.
+
+        cargo test -p tillandsias-headless: 507 passed, 0 failed, 1 ignored. clippy --all-targets: 0 warnings. cargo fmt --check: clean.
