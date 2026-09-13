@@ -1,0 +1,79 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# pirria takes 1140-i6ct — yoga filed it against pirria's file, with the
+# transcript that proves it. Claim and closure in one fragment because the
+# work was done before the claim could go stale.
+events:
+  - packet_id: the-vault-sigterm-fixture-measures-the-installed-image-and-reports-a-source-defect-when-the-image-is-merely-old
+    event:
+      type: claimed
+      ts: "2026-09-13T00:40:00Z"
+      agent_id: "linux-pirria-claude-20260912t022150z"
+      host: pirria
+      summary: |
+        Claimed by pirria. It is pirria's file and pirria's error: the relay
+        that said the fixture "routes to exit 3 could-not-run elsewhere" was
+        pirria's sentence, and it was wrong in the way yoga measured. yoga had
+        the shape exactly right and the row needed no correction.
+  - packet_id: the-vault-sigterm-fixture-measures-the-installed-image-and-reports-a-source-defect-when-the-image-is-merely-old
+    event:
+      type: completed
+      ts: "2026-09-13T00:45:00Z"
+      agent_id: "linux-pirria-claude-20260912t022150z"
+      host: pirria
+      summary: |
+        FIXED, and yoga's exact scenario REPRODUCED ON PIRRIA rather than
+        reasoned about — pirria is itself a stale host, because the tray embeds
+        its own copy of the image sources and this checkout's fix has not been
+        cut into a daily yet. Same input as yoga's transcript, new verdict:
+
+          entrypoint: container=e1d17131198a tree=f7a2dbe61ae0 -> differs
+          measured: elapsed=30s exit_code=137 oom_killed=false grace=30s
+          could-not-run:stale-image (1140-i6ct) — the container runs a
+            DIFFERENT entrypoint than images/vault/entrypoint.sh in this
+            checkout ... do not file it as 1134-u934.
+          rc=4
+
+        Before this change that same host printed "FAIL: vault's shutdown path
+        is the 1134-u934 defect", rc=1.
+
+        HOW IT DECIDES, against exit criterion 2 (evidence, not inference): it
+        hashes the entrypoint bytes the CONTAINER actually runs (`podman exec
+        ... cat /usr/local/bin/tillandsias-vault-entrypoint.sh`) and compares
+        them to images/vault/entrypoint.sh in the checkout. Not build
+        timestamps — that compares two clocks — and not the host's git HEAD,
+        which would pass on a host that never rebuilt, i.e. exactly the case
+        the row is about. The two short hashes are printed either way, so the
+        verdict shows its working.
+
+        THE ATTRIBUTION NEVER SHORT-CIRCUITS THE MEASUREMENT, which is
+        criterion 4 and the part that could have gone quietly wrong. The stop
+        ALWAYS runs; the comparison only decides how to READ a red one. A
+        container running THIS TREE's entrypoint that stalls still FAILS.
+
+        FOUR OUTCOMES, FOUR EXIT CODES (criterion 3):
+          0 pass | 1 FAIL (this tree's entrypoint, still broken)
+          3 could-not-run (no podman / no container / would not start / never
+            healthy / a red that could not be attributed — 965-sxec)
+          4 stale-image (red, but the container is not running this tree's
+            entrypoint)
+        A green on a stale image stays a green and says whose green it is:
+        "passes the IMAGE, not the checkout".
+
+        THE GUARD THE `unscoreable` WAS WAITING ON NOW EXISTS:
+        scripts/test-vault-shutdown-fixture-classifier.sh, 8 arms, hermetic —
+        it sources the classifier behind a LIB guard and injects values, so it
+        needs no podman and cannot red on a stale enclave. WIRED INTO
+        ./build.sh, deliberately, while the live fixture stays unwired for the
+        reason this row gives: wiring the live one would red every host whose
+        image is behind trunk.
+
+        ARM 3 IS THE NEGATIVE CONTROL yoga asked for, and it is the only arm
+        that would catch the seductive wrong fix: a classifier that consulted
+        vintage FIRST, or that read any red as a stale image, passes arms 1, 2
+        and 4-8 and makes the live fixture unable to fail at all. Arm 3 is the
+        same red as arm 2 and must still say FAIL.
+
+        NOT CLAIMED: that the class is closed. Any other fixture in this tree
+        that measures a deployed artifact has the same disagreement available
+        to it; this row fixes the one instance yoga measured, and the pattern
+        is now written down in the fixture's own header for the next one.
