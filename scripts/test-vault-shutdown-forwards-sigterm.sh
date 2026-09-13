@@ -63,6 +63,18 @@
 # token rather than ok: printed over an assertion that never executed (the
 # 1024-c3h3 could-not-run-reported-as-clean shape).
 #
+# KEY ON THE TOKEN, NOT THE INTEGER. `could-not-run:stale-image (1140-i6ct)`
+# is the stable contract; 4 is this script's local spelling of it. There is no
+# shared exit-code table in this tree, so each script owns its own grammar —
+# and 4 is spoken elsewhere with the OPPOSITE sense: measured by yoga across
+# 15 sites, check-resumable-claim-dirt.sh:34 documents "4 — ok:clean-tree" and
+# check-opsx-generated-dirt.sh:28 "4 — ok-with-clean-tree", both GOOD outcomes.
+# A caller that branches on the number will therefore read a stale image as a
+# clean tree the moment it is pointed at a sibling script. The number is not
+# renumbered here on purpose: four DISTINGUISHABLE codes is 1140-i6ct's own
+# exit criterion, and collapsing two of them to dodge a collision that only
+# exists across files would trade a naming clash for the defect the row fixes.
+#
 # The classifier is sourceable for its hermetic negative control — see
 # scripts/test-vault-shutdown-fixture-classifier.sh, which is the guard that
 # keeps all four outcomes reachable and keeps a real regression failing.

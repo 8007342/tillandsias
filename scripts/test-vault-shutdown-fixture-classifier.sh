@@ -58,6 +58,16 @@ arm "stall+137/match -> FAIL"   1 "1134-u934 defect"           30 15 137 match
 # ARM 3: THE NEGATIVE CONTROL. Same red as arm 2, same entrypoint verdict.
 #        A classifier that consulted vintage FIRST, or that treated any red as
 #        a stale image, returns 4 here — and the fixture could then never fail.
+#
+#        DO NOT DELETE THIS AS A DUPLICATE OF ARM 2. It is written to look like
+#        one, and that is the point (yoga, 1140-i6ct): the wrong fix it catches
+#        — check the image vintage BEFORE measuring — passes every other arm in
+#        this file, and it is attractive because it reads as an optimisation
+#        rather than as a bug. An arm whose only job is to fail for the
+#        seductive wrong answer is exactly the arm a cold reader deletes as
+#        redundant. Arm 2 asserts the verdict; arm 3 asserts the verdict is
+#        still REACHABLE. Losing it costs nothing visible and silently makes
+#        the live fixture unable to fail at all.
 arm "regression still fails"    1 "FAIL:"                      30 15 137 match
 
 # ARM 4: yoga's case. Red, but the container is not running this tree's
