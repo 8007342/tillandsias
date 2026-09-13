@@ -1662,3 +1662,21 @@ stories.
   the HOST before dispatch. Promotion to refusing needs clean in-situ runs on
   a non-Silverblue Linux host (macuahuitl reads the advisory line on its next
   gate) and a WSL host, because the fixture cannot see substrate.
+- **Folded by reference, coordination pass 2026-09-13T06:1xZ**: esme's
+  `plan/issues/fleet-restart-2026-09-12-esme.md` (the exec-bit sweep by
+  population, the sanctioned floor gate at 2598 s, the printf SIGPIPE
+  measurement) and macbookair's `…-macbookair.md` (is_battery_present as a
+  bare bool on every non-Linux host, the stale-artifact trap in the
+  capability probe, check-capability-row.sh blind to host facts, the gh
+  dialog being a fixture's control run, the read_github_token invitation now
+  filed as 1139-imd4, the darwin reaper fail-open). Relayed this pass:
+  osx-next e7318c7dd (the darwin unblock — named skip, loud trap, 1145-iigx
+  filed; macbookair's claim of 1137-rgfm now visible) and windows-next
+  5cf0eb866 (esme's 1076-kft9 measurement; yolanda's claim of 823-u5zf).
+  The relay conflicted in scripts/with-tillandsias-builder.sh: yoga's caller
+  half (`_tb_on_signal`, on trunk first) and macbookair's `_tb_reap_and_report`
+  (the same fix written on osx-next before the relay) — trunk's function kept
+  for both hunks, no dangling reference, dispatch-reap fixture 9/9 on the
+  merged tree. Two hosts fixing the same caller within an hour is the
+  duplicate-filing gap one layer down: a heads-up on a shared script beats a
+  merge-time choice.
