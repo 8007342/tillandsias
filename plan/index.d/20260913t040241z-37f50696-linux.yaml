@@ -1,0 +1,76 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-gate-every-host-lands-through-is-blind-to-nine-conditions-the-daily-release-gate-sees
+    event:
+      type: completed
+      ts: "2026-09-13T04:02:41Z"
+      agent_id: linux-lenovinha-opus5-20260913t040241z
+      host: linux
+      summary: |
+        ALREADY BUILT — items 1-3 were delivered under 1087-h2z9 and this row never
+        learned. Closed on verification, not on new work. Nothing was rebuilt.
+
+        This row is assigned to lenovinha and I claimed it intending to build the
+        enumeration. Before writing anything I checked whether it already existed,
+        because an identical stale-row finding had come up an hour earlier on 1085-g52w.
+        It had.
+
+        THE DELIVERABLE, item by item:
+
+          1. "ENUMERATE BOTH GATES' STEP SETS and diff them" ->
+             scripts/gate-divergence-declared.txt, 59 lines, 17 declared divergences.
+          2. "the set enforced only in the daily gate is DECLARED and BOUNDED, so a
+             condition cannot join it silently" -> the same file plus the ratchet.
+          3. "BUILD THE CHECK THAT FAILS ON SILENT DIVERGENCE" ->
+             scripts/test-gate-divergence-is-declared.sh, wired as gate step
+             090-1087-h2z9, currently ok:gate-divergence-declared:17.
+
+        It enforces exactly what this row specified: a script local-ci invokes and
+        --check does not MUST be declared; a declaration for something no longer in the
+        gap also reds, so the file cannot rot into a list of things that used to be true;
+        and the untriaged count RATCHETS IN BOTH DIRECTIONS, so the baseline tightens as
+        a side effect of triage rather than on a schedule somebody has to remember.
+
+        I VERIFIED THE SPECIFIC TRAP THIS ROW WARNS ABOUT rather than pattern-matching on
+        the filename. Item 1 says: "Eleven steps now live in scripts/gate-steps.d/*.step,
+        so an enumeration that greps build.sh alone will under-count — that mistake was
+        made once already on 2026-09-05." The existing check reads gate-steps.d/*.step
+        and extracts STEP_SCRIPT directly (lines 81-83). It does not under-count. That
+        was the one thing that could have meant real work remained, so it was the thing
+        to check.
+
+        SCALE DRIFT WORTH RECORDING: the row says ELEVEN steps live in gate-steps.d.
+        There are now FORTY-FIVE, six added by me tonight (205, 210, 220, 225, 235, 240,
+        245). The mechanism absorbed a 4x growth in the step set without this row being
+        touched — which is evidence the declared-and-bounded design works, and also why
+        nobody noticed the row was stale.
+
+        UNSCOREABLE DISCHARGED. The row declared itself unpinnable because "the closure
+        to build is a check that FAILS when a condition is enforced in --ci-full and not
+        in --check, which requires enumerating both gates' step sets — that enumeration
+        is the packet's first deliverable and cannot be pinned before it exists." The
+        enumeration exists, so the pin is now real: scripts/test-gate-divergence-is-declared.sh.
+
+        ITEM 4 HONOURED: the nine conditions were NOT fixed here. They belong to their
+        owners as the row assigns them.
+
+        RESIDUAL, small and by design: 2 untriaged entries remain in the declared file.
+        The ratchet drives that down as a side effect of whoever triages them; it is not
+        a blocker and not this row's subject, which was the CLASS.
+
+        SECOND STALE p1 THIS SESSION, and the pattern is now worth acting on rather than
+        noting. 1085-g52w was fixed by b026372ff under order 1124-7f3u; 1086-kx8i was
+        delivered by 1087-h2z9. Both sat `ready` for a week with their deliverables
+        already built and their rows unaware. Both were found only by checking before
+        building. The coordinator is filing the reconciliation check ("a ready row whose
+        owned_files a landed fix touched since it was filed is a staleness candidate,
+        surfaced by the pass, never auto-closed") — these are two independent instances
+        in one evening, which is the measurement that check should carry.
