@@ -1680,3 +1680,372 @@ stories.
   merged tree. Two hosts fixing the same caller within an hour is the
   duplicate-filing gap one layer down: a heads-up on a shared script beats a
   merge-time choice.
+- **The competing-gate detector's second substrate** (macuahuitl, from its
+  own landing gate at 4d0b99dba, mutable Fedora, toolbox dispatch): line 1
+  `ok:no-competing-gate` from the host-side call before dispatch, line 13
+  the honest `could-not-run:competing-gate:inside-container`; no false
+  accusation, same shape as Silverblue. The WSL datapoint is the Windows
+  hosts' to produce (a false accusation there is the interesting result).
+  yoga verified the relay's wrapper resolution rather than trusting it —
+  both halves pair on trunk (reaper returns 2 unsupported where it cannot
+  see; `_tb_on_signal` reports loudly; absent-token path rc 0) — and nearly
+  reported the reaper broken from one command: they had exported the wrapper
+  token into the shell running the reaper, so it found itself; a matcher
+  over a set containing itself reports itself. Seam for 1145-iigx: the
+  supported-guard's `/proc` root is hardcoded, so the unsupported arm is
+  unreachable on every Linux host; an overridable root lets every host prove
+  the refusal fires.
+- **The competing-gate detector's guard enumerates jails, so an unrecognised
+  jail accuses** (yoga, self-found while briefing yolanda; ancestry and bytes
+  verified on macuahuitl from origin): the inside-container guard tests
+  `TOOLBOX_PATH` and `container=oci|podman`; a WSL distro sets neither, and a
+  distro cannot see the native Windows wrapper pid (1137-da83), so the
+  detector there finds no wrapper for its own token and accuses by a second
+  mechanism the fix for the first did not cover. Design yoga is taking in
+  their :05 cycle: INVERT — answer only when the caller positively asserts it
+  is host-side (the wrapper's pre-dispatch call passes a flag; build.sh's
+  fast-refusal call does not; everything unflagged refuses), so a new dispatch
+  shape is silent by default instead of wrong by default. Hold on yolanda:
+  origin/windows-next carries 936d22364 (the detector with zero
+  `inside-container` and no wrapper call — the version that accused every
+  Silverblue gate); 3a7d2013d is on linux-next only and arrives with their
+  pre-push merge; ba0fb4fd5 is already on linux-next, so the osx-next relay
+  they asked for buys nothing and was not done. Two trunk-byte facts folded
+  into the design: `with-wsl2-builder.sh` makes no detector call at all, so
+  under the inversion the WSL datapoint becomes "does the unflagged in-distro
+  call refuse" and promotion needs a flagged MSYS-side call that does not yet
+  exist; and MSYS procfs exposes no `/proc/<pid>/environ`, so that flagged
+  call would take the detector's unreadable-environ branch for every pid — to
+  be answered as a named `unsupported:`, never as "none found" (the darwin
+  fail-open shape). Condition for yolanda, not a claim: `ls /proc/$$/environ`
+  under Git Bash.
+- **The detector's blind scan answers ok** (yoga, CONFIRMED by control, not
+  by argument; ordering read on trunk by macuahuitl): a procfs tree with every
+  environ chmod 000, including a tokened build.sh with no wrapper, answers
+  `ok:no-competing-gate` rc 0 — a clean bill of health from a scan that saw
+  nothing, the darwin fail-open one substrate over. The `opaque` counter built
+  to prevent exactly this sits AFTER the empty-accusation early return, so it
+  is consulted only when there is already an accusation to suspend and never
+  when the scan produced nothing because it could see nothing. yoga names it
+  as their pattern, three cycles running: the mechanism built and then placed
+  where it cannot fire. The obvious fix (opaque check first) is wrong — a
+  healthy Linux /proc is full of root-owned unreadable environs, so every host
+  would answer could-not-run. The distinction that works: count READABLE
+  environs too and refuse (`unsupported:`) only when that count is zero; a
+  healthy scan reads hundreds and keeps today's behaviour, a blind one (MSYS,
+  darwin) stops being indistinguishable from a clean one. Offered refinement:
+  require the caller's own tokened environ to appear in the scan (the
+  self-match excluded in the test is the production positive control).
+  Consequence stated rather than discovered: under the inversion the in-distro
+  call refuses and a flagged MSYS-side call answers unsupported, so Windows may
+  never be a substrate where the detector sees, and the criterion rewrite
+  should say so. Queued in yoga's :05 cycle with the inversion: inversion,
+  readable-count fix, criterion on dispatch shape, WSL wiring filed with the
+  flag contract for yolanda.
+  Settled design (yoga, same exchange): the host-side flag carries the
+  caller's pid, so the fixture supplies a pid that exists in its fake procfs
+  tree and no second seam appears; the detector verifies that pid's environ
+  CONTAINS the caller's token (readable-but-tokenless is a contract violation
+  and refuses loudly). Four fixture arms: pid absent, readable and tokened,
+  readable and tokenless, present and unreadable. Fallback if the seam gets
+  ugly: readable-count alone. The dispatch-shape criterion states MSYS/Cygwin
+  as a substrate where the detector cannot see, closing the WSL row as a
+  stated limit. Which of the two landed is to be recorded from yoga's report,
+  not from this note.
+  Exit-code contract agreed (yoga proposed, macuahuitl accepted): 0/1 proceed
+  as today; 3 `could-not-run:competing-gate:blind` for pid absent or
+  unreadable (this host cannot answer, stop asking); 2
+  `refused:competing-gate:caller-contract` for readable-but-tokenless (a
+  caller bug, fix the call site) — opposite remedies never share a code, and
+  2 is the tree's usage/infra idiom (check-opsx-generated-dirt.sh). Trunk
+  fact: both callers discard the rc today (`|| true` at
+  the wrapper's pre-dispatch call in `with-tillandsias-builder.sh` and the fast-refusal call in `build.sh`), so the distinction
+  lives in the fixture and the verdict line until promotion. Already true on
+  trunk (yoga, read): the fixture's `check()` pins exit code AND verdict line
+  together for all eleven arms, so a shared code reds the arm expecting the
+  other; the new arms keep that helper rather than a weaker one beside it.
+  Still owed: the criterion states that the four-code design binds the FUTURE
+  consumer (nothing on trunk reads the number), the promoting consumer must
+  enumerate 2 apart from 3 with no default that proceeds, and consumer wiring
+  lands as its own change with its own evidence BEFORE promotion — the first
+  reader of the codes must not also be the first thing that can stop a build.
+- **A deny-list of placeholders cannot catch the next placeholder**
+  (macbookair, 1137-rgfm, landed osx-next 2ccd051f1, attested 8326272e2;
+  relay to trunk in the 07:41Z pass): `hardware_fingerprint` refused the
+  placeholders already found ("Host CPU", "unknown", from 805-r98w), so
+  "Apple Silicon CPU" passed a check whose purpose is catching placeholders,
+  and every Apple-silicon Mac with the same core count hashed to one
+  fingerprint (hw2-d1ec0bba772d4bda) — which is what let
+  `capability-matrix --by-hardware` merge machines it never measured. Fix: a
+  `name_source` on DeviceRecord asks the probe where the name came from; the
+  deny-list survives only for `None`, because reading pre-field silence as
+  "placeholder" would make every stored document unidentifiable on landing
+  day. macOS reads `machdep.cpu.brand_string`; the GPU stays a declared
+  `placeholder` (needs a framework call, not a sysctl) so that component is
+  KNOWN to discriminate nothing. Both guards falsified (reverting the macOS
+  arm reds one; ignoring provenance reds the cross-platform one — the one
+  that proves the deny-list cannot do the job). Sits `implemented`: closure is
+  a second Mac's fingerprint differing, which no single host can produce;
+  routed to macneo as a measurement (no build). Corrected by macbookair
+  before macneo spent it: the coordinator had predicted "macneo's current
+  hash equals macbookair's old one if the core counts match", which is
+  under-specified — the hash covers fieldset, cpu vendor/name/cores, gpu,
+  npu AND a RAM power-of-two class, so 8 GiB versus 16 GiB differs on
+  identical silicon; and a binary predating 803-r8u4 omits the RAM component
+  entirely (measured on one machine, same minute: stale release
+  hw2-5ce200f625e69d05, fresh hw2-d1ec0bba772d4bda). A cross-machine hash
+  comparison is confounded until one release carries 2ccd051f1 on both. The
+  unconfounded test is the raw inputs: if macneo's brand_string differs
+  from "Apple M5" while cores match 10/10, the old code produced the
+  identical `cpu:apple/Apple Silicon CPU/10c10t` on two chips — the
+  collision shown from inputs, no hash involved. If cores differ the claim
+  narrows to "the name discriminates nothing within a core-count class",
+  said plainly rather than rounded up. Rule: a predicted equality of a
+  derived value must list every input of the derivation first.
+- **A 1-in-15 red unrelated to the diff teaches every host to disbelieve the
+  gate** (macbookair, 1146-z8ux, unclaimed): two tests mutate one
+  process-global env var in parallel threads; the pristine suite reproduced
+  it at 1/15 over 15 runs after a stash, so it is pre-existing and
+  timing-sensitive, and 1-of-3 versus 1-of-15 is not distinguishable at
+  those counts. Host-independent: macuahuitl's next meta cycle or lenovinha.
+- **"check not run" hid two arms that ran** (macbookair, self-corrected): the
+  1141-vf9w step's skip description said the check did not run while the two
+  substrate-refusal arms DO run before the darwin skip; a reader would have
+  concluded macOS pins nothing — the conclusion 1145-iigx warns its claimer
+  against. Now "2 substrate-refusal arms RAN and passed; 9 reaper arms could
+  not run". A skip description enumerates what ran, not only what did not.
+- **Two timing logs on macbookair** (operator item): `cycle-metrics.sh`
+  refused (rc 2) between `/tmp/tillandsias-timing.jsonl` (13 lines, last
+  2026-09-11T23:22:58Z) and `.cache/metrics/tillandsias-timing.jsonl` (28,471
+  lines, live); the guard says move the stray aside, never delete, and
+  concatenation is an operator decision. macbookair used the named-log escape
+  and changed nothing on disk. Ask: retire the /tmp copy on macbookair.
+- **The Windows lane is red on the competing-gate fixture, and it is the
+  root regime, not the marker** (yolanda, measured on the sanctioned path;
+  mechanism read on trunk by macuahuitl): arm "an unreadable process suspends
+  the accusation" wanted rc 3 `unreadable-processes` and got the accusation.
+  yolanda attributed it to WSL lacking a container marker; the arm is
+  `chmod 000 "$r/103/environ"` in a fake procfs tree
+  (the `opaque` scenario of `test-no-competing-gate.sh`, `newroot opaque`) with no root guard, the detector counts
+  `[ ! -r environ ]` as opaque, and the WSL gate runs as root — root reads a
+  000 file, opaque stays 0, the tokened build.sh has no wrapper, and the code
+  accuses because it can read everything. Same shape as the 2026-09-12
+  chmod-000 arm. TWO mechanisms, two fixes: (1) the fixture arm needs a named
+  root skip or a root-proof construction (dangling symlink pins a different
+  semantics) — the inversion alone leaves Windows red; (2) yolanda's
+  production line `advisory:competing-gate:1 (not blocking)` is the measured
+  WSL datapoint: in-distro call, no marker, wrapper invisible, fixed by the
+  inversion. Ruling: both Windows hosts HOLD on the lane; no scoped skip, no
+  advisory override, no second gate spent; yoga's :05 cycle carries both
+  fixes; esme warned before their merge. yolanda read the block the right
+  way round: the detector is advisory and did not block, the fixture blocked
+  by correctly reporting the detector wrong here — silencing it would quiet a
+  true report on someone else's row. 823-u5zf is done and green at 1d7b29bcc
+  (the argv work had landed; what was open was its closure's observable
+  being inert on the only headless path that could read it), blocked only by
+  the above; to be kept off local-only (work ref or salvage). Not promoting
+  1141-vf9w: measured false accusation on WSL today. yolanda's own
+  correction: build.sh calls the detector directly on their host (the
+  wrapper never does), inferred earlier from where the caller was expected
+  rather than looked for. Condition sent, not a claim: `id -u` from a gate
+  shell.
+  MEASURED on esme before their merge: gate uid 0; a mode-000 file under
+  /root reads successfully; verdict "a chmod-000 file IS readable as uid 0
+  here" — the root attribution is closed by measurement on WSL, and esme will
+  red on the same arm the moment they merge trunk (they hold, per the
+  ruling). Instruction corrected for both Windows hosts: keep finished
+  commits safe with `scripts/salvage-dirty-worktree.sh <order>`, NOT a
+  work/<order> ref — a first push of a new work ref has no base to diff
+  against and needs a full gate, which is red on those hosts by definition.
+  esme's near-miss, named: their first probe passed mktemp through nested
+  wsl.exe layers, the variable came back empty, chmod reported "cannot
+  access ''", cat failed against an empty path, and the script concluded
+  NOT exposed — a broken instrument producing a clean false negative; caught
+  only because the chmod error line was in the output and did not belong
+  there. An error line that does not belong is the instrument reporting it
+  broke; filtering it for tidiness would have reported esme safe.
+- **The salvage script covers the dirty tree, not the unpushed commit**
+  (yolanda, measured): on a clean worktree with an unpushed commit and a red
+  gate, `scripts/salvage-dirty-worktree.sh` answers `ok:salvage-not-needed`
+  rc 0 having preserved nothing, and a first push of a new work/<order> ref
+  needs the full gate that is red — so neither half of the coordinator's
+  instruction reached the state the salvage rationale was written for
+  (finished work sitting where nothing protects it). Fleet recipe, read from
+  the hook before relying on it: `pre-push-local-gate.sh` exempts a push in
+  which EVERY ref is `refs/heads/salvage/*`, so
+  `git push origin HEAD:refs/heads/salvage/<host>/<yyyymmdd>-<order>` lands
+  the commit without a gate; verify by `merge-base --is-ancestor` and by
+  content on the remote ref, not by the push's exit code. 1d7b29bcc is at
+  salvage/yolanda/20260913-823-u5zf. Second property, from yolanda's own
+  litter: a dangling symlink in the worktree makes the salvage script FAIL
+  (`fail:salvage:add:error: open("dangling"): Function not implemented`)
+  rather than skip the path, on the drvfs filesystem where salvage matters
+  most. Both filed as one packet by macuahuitl. yolanda's uid-0 reading is
+  the second WSL instance (root under both `-u root` and the bare
+  `wsl.exe -d tillandsias-build` the gate uses). Their named near-miss:
+  `d=$(mktemp -d); cd "$d"` under `bash -lc` returned empty, the cd failed,
+  probe files landed in the REPO ROOT, and the cleanup was confirmed by
+  listing /root — the wrong subject; the salvage run exposed it.
+  LANDED (yoga, b75fd00cf, attempt 1): the arm constructs unreadability with
+  a dangling symlink rather than chmod 000, chosen over the fleet's usual
+  root skip on yolanda's argument — a skip costs the arm its teeth on every
+  root host, which on this fleet is every WSL host, permanently
+  (test-spec-index-durable-tier-demotion.sh under 1129-3yv7 asserts nothing
+  there for that reason). 11/11 as uid 1000, under `podman unshare` as uid 0,
+  and by yolanda inside tillandsias-build. Accepted knowingly and stated on
+  the row: the arm pins "missing environ counts as opaque", so on a live
+  /proc an unrelated process exiting between list and read can suspend a
+  genuine accusation — weakens detection, cannot manufacture a false
+  accusation, and is a stated PRECONDITION for promotion (a detector
+  silenceable by ordinary churn is not one to hang a build on). Two
+  narrowings: yolanda's `advisory:competing-gate:1` IS the measured WSL
+  datapoint for the marker-absence mechanism; what remains untaken is a
+  flagged host-side caller meeting unreadable processes. And THREE mechanisms
+  defeat a chmod negative control (yolanda's framing): NTFS under Git Bash
+  ignores the mode, root overrides it, and Silverblue passed only because the
+  fixture happens to run as uid 1000 — the next person hits the NTFS instance
+  and concludes the root fix does not apply. The tree already knew:
+  1129-3yv7 recorded "chmod 000 does not constrain euid 0" on 2026-09-12,
+  measured on yolanda, the day before the arm was written; `grep -rn 'chmod
+  000' scripts/test-*.sh` would have found it in one command, and the cost of
+  not asking whether the construct had a precedent was another host's lane.
+  Hold lifted for both Windows hosts. Two directions reached the same
+  diagnosis independently (reading the arm here; chmod under podman unshare
+  on yoga), which is worth more than either.
+  MEASURED on esme, both sides of the pair as uid 0: a mode-000 file reads
+  (the defect); `ln -s /root/definitely-not-here /root/dangle; cat` fails
+  (the fix). The first probe alone only showed the old arm broken, not that
+  the new one works. esme's line on why the construction is the right shape
+  and not merely a different one: mode bits are an ACCESS CHECK and uid 0 is
+  defined as the identity that bypasses access checks, so no permission-based
+  construction can ever produce unreadability for root — the old arm was
+  unfixable in its own terms; a dangling symlink fails at RESOLUTION, before
+  any permission question is asked, so it is uid-independent by construction
+  and a future privileged context cannot defeat it again.
+- **A contract three reviewers agreed on was unsatisfiable; the positive
+  control found it on first execution** (yoga, inversion landed f0764598a):
+  the agreed check "the passed pid's environ CONTAINS the caller's token"
+  cannot hold — `/proc/<pid>/environ` is the environment a process was
+  EXEC'D with, and the wrapper token is minted and exported at runtime by
+  the asserting shell, so it is never in that shell's own environ (measured:
+  exporting shell 0 matches, child exec'd after the export 1 match). The
+  first wiring refused its real call site with
+  `refused:competing-gate:caller-contract`, correctly, against a contract
+  nothing could satisfy; the coordinator proposed it, yoga accepted and
+  argued its exit code, yolanda did not dispute it. Replacement, stronger:
+  the detector reads ITS OWN environ (`$PROC_ROOT/self`, so a fake tree can
+  construct it) — this process is the child exec'd after the export, so the
+  token is present exactly when the caller really exported it, and no
+  convenient pid can be substituted. Four codes intact and mutation-verified
+  distinct (11/12 on each of three mutations; 12/12 at uid 1000 and uid 0);
+  in the landing gate: `ok:no-competing-gate` from the wrapper's flagged
+  call, `could-not-run:competing-gate:no-host-side-assertion` from build.sh's
+  unflagged one. The caller-contract code is the one of the four with
+  production evidence. Left for yoga's next cycle: the dispatch-shape
+  criterion (MSYS as a substrate that cannot see; churn-suspension clause
+  naming a slow host) and the WSL wiring with the `--host-side <pid>` +
+  exported-token contract for yolanda.
+- **1137-rgfm did not compile on Linux** (macuahuitl, this cycle's gate, on
+  the osx-next relay): `name_source` was added to DeviceRecord and set only
+  in the macOS arm; six Linux initializers (nvidia, the three lspci-named
+  GPU arms, the WSL2 dxg arm, the accel NPU arm) and two Windows arms
+  (Win32_VideoController GPU, PnP NPU) lacked the field — darwin's cfg hid
+  every one of them from the author's build, the green-on-one-regime shape
+  on the cfg axis. Fixed in the same land with the provenance each site has
+  (measured where nvidia-smi, lspci or PnP answered; placeholder for the
+  fixed strings and the driver-derived NPU name); the Windows arms are
+  patched blind and yolanda's next merge compiles them. Had the relay landed
+  before a Linux gate ran, every Linux host's gate would have been red.
+  MEASURED on macneo (raw sysctl, no build): brand_string "Apple A18 Pro",
+  6 physical / 6 logical (2P+4E), 8 GiB, hw.model Mac17,5, macOS 26.6.2.
+  Different core-count class from macbookair's M5 10c10t, so the old strings
+  (`cpu:apple/Apple Silicon CPU/6c6t` vs `/10c10t`) never collided and this
+  pair cannot demonstrate the collision; the claim narrows, as macbookair
+  called in advance, to "the placeholder discriminated nothing within a
+  core-count class". macneo's stored capability row (20260912t014039z)
+  carries "Apple Silicon CPU" and hw2-15343879d48b5915 — the placeholder on
+  a second machine, from the ledger. The fleet has no same-class pair; the
+  suggested closure is the narrowed statement plus the cross-platform
+  provenance guard. macneo flagged, not interpreted, an A-series brand
+  string on a Mac model identifier; consistent with the low-cost A18 Pro
+  MacBook and the operator's "low-end host", not investigated further.
+  Routing consequence recorded (coordinator): macneo is a different macOS
+  hardware class by measurement (A18 Pro, Mac17,5, 2P+4E, 8 GiB), so the
+  fleet has two macOS classes and no comparable pair; work that assumed a
+  second comparable Mac treats macneo as its own class. Their stored row's
+  `system_ram_gb: null` dates their installed binary before 803-r8u4 (the
+  vintage confound evidenced from the ledger, not from one machine's
+  accident) — a floor-tier smoke item after the next release. macbookair
+  closes 1137-rgfm on the narrowed statement with the cross-platform
+  provenance guard as evidence and macneo's inputs plus stored row as the
+  second-machine confirmation; owns the cfg-hidden compile break without
+  qualification and is testing whether `cargo zigbuild` (the lane's own
+  cross path) can compile the Linux arms on darwin, since a plain
+  `--target x86_64-unknown-linux-musl` check dies in ring's build script
+  before reaching the crate.
+- **Partly stale, and the live half was quieter than the original defect**
+  (lenovinha, 1123-k3mq closed at c93139300; third kind of stale row for
+  1144-jfr5's evidence): criterion 1 was already met by 7c83653ec
+  (686-7qcm, compaction applies the closure ladder), verified by the
+  recorded pre-fix failure not reproducing; criterion 2 WAS live — once
+  compaction refused a rung-lowering write it dropped the write AND deleted
+  the fragment carrying it, in silence (`ok: compacted 1 fragment(s)`, zero
+  words about the discarded value), so a coordinator releasing an expired
+  claim got ok from set-field, ok from compact, a ledger still `completed`,
+  and no record anywhere. The original defect at least left the wrong value
+  visible in the base. Now compact reports the packet, the refused value,
+  the winner, the host and the exact `set-field … --reopen-evidence` command
+  — the remaining half of 1115-yvrq. Deliberately not done: last-write-wins
+  status (would let a stale high-water fragment silently reopen finished
+  work; 650-dq6u). 23/23, mutation-scored, one of three tests is the
+  evidence. Fleet rule from lenovinha's repeated mistake (twice in one
+  night, two crates): INSERT RUST TESTS ANCHORED ON THE `#[test]` LINE,
+  never the `fn` line — anchoring on fn double-registers the new test and
+  strips the attribute from the neighbour, silently disabling it while the
+  suite reads green; verify by ENUMERATION, never the pass count.
+- **The zigbuild cross-check works and catches the actual defect**
+  (macbookair, measured): `cargo zigbuild -p tillandsias-headless --target
+  x86_64-unknown-linux-musl` → rc 101, six E0063 at exactly the six Linux
+  arms; the lane already requires zig + cargo-zigbuild
+  (scripts/build-macos-tray.sh). Rule: zigbuild the guest target before
+  landing a change to a cfg-split file. Boundary: 6 of 8 arms — no Windows
+  target is installed on macOS, so the two Windows arms need yolanda or
+  esme; plain `cargo check --target x86_64-unknown-linux-musl` dies in
+  ring's build script for want of a cross C toolchain and never reaches the
+  crate. Nearly sent `E0063 count = 0` while the build was still compiling —
+  fifth absent-result-read-as-negative instance, caught. Decision recorded:
+  macuahuitl lands the fix (it was committed here before the question);
+  macbookair does not touch the file and re-runs zigbuild after merging
+  trunk for the 0-errors arm. Two hosts, one file, heads-up before writing.
+- **The unstageable-symlink axis is the git, not the filesystem** (yolanda,
+  full matrix on one drvfs path): Git Bash cannot CREATE a dangling symlink
+  (MSYS emulation copies the target); WSL creates it; WSL git stages it
+  (rc 0, `A dangling`); Git for Windows cannot index it (rc 128,
+  `open("dangling"): Function not implemented`). The salvage skip is a
+  Git-for-Windows property reachable only when a non-MSYS tool created the
+  path; written as drvfs the row would have sent a reproducer to WSL to
+  conclude the skip is dead code. Wording corrected in the landing; the
+  test-only seam is the only portable construction. Three fixtures in one
+  night wrong about their own setup and green on the host that wrote them —
+  yolanda's argument for cross-substrate gating. Coordinator cadence gap,
+  named: `sweep-salvage-refs.sh` in report mode found 11 refs, 10 UNSEEN by
+  the ledger (two from `salvage/unknown/`, one of yoga's from 2026-08-26) —
+  the consumer 874-w2gc added has not been run on a cadence; `--apply` and
+  the deletion of yolanda's now-redundant
+  `salvage/yolanda/20260913-823-u5zf` (ancestry confirmed by them) are
+  coordinator writes for the next pass. 823-u5zf landed windows-next
+  4061856c8: the argv work was already landed and the next_action stale;
+  what was open was the closure's own observable being inert (`--forge`
+  exits before `init_tracing()` on the only headless path); pinned with a
+  mutation control repaired twice (matched its own source; then passed by
+  reading its own doc comment).
+- **This cycle's land** (macuahuitl, ok:land:67009ea3b, second launch): the
+  first launch was refused by the bash-dialect guard (761-g36m) — the new
+  salvage loop's `"${paths_to_stage[@]}"` under `set -u` dies on bash 3.2
+  when nothing is staged; the 3.2-clean `${arr[@]+"${arr[@]}"}` idiom fixed
+  it, dialect check and fixture green, relaunched, attempt 1 ok. The gate
+  caught on this host what would otherwise have been macOS's to find: the
+  sub-agent wrote bash-4 idiom, the coordinator's own fixture run did not
+  see it, the guard did. Landed together: the osx-next relay with its Linux
+  compile fixed forward, 1146-z8ux and 1146-8j7i completed, 1147-6xqs filed,
+  the loop-status fragment, and the held coordination records.

@@ -53,15 +53,53 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # The condition is probed from the host at run time; no platform is named by
 # uname and no version is pinned, so a darwin that grows /proc would run the
 # arms rather than skip them.
-if ! tillandsias_dispatch_reap_supported || ! command -v setsid >/dev/null 2>&1; then
-    echo "skip:dispatch-reap:no-proc-no-setsid — this platform has no /proc and/or no setsid; the reaper is unsupported here, which is NOT the same as passing (1141-vf9w)" >&2
-    exit 2
-fi
 
 pass=0; fail=0
 check() { # check <label> <condition-rc>
     if [ "$2" -eq 0 ]; then pass=$((pass + 1)); else fail=$((fail + 1)); echo "FAIL: $1"; fi
 }
+
+# THE SUBSTRATE-REFUSAL ARMS RUN ON EVERY HOST, AND THEY RUN BEFORE THE SKIP
+# BELOW ON PURPOSE (yoga's seam, 2026-09-13). Everything after the skip needs a
+# working reaper and is therefore Linux-only; these two arms need only the
+# refusal path, so putting them here is what lets a LINUX host pin the behaviour
+# that exists because of a DARWIN absence. Without them the unsupported arm was
+# unreachable wherever anyone could have tested it: `[ -d /proc ]` is always
+# true on Linux, so the guard could never be seen to fire, and a guard that
+# cannot fire reads exactly like one that passes.
+#
+# TILLANDSIAS_DISPATCH_PROC_ROOT is a FIXTURE seam; production never sets it.
+# Pointing it at an empty directory reproduces the SHAPE of the absence (no
+# /proc to enumerate), not macOS itself — darwin additionally cannot read
+# another process's environ at all, which is why 1145-iigx exists and why this
+# arm is not a substitute for it.
+_probe_root="$(mktemp -d "${TMPDIR:-/tmp}/dispatch-reap-noproc.XXXXXX")"
+rmdir "$_probe_root"   # a path that does NOT exist is the condition under test
+
+_unsup_err="$(TILLANDSIAS_DISPATCH_PROC_ROOT="$_probe_root" \
+    tillandsias_reap_marked "probe-token" 2>&1 >/dev/null)"; _unsup_rc=$?
+[ "$_unsup_rc" -eq 2 ]; check "a substrate with no proc root refuses with rc 2, never a quiet 0" $?
+case "$_unsup_err" in
+    *unsupported:dispatch-reap:no-proc*) true ;;
+    *) false ;;
+esac
+check "the refusal NAMES itself on stderr rather than failing silently" $?
+
+# THE SKIP COMES AFTER THOSE ARMS, AND ONLY IF THEY PASSED. A fixture that
+# skipped first would hide a genuine refusal-path regression behind "this
+# platform cannot run the reaper" — the could-not-look verdict swallowing a
+# real answer, which is the same confusion in the other direction. If the arms
+# above failed, that is a finding about code this host CAN exercise, and it is
+# reported as a failure.
+if [ "$fail" -ne 0 ]; then
+    echo "FAIL: dispatch reap substrate-refusal arms $pass/$((pass + fail)) (1141-vf9w)"
+    exit 1
+fi
+
+if ! tillandsias_dispatch_reap_supported || ! command -v setsid >/dev/null 2>&1; then
+    echo "skip:dispatch-reap:no-proc-no-setsid — this platform has no /proc and/or no setsid; the reaper is unsupported here, which is NOT the same as passing (1141-vf9w)" >&2
+    exit 2
+fi
 
 # Spawn a process carrying $1 as its token; echo its pid.
 # stdio MUST be detached. A backgrounded child inherits the command

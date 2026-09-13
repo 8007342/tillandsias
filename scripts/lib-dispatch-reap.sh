@@ -109,7 +109,24 @@ tillandsias_dispatch_token() {
 # child packet rather than guessed at here. This change converts a silent lie
 # into a named refusal; it does not make darwin supported.
 tillandsias_dispatch_reap_supported() {
-    [ -d /proc ]
+    # THE SEAM IS HERE SO THE REFUSAL CAN BE FALSIFIED ON EVERY HOST (yoga,
+    # 2026-09-13). Hardcoding `[ -d /proc ]` made the unsupported arm
+    # UNREACHABLE on Linux: the one arm that exists because of a substrate
+    # difference was the one no other substrate could pin, so every Linux host
+    # ran a guard it could never see fire. A guard that cannot fire is
+    # indistinguishable from a guard that passes — which is the same class this
+    # whole order is about, one level up from the reaper itself.
+    #
+    # PRODUCTION NEVER SETS THIS. The default is /proc and the variable exists
+    # for fixtures, which point it at an empty directory to reproduce a
+    # darwin-shaped absence on a host that has /proc. That is not a
+    # simulation of macOS — macOS additionally has no way to read another
+    # process's environ at all (1145-iigx) — it is a way to prove THIS
+    # function's refusal path executes and says what it claims.
+    #
+    # Yoga's equivalent arm on their detector is what caught a production false
+    # positive afterwards, which is the argument for paying the one variable.
+    [ -d "${TILLANDSIAS_DISPATCH_PROC_ROOT:-/proc}" ]
 }
 
 tillandsias_marked_pids() {
