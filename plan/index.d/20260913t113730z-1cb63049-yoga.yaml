@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-linux-clean-room-reset-does-not-reach-the-host-keychain
+    field: status
+    value: ready
+    ts: "2026-09-13T11:37:30Z"
+    host: yoga
+
+events:
+  - packet_id: the-linux-clean-room-reset-does-not-reach-the-host-keychain
+    event:
+      type: note
+      ts: "2026-09-13T11:37:30Z"
+      host: yoga
+      summary: |-
+        released after a decision slice: criterion 1 decided (a) with evidence, criterion 2 already met by lenovinha's probe; implementation plus criterion 3's both-directions fixture is the next slice and I am not holding the row across it
