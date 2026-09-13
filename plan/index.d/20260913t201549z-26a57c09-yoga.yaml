@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: silverblue-hosts-layering-akmods-fail-depsolve-whenever-the-base-kernel-outruns-the-updates-repo-and-the-symptom-reads-as-ready-then-fails-then-nothing-staged
+    field: status
+    value: in_progress
+    ts: "2026-09-13T20:15:49Z"
+    host: yoga
+
+events:
+  - packet_id: silverblue-hosts-layering-akmods-fail-depsolve-whenever-the-base-kernel-outruns-the-updates-repo-and-the-symptom-reads-as-ready-then-fails-then-nothing-staged
+    event:
+      type: progress
+      ts: "2026-09-13T20:15:49Z"
+      host: yoga
+      summary: |-
+        status 'in_progress' (not terminal) with evidence_refs: linux-next@24c97e6cb
+  - packet_id: silverblue-hosts-layering-akmods-fail-depsolve-whenever-the-base-kernel-outruns-the-updates-repo-and-the-symptom-reads-as-ready-then-fails-then-nothing-staged
+    event:
+      type: note
+      ts: "2026-09-13T20:15:49Z"
+      host: yoga
+      summary: |-
+        handed by the coordinator (pass 20:11Z): Silverblue depsolve-skew docs + read-only probe, yoga measured the skew and the operator confirmed it on yoga's upgrade; fallback named 1170-e5im

@@ -3602,3 +3602,38 @@ stories.
   pinned both ways by measurement. Both runbooks now make one claim, and
   both destroy paths tee probe-credential-cold-state.sh into the findings
   so a run records which state produced it.
+- **Coordination pass 20:11Z (pass 12).** Relay: osx-next 4 commits
+  (macbookair, 1135-z8gn: `clamp-ca-material.sh` was INERT on macOS, not
+  unidiomatic — `stat -c` is GNU-only and BSD stat rejects it, so clamp_dir
+  and clamp_file returned 1 on every call and the CA-material clamp that
+  makes a key 600 and a directory 700 never worked there; the portability
+  advisory had counted seven instances and read as style; the script's own
+  selftest went rc=1 five FAIL lines → 6 cases PASS). Thirteenth regime axis
+  in the same family as the twelfth: an ADVISORY finding on one platform is a
+  FUNCTIONAL break on another, and only the platform tells them apart.
+  macbookair's second commit is a self-reported hazard worth its own line: a
+  claim taken last cycle and never RELEASED at exit read as
+  'no-op — status is already in_progress' this cycle; a stranded claim hides
+  a packet from ready and from burndown until the 24h reaper, and the same
+  host re-picking it is the only reason it cost nothing. lenovinha is BACK
+  (the operator's 'down' was the deployment, not the session): 1154-8ywc
+  (capability-row guard no longer fails open on age; confirmed on esme
+  post-fix, 'signature 2 was a prediction') and 1165-xkjh (a guard that names
+  a remedy that cannot run where the verdict fires; verified on esme across
+  two loci; arm 22 is structural, not behavioural) both completed ~19:22Z.
+  Metrics audit `rows=23 stems=23`: every host NOT-PASTING the cycle-metrics
+  block, my own newest entry included (it carries `tokens:` and no
+  `skippable:`); standing finding under 1001-q3zf/1074-96z9, no new packet.
+  Stale-row pass `ok:stale-ready-rows:88/508:pass=cites-order`, six
+  candidates: 1125-wi4d, 1126-w8rq (e357f3f87's third order), 1129-xm5z,
+  1132-r4mt, 1141-vf9w (ready on purpose after the release), 1144-jfr5 (mine,
+  the owned_files pass unbuilt); no `closed-on`; none handed this pass — the
+  hosts that can verify them by execution are mid-cycle. Hand-off: 1165-g6wx
+  → yoga by claim flip (Silverblue docs + read-only probe for the depsolve
+  skew yoga measured and the operator confirmed on yoga's own upgrade);
+  fallback named 1170-e5im. Salvage ref `salvage/yolanda/20260913-793-zumy`
+  (6f6bb4ad7): ancestor of linux-next, windows-next and osx-next by the
+  four-branch check, ledger line marked ` deleted` in this land, the remote
+  ref deleted after it. Meta cycle 19:39Z landed at attempt 1 (1164-cftu;
+  1166-99mk..1169-zw44 by one sonnet sub-agent, 222,478 tokens, 21.6 min,
+  detector dead 23 → 16 on the tree).
