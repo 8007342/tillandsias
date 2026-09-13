@@ -2104,6 +2104,22 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "checkout-lock attested-release fixture passed"
 
+    # ORDER 1137-da83. Belt for the litmus binding's braces, and deliberately
+    # the same wiring as the attested-release fixture above rather than a new
+    # pattern. A fixture reaches the gate by ONE of two routes — an explicit
+    # line here, or a litmus binding under openspec/litmus-bindings.yaml — and
+    # scripts/test-*.sh is NOT globbed, so a fixture with neither is a file
+    # rather than a gate. This one pins what a caller reads from a REFUSED
+    # land: three false claims in one hour came from reading that verdict
+    # through `| tail`, the worst of them accusing land-on-platform-branch.sh
+    # of the exact defect its header exists to prevent.
+    _step "Checking the land-verdict-through-a-pipe fixture (1137-da83)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-land-verdict-through-a-pipe.sh" 2>&1; then
+        _error "the land-verdict pipe fixture regressed — either the land tool stopped exiting 3 and naming a refused gate, or the trap it documents changed shape and the row's guidance is now wrong"
+        exit 1
+    fi
+    _info "land-verdict-through-a-pipe fixture passed"
+
     # The release runbook must not prescribe pushing the tag before the
     # back-merge (898-zhf3). That order is UNEXECUTABLE with the pre-push hook
     # installed — creating the tag locally is enough for the monotonicity guard

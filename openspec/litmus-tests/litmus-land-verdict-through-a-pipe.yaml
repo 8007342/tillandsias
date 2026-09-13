@@ -1,0 +1,57 @@
+# @trace order:1137-da83
+#
+# Order 1137-da83. A fixture that nothing invokes is the vacuous-green shape
+# this repository keeps paying for, and scripts/test-*.sh is NOT globbed by
+# build.sh. A fixture reaches the gate by EITHER of two routes: an explicit
+# `_run bash` line in build.sh (how test-cycle-lock-attested-release.sh runs) or
+# a binding here (how test-cycle-checkout-lock.sh runs — it appears in build.sh
+# not at all). Neither is automatic; a fixture with NEITHER is a file.
+#
+# This one deliberately has BOTH, because the first draft of this comment said
+# a litmus binding was the only route, which is false, and the author told a
+# sibling host so before checking. Belt and braces is right here for the same
+# reason it was wrong for the path-conversion guards: these two routes compose,
+# and those did not.
+#
+# WHAT IS BEING PINNED, and why it is worth a binding at all. The land tool is
+# CORRECT: it exits 3 for a refused gate and names the refusal. What is pinned
+# is what a CALLER SEES when it reads that verdict through a pipe, because on
+# 2026-09-12 two Windows hosts produced three false claims in one hour from
+# exactly that misreading, the worst of them accusing
+# scripts/land-on-platform-branch.sh of reporting success over a refused gate.
+# That tool's header exists BECAUSE someone once shipped that bug, so it was
+# accused of the defect it was written to prevent, by a reading that had the
+# defect — and a sibling host was about to file a row against it.
+#
+# The trap is not merely that `$?` is wrong. `refused:land:gate-failed` goes to
+# STDERR, so a bare `| tail` captures output containing no refusal at all while
+# reporting exit 0: both halves of the evidence disappear in one step. That is
+# arm A, and it is the reason this is executable rather than a note.
+name: litmus:land-verdict-through-a-pipe
+spec: ci-release
+phase: pre-build
+description: >
+  Pin what a caller reads from a REFUSED land: unpiped it exits 3 and names the
+  refusal with its first failing line (arms D, D2, E); through a bare `| tail`
+  the status is tail's 0 AND the refusal is absent from the captured stdout
+  (A, A2); `${PIPESTATUS[0]}` recovers the real status from that same pipeline
+  (B); `2>&1 |` restores the verdict text but not the status (C, C2); and
+  `set -o pipefail` propagates it (F).
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/land-on-platform-branch.sh
+  - workspace contains scripts/test-land-verdict-through-a-pipe.sh
+  - shell utilities (git, bash, mktemp) are available in PATH
+
+critical_path:
+  - step: "fixture and the tool it pins both parse, and the fixture carries its exec bit"
+    command: "bash -n scripts/land-on-platform-branch.sh && bash -n scripts/test-land-verdict-through-a-pipe.sh && test -x scripts/test-land-verdict-through-a-pipe.sh && echo 'ok: land-pipe-fixture-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: land-pipe-fixture-parses"
+
+  - step: "the positive control and all five trap arms: a refusing gate planted in a scratch repo, read six ways"
+    command: "bash scripts/test-land-verdict-through-a-pipe.sh | tail -1"
+    timeout_ms: 60000
+    expected_behavior: "ok:land-verdict-pipe-fixture:all"
