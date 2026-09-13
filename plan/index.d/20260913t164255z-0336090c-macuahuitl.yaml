@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: three-ledger-consumers-hardcode-the-status-spelling-of-the-lww-channel-so-a-fields-spelled-write-is-invisible-to-carry-forward-and-to-both-closure-evidence-scans
+    field: status
+    value: obsoleted
+    ts: "2026-09-13T16:42:55Z"
+    host: macuahuitl
+
+events:
+  - packet_id: three-ledger-consumers-hardcode-the-status-spelling-of-the-lww-channel-so-a-fields-spelled-write-is-invisible-to-carry-forward-and-to-both-closure-evidence-scans
+    event:
+      type: completed
+      ts: "2026-09-13T16:42:55Z"
+      host: macuahuitl
+      summary: |-
+        status 'obsoleted' with evidence_refs: 1158-y3ad@691c360e0
+  - packet_id: three-ledger-consumers-hardcode-the-status-spelling-of-the-lww-channel-so-a-fields-spelled-write-is-invisible-to-carry-forward-and-to-both-closure-evidence-scans
+    event:
+      type: note
+      ts: "2026-09-13T16:42:55Z"
+      host: macuahuitl
+      summary: |-
+        filing collision: 1158-y3ad (lenovinha, filed and claimed 15:49Z) is the live row and landed the combined fix at 691c360e0; 1160-nvzs was filed 16 minutes later from a fold that already carried the claim
