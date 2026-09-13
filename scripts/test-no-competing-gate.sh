@@ -35,7 +35,19 @@ mkproc() {
 }
 newroot() { local r="$tmp/$1"; mkdir -p "$r/1"; printf 'x\0' > "$r/1/cmdline"; printf 'PATH=/x\0' > "$r/1/environ"; echo "$r"; }
 
-run_check() { TILLANDSIAS_PROC_ROOT="$1" bash "$CHECK" 2>&1; }
+# NEUTRALISE THE CONTAINER MARKERS, or the fixture is not hermetic after all.
+# The gate itself runs INSIDE the builder toolbox, where TOOLBOX_PATH is set, so
+# an arm that merely inherits the environment gets the inside-container refusal
+# no matter what its procfs tree says. Measured the noisy way: every arm passed
+# on the host and the whole fixture refused the land from inside the gate. Arms
+# that mean to test the container refusal set the marker themselves.
+run_check() { TOOLBOX_PATH="" container="" TILLANDSIAS_PROC_ROOT="$1" bash "$CHECK" 2>&1; }
+
+# The container arms need the marker SET, and run_check deliberately clears it,
+# so they get their own entry point rather than relying on assignment order.
+run_check_in_container() { # <procroot> <marker-var> <value>
+    env "$2=$3" TILLANDSIAS_PROC_ROOT="$1" bash "$CHECK" 2>&1
+}
 
 check() { # <label> <expected-rc> <expected-token> <rc> <out>
     if [ "$4" -eq "$2" ] && printf '%s' "$5" | grep -q "$3"; then
@@ -105,6 +117,35 @@ r="$(newroot untokened)"
 mkproc "$r" 401 - "bash /other-repo/./build.sh --check"
 out="$(run_check "$r")"; rc=$?
 check "an untokened build.sh elsewhere is not this checkout's competitor" 0 "ok:no-competing-gate" "$rc" "$out"
+
+# 8. INSIDE A CONTAINER THE CHECK REFUSES TO ANSWER. This is the arm the
+#    hermetic fixture could not have predicted and the first in-situ run
+#    produced: build.sh re-execs into the toolbox BEFORE its fast refusals, and
+#    from inside, a host-side wrapper's environ is unreadable — `[ -r ]` answers
+#    TRUE and the read is then DENIED, so every wrapper vanished and every gate
+#    reported ITSELF as a competing gate. A fake procfs of plain files is always
+#    readable, which is exactly why 8/8 passed over a detector that was wrong in
+#    production.
+r="$(newroot incontainer)"
+mkproc "$r" 101 tok-a "/usr/bin/conmon --api-version 1 -c abc"
+mkproc "$r" 102 tok-a "bash /repo/./build.sh --check"
+out="$(run_check_in_container "$r" TOOLBOX_PATH /)"; rc=$?
+check "inside a container it refuses to answer rather than accusing" 3 "could-not-run:competing-gate:inside-container" "$rc" "$out"
+out="$(run_check_in_container "$r" container oci)"; rc=$?
+check "an oci container is refused the same way" 3 "could-not-run:competing-gate:inside-container" "$rc" "$out"
+
+# 9. AN UNREADABLE PROCESS SUSPENDS THE ACCUSATION. A denied read is not an
+#    absent token: one of the processes it could not read may be the live
+#    wrapper of the group that looks headless. Accusing anyway is how a
+#    permission boundary becomes a false positive.
+r="$(newroot opaque)"
+mkproc "$r" 101 tok-a "/usr/bin/conmon --api-version 1 -c abc"
+mkproc "$r" 102 tok-a "bash /repo/./build.sh --check"
+mkproc "$r" 103 tok-b "bash /repo/./build.sh --check"
+chmod 000 "$r/103/environ"
+out="$(run_check "$r")"; rc=$?
+chmod 644 "$r/103/environ" 2>/dev/null || true
+check "an unreadable process suspends the accusation" 3 "could-not-run:competing-gate:unreadable-processes" "$rc" "$out"
 
 total=$((pass+fail))
 if [ "$fail" -eq 0 ]; then echo "PASS: competing-gate detector $pass/$total (1141-vf9w)"; exit 0; fi

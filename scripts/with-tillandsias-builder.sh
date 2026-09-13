@@ -480,6 +480,21 @@ _tb_dispatch() {
 
 ENV_FORWARD="$(tillandsias_env_forward_prefix)"
 
+# ORDER 1141-vf9w — ASK ABOUT COMPETING GATES HERE, ON THE HOST, BEFORE THE
+# DISPATCH. This is the only place on a Silverblue host where the question can
+# be answered: build.sh re-execs into the toolbox before its own fast refusals,
+# and from inside, a host-side wrapper's environ is unreadable — `[ -r ]`
+# answers true and the read is denied. Run there, the detector saw no wrapper
+# for any token and reported every gate as a competing gate. Advisory that was
+# noise; refusing it would have made every Linux gate refuse itself.
+#
+# Best-effort by construction: this must never be the reason a build does not
+# start.
+_tb_self_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -x "$_tb_self_dir/check-no-competing-gate.sh" ]; then
+    bash "$_tb_self_dir/check-no-competing-gate.sh" || true
+fi
+
 echo "[tillandsias-builder] Re-execing inside '$TOOLBOX_NAME' toolbox..."
 
 if [[ "$_TB_DIRECT" == 1 ]]; then
