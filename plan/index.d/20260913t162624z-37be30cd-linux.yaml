@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: three-main-rs-consumers-hardcode-the-status-spelling-of-the-lww-channel-so-a-fields-spelled-write-is-invisible-to-carry-forward-gaps-and-both-closure-evidence-check-scans
+    field: status
+    value: completed
+    ts: "2026-09-13T16:26:24Z"
+    host: linux
+
+events:
+  - packet_id: three-main-rs-consumers-hardcode-the-status-spelling-of-the-lww-channel-so-a-fields-spelled-write-is-invisible-to-carry-forward-gaps-and-both-closure-evidence-check-scans
+    event:
+      type: completed
+      ts: "2026-09-13T16:26:24Z"
+      host: linux
+      summary: |-
+        status 'completed' with evidence_refs: 691c360e0
+  - packet_id: three-main-rs-consumers-hardcode-the-status-spelling-of-the-lww-channel-so-a-fields-spelled-write-is-invisible-to-carry-forward-gaps-and-both-closure-evidence-check-scans
+    event:
+      type: note
+      ts: "2026-09-13T16:26:24Z"
+      host: linux
+      summary: |-
+        landed ok:land:691c360e0:attempt-1 (MERGING, so 42732c6b0 survives as an ancestor too). Three consumers routed through lww_entries; scan-side guard added; 7/7 fixture with both symptoms reproduced pre-fix; 310/310 crate tests under --lib.
