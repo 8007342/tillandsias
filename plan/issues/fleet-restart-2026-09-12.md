@@ -1082,3 +1082,29 @@ stories.
   one; the earlier "relaunch passed" samples may have been stamped no-ops.
   yoga takes pirria's wrapper-propagation row plus a gate-level lock; pirria
   verifies on the floor tier.
+- **The surviving-gate fix landed** (yoga, 1141-vf9w parts 1 and 3,
+  23c3dfce3): the wrapper no longer execs, so a signal has something to
+  arrive at, and termination propagates into the container-side tree by an
+  environment MARKER rather than an argv match — a stray and a healthy
+  concurrent gate run identical argv, and killing a legitimate gate is worse
+  than the orphan; bounded SIGTERM then SIGKILL; the reap lives in
+  scripts/lib-dispatch-reap.sh because with-wsl2-builder.sh dispatches the
+  same way (891-5shq: a second boundary must not reimplement the first's
+  fix). Three defects yoga put into their own fix, all caught by measurement
+  or a gate: a /proc scan at 819 ms per pid polled 20 times (16 s inside a
+  handler that runs while the caller is dying), ~300 permission errors
+  sprayed to the caller's stderr, and `mapfile -d ''` (bash 4.4+) refused by
+  check-bash-dialect naming darwin's 3.2. A mutation test silently did not
+  apply and reported a pass for the second time in a night (a sed pattern
+  missed after an indentation change): the rule now is print the mutation
+  diff and refuse if it is empty before believing any mutation result. An
+  invented order (1141-p2wq) was written into three files before the minted
+  1141-vf9w replaced it — the mint-never-pick rule doing its job late. Part
+  2, the gate-level lock, stays in_progress: pirria saw a legitimate NESTED
+  build.sh mid-gate, so the discriminator is conmon versus the launching
+  podman exec, never "another build.sh exists"; its third criterion is to
+  trace gate-stamp.sh as shared state and answer whether a surviving gate can
+  write a false PASS or only cause a false fail. pirria's relay re-gated on
+  yoga (6071c346d); the [low-end] linux queue is empty, so pirria's cadence
+  runs the due de-slop sweep (306 orders since the last) as its standing
+  tier work, and 1004-4xie's role corrected to windows.
