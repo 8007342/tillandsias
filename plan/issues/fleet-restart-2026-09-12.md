@@ -875,3 +875,72 @@ stories.
   echo rc=$?`. macneo flagged rotation to the operator; the drill's earlier
   probe text is corrected above. Crons on every host are session-only and
   expire 2026-09-19; the cadence must be re-armed on session start.
+- **First autonomous-drain stories** (evening, 2026-09-12): yoga 1132-r4mt
+  (two hypotheses refuted, the re-exec asymmetry named, two clean in-situ
+  samples with the print armed, refusal still uncaught) and 890-27mv (the
+  release-tier freshness reporter; ruling: macuahuitl is the nominated
+  ci-full host — every cut's gate plus one scheduled run per day when no cut
+  ran — no rotating sample, since 888-vgs8 puts convergence history where the
+  tier runs); lenovinha packet B → 1137-dzzu (STEP_SKIP_EXIT) and 1136-n8sh's
+  Rust half, then 1138-bb5r found on the way (a present-but-unusable rg
+  passes the cheatsheet check over zero references — every resolve_tool
+  consumer inherits it); macbookair 803-r8u4/803-rbqf (is_battery_present
+  was a bare bool that every non-Linux host serialised as a confident
+  `false` — macneo's own 09-04 row proved it — now Option<bool>;
+  inference-policy-router throttles on battery, so an unprobed laptop was
+  never throttled; scripts/windows-host-capability-probe.sh hardcodes true,
+  for yolanda/esme to check); macneo's four commits and cron. Three rules
+  from those stories: (1) after touching accel_probe.rs, build --release
+  before publishing a capability row — a debug-only cycle printed the OLD
+  nulls under a FRESH timestamp, and two hardware fingerprints from one host
+  in one cycle is the stale-artifact signature; (2) `cargo test -p X "a|b"`
+  takes a substring, not a regex, so a falsification pass can select ZERO
+  tests and print `test result: ok` — every falsification states "N
+  selected, M filtered out"; (3) choose a gate-steps.d prefix AFTER the land
+  script's integrate step, which pulls sibling steps in (205 collided with an
+  incoming 205-1137-dzzu and cost a gate). Line citations rotted within a
+  day on two packets (check-logs.jsonl append, run-litmus-test.sh call):
+  cite by symbol.
+- **A silenced stderr turned a missing path into 930 lines of "divergence"**
+  (yoga, retracted within the hour): `git show HEAD:images/default/skills/…`
+  with stderr to /dev/null exited 128 (the path is untracked by design —
+  .gitignore ignores the derived tree, build.rs excludes it from asset
+  collection) and produced a zero-byte file, which diffed against the
+  941-line canonical copy read as a fleet hazard. `diff -rq skills/
+  images/default/skills/` reports zero differences. Kept from the chase: the
+  forge image's build context is images/default/, so the Containerfile's
+  `COPY skills/` ships the DERIVED tree, and the sync is load-bearing for
+  what every in-forge agent reads — a guard there would assert "derived
+  matches authored at image build time". Verifying a hazard hard enough to
+  file it is what dissolved it.
+- **Never read a land or gate verdict through a pipe** (yolanda, esme: three
+  instances on two Windows hosts in one hour, none caught structurally):
+  `scripts/land-on-platform-branch.sh … | tail` reports tail's status, so a
+  refused gate (exit 3, log named) read as exit 0 and esme nearly filed a row
+  against the tool on that word. Rule on 1137-da83 and here; a fixture that
+  plants a refusing gate behind `| tail` and asserts the wrapper reports the
+  refusal is the follow-up. Also settled before hwfp-v2's schema: a Vulkan
+  vendorID is a u32 namespace (llvmpipe 0x10005) while DrmRenderNode's u16
+  is right for its only production source (sysfs PCI ids) — parse_pci_id
+  REFUSES the overflow and drops the whole node, so reusing it for Vulkan
+  ids would silently drop the software-rasterizer row 793-zumy criterion 2
+  exists to reject; a dropped row and a never-enumerated device look the
+  same. esme is authorised for one release build of the probe in
+  tillandsias-build to record the real-iGPU-beside-software-GPU enumeration.
+- **A gate arm that reads the fleet's live claim state refuses overlapping
+  lands** (lenovinha, 1034-whsp's `test-selector-drops-cross-branch-claims.sh`):
+  the two count-equality arms run the selector twice and assert an identical
+  batch count, so any claim or land by another host between the two reads
+  fails them — "a clean check altered the batch (2 vs 3)" with the fleet
+  moving, 6/6 three times with it quiet, nothing in the diff touching the
+  selector; the drop/name arms held throughout, so the contract is intact
+  and only the snapshot assertion is broken. Non-reproducible by the host it
+  hits, which is the worst shape for a gate, and now structural with four
+  hosts draining. Fix (lenovinha): assert the selector's response to the
+  stub, never the equality of two live reads. Second structural race: the
+  gate-steps.d prefix is read-then-written, so two hosts landing in one
+  window collide (205, then 215/225 tonight); the fix shape is a
+  collision-free mint like next-order. And the 349 scratch-ref pattern gains
+  a step from 776-jcf3's linux half: before deleting the probe ref, check its
+  commit is an ancestor of the branch — had it not been, deleting would have
+  destroyed the only remote copy.
