@@ -125,5 +125,52 @@ else
     fi
 fi
 
+# ── 8/9. A FALLBACK SHARE ON DISK IS NOT A COLD ROOM (900-z3kv, 1149-vgn2).
+#      vault recovers from the host keychain OR a fallback file under the init
+#      cache. This probe read only the keychain, so on pirria a
+#      `fallback_vault-shamir-share-v1` kept every reset WARM since 2026-09-01
+#      while the probe certified the host COLD — and the cold verdict's own text
+#      asserts "the resync path IS exercised", which was exactly false there. A
+#      check that RAN and reported a property it was not measuring, inside the
+#      instrument this row delivered to detect that class.
+#
+#      CONSTRUCTION: a busctl stub that SUCCEEDS, advertises the secrets service
+#      and returns NO items — an empty keychain, not an unaskable question —
+#      with XDG_CACHE_HOME pointed at a scratch tree. Existence only; this arm
+#      never writes anything resembling a secret, per criterion 4.
+_stub="$W/stub"; mkdir -p "$_stub"
+cat > "$_stub/busctl" <<'STUB'
+#!/usr/bin/env bash
+case "$*" in
+    *list*) echo "org.freedesktop.secrets  1 dummy - - -" ;;
+    *call*) echo 'ao 0 ao 0' ;;
+esac
+exit 0
+STUB
+chmod +x "$_stub/busctl"
+_cache="$W/cache"; mkdir -p "$_cache/tillandsias"
+: > "$_cache/tillandsias/fallback_vault-shamir-share-v1"
+if [ ! -e "$_cache/tillandsias/fallback_vault-shamir-share-v1" ]; then
+    bad "arm 8 could not plant a fallback share, so it would have asserted nothing"
+else
+    out="$(PATH="$_stub:$PATH" XDG_CACHE_HOME="$_cache" bash "$PROBE" 2>&1)"
+    case "$out" in
+        *credential-state:warm*fallback*) ok "an empty keychain with a fallback share reads WARM, not cold" ;;
+        *credential-state:cold*)          bad "FALSE COLD: a fallback share is present and the probe certified cold (1149-vgn2)" ;;
+        *)                                bad "arm 8 produced an unclassified verdict: $out" ;;
+    esac
+fi
+
+#      NEGATIVE CONTROL, and the arm most likely to be deleted as redundant:
+#      with the fallback REMOVED and the same empty keychain, the probe must
+#      still say COLD. Without it, a probe that simply never reported cold again
+#      would pass arm 8.
+rm -f "$_cache/tillandsias/fallback_vault-shamir-share-v1"
+out="$(PATH="$_stub:$PATH" XDG_CACHE_HOME="$_cache" bash "$PROBE" 2>&1)"
+case "$out" in
+    *credential-state:cold*) ok "an empty keychain with NO fallback still reads cold" ;;
+    *)                       bad "cold became unreachable once the fallback check was added: $out" ;;
+esac
+
 echo "credential-cold-state-probe: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

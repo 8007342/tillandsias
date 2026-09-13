@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-ready-row-whose-owned-files-a-landed-fix-touched-since-filing-is-a-staleness-candidate-the-pass-must-surface
+    field: next_action
+    value: 'Owned_files pass left (the cites-the-order first pass landed at 320296380 with fixture and skill step): for each ready row with owned_files and a filed ts, list commits after that ts touching those files whose subject/body cite neither the order nor the packet_id; print stale-candidate lines in the same grammar with pass=owned-files; NEGATIVE CONTROL a commit citing the row is not a candidate; criterion 1 names 1085-g52w against b026372ff; measure under 60 s on the full ledger on macuahuitl.'
+    ts: "2026-09-13T11:43:14Z"
+    host: macuahuitl
+
+events:
+  - packet_id: a-ready-row-whose-owned-files-a-landed-fix-touched-since-filing-is-a-staleness-candidate-the-pass-must-surface
+    event:
+      type: note
+      ts: "2026-09-13T11:43:14Z"
+      host: macuahuitl
+      summary: |-
+        written for the next claimer

@@ -392,8 +392,10 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
         if grep -qiE "authentication failed|invalid username or token|could not read Username|Permission denied \(publickey\)" "$_plog"; then
             echo "refused:land:auth-failed — git cannot authenticate to origin." >&2
             sed -n '1,3p' "$_plog" >&2
-            echo "  The commit is safe locally; nothing was lost. Re-authenticate, then re-run:" >&2
-            echo "    gh auth refresh -h github.com && gh auth setup-git" >&2
+            echo "  The commit is safe locally; nothing was lost. STOP HERE and report the" >&2
+            echo "  blocker: do NOT run 'gh auth login' or 'gh auth refresh' — a re-auth on one" >&2
+            echo "  host evicts the operator's token on the others (1025-a896). The operator" >&2
+            echo "  re-provisions the credential; then re-run:" >&2
             echo "    scripts/land-on-platform-branch.sh $BRANCH" >&2
             rm -f "$_plog"; exit 5
         fi
