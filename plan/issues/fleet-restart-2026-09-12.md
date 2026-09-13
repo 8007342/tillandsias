@@ -900,8 +900,20 @@ stories.
   gate log — and that tool's header exists BECAUSE someone once shipped exactly
   that bug, so it was accused of the defect it was written to prevent, by a
   reading that had the defect. esme was about to file a row against it.
-  Capture into a variable (`out="$(cmd 2>&1)"; rc=$?`), or `${PIPESTATUS[0]}`,
-  or `set -o pipefail`. Same family as the macneo probe entry above — there the
+  Capture into a variable (`out="$(cmd 2>&1)"; rc=$?`) or `set -o pipefail`.
+  SAY "SNAPSHOT THE ARRAY AS THE VERY NEXT COMMAND" — `ps=("${PIPESTATUS[@]}")`,
+  then index it — and NOT "use ${PIPESTATUS[0]}". PIPESTATUS[0] is not wrong; it
+  is FRAGILE, and the distinction decides whether this entry survives contact
+  with a reader. Read as the first command after the pipeline it is correct, so
+  anyone who tests it in isolation finds it works and concludes the warning was
+  overblown. But ANY intervening command resets the array, and the intervening
+  command everyone writes is `a=$?` — precisely what you reach for alongside it.
+  `a=$?; b="${PIPESTATUS[0]}"` yields 0 and 0 even on one line, because `;`
+  separates two commands; a `$( )` or `( )` around the pipeline loses it too.
+  The mechanism is fine; the idiom it travels with destroys it (esme's framing).
+  THE NEAR-MISS IS PART OF THE RULE: an isolated test of PIPESTATUS[0] passes. Pinned executably by
+  litmus:land-verdict-through-a-pipe (scripts/test-land-verdict-through-a-pipe.sh),
+  which plants a refusing gate in a scratch repo and reads it six ways. Same family as the macneo probe entry above — there the
   rc was the signal and stdout the secret; here the rc is the thing the pipe
   silently replaces. The trap is that `head`/`tail` are what you reach for to
   make output READABLE, so the habit that makes a measurement legible is the
@@ -911,3 +923,55 @@ stories.
   it. So the second half of the rule is social — flag a disagreement you cannot
   explain rather than smoothing it, because agreement between two sources is
   not evidence when both share a method.
+
+  AND THE THIRD HALF IS THAT CAREFUL THOUGHT DID NOT REACH THE BOTTOM OF THIS;
+  AN ARM THAT COULD GO RED DID. The `${PIPESTATUS[0]}` fragility above was found
+  only when a fixture refused to go green against a tool that had just been
+  proven correct — neither host got there by reasoning, and both had already
+  published the weaker advice. The same file taught it twice: that fixture
+  opened with `set -uo pipefail`, one of the three sanctioned remedies, and
+  four trap arms went green while measuring the remedy instead of the defect.
+  When the subject is how a measurement lies, write the arm.
+- **A fixture reaches the gate by one of two routes, and neither is automatic**
+  (yolanda and esme, 2026-09-12). `scripts/test-*.sh` is NOT globbed by
+  build.sh. Route 1: an explicit `_run bash "$SCRIPT_DIR/scripts/test-X.sh"`
+  line in build.sh (~100 of them, e.g. test-cycle-lock-attested-release.sh).
+  Route 2: a litmus binding — and route 2 is TWO FILES.
+  `openspec/litmus-tests/litmus-<name>.yaml` defines the test;
+  `openspec/litmus-bindings.yaml` registers it against a spec_id, and
+  `get_litmus_tests_for_spec` reads that registry to decide what
+  `run-litmus-test.sh <spec>` runs. Definition only: the file exists and no
+  spec run picks it up. Registry only: a pin naming a test nothing defines,
+  which is 1068-cxmf's standing defect. A fixture wired by NEITHER route is a
+  file, not a gate — that is the vacuous-green shape, and the corpus has 253+
+  test scripts against 125 distinct names in the litmus yamls, so the gap is
+  not hypothetical. Wire it in the same commit that writes it and say which
+  route. Both hosts got a piece of this wrong before checking the runner
+  source: one claimed the litmus binding was the only route, the other that the
+  registry file was not involved.
+
+  RELATEDLY, a `| tail -1` inside a litmus step is CORRECT and should not be
+  filed as an instance of the pipe rule above. `run-litmus-test.sh` honours the
+  exit code only when a step declares NEITHER `success_pattern` NOR
+  `expected_behavior` (the order-256/267 strict-exit arm); with
+  `expected_behavior` the verdict is content-based, so `tail -1` extracts the
+  signal rather than discarding it. STATED AS A RULE RATHER THAN AS A FACT ABOUT
+  ONE FILE (esme's phrasing): a content-asserted step is only as good as the
+  guarantee that its verdict line CANNOT PRINT EARLY. Guard the terminal `ok:`
+  behind the failure counter — `[ "$fail" -eq 0 ]` — or the step passes on a
+  fixture that died halfway. esme chased this to the bottom while primed to find
+  the bug, and reported it as a negative.
+
+  A RELATED SCARE, NARROWED RATHER THAN FILED. run-litmus-test.sh:177-181 warns
+  that without yq the runner falls back to grep approximations that decide WHICH
+  TESTS RUN, so a host would silently select a different test set and nothing
+  would report the difference. Measured on yolanda, which has NO yq: the comment
+  overstates the residual, because order 746-htj9 added a FIRST tier —
+  `tillandsias-plan yaml-json | jq` — and it resolves here. Piping the registry
+  through `jq -r '.specs[] | select(.spec_id=="ci-release") | .litmus_tests[]'`
+  returned the correct list including a binding added minutes earlier, so
+  selection was NOT degraded on a yq-less host. The real residual is narrower:
+  a host with neither yq NOR a resolvable tillandsias-plan+jq falls to grep, and
+  steps whose own COMMANDS call yq still fail or return empty — which is what
+  `warn:litmus-degraded-no-yq` already reports. Not filed as a row on that
+  basis: the in-place comment predates its own mitigation.

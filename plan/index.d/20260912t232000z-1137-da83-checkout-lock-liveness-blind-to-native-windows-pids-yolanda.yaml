@@ -215,10 +215,55 @@ packets:
              was accused of the defect it was written to prevent, by a reading
              that had the defect.
 
-         Capture into a variable (`out="$(cmd 2>&1)"; rc=$?`), or use
-         `${PIPESTATUS[0]}`, or `set -o pipefail`. The trap is that head/tail are
-         what you reach for to make output READABLE: the habit that makes a
-         measurement legible is the habit that corrupts it.
+         Capture into a variable (`out="$(cmd 2>&1)"; rc=$?`), or
+         `set -o pipefail`, or SNAPSHOT THE ARRAY AS THE VERY NEXT COMMAND:
+         `ps=("${PIPESTATUS[@]}")`, then index it.
+
+         PHRASE IT THAT WAY AND NOT AS "use ${PIPESTATUS[0]}" (esme's point,
+         and they are right). PIPESTATUS[0] is not WRONG — read as the first
+         command after the pipeline it is correct, and a reader who tests it in
+         isolation will find it works and conclude this warning was overblown.
+         It is FRAGILE: ANY intervening command resets it, and the intervening
+         command everyone writes is `a=$?`, which is exactly what you reach for
+         alongside it. So the mechanism is fine and the idiom it travels with
+         destroys it. Measured while writing this row's fixture:
+
+           bash -c 'exit 3' | tail -1 >/dev/null
+           a=$?; b="${PIPESTATUS[0]}"   ->  a=0 b=0   (both wrong, even on ONE line)
+           ps=("${PIPESTATUS[@]}")      ->  ps=(3 0)  (correct)
+
+         `;` separates two commands and the `a=$?` assignment RESETS the array
+         before the second reads it; a `$( )` or a `( )` around the pipeline
+         loses it the same way. Snapshot the whole array as the very next
+         command after the pipeline, then index it. THE REMEDY CARRIES THE TRAP,
+         which is why this row ships an executable fixture rather than advice.
+
+         AND THE FIXTURE IS WIRED TWO WAYS, because I got this wrong once
+         already and told a peer so. `scripts/test-*.sh` is NOT globbed by
+         build.sh, but a fixture reaches the gate by EITHER of two routes: an
+         explicit `_run bash` line in build.sh (~100 such lines, including
+         test-cycle-lock-attested-release.sh) or a litmus binding (which is how
+         test-cycle-checkout-lock.sh runs — it appears in build.sh not at all).
+         I first said "only because a litmus binding names it", which is false.
+
+         AND ROUTE 2 IS TWO FILES, NOT ONE — the correction esme and I each got
+         half of. `openspec/litmus-tests/litmus-<name>.yaml` DEFINES the test
+         (steps, commands, expected_behavior).
+         `openspec/litmus-bindings.yaml` REGISTERS it against a spec_id, and
+         `get_litmus_tests_for_spec` in run-litmus-test.sh reads THAT registry
+         to decide what `run-litmus-test.sh <spec>` executes. Write only the
+         definition and the file exists but no spec run picks it up; write only
+         the registry entry and it names a test nothing defines, which is
+         1068-cxmf's dangling-pin defect. The failure mode is opening one of
+         the two and believing you are done.
+
+         Either route suffices; neither is automatic; a fixture with NEITHER is
+         a file, not a gate. This one has both routes, and route 2 in both its
+         halves.
+
+         The trap is that head/tail are what you reach for to make output
+         READABLE: the habit that makes a measurement legible is the habit that
+         corrupts it.
 
          NOTHING STRUCTURAL CAUGHT ANY OF THE THREE — not a gate, not a test. One
          was caught by re-reading one's own command, one by a peer flagging a
