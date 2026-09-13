@@ -1,0 +1,88 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-deslop-sweeps-own-record-file-is-outside-the-plan-only-lane-so-the-sweep-assigned-to-the-slowest-hosts-pays-a-full-build-gate-to-record-that-it-read-some-rows
+    order: 1141-f5nk
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [gates, plan, deslop, floor-tier]
+    estimated_hours: 1
+    unscoreable: |
+      unpinnable-until-the-guard-exists. The check is runnable today — stage
+      a plan/deslop-sweeps.d/<host>.md beside index.d fragments and read the
+      lane verdict — but no litmus binds the lane's DIRECTORY SET, which is
+      the thing this row changes. scripts/test-pre-push-issue-capture-lane.sh
+      is the nearest fixture and covers plan/issues/ only. Whoever fixes this
+      extends that fixture with a deslop-sweeps arm and, more importantly,
+      the negative control: a path outside the set must STILL take the full
+      gate, or the fix trades a friction for a hole.
+    owned_files:
+      - scripts/hooks/pre-push-local-gate.sh
+    title: |
+      MEASURED on pirria: `scripts/check-deslop-due.sh record` writes plan/deslop-sweeps.d/<host>.md, which pre-push-local-gate.sh:521 does not list among the plan-only lane's directories — so a sweep that changed nothing but ledger rows is charged a full ./build.sh --check, on the tier the sweep is deliberately assigned to because it is reading rather than building
+    context: |
+      MEASURED this sweep, on the first attempt to land it:
+
+        plan-only lane: not applicable — 'plan/deslop-sweeps.d/pirria.md' is
+        outside plan/index.d/, plan/loop_status.d/, plan/issues/, and
+        plan/mo-full-attestations.d/ (full gate required)
+
+      The push carried six files: five plan/index.d/ fragments (two note
+      events, two set-field corrections, one retraction) and the sweep's own
+      record. The five qualify. The sixth is what the sweep is REQUIRED to
+      write — `scripts/check-deslop-due.sh record` refuses without
+      --examined and --confirmed and writes them to
+      plan/deslop-sweeps.d/<host>.md (check-deslop-due.sh:69,142) — and it
+      takes the whole push onto the full gate.
+
+      THE COST LANDS EXACTLY WHERE THE SWEEP WAS SENT. The de-slop sweep is
+      assigned to the floor tier precisely because it is reading, not
+      building; on this host ./build.sh --check measures 826-950s. So the
+      cheapest possible cycle — examine rows, retract one, correct one,
+      write six small YAML files — pays the most expensive gate in the tree,
+      to record that it read some rows.
+
+      IT IS AN OMISSION, NOT A POLICY. plan/deslop-sweeps.d/ is a ledger
+      directory in exactly the sense the other four are: append-only,
+      host-scoped (`<host>.md`), written by a script rather than by hand, and
+      read back by two checkers (check-deslop-due.sh and
+      check-deslop-sweep-health.sh:68) that consume it as data. Nothing in it
+      can change what the gate compiles. The lane's `*)` arm at
+      pre-push-local-gate.sh:521 simply predates it — the message enumerates
+      four directories and this is a fifth of the same kind.
+
+      MUTATION AND PREDICTED OBSERVABLE:
+        mutation:  stage plan/deslop-sweeps.d/<host>.md beside index.d
+                   fragments and push
+        predicted: the lane refuses with the line above and the push demands
+                   a full gate
+        observed:  exactly that, this sweep. CONFIRMED.
+
+      NOT ESTABLISHED, and deliberately not assumed: whether
+      plan/deslop-sweeps.d/ is the only ledger directory left out. The four
+      named in the message plus this one are the ones this sweep touched; a
+      fix should enumerate the plan/*.d/ directories that scripts WRITE and
+      check each against the lane, rather than adding one path and leaving
+      the next host to find the next omission.
+
+      WHY p2 AND NOT p3: it is pure friction with a workaround (run the
+      gate), so nothing is at risk — but it is a standing tax on a recurring
+      scheduled step, charged to the hosts least able to pay it, and it
+      discourages the record-keeping the kill rule depends on. A sweep that
+      skipped the record to stay on the fast lane would silently disarm
+      829-dkuc's two-consecutive-zero-sweeps detector.
+    next_action: |
+      1. Enumerate which plan/*.d/ directories are written by scripts rather
+         than by hand (`grep -rn 'plan/[a-z_-]*\.d' scripts/` is the start)
+         and check each against the lane's case arms at
+         scripts/hooks/pre-push-local-gate.sh:~460-525.
+      2. Add the qualifying ones, deslop-sweeps.d among them, with the same
+         per-file discipline the existing arms use (the attestation arm
+         refuses README.md/TEMPLATE.md; the issues arm requires a class
+         directory) — a sweep record is `<host>.md` and nothing else.
+      3. THE NEGATIVE CONTROL IS THE HALF THAT MATTERS: a path outside the
+         set must still take the full gate, and a fixture must assert it.
+         Widening a lane is a change to what can reach trunk ungated; a fix
+         that only proves the new path passes has tested the easy direction.

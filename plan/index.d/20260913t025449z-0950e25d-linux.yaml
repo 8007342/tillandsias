@@ -1,0 +1,70 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-gate-fixture-that-asserts-a-number-nobody-chose-is-a-snapshot-not-a-threshold-and-it-fires-later-with-the-wrong-label
+    event:
+      type: note
+      ts: "2026-09-13T02:54:49Z"
+      agent_id: linux-lenovinha-opus5-20260913t025449z
+      host: linux
+      summary: |
+        NEXT_ACTION ITEM 5 DISCHARGED: the six remaining leads re-checked, one per
+        fixture, against the four-kind test. FIVE OF FIVE REFUTED AS SNAPSHOTS. The
+        class is SMALLER than "nine fixtures" implies — nine counted CANDIDATES, and the
+        sweep's refute-defaulting discipline holds up.
+
+        METHOD NOTE, because it changed the answer: the cited line numbers are not where
+        the numbers are. test-subdomain-routing.sh:147, test-git-credential-helper.sh:61
+        and test-litmus-missing-bound-test-reds.sh:93 carry NO numeric comparison at all
+        at those lines. Trusting the citations would have produced three confident
+        refutations for the wrong reason. Each file was instead swept for numeric
+        comparisons and every hit classified.
+
+          test-subdomain-routing.sh — CONTRACT PIN. The cited line asserts an @trace
+          annotation is present in the squid config. No number. Its only comparison is
+          `TESTS_FAILED -eq 0`, the fixture's own tally. NOT AN INSTANCE.
+
+          test-git-credential-helper.sh — CONTRACT PIN. greps on images/git/relay-refs.sh
+          asserting the token never enters argv. No numeric comparison anywhere in the
+          file. NOT AN INSTANCE.
+
+          test-yaml-reader-availability.sh — CORRECTNESS CHECK. `FAIL -eq 0` on its own
+          counter. NOT AN INSTANCE.
+
+          test-archiver-ruby-could-not-run.sh — CONTRACT PIN. `rc -eq 3` and
+          `rc2 -eq 3`: 3 is the DOCUMENTED could-not-run exit code (965-sxec), chosen and
+          written down in that order, not measured. NOT AN INSTANCE, and this is the case
+          most likely to be misread as one by a grep for bare numeric comparisons.
+
+          test-litmus-missing-bound-test-reds.sh — DECLARED VACUITY FLOOR, kept and
+          IMPROVED. `bound_total -gt 100` against a live ~479; 100 is not what the tree
+          measured (that would be 479), it is a floor well below any plausible corpus,
+          catching the grep returning nothing. Same kind as the negative control
+          `n_all -gt 20`. Per this row's own remedy for a declared floor — "only that its
+          failure message name the real cause" — a red now separates the two causes that
+          need opposite responses: the PARSER stopped matching (fix the fixture) or the
+          CORPUS shrank below the floor (lower it deliberately, and say who did). 6/6.
+
+          test-freshness-regime-budget.sh — ALREADY DONE by 8d190f47f, confirmed on
+          trunk. Recorded here as this row's next_action asked.
+
+        WHAT THIS MEANS FOR THE CLASS, and it is the part worth carrying forward: three
+        of nine were real and are fixed; five are LEGITIMATE ARMS — contract pins,
+        correctness checks, and a declared floor — that a claimer reading only the
+        prohibition would have stripped. That is precisely the over-fixing the
+        2026-09-05T22:43Z note was written to prevent, and it nearly happened here: the
+        cited lines LOOK like leads until you ask where the other side of the comparison
+        came from. The note earned its place.
+
+        STILL OPEN, and deliberately not claimed as closed: next_action item 6. Both
+        sweeps read only --check. Nothing here says anything about --test, --ci-full,
+        the litmus corpus, or the hooks — the row's own "NINE IS A FLOOR, NOT A TOTAL"
+        still stands for those surfaces. That is a separate packet, not work I have
+        silently absorbed.

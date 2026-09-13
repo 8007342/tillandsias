@@ -105,8 +105,31 @@ while IFS= read -r n; do
 done < <(grep -oE '^[[:space:]]*-[[:space:]]+litmus:[A-Za-z0-9._-]+' "$ROOT/openspec/litmus-bindings.yaml" \
           | sed 's/^[[:space:]]*-[[:space:]]*//' | tr -d '\r' | sort -u)
 _result "arm2-every-bound-name-resolves-to-a-file" "0" "$bound_missing"
+# ORDER 1083-gzqj, EXAMINED AND KEPT. This was one of six leads re-checked
+# against the four-kind test (threshold / contract pin / correctness check /
+# snapshot), and it is NOT a snapshot: 100 is not what the tree measured when
+# the arm was written — that number is ~479 today — it is a floor well below any
+# plausible corpus, chosen to catch the grep returning nothing. Same kind as
+# test-precommit-zero-trace-scan-scope.sh's `n_all -gt 20`, which two
+# independent sweeps examined and both cleared. Removing it would delete a real
+# vacuity guard, which is the over-fixing 1083-gzqj's own note warns a claimer
+# reading only the prohibition would commit.
+#
+# WHAT THE ORDER DOES ASK FOR: "the remedy for a declared floor is only that its
+# failure message name the real cause, so a shrunken corpus does not read as a
+# broken sweep." Before this, a red said the binding list was not read — which
+# points at the parser. If the corpus itself shrank below the floor, that is a
+# TRUE statement about the corpus and a misleading one about the fixture.
 if [ "$bound_total" -gt 100 ]; then plausible=yes; else plausible=no; fi
 _result "arm2-control-the-binding-list-was-actually-read" "yes" "$plausible"
+if [ "$plausible" = "no" ]; then
+    echo "    floor: expected >100 bound litmus names, read $bound_total from" >&2
+    echo "    openspec/litmus-bindings.yaml. 100 is a DECLARED vacuity floor (1083-gzqj)," >&2
+    echo "    not a measurement — it exists to catch the grep above returning nothing." >&2
+    echo "    Two causes, and they need opposite responses: the PARSER stopped matching" >&2
+    echo "    (fix this fixture), or the CORPUS genuinely shrank below 100 (fix nothing" >&2
+    echo "    here — lower the floor deliberately and say who lowered it and why)." >&2
+fi
 
 # ---- ARM 3: the CR strip that made the lookup work at all stays -------------
 # Without it the name carries a trailing CR on Windows, the file is "not found",

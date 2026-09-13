@@ -1242,6 +1242,68 @@ stories.
   pushes directly only when the window is open, never a union gate for a
   plan-only change. Five harness waiters were reaped for memory during the
   4050 s gate; it survived because it ran under setsid inside the distro.
+- **CORRECTION to the two bullets above, measured by yolanda and esme
+  against the hook's predicate** — discard the "floor-tier plan-only window"
+  framing and the "silent second route" claim. (1) `_lane_can_scope` in
+  scripts/hooks/pre-push-local-gate.sh walks every merge in the outgoing
+  range and requires each merge's SECOND parent to be an ancestor of
+  origin/linux-next; esme's refused head had 17 merges with one disqualifying
+  (its second parent was yolanda's checkout-lock land 3cfea048a, not yet
+  relayed to trunk) and the accepted head had 28 merges and none. So a floor
+  host can push plan-only without a stamp at any time provided it does not
+  MERGE a branch carrying un-relayed commits: basing on origin/windows-next
+  (first parent) is free, merging it makes that content a second parent —
+  same branch, same content, different parent position, opposite verdict —
+  and the reason is not tidiness (a non-trunk second parent can carry
+  unreviewed code invisible to a first-parent walk). The cause was fleet
+  timing — the lag between a platform land and its relay — and the relay is
+  the coordinator's to keep short; this land carries 3cfea048a. What stands:
+  the linux-next-merged guard runs before the lane; a first push of a
+  `work/` ref has no remote base and needs the full gate; 4050 s is the cost
+  of a floor-tier UNION push, not of routine plan work. (2) The "silent
+  cargo-absent skip reporting ok" on yolanda was a FIXTURE's assertion text
+  (test-cycle-preflight-cargo-resolution.sh quoting the value it asserted on)
+  read as the host's verdict; the real tier step 190 lines down had passed.
+  1140-d6ni is "the tier check is broken on esme by the stale-.exe
+  resolution", no second route; the reorder (yoga, 1142-wn2k superseded into
+  it) is the whole fix; open question, not a claim: yolanda's host carries
+  the same artefact shape with interop on and did not break. Fourth instance
+  of one error class in a night, named: a search that returns something has
+  not answered the question — ask what the matched line IS before reading
+  what it says. Also: esme held the checkout lock 87 minutes after a gate,
+  visible only because 1137-da83 made the lock real; long gates on any host
+  launch DETACHED from the harness (nohup/setsid to a log; yolanda verified
+  the gate alive in a later call), since the harness reaps its own tasks.
+- **SECOND CORRECTION: the 4050 s gate and the false ERROR had one cause,
+  and it was not the tier** (esme): launching `./build.sh --check` from
+  INSIDE the WSL distro (to survive the harness's memory reaps) made
+  scripts/with-wsl2-builder.sh see an already-Linux shell, skip its re-exec,
+  and never export CARGO_TARGET_DIR to the distro-local ext4 target dir — so
+  the gate compiled against ./target on drvfs (6.75x) and
+  resolve_target_binary found the stale tillandsias-policy.exe that the
+  sanctioned target dir never holds (62 occurrences of target/debug in
+  esme's log, zero of tillandsias-wsl2-target; yolanda's log the reverse).
+  The reorder is right but reachable only when CARGO_TARGET_DIR points at a
+  mixed-artefact directory, which the sanctioned path avoids by construction
+  (1140-d6ni's third amendment). Deleting the .exe did not persist — cargo
+  re-created the hardlink from target/debug/deps. Rules for both Windows
+  hosts: never launch a gate by hand inside the distro; detach from Git Bash
+  (nohup … & disown, verified alive in a later call) so the re-exec still
+  happens. "esmeraldinha is not slow, its filesystem is" — and this time the
+  filesystem was chosen by a bypass.
+- **A host landing CODE is starved by plan-only churn** (lenovinha, measured):
+  1119-w2rj finished, green (536 tests, criterion 4 executed against the
+  real image with a 0755-refuses/0777-succeeds control), exhausted four land
+  attempts — an 8-minute full gate racing a 5-10 minute trunk cadence, six of
+  the twelve preceding commits being the coordinator's own plan-only drill
+  records landed one per message. The cheap lane sets the cadence and the
+  expensive lane pays it. Policy: the coordinator batches plan-only records
+  into ONE land per coordination pass (this bullet waits for the next one);
+  every host batches plan-only pushes into its cycle's land; and the land
+  tool must make a re-integrate that brought only plan/ paths cost the
+  partial memo rather than a full gate — lenovinha files and fixes it, and
+  takes 1083-gzqj next (1140-5bre does not close its ARM 2: the baseline on
+  the live ledger was kept one layer down).
 - **CORRECTIONS to the two entries above, all three errors mine** (esme, after
   yolanda re-read the evidence and yoga questioned it):
   - **Route B does not exist.** The "silent cargo-absent SKIP that reports

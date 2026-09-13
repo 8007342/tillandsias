@@ -58,7 +58,80 @@ STUB
 # The tier is not this fixture's subject. Its subject is what the selector does
 # with a batch once it HAS one, so pinning the tier removes a variable that
 # decides whether the test can run at all on the host that runs it.
-_run() { TILLANDSIAS_HOST_TIER=general TILLANDSIAS_XBRANCH_CHECK="$W/stub.sh" bash scripts/select-work-batch.sh linux --budget 3 2>&1; }
+_run() {
+    TILLANDSIAS_HOST_TIER=general \
+    TILLANDSIAS_XBRANCH_CHECK="$W/stub.sh" \
+    TILLANDSIAS_PLAN_BIN="$W/plan-shim.sh" \
+    bash scripts/select-work-batch.sh linux --budget 3 2>&1
+}
+
+# ── THE LEDGER IS A FIXTURE, NOT THE FLEET'S (order 1083-gzqj, ARM 2) ──────
+#
+# The stub above removed this fixture's dependency on the cross-branch CHECKER.
+# It did NOT remove its dependency on the LEDGER: select-work-batch.sh reads the
+# live plan, so the batch it returns is a function of what every host has
+# claimed, closed or landed in the last few minutes. The baseline below then
+# required that live pool to be non-empty, which is ARM 2 of 1083-gzqj: the arm
+# reds when the linux ready pool empties, and siblings holding rows or a release
+# bump can cause that with no code change at all.
+#
+# THIS IS THE SECOND HALF OF A REPAIR THAT WAS MADE ONCE BEFORE. The header
+# above records the first: the fixture "passed when I wrote it and refused a
+# real land hours later, having tested nothing but the fleet's claim state". The
+# repair stubbed the checker and left the baseline. 1140-5bre then removed the
+# cross-read COMPARISONS in arms 1 and 3 and ALSO left the baseline. Two authors,
+# same file, same half-application. The baseline is the part that was never
+# fixed, so it is fixed here rather than explained again.
+#
+# HOW: the selector reaches the ledger only through "$PLAN", and
+# TILLANDSIAS_PLAN_BIN overrides which binary that is. A shim that appends
+# `--index <fixture>` to every call points the whole selector at a ledger THIS
+# FILE owns — three ready packets, written here, unaffected by any host. The
+# batch then has a subject because the fixture guarantees one, not because the
+# fleet happened to be busy.
+_FIXTURE_INDEX="$W/fixture-index.yaml"
+cat > "$_FIXTURE_INDEX" <<'FIXTURE_LEDGER'
+plan_index:
+  - packet_id: xbranch-fixture-alpha
+    order: 9990-aaaa
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    title: fixture row alpha for the cross-branch selector arms
+    unscoreable: fixture row, never landed — exists only to give the arms a subject
+  - packet_id: xbranch-fixture-beta
+    order: 9991-bbbb
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    title: fixture row beta for the cross-branch selector arms
+    unscoreable: fixture row, never landed — exists only to give the arms a subject
+  - packet_id: xbranch-fixture-gamma
+    order: 9992-cccc
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    title: fixture row gamma for the cross-branch selector arms
+    unscoreable: fixture row, never landed — exists only to give the arms a subject
+FIXTURE_LEDGER
+
+_REAL_PLAN="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary 2>/dev/null || printf '')"
+if [ -z "$_REAL_PLAN" ]; then
+    bad "no runnable tillandsias-plan — this fixture cannot drive the selector at all"
+    echo "selector-drops-cross-branch-claims: $pass passed, $fail failed"
+    exit 1
+fi
+cat > "$W/plan-shim.sh" <<SHIM
+#!/usr/bin/env bash
+exec "$_REAL_PLAN" --index "$_FIXTURE_INDEX" "\$@"
+SHIM
+chmod +x "$W/plan-shim.sh"
 
 # ── 0. BASELINE: the UNFILTERED batch, taken with the clean stub ───────────
 # NOT with the live checker. The baseline is the batch before any cross-branch
