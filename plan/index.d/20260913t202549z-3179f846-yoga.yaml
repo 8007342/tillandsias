@@ -1,0 +1,82 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: silverblue-hosts-layering-akmods-fail-depsolve-whenever-the-base-kernel-outruns-the-updates-repo-and-the-symptom-reads-as-ready-then-fails-then-nothing-staged
+    event:
+      type: implemented
+      ts: "2026-09-13T20:25:49Z"
+      agent_id: linux-yoga-claude-20260913t202549z
+      host: yoga
+      summary: |
+        ALL THREE EXIT CRITERIA MET. Cheatsheet, read-only probe, and the
+        meta-orchestration preamble carrying the verdict.
+
+        1. CHEATSHEET — cheatsheets/runtime/silverblue-updates.md. Names the symptom
+           ("ready, requires restart" that never applies, with nothing staged), the
+           journal line to read, the rich dependency `(kernel-devel-matched if
+           kernel-core)` and why it fires (kernel-core comes from the OSTree base, so
+           the `if` is satisfied and every repo kernel-devel-matched is then refused),
+           and the three remedies AS THE OPERATOR'S DECISION — with the reason stated
+           rather than implied: every remedy changes what is installed on someone's
+           workstation. Carries the two-host scope table, because two Silverblue hosts
+           DISAGREEING is what localises this to akmods rather than to GPU drivers or
+           to Silverblue.
+
+           WROTE IT TO cheatsheets/runtime/, NOT the owned_files path. The row names
+           docs/cheatsheets/runtime/silverblue-updates.md; measured before writing,
+           docs/cheatsheets/runtime/ holds only a `wsl` directory, and BOTH guards walk
+           the root tree — check-cheatsheet-source-anchors.sh and
+           check-cheatsheet-tiers.sh resolve `cheatsheets/`, and the forge image's
+           derived tree is staged from there too. An entry under docs/ would have been
+           unvalidated by the anchors guard, uncounted by the tier check, and absent
+           from the image. Both guards green where it now lives.
+
+        2. PROBE — scripts/probe-silverblue-update-skew.sh, read-only, reporting
+           skip / ok:no-skew / skew: / could-not-run. It requires ALL THREE conditions
+           before saying skew: akmods layered, an update offered, AND a depsolve failure
+           naming kernel-devel-matched in the rpm-ostreed journal. The third is the one
+           that separates "an update is pending" from "this host CANNOT apply it" —
+           `--check` never sees it, because --check does not depsolve, which is the
+           whole reason the symptom reads as "ready".
+
+           NOTHING IN IT CAN MUTATE A DEPLOYMENT, the packet's hard constraint. The only
+           rpm-ostree calls are `status` and `upgrade --check`, the latter bounded by
+           timeout so an unreachable mirror degrades to could-not-run rather than
+           hanging a cycle preamble.
+
+        3. PREAMBLE — skills/meta-orchestration/SKILL.md now runs the probe on immutable
+           Linux at cycle start and says what to do with each verdict, including the
+           part an agent most needs told: a skew: verdict is NOT a cycle failure and NOT
+           something to act on, because all three remedies are the operator's.
+
+        VERIFIED LIVE ON THIS HOST: `ok:no-skew:no-akmods-layered (layered:
+        google-chrome-stable rocm)`. yoga is the real negative control — it is the host
+        whose clean apply of 44.20260913.0 proved the cause was akmods rather than GPU.
+
+        FIXTURE 6/6, hermetic, and stubs are the only honest construction: the condition
+        is TRANSIENT by definition and clears when the repo catches up, so no host can
+        be relied on to be in it, while the host that WAS (lenovinha) cannot run this.
+        Negative controls cover no-akmods, no-update-offered, and — the one that stops
+        this reporting skew for every akmods host forever — layered AND offered but a
+        QUIET journal, because pending is not blocked. An unreadable journal is
+        could-not-run, never no-skew (965-sxec).
+
+        MUTATION-VERIFIED, and two of my first three mutations were INEFFECTIVE and I
+        caught that rather than concluding the arms were weak. Bypassing the journal
+        check with `true ||` did nothing, because `true || A && B` parses as
+        `(true||A) && B` and B still ran; and my "mutating call" was added as a COMMENT,
+        which the source-text arm correctly ignores. Redone properly: bypassing the
+        journal condition reds 5/6, treating an unreadable journal as no-skew reds 5/6,
+        and a real `rpm-ostree cleanup -p` reds 5/6 by name. That is the fourth time
+        this session a mutation that did not apply reported a pass.
+
+        CREDENTIAL PREFLIGHT, as instructed: `unverified:gh-credentials-store`, not
+        blocked:*, so I proceeded. Worth recording that "unverified" is this check's
+        arm-1 answer and verifies nothing about the live channel.

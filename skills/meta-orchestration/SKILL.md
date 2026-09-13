@@ -571,6 +571,24 @@ bound, but that reading says nothing about what a second host does to it —
 which is precisely why hosts rejoin one at a time and the number is re-measured
 after each.
 
+**On immutable Linux, run the update-skew probe at cycle start and carry its
+verdict into the handoff** (order 1165-g6wx):
+
+```bash
+scripts/probe-silverblue-update-skew.sh   # -> skew: | ok:no-skew | could-not-run:
+```
+
+Read-only: it runs no `rpm-ostree` command that can mutate a deployment, and it
+exists so a cycle SAYS "skew" instead of a host guessing. A `skew:` verdict means
+this host cannot apply the offered update at all — `akmods` is layered, the base
+kernel has outrun the repo's `kernel-devel-matched`, depsolve fails and nothing
+stages, while `--check` and GNOME Software keep reporting "ready, requires
+restart". **Do not treat it as a cycle failure and do not act on it**: the three
+remedies all change what is installed on someone's workstation and are the
+operator's decision. Report the verdict and carry on. `could-not-run:` is not a
+clean verdict either — it means the question could not be asked.
+See `cheatsheets/runtime/silverblue-updates.md`.
+
 **If you are on immutable Linux (Silverblue/Kinoite), two things differ.**
 First, `./build.sh` transparently re-execs inside the `tillandsias-builder`
 toolbox (`scripts/with-tillandsias-builder.sh`), creating it with
