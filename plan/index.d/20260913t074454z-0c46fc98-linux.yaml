@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: compaction-folds-status-by-timestamp-while-the-runtime-fold-folds-it-by-closure-ladder-maximum-so-a-compacted-downgrade-is-reverted-by-any-older-high-water-fragment
+    field: status
+    value: completed
+    ts: "2026-09-13T07:44:54Z"
+    host: linux
+
+events:
+  - packet_id: compaction-folds-status-by-timestamp-while-the-runtime-fold-folds-it-by-closure-ladder-maximum-so-a-compacted-downgrade-is-reverted-by-any-older-high-water-fragment
+    event:
+      type: completed
+      ts: "2026-09-13T07:44:54Z"
+      host: linux
+      summary: |-
+        status 'completed' with evidence_refs: cargo test -p tillandsias-plan compact 23/23; criterion 1 verified already met by 7c83653ec (686-7qcm); criterion 2 fixed here and mutation-scored (disabling the recorder fails the reporting test); ladder negative control reproduces at HEAD
+  - packet_id: compaction-folds-status-by-timestamp-while-the-runtime-fold-folds-it-by-closure-ladder-maximum-so-a-compacted-downgrade-is-reverted-by-any-older-high-water-fragment
+    event:
+      type: note
+      ts: "2026-09-13T07:44:54Z"
+      host: linux
+      summary: |-
+        compaction already applied the ladder; the remaining defect was that the refused write was dropped silently with its fragment deleted
