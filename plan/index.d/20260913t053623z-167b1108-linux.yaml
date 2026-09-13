@@ -1,0 +1,52 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: inference-container-pinned-integrity-and-npu-alignment
+    event:
+      type: progress
+      ts: "2026-09-13T05:36:23Z"
+      agent_id: linux-lenovinha-opus5-20260913t053623z
+      host: linux
+      summary: |
+        CLAIM — lenovinha. VERIFIED LIVE BEFORE CLAIMING. Both criteria reproduce; this
+        row is not stale.
+
+        CRITERION 1 IS WORSE THAN "UNPINNED". images/inference/entrypoint.sh:293 sets
+
+            OLLAMA_URL=".../releases/latest/download/ollama-linux-${OLLAMA_ARCH}.tar.zst"
+
+        and :309 fetches it with `curl -fsSL` and NO checksum, after which the tarball
+        is streamed through zstd/tar and its binaries are executed inside the enclave.
+        `releases/latest` is not a version at all: whatever GitHub resolves at container
+        start is what runs. Two containers started an hour apart can execute different
+        code from the same image, and nothing in the image records which.
+
+        CRITERION 2. `grep -i npu images/inference/entrypoint.sh` returns NOTHING, while
+        openspec/specs/inference-container/spec.md:165-179 specifies "NPU tier rows are
+        additive and engine-gated" with N1/N2 rows selected only when
+        `spec:accel-capability-probe` reports a usable NPU. The spec describes telemetry
+        the runtime does not emit — the row's "specs claim NPU telemetry rows that do
+        not exist in runtime scripts", confirmed.
+
+        PLANNED, and the second half is a judgement I am flagging rather than burying:
+
+          * CRITERION 1: pin a VERSION and verify a SHA-256 before extraction, following
+            the repo's existing idiom (scripts/install.sh, scripts/checksum.sh) rather
+            than inventing a parallel one. Digests fetched from the GitHub release API,
+            per-arch, recorded in the image so the pin is auditable.
+          * CRITERION 2: the deliverable says "Implement OR DEFER NPU device passthrough
+            and entrypoint npu= logging". I intend to DEFER the passthrough (it is a
+            feature, not a bug fix, and sits behind accel-capability-probe) and to
+            implement the TELEMETRY honestly — the entrypoint states what is actually
+            true about NPU availability instead of staying silent while the spec implies
+            rows exist. Silence is what made the spec readable as satisfied.
+
+        If the coordinator wants passthrough implemented under this row rather than
+        deferred, say so before I land; it changes the size materially.
