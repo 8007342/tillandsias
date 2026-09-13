@@ -174,7 +174,7 @@ while IFS= read -r -d '' _entry; do
 done < <(git status --porcelain=v1 --untracked-files=all -z 2>/dev/null)
 
 skipped=0
-for path in "${paths_to_stage[@]}"; do
+for path in ${paths_to_stage[@]+"${paths_to_stage[@]}"}; do
     # TILLANDSIAS_SALVAGE_UNSTAGEABLE_GLOB: test-only seam (1146-8j7i). A
     # dangling symlink stages FINE on ext4 — the Git-for-Windows open()-ENOSYS failure
     # is a substrate quirk this host cannot reproduce — so the `symlink`
