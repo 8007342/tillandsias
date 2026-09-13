@@ -197,11 +197,40 @@ fi
 # `podman cp` first, which asks the image for NOTHING: it reads the layer from
 # the host side, so an image with no shell and no coreutils still answers. It
 # is tried first for that reason and not merely as a fallback. `cat` is the
-# second arm, for a podman too old for `cp` on a running container. Note that
-# `podman cp <ctr>:<path> -` is deliberately NOT used: that emits a TAR whose
-# header carries mtimes, so hashing the stream would compare timestamps and
-# report `differs` for two byte-identical entrypoints — the failure this whole
-# row is about, reintroduced one layer down.
+# second arm, for a podman too old for `cp` on a running container.
+#
+# THE STREAM FORM IS REJECTED, and this is the paragraph to read before
+# "simplifying" the mktemp away. `podman cp <ctr>:<path> -` writes a TAR to
+# stdout, so hashing it hashes the header too. MEASURED on yoga against the
+# same container that produced the file digest below:
+#
+#   podman cp <ctr>:<path> - | sha256sum   -> 2b077df6896b
+#   the same command, again                -> 2b077df6896b
+#   tar -tvf -  ->  -rwxr-xr-x 101/0 10518 2026-09-11 19:00 tillandsias-vault-entrypoint.sh
+#
+# The digest is not the file's (e1d17131198a), and the header carries the
+# image's BUILD TIME. So the stream form compares timestamps and would report
+# `differs` for two byte-identical entrypoints — this row's own defect, one
+# layer down.
+#
+# AND ONE DEGREE QUIETER, which is the part that makes it dangerous rather
+# than merely wrong: the stream digest is STABLE across repeated runs on one
+# host. A developer testing locally sees a reproducible number, concludes the
+# mechanism is sound, and only discovers otherwise when comparing two hosts or
+# two builds of identical content. It is silent exactly where it would be
+# tested and loud only in production — the same shape as the row itself, an
+# instrument that disagrees with reality only in the interval nobody
+# exercises.
+#
+# THAT PREDICTION WAS THEN MEASURED ACROSS THE TWO HOSTS, which is the only
+# place it is visible at all. Same file, byte-identical, e1d17131198a on both:
+#
+#   yoga    stream digest 2b077df6896b   tar header mtime 2026-09-11 19:00
+#   pirria  stream digest 5b5735e0808b   tar header mtime 2026-09-12 03:29
+#
+# Two hosts, two reproducible-looking numbers, one identical file. Each host
+# would have been satisfied by its own repeatability. The stream form does not
+# compare entrypoints; it compares when each host happened to build its image.
 _image_hash=""
 _cp_dir="$(mktemp -d 2>/dev/null)"
 if [ -n "$_cp_dir" ]; then
