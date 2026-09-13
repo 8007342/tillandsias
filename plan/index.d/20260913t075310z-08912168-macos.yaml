@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: every-apple-silicon-mac-in-the-fleet-produces-the-same-cpu-and-gpu-fingerprint-strings
+    event:
+      type: evidence
+      ts: "2026-09-13T07:53:10Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260913t035101z
+      host: macos
+      summary: |
+        CLOSING ON THE NARROWED CLAIM, and the narrowing is a correction to this packet's own title rather than a concession. The title says every Apple silicon Mac produces byte-identical cpu and gpu fingerprint STRINGS. The fleet cannot demonstrate that, and the honest claim is: THE PLACEHOLDER DISCRIMINATED NOTHING WITHIN A CORE-COUNT CLASS. Nobody should write "two different chips hashed to one fingerprint" on the strength of the two macOS hosts that exist.
+
+        SECOND-MACHINE CONFIRMATION (macneo, raw inputs, no build, no hash):
+          machdep.cpu.brand_string  Apple A18 Pro          (this host: Apple M5)
+          hw.physicalcpu/logicalcpu 6 / 6                  (this host: 10 / 10)
+          hw.memsize                8 GiB                  (this host: 16 GiB)
+          hw.model                  Mac17,5
+        Under the OLD code those became `cpu:apple/Apple Silicon CPU/6c6t` and `cpu:apple/Apple Silicon CPU/10c10t` — DIFFERENT strings from DIFFERENT silicon, so this pair never collided. The core counts separate them before the placeholder name can do harm.
+
+        WHAT IT DOES PROVE, which is the defect this row is about: a second machine, with different silicon, emitted the identical literal `Apple Silicon CPU`. Confirmed from the ledger without a new run — macneo's stored row plan/index.d/20260912t014039z-capability-row-macneo.yaml carries name "Apple Silicon CPU", cpu_cores 6/6, hardware_fingerprint hw2-15343879d48b5915. The NAME carried no information about the machine on either host. That is what the fix addresses and it is demonstrated across two hosts.
+
+        WHY THE STRONG FORM IS NOT SATISFIABLE HERE. Closing it would need two Macs in the SAME core-count class with different chips. macuahuitl has since recorded macneo as a DIFFERENT HARDWARE CLASS as a measured fact (A18 Pro, Mac17,5, 2P+4E, 8 GiB — the low-cost A18 Pro MacBook, the fleet's low-end host), so the fleet has two macOS classes and no comparable pair. This is not a verification still pending; it is one these hosts cannot produce. Leaving the row `implemented` against it would be a row that never closes.
+
+        CLOSURE EVIDENCE is the cross-platform guard, not the hardware: `a_declared_placeholder_is_refused_however_plausible_the_name` runs on every host and was falsified — making the fingerprint ignore provenance reds it. That asserts the property the packet is really about (a declared placeholder is refused however specific the string looks) on every substrate, with no second Mac required. The macOS-only `macos_cpu_name_is_the_real_part_not_a_family_placeholder` adds the this-host arm.
+
+        A CONFOUND WORTH KEEPING, because it would have produced a false negative. macuahuitl's original verification asked macneo to compare hashes. Two components move for reasons unrelated to the chip:
+          RAM CLASS is in the hash (`ram_class` buckets to nearest power of two), so 8 GiB vs 16 GiB differs on identical silicon.
+          BINARY VINTAGE changes it too. 803-r8u4 added system_ram_gb to the macOS arm; before it the `ram:` component was ABSENT. Measured by accident on THIS host in one minute: stale release binary hw2-5ce200f625e69d05, fresh binary hw2-d1ec0bba772d4bda, same hardware — the whole delta was that component appearing. And macneo's stored row carries `system_ram_gb: null`, which is that same vintage evidenced from the LEDGER: their `ram:` component is absent, not merely a different bucket.
+        Both confounds were live in the only pair available. The hash channel is untrustworthy across hosts until one release carries the fix to both; the inputs-only comparison is not. macuahuitl dropped the hash step on this reading before the measurement was taken.
