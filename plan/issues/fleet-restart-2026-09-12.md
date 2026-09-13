@@ -1922,3 +1922,64 @@ stories.
   unfixable in its own terms; a dangling symlink fails at RESOLUTION, before
   any permission question is asked, so it is uid-independent by construction
   and a future privileged context cannot defeat it again.
+- **A contract three reviewers agreed on was unsatisfiable; the positive
+  control found it on first execution** (yoga, inversion landed f0764598a):
+  the agreed check "the passed pid's environ CONTAINS the caller's token"
+  cannot hold — `/proc/<pid>/environ` is the environment a process was
+  EXEC'D with, and the wrapper token is minted and exported at runtime by
+  the asserting shell, so it is never in that shell's own environ (measured:
+  exporting shell 0 matches, child exec'd after the export 1 match). The
+  first wiring refused its real call site with
+  `refused:competing-gate:caller-contract`, correctly, against a contract
+  nothing could satisfy; the coordinator proposed it, yoga accepted and
+  argued its exit code, yolanda did not dispute it. Replacement, stronger:
+  the detector reads ITS OWN environ (`$PROC_ROOT/self`, so a fake tree can
+  construct it) — this process is the child exec'd after the export, so the
+  token is present exactly when the caller really exported it, and no
+  convenient pid can be substituted. Four codes intact and mutation-verified
+  distinct (11/12 on each of three mutations; 12/12 at uid 1000 and uid 0);
+  in the landing gate: `ok:no-competing-gate` from the wrapper's flagged
+  call, `could-not-run:competing-gate:no-host-side-assertion` from build.sh's
+  unflagged one. The caller-contract code is the one of the four with
+  production evidence. Left for yoga's next cycle: the dispatch-shape
+  criterion (MSYS as a substrate that cannot see; churn-suspension clause
+  naming a slow host) and the WSL wiring with the `--host-side <pid>` +
+  exported-token contract for yolanda.
+- **1137-rgfm did not compile on Linux** (macuahuitl, this cycle's gate, on
+  the osx-next relay): `name_source` was added to DeviceRecord and set only
+  in the macOS arm; six Linux initializers (nvidia, the three lspci-named
+  GPU arms, the WSL2 dxg arm, the accel NPU arm) and two Windows arms
+  (Win32_VideoController GPU, PnP NPU) lacked the field — darwin's cfg hid
+  every one of them from the author's build, the green-on-one-regime shape
+  on the cfg axis. Fixed in the same land with the provenance each site has
+  (measured where nvidia-smi, lspci or PnP answered; placeholder for the
+  fixed strings and the driver-derived NPU name); the Windows arms are
+  patched blind and yolanda's next merge compiles them. Had the relay landed
+  before a Linux gate ran, every Linux host's gate would have been red.
+  MEASURED on macneo (raw sysctl, no build): brand_string "Apple A18 Pro",
+  6 physical / 6 logical (2P+4E), 8 GiB, hw.model Mac17,5, macOS 26.6.2.
+  Different core-count class from macbookair's M5 10c10t, so the old strings
+  (`cpu:apple/Apple Silicon CPU/6c6t` vs `/10c10t`) never collided and this
+  pair cannot demonstrate the collision; the claim narrows, as macbookair
+  called in advance, to "the placeholder discriminated nothing within a
+  core-count class". macneo's stored capability row (20260912t014039z)
+  carries "Apple Silicon CPU" and hw2-15343879d48b5915 — the placeholder on
+  a second machine, from the ledger. The fleet has no same-class pair; the
+  suggested closure is the narrowed statement plus the cross-platform
+  provenance guard. macneo flagged, not interpreted, an A-series brand
+  string on a Mac model identifier; consistent with the low-cost A18 Pro
+  MacBook and the operator's "low-end host", not investigated further.
+  Routing consequence recorded (coordinator): macneo is a different macOS
+  hardware class by measurement (A18 Pro, Mac17,5, 2P+4E, 8 GiB), so the
+  fleet has two macOS classes and no comparable pair; work that assumed a
+  second comparable Mac treats macneo as its own class. Their stored row's
+  `system_ram_gb: null` dates their installed binary before 803-r8u4 (the
+  vintage confound evidenced from the ledger, not from one machine's
+  accident) — a floor-tier smoke item after the next release. macbookair
+  closes 1137-rgfm on the narrowed statement with the cross-platform
+  provenance guard as evidence and macneo's inputs plus stored row as the
+  second-machine confirmation; owns the cfg-hidden compile break without
+  qualification and is testing whether `cargo zigbuild` (the lane's own
+  cross path) can compile the Linux arms on darwin, since a plain
+  `--target x86_64-unknown-linux-musl` check dies in ring's build script
+  before reaching the crate.
