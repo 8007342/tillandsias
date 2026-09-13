@@ -124,7 +124,22 @@ t1="$(tillandsias_dispatch_token)"; t2="$(tillandsias_dispatch_token)"
 # 2. A marked process is FOUND by its token.
 pa="$(spawn_marked "$TOKEN_A")"
 sleep 0.3
-tillandsias_marked_pids "$TOKEN_A" | grep -qxF "$pa"; check "a marked process is found by its token" $?
+# ORDER 1076-kft9, MEASURED HERE 2026-09-13. This was
+# `tillandsias_marked_pids ... | grep -qxF ...`, and under `set -o pipefail`
+# (line 25) that pipeline reports FAILURE ON A SUCCESSFUL MATCH: `grep -q` exits
+# at the first hit and SIGPIPEs the producer, which is still walking /proc.
+# EPIPE happens iff the producer still has bytes to write when the consumer
+# exits, so it is environment-dependent — and this gate runs INSIDE the
+# tillandsias-builder toolbox, where it reproduces every time.
+#
+#   inside the toolbox, same token, same library:
+#     PIPED    (grep -q under pipefail)  5/5 reported FAILURE
+#     CAPTURED (same question, no pipe)  0/5 reported FAILURE
+#
+# On the host it passes, which is why this read as a flake: it refused innocent
+# lands and every by-hand re-run afterwards was green. Capture, then match.
+_marked_a="$(tillandsias_marked_pids "$TOKEN_A")"
+printf '%s\n' "$_marked_a" | grep -qxF "$pa"; check "a marked process is found by its token" $?
 
 # 3. THE NEGATIVE CONTROL, and the reason a marker is used instead of a command
 #    line at all: a process marked with a DIFFERENT token must be invisible
@@ -134,7 +149,10 @@ tillandsias_marked_pids "$TOKEN_A" | grep -qxF "$pa"; check "a marked process is
 #    for that mistake; every other arm passes with an argv matcher.
 pb="$(spawn_marked "$TOKEN_B")"
 sleep 0.3
-if tillandsias_marked_pids "$TOKEN_A" | grep -qxF "$pb"; then false; else true; fi
+# Same hazard, opposite assertion: here a SIGPIPE-induced failure would make the
+# arm pass for the wrong reason, which is worse than a false red.
+_marked_a2="$(tillandsias_marked_pids "$TOKEN_A")"
+if printf '%s\n' "$_marked_a2" | grep -qxF "$pb"; then false; else true; fi
 check "a differently-marked process is NOT in this token's kill set" $?
 
 # 4. The reap kills the marked tree.
