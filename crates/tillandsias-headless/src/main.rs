@@ -1375,10 +1375,21 @@ fn ensure_lane_process_env() {
 /// existing directory with wrong permissions is corrected too.
 #[cfg(unix)]
 fn ensure_xdg_runtime_dir() -> Option<PathBuf> {
+    ensure_xdg_runtime_dir_from(std::env::var_os("XDG_RUNTIME_DIR"))
+}
+
+/// The body, with the variable's value as a PARAMETER (1146-z8ux, second
+/// instance): the tests used to plant `XDG_RUNTIME_DIR` in the process
+/// environment from three parallel threads behind a helper whose doc said
+/// "serialised" and which serialised nothing, so one test's restore landed
+/// inside another's window and the suite failed with the real
+/// `/run/user/<uid>` where a temp path was expected. Production reads the
+/// environment exactly once, in `ensure_xdg_runtime_dir`.
+#[cfg(unix)]
+fn ensure_xdg_runtime_dir_from(raw: Option<std::ffi::OsString>) -> Option<PathBuf> {
     use std::os::unix::fs::PermissionsExt;
 
-    let raw = std::env::var_os("XDG_RUNTIME_DIR")?;
-    let dir = PathBuf::from(raw);
+    let dir = PathBuf::from(raw?);
     if dir.as_os_str().is_empty() {
         return None;
     }
@@ -4094,22 +4105,18 @@ fn report_seed_staleness(project_path: &Path, seed: &str) {
 /// relying on the `create_dir_all` every consumer already does.
 #[cfg(all(test, unix))]
 mod xdg_runtime_dir_tests {
-    use super::ensure_xdg_runtime_dir;
+    use super::ensure_xdg_runtime_dir_from;
     use std::os::unix::fs::PermissionsExt;
 
-    /// Serialised: these mutate the process-wide XDG_RUNTIME_DIR.
-    fn with_env<T>(value: Option<&std::path::Path>, f: impl FnOnce() -> T) -> T {
-        let prev = std::env::var_os("XDG_RUNTIME_DIR");
-        match value {
-            Some(p) => unsafe { std::env::set_var("XDG_RUNTIME_DIR", p) },
-            None => unsafe { std::env::remove_var("XDG_RUNTIME_DIR") },
-        }
-        let out = f();
-        match prev {
-            Some(v) => unsafe { std::env::set_var("XDG_RUNTIME_DIR", v) },
-            None => unsafe { std::env::remove_var("XDG_RUNTIME_DIR") },
-        }
-        out
+    /// The value is PASSED, never planted in the process environment: these
+    /// three tests run as parallel threads of one process, and the previous
+    /// helper (documented "serialised", serialising nothing) let one test's
+    /// restore land inside another's window (1146-z8ux, second instance).
+    fn with_env<T>(
+        value: Option<&std::path::Path>,
+        f: impl FnOnce(Option<std::ffi::OsString>) -> T,
+    ) -> T {
+        f(value.map(|p| p.as_os_str().to_os_string()))
     }
 
     #[test]
@@ -4118,7 +4125,7 @@ mod xdg_runtime_dir_tests {
         let target = tmp.path().join("run-user-0");
         assert!(!target.exists());
 
-        let got = with_env(Some(&target), ensure_xdg_runtime_dir);
+        let got = with_env(Some(&target), ensure_xdg_runtime_dir_from);
 
         assert_eq!(got.as_deref(), Some(target.as_path()));
         assert!(target.is_dir(), "the directory must exist afterwards");
@@ -4136,7 +4143,7 @@ mod xdg_runtime_dir_tests {
         std::fs::create_dir_all(&target).unwrap();
         std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o755)).unwrap();
 
-        with_env(Some(&target), ensure_xdg_runtime_dir);
+        with_env(Some(&target), ensure_xdg_runtime_dir_from);
 
         let mode = std::fs::metadata(&target).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode, 0o700, "a pre-existing 0755 dir must be tightened");
@@ -4146,7 +4153,7 @@ mod xdg_runtime_dir_tests {
     /// consumer of the runtime dir already falls back when it is absent.
     #[test]
     fn unset_variable_is_a_noop() {
-        assert!(with_env(None, ensure_xdg_runtime_dir).is_none());
+        assert!(with_env(None, ensure_xdg_runtime_dir_from).is_none());
     }
 }
 

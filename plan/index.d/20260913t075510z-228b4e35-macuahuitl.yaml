@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-salvage-net-preserves-a-finished-unpushed-commit-on-a-clean-tree-and-skips-a-path-it-cannot-stage-instead-of-failing
+    event:
+      type: note
+      ts: "2026-09-13T07:55:10Z"
+      agent_id: linux-macuahuitl-fable-20260913t075510z
+      host: macuahuitl
+      summary: |
+        Axis corrected before landing (yolanda, measured full matrix on one drvfs
+        path): Git for Windows cannot index a dangling symlink anywhere — MSYS
+        emulates symlinks by copying the target, and a missing target leaves nothing
+        to copy (rc 128, open("dangling"): Function not implemented) — and cannot
+        create one either; WSL git on the same drvfs path creates and stages it
+        (rc 0). The skip is therefore a Git-for-Windows property, reachable on a
+        Windows checkout only when a non-MSYS tool created the path (yolanda's real
+        state: a WSL probe whose cd failed). Written as a drvfs property the row
+        would have sent a reproducer to WSL, where it does not occur, to conclude
+        the skip is dead code. The test-only seam is the only portable construction.
