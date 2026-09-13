@@ -356,8 +356,29 @@ resolve_target_binary() {
     if [ -n "$ctd" ] && [ "${ctd#/}" = "$ctd" ]; then
         ctd="$root/$ctd"
     fi
+    # ORDER 1142-wn2k — LOCUS-NATIVE ARTEFACT FIRST, the same reorder 1030-i2p8 made
+    # for resolve_plan_binary fifty lines above. That comment predicted the
+    # masking would lift; this sibling never got the change, so it lifted here
+    # instead.
+    #
+    # These used to try `.exe` before the ELF. On a SHARED Windows/WSL checkout
+    # both artefacts sit in one target dir, and with WSL interop enabled the
+    # .exe RUNS inside the distro — so a stale .exe beside a fresh ELF is the
+    # one this probe returned. MEASURED by esme: a Sep-4 tillandsias-policy.exe
+    # was selected over the current ELF, the Windows binary joined `/mnt/c/...`
+    # with a backslash, and check-cheatsheet-tiers refused "cheatsheets/
+    # directory not found" against a tree where it plainly exists. Same tree,
+    # same args: .exe -> ERROR, ELF -> silent pass. 67.5 minutes to reach that
+    # false verdict, and every Windows gate was refused until the reorder
+    # landed.
+    #
+    # SAFE FOR THE SAME REASON AS 1030-i2p8: this is a RUN-don't-stat probe, so
+    # a candidate is returned only when it actually executes. Inside a Linux
+    # locus the ELF runs and the .exe is skipped; on the Windows side the ELF
+    # cannot execute and is skipped, leaving the .exe. Each locus gets its
+    # native artefact with no caller passing a flag to say which it is in.
     for dir in ${ctd:+"$ctd/$profile"} "$root/target/$profile"; do
-        for candidate in "$dir/$name.exe" "$dir/$name"; do
+        for candidate in "$dir/$name" "$dir/$name.exe"; do
             if target_binary_runs "$candidate"; then
                 printf '%s\n' "$candidate"
                 return 0
