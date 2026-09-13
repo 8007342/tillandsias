@@ -113,6 +113,31 @@ spawn_marked() {
 
 alive() { kill -0 "$1" 2>/dev/null; }
 
+# WAIT FOR THE PREMISE, DO NOT SLEEP AND HOPE. These arms used a fixed
+# `sleep 0.3` between spawning a marked process and scanning for it, which is a
+# race by construction: `/proc/<pid>/environ` is the EXEC-TIME environment, so
+# between fork and exec the pid exists carrying the PARENT's environ and no
+# token. The window is tiny — I could not reproduce it on yoga in 18 attempts,
+# including under six spinning CPU hogs with the wait removed entirely — but
+# lenovinha's gate refused an innocent diff at `FAIL: a marked process is found
+# by its token`, 10/11, and the same tree standalone was 11/11 three times. A
+# fixed sleep cannot be made correct by lengthening it; it can only be made
+# less likely to be wrong, and it is invisible to whoever re-runs by hand.
+#
+# So poll until the condition the arm depends on is TRUE, and FAIL LOUDLY if it
+# never becomes true rather than asserting over a premise that was never
+# established — the rule this row produced, applied to the setup again.
+await_marked() { # await_marked <pid> <token>; 0 if the token appears, 1 on timeout
+    local pid="$1" token="$2" i
+    for ((i = 0; i < 100; i++)); do
+        if tillandsias_marked_pids "$token" 2>/dev/null | grep -qxF "$pid"; then
+            return 0
+        fi
+        sleep 0.05
+    done
+    return 1
+}
+
 TOKEN_A="test-a-$$-${RANDOM}"
 TOKEN_B="test-b-$$-${RANDOM}"
 
@@ -123,8 +148,7 @@ t1="$(tillandsias_dispatch_token)"; t2="$(tillandsias_dispatch_token)"
 
 # 2. A marked process is FOUND by its token.
 pa="$(spawn_marked "$TOKEN_A")"
-sleep 0.3
-tillandsias_marked_pids "$TOKEN_A" | grep -qxF "$pa"; check "a marked process is found by its token" $?
+await_marked "$pa" "$TOKEN_A"; check "a marked process is found by its token" $?
 
 # 3. THE NEGATIVE CONTROL, and the reason a marker is used instead of a command
 #    line at all: a process marked with a DIFFERENT token must be invisible
@@ -133,7 +157,12 @@ tillandsias_marked_pids "$TOKEN_A" | grep -qxF "$pa"; check "a marked process is
 #    failure than the orphan it is fixing. This arm is the only one that fails
 #    for that mistake; every other arm passes with an argv matcher.
 pb="$(spawn_marked "$TOKEN_B")"
-sleep 0.3
+# Wait for pb under its OWN token first. Without this the negative control
+# passes vacuously whenever pb has not exec'd yet — "absent from A's set"
+# would be satisfied by "absent from every set", which asserts nothing.
+if ! await_marked "$pb" "$TOKEN_B"; then
+    fail=$((fail+1)); echo "FAIL: pb never became visible under its own token — the negative control would have asserted nothing"
+fi
 if tillandsias_marked_pids "$TOKEN_A" | grep -qxF "$pb"; then false; else true; fi
 check "a differently-marked process is NOT in this token's kill set" $?
 
@@ -152,7 +181,7 @@ tillandsias_reap_marked "$TOKEN_B" >/dev/null 2>&1
 # 6. AN EMPTY TOKEN MATCHES NOTHING. A reaper that treated "" as a wildcard
 #    would kill every process on the host the first time a token went unset.
 pc="$(spawn_marked "$TOKEN_A")"
-sleep 0.3
+await_marked "$pc" "$TOKEN_A" || { fail=$((fail+1)); echo "FAIL: pc never became visible under its token"; }
 [ -z "$(tillandsias_marked_pids "")" ]; check "an empty token matches nothing" $?
 tillandsias_reap_marked "$TOKEN_A" >/dev/null 2>&1
 
