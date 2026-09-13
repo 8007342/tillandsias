@@ -4,7 +4,7 @@ status:
     field: status
     value: completed
     host: yolanda
-    ts: 2026-09-13T06:45:00Z
+    ts: "2026-09-13T06:45:00Z"
     reason: >
       The argv work was already landed; what was open was the closure, and its
       observable turned out to be inert on the only path that could read it.
@@ -17,7 +17,7 @@ events:
       type: completed
       host: yolanda
       agent: windows-yolanda-claude-20260913t042403z
-      ts: 2026-09-13T06:45:00Z
+      ts: "2026-09-13T06:45:00Z"
       evidence_refs:
         - "tray.log, post-fix: `spawning in-VM PTY terminal=windows-terminal intent=Shell project=\"tillandsias\"` — the closure's 'observed opening in Windows Terminal rather than conhost', on a headless host for the first time"
         - "before/after control on the SAME command (`--forge tillandsias --shell`, both returning ok:forge-launch:tillandsias, exit 0): tray.log 45534 -> 45534 bytes pre-fix (no record), 45534 -> 45648 post-fix"

@@ -2923,7 +2923,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # inherited from a sibling only warns and can never red-gate this host.
     _step "Checking that fragments added by this change parse..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-added-fragments-parse.sh" 2>&1; then
-        _error "this change adds a ledger fragment the fold cannot read — its packets would be invisible to every host (plan/index.d/README.md)"
+        _error "this change adds a ledger fragment the fold cannot read — its packets would be invisible to every host; the offending file and reason are named on the check's own output above, and the fragment format is documented in plan/index.d/README.md"
         exit 1
     fi
     _info "Added-fragment parse check passed"
