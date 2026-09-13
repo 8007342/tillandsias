@@ -1,0 +1,100 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-linux-clean-room-reset-does-not-reach-the-host-keychain
+    event:
+      type: progress
+      ts: "2026-09-13T03:05:56Z"
+      agent_id: linux-lenovinha-opus5-20260913t030556z
+      host: linux
+      summary: |
+        EXIT CRITERION 2 MET. The row stays READY: criterion 1's (a)/(b) decision is
+        deliberately NOT made here, so this is progress, not closure.
+
+        RE-MEASURED THIS HOST, metadata only, and it reproduces the filing exactly:
+          Label     vault-shamir-share-v1@tillandsias:default (keyring v3.6.3)
+          Created   2026-07-08T18:21:27Z     (row records: created 2026-07-08)
+          Modified  2026-08-14T20:45:31Z     (row records: modified 2026-08-14)
+          Locked    false
+        Untouched since 2026-08-14 — no reset in the intervening month has cleared it.
+        The secret was never read; Created/Modified/Locked answer the question.
+
+        DELIVERED — scripts/probe-credential-cold-state.sh. Reports
+        `credential-state:cold|warm|could-not-run`, line form for a console and
+        `--format=md` for pasting into a findings file the way the Windows leg records
+        its hashes. ADVISORY, exit 0 for cold and warm: refusing a warm host would block
+        every developer machine, and the point is that a run SAYS which state produced
+        it. Exit 2 only when the question could not be ASKED.
+
+        TWO DEFECTS IN MY OWN INSTRUMENT, both caught before landing, both of the exact
+        class this row is about — an answer about nothing, wearing the shape of data:
+
+          1. WRONG ATTRIBUTE SCHEMA. The first probe searched `service=
+             vault-shamir-share-v1` and returned zero items ON A HOST THAT HOLDS THE
+             SHARE. That is a false CREDENTIAL-COLD — the very verdict this order
+             exists to stop — produced inside the instrument built to detect it. A
+             wrong query and an absent secret are indistinguishable from outside. The
+             real schema is the keyring crate's `service`/`username` pair, which
+             vault_bootstrap.rs supplies as Entry::new(KEYCHAIN_SERVICE,
+             VAULT_SHAMIR_SHARE_V1); arm 5 now pins the probe to those constants so
+             drift cannot silently reintroduce it.
+
+          2. A VERDICT DECIDED BY A SIGNAL. The first liveness check was
+             `busctl --user list | grep -q org.freedesktop.secrets`. Two consecutive
+             runs on this host disagreed — `warm`, then `could-not-run` — because
+             `grep -q` exits on the first match and SIGPIPEs busctl, so the status
+             depended on which side won (792-ksr8, capture before matching). A spurious
+             could-not-run is the honest-looking half of the failure: it reads as "we
+             checked and could not tell". Fixed by capturing first; arm 3 runs the probe
+             five times and requires agreement.
+
+        PINNED by scripts/test-credential-cold-state-probe.sh, 7/7, gate step
+        240-900-z3kv. The load-bearing arm is 2: with a busctl-free PATH the probe must
+        say could-not-run, must say outright that this is NOT cold, and must exit 2.
+        That arm SKIPPED on first writing because narrowing PATH to /usr/bin:/bin does
+        not exclude a busctl that lives in /usr/bin — a safety arm that skips exactly
+        where it matters is not a safety arm, so it now builds a minimal PATH by
+        symlink and executes on any host.
+
+        RUNBOOK CORRECTED, without pre-empting the decision.
+        skills/smoke-curl-install-and-test-e2e/SKILL.md asserted a fresh --init
+        re-initializes Vault and re-captures the share "so the keychain-volume resync
+        brick is part of what this smoke exercises". On Linux that is measurably false.
+        It now states the measured Linux behaviour, names both hosts and their share
+        ages, tells the operator to paste the probe's md block into the findings file,
+        and says explicitly that (a) versus (b) is an OPEN DECISION on this row — "until
+        it is made, do not write either claim as settled". That satisfies "do not leave
+        the runbook asserting (a) while shipping (b)" without choosing (b) by default,
+        which would have been the easy and wrong move: a false claim must go regardless
+        of which branch wins.
+
+        EVIDENCE FOR THE (a)/(b) DECISION, gathered, not acted on:
+          * scripts/clear-vault-host-credentials.ps1 EXISTS AND IS WINDOWS-ONLY. There
+            is no .sh counterpart. So 804-ckst's remedy was implemented for one platform
+            and never generalised — which is the concrete form of yolanda's observation
+            that 804-ckst does not generalise off Windows.
+          * That asymmetry is an argument FOR (a): the fleet already decided, on
+            Windows, that a clean room should be credential-cold. Leaving Linux warm
+            means "clean room" means two different things on two platforms, and the
+            runbook has one paragraph for both.
+          * Against acting tonight: (a) deletes a HOST CREDENTIAL. Botched, it locks
+            Vault out of its own data, and the row's own negative control requires
+            proving the legitimate warm-RESTART path still recovers. That is a
+            destructive change to host state no reset currently touches.
+
+        WHAT REMAINS, and who should do it:
+          * The (a)/(b) decision, with the operator. My recommendation is (a), on the
+            Windows-precedent argument above, but it is a decision about destroying host
+            credentials and I have not made it.
+          * If (a): the both-directions fixture the row demands — after a reset the
+            entry is absent, AND a wipe path that does NOT clear it is caught. The row
+            says a one-direction assertion is what got us here.
+          * NOT DONE AND NOT NEEDED: re-running the two Linux legs. The row rules that
+            out in its own notes, and this cycle did not do it.

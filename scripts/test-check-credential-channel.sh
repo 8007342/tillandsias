@@ -372,11 +372,50 @@ esac
 # probe — the same incidental-co-occurrence error fixed in the promotion gate
 # earlier tonight (888-m75r), reproduced here in a test that was supposed to be
 # checking for exactly that kind of sloppiness.
-probes="$(grep -nE 'timeout [0-9]+ +git push --dry-run|_probe_cmd=' "$GUARD" \
-          | grep -vcE ':[[:space:]]*#')"
-[ "$probes" -le 3 ] \
-    && ok "reverify added no probe to the hot path ($probes invocation sites)" \
-    || bad "reverify added probes to the hot path ($probes invocation sites)"
+# ORDER 1083-gzqj. THIS ARM USED TO READ `[ "$probes" -le 3 ]`, COUNTING PROBE
+# SITES IN THE WHOLE GUARD. Nobody chose 3. It was what the file happened to
+# contain when the arm was written — verified still exactly 3 on macuahuitl
+# 2026-09-05 (HEAD, HEAD~10, HEAD~30) and again on lenovinha at this commit. The
+# margin was ZERO, so the next refusal class that legitimately needs its own
+# `push --dry-run` would have red the LANDING GATE on every host, under a
+# message telling the operator that reverify added a probe to the hot path —
+# when what actually happened is that the guard grew a fourth legitimate probe.
+# A snapshot in a gate fires later, on a host that changed nothing, with a label
+# pointing at the wrong subsystem.
+#
+# THE PROPERTY THE COMMENT ABOVE ACTUALLY STATES is structural, not numeric:
+# reverify is a separate mode called ONCE before the gate, so probes belong to
+# the verdict function it invokes and must not appear on the default path. That
+# is assertable with NO NUMBER AT ALL, and it is strictly stronger: a fourth
+# probe added inside the verdict function is fine and now passes, while a first
+# probe added to the default path fails — which the count could never
+# distinguish, since both merely moved it from 3 to 4.
+_probe_fn_start="$(grep -n '^credential_channel_verdict() {' "$GUARD" | cut -d: -f1)"
+_probe_fn_end="$(awk -v s="$_probe_fn_start" 'NR>s && /^}/{print NR; exit}' "$GUARD")"
+if [ -z "$_probe_fn_start" ] || [ -z "$_probe_fn_end" ]; then
+    bad "cannot locate credential_channel_verdict()'s extent in $GUARD — this arm \
+cannot tell hot path from verdict path and must not pretend otherwise"
+else
+    _probe_lines="$(grep -nE 'timeout [0-9]+ +git push --dry-run|_probe_cmd=' "$GUARD" \
+                    | grep -vE ':[[:space:]]*#' | cut -d: -f1)"
+    _probes_total="$(printf '%s\n' "$_probe_lines" | grep -c '[0-9]')"
+    _probes_outside="$(printf '%s\n' "$_probe_lines" | awk -v s="$_probe_fn_start" -v e="$_probe_fn_end" \
+                       '$1 != "" && ($1 < s || $1 > e)' | tr '\n' ' ')"
+    # A DECLARED VACUITY FLOOR, and the number IS chosen: at least one. If the
+    # grep pattern ever stops matching — a rename, a reformat — every assertion
+    # here passes over an empty set and the arm silently stops guarding. One is
+    # the minimum that makes "the guard probes at all" true.
+    if [ "${_probes_total:-0}" -lt 1 ]; then
+        bad "no probe invocation site matched in $GUARD — the pattern has rotted and \
+this arm is asserting over nothing (declared floor: at least 1)"
+    elif [ -n "${_probes_outside// /}" ]; then
+        bad "probe invocation site(s) on the DEFAULT path, outside credential_channel_verdict() \
+(lines: ${_probes_outside%% }) — reverify must stay a separate mode, not a cost on every git operation"
+    else
+        ok "every probe invocation site ($_probes_total) is inside credential_channel_verdict(); \
+the default path carries none"
+    fi
+fi
 
 # ═══ ORDER 894-scxy: name the layer that FAILED, not the one we OBSERVED ═════
 # gh prints "The token in keyring is invalid". MEASURED on pirria 2026-08-25:

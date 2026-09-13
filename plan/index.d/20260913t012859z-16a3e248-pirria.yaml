@@ -1,0 +1,64 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: five-at-trace-sites-name-a-spec-that-does-not-exist-windows-wsl-runtime
+    event:
+      type: note
+      ts: "2026-09-13T01:28:59Z"
+      agent_id: linux-pirria-claude-20260913t012614z
+      host: pirria
+      summary: |
+        RETRACTED AS A DIVERGENT-DUPLICATE of 834-7ut9. This is a strict SUBSET
+        of that row, filed seventeen days later by a host that could not see it.
+
+        THE PAIR, both ready, both p3, both bug, both about the same string:
+          834-7ut9  filed 2026-08-19 from a Linux commit hook
+                    "48 @trace annotations across 22 files cite
+                     'spec:windows-wsl-runtime', which has no spec"
+          1063-htns filed 2026-09-05 from a macOS commit hook on client.rs
+                    "Five `@trace spec:windows-wsl-runtime` sites name a spec that
+                     does not exist"
+
+        The five sites in 1063-htns (client.rs:990,1695,1726,1735 and lib.rs:1)
+        are five of the 48. Same ghost name, same real spec (`wsl-runtime`), same
+        remedy question, same deliverable.
+
+        RE-MEASURED BEFORE RETRACTING, because a duplicate of a row whose premise
+        has since been fixed is TWO pieces of residue, not one, and the retraction
+        would then be aimed at the wrong half:
+
+          grep -rho 'spec:windows-wsl-runtime'   ->  56 occurrences  (was 48)
+          files carrying it, excluding target/plan/.git ->  25 files (was 22)
+          grep -rho 'spec:wsl-runtime'           ->   7 occurrences  (was 6)
+          openspec/specs/ | grep -i wsl          ->  wsl-daemon-orchestration, wsl-runtime
+
+        So the premise is not merely still true, it has GROWN by 8 occurrences and
+        3 files while both rows sat ready. 834-7ut9 is live and correct and stays
+        ready; this row is the residue.
+
+        WHY THIS ONE AND NOT THE OTHER, stated because retracting the newer row is
+        not automatic: 834-7ut9 is the superset by a factor of ten, it holds the
+        deciding question both rows need answered (whether the annotations are a
+        stale name for `wsl-runtime` or whether `windows-wsl-runtime` was renamed
+        away, which `git log` on the spec directory settles), and its closure
+        covers these five sites as a consequence. Closing the superset would leave
+        43 sites unowned; closing the subset leaves nothing unowned.
+
+        WHAT IS PRESERVED RATHER THAN DISCARDED: 1063-htns carries one thing
+        834-7ut9 does not — the observation that the pre-commit hook only surfaces
+        these when someone happens to edit the file, which is why an 8:1 ghost
+        ratio survived weeks of commits. That belongs to the surviving row and is
+        noted on it rather than dying here with this one.
+
+        MUTATION AND PREDICTED OBSERVABLE, per 829-dkuc's falsifiability rule:
+          mutation:   set-field 1063-htns status obsoleted
+          predicted:  `ready any` drops 220 -> 219, and 1063-htns no longer
+                      appears in that listing
+        Recorded here before running it.

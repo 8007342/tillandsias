@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-cheatsheet-tier-check-protects-neither-windows-host-by-two-independent-routes
+    field: next_action
+    value: 'Land the reorder in resolve_target_binary: try the extensionless path before the .exe, matching resolve_plan_binary. With route B retracted this is the whole fix, not half of it. The cargo-absent grammar bullet in the deliverable is motivated by no observed failure and is at most an open design question.'
+    ts: "2026-09-13T02:07:00Z"
+    host: windows
+
+events:
+  - packet_id: the-cheatsheet-tier-check-protects-neither-windows-host-by-two-independent-routes
+    event:
+      type: note
+      ts: "2026-09-13T02:07:00Z"
+      host: windows
+      summary: |-
+        route B retracted; the reorder is no longer an incomplete close

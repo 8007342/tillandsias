@@ -2157,6 +2157,21 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "release runbook tag-order fixture passed"
 
+    # ORDER 1140-i6ct. The HERMETIC half only. The live fixture
+    # (test-vault-shutdown-forwards-sigterm.sh) stops a real container and is
+    # deliberately NOT wired here — 1140-i6ct says in as many words that
+    # wiring it would red every host whose image is behind trunk. This drives
+    # its classifier with injected values, so it needs no podman and cannot
+    # red on a stale enclave. Its arm 3 is the one that matters: a vintage
+    # check that short-circuited the measurement would make the live fixture
+    # unable to fail at all.
+    _step "Checking the vault-shutdown classifier keeps all four outcomes reachable (1140-i6ct)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-vault-shutdown-fixture-classifier.sh" 2>&1; then
+        _error "the vault shutdown fixture can no longer tell a stale image from the 1134-u934 defect — or can no longer fail at all"
+        exit 1
+    fi
+    _info "vault-shutdown classifier fixture passed"
+
     _step "Checking the promote-stable evidence gate and dry-run..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-promote-stable-evidence-gate.sh" 2>&1; then
         _error "promote-stable's gate or its --dry-run regressed — this script flips an outward-facing release channel"

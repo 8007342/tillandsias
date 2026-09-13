@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-dispatch-wrapper-that-execs-into-a-container-cannot-be-killed-so-a-cancelled-gate-keeps-running-in-the-same-checkout
+    field: next_action
+    value: rebuild criterion 3 on the parent CHAIN not the immediate ppid (a legitimate gate is conmon-parented too), then implement the lock as hygiene — the false-PASS path is refuted and closed
+    ts: "2026-09-13T01:45:58Z"
+    host: yoga
+
+events:
+  - packet_id: a-dispatch-wrapper-that-execs-into-a-container-cannot-be-killed-so-a-cancelled-gate-keeps-running-in-the-same-checkout
+    event:
+      type: progress
+      ts: "2026-09-13T01:45:58Z"
+      host: yoga
+      summary: |-
+        status 'rebuild criterion 3 on the parent CHAIN not the immediate ppid (a legitimate gate is conmon-parented too), then implement the lock as hygiene — the false-PASS path is refuted and closed' (not terminal) with evidence_refs: gate-stamp.sh token tree-binding refutes false PASS; pirria correction on conmon parentage

@@ -1,0 +1,122 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-cross-branch-selector-fixture-compares-two-live-ledger-reads-so-any-concurrent-land-refuses-an-unrelated-one
+    order: 1140-5bre
+    status: completed
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [gate, fail-loud, plan, coordination]
+    estimated_hours: 1
+    owned_files:
+      - scripts/test-selector-drops-cross-branch-claims.sh
+    verifiable_closure: |
+      scripts/test-selector-drops-cross-branch-claims.sh passes (7/7 on
+      lenovinha, stable across four consecutive runs), and no arm reads a second
+      invocation of the selector for comparison.
+    title: |
+      arms 1 and 3 asserted equality against a batch count taken from a SEPARATE selector invocation, so any other host claiming or landing between the two reads refused an unrelated land — and the refusal was not reproducible by the host it hit
+    context: |
+      MEASURED on lenovinha: a land refused with
+
+        FAIL: a clean check altered the batch (2 vs 3) or printed a note
+        FAIL: an unanswerable check changed the batch (2 vs 3) — a blip would
+              stop the host
+
+      while a sibling host was mid-land (origin moved twice during the gate).
+      Three consecutive re-runs minutes later with the fleet quiet: 6/6, 6/6,
+      6/6. Nothing in the refused diff touches the selector.
+
+      THE CAUSE: `n_base` came from its own invocation of
+      select-work-batch.sh, and arms 1 and 3 required a later invocation to
+      return the same count. The stub already removed the CROSS-BRANCH
+      CHECKER's live dependency — the header says so — but not the LEDGER's.
+      Every claim, closure and land by any host changes the ready set, so with
+      four hosts draining, the two reads straddle other people's writes.
+
+      THIS IS 1083-gzqj's SHAPE: a number nobody chose, asserted as a threshold.
+      The fixture's own header predicted it in the cross-branch dimension —
+      "this fixture passed when I wrote it and refused a real land hours later,
+      having tested nothing but the fleet's claim state" — and the same defect
+      survived one dimension over.
+
+      WHY IT IS p1 RATHER THAN A FLAKE TO RETRY THROUGH. The failure is
+      NON-REPRODUCIBLE BY THE HOST IT HITS, which is the worst shape a gate can
+      have: the host sees a red gate naming the selector, its own diff is
+      innocent, and re-running makes it green — so the honest reading is "I do
+      not know what happened" and the cheap reading is "gates are flaky here".
+      With several hosts draining concurrently, any two overlapping lands can
+      refuse each other.
+    deliverable: |
+      Arms 1 and 3 assert the selector's RESPONSE TO THE STUB, from a single
+      run's own output, and never the equality of two live reads.
+
+        * ARM 1 (clean stub): a batch survives AND no drop note is printed.
+        * ARM 3 (blind stub): a batch survives, no drop note is printed, and the
+          could-not-fold notice IS printed (unchanged).
+        * ARM 1b, NEW NEGATIVE CONTROL: arm 1's predicate is run against the
+          HELD stub, where a drop genuinely happened, and must NOT hold. Without
+          it arm 1 would pass on a selector that had stopped checking anything
+          at all — which is what the count comparison was catching before it was
+          removed for being unstable.
+        * `n_base` survives only inside arm 0's own self-contained assertion
+          (the batch is non-empty, so the later arms have a subject). No arm
+          compares across invocations.
+
+      THE DROP IS MATCHED BY ITS SENTENCE, NOT BY THE `cross-branch:` PREFIX,
+      and this was measured rather than reasoned: that prefix ALSO carries the
+      could-not-fold notice which arm 3 REQUIRES to be present, so keying on the
+      bare prefix makes arms 1 and 3 contradict each other and arm 3 fails on a
+      correct selector. The first cut of this fix did exactly that. The drop
+      sentence is now bound to one variable so the two readings cannot drift.
+
+      SOUNDNESS NOTE RECORDED IN THE FILE: "nothing was dropped" is read off the
+      ABSENCE of a drop note, which holds only because arm 2 pins that every drop
+      is NAMED. The arms compose — weakening arm 2 silently empties arms 1 and 3
+      of meaning, and the file now says so where an editor of arm 2 will see it.
+    provenance: |
+      Refused lenovinha's land during concurrent fleet drain; diagnosed and
+      assigned back by the coordinator to fix rather than to retry around.
+events:
+  - packet_id: the-cross-branch-selector-fixture-compares-two-live-ledger-reads-so-any-concurrent-land-refuses-an-unrelated-one
+    event:
+      type: progress
+      ts: "2026-09-13T00:11:20Z"
+      agent_id: linux-lenovinha-opus5-20260913t003620z
+      host: linux
+      summary: |-
+        CLAIM. lenovinha takes the selector fixture fix on the coordinator's
+        assignment, scope scripts/test-selector-drops-cross-branch-claims.sh.
+  - packet_id: the-cross-branch-selector-fixture-compares-two-live-ledger-reads-so-any-concurrent-land-refuses-an-unrelated-one
+    event:
+      type: completed
+      ts: "2026-09-13T00:36:20Z"
+      agent_id: linux-lenovinha-opus5-20260913t003620z
+      host: linux
+      evidence_refs:
+        - scripts/test-selector-drops-cross-branch-claims.sh
+      summary: |-
+        CLOSED. 7/7 on lenovinha (was 6 arms, now 7 with the new negative
+        control), stable across four consecutive runs.
+
+        THE STRUCTURAL PROOF, which matters more than the four green runs: no
+        arm reads a second invocation of the selector for comparison any more.
+        Green runs on a quiet fleet were exactly what the broken version also
+        produced, so "it passes now" is not evidence — the evidence is that the
+        dependency is gone by construction. `n_base` remains only inside arm 0,
+        compared against nothing.
+
+        ONE WRONG CUT, RECORDED BECAUSE IT IS THE INSTRUCTIVE PART: keying
+        "nothing was dropped" on the bare `cross-branch:` prefix made arm 3
+        fail on a CORRECT selector, because the blind path emits its
+        could-not-fold notice under that same prefix — the notice arm 3 requires
+        to be present. Arms 1 and 3 contradicted each other. Matching the drop
+        SENTENCE instead resolves it, and the sentence now lives in one variable
+        so the two readings cannot drift apart.
+
+        NOT CLAIMED: that this ends fixture flakiness under concurrency. It ends
+        THIS fixture's dependency on two live reads. Any other gate fixture that
+        reads the live ledger twice has the same defect and would have to be
+        found the same way — by refusing somebody's innocent land.

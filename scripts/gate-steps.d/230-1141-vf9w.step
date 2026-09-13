@@ -1,0 +1,15 @@
+# Gate step 1141-vf9w — data, not code.
+#
+# Binds the HERMETIC fixture. It spawns its own marked processes and reaps
+# them; it needs no podman, no toolbox and no gate, so it is honest on every
+# host and costs the inner loop almost nothing.
+#
+# The END-TO-END demonstration is deliberately not wired: it needs a live
+# toolbox and a real gate, and a gate step that launches a gate is a recursion
+# nobody wants. That evidence is the transcript on 1132-r4mt and 1141-vf9w.
+#
+# STEP_SCRIPT is a LITERAL path (1063-nraf).
+STEP_DESC="Checking a cancelled dispatch cannot leave its container-side tree running (1141-vf9w)"
+STEP_SCRIPT="scripts/test-dispatch-reap.sh"
+STEP_ERROR="the dispatch reaper regressed (1141-vf9w) — a cancelled gate may again survive in the same checkout, or the reaper may have widened beyond its own dispatch; see the verdict line above"
+STEP_OK="Dispatch reap check passed"

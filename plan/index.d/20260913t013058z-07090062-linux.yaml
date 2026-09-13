@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: cloud-mode-launches-bind-mount-a-relative-name-and-infer-cloud-from-the-environment-so-the-tray-observatorium-leaf-cannot-show-the-repo
+    field: status
+    value: completed
+    ts: "2026-09-13T01:30:58Z"
+    host: linux
+
+events:
+  - packet_id: cloud-mode-launches-bind-mount-a-relative-name-and-infer-cloud-from-the-environment-so-the-tray-observatorium-leaf-cannot-show-the-repo
+    event:
+      type: completed
+      ts: "2026-09-13T01:30:58Z"
+      host: linux
+      summary: |-
+        status 'completed' with evidence_refs: cargo test -p tillandsias-headless --bins 536 passed 0 failed incl. cloud_mode_gitconfig_ignores_a_stray_same_named_repo_in_the_cwd with pre-fix control; criterion 4 executed against localhost/tillandsias-forge:v56.9.12.1 (mode 0755 REFUSED / 0777 OK as uid 1000)
+  - packet_id: cloud-mode-launches-bind-mount-a-relative-name-and-infer-cloud-from-the-environment-so-the-tray-observatorium-leaf-cannot-show-the-repo
+    event:
+      type: note
+      ts: "2026-09-13T01:30:58Z"
+      host: linux
+      summary: |-
+        host_checkout Option<&Path> plumbed through both builders; resolved remote URL passed to the gitconfig writer

@@ -1442,6 +1442,32 @@ impl DrmRenderNode {
 ///
 /// Split out because it is the only fiddly part and the whole enumeration is
 /// worthless if it silently yields 0 for a value it could not read.
+/// Parse a sysfs PCI id (`0x1002`) into a `u16`.
+///
+/// PCI-ONLY, AND THE TYPE IS THE CONTRACT. A PCI vendor/device id is 16 bits by
+/// the PCI spec, and the only production caller reads sysfs
+/// (`/sys/class/drm/card<N>/device/{vendor,device}`), so `u16` is correct here
+/// and not merely convenient. Anything wider is not a PCI id.
+///
+/// DO NOT REUSE THIS FOR A VULKAN `vendorID`. That is a DIFFERENT NAMESPACE:
+/// `uint32_t`, Khronos-assigned, and deliberately outside the PCI range for
+/// vendors that have no PCI id — lavapipe/llvmpipe reports 0x10005, which is
+/// 65541 and does not fit. `u16::from_str_radix` returns None on it, the `?` at
+/// the call site drops the WHOLE node, and a dropped row is indistinguishable
+/// from a device that never enumerated. So the failure would not read as
+/// "software rasterizer rejected"; it would read as "no such device", silently,
+/// for exactly the rows 793-zumy criterion 2 exists to reject EXPLICITLY.
+/// Rejecting a rasterizer and losing it must never produce the same record.
+///
+/// A Vulkan id therefore needs its own field (`u32`) and its own parser. Today
+/// nothing captures one: the enumerator is sysfs-only and rejects
+/// lavapipe/llvmpipe STRUCTURALLY, because a userspace-only ICD creates no DRM
+/// render node to find. This comment exists so the next person to add Vulkan
+/// enumeration does not reach for the nearest parser that compiles.
+///
+/// Raised by esme, corrected against this code by yolanda, settled on yoga
+/// against the hwfp-v2 field set: that bump records vendor_id/device_id from
+/// THIS path — sysfs PCI — so it needs no change.
 pub fn parse_pci_id(body: &str) -> Option<u16> {
     let t = body.trim();
     let hex = t.strip_prefix("0x").unwrap_or(t);
@@ -4818,6 +4844,30 @@ mod tests {
         assert_eq!(super::parse_pci_id("1002"), Some(0x1002));
         assert_eq!(super::parse_pci_id(""), None);
         assert_eq!(super::parse_pci_id("not-a-number"), None);
+    }
+
+    /// A VULKAN vendorID IS NOT A PCI ID, and this pins the consequence rather
+    /// than the intention. lavapipe/llvmpipe reports 0x10005 — Khronos-assigned,
+    /// uint32_t, deliberately outside the PCI range — and it does not fit a
+    /// u16, so this parser returns None and the `?` in the caller drops the
+    /// whole node. A dropped row and a device that never enumerated are the
+    /// same record, so reusing this parser for Vulkan would turn the EXPLICIT
+    /// software-rasterizer rejection 793-zumy criterion 2 asks for into a
+    /// silent disappearance.
+    ///
+    /// This test does not argue that; it makes the boundary executable, so a
+    /// future Vulkan field that reaches for the nearest parser that compiles
+    /// has to read this first. The fix when that day comes is a separate u32
+    /// field with its own parser, never a widening of this one.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_vulkan_vendor_id_does_not_fit_a_pci_id_and_must_not_be_parsed_as_one() {
+        // Not a PCI id: 0x10005 is 65541, one namespace over and 6 past u16::MAX.
+        assert_eq!(super::parse_pci_id("0x10005"), None);
+        assert_eq!(super::parse_pci_id("0x10000"), None);
+        // The last value that IS a PCI id, so the boundary is pinned on both
+        // sides and a widened type would red this pair, not just the one above.
+        assert_eq!(super::parse_pci_id("0xffff"), Some(0xffff));
     }
 
     /// ORDER 935-jhh5. The old `cdi_ok = effective_tier == "gpu-cuda"` was

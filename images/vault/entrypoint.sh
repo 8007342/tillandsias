@@ -72,8 +72,77 @@ log "unseal key material loaded (32 bytes)"
 # Step 2: Boot vault server in the background.
 # ---------------------------------------------------------------------------
 log "launching vault server"
-vault server -config="$VAULT_CONFIG" 2>&1 | tee -a "$ENTRYPOINT_LOG" &
+# ORDER 1134-u934: PROCESS SUBSTITUTION, NOT A PIPELINE, and the reason is the
+# pid. `cmd | tee &` backgrounds a PIPELINE, and `$!` is then the LAST stage —
+# tee, not vault. MEASURED inside a running container before this fix: PID 1
+# bash, PID 10 vault, PID 11 tee, and VAULT_PID held 11. So `wait "$VAULT_PID"`
+# waited on tee, and a trap forwarding to $VAULT_PID would have signalled tee,
+# left the stall exactly as it was, and looked correct. Redirecting through
+# >(tee ...) keeps vault as the DIRECT child, so $! is vault's pid and the log
+# is still appended.
+vault server -config="$VAULT_CONFIG" > >(tee -a "$ENTRYPOINT_LOG") 2>&1 &
 VAULT_PID=$!
+
+# ORDER 1134-u934: FORWARD SIGTERM. This script is PID 1, so podman's stop
+# signal is delivered HERE and nowhere else; with no trap, vault was never told
+# to shut down and the container was SIGKILLed when the grace expired.
+# MEASURED before this fix: `podman stop -t 30 tillandsias-vault` took the full
+# 30s every time and the container exited 137 (OOMKilled false), while the
+# proxy in the same shutdown exited 0. Vault's own log had NO shutdown entry —
+# it never heard the signal. A sealed secret store was being killed uncleanly
+# on every host on every stop.
+_vault_term_requested=0
+_vault_forward_term() {
+    _vault_term_requested=1
+    log "received termination signal; forwarding to vault (pid $VAULT_PID)"
+    kill -TERM "$VAULT_PID" 2>/dev/null || true
+    # The signal can arrive DURING provisioning (steps 3-6 below), not only
+    # once we are parked in `wait`. In that window the handler returns into a
+    # run of `curl -fsS` calls against a vault that is now shutting down, and
+    # `set -e` turns the first of those into a non-zero container exit — a
+    # different wrong answer to the same stop. So the handler does not return
+    # into provisioning at all: it reaps vault and exits from here. Firing
+    # while we are ALREADY in the wait below is the same call, so there is one
+    # shutdown path rather than two.
+    _vault_wait_and_exit
+}
+trap _vault_forward_term TERM INT
+
+# ORDER 1134-u934: the THIRD defect in this shape, invisible until the trap
+# actually fires. `set -e` is active from line 27. A trapped signal INTERRUPTS
+# `wait`, which then returns 128+signo (143 for TERM) — and under `set -e` a
+# bare failing `wait` exits the shell THAT INSTANT, at 143, before vault has
+# finished sealing. A trap that forwards correctly and a bare `wait` therefore
+# still produce an unclean stop, which is why every wait below is guarded with
+# `|| rc=$?`: the guard is what keeps the shell alive long enough to wait the
+# second time.
+#
+# There are TWO places this script hands control back to vault — here, and the
+# subsequent-boot early return further down — so the logic is a function; the
+# early-return path had the same bare `wait` and the same `exit 0` that
+# reported clean regardless of what vault did.
+_vault_wait_and_exit() {
+    local rc=0
+    wait "$VAULT_PID" || rc=$?
+    # Vault is shutting DOWN at this point, not shut down. Wait again until the
+    # pid is actually gone, so the container exits on VAULT'S status rather
+    # than on the trap's — the difference between a clean stop and one that
+    # merely starts a clean stop and then exits anyway.
+    while kill -0 "$VAULT_PID" 2>/dev/null; do
+        rc=0
+        wait "$VAULT_PID" || rc=$?
+    done
+    # When WE asked for the shutdown, the shutdown IS the success case.
+    # Propagating a signal-initiated status would make every clean `podman
+    # stop` look like a crash, which is the failure this order exists to
+    # remove. An exit nobody asked for still propagates verbatim.
+    if [ "$_vault_term_requested" -eq 1 ]; then
+        log "vault exited after a forwarded termination signal (rc=$rc); reporting a clean shutdown"
+        exit 0
+    fi
+    log "vault exited on its own (rc=$rc)"
+    exit "$rc"
+}
 
 # Wait for the API to respond.
 i=0
@@ -169,8 +238,7 @@ fi
 # unnecessary. Skip straight to serving.
 if [ -z "$ROOT_TOKEN" ]; then
     log "vault is unsealed and serving (provisioning persisted from a prior boot)"
-    wait "$VAULT_PID"
-    exit 0
+    _vault_wait_and_exit
 fi
 
 export VAULT_TOKEN="$ROOT_TOKEN"
@@ -248,4 +316,4 @@ log "vault is fully configured (unsealed, policies loaded, approle+kv2+audit+ssh
 # ---------------------------------------------------------------------------
 unset VAULT_TOKEN UNSEAL_KEY_HEX UNSEAL_HEX ROOT_TOKEN ENVELOPED_HEX SHAMIR_KEY_HEX
 
-wait "$VAULT_PID"
+_vault_wait_and_exit

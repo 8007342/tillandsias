@@ -38,10 +38,51 @@
 # Deliberately echoes a PREFIX rather than running the tool: callers pipe into
 # it, redirect it, and pass heredocs, and a wrapper that owned invocation would
 # have to reproduce all of that.
+# _tool_probe_args <tool>
+#
+# The cheapest invocation that proves <tool> can RUN. `--version` for
+# everything we dispatch today; the case exists so a tool that has no version
+# flag, or an expensive one, gets a STATED override rather than a silent
+# exemption. A tool whose usability cannot be probed cheaply belongs here with
+# a comment saying why, not in an unwritten exception.
+_tool_probe_args() {
+    case "$1" in
+        *) printf '%s' "--version" ;;
+    esac
+}
+
 resolve_tool() {
     _rt_tool="${1:?resolve_tool: tool name required}"
     _rt_container="${2:-tillandsias-builder}"
-    if command -v "$_rt_tool" >/dev/null 2>&1; then
+    # THE HOST ARM PROBES USABILITY, NOT JUST PRESENCE (1138-bb5r). It used to
+    # accept anything `command -v` could see, which is a claim about the PATH
+    # and not about the binary. A tool that is present and cannot run was then
+    # handed back and every caller ran it, once per call site, failing quietly.
+    #
+    # MEASURED on lenovinha: with a stub `rg` on PATH exiting non-zero,
+    # check-cheatsheet-refs.sh matched nothing, recorded no broken reference,
+    # and exited 0 — a clean pass over zero references. Silent, where the
+    # absent-rg case it was found next to was merely loud.
+    #
+    # THE ASYMMETRY THIS REMOVES was already visible below: the toolbox arm has
+    # always run `<tool> --version` inside the container, with a comment saying
+    # why — "the container existing does not mean the tool is in it". The host
+    # arm was never held to the standard its own sibling states. 799-tb7q
+    # reasoned about presence on the host and availability in the toolbox, and
+    # present-but-unusable on the host fell between the two.
+    #
+    # A BROKEN HOST TOOL NOW FALLS THROUGH TO THE TOOLBOX rather than being
+    # returned, which is the same treatment absence already got — the caller
+    # asked for a tool it can run, and on that question the two are the same
+    # answer.
+    #
+    # COST: one extra process spawn per resolve_tool call. Measured across the
+    # callers at the time of writing: every one resolves ONCE into a variable at
+    # file scope, none inside a loop, so this is one spawn per script run and
+    # needs no memoisation. A future caller that resolves in a loop should
+    # memoise per (tool, container) rather than revert this.
+    if command -v "$_rt_tool" >/dev/null 2>&1 \
+       && "$_rt_tool" $(_tool_probe_args "$_rt_tool") >/dev/null 2>&1; then
         printf '%s' "$_rt_tool"
         return 0
     fi
