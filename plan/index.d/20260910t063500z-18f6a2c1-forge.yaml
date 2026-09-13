@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-ledger-has-more-than-one-place-to-look-and-every-reader-looks-in-one-so-five-writes-landed-somewhere-nothing-consults
+    event:
+      type: progress
+      ts: "2026-09-10T06:35:00Z"
+      agent_id: forge-forge-tillandsias-opencode-20260910t064054z
+      host: forge
+      summary: |-
+        forge cycle: landed ARM 1 (claim event without status) in scripts/test-ledger-write-reaches-its-reader.sh — fixture packets claimed-but-ready/released-back-to-ready, claimed/released id extractors, ready-but-claimed check with release-exclusion, added as gate step 110-1080-4deb; 9 arm assertions green; real-ledger scan: 0 blind ready packets after release-exclusion
