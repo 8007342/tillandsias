@@ -1719,3 +1719,53 @@ stories.
   be answered as a named `unsupported:`, never as "none found" (the darwin
   fail-open shape). Condition for yolanda, not a claim: `ls /proc/$$/environ`
   under Git Bash.
+- **The detector's blind scan answers ok** (yoga, CONFIRMED by control, not
+  by argument; ordering read on trunk by macuahuitl): a procfs tree with every
+  environ chmod 000, including a tokened build.sh with no wrapper, answers
+  `ok:no-competing-gate` rc 0 — a clean bill of health from a scan that saw
+  nothing, the darwin fail-open one substrate over. The `opaque` counter built
+  to prevent exactly this sits AFTER the empty-accusation early return, so it
+  is consulted only when there is already an accusation to suspend and never
+  when the scan produced nothing because it could see nothing. yoga names it
+  as their pattern, three cycles running: the mechanism built and then placed
+  where it cannot fire. The obvious fix (opaque check first) is wrong — a
+  healthy Linux /proc is full of root-owned unreadable environs, so every host
+  would answer could-not-run. The distinction that works: count READABLE
+  environs too and refuse (`unsupported:`) only when that count is zero; a
+  healthy scan reads hundreds and keeps today's behaviour, a blind one (MSYS,
+  darwin) stops being indistinguishable from a clean one. Offered refinement:
+  require the caller's own tokened environ to appear in the scan (the
+  self-match excluded in the test is the production positive control).
+  Consequence stated rather than discovered: under the inversion the in-distro
+  call refuses and a flagged MSYS-side call answers unsupported, so Windows may
+  never be a substrate where the detector sees, and the criterion rewrite
+  should say so. Queued in yoga's :05 cycle with the inversion: inversion,
+  readable-count fix, criterion on dispatch shape, WSL wiring filed with the
+  flag contract for yolanda.
+  Settled design (yoga, same exchange): the host-side flag carries the
+  caller's pid, so the fixture supplies a pid that exists in its fake procfs
+  tree and no second seam appears; the detector verifies that pid's environ
+  CONTAINS the caller's token (readable-but-tokenless is a contract violation
+  and refuses loudly). Four fixture arms: pid absent, readable and tokened,
+  readable and tokenless, present and unreadable. Fallback if the seam gets
+  ugly: readable-count alone. The dispatch-shape criterion states MSYS/Cygwin
+  as a substrate where the detector cannot see, closing the WSL row as a
+  stated limit. Which of the two landed is to be recorded from yoga's report,
+  not from this note.
+  Exit-code contract agreed (yoga proposed, macuahuitl accepted): 0/1 proceed
+  as today; 3 `could-not-run:competing-gate:blind` for pid absent or
+  unreadable (this host cannot answer, stop asking); 2
+  `refused:competing-gate:caller-contract` for readable-but-tokenless (a
+  caller bug, fix the call site) — opposite remedies never share a code, and
+  2 is the tree's usage/infra idiom (check-opsx-generated-dirt.sh). Trunk
+  fact: both callers discard the rc today (`|| true` at
+  with-tillandsias-builder.sh:495 and build.sh:1766), so the distinction
+  lives in the fixture and the verdict line until promotion. Already true on
+  trunk (yoga, read): the fixture's `check()` pins exit code AND verdict line
+  together for all eleven arms, so a shared code reds the arm expecting the
+  other; the new arms keep that helper rather than a weaker one beside it.
+  Still owed: the criterion states that the four-code design binds the FUTURE
+  consumer (nothing on trunk reads the number), the promoting consumer must
+  enumerate 2 apart from 3 with no default that proceeds, and consumer wiring
+  lands as its own change with its own evidence BEFORE promotion — the first
+  reader of the codes must not also be the first thing that can stop a build.
