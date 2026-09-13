@@ -1,0 +1,13 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 699-usxc).
+#
+# the-credential-helpers-host-pin-refuses-the-vault-agent-relay-fixtures-example-upstream-so-the-release-tier-is-red-on-a-fixture-no-check-gate-runs.status was ALREADY 'in_progress', so no field changed — but the caller
+# supplied a note, and discarding it silently is what this packet is about.
+events:
+  - packet_id: the-credential-helpers-host-pin-refuses-the-vault-agent-relay-fixtures-example-upstream-so-the-release-tier-is-red-on-a-fixture-no-check-gate-runs
+    event:
+      type: note
+      ts: "2026-09-13T16:40:32Z"
+      host: lenovinha
+      summary: |-
+        handed by the coordinator to lenovinha, owner of 1118-bscs, at filing; release tier red on this fixture since the pin landed

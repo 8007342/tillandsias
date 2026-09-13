@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by the macuahuitl coordinator on 2026-09-13 after the fourth gate-step
+# prefix collision in one night; the window is the gate itself.
+packets:
+  - packet_id: gate-step-prefixes-are-scarce-integers-chosen-before-a-six-minute-gate-so-pick-later-advice-cannot-close-the-race-and-four-lands-collided-in-one-night
+    order: 1162-qbrx
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [gate, coordination, tooling, land]
+    estimated_hours: 3
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is the allocation change and its fixture. Future litmus scripts/test-gate-step-prefix-allocation.sh; the claimer writes it in the same commit and moves this text into verifiable_closure: two scratch checkouts each add a gate step with the same chosen prefix and land in sequence; the second land does not collide (the prefix is allocated or the ordering does not depend on scarce integers) (pre-fix result: FAILS — the second land is refused on the prefix; measured four times 2026-09-13: yoga at 205; lenovinha at 215, 255, and 280 against yoga's 900-z3kv, the last picked AFTER the integrate exactly as the skill says); NEGATIVE CONTROL: two steps that genuinely order before/after each other keep that order."
+    owned_files:
+      - scripts/land-on-platform-branch.sh
+      - scripts/gate-steps.d/README.md
+      - skills/advance-work-from-plan/SKILL.md
+    title: |
+      Gate-step files are ordered by a scarce integer prefix chosen at commit time; the skill's advice to pick it after the integrate cannot close the race because the window is not merge-to-commit, it is commit-to-gate-FINISHING — six minutes in which any host can land a step. Four collisions in one night (205, 215, 255, 280), the last picked after the integrate. Allocate the prefix at land time, or stop ordering by scarce integers.
+    context: |
+      MEASURED 2026-09-13 (lenovinha's count): yoga at 205; lenovinha at 215,
+      255, and 280 against yoga's 900-z3kv landing mid-gate. The 280 case
+      followed the skill exactly — prefix chosen after the integrate — and
+      still collided, which is the empirical case that advice cannot close a
+      race whose window is the gate itself. Each collision costs a full
+      re-gate (8-40 minutes depending on the host).
+
+      WHAT TO BUILD, two candidates for the claimer to weigh: (1) the land
+      tool allocates the prefix at land time — after its own integrate and
+      before the gate — by renaming the new step to the next free slot and
+      amending the commit, so the choice is made inside the only window
+      that cannot race; or (2) step ordering stops depending on scarce
+      integers (a `after:`/`before:` header the runner topologically sorts,
+      with the integer as a tiebreak), so two hosts adding independent
+      steps never contend. (1) is smaller; (2) removes the class.
+
+      NOT IN SCOPE: renumbering existing steps.
+    exit_criteria:
+      - 'two sequential lands adding steps with the same chosen prefix both land without a prefix refusal (pre-fix result: FAILS — the second is refused)'
+      - 'NEGATIVE CONTROL: an explicit ordering between two steps is preserved'
+      - 'skills/advance-work-from-plan/SKILL.md no longer advises picking the prefix after the integrate as the remedy; it names the allocation'
+    events:
+      - type: filed
+        ts: "2026-09-13T16:41:57Z"
+        agent_id: "linux-macuahuitl-fable-20260913t164157z"
+        host: macuahuitl
+        summary: |
+          Filed by the coordinator from lenovinha's fourth collision; a
+          coordination-surface row.

@@ -1,0 +1,59 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: check-capability-row-returns-before-the-expiry-check-when-the-live-fold-is-unavailable-so-a-genuinely-expired-row-reads-green-on-any-host-that-cannot-run-a-probe
+    event:
+      type: completed
+      ts: "2026-09-13T19:06:27Z"
+      agent_id: linux-lenovinha-opus5-20260913t190625z
+      host: linux
+      summary: |
+        LANDED: ok:land:91f058658:attempt-1, gate green first attempt.
+
+        Closure verified against the merged tree, not just my own: the fixture is wired
+        at build.sh:2298, so arms 16-19 ran inside the landing gate on this host and
+        will run on every host's --check from now on.
+
+        WHAT THIS UNBLOCKS. 1159-g96c could not be verified on the host that exhibits
+        it — esme reached the same 21-day-stale windows-host row from two directions
+        and neither evaluated its age: from the builder distro the derived locus is
+        bare-metal so no committed row matched, and from Git Bash the probe is
+        unresolvable so check() short-circuited before the age test. THIS PACKET FIXES
+        THE SECOND PATH. esme's Git Bash run should now answer
+        stale:capability-row-expired rather than ok:, which is both the verification
+        1159-g96c needs and a live confirmation of this fix on a host where the
+        unrunnable-probe path is the NATURAL state rather than a forced one.
+
+        THE METHOD NOTE WORTH KEEPING, and it is the one thing I would carry to the
+        next packet: A PRE-FIX RUN IS NOT A TEETH TEST FOR A NEGATIVE CONTROL. Arms
+        17-19 describe behaviour this packet PRESERVES, so they pass against the
+        pre-fix body trivially — running them there tells you nothing. They had to be
+        mutated against instead, and both mutations found a real arm:
+
+          newest -> oldest        arm 19 fails: an old sibling expires a live host
+          threshold -> always     arms 5, 17, 18 fail: the overreach controls bite
+
+        Arm 5 catching the second mutation is the detail I want on the record. That
+        control was written for 889-ewvt months ago to stop an unrunnable probe
+        manufacturing a drift claim, and it caught an unrelated overreach on the same
+        path today. A control written for one defect that still bites a different one
+        is the only evidence that it was written at the right altitude.
+
+        THREE-HOST EVIDENCE, all pre-fix, cited here because no single host could have
+        produced it: yolanda (probe runnable) caught a stale row correctly — the
+        positive control that made this a claim about the code path rather than about
+        broken hosts; esme (probe unresolvable) answered ok: over rows 21 days old —
+        the natural occurrence; lenovinha (probe runnable, short-circuit FORCED through
+        the documented seam) answered ok: over a row dated 2020-01-01 whose 222163200s
+        age was never computed — the induced occurrence on a host that does not exhibit
+        it, which is what ruled out "hosts that cannot build are simply broken".
+
+        CREDIT: esme found it while blocked on something else entirely, and sent the
+        CHAIN rather than the verdict. The verdict alone was a green.
