@@ -112,7 +112,24 @@ _prop() {
 _created_raw="$(_prop Created)"
 _modified_raw="$(_prop Modified)"
 _locked="$(_prop Locked)"
-_fmt_ts() { [ -n "$1" ] && date -u -d "@$1" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || printf 'unknown'; }
+# EPOCH -> ISO, PORTABLY, AND VALIDATED BY SHAPE RATHER THAN BY EXIT CODE.
+# GNU takes `-d @epoch`; BSD (macOS) takes `-r epoch`, and GNU must be tried
+# FIRST because GNU's -r means --reference=FILE. The shape check is the
+# load-bearing part: check-bash-dialect refuses a bare GNU form precisely
+# because "BSD date succeeds with garbage output — exit-code guards cannot
+# catch it", so `|| fallback` on status alone would let that garbage through.
+# Anything that is not YYYY- falls to the next arm, and a total miss degrades to
+# the raw epoch rather than inventing a timestamp — this probe's whole purpose
+# is to stop a report claiming more than it measured.
+_fmt_ts() {  # gnu-date: ok (shape-validated; BSD garbage fails the YYYY- match and falls through)
+    _ts_e="${1:-}"
+    [ -n "$_ts_e" ] || { printf 'unknown'; return; }
+    _ts_out="$(date -u -d "@$_ts_e" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || true)"
+    case "$_ts_out" in [0-9][0-9][0-9][0-9]-*) printf '%s' "$_ts_out"; return ;; esac
+    _ts_out="$(date -u -r "$_ts_e" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || true)"
+    case "$_ts_out" in [0-9][0-9][0-9][0-9]-*) printf '%s' "$_ts_out"; return ;; esac
+    printf 'epoch:%s' "$_ts_e"
+}
 _created="$(_fmt_ts "$_created_raw")"
 _modified="$(_fmt_ts "$_modified_raw")"
 
