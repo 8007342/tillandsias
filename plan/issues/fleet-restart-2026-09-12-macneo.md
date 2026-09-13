@@ -54,15 +54,15 @@ fleet's wrappers were authored where it does.
 The keychain read is a FIXTURE, not the credential guard doing operational work:
 `./build.sh --check` -> `test-host-tools.sh` -> the prover row
 `timeout|binary|gate|macos|check-credential-channel.sh|blocked:gh-cli-only` ->
-the real `check-credential-channel.sh`, TWICE (the 1004-x9ua control run at
-test-host-tools.sh:149 is unconditional, then again with the tool hidden). So a
+the real `check-credential-channel.sh`, TWICE (test-host-tools.sh's `ctl=` control run, added by 1004-x9ua, is
+unconditional, then again with the tool hidden). So a
 build depends on the operator's GitHub login state in order to prove that
 COREUTILS is installed. 1004-x9ua's own comment already records that coupling
 misfiring on this host — it "was reporting the OPERATOR'S gh login state as a
 fact about coreutils, and its remedy told them to install a package they had."
 
-The build.sh:2054 credential fixture is NOT the caller: it writes a stub `gh` to
-a temp dir and puts it first on PATH. Hermetic. An earlier diagnosis blamed it
+The `test-check-credential-channel.sh` fixture build.sh runs is NOT the
+caller: it writes a stub `gh` to a temp dir and puts it first on PATH. Hermetic. An earlier diagnosis blamed it
 and was wrong.
 
 **End-user runtime does NOT read the host GitHub credential** — checked because
@@ -90,8 +90,8 @@ ruling rather than an assertion. Flagged, not claimed.
 
 ## 2026-09-13 — check-host-tools.sh reports a false MISSING under an agent PATH
 
-`check-host-tools.sh:243` resolves rustup with a bare `command -v`, so when
-rustup is not on the CURRENT PATH it concludes no targets are installed. Same
+`check-host-tools.sh`'s `_installed_targets` probe resolves rustup with a bare
+`command -v`, so when rustup is not on the CURRENT PATH it concludes no targets are installed. Same
 host, same minute, only PATH differing:
 
     agent non-login PATH   ok:host-tools:macos:gate:5 present; tray-build:4 present, missing aarch64-unknown-linux-musl,x86_64-unknown-linux-musl
