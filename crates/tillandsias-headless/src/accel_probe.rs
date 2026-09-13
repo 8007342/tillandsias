@@ -2717,6 +2717,9 @@ fn enumerate_gpus() -> Vec<DeviceRecord> {
                 device_class: "gpu".to_string(),
                 vendor: "nvidia".to_string(),
                 name: nvidia_model_name(first_line),
+                // Read from nvidia-smi's own line (1137-rgfm: the probe says
+                // whether it measured the name; the deny-list cannot).
+                name_source: Some("measured".to_string()),
                 device_node: Some("/dev/nvidia0".to_string()),
                 fw_version: None,
                 driver: None,
@@ -2764,11 +2767,23 @@ fn enumerate_gpus() -> Vec<DeviceRecord> {
                         this_mm.as_deref() == Some("unified"),
                         discrete_gpu_is_schedulable(&gpus),
                     );
+                    let lspci_name = pci_device_name_via_lspci(&pci_addr);
                     gpus.push(DeviceRecord {
                         device_class: "gpu".to_string(),
                         vendor: "amd".to_string(),
-                        name: pci_device_name_via_lspci(&pci_addr)
+                        name: lspci_name
+                            .clone()
                             .unwrap_or_else(|| "AMD GPU (amdgpu)".to_string()),
+                        // 1137-rgfm: lspci answered -> measured; the fallback
+                        // string is a placeholder and must say so.
+                        name_source: Some(
+                            (if lspci_name.is_some() {
+                                "measured"
+                            } else {
+                                "placeholder"
+                            })
+                            .to_string(),
+                        ),
                         device_node: render_node,
                         fw_version: None,
                         driver: Some("amdgpu".to_string()),
@@ -2789,11 +2804,23 @@ fn enumerate_gpus() -> Vec<DeviceRecord> {
                 ("0x8086", Some("i915")) | ("0x8086", Some("xe")) => {
                     let (usable, lanes, unusable_reason) =
                         intel_gpu_disposition(intel_rt, render_node.is_some());
+                    let lspci_name = pci_device_name_via_lspci(&pci_addr);
                     gpus.push(DeviceRecord {
                         device_class: "gpu".to_string(),
                         vendor: "intel".to_string(),
-                        name: pci_device_name_via_lspci(&pci_addr)
+                        name: lspci_name
+                            .clone()
                             .unwrap_or_else(|| "Intel GPU".to_string()),
+                        // 1137-rgfm: lspci answered -> measured; the fallback
+                        // string is a placeholder and must say so.
+                        name_source: Some(
+                            (if lspci_name.is_some() {
+                                "measured"
+                            } else {
+                                "placeholder"
+                            })
+                            .to_string(),
+                        ),
                         device_node: render_node,
                         fw_version: None,
                         driver,
@@ -2816,6 +2843,7 @@ fn enumerate_gpus() -> Vec<DeviceRecord> {
                 // when nothing else was found, and with the REAL vendor
                 // instead of the old hardcoded "amd".
                 (vid, _) if gpus.is_empty() => {
+                    let lspci_name = pci_device_name_via_lspci(&pci_addr);
                     gpus.push(DeviceRecord {
                         device_class: "gpu".to_string(),
                         vendor: match vid {
@@ -2823,8 +2851,19 @@ fn enumerate_gpus() -> Vec<DeviceRecord> {
                             "0x1002" => "amd".to_string(),
                             _ => "unknown".to_string(),
                         },
-                        name: pci_device_name_via_lspci(&pci_addr)
+                        name: lspci_name
+                            .clone()
                             .unwrap_or_else(|| "Vulkan GPU".to_string()),
+                        // 1137-rgfm: lspci answered -> measured; the fallback
+                        // string is a placeholder and must say so.
+                        name_source: Some(
+                            (if lspci_name.is_some() {
+                                "measured"
+                            } else {
+                                "placeholder"
+                            })
+                            .to_string(),
+                        ),
                         device_node: render_node
                             .or_else(|| Some(format!("/sys/bus/pci/devices/{pci_addr}"))),
                         fw_version: None,
@@ -2862,6 +2901,9 @@ fn enumerate_gpus() -> Vec<DeviceRecord> {
                 // honest "unknown".
                 vendor: "unknown".to_string(),
                 name: "WSL2 paravirtual GPU (/dev/dxg)".to_string(),
+                // Every WSL2 host emits this same string: it identifies the
+                // substrate, not the card (1137-rgfm: declared placeholder).
+                name_source: Some("placeholder".to_string()),
                 device_node: Some("/dev/dxg".to_string()),
                 fw_version: None,
                 driver: None,
@@ -3000,6 +3042,8 @@ fn windows_gpus() -> Option<Vec<DeviceRecord>> {
                         _ => "unknown".to_string(),
                     },
                     name,
+                    // Win32_VideoController's own Name (1137-rgfm: measured).
+                    name_source: Some("measured".to_string()),
                     device_node: pair,
                     fw_version: None,
                     driver: (!driver.is_empty()).then(|| driver.to_string()),
@@ -3064,6 +3108,16 @@ fn windows_npus() -> Option<Vec<DeviceRecord>> {
                 Some(DeviceRecord {
                     device_class: "npu".to_string(),
                     vendor,
+                    // 1137-rgfm: the PnP name is measured; the empty-name
+                    // fallback is a placeholder and says so.
+                    name_source: Some(
+                        (if name.is_empty() {
+                            "placeholder"
+                        } else {
+                            "measured"
+                        })
+                        .to_string(),
+                    ),
                     name: if name.is_empty() {
                         "Unknown Compute Accelerator".to_string()
                     } else {
@@ -3152,6 +3206,9 @@ fn enumerate_npus() -> Vec<DeviceRecord> {
                     device_class: "npu".to_string(),
                     vendor,
                     name: name_str,
+                    // Derived from the driver name ("Intel NPU"), not read from
+                    // the device: a placeholder by construction (1137-rgfm).
+                    name_source: Some("placeholder".to_string()),
                     device_node: Some(node_path),
                     fw_version,
                     driver: driver_name,
@@ -3357,8 +3414,20 @@ fn normalize_node_name(raw: &str) -> Option<String> {
 /// unidentifiable host into one row — the exact collision this field exists to
 /// prevent, reintroduced through the error path.
 fn resolve_host_id() -> (String, String) {
-    if let Ok(v) = std::env::var(HOST_ID_ENV)
-        && let Some(id) = normalize_node_name(&v)
+    resolve_host_id_from(std::env::var(HOST_ID_ENV).ok().as_deref())
+}
+
+/// The resolver proper, with the input as a PARAMETER rather than a read of
+/// the process environment (1146-z8ux). Two tests used to exercise this by
+/// `set_var`/`remove_var` on `HOST_ID_ENV` from parallel threads of one test
+/// process; when one removed the variable inside the other's window the first
+/// resolved by node-name and the suite failed about one run in fifteen with
+/// nothing wrong in the tree. Taking the input here deletes the shared global
+/// from the tests instead of scheduling around it; production reads the
+/// environment exactly once, in `resolve_host_id`.
+fn resolve_host_id_from(input: Option<&str>) -> (String, String) {
+    if let Some(v) = input
+        && let Some(id) = normalize_node_name(v)
     {
         return (id, "input".to_string());
     }
@@ -6235,13 +6304,11 @@ mod tests {
     /// two keys for one machine, which is the defect this field exists to fix.
     #[test]
     fn the_input_overrides_the_derived_name_and_is_normalised() {
-        let prev = std::env::var_os(HOST_ID_ENV);
-        unsafe { std::env::set_var(HOST_ID_ENV, "Esmeraldinha.LOCAL") };
-        let (id, source) = resolve_host_id();
-        match prev {
-            Some(v) => unsafe { std::env::set_var(HOST_ID_ENV, v) },
-            None => unsafe { std::env::remove_var(HOST_ID_ENV) },
-        }
+        // The input is passed, not planted in the process environment: this
+        // test and `the_probe_always_yields_a_foldable_key` run as threads of
+        // one process, and mutating `HOST_ID_ENV` from both raced about one
+        // run in fifteen (1146-z8ux).
+        let (id, source) = resolve_host_id_from(Some("Esmeraldinha.LOCAL"));
         assert_eq!(id, "esmeraldinha");
         assert_eq!(source, "input");
     }
@@ -6251,12 +6318,9 @@ mod tests {
     /// obtained.
     #[test]
     fn the_probe_always_yields_a_foldable_key() {
-        let prev = std::env::var_os(HOST_ID_ENV);
-        unsafe { std::env::remove_var(HOST_ID_ENV) };
-        let (id, source) = resolve_host_id();
-        if let Some(v) = prev {
-            unsafe { std::env::set_var(HOST_ID_ENV, v) }
-        }
+        // No input: the derived chain (hostname -> uname -n -> /etc/hostname)
+        // must answer. Nothing in the environment is touched (1146-z8ux).
+        let (id, source) = resolve_host_id_from(None);
         assert!(
             !id.is_empty(),
             "an empty key would fold every unknown host into one row"
