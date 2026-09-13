@@ -33,7 +33,16 @@ mkproc() {
     fi
     printf '%s\0' "$cmd" > "$r/$pid/cmdline"
 }
-newroot() { local r="$tmp/$1"; mkdir -p "$r/1"; printf 'x\0' > "$r/1/cmdline"; printf 'PATH=/x\0' > "$r/1/environ"; echo "$r"; }
+# Every tree needs a readable, TOKENED `self`: the check's positive control
+# reads its own environ before it will answer at all. Arms that mean to exercise
+# the control's failures overwrite this deliberately.
+newroot() {
+    local r="$tmp/$1"; mkdir -p "$r/1" "$r/self"
+    printf 'x\0' > "$r/1/cmdline"; printf 'PATH=/x\0' > "$r/1/environ"
+    printf 'x\0' > "$r/self/cmdline"
+    printf 'PATH=/x\0TILLANDSIAS_WRAPPER_TOKEN=self-tok\0' > "$r/self/environ"
+    echo "$r"
+}
 
 # NEUTRALISE THE CONTAINER MARKERS, or the fixture is not hermetic after all.
 # The gate itself runs INSIDE the builder toolbox, where TOOLBOX_PATH is set, so
@@ -41,7 +50,10 @@ newroot() { local r="$tmp/$1"; mkdir -p "$r/1"; printf 'x\0' > "$r/1/cmdline"; p
 # no matter what its procfs tree says. Measured the noisy way: every arm passed
 # on the host and the whole fixture refused the land from inside the gate. Arms
 # that mean to test the container refusal set the marker themselves.
-run_check() { TOOLBOX_PATH="" container="" TILLANDSIAS_PROC_ROOT="$1" bash "$CHECK" 2>&1; }
+# Arms assert --host-side, because an unflagged caller is silent by design now
+# (the inversion). The pid value is immaterial to the scan; what the check
+# verifies is its OWN environ, which newroot() supplies.
+run_check() { TILLANDSIAS_PROC_ROOT="$1" bash "$CHECK" --host-side 999 2>&1; }
 
 # The container arms need the marker SET, and run_check deliberately clears it,
 # so they get their own entry point rather than relying on assignment order.
@@ -118,21 +130,44 @@ mkproc "$r" 401 - "bash /other-repo/./build.sh --check"
 out="$(run_check "$r")"; rc=$?
 check "an untokened build.sh elsewhere is not this checkout's competitor" 0 "ok:no-competing-gate" "$rc" "$out"
 
-# 8. INSIDE A CONTAINER THE CHECK REFUSES TO ANSWER. This is the arm the
-#    hermetic fixture could not have predicted and the first in-situ run
-#    produced: build.sh re-execs into the toolbox BEFORE its fast refusals, and
-#    from inside, a host-side wrapper's environ is unreadable — `[ -r ]` answers
-#    TRUE and the read is then DENIED, so every wrapper vanished and every gate
-#    reported ITSELF as a competing gate. A fake procfs of plain files is always
-#    readable, which is exactly why 8/8 passed over a detector that was wrong in
-#    production.
-r="$(newroot incontainer)"
+# 8. AN UNFLAGGED CALLER IS SILENT — the inversion itself. Before this, the
+#    check answered unless it RECOGNISED a container, which pointed its failure
+#    mode at every dispatch boundary nobody had met: WSL2 sets no marker at all
+#    (measured by yolanda: TOOLBOX_PATH empty, container empty, no marker files)
+#    and their gate accused itself. Unflagged now costs a missing answer, never
+#    a wrong one.
+r="$(newroot unflagged)"
 mkproc "$r" 101 tok-a "/usr/bin/conmon --api-version 1 -c abc"
 mkproc "$r" 102 tok-a "bash /repo/./build.sh --check"
-out="$(run_check_in_container "$r" TOOLBOX_PATH /)"; rc=$?
-check "inside a container it refuses to answer rather than accusing" 3 "could-not-run:competing-gate:inside-container" "$rc" "$out"
-out="$(run_check_in_container "$r" container oci)"; rc=$?
-check "an oci container is refused the same way" 3 "could-not-run:competing-gate:inside-container" "$rc" "$out"
+out="$(TILLANDSIAS_PROC_ROOT="$r" bash "$CHECK" 2>&1)"; rc=$?
+check "an unflagged caller is silent, not accusing" 3 "could-not-run:competing-gate:no-host-side-assertion" "$rc" "$out"
+
+# 8b. THE CALLER CONTRACT. A caller that asserts host-side but never exported
+#     the token is a CALL SITE BUG, not a substrate limit, and gets its own exit
+#     code so a promoting consumer cannot write it off as "this host cannot
+#     answer". This is the arm that caught the impossible first version of the
+#     contract: it demanded the caller's own pid carry the token, which a
+#     runtime export never puts there.
+r="$(newroot tokenless)"
+printf 'PATH=/x\0' > "$r/self/environ"   # readable, no token
+out="$(run_check "$r")"; rc=$?
+check "host-side asserted but no token exported is a caller bug (2)" 2 "refused:competing-gate:caller-contract" "$rc" "$out"
+
+# 8c. BLIND: our own environ unreadable. On a substrate with no readable environ
+#     at all — MSYS/Cygwin exposes cmdline and status and winpid but no environ;
+#     darwin has no /proc — the check must refuse rather than report a clean
+#     tree. Constructed so that NEITHER a dangling symlink nor absence is
+#     assumed: the precondition is asserted below.
+r="$(newroot blindself)"
+rm -f "$r/self/environ"
+ln -s /nonexistent-so-there-is-nothing-to-read "$r/self/environ" 2>/dev/null || true
+if [ -r "$r/self/environ" ]; then
+    fail=$((fail+1))
+    echo "FAIL: could not construct an unreadable self environ on this substrate — this arm would have asserted nothing"
+else
+    out="$(run_check "$r")"; rc=$?
+    check "an unreadable own-environ is blind (3), never a clean tree" 3 "could-not-run:competing-gate:blind" "$rc" "$out"
+fi
 
 # 9. AN UNREADABLE PROCESS SUSPENDS THE ACCUSATION. A denied read is not an
 #    absent token: one of the processes it could not read may be the live
@@ -142,10 +177,40 @@ r="$(newroot opaque)"
 mkproc "$r" 101 tok-a "/usr/bin/conmon --api-version 1 -c abc"
 mkproc "$r" 102 tok-a "bash /repo/./build.sh --check"
 mkproc "$r" 103 tok-b "bash /repo/./build.sh --check"
-chmod 000 "$r/103/environ"
-out="$(run_check "$r")"; rc=$?
-chmod 644 "$r/103/environ" 2>/dev/null || true
-check "an unreadable process suspends the accusation" 3 "could-not-run:competing-gate:unreadable-processes" "$rc" "$out"
+# UNREADABLE BY STRUCTURE, NOT BY PERMISSION. This arm used to `chmod 000` the
+# environ, which assumes chmod denies the READER — false for root, which has
+# DAC_OVERRIDE, and a WSL distro runs as root by default. Measured under
+# `podman unshare`: uid 0 gets `[ -r <chmod-000> ]` = TRUE while uid 1000 gets
+# FALSE, so the arm passed on Linux hosts and RED yolanda's windows-next gate,
+# where the file was readable, the group looked headless and the classifier
+# accused — correctly, for the tree the fixture actually built. A dangling
+# symlink has nothing to read rather than permission to deny, so `[ -r ]` is
+# FALSE for uid 0 and uid 1000 alike and the arm means the same thing
+# everywhere. Second time this fixture claimed a regime it did not have; the
+# first was inheriting TOOLBOX_PATH from the gate's own container.
+rm -f "$r/103/environ"
+ln -s /nonexistent-so-there-is-nothing-to-read "$r/103/environ" 2>/dev/null || true
+# PROVE THE INJECTED FAILURE ACTUALLY OCCURRED — the rule this arm's own
+# history produced, applied to the SETUP rather than only to the assertion.
+#
+# The arm needs one property: that environ cannot be read. A dangling symlink
+# gives it, and so does an absent file; which of the two a substrate allows is
+# not the subject. But the arm must not proceed on the ASSUMPTION that either
+# worked. Measured by yolanda on WSL: `ln` failed with "No such file or
+# directory", the arm passed anyway on the absent file, and the suite printed
+# PASS — an arm passing for a reason other than the one it names, which is
+# exactly the defect this arm was rewritten to remove one commit earlier.
+# `ln`'s stderr went to the log and nothing read it.
+#
+# So assert the precondition. If NEITHER construction denies the read on this
+# substrate, the arm asserts nothing and must say so rather than pass.
+if [ -r "$r/103/environ" ]; then
+    fail=$((fail+1))
+    echo "FAIL: could not construct an unreadable environ on this substrate — neither a dangling symlink nor an absent file denied the read, so this arm would have asserted nothing"
+else
+    out="$(run_check "$r")"; rc=$?
+    check "an unreadable process suspends the accusation" 3 "could-not-run:competing-gate:unreadable-processes" "$rc" "$out"
+fi
 
 total=$((pass+fail))
 if [ "$fail" -eq 0 ]; then echo "PASS: competing-gate detector $pass/$total (1141-vf9w)"; exit 0; fi
