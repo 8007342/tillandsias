@@ -1,0 +1,64 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-proxy-permissive-port-guard-puts-include-after-the-double-dash-so-the-filter-is-inert-and-it-scans-binaries-reporting-a-staged-guest-as-a-consumer
+    event:
+      type: completed
+      ts: "2026-09-13T09:36:35Z"
+      agent_id: linux-lenovinha-opus5-20260913t093635z
+      host: linux
+      summary: |
+        ALREADY FIXED by e357f3f87 ("fix(1125-wi4d, 1126-w8rq, 1127-apa8): three
+        Windows-lane defects, each falsified both ways"). Closed on verification; no code
+        was written. All four exit criteria checked by EXECUTION, not by reading the
+        commit subject.
+
+          1. `--include` IS APPLIED. Line 59 reads
+             `grep -rlF --include='*.rs' -- '3129' "$CONSUMER_ROOT"` — the filter before
+             the `--`, which is the correct order. I confirmed the MECHANISM the row
+             describes rather than assuming it, on a scratch tree with a .rs, a .txt and
+             a binary all containing 3129:
+                 -- before --include  -> matched b.txt AND a.rs   (filter inert)
+                 --include before --  -> matched a.rs only        (filter live)
+             So the row's diagnosis was exactly right; it is simply already landed.
+
+          2. A STAGED GUEST BINARY IS NOT A CONSUMER. Planted a fake ELF containing
+             `3129` under crates/ -> ok:proxy-permissive-port:unrouted-and-documented.
+             Pre-fix this was the land refusal yolanda hit.
+
+          3. NEGATIVE CONTROL HOLDS — and this is the one that matters, because a fix
+             that narrowed the search too far would pass 1 and 2 while gutting the
+             guard. Planted a real `.rs` naming 3129 under crates/ ->
+             violation:proxy-permissive-port:stale-unrouted-caveat. The guard still
+             flips to its routed branch and still refuses the stale NOT ROUTED caveat.
+             The fix narrowed WHICH FILES are searched, not WHAT is asserted, exactly as
+             the criterion requires.
+
+          4. SCOPE UNCHANGED: CONSUMER_ROOT is still `crates` (:42) and build.sh is not
+             searched — the dev proxy is a different proxy, per the scope comment.
+
+        Both probes were removed and the guard re-verified clean afterwards; the tree is
+        untouched.
+
+        A DISTINCT STALE SHAPE, worth separating from the others on 1144-jfr5. The three
+        earlier cases tonight were rows fixed under a DIFFERENT order, where nothing
+        connected commit to row (1085-g52w <- b026372ff under 1124-7f3u; 1086-kx8i <-
+        1087-h2z9). This one is different and cheaper to catch: THE FIXING COMMIT NAMES
+        THE ORDER IN ITS SUBJECT and the row simply was never moved off `ready`. A
+        reconciliation pass can find this class with a single query — a landed commit
+        whose subject cites `<order>` while that order still folds `ready` — with no
+        owned_files heuristic and no judgement about file overlap. It is strictly easier
+        than the shape 1144-jfr5 was filed for, and it is probably the more common one.
+
+        WHY IT MATTERED ANYWAY: I relied on this guard's green verdict last cycle while
+        closing 1118-bscs. Had the `--include` defect still been live, that green would
+        have been a weaker statement than I took it for — the guard would have been
+        scanning binaries. It was already fixed, so the reliance was sound; I did not
+        know that at the time.

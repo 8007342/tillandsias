@@ -2076,3 +2076,388 @@ stories.
   item, from macbookair: every host's cadence is a session-scoped cron that
   dies with its session and expires 2026-09-19; the durable per-host timer
   is 890-27mv's open follow-up.
+  Salvage disposition closed for yoga's two refs: yoga verified rather than
+  agreed (diff against the PARENT, then byte-compare — the 1377-file diff
+  against trunk is only the stale base and says nothing about what a ref
+  carries): 20260912-restart one file identical (sha bb637c96fce1 both
+  sides); 20260826-iteration-3 a real local-ci.sh PIPESTATUS fix that
+  survived under 831-ezea. Both DELETED by the coordinator; seven salvage
+  refs remain. yoga's implication for 1148-3439: the broken window is the
+  interval since 874-s8vf was archived, during which salvage records were
+  LOST rather than delayed, and every deletion has rested on a manual
+  parent-diff — fine at eleven, not at a hundred, and silent.
+- **pirria is back** (relaunched by the operator, reported 08:2xZ; destructive
+  reset approved on that host by its user): briefed as floor tier — first
+  the parent-diff of salvage/pirria/20260904-1013-qv7c (+91/-4 on the smoke
+  skill; likely landed by another route) reported, not deleted; standing job
+  the daily-channel curl-install smoke §0-§5 on the newest release with the
+  timing helpers sourced (the only floor host that writes smoke-* records);
+  per-host drill file flat; plan-only pushes gate-free; scripts/skills diffs
+  handed to the coordinator rather than landed; cadence arming is the
+  operator's.
+- **A set-field on a long-form field silently drops other hosts' warnings**
+  (esme, 793-zumy, landed windows-next 4456bdc53): correcting next_action
+  replaced it wholesale and dropped three load-bearing lines — the
+  VERIFICATION DEBT note, "DO NOT MOVE legacy_tier WITHOUT TELLING YOGA"
+  (dev-inference-ensure.sh greps it with `grep -m1` on raw --capabilities
+  output; a key ahead of it silently downgrades a host to cpu), and the
+  hwfp-v2 field list — restored verbatim under a PRESERVED heading. Noticed
+  ONLY because the tool echoed the old value's tail; check-fragment-status-
+  loss guards status, not prose, so nothing in the gate chain catches it.
+  Ledger-integrity hazard; packet in the next pass on esme's evidence. Also
+  from esme: 1146-xs6s filed (the stale-plan-binary refusal recommends a
+  candidate newer than the RESOLVED binary rather than the SOURCE, honours
+  TILLANDSIAS_PLAN_BIN on existence alone, and named an ELF to a Git-Bash
+  hook — two failure modes, no success mode on Windows; rebuilt at
+  CARGO_BUILD_JOBS=1 in 1m38s, which made the guard's premise true); two
+  self-corrections — jobs=1 SURVIVES the memory reaper where jobs=2 is
+  reaped (true for survival, still worse for throughput), and Windows-side
+  long work has no setsid equivalent, so only the in-distro side is
+  protectable; and the capture lesson: filtering a diagnosis at capture time
+  (grep on a variable, tail -20) discarded the verdict line twice — write
+  the raw output to a file and query it afterwards; a filter has to
+  anticipate the failure, and the point of a failure is that you did not.
+  pirria's parent-diff verdict: salvage/pirria/20260904-1013-qv7c is
+  REDUNDANT — the tip's skill blob is byte-identical to trunk commit
+  5e6c6a4cc ("salvage(pirria): dirty worktree preserved before a cycle
+  refusal"), landed by a second route (same subject, different sha, so
+  `--is-ancestor` says no while the content is fully present), and trunk has
+  since moved past it (1026-ps4n, 900-z3kv, 1004-vsh2 all edit the same
+  sections; restoring the ref would regress them). Verified on macuahuitl
+  (ancestor + blob compare) and DELETED. Six salvage refs remain: pirria's
+  three merged everywhere, yolanda's (delete after the relay lands), and
+  the two salvage/unknown/ opsx refs.
+- **CORRECTION, withdrawn before it reached the operator** (macbookair): the
+  "durable per-host timer" item recorded in the 08:11Z pass entry is NOT an
+  operator ask. The operator told macbookair directly that non-durable,
+  session-scoped crons are INTENDED: cadence is set per milestone by the
+  orchestrator, and a durable scheduler would hand cadence control to
+  something nobody re-points when the milestone changes. macbookair names
+  the error class: inferring a defect from a property without asking whether
+  the property was chosen — the same shape as the night's fixture packets,
+  pointed at a design decision. 890-27mv's follow-up stands or falls on its
+  own reasons; nothing measured this session is evidence for it.
+  Pass 08:11Z landed ok:land:79fc27018 attempt 1 (both relays, 1148-3439,
+  the pass record). yolanda's salvage/yolanda/20260913-823-u5zf deleted
+  after 1d7b29bcc reached trunk by the relay; five salvage refs remain
+  (pirria's three merged everywhere, the two salvage/unknown/ opsx refs).
+- **1141-vf9w's reaper fixture flakes under gate load** (lenovinha,
+  measured; relayed to yoga with a testable shape): land refused at attempt
+  1 on `FAIL: a marked process is found by its token` (10/11); the same
+  tree and commit standalone 11/11 three times running; the diff touched
+  nothing near dispatch. "Passes alone, fails in the gate" refuses innocent
+  diffs and is invisible to a hand re-run. Candidate, not a claim: the arm
+  scans before the spawned child has exec'd, so its environ does not yet
+  carry the token; under load the window opens. Fix shape if so: a bounded
+  poll until the token is visible before the assert. The load was
+  lenovinha's own gate (the coordinator's land ran on macuahuitl).
+- **1119-6wn6's counter half** (lenovinha, re-landing): --emit-tokens
+  appends one JSONL record per cycle beside the flow log with the flow
+  log's properties (coercion over a poisoned row, cycle-id minting,
+  replace-on-retry keyed host+cycle, always exit 0); views `tokens:` and
+  `token_recur:` (top-3 REPEATED labels — a one-off is a cost, not a
+  recurrence). Coordinator review: keep the more-than-once rule and add
+  `token_max:` (largest single record, label, cycle id) so the incident
+  that produced the packet — a one-off 4.5M — is visible without polluting
+  the recurrence view; the fixture pins the baseline appears there and not
+  in token_recur. Semantics to check: the first emitted row carries
+  main_ctx≈900k, which was reported earlier as the SESSION cumulative; a
+  per-cycle contract with the row re-emitted, or a field named
+  main_ctx_cumulative. Stated limit: the instrument pins the ledger and the
+  views, never the honesty of the number — only the agent observes its own
+  spend. Two of lenovinha's own arms were vacuous by absence ("abc is not in
+  the log" is true with no log) and pre-fix scoring caught it: 3 → 1 pre-fix
+  passes, the survivor named (exit-0, undemonstrable pre-fix).
+- **macneo :40 cycle** (osx-next ae9d9e42d, record b44ff8df3, relay next
+  pass): 1127-apa8 closed as a READY-BUT-LANDED row — the fix was already
+  on trunk as e357f3f87 (`--include='*.rs'` moved from after the `--` to
+  before it in check-proxy-permissive-port-routing.sh; after the double
+  dash grep took it as a path operand, so the filter never applied and the
+  scan walked staged binaries — both halves of the title one reordering);
+  verified on the host with a positive control on the 3129 literal so the
+  empty .rs result is a true negative. Offered to 1080-4deb as a worked
+  confirmation: the landing subject opens with fix(1127-apa8), so the
+  anchored reader would have rung this row — one real closure out of the
+  46-hit list, checked by hand. KEYCHAIN ASK CORRECTED AND RESOLVED (macneo,
+  corroborated from the item, not the report): the standing operator ask
+  said "run the command and choose Always Allow"; the operator did,
+  repeatedly, and it did nothing — the dialog carries a PASSWORD field and
+  Always Allow authenticates nothing unless the LOGIN KEYCHAIN PASSWORD is
+  typed first (gh:github.com acct cdat == mdat == 2026-09-06T04:22:01Z
+  before, during and after; no grant written). Root cause settled: a WEDGED
+  SecurityAgent (21h45m, ignored SIGTERM, respawned on SIGKILL) plus
+  accumulating PPID-1 `security` orphans, because _ccc_timeout kills gh and
+  its security child survives holding a dialog no later timeout reaps — NOT
+  a deny-by-default ACL (macneo's earlier guess) and NOT a prompt backlog
+  (macbookair's). A restart cleared it; bare decrypt rc 0; three gates since
+  reached the keychain without prompting. Same family as 1145-iigx. The ask
+  comes off the operator list. Structural refusal worth a packet: the
+  plan-only lane refused a one-line claim push because the mandated
+  origin/linux-next merge pulled a non-plan path (already gated on trunk)
+  into the outgoing diff — any cycle where trunk has added a non-plan file
+  since the host's last merge pays a full gate for a claim; the lane should
+  treat outgoing non-plan paths byte-identical to origin/linux-next as not
+  the pusher's to gate. macneo's per-host file
+  (fleet-restart-2026-09-12-macneo.md) written on the convention; folded
+  by reference. Self-inflicted and reported: three line-number citations
+  (881-29me) re-cited by symbol, guard re-proven with a planted fake file-and-line citation.
+  yoga's follow-up on the reaper flake (ok:land:4423f6ea9): the exec-window
+  shape is UNREPRODUCED, not confirmed — `sleep 0.3` removed entirely, 18
+  runs (8 idle, 10 under six CPU hogs), zero failures on yoga — and fixed
+  anyway on construction: a fixed sleep between spawning and asserting is a
+  race by construction; `await_marked` now polls until the token is visible
+  for that pid and FAILS LOUDLY on timeout (teeth: with the export removed
+  it reds by name). The hypothesis found a second defect of opposite sign:
+  arm 3, the negative control, was satisfied whenever the child had not
+  exec'd YET ("absent from A's set" is implied by "absent from every set"),
+  so under exactly the load that flakes arm 2, arm 3 passed for free. One
+  missing synchronisation, two defects, only one visible. yoga's cycle is
+  LANDED-BUT-UNATTESTED at 7c5c5e330, cause theirs end to end and recorded
+  as the sanctioned exit: `pkill -f 'while :; do :; done'` matched the
+  killer's own command line and killed the session mid-command twice; the
+  second kill aborted a restore, the boundary snapshot was then taken over
+  the dirty tree and recorded the deliberate test mutation as STARTUP DIRT,
+  and restoring the file read as startup dirt vanishing — the guard was
+  right. Nothing lost: the boundary's worktree.diff holds the discarded
+  hunk. Three rules, yoga's, by name: kill by PID with a `$$` exclusion,
+  never by a pattern that matches the killer; check the tree is clean
+  before taking a boundary; SALVAGE BEFORE RESTORE — establish whose dirt it
+  is before discarding it, whoever it turns out to be.
+  CORRECTION (lenovinha, 47271ced5): the coordinator's relayed hypothesis
+  for the reaper flake (spawn-then-scan before exec) was WRONG — `$!`
+  equals the token holder in both environments, so a poll could not have
+  settled it; not CPU load (8 spinners, 11/11), not /proc access, not
+  setsid. The cause is the SIGPIPE CLASS, measured decisively inside
+  tillandsias-builder varying only the pipe: `tillandsias_marked_pids |
+  grep -qxF` under pipefail 5/5 FAILURE on a SUCCESSFUL match (grep -q
+  exits at the first hit and SIGPIPEs the producer still walking /proc);
+  the same question captured then matched 0/5. 1076-kft9's condition with
+  its environment dependence (they measured drvfs vs ext4; this is host vs
+  container) — why it refused innocent lands and every by-hand re-run was
+  green. Both fixes were needed: yoga's alone 10/13 (await_marked polled
+  by piping into grep -q and could only time out), lenovinha's alone
+  11/11, combined 11/11 in-container and on host; lenovinha took yoga's
+  file as the base (their arms, awaits, pb/pc vacuity fix) and applied
+  capture-before-matching to the helper and the one raw pipeline where a
+  SIGPIPE failure would have made the negative control pass for the wrong
+  reason; arm accounting by enumeration (11 check calls in both files).
+  Row stays yoga's. lenovinha's own earlier instance stays unproven and
+  retracted; this is a different, reproducible instance in another file.
+  1119-6wn6 review corrections landed: token_max pinned as a PAIR with
+  token_recur (same record in one view and not the other); the mislabelled
+  row fixed as main_ctx_cumulative (the average was NOT poisoned —
+  avg_subagent_tokens aggregates subagent_tokens only — so the fix stands
+  on the misuse, not the coordinator's predicted consequence); 13/13.
+  yoga's closure (ok:land:9dc5853be, attested 391a5b471, boundary taken
+  over a tree checked clean first), in their terms: 1132-r4mt's filing
+  event dismissed SIGPIPE-in-a-grep-q-pipeline BY NAME as unable to explain
+  the archiver's ruby positive control — correct about the SUBJECT — and the
+  fixture built to study that packet then failed by exactly the dismissed
+  mechanism and refused innocent lands for it. Ruling a mechanism out for
+  the subject says nothing about the INSTRUMENT built to study it, and the
+  instrument is the thing nobody reviews. Their own fix alone (await_marked
+  polling by piping into grep -q) would have turned an intermittent false
+  failure into a DETERMINISTIC one on every host whose gate runs in a
+  container; it read as an improvement because it was green on the
+  authoring host — fourth instance tonight. And the method error, in their
+  words: failing to reproduce in 18 runs was the measurement saying the
+  hypothesis was wrong, not licence to fix on construction and stop
+  looking; "a fixed sleep is a race by construction" was true and
+  irrelevant. Verified on merge: zero raw `marked_pids | grep` pipelines
+  remain. Left on 1141-vf9w: the dispatch-shape criterion and the WSL
+  wiring with the flag contract.
+- **1118-dwgx landed windows-next dbc1c4d73** (yolanda, first-attempt land,
+  one gate, no refusals, no memory kills — "a packet sized to a cycle and
+  every check run before the gate rather than through it"): the browser
+  enclave's podman argv is a wall of confinements (cap-drop=ALL,
+  no-new-privileges, read-only, userns=keep-id, tmpfs for /tmp and both
+  caches) and `--network=${TILLANDSIAS_BROWSER_NETWORK:-host}` was the one
+  line that undid them BY DEFAULT with no proxy filtering, asserted by
+  nothing; now falls back through TILLANDSIAS_ENCLAVE_NET
+  (check-enclave-network-internal.sh's spelling) and is pinned in
+  litmus:browser-isolation-core-shape beside cap-drop and user-data-dir;
+  `labels.len() < 3` in allowlist.rs. Relay next pass. THE PIN REPRODUCED
+  THE DEFECT IT WAS WRITTEN TO PREVENT: its first draft matched the
+  rationale COMMENT above the flag, which quotes `--network=host` while
+  explaining why it is wrong, so the step would have read its author's own
+  prose as the code and reported the fix present — the same shape as
+  823-u5zf's closure one packet earlier, in the pin written after learning
+  it. Both steps strip comment lines now and the mutation control leaves
+  the comment in place so the blindness is exercised. Caught only by
+  running the step's command and reading what it matched; that also
+  settled the stray hit (exactly one code occurrence of `--network=host`).
+- **pirria's stable smoke of v56.9.12.2: PASS §0-§5** (report and two
+  packets on linux-next 58835a8be, plan-only lane): install/version PASS;
+  reset PASS (0 containers, 0 volumes, 0 images); init PASS 442.7 s, 15
+  images; forge lane 66m39s, supervisor SURVIVED at 15 GiB; sealed and
+  proxy asserts PASS; five smoke-* timing records written (field is `exit`,
+  not `exit_code`) — the first floor-host timing records the metrics have
+  had. 1134-u934 CONFIRMED on the published artifact at §3b (vault exit 137,
+  elapsed 11 s ≥ grace 10 s, oom=false, tree `1 bash / 10 vault / 11 tee`;
+  the fix 0b606fde7 landed after the tag's base 8a45bd522) — a confirmation
+  event, not a new packet. THE FINDING THAT MATTERS (p1,
+  smoke-finding/credential-cold-probe-reads-keychain-only): the
+  credential-cold probe asks the host keychain only, while vault reads the
+  keychain OR ~/.cache/tillandsias/fallback_*; fallback_vault-shamir-share-v1
+  (mode 600) has sat on pirria since 2026-09-01 untouched by every reset, so
+  the "cold" verdict was WRONG and the resync path was NOT exercised — the
+  900-z3kv condition exactly, while 900-z3kv's own criterion-2 instrument
+  certified the opposite; the vault log says "in keychain" when the share
+  came from the fallback, which keeps the substitution unreadable. A wrong
+  COLD on the host cited for cheap clean-room results is spent, where a
+  wrong warm is discounted. pirria did NOT delete the fallback files:
+  criterion 1's (a)/(b) is the operator's and now covers the fallback file
+  as well as the keychain. p3: `tillandsias-plan blocked-on` errors "the
+  ARTIFACT is stale — rebuild" while the binary has only blocked-by and the
+  MCP layer advertises plan_blocked_on (second instance of the surface-skew
+  class after `unknown query constraint: --capability-tags`). NOT CHECKED,
+  stated: the release's headline 1084-x8ya keying — a lane that launches
+  cannot tell a correctly keyed wire from an unkeyed one that works; the
+  mismatch arm was never provoked. §4a: 15 GiB is a BOUNDARY, not a
+  threshold — survived this run, lost the supervisor 2026-09-04 at the same
+  size; setsid made it observable, not adequate. The in-forge agent pushed
+  its own work (f156b1fb5, 1c181f233) and filed
+  low-end-tier-structural-drain-gap-2026-09-13.md for its refused:no-tier-work.
+  Not yet ledger rows: pirria's two findings are "### Work Packet" sections
+  in the findings report, with no plan/index.d fragment (zero matching
+  packet_ids); asked to file them as fragments through the plan-only lane
+  with verifiable_closure/owned_files and the pre-fix result, else the
+  coordinator files them from the report at the next pass. The forge agent
+  on pirria compacted 320 fragments into the base (f156b1fb5; 9 fragments
+  remain, 900 packets, all recent rows intact) — a base write from a floor
+  host's forge that took the full gate inside the lane.
+  Filed by pirria as ledger rows at d4c12ed05 (plan-only lane): 1149-vgn2
+  (the credential-cold probe certifies cold while a fallback share keeps
+  every reset warm; owned scripts/probe-credential-cold-state.sh and its
+  fixture; unscoreable form naming the future litmus, the measured pre-fix
+  FAILS verbatim, and two negative controls — no item and no fallback still
+  answers cold; a keychain item present still answers warm) and 1149-e8my
+  (the plan CLI blames a stale artifact for a subcommand name that never
+  existed; owned crates/tillandsias-plan/src/main.rs). Both claimable
+  (`ready` lists them worked:1@linux). check-declared-closures-added.sh
+  refused the verifiable_closure form for both because each deliverable IS
+  its guard (885-92iu) — the unscoreable form is the right one there, as
+  1144-jfr5 and 1147-6xqs found. LANE POLICY, third structural refusal of
+  the plan-only lane in one night, for the coordinator to file: the lane
+  refused pirria's first attempt with "the resolved plan binary is STALE
+  (full gate required)" because their trunk pull brought a newer
+  crates/tillandsias-plan/src/main.rs than their binary — so the gate-free
+  lane, built so floor hosts and forges can file without cargo, requires a
+  cargo build on exactly those hosts (54.8 s warm on pirria; a cold target/
+  or no toolchain has no move short of --no-verify, which is forbidden).
+  1129-4su6's reasoning stands (a stale binary can accept a shape current
+  rules refuse); the fix is to scope staleness to the fragment-validation
+  surface rather than all of main.rs, or let the lane validate with a
+  fetched binary. Siblings: macneo's (the mandated trunk merge pulls
+  trunk-gated non-plan paths into the outgoing diff) and esme's 1146-xs6s
+  (the staleness remedy names a wrong artifact).
+- **1141-vf9w story complete** (yoga, ok:land:b48fef19f, attested
+  549566ea2): criterion rewritten on dispatch SHAPE — the old "a
+  non-Silverblue linux host and a WSL host" was satisfied by mutable Fedora
+  in wording, not meaning (Silverblue and mutable Fedora are both toolbox
+  dispatch: one shape measured twice wearing two distro names); now
+  toolbox (satisfied; a third toolbox host adds nothing), wsl.exe, none;
+  plus churn-suspension measured on a SLOW host; plus a consumer that reads
+  the codes landed first. MSYS closes as a stated limit (no
+  /proc/<pid>/environ on the Windows host side; the detector cannot see
+  there by construction). 1149-3v3n filed for the Windows lane with the
+  flag contract written out (`--host-side "$$"` before dispatch, token
+  exported first, exit grammar 0/1/2/3, closure a QUOTED GATE LOG since the
+  substrate is the subject) — not wired by yoga (with-wsl2-builder.sh is
+  Windows-lane scope; unexercised code in someone else's file). Coordinator
+  ruling: 1141-vf9w released to READY with the criterion as next_action and
+  each remaining condition routed by host — wsl.exe datapoint → yolanda via
+  1149-3v3n; churn-suspension on a slow host → pirria as a floor-tier
+  measurement (recipe sent: a tokened sleep as the candidate, 30 detector
+  runs under a churn loop and 30 without, four raw counts and scan
+  durations); consumer wiring → its own packet, yoga to file.
+  Done (yoga, ok:land:00bd88f9f, attested 7d518bf36): 1141-vf9w is READY
+  with the three conditions routed by host on the row itself (wsl.exe via
+  1149-3v3n on yolanda; churn-suspension on pirria; the consumer at
+  1150-q462) — written for a distrustful stranger, the property a
+  message-only park lacked earlier tonight. 1150-q462 filed (yoga's, p2):
+  both call sites discard the status with `|| true`, so the four-code
+  grammar binds nobody and a caller-contract bug is indistinguishable from
+  an unsupported substrate; its criteria pin the BRANCHING (a stub returning
+  2 must produce a different caller response than a stub returning 3 — the
+  arm most likely to be deleted as redundant is the negative control), and
+  the row states why it must not be bundled with promotion: the first
+  reader of the codes must not also be the first thing that can stop a
+  build, or a consumer bug and a detector bug arrive together and cannot be
+  told apart in the field. Code 2 is the one with production evidence.
+  Promotion closes on evidence, not work: a flag flip already pinned.
+- **One row closed twice in one hour, on two branches** (1127-apa8):
+  macneo closed it on verification at osx-next ae9d9e42d (~08:40Z); lenovinha
+  closed it on verification at linux-next 358e3f4f3 (~09:50Z), having
+  picked it from plan_next, which could not see macneo's claim or closure
+  because both live on osx-next until the coordinator relays. Nothing to
+  drop (both are verification-only closures; the relay will carry two
+  completion records for one row), but the cost is a cycle of a fat host,
+  and the cause is structural: CLAIMS AND CLOSURES ON A PLATFORM BRANCH ARE
+  INVISIBLE TO plan_next ON EVERY OTHER HOST until the next pass. The claim
+  event exists to prevent exactly this and it cannot, because the
+  methodology sends platform hosts' plan edits to their platform branch.
+  Candidate fix for a packet (methodology-level, operator-visible): let
+  claim and closure fragments be pushed to linux-next from any host through
+  the plan-only lane (the ledger's canonical home), or have the coordinator
+  relay platform-branch plan fragments on a shorter clock than code. Also
+  from lenovinha: a DISTINCT stale shape for 1144-jfr5, the cheaper one —
+  the fixing commit NAMES the order (e357f3f87 "fix(1125-wi4d, 1126-w8rq,
+  1127-apa8)") and the row was simply never moved off ready; the query "a
+  landed commit whose subject cites <order> while <order> still folds
+  ready" has no owned_files heuristic and no false positives, and belongs as
+  a first pass ahead of the fuzzier one (still a candidate: the commit
+  fixed three orders and might have completed only two, so verification by
+  execution stays mandatory). lenovinha's near-miss, on the row: they cited
+  this guard's green while closing 1118-bscs before knowing whether its
+  --include defect was live — citing a guard's verdict without knowing what
+  it searches is the near-miss, whatever the outcome. lenovinha next:
+  1128-4ffr (a capability row wedges every push from a host absent from the
+  compacted base).
+- **The competing-gate detector has a PERMISSION FLOOR and can never accuse
+  on an unprivileged Linux host** (pirria, measured; event on 1141-vf9w at
+  81c936ea3; the churn hypothesis REFUTED): 30 runs per arm with a genuine
+  stray alive (build.sh in cmdline + token, no toolbox sharing it): control
+  accused=0 suspended=30; churn accused=0 suspended=30; opaque 164..171;
+  37 vs 47 ms per scan (timing is not where the problem lives). Of 255
+  processes 162 have an unreadable environ, 150 root-owned —
+  /proc/<pid>/environ is owner-readable only, so opaque is permanently
+  non-zero on every multi-user Linux host and ONE unreadable process is the
+  threshold. The classifier is fine (all three states fire through the
+  TILLANDSIAS_PROC_ROOT seam). Consequence: "promote once it has run clean
+  across hosts" is satisfied forever on every unprivileged host because the
+  detector cannot reach its own accusation there; the only regimes where it
+  CAN accuse are the two that produced false positives (in-container same
+  uid; WSL as root). Coordinator's brief was wrong twice (recorded): the
+  detector does not test cwd (candidate = `*build.sh*` in cmdline plus the
+  token; bare sleeps hit the debris arm on purpose) and the caller must pass
+  --host-side with the token exported into the detector process. Candidate
+  fix sent to yoga: count an unreadable environ as opaque only when the
+  process could be the candidate's wrapper (same uid as the scanner, or a
+  wrapper-shaped cmdline, which is world-readable). 1150-q462 (no consumer
+  reads the codes) and this (the producer cannot emit the code) cite each
+  other. pirria's plan-only push recorded its head as an un-gated union
+  past a merge of origin/linux-next; the coordinator's next land gates it.
+- **1128-4ffr closed** (lenovinha, cd7d62172): a joining host's capability
+  row no longer wedges every push — preflight allows rc 3 only when every
+  dropped entry carries the PENDING reason ("the compacted base carries no
+  row for that host and locus") and zero fragments are malformed ("carries
+  no host.host_id"); the allowance keys on the REASON, never the shared
+  `dropped-entry:` prefix. The correct fix came from lenovinha's own invalid
+  reproduction: their probe put host_id at entry level and hit the
+  MALFORMED drop, which returns the same blocked:plan-ledger-incomplete —
+  same verdict, different cause — so "falsified both ways" in the claim was
+  false and was corrected on the row; arm 4 makes that mistake permanent
+  (no host_id must STILL refuse; a prefix-keyed allowance would wave it
+  through with arms 1-3 green). Second defect introduced and caught: the
+  first cut allowed the case but left rc 3, which the next branch relabelled
+  blocked:plan-ledger-invalid — a worse label — caught only by running all
+  four cases separately. 5 of 6 arms are preservation arms; only arm 1
+  demonstrates the fix, said so. NOT DONE, named: the fold still declines
+  the row, so a joining host stops being WEDGED but APPEARS in the matrix
+  only after a compaction; the matrix half is a different file
+  (crates/tillandsias-plan) and its own row. On the 1127-apa8 duplicate:
+  two hosts reaching one verdict by different routes is evidence the
+  verification method is sound, though the cycle was wasted; the
+  cites-the-order query would not have helped, since the row genuinely
+  was ready on each branch.

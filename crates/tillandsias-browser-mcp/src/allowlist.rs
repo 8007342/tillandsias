@@ -231,13 +231,28 @@ pub fn validate(url: &str, project_label: &str) -> Result<AllowedUrl, AllowlistD
         return Err(AllowlistDeny::BareLocalhost);
     }
 
+    // ORDER 1118-dwgx. THE PROJECT LABEL MAY ITSELF CONTAIN DOTS. A project
+    // directory named `tillandsias.org` routes as
+    // `web.tillandsias.org.localhost`, which splits into FOUR labels, and the
+    // old `labels.len() != 3` rejected it as a malformed host — so browser.open
+    // failed for every project whose directory name carries a dot, which is
+    // every project named after a domain.
+    //
+    // The shape is still <service>.<project>.localhost: FIRST label is the
+    // service, LAST must be `localhost`, and everything between is the project,
+    // rejoined on '.'. Widening the count is safe because the project is then
+    // compared for EXACT equality against the caller's project_label just below
+    // — a host like `evil.com.acme.localhost` yields project `com.acme`, which
+    // matches nothing unless the caller really is that project. The minimum of
+    // three labels is what keeps `localhost` and `acme.localhost` out; those
+    // have their own denials above and must not reach this arm.
     let labels = split_host_labels(&host);
-    if labels.len() != 3 || labels[2] != "localhost" {
+    if labels.len() < 3 || labels[labels.len() - 1] != "localhost" {
         return Err(AllowlistDeny::HostShape);
     }
 
     let service_label = labels[0].to_string();
-    let host_project_label = labels[1].to_string();
+    let host_project_label = labels[1..labels.len() - 1].join(".");
     if host_project_label != project_label {
         return Err(AllowlistDeny::ProjectMismatch {
             expected: project_label.to_string(),
@@ -268,6 +283,48 @@ mod tests {
         let allowed = validate("http://web.acme.localhost:8080/foo?q=1", "acme").unwrap();
         assert_eq!(allowed.host, "web.acme.localhost");
         assert_eq!(allowed.service_label, "web");
+    }
+
+    /// ORDER 1118-dwgx. A project directory named after a domain routes through
+    /// a host with FOUR labels; the old exact-three check denied it.
+    ///
+    /// REGIME: pure function, no host state, no network, no wall-clock — the
+    /// same shape as the sibling cases above.
+    #[test]
+    fn accepts_project_label_containing_dots() {
+        let allowed = validate(
+            "http://web.tillandsias.org.localhost:8080/foo",
+            "tillandsias.org",
+        )
+        .unwrap();
+        assert_eq!(allowed.host, "web.tillandsias.org.localhost");
+        assert_eq!(allowed.service_label, "web");
+    }
+
+    /// THE NEGATIVE CONTROL FOR THE WIDENING, and the reason it is safe. Extra
+    /// labels are admitted to the SHAPE check, then the rejoined project must
+    /// still match the caller exactly — so a longer host cannot borrow another
+    /// project's authority.
+    #[test]
+    fn dotted_project_still_refuses_a_mismatched_project() {
+        let err = validate("http://web.tillandsias.org.localhost:8080/foo", "acme").unwrap_err();
+        match err {
+            AllowlistDeny::ProjectMismatch { expected, actual } => {
+                assert_eq!(expected, "acme");
+                assert_eq!(actual, "tillandsias.org");
+            }
+            other => panic!("expected ProjectMismatch, got {other:?}"),
+        }
+    }
+
+    /// The floor the widening must not lower: two labels is still a bad shape.
+    #[test]
+    fn two_label_host_is_still_refused() {
+        let err = validate("http://acme.localhost:8080/", "acme").unwrap_err();
+        assert!(
+            matches!(err, AllowlistDeny::HostShape | AllowlistDeny::BareLocalhost),
+            "a two-label host must not pass the shape check, got {err:?}"
+        );
     }
 
     #[test]

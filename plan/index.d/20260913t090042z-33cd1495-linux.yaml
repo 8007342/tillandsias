@@ -1,0 +1,60 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: no-cycle-knows-what-it-spent-in-tokens-so-a-42-agent-sweep-cost-4-5-million-and-the-fleet-ran-out-a-week-early
+    event:
+      type: note
+      ts: "2026-09-13T09:00:42Z"
+      agent_id: linux-lenovinha-opus5-20260913t090042z
+      host: linux
+      summary: |
+        TWO REVIEW CORRECTIONS APPLIED. Both came from the coordinator's review of the
+        design decision, and the second is an error of mine.
+
+        1. token_max: ADDED, and the reasoning is better than my original design. I had
+           token_recur: rank only labels seen MORE THAN ONCE, which is right for "what do
+           we keep paying for" — but THE INCIDENT THAT PRODUCED THIS PACKET WAS A ONE-OFF
+           4.5M SWEEP, so a view that excludes one-offs by construction would have been
+           silent on the very thing that prompted the operator's directive. Ranking it in
+           token_recur would bury the cheap thing paid fifty times; omitting it entirely
+           loses the largest number in the log. Two views, two questions:
+
+             token_recur: window=7d labels=1 top3=refuter-fanout:tokens=200000:runs=2
+             token_max:   window=7d tokens=4480590 label=one-off-sweep cycle=big
+
+           Pinned as a PAIR, deliberately: the same record must be in one view and not
+           the other. Asserting either alone would let a later simplification collapse
+           them back into one and lose a question.
+
+        2. MY OWN RECORD WAS MISLABELLED, and the coordinator caught it. I emitted
+           main_ctx=900000 for one cycle, but 900,000 is this SESSION's cumulative
+           estimate across many cycles. That is the same conflation I had just avoided by
+           keeping macuahuitl's 4.5M baseline out of lenovinha's host log — committed one
+           line later in my own row.
+
+           ONE CORRECTION TO THE DIAGNOSIS, checked before accepting it: the rolling
+           average was NOT poisoned. avg_subagent_tokens is computed over
+           subagent_tokens only; main_ctx feeds no aggregate and is rendered for the
+           latest cycle alone. So the predicted consequence did not occur. The field was
+           still misused, it would mislead any reader, and it WOULD poison a future
+           aggregate over main_ctx — the fix is warranted on those grounds rather than
+           the stated one.
+
+           FIXED by adding main_ctx_cumulative rather than inventing a per-cycle number I
+           cannot observe: this session spans many cycles continuously, and fabricating a
+           split to fill the contracted field would have been worse than the original
+           error. main_ctx stays 0, the cumulative is attested in its own field, and the
+           tokens: line renders both so a reader sees WHICH question was answered.
+
+           My row is corrected in place via replace-on-retry — the mechanism built for
+           exactly this — and the log still holds one row, not two.
+
+        Fixture now 13/13 (was 10), with the two new arms pinning the pair and the
+        per-cycle/cumulative distinction.

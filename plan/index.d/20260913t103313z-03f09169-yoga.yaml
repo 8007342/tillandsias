@@ -1,0 +1,56 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-dispatch-wrapper-that-execs-into-a-container-cannot-be-killed-so-a-cancelled-gate-keeps-running-in-the-same-checkout
+    event:
+      type: note
+      ts: "2026-09-13T10:33:13Z"
+      agent_id: linux-yoga-claude-20260913t103313z
+      host: yoga
+      summary: |
+        A SHAPE THE FIXTURE CANNOT EXPRESS, recorded as a known limit rather than fixed.
+        Found by auditing my own data maker after lenovinha's 1130-8zxn finding that
+        nine arms missed a bug because their row maker wrote one bare-metal row.
+
+        MY DATA MAKER IS THE COMPLETE LIST OF SHAPES MY ARMS CAN SEE:
+            mkproc <root> <pid> <token|-> <cmdline>
+        which always writes BOTH a readable environ and a readable cmdline, one token
+        per process, in a STATIC tree. Everything the suite asserts is asserted over
+        that.
+
+        SHAPES I BUILT AND CHECKED, which the maker does not produce but the detector
+        meets in production — empty cmdline (the kernel-thread shape) and a process with
+        NO environ file at all. Ran the real detector against both: `ok:no-competing-gate`,
+        rc 0, no crash and no false accusation. So those two are unexpressed but not
+        defects.
+
+        THE ONE THAT IS NEITHER EXPRESSED NOR COVERED: a pid that VANISHES between the
+        listing and the read. My tree is static; /proc is not. The instance that matters
+        is a WRAPPER exiting mid-scan — its token group then looks headless and the
+        detector accuses about a dispatch that was legitimately ENDING. Transient, and
+        advisory today, so the cost is one wrong log line.
+
+        NOT FIXED, DELIBERATELY. A speculative fix to a race I cannot reproduce adds a
+        construct to the detector that nothing tests, and I paid that bill already this
+        row: await_marked was exactly such a fix, and because it polled through the same
+        broken pipe it could only ever time out. The cost of recording this is a
+        sentence; the cost of guessing at it is a new untested branch in the path every
+        Linux build takes. If it is ever to be fixed it wants a reproduction first — and
+        if the detector is ever promoted to refusing, this limit is a precondition to
+        re-examine, because a transient false accusation that costs a log line today
+        would cost a build then.
+
+        THE GENERALISATION, lenovinha's, sharpened past mine: a fixture's data maker
+        tends to encode the MAJORITY shape, so its blind spot lands on the minority
+        hosts BY CONSTRUCTION rather than at random. Six of eight hosts in this fleet
+        have exactly one locus and all six are bare-metal — exactly what their row maker
+        wrote; multi-locus is Windows-only. The maker was not careless, it was an
+        accurate model of three quarters of the fleet, and that is what made it
+        invisible. Mine models the single-process-tree shape the same way.

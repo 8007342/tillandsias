@@ -1,0 +1,74 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Measurement filed by pirria (floor host) at macuahuitl's request; row is yoga's.
+events:
+  - packet_id: a-dispatch-wrapper-that-execs-into-a-container-cannot-be-killed-so-a-cancelled-gate-keeps-running-in-the-same-checkout
+    event:
+      type: note
+      ts: "2026-09-13T09:44:10Z"
+      agent_id: pirria-cachyos
+      host: linux
+      summary: |
+        MEASURED ON A SLOW HOST, AND THE CHURN HYPOTHESIS IS REFUTED — the suspension
+        is not a race, it is a PERMISSION FLOOR, and check-no-competing-gate.sh can
+        never accuse anyone when run unprivileged on an ordinary Linux host.
+
+        Commissioned as "does process churn suspend a genuine accusation on a slow
+        host". It does not need to. On pirria (CachyOS, 4 cores, 15 GiB), IDLE, with a
+        genuine stray planted and no churn running at all:
+
+          could-not-run:competing-gate:unreadable-processes:164
+          rc=3
+
+        THE FOUR RAW COUNTS, 30 detector runs per arm, one planted stray alive
+        throughout:
+
+          control (no churn):  accused=0  suspended=30  ok=0  other=0   opaque 164..166
+          with churn:          accused=0  suspended=30  ok=0  other=0   opaque 164..171
+
+        Churn moved the opaque count by at most 7 out of ~165. It changed no verdict,
+        because the verdict was already pinned by a floor the churn does not touch.
+
+        WHY. Of 255 processes on this host, 93 have a readable environ and 162 do not;
+        150 of those 162 are ROOT-OWNED. `/proc/<pid>/environ` is readable only by the
+        process owner, so an unprivileged scan on any multi-user Linux host — which is
+        every Linux host, systemd alone accounts for most of it — sees a permanently
+        non-zero `opaque`. The guard refuses to accuse when `opaque > 0`, and ONE
+        unreadable process is enough (measured below). So the accusation arm is
+        unreachable in production for any caller that is not root.
+
+        THE STRAY BRANCH IS REACHABLE, so this is a floor and not a broken classifier.
+        Through the script's own TILLANDSIAS_PROC_ROOT seam, all three states fire
+        correctly on a constructed tree:
+
+          all readable, stray present      -> competing-gate: ... pid=4242 token=probe-stray-1
+                                              advisory:competing-gate:1   rc=0
+          + exactly ONE unreadable process -> could-not-run:...unreadable-processes:1  rc=3
+          + a live `toolbox run` sharing
+            the token                      -> ok:no-competing-gate       rc=0
+
+        One is the threshold. Not "many", not "enough to hide a wrapper" — one.
+
+        A CORRECTION TO THE CANDIDATE SHAPE, for whoever measures next. The detector
+        does NOT test cwd, so a scratch checkout is irrelevant to it, and a plain
+        `TILLANDSIAS_WRAPPER_TOKEN=x sleep 600` is NEVER accused: the classifier
+        matches `*build.sh*` in `/proc/<pid>/cmdline` and routes anything else to the
+        `*)` debris arm on purpose ("a test's leaked child is not contention"). The
+        probe that works is a process whose cmdline contains build.sh and whose environ
+        carries the token, with no `toolbox run` sharing it. The caller must also pass
+        `--host-side <pid>` AND export TILLANDSIAS_WRAPPER_TOKEN into the detector
+        process, or the run ends at `no-host-side-assertion` / `caller-contract`
+        before any scan happens.
+
+        SCAN COST, since it was asked and it is the one thing the slow host makes
+        cheap to believe: 37 ms per run idle, 47 ms under churn (30-run wall clock
+        1135 ms vs 1411 ms). The scan is not slow on a slow host and timing is not
+        where this guard's problem lives.
+
+        WHAT THIS MEANS FOR THE PROMOTION DECISION, which is the row's actual
+        question. The header stages this check as advisory-now, refusing-later,
+        promoted "once it has run clean across hosts". It will run clean across every
+        unprivileged host FOREVER, because it cannot reach its own accusation — so a
+        clean run is not evidence the discriminator is right, and the promotion
+        criterion as written cannot be satisfied by the thing it means to measure.
+        That is the same shape the header already warns about twice (a green on a path
+        that cannot reach the condition). Not proposing a fix; the row is yoga's.

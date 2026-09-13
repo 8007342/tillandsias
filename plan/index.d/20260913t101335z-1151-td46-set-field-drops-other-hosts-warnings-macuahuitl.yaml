@@ -1,0 +1,60 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by the macuahuitl coordinator on 2026-09-13 from esme's 793-zumy
+# correction: a set-field on next_action silently dropped three warnings
+# other hosts had written, and nothing in the gate chain guards field prose.
+packets:
+  - packet_id: set-field-on-a-long-form-field-replaces-it-wholesale-and-silently-drops-warnings-other-hosts-wrote-so-it-must-show-the-dropped-lines-and-refuse-unless-told-to-replace
+    order: 1151-td46
+    status: ready
+    kind: bugfix
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [ledger, tooling, plan, coordination, integrity]
+    estimated_hours: 3
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable IS the guard. Future litmus scripts/test-set-field-prose-guard.sh; the claimer writes it in the same commit and moves this text into verifiable_closure: set-field on next_action/context/notes with a new value that lacks lines the old value carried prints the dropped lines and refuses (rc 2) unless --replace is given, and --append adds without dropping (pre-fix result: FAILS — the replacement is silent; measured esme 2026-09-13 on 793-zumy, three load-bearing warnings dropped and noticed only because the tool echoed the old value's tail); NEGATIVE CONTROL: set-field status and other short fields are unaffected, and --replace still replaces wholesale."
+    owned_files:
+      - crates/tillandsias-plan/src/main.rs
+      - scripts/test-set-field-prose-guard.sh
+    title: |
+      A set-field on a long-form field (next_action, context, notes) replaces it wholesale, so a host correcting one sentence silently deletes warnings other hosts wrote into the same field; check-fragment-status-loss guards status only, so nothing in the gate chain catches it. The tool should show what it is about to drop and refuse unless told to replace, and offer --append.
+    context: |
+      MEASURED on esme 2026-09-13 while attaching evidence to 793-zumy: the
+      first set-field on next_action replaced it and dropped three
+      load-bearing lines the old value carried — the VERIFICATION DEBT note,
+      "DO NOT MOVE legacy_tier WITHOUT TELLING YOGA" (dev-inference-ensure.sh
+      greps it with `grep -m1` on raw --capabilities output, so a key placed
+      ahead of it silently downgrades a host to cpu), and the hwfp-v2 field
+      list. esme restored all three verbatim under a PRESERVED heading, and
+      noticed ONLY because the tool echoed the old value's tail in its
+      confirmation. Any host correcting a long-form field can silently
+      delete another host's warnings; the ledger's integrity guard covers
+      status transitions, not prose.
+
+      WHAT TO BUILD. In set-field, for the long-form fields: diff the old
+      value against the new by line; if any old line is absent from the new
+      value, print the dropped lines under "would drop:" and refuse with rc 2
+      unless --replace is passed; add --append (new text after the old, with
+      a dated attribution line) as the default way to add a correction.
+      Short fields (status, priority, next_action when the old value is a
+      single line) keep today's behaviour. The fixture plants a three-line
+      field, sets a one-line value, and asserts the refusal names the two
+      lost lines; --replace succeeds; --append keeps all three and adds the
+      fourth.
+
+      NOT IN SCOPE: guarding fragment files edited by hand (immutable once
+      landed, already refused), or merging concurrent edits.
+    exit_criteria:
+      - 'set-field on a multi-line next_action with a value that lacks old lines prints the dropped lines and refuses rc 2 without --replace (pre-fix result: FAILS — silent replacement)'
+      - '--append preserves every old line and adds the new text with an attribution line; --replace replaces wholesale'
+      - 'NEGATIVE CONTROL: set-field status, priority and a single-line next_action are unaffected; check-fragment-status-loss still passes'
+      - 'the set-field usage text names the three modes and skills/coordinate-multihost-work/SKILL.md tells a correcting host to use --append'
+    events:
+      - type: filed
+        ts: "2026-09-13T10:13:35Z"
+        agent_id: "linux-macuahuitl-fable-20260913t101335z"
+        host: macuahuitl
+        summary: |
+          Filed by the coordinator from esme's 793-zumy correction; the
+          dropped warnings were other hosts', and the catch was luck.

@@ -1,0 +1,93 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: no-cycle-knows-what-it-spent-in-tokens-so-a-42-agent-sweep-cost-4-5-million-and-the-fleet-ran-out-a-week-early
+    event:
+      type: completed
+      ts: "2026-09-13T08:14:42Z"
+      agent_id: linux-lenovinha-opus5-20260913t081442z
+      host: linux
+      summary: |
+        THE COUNTER HALF LANDS. Criterion 3 (the rules text) was already in from the
+        filing commit, verified rather than assumed; criteria 1, 2, 4, 5 are closed here.
+
+        CRITERION 5 — THE BASELINE, recorded in the instrument's own terms so the first
+        post-fix cycle has a number to beat:
+
+            2026-09-11, macuahuitl, ONE Workflow: 42 agents at the main model tier
+            (9 packet reconciliations, 18 refuters, 5 commit-group reviews with
+            per-finding refuters, 1 blocker audit), 1,302 tool calls, 21 minutes,
+            4,480,590 sub-agent tokens against a ~250,000-token main context.
+            Read-only. Every verdict survived and two shipped defects were found —
+            the output was good and the price was invisible, which is the defect.
+
+        Recorded HERE rather than as the first row of my host log, deliberately: writing
+        macuahuitl's spend into lenovinha's per-host ledger would attribute it to the
+        wrong host and poison this host's rolling average from row one. The row allows
+        either; the closure event is the honest place for another host's measurement.
+
+        DELIVERED:
+          * `--emit-tokens host= cycle= main_ctx= subagent_tokens= agents= by_model=
+            label=` appends one JSONL record per cycle to tillandsias-tokens.jsonl
+            beside the flow log — mirroring --emit-flow exactly, including the
+            properties it learned the hard way: numeric coercion instead of a poisoned
+            row, cycle-id minting so `-` is unreachable by construction (801-tpxd),
+            replace-on-retry keyed host+cycle through a temp file and mv, and
+            best-effort/always-exit-0 so an instrument cannot take down the cycle it
+            measures.
+          * `tokens:` — this cycle's attested spend plus a rolling per-cycle average,
+            reading `source=absent` until a record exists.
+          * `token_recur:` — the top-3 repeated token-expensive LABELS over the window,
+            ranked by total spend.
+
+        THE DESIGN DECISION WORTH REVIEWING: only labels seen MORE THAN ONCE are ranked.
+        A one-off 4.5M sweep is a COST, not a recurrence, and letting it top the list
+        would bury the cheap thing paid fifty times — which is precisely what the
+        operator asked to find ("expensive repeatable works we could simplify"). The
+        fixture pins both directions: repeated labels ARE ranked, the 4,480,590 one-off
+        is NOT, and the arm fails if token_recur ranks nothing at all.
+
+        AWK, NOT jq, for the views. recur:/skippable: need jq's generality because they
+        parse logs other tools write; this log is written by --emit-tokens in the same
+        file, one flat record per line. Parsing our own format with awk removes the
+        jq-missing branch entirely, so this line cannot render `:unreadable` on a host
+        that simply lacks jq — a token instrument going blind on the cheapest hosts would
+        miss exactly the fleet the operator is protecting.
+
+        THE SKILL NOW POINTS AT IT. meta-orchestration said "Until
+        `scripts/cycle-metrics.sh --emit-tokens` exists, the handoff carries a
+        hand-attested tokens: line" — it anticipated this work. That sentence is
+        replaced with the emit invocation, the label rationale, and the note that the
+        attestation is now structured and comparable rather than prose at the end of a
+        message.
+
+        DOGFOODED ON LIVE DATA, not only fixtures: this cycle's own record is the first
+        row of lenovinha's log — main_ctx≈900,000 (my estimate, which is what an
+        attestation is), subagent_tokens=0, agents=0. That is the negative control
+        holding on real data: a cycle that spawned nothing reports zeros and is absent
+        from token_recur:.
+
+        WHAT THIS CANNOT DO, stated because the instrument's limit is part of its
+        contract: it pins the LEDGER and the VIEWS, never the honesty of the number. Only
+        the agent observes its own token spend, so this is an attestation (the
+        check-mcp-surface shape). A host that under-reports is not detectable here, and
+        no arm pretends otherwise.
+
+        10/10, gate step 270-1119-6wn6, and 1/10 against the reverted script.
+
+        TWO OF MY OWN ARMS WERE VACUOUS AND I FIXED THEM. Scoring against the pre-fix
+        script showed 3 passing; every one passed by ABSENCE — "abc is not in the log" is
+        trivially true when there is no log, and "the one-off is not ranked" is trivially
+        true when nothing is ranked. Both would have stayed green if the feature were
+        deleted. They now assert the positive precondition first (the coerced row exists;
+        token_recur is ranking something), and pre-fix passes dropped from 3 to 1. The
+        survivor is the best-effort exit-0 arm, which passes pre-fix because an unknown
+        flag also exits 0 — a property that cannot be demonstrated pre-fix, named rather
+        than counted.

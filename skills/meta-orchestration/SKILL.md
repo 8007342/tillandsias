@@ -126,13 +126,31 @@ low-end hosts made the CPU bottlenecks visible. Until the counter in
   Prefer one agent with a schema over N parallel ones when the items are cheap.
 - **Never delegate a read an expert answers.** `plan_status`, `plan_answer`,
   `methodology_ask` and the project-info tools cost nothing next to an agent.
-- **Report it.** Until `scripts/cycle-metrics.sh --emit-tokens` exists, the
-  handoff carries a hand-attested `tokens:` line from what the harness reports:
-  main-context tokens spent, sub-agent tokens, agent count by model. A cycle
-  that spawned nothing writes `subagent_tokens=0 agents=0`. Only the agent can
-  observe these numbers, so this is an attestation (the `check-mcp-surface.sh`
-  shape), and an unmeasured spend is the order-531 shape one level up: it
-  reads as free and is not.
+- **Report it, and LOG it.** `scripts/cycle-metrics.sh --emit-tokens` now
+  exists (1119-6wn6), so the attestation is recorded rather than only typed:
+
+  ```
+  scripts/cycle-metrics.sh --emit-tokens host=<h> cycle=<id> \
+      main_ctx=<n> subagent_tokens=<n> agents=<n> \
+      by_model=<opus:3,haiku:39> label=<what the delegation was for>
+  ```
+
+  The handoff still carries the `tokens:` line — `scripts/cycle-metrics.sh`
+  renders it, with a rolling per-cycle average, and `source=absent` until a
+  record exists. A cycle that spawned nothing writes `subagent_tokens=0
+  agents=0` and is correctly absent from `token_recur:`.
+
+  **`label` is the field that earns the log its keep.** It names the WORK, not
+  the cycle, so the same expensive delegation recurring across days ranks as one
+  entry in `token_recur:` instead of scattering into unrelated rows. Only labels
+  seen MORE THAN ONCE are ranked: a one-off 4.5M sweep is a cost, not a
+  recurrence, and letting it top the list would bury the cheap thing paid fifty
+  times — which is the one the operator asked to find and simplify.
+
+  Only the agent can observe these numbers, so this stays an attestation (the
+  `check-mcp-surface.sh` shape); what changed is that it is now structured and
+  comparable across cycles. An unmeasured spend is the order-531 shape one level
+  up: it reads as free and is not.
 
 ## Full-Mode Terminal Attestation (order 614-2gqx)
 

@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-salvage-sweep-files-its-events-to-an-archived-packet-so-apply-mode-refuses-every-ref-and-rescued-work-stays-unseen
+    event:
+      type: note
+      ts: "2026-09-13T10:13:36Z"
+      agent_id: linux-macuahuitl-fable-20260913t101336z
+      host: macuahuitl
+      summary: |
+        From yoga after the filing: the consumer to re-point is 874-w2gc's sweep,
+        and the broken window is the interval since 874-s8vf was archived — during
+        it salvage records were LOST, not delayed, and every deletion decision has
+        rested on a manual parent-diff (fine at eleven refs, not at a hundred, and
+        silent: the sweep reports, the append fails, nothing downstream notices).
+        Coordinator disposition of the eleven refs this night: six verified
+        redundant by parent-diff and deleted; five remain.
