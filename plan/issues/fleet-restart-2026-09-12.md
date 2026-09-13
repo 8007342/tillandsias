@@ -3288,3 +3288,103 @@ stories.
   this while the behaviour is intact") — pattern updated to the const and
   the loop. The exercise did its job: three of the four causes were
   invisible to every --check gate in the fleet.
+- **1161-42pc fixed without the seam the coordinator specified** (lenovinha,
+  declined on security grounds and said so): an env var the helper honours
+  to allow a named host is a TOKEN-REDIRECTION PATH — anyone who can set an
+  environment variable in that process points the helper at a host they
+  control and receives the live GitHub token from Vault; logging it does not
+  help because the log is written where the attacker already is; the
+  helper's own header ("a credential helper must not rest on an assumption
+  about its caller") rules out an assumption about the environment one
+  layer down, and 1118-bscs exists because the previous version rested on
+  exactly that. The finding underneath: NOTHING NEEDED A FAKE HOSTNAME —
+  the fixture's fake `git` never dials, `$REAL_GIT` only inits and commits
+  locally, and the cases assert credential-protocol behaviour and password
+  generation tracking, neither of which depends on the host being
+  unresolvable. Fix: the fixture asks with an allowlisted host; the
+  production helper is UNCHANGED (+44/-2, fixture only); 7 cases pass,
+  cases 1-6 unchanged. The pin gained coverage: case 7 makes the old
+  accidental refusal deliberate (the production helper in situ refuses
+  github.example.invalid, prints no password, names 1118-bscs) with a
+  negative control beside it (the same helper still serves github.com —
+  without it the arm passes for a helper that refuses everything). Teeth:
+  neutering the allowlist reds case 7 by name. Rule for the row, theirs:
+  NEVER WEAKEN A FAIL-CLOSED CREDENTIAL GATE TO ACCOMMODATE A TEST WHEN
+  THE TEST CAN BE MADE TO SATISFY THE GATE — check whether the test needs
+  the thing it asks for. The coordinator's seam text stays on the row as
+  the shape refused and why. Sequencing: their land starts now; the row
+  reaches trunk in the coordinator's in-flight land; the closure event
+  follows their pre-push merge.
+- **A third silence in the plan-only recipe** (yolanda, measured by the
+  predicate): predictor CLEAN (only their commit on the first-parent line),
+  containment guard PASSED (`ok:linux-next-merged:1`), and the lane still
+  refused — `_lane_can_scope` over the range: merges=5, disqualifying=1,
+  the disqualifier being a merge of origin/windows-next made at cycle start
+  (7 behind with an unpushed merge, so no fast-forward), whose second
+  parent (esme's 1155-jurn note, e3cf301d3) trunk has not taken; the scope
+  is disqualified, the lane falls back to the FULL net diff, and trunk's
+  fragments.rs appears in it. The recipe has THREE independent conditions
+  and the predictor checks one: (1) predictor clean; (2) trunk contained
+  (the guard that runs before the lane); (3) every merge's second parent
+  already in trunk. And the consequence is stronger than esme and yolanda
+  first said: once a host has merged its own platform branch, it loses the
+  plan-only lane for EVERY subsequent plan push until the coordinator relays
+  that content — a property of the history from that merge onward, not of
+  the push. The predicate is correct; the recipe cannot promise the lane
+  applies. For 1152-y3bv and the coordination skill: a fourth line — run
+  `_lane_can_scope`'s own check, or "if you merged your platform branch
+  this cycle, expect the full gate until the relay" — and a relay cadence
+  the platform hosts can see. yolanda landed through the tool (correct once
+  the lane does not apply); payload: esme's verification of 793-zumy's
+  third arm on esmeraldinha with their three guards green first.
+  1161-42pc landed and closed (lenovinha, ok:land:7a6f8c5f6, closure
+  76e604655; images/git/git-credential-tillandsias.sh byte-unchanged; the
+  release tier should be green on the next cut). OPERATIONAL FACT: their
+  credential is INTERMITTENT, not expired — dead (push and gh auth status
+  hang, "token in default is invalid"), alive (nine commits over three
+  lands), dead again (refused:land:auth-failed on this row), alive seconds
+  later (dry-run rc 0, re-ran, attempt 1 ok), no operator action between
+  the last two; a genuinely invalid token does not start working on its
+  own, so something upstream of the token drops or times out — network,
+  credential store or GitHub-side, undistinguishable from one host; a
+  fleet fact if others see it, not filed. Consequence: auth-failed IS
+  RETRYABLE there, and the land script treats it as terminal (exit 5),
+  right for a real expiry and a whole cycle for a blip — a single retry
+  after a short pause would have saved this one; row filed by the
+  coordinator. The re-provisioning ask is withdrawn from the operator's
+  list as stated; the next auth-failed on lenovinha is not "the token died
+  again". Their session: 1130-8zxn, 1158-y3ad, 1161-42pc closed; 1154-8ywc
+  and 1159-g96c filed, unclaimed, p2.
+- **1150-q462 completed** (yoga, code 74e28adbd, closure ok:land:23b42ef74,
+  attested ba2a74a8f): the four competing-gate codes now bind a caller —
+  the wrapper's pre-dispatch call branches on all five outcomes (2 names
+  THIS CALL SITE as the thing to fix and says it is not a property of the
+  host; 3 says the question could not be asked and is not a clean-room
+  verdict; an unknown code says the grammar changed and the caller was not
+  updated); no default that proceeds; still advisory, and an arm pins that
+  none of the five stops the build — the sequencing rule survived contact
+  with the implementation. Construction worth keeping: the fixture drives
+  the case block EXTRACTED FROM THE SHIPPED WRAPPER BY MARKERS, not a copy
+  (a copy is the 881-29me shape and rots), and the extraction failing is
+  the suite's FIRST arm, so a fixture that can no longer find what it
+  tests fails by name instead of passing vacuously. Third mutation-that-
+  did-not-apply this session (a mangled no-op passed 8/8 and tested
+  nothing; redone, 7/8 and 6/8 red): the normal failure mode of mutation
+  testing, caught every time only by proving the diff non-empty first.
+  1141-vf9w's remaining two belong to other hosts: the wsl.exe in-situ
+  reading (1149-3v3n, yolanda) and a POSITIVE demonstration — the detector
+  accusing a genuine stray on the host being promoted for — which replaced
+  pirria's retired churn condition.
+- **Coordination pass 18:11Z** (macuahuitl): relayed osx-next (macneo's
+  1127-xm3m closure and cycle records, two attestations; 2 code files, 53
+  insertions) and windows-next (yolanda's 793-zumy verification note
+  through the tool, a windows-tray diagnostics record) in one land; the
+  stale-row pass now prints closed-on for a sibling-branch closure not yet
+  relayed (one this pass: the relay carries it, nobody is handed it); 91 of
+  511 candidates otherwise, no hand-offs this pass — macneo and yoga are
+  consuming the list themselves and closing genuine rows from it. The
+  salvage sweep found one new ref since the ledger was created
+  (refs/heads/salvage/yolanda/20260913-793-zumy) and filed it through --apply — the first
+  automatic filing since 874-s8vf was archived. Trunk since the last pass:
+  1161-42pc closed (lenovinha), 1150-q462 completed (yoga). Held row
+  1164-cftu (auth-failed retry) lands with this pass.
