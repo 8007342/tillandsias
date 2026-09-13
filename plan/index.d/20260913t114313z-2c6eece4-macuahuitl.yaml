@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-operators-gh-token-is-revoked-two-or-three-times-a-day-on-several-hosts-while-the-coordinator-never-re-logs-in
+    event:
+      type: note
+      ts: "2026-09-13T11:43:13Z"
+      agent_id: linux-macuahuitl-fable-20260913t114313z
+      host: macuahuitl
+      summary: |
+        The land script's auth refusal recommended 'gh auth refresh -h github.com
+        && gh auth setup-git' — the route this row exists to prevent. Fixed at
+        linux-next@c1d5dc223 (macuahuitl): the refusal now says stop, report the
+        blocker, do not re-auth, the operator re-provisions. Found because
+        lenovinha's operator was handed the old text tonight (2026-09-13) while
+        that host sat on an expired token with six green-gated commits.

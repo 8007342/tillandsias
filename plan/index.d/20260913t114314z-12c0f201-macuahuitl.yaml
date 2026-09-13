@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-ready-row-whose-owned-files-a-landed-fix-touched-since-filing-is-a-staleness-candidate-the-pass-must-surface
+    field: status
+    value: ready
+    ts: "2026-09-13T11:43:14Z"
+    host: macuahuitl
+
+events:
+  - packet_id: a-ready-row-whose-owned-files-a-landed-fix-touched-since-filing-is-a-staleness-candidate-the-pass-must-surface
+    event:
+      type: progress
+      ts: "2026-09-13T11:43:14Z"
+      host: macuahuitl
+      summary: |-
+        status 'ready' (not terminal) with evidence_refs: linux-next@320296380
+  - packet_id: a-ready-row-whose-owned-files-a-landed-fix-touched-since-filing-is-a-staleness-candidate-the-pass-must-surface
+    event:
+      type: note
+      ts: "2026-09-13T11:43:14Z"
+      host: macuahuitl
+      summary: |-
+        first pass landed; owned_files pass left, claimable
