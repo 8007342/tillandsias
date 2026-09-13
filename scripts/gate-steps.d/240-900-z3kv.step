@@ -1,0 +1,11 @@
+# Gate step 900-z3kv — data, not code (order 1072-b7eq).
+#
+# The probe that lets a Linux e2e demonstrate whether it ran credential-cold or
+# credential-warm must never turn "I could not ask" into "the room was clean",
+# and must never materialise the unseal secret to answer.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the credential-state probe cannot report could-not-run as cold (900-z3kv)"
+STEP_SCRIPT="scripts/test-credential-cold-state-probe.sh"
+STEP_ERROR="the credential-state probe can report an unaskable question as a clean room, materialise the secret, or disagree with itself between runs (900-z3kv) — see the verdict line above"
+STEP_OK="Credential-state probe contract passed"
