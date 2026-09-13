@@ -1747,6 +1747,24 @@ if [[ "$FLAG_CHECK" == true ]]; then
 
     _step "Fast refusals: sub-second deciders before any compile (1009-gccx)..."
 
+    # ORDER 1141-vf9w — is another gate already using this checkout?
+    #
+    # ADVISORY BY DEFAULT, and deliberately so. A cancelled gate could outlive
+    # its launcher and keep running against this tree (the wrapper now
+    # propagates termination, but a survivor from before that fix, from a kill
+    # -9, or from a host where propagation cannot run, still holds the
+    # checkout). Reporting it HERE is worth a lot -- it is the cheapest possible
+    # place to learn that the verdict you are about to spend six minutes on may
+    # be raced.
+    #
+    # It does not REFUSE yet because this discriminator has been wrong three
+    # times in two cycles and twice only a measurement caught it, and a wrong
+    # refusal on this line stops every Linux host rather than one. Promotion is
+    # a flag (TILLANDSIAS_COMPETING_GATE_ADVISORY=0), pinned by the fixture, to
+    # be flipped on fleet evidence rather than on confidence -- the same staging
+    # check-portability-idioms.sh argues for itself.
+    _run bash "$SCRIPT_DIR/scripts/check-no-competing-gate.sh" 2>&1 || true
+
     if ! _run bash "$SCRIPT_DIR/scripts/check-scorable-obligation-added.sh" 2>&1; then
         _error "this change files a packet with no scorable obligation — name a litmus:<test> in its verifiable_closure (977-448j)"
         exit 1
