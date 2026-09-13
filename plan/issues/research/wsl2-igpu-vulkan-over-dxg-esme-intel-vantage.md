@@ -166,3 +166,140 @@ schema lands.
 
 trace: plan/issues/research/wsl2-igpu-vulkan-over-dxg-measured-2026-08-16.md
        crates/tillandsias-headless/src/accel_probe.rs
+
+---
+
+## The probe was run. Two findings, one of which invalidates part of a reading
+
+Authorised by macuahuitl-fedora as a measurement, after this document's first
+half asked for it. The build was **debug, not release** — the orchestrator's
+rule, since enumeration does not depend on optimisation. Recorded as asked:
+**debug produced the probe output below.**
+
+### Build cost, the first number for the floor tier
+
+Regime: esmeraldinha, `tillandsias-build` WSL2 distro, Fedora 44 container
+image, 4 cores, ~7.8 GiB visible to WSL, `CARGO_BUILD_JOBS=2`, depth-1 clone
+onto **ext4** rather than the `/mnt/c` drvfs mount, cargo registry warm at
+278M so no network fetch, target directory **cold**.
+
+| stage | wall |
+|---|---|
+| cold clone + deps to the `build.rs` panic | 149s |
+| `scripts/build-sidecar.sh` | 64s |
+| `cargo build -p tillandsias-headless` after staging | 27s |
+
+A cold clone hit a fail-loud guard worth naming, because most of this
+document is about instruments that lie and this one did the opposite:
+`build.rs` panicked with `required runtime asset missing:
+images/router/tillandsias-router-sidecar`, explained that it is a build
+artifact never committed (order 710-w9kc), said a fresh clone will not have
+it, and gave the exact remedy. It cost one cycle to diagnose rather than an
+hour.
+
+### FINDING A — `--capabilities` serves a cached envelope indistinguishably from a live one
+
+**This is the more serious of the two and it invalidated my own first
+reading.** The command returns the contents of
+`~/.cache/tillandsias/capabilities.json` when that file exists, with nothing
+in the output saying so.
+
+How it was established, because the first inference was unsound and the
+correction matters. Two consecutive runs produced byte-identical envelopes
+including a nanosecond-precision `timestamp` of
+`2026-09-12T03:29:40.356539631+00:00`, ~20h behind the wall clock. Identical
+output alone proves nothing — both runs landed inside the same second. The
+nanoseconds are what cannot be coincidence: a real `chrono::Utc::now()` does
+not reproduce `.356539631` twice. The decisive test was to move the cache
+aside and re-run:
+
+| cache present | `timestamp` = `2026-09-12T03:29:40.356539631+00:00` |
+| cache aside   | `timestamp` = `2026-09-13T00:06:19.927717658+00:00`, matching wall clock |
+
+The cache file was restored afterwards, unmodified, with its original mtime.
+
+Consequence for this row and beyond: **any host that has read
+`--capabilities` may have been reading a replay**, and nothing in the envelope
+distinguishes the two. A stale provisioning state can therefore propagate as
+a current measurement across the fleet, which is exactly the failure this
+packet exists to correct, one layer up from where it was looking. The envelope
+already carries `probe_identity` and `hardware_fingerprint`; it does not carry
+a served-from-cache flag or a cache age.
+
+I am not filing a fix. This is a second row, it belongs to whoever owns the
+probe's caching, and it wants a decision — bypass flag, staleness bound, or an
+explicit `source=cache|measured` field — rather than my guess at one.
+
+### FINDING B — the WSL2 reason is a hardcoded constant, not a detection
+
+Everything below is a **live** measurement, taken with the cache bypassed.
+
+```
+accel_class=cpu-only accel_gpu=present-unusable
+accel_gpu_name=WSL2_paravirtual_GPU_dev_dxg
+accel_reason=engine-missing_no-vulkan-icd
+accel_proof=unknown accel_side=wsl2-guest accel_gpu_path=dxg-d3d12
+accel_gpu_engine=engine-missing accel_cpu_cores=4 accel_ram_gb=8
+accel_prefill_dev=cpu accel_decode_dev=cpu accel_decode_crossover_b=unmeasured
+```
+
+```
+"render_nodes": []          "engines": []
+"enumeration_gaps": ["container-lane"]
+"probe_identity": "56.9.12+27c4c20d14e70a9e"
+"hardware_fingerprint": "hw2-956e80f459c25b53"
+
+{ "device_class": "gpu", "vendor": "unknown",
+  "name": "WSL2 paravirtual GPU (/dev/dxg)", "device_node": "/dev/dxg",
+  "usable": false, "unusable_reason": "engine-missing:no-vulkan-icd",
+  "lanes": [] }
+```
+
+`render_nodes` is empty, as this host's `/dev/dri` absence predicts, and
+`accel_proof=unknown`. The packet's criterion-1 work has partly landed: the
+envelope no longer says `accel_gpu=none`, it names `/dev/dxg`, and it gives a
+reason.
+
+**The reason is false on this host.** `accel_reason=engine-missing_no-vulkan-icd`
+asserts no Vulkan ICD is installed. There is one, and it enumerates
+`PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU` — the first half of this document is
+that measurement.
+
+By symbol, this is not a detection that failed. `wsl2_paravirtual_gpu_reason()`
+returns the string literal `"engine-missing:no-vulkan-icd"` unconditionally,
+and `enumerate_gpus` assigns it to every WSL2 dxg device. Nothing reads
+`/usr/share/vulkan/icd.d`, `libvulkan.so`, or an enumeration result. The
+value was correct for the host it was derived from — yolanda, measured with
+no loader present — and was baked in as universal.
+
+Criterion 2 requires that detection be **by enumeration, not file existence**.
+The current code does neither: it is a constant. And the packet's own context
+section warns about precisely this shape, where 599-3b9h's expectation "was
+derived from the same blind rubric it was checking, so the observation
+confirmed the implementation rather than the hardware". The fix reproduced the
+defect it was written to remove, one layer in — and it was invisible until a
+host with the loader installed ran the probe, which had never happened before.
+
+The verdict itself I am NOT calling wrong. `usable: false` and `cpu-only` may
+well be right here: I ran no inference, measured no throughput, and an N100
+iGPU may be a loss exactly as yoga measured for gfx1152. What is wrong is the
+**reason**, which states a provisioning fact that is not true of this host.
+
+### Unexplained, recorded rather than resolved
+
+Between two `date -u` reads separated by `sleep 5` in one shell, the distro's
+clock returned the same second. I did not pursue it and I am not asserting a
+clock defect — the live envelope's timestamp agreed with the wall clock to one
+second in the test above, which argues against one. Noted because it is the
+kind of thing that corrupts a measurement quietly, and because I would rather
+record an anomaly I cannot explain than leave it out.
+
+### The independence caveat, restated as ordered
+
+The Vulkan ICD package on this host reports installed 2026-08-17, one day after
+yolanda's 2026-08-16 experiment. **Nobody should invent a link.** I have no
+evidence connecting them. If it was a deliberate follow-up install rather than
+routine image provisioning, this host is less independent of that experiment
+than everything above assumes, and Finding B's force is unchanged but its
+framing as "a host nobody provisioned" is not. Whoever owns the builder image
+can settle it.
