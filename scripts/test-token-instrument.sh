@@ -120,6 +120,28 @@ case "$out" in
     *) ok "a single-run label is NOT ranked while others ARE (a one-off is a cost, not a recurrence)" ;;
 esac
 
+# ── 5b. token_max SURFACES WHAT token_recur DELIBERATELY HIDES. ───────────
+#      Added on review, and the reasoning is sharper than the original design:
+#      the incident that produced this packet WAS a one-off 4.5M sweep, so a
+#      view that excludes one-offs by construction would have been silent on the
+#      very thing that prompted the operator's directive. Ranking it in
+#      token_recur would bury the cheap thing paid fifty times; omitting it
+#      everywhere would lose the largest number in the log. Two views, two
+#      questions, nothing buried — so both halves are pinned together here.
+out_recur="$(report | grep -E '^token_recur:' || true)"
+out_max="$(report | grep -E '^token_max:' || true)"
+case "$out_max" in
+    "") bad "no token_max line at all — the largest single spend is invisible again" ;;
+    *"tokens=4480590"*one-off-sweep*) ok "token_max surfaces the one-off with its label" ;;
+    *) bad "token_max did not surface the largest record: $out_max" ;;
+esac
+# The pairing is the point: the SAME record must be in one view and not the
+# other. Asserting either alone would let a later 'simplification' collapse them.
+case "$out_recur" in
+    *one-off-sweep*) bad "the one-off appears in BOTH views; token_recur has stopped excluding single runs" ;;
+    *) ok "the same one-off is absent from token_recur (two views, two questions)" ;;
+esac
+
 # ── 6. NEGATIVE CONTROL (the row names it): a cycle that spawned nothing
 #      reports zeros and is not flagged.
 rm -f "$LOG"
@@ -133,6 +155,22 @@ out="$(report | grep -E '^token_recur:' || true)"
 case "$out" in
     *"top3=-"*) ok "NEGATIVE CONTROL: a solo cycle is not flagged by token_recur" ;;
     *)          bad "NEGATIVE CONTROL: a solo cycle was flagged as a token recurrence: $out" ;;
+esac
+
+# ── 6b. PER-CYCLE AND CUMULATIVE ARE DIFFERENT FIELDS. ────────────────────
+#      Added after the author put a SESSION TOTAL in `main_ctx`, whose contract
+#      is per-cycle — the same conflation that kept the 4.5M baseline out of a
+#      host log, committed one line later in the author's own record. When only
+#      the running total is observable, it goes in main_ctx_cumulative and
+#      main_ctx stays 0, so a reader sees WHICH question was answered instead of
+#      inferring it from prose.
+rm -f "$LOG"
+emit host=h cycle=cum main_ctx_cumulative=900000 subagent_tokens=0 agents=0 label=solo
+out="$(report | grep -E '^tokens:' || true)"
+case "$out" in
+    *"main_ctx=0"*"main_ctx_cumulative=900000"*)
+        ok "a cumulative attestation renders distinctly from a per-cycle one" ;;
+    *) bad "main_ctx and main_ctx_cumulative are not distinguishable in the line: $out" ;;
 esac
 
 # ── 7. THE INSTRUMENT CANNOT TAKE DOWN THE CYCLE IT MEASURES. An unwritable

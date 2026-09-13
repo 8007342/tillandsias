@@ -541,12 +541,20 @@ fi
 if [ "${1:-}" = "--emit-tokens" ]; then
     shift
     et_host="-"; et_cycle=""; et_by_model="-"; et_label="-"
-    et_main_ctx=0; et_subagent_tokens=0; et_agents=0
+    et_main_ctx=0; et_subagent_tokens=0; et_agents=0; et_main_ctx_cum=0
     for tok in "$@"; do
         case "$tok" in
             host=*)             et_host="${tok#host=}" ;;
             cycle=*)            et_cycle="${tok#cycle=}" ;;
             main_ctx=*)         et_main_ctx="${tok#main_ctx=}" ;;
+            # ORDER 1119-6wn6, added on review. `main_ctx` is PER-CYCLE by
+            # contract. A session that spans many cycles cannot always separate
+            # them — this one could not — and putting a session TOTAL in a
+            # per-cycle field is the same conflation that kept the 4.5M baseline
+            # out of a host log, committed one line later. When only the running
+            # total is observable, attest it HERE and leave main_ctx at 0, so a
+            # reader sees which question was answered instead of inferring it.
+            main_ctx_cumulative=*) et_main_ctx_cum="${tok#main_ctx_cumulative=}" ;;
             subagent_tokens=*)  et_subagent_tokens="${tok#subagent_tokens=}" ;;
             agents=*)           et_agents="${tok#agents=}" ;;
             by_model=*)         et_by_model="${tok#by_model=}" ;;
@@ -555,7 +563,7 @@ if [ "${1:-}" = "--emit-tokens" ]; then
     done
     # Coerce non-numerics to 0 rather than write a poisoned row the rolling
     # average would then carry forever (--emit-flow's rule, same reason).
-    for v in et_main_ctx et_subagent_tokens et_agents; do
+    for v in et_main_ctx et_subagent_tokens et_agents et_main_ctx_cum; do
         eval "case \"\$$v\" in ''|*[!0-9]*) $v=0 ;; esac"
     done
     # Strings reach a JSON record, so strip what would break it or shift a
@@ -578,9 +586,9 @@ if [ "${1:-}" = "--emit-tokens" ]; then
     et_cycle="${et_cycle//[\"\\]/_}"; et_cycle="${et_cycle//[[:cntrl:][:space:]]/_}"
     {
         et_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
-        et_record="$(printf '{"ts":"%s","host":"%s","cycle":"%s","label":"%s","main_ctx":%s,"subagent_tokens":%s,"agents":%s,"by_model":"%s"}' \
+        et_record="$(printf '{"ts":"%s","host":"%s","cycle":"%s","label":"%s","main_ctx":%s,"main_ctx_cumulative":%s,"subagent_tokens":%s,"agents":%s,"by_model":"%s"}' \
             "$et_ts" "$et_host" "$et_cycle" "$et_label" \
-            "$et_main_ctx" "$et_subagent_tokens" "$et_agents" "$et_by_model")"
+            "$et_main_ctx" "$et_main_ctx_cum" "$et_subagent_tokens" "$et_agents" "$et_by_model")"
         mkdir -p "$(dirname "$TOKENS_LOG")" 2>/dev/null || true
         if [ -f "$TOKENS_LOG" ] \
            && grep -q "\"host\":\"${et_host}\",\"cycle\":\"${et_cycle}\"" "$TOKENS_LOG"; then
@@ -1305,6 +1313,7 @@ printf 'skippable: window=%sd %s source=%s\n' "$RECUR_WINDOW_DAYS" \
 token_source="absent"
 token_line="cycle=- main_ctx=0 subagent_tokens=0 agents=0 by_model=- avg_subagent_tokens=0 cycles=0"
 token_recur_line="window=${RECUR_WINDOW_DAYS}d labels=0 top3=-"
+token_max_line="window=${RECUR_WINDOW_DAYS}d tokens=0 label=- cycle=-"
 if [ -f "$TOKENS_LOG" ]; then
     token_source="$TOKENS_LOG"
     _tok_cut="$(date -u -d "-${RECUR_WINDOW_DAYS} days" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null \
@@ -1335,6 +1344,17 @@ if [ -f "$TOKENS_LOG" ]; then
             # would move for reasons the reader cannot see.
             n_all++; sum_all += st
             last_cycle = field($0, "cycle"); last_main = field($0, "main_ctx")
+            last_main_cum = field($0, "main_ctx_cumulative")
+            # ORDER 1119-6wn6, added on review: the LARGEST single record in the
+            # window, with its label and cycle. token_recur: ranks only REPEATED
+            # labels, which is the right answer to "what do we keep paying for"
+            # — but the incident that produced this packet was a ONE-OFF 4.5M
+            # sweep, and a view that hides one-offs by construction would have
+            # been silent on the very thing that prompted the directive. Two
+            # views, two questions, nothing buried.
+            if (cut == "" || ts >= cut) {
+                if (st > maxv) { maxv = st; maxlab = field($0, "label"); maxcyc = field($0, "cycle") }
+            }
             last_sub = st; last_agents = field($0, "agents"); last_bm = field($0, "by_model")
             if (cut == "" || ts >= cut) {
                 lab = field($0, "label")
@@ -1343,8 +1363,9 @@ if [ -f "$TOKENS_LOG" ]; then
         }
         END {
             avg = (n_all > 0) ? int(sum_all / n_all) : 0
-            printf "cycle=%s main_ctx=%s subagent_tokens=%s agents=%s by_model=%s avg_subagent_tokens=%d cycles=%d\n",
+            printf "cycle=%s main_ctx=%s main_ctx_cumulative=%s subagent_tokens=%s agents=%s by_model=%s avg_subagent_tokens=%d cycles=%d\n",
                 (last_cycle == "" ? "-" : last_cycle), (last_main == "" ? 0 : last_main),
+                (last_main_cum == "" ? 0 : last_main_cum),
                 (last_sub == "" ? 0 : last_sub), (last_agents == "" ? 0 : last_agents),
                 (last_bm == "" ? "-" : last_bm), avg, n_all
             # REPEATED means runs > 1. A one-off 4.5M sweep is a cost, not a
@@ -1365,18 +1386,22 @@ if [ -f "$TOKENS_LOG" ]; then
                 shown++
             }
             printf "labels=%d top3=%s\n", nlab, (out == "" ? "-" : out)
+            printf "tokens=%d label=%s cycle=%s\n", maxv + 0,
+                (maxlab == "" ? "-" : maxlab), (maxcyc == "" ? "-" : maxcyc)
         }
     ' "$TOKENS_LOG" 2>/dev/null || true)"
     if [ -n "$_tok_out" ]; then
-        { IFS= read -r _tok_cycle_line; IFS= read -r _tok_recur_rest; } <<EOF
+        { IFS= read -r _tok_cycle_line; IFS= read -r _tok_recur_rest; IFS= read -r _tok_max_rest; } <<EOF
 $_tok_out
 EOF
         [ -n "$_tok_cycle_line" ] && token_line="$_tok_cycle_line"
         [ -n "$_tok_recur_rest" ] && token_recur_line="window=${RECUR_WINDOW_DAYS}d $_tok_recur_rest"
+        [ -n "$_tok_max_rest" ] && token_max_line="window=${RECUR_WINDOW_DAYS}d $_tok_max_rest"
     fi
 fi
 printf 'tokens: %s source=%s\n' "$token_line" "$token_source"
 printf 'token_recur: %s source=%s\n' "$token_recur_line" "$token_source"
+printf 'token_max: %s source=%s\n' "$token_max_line" "$token_source"
 
 # ── plan ────────────────────────────────────────────────────────────────────
 packets="-"; ready="-"; blocked="-"; pending="-"
