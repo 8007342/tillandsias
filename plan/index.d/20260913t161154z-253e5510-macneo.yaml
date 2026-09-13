@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-unit-test-in-the-pre-push-gate-writes-the-hosts-live-crashloop-state-with-a-synthetic-ready-so-every-macos-push-destroys-the-guest-evidence-the-gate-is-supposed-to-protect
+    field: status
+    value: in_progress
+    ts: "2026-09-13T16:11:54Z"
+    host: macneo
+
+events:
+  - packet_id: a-unit-test-in-the-pre-push-gate-writes-the-hosts-live-crashloop-state-with-a-synthetic-ready-so-every-macos-push-destroys-the-guest-evidence-the-gate-is-supposed-to-protect
+    event:
+      type: note
+      ts: "2026-09-13T16:11:54Z"
+      host: macneo
+      summary: |-
+        claimed for cycle 2026-09-13T16:10:09Z by macos-tlatoanis-macbook-neo-claude-20260913t161044z: verify-and-close from a green gate log
