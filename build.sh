@@ -1763,6 +1763,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # a flag (TILLANDSIAS_COMPETING_GATE_ADVISORY=0), pinned by the fixture, to
     # be flipped on fleet evidence rather than on confidence -- the same staging
     # check-portability-idioms.sh argues for itself.
+    # DELIBERATELY UNFLAGGED. By the time this runs on a Silverblue or WSL host
+    # we are INSIDE the dispatch, where the host-side wrapper is unreadable (or,
+    # on WSL, has no /proc entry at all), so any verdict from here is a guess —
+    # and the guess it made was to accuse every gate of being its own
+    # competitor. Without --host-side the check now says so and stops. On a host
+    # that does NOT re-exec, this is the host side, and wiring the assertion
+    # here is the follow-up rather than a silent widening.
     _run bash "$SCRIPT_DIR/scripts/check-no-competing-gate.sh" 2>&1 || true
 
     if ! _run bash "$SCRIPT_DIR/scripts/check-scorable-obligation-added.sh" 2>&1; then
