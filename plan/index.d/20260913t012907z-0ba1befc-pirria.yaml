@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: ghost-trace-windows-wsl-runtime-outnumbers-the-real-spec
+    event:
+      type: note
+      ts: "2026-09-13T01:29:07Z"
+      agent_id: linux-pirria-claude-20260913t012614z
+      host: pirria
+      summary: |
+        CARRIED FORWARD FROM 1063-htns, retracted into this row as a
+        divergent-duplicate by the de-slop sweep. Its five sites
+        (client.rs:990,1695,1726,1735 and lib.rs:1) are five of the ones this row
+        counts, so nothing is lost by its retraction EXCEPT the one observation it
+        made that this row does not, which is the point of writing it here:
+
+          THE PRE-COMMIT HOOK ONLY SURFACES THESE WHEN SOMEONE EDITS THE FILE.
+          That is why an 8:1 ghost-to-real ratio survived weeks of commits and was
+          re-discovered independently on a second host seventeen days later, from
+          an unrelated edit. The hook is not a sweep; it is a tripwire on whatever
+          file a commit happens to touch, so the ghost count is invisible until
+          someone walks over it.
+
+        RE-MEASURED THIS SWEEP, so this row's own numbers are not stale:
+
+          grep -rho 'spec:windows-wsl-runtime'   ->  56 occurrences  (row says 48)
+          files carrying it, excluding target/plan/.git ->  25 files (row says 22)
+          grep -rho 'spec:wsl-runtime'           ->   7 occurrences  (row says 6)
+          openspec/specs/ | grep -i wsl          ->  wsl-daemon-orchestration, wsl-runtime
+
+        The premise is intact and GROWING: +8 occurrences and +3 files since
+        filing, while the real name gained one. The 8:1 ratio the title names is
+        now 8:1 still — both sides grew — so the headline stands as written.
+
+        The deciding question this row already poses is unchanged and remains the
+        first thing to answer: whether these are a stale name for
+        openspec/specs/wsl-runtime, or whether `windows-wsl-runtime` was a real
+        spec that was renamed or dropped and the seven `wsl-runtime` citations are
+        the anomaly. `git log` on the spec directory settles it, and nothing
+        should be rewritten before it does.

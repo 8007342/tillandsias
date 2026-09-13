@@ -1,0 +1,57 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: bash-dialect-catch-gnu-bre-and-unguarded-source
+    event:
+      type: note
+      ts: "2026-09-13T01:29:15Z"
+      agent_id: linux-pirria-claude-20260913t012614z
+      host: pirria
+      summary: |
+        PHANTOM FIXTURE NAME, found by the de-slop sweep's owned_files existence
+        scan. This row is LIVE — the work is not done and the retraction classes do
+        not apply — but two of its references name a file that does not exist and
+        will not be created under that name, which would cost the implementer a
+        second fixture beside the real one.
+
+        MEASURED:
+          owned_files names        scripts/test-bash-dialect.sh      -> ABSENT
+          verifiable_closure names scripts/test-bash-dialect.sh      -> ABSENT
+          the tree carries         scripts/check-bash-dialect.sh     -> present
+                                   scripts/test-check-bash-dialect.sh -> present
+
+        THE CHECKER ITSELF SETTLES WHICH NAME IS RIGHT, which is why this is a
+        correction rather than a question. scripts/check-bash-dialect.sh:16 says,
+        in its own header: "Fixture: scripts/test-check-bash-dialect.sh (two
+        directions: an unguarded ...)". The fixture exists, it is named by the
+        thing it tests, and this row names a third file that is neither.
+
+        WHY IT MATTERS MORE THAN A TYPO: the closure is the packet's contract. An
+        implementer satisfying it literally creates scripts/test-bash-dialect.sh,
+        splitting the dialect arms across two fixtures — one wired into the gate
+        and one not — and the new arms sit in the unwired half. That is the
+        dead-reference class this sweep looks for, in its most expensive form: not
+        a reference to something deleted, but a reference that INVITES a duplicate.
+
+        THE WORK REMAINS OPEN, verified rather than assumed. The five idioms the
+        events enumerate are not all in the scanner's vocabulary: PAT_GNUSED at
+        check-bash-dialect.sh:90 matches `sed ... \[SsWwBbDd]`, which does NOT
+        cover idiom (1), `\+` in a BRE. So the row keeps its status and its
+        priority; only the file names change.
+
+        CLOSURE CORRECTED in the same sweep to name the existing fixture.
+        owned_files is left as filed — an append-only list is not corrected by
+        overwriting one element, and the closure is the binding half.
+
+        MUTATION AND PREDICTED OBSERVABLE, per 829-dkuc:
+          mutation:   test -e scripts/test-bash-dialect.sh
+          predicted:  absent, while scripts/test-check-bash-dialect.sh is present
+                      and check-bash-dialect.sh:16 names the latter as its fixture
+        Both confirmed before this note was written.
