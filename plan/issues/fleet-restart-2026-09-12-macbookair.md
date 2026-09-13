@@ -198,3 +198,87 @@ looked"* will eventually be read as the former.
   macOS ships bash 3.2, and records that check-bash-dialect refused it once and
   "earned its keep". All true. The dialect guard checks the SHELL and had
   nothing to say about a FILESYSTEM absent on the target.
+
+## 2026-09-13 — a cfg-split file, and the check darwin CAN run
+
+- **I added a struct field and fixed only the initializers my compiler could
+  see.** `name_source` on `DeviceRecord` (1137-rgfm). `cargo build` on macOS
+  reported exactly TWO missing-field errors and I fixed those two; eight more
+  sites sat behind `#[cfg(target_os = ...)]` and were invisible to a darwin
+  build — six Linux arms (nvidia via nvidia-smi, three lspci-named GPU arms,
+  the WSL2 /dev/dxg arm, the accel NPU arm) and two Windows arms
+  (Win32_VideoController GPU, PnP NPU). Green-on-one-regime on the cfg axis,
+  committed in the same cycle I landed a fix for that same class one axis over
+  (the darwin reaper). Caught by macuahuitl's relay gate, fixed forward by them
+  so trunk never carried it.
+
+- **THE CHECK DARWIN CAN RUN: `cargo zigbuild`, and it catches this.** Measured
+  on the pre-fix tree:
+
+      cargo zigbuild -p tillandsias-headless --target x86_64-unknown-linux-musl
+      -> rc=101, 6 x error[E0063] "missing field `name_source`"
+      -> accel_probe.rs 2716, 2767, 2792, 2819, 2856, 3151
+
+  Exactly the six Linux arms. The tool is already a hard requirement of this
+  lane — `scripts/build-macos-tray.sh` dies without zig and cargo-zigbuild and
+  cross-builds the guest for both musl triples with it — so this costs nothing
+  new. **RULE: zigbuild the guest target before landing a change to a
+  cfg-split file.**
+
+  **BOUNDARY, so nobody over-trusts it.** This covers the SIX LINUX arms only.
+  `rustup target list --installed` on this host is aarch64-apple-darwin plus
+  the two linux-musl triples — no Windows target — so the two Windows arms are
+  still invisible from macOS and need a Windows host. Six of eight, not eight
+  of eight.
+
+  **THE ALTERNATIVE THAT DOES NOT WORK, recorded so nobody retries it:** plain
+  `cargo check -p tillandsias-headless --target x86_64-unknown-linux-musl`
+  fails in `ring`'s build script for want of a cross C toolchain and never
+  reaches the crate. zigbuild supplies that toolchain; that is the entire
+  difference between the two commands.
+
+- **Fifth instance of the absent-vs-negative trap, caught before it left the
+  host.** I read `grep -c E0063` off that zigbuild's log and got 0 — because
+  the build was still compiling dependencies and had not reached the crate.
+  Three minutes from reporting "the Linux arms compile clean" about a build
+  that had not compiled them. The tell was that the log had no `rc=` line: the
+  command writes its own exit status as the last line precisely so a reader can
+  distinguish finished-and-clean from not-finished. **Check for the terminator
+  before reading the count.**
+
+- **Two hosts, one file, second occurrence — and this time the rule held.**
+  osx-next carried the cfg break, trunk carried neither the field nor the break
+  (2ccd051f1 was not yet relayed), and macuahuitl had a fix in flight on their
+  branch. Rather than fix it myself on my own branch, I measured the state,
+  reported it, and ASKED who lands it. They did; I did not touch the file. That
+  is the heads-up-before-writing rule from this morning's collision, applied
+  four hours later to the same class of situation. The measurement that made
+  the question precise: `git show origin/linux-next:...accel_probe.rs | grep -c
+  name_source` = 0 against origin/osx-next = 18.
+
+- **A verification the fleet cannot produce is not a pending verification.**
+  1137-rgfm's title claimed every Apple silicon Mac emits byte-identical
+  fingerprint strings. Demonstrating that needs two Macs in the SAME
+  core-count class with different chips. macneo is a different hardware class
+  as a measured fact (Apple A18 Pro, Mac17,5, 2P+4E, 8 GiB — the fleet's
+  low-end host) against this host's M5 10c10t, so under the old code the two
+  strings differed at the core count and the pair never collided. Closed on
+  the narrowed claim instead: THE PLACEHOLDER DISCRIMINATED NOTHING WITHIN A
+  CORE-COUNT CLASS, with the cross-platform provenance guard as closure
+  evidence and macneo's inputs as second-machine confirmation that a real
+  brand_string exists to read. A smaller true claim beats a row that never
+  closes.
+
+- **The hash channel is untrustworthy across hosts, and it would have produced
+  a false negative.** The original verification asked macneo to compare
+  fingerprints with mine. Two components move for reasons unrelated to the
+  chip: `ram_class` is IN the hash (8 GiB vs 16 GiB differs on identical
+  silicon), and binary vintage changes it too — 803-r8u4 added `system_ram_gb`
+  to the macOS arm, and before it the `ram:` component was ABSENT ENTIRELY.
+  Measured by accident on ONE machine in one minute: stale release binary
+  `hw2-5ce200f625e69d05`, fresh binary `hw2-d1ec0bba772d4bda`, same hardware.
+  And macneo's stored row carries `system_ram_gb: null` — the same vintage
+  evidenced from the LEDGER rather than from my accident. Both confounds were
+  live in the only pair available. **Compare the INPUTS across hosts
+  (brand_string, core counts, memsize); compare hashes only within one host and
+  one binary.**
