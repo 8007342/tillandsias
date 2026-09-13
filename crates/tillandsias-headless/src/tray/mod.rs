@@ -2405,11 +2405,11 @@ fn launch_project_action(
             // OpenCode Web is already wired and brings its own enclave +
             // browser surface. Untouched per the per-project-action contract.
             let project_path = project.path.display().to_string();
-            super::run_opencode_web_mode(&project_path, None, None, debug)
+            super::run_opencode_web_mode(&project_path, false, None, None, debug)
         }
         LaunchKind::Observatorium => {
             let project_path = project.path.display().to_string();
-            super::run_observatorium_mode(&project_path, None, debug)
+            super::run_observatorium_mode(&project_path, false, None, debug)
         }
         LaunchKind::Claude
         | LaunchKind::Codex
@@ -7332,11 +7332,12 @@ mod tests {
             "launch_project_action must forward debug to launch_forge_agent (not false)"
         );
         assert!(
-            source.contains("super::run_opencode_web_mode(&project_path, None, None, debug)"),
+            source
+                .contains("super::run_opencode_web_mode(&project_path, false, None, None, debug)"),
             "launch_project_action must forward debug to run_opencode_web_mode (not false)"
         );
         assert!(
-            source.contains("super::run_observatorium_mode(&project_path, None, debug)"),
+            source.contains("super::run_observatorium_mode(&project_path, false, None, debug)"),
             "launch_project_action must forward debug to run_observatorium_mode (not false)"
         );
 
