@@ -1,0 +1,124 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-shipped-library-invites-the-next-contributor-to-call-gh-auth-token-at-application-startup
+    order: 1139-imd4
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [security, macos, windows, fail-loud, dead-code]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-core/src/secrets.rs
+    verifiable_closure: |
+      cargo test -p tillandsias-core the_shipped_library_does_not_invite_a_host_side_github_token_read
+      passes, and REDS on the tree before the fix. The pre-fix demonstration is
+      the doc comment itself: the guard asserts the source of secrets.rs no
+      longer tells a reader to call a gh-reading function at application
+      startup, so running it against HEAD~ of the fix must fail by naming that
+      sentence. A guard that only greps for the symbol name is not a closure
+      for this row — the symbol may legitimately remain if it is fenced; the
+      INVITATION is the defect.
+    title: |
+      read_github_token() shells out to `gh auth token` inside a library the macOS tray links, is unreachable today, and carries a doc comment telling the next contributor to call it at application startup — one wire-up from violating a MUST-modality spec
+    context: |
+      FOUND on macbookair 2026-09-12, answering an operator question relayed by
+      macneo: is reading the host's GitHub credential an END USER RUNTIME
+      dependency or only a fleet-builder one? The operator's position is that
+      it is acceptable for fleet builders and NOT at end-user runtime.
+
+      THE ANSWER TODAY IS "FLEET-BUILDER ONLY", AND IT IS ONE EDIT FROM
+      BECOMING WRONG. That is the whole packet.
+
+      What ships is clean. crates/tillandsias-macos-tray touches the keychain
+      only in its own namespace — installation_uuid.rs, service `tillandsias`,
+      accounts `tillandsias-vm-uuid` and `vault-shamir-share-v1`. It never
+      names gh:github.com, contains no `Command::new("gh")`, and
+      scripts/build-macos-tray.sh invokes no gh either. That matches
+      host-shell-architecture.security.no-host-credentials@v1 (MUST,
+      Measurable: true), which says the host shell SHALL NOT load, cache or
+      transmit GitHub tokens and that the installation UUID is the only
+      host-side secret.
+
+      THE SEAM. crates/tillandsias-core/src/secrets.rs `read_github_token()`
+      spawns `gh auth token` with a 5s bound. tillandsias-core is a PATH
+      DEPENDENCY of the shipped tray (crates/tillandsias-macos-tray/Cargo.toml).
+      It is unreachable today: its only caller is
+      `check_and_refresh_github_token()` in the same file, and THAT has zero
+      callers repo-wide — grepping crates and scripts returns exactly three
+      hits, all inside secrets.rs, two of them the two definitions.
+
+      AND THE DEAD FUNCTION ASKS TO BE WIRED UP, verbatim:
+
+        /// Main entry point: check if token refresh is needed and perform it.
+        ///
+        /// This should be called at application startup to ensure the GitHub token
+        /// is fresh before attempting any git operations.
+
+      A contributor who obeys that comment gives the end-user runtime exactly
+      the dependency the operator is refusing, and nothing in the tree stops
+      them: no-host-credentials@v1 is prose in openspec/, not a gate on this
+      symbol. The defect is not the dead code, it is the INSTRUCTION attached
+      to it — dead code that documents its own activation is a latent change,
+      not an inert one.
+
+      NO LIVE SPEC WANTS THIS, which I checked before proposing removal because
+      the function carries `@trace spec:secret-rotation, gap:ON-009` and a
+      trace to a live spec would have made this a spec conflict rather than a
+      cleanup. It is not:
+        * openspec/specs/secret-rotation/spec.md is a TOMBSTONE —
+          `<!-- @tombstone superseded:podman-secrets-integration -->`, Status:
+          retired. Its replacement delivers the GitHub token as a podman secret
+          at /run/secrets/tillandsias-github-token INSIDE the git service
+          container, i.e. in-VM, which is what no-host-credentials@v1 requires.
+          The retired spec states in as many words: "No active code path should
+          require GIT_ASKPASS or bind-mounted GitHub token files", and that
+          legacy annotations naming it "refer to historical behavior and should
+          be migrated".
+        * gap ON-009 is an ARCHIVED P3 backlog line ("GitHub token refresh on
+          expiry ... via Secret Service", plan/archive/2026-06-03).
+      So the only specification with a live claim on this code forbids it, and
+      the one that wanted it has been retired for months. There is no tension
+      to resolve — which is precisely why this is safe to remove and worth
+      removing rather than leaving as a judgement call for whoever finds it next.
+
+      SECOND, SMALLER FINDING, same line: the `@trace spec:secret-rotation`
+      annotation points at a retired spec, and the tombstone itself asks for
+      such annotations to be migrated. Whatever disposition the function takes,
+      that trace should not survive it pointing where it points.
+    deliverable: |
+      REMOVE THE INVITATION. Either disposition is acceptable and the choice
+      should be stated in the commit:
+        1. delete `check_and_refresh_github_token()` and, if it then has no
+           callers, `read_github_token()` with it — the honest option, since no
+           live spec asks for either; or
+        2. keep the symbols but fence them behind the fleet-builder credential
+           path and REWRITE the doc comment so it names
+           host-shell-architecture.security.no-host-credentials@v1 and says
+           plainly that this must NOT be called from the host shell at
+           application startup.
+      What is not acceptable is leaving a comment that reads as an instruction
+      to violate a MUST.
+
+      Then a guard, because the next contributor is the threat model and a
+      comment alone does not stop them. It must red on the pre-fix tree by
+      naming the startup sentence — see verifiable_closure. Prove both arms
+      against real history rather than asserting them.
+
+      If disposition 2 is chosen, migrate the `@trace spec:secret-rotation`
+      annotation to the live replacement per that spec's own tombstone note.
+    next_action: >
+      Decide disposition 1 or 2 first — the guard differs between them, and
+      writing the guard before the decision wastes it. Prefer 1 unless someone
+      can name a live consumer; I could not find one, and the spec that wanted
+      this is retired. Whichever is chosen, the guard must fail on HEAD~ of the
+      fix by quoting the doc comment, not merely by finding the symbol.
+    provenance: |
+      Filed by macbookair (macos) 2026-09-12 at macuahuitl's instruction, from
+      a question relayed by macneo on behalf of their operator. Every claim
+      above verified on this host at osx-next 6d5f14de9: the caller count by
+      grep over crates and scripts, the Cargo.toml path dependency, the doc
+      comment quoted verbatim from source, and the retired status read from the
+      spec file's own tombstone header. Cited by symbol, not by line.
