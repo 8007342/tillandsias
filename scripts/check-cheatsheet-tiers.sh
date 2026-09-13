@@ -84,11 +84,23 @@ args=(check-cheatsheet-tiers --repo-root "${REPO_ROOT}")
 
 # Run-don't-stat via the shared probe (orders 672-4nts + 770-ifeg). This
 # script's own inline `--help` probe was the prototype; resolve_target_binary
-# generalizes it AND tries the runnable `.exe` sibling first, so on Windows
-# the gate now RUNS against the PE cargo just built instead of skipping over
-# the stale Linux ELF at the extensionless path. A probe that cannot run on
-# this host at all remains a SKIP, said once — an "Exec format error" banner
-# provides zero coverage and trains readers to ignore red gate text.
+# generalizes it.
+#
+# CORRECTED BY 1142-wn2k (esme's row for the same defect is 1140-d6ni). This paragraph used to say the probe "tries the
+# runnable `.exe` sibling first", which was true when it was written and is now
+# false — the candidate order is locus-native FIRST, matching resolve_plan_binary
+# (1030-i2p8). The Windows outcome the old sentence wanted is UNCHANGED, because
+# the probe RUNS candidates rather than stat-ing them: on a Windows host the
+# extensionless Linux ELF cannot execute, so it is skipped and the freshly built
+# PE is taken regardless of order. What the old order actually did was pick a
+# STALE .exe over a fresh ELF inside a WSL distro with interop enabled, where
+# BOTH execute — which is how this very check came to refuse
+# "cheatsheets/ directory not found" against a tree where it exists, for 67.5
+# minutes, on esme.
+#
+# A probe that cannot run on this host at all remains a SKIP, said once — an
+# "Exec format error" banner provides zero coverage and trains readers to
+# ignore red gate text.
 . "${REPO_ROOT}/scripts/plan-binary-probe.sh"
 if ! POLICY_BIN="$(resolve_target_binary tillandsias-policy debug "${REPO_ROOT}")"; then
     echo "skip:policy-binary-not-host-executable (no runnable tillandsias-policy under target/debug or CARGO_TARGET_DIR)"
