@@ -944,3 +944,36 @@ stories.
   a step from 776-jcf3's linux half: before deleting the probe ref, check its
   commit is an ancestor of the branch — had it not been, deleting would have
   destroyed the only remote copy.
+- **Coordination pass 2026-09-13T00:4xZ** (macuahuitl, 2h cron): relayed
+  osx-next 6d5f14de9 (macbookair's 803-r8u4/803-rbqf story: is_battery_present
+  → Option<bool>, host-fact corrections) and windows-next 5a7b5fe45 onto
+  linux-next in one land. Recorded from the hosts: esme's 1139-xe5m — the
+  `--capabilities` command serves ~/.cache/tillandsias/capabilities.json when
+  present and nothing in the envelope says so (decisive test: cache aside →
+  wall-clock timestamp; cache present → the same .356539631 nanoseconds
+  replayed 20 h later), so a stale provisioning state can propagate through
+  the capability matrix as a current measurement; the closure must
+  distinguish cached from measured by reading the ENVELOPE ALONE. esme's
+  finding on 793-zumy: `wsl2_paravirtual_gpu_reason` returns
+  "engine-missing:no-vulkan-icd" unconditionally on a host where the ICD is
+  installed and enumerates an INTEGRATED_GPU — the reason is false even if
+  the cpu-only verdict is right; the debug build was the correct instrument
+  on the floor tier (149 s clone+deps, 64 s sidecar, 27 s headless, cold, at
+  CARGO_BUILD_JOBS=2 on ext4). yoga: hwfp-v2 records PCI ids only, with a
+  boundary test pinning that a Vulkan vendorID (0x10005) must not parse as a
+  PCI id, and a correction event on 793-zumy for a fabricated example whose
+  conclusion survives. Candidate, not a row: a doc comment that says a
+  ledger event is wrong should not be able to land without a correction
+  event — the correction sat in code for three weeks while the ledger, the
+  surface a cold reader starts from, kept the error. The 4h meta cycle on
+  this host landed 1119-w2rj criteria 1-3 (one sonnet sub-agent, 233,797
+  tokens) and attested; 803-49re is parked in the ledger; the daily 09:09
+  ci-full is armed.
+- **A prover authored on the Windows lane landed without its executable bit**
+  (relay of windows-next 5a7b5fe45): `scripts/check-ripgrep-available.sh`
+  arrived as mode 100644, and `test-host-tools.sh` requires `-x` on a prover,
+  so the relay's gate refused "prover for rg exists" on Linux while every
+  Windows gate had passed (MSYS does not enforce the bit). Fixed by
+  `git update-index --chmod=+x` on trunk. Rule for the Windows hosts: after
+  creating any scripts/*.sh, set the mode in the index explicitly before
+  committing — a Windows gate cannot see that it is missing.

@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: accel-probe-host-facts-are-linux-only
+    event:
+      type: evidence
+      ts: "2026-09-12T23:23:20Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260912t232313z
+      host: macos
+      summary: |
+        IMPLEMENTED on macbookair (Apple M5, macOS 25.6.0, 10c/10t, 16 GiB). All three deliverables, in crates/tillandsias-headless/src/accel_probe.rs. Cite by symbol; the line numbers in this record were already stale once.
+
+        1. RAM. `enumerate_cpu`'s macOS arm set cores, vendor, name and flags, then left `ram_gb` at its None initializer — so every macOS row filed system_ram_gb: null. New `macos_system_ram_gb()` reads `sysctl -n hw.memsize`. MEASURED here: 17179869184 -> 16.0 GiB. A failed query still yields None, so only the measurable case moved.
+
+        2. Battery, and this is the one that was ACTIVELY WRONG rather than merely absent. `HostInfo.is_battery_present` was a bare `bool` that only the Linux /sys/class/power_supply scan ever wrote; every other host serialised the `false` initializer as a confident denial. THE FIELD EVIDENCE IS ALREADY IN THIS LEDGER: the first macOS capability row (macneo, relayed by macuahuitl onto 657-zm2n 2026-09-04) reads `system_ram_gb null, is_battery_present false` — from a MacBook, which has a battery. Now `Option<bool>` with serde(default): None means nothing looked. macOS arm reads `pmset -g batt` and keys on the `InternalBattery` marker, NOT on 'AC Power'/'Battery Power' — that is the charging state and changes when someone unplugs the machine; the question is whether the hardware exists. The Linux arm now answers Some(false) for a readable directory with no battery and leaves None when the directory cannot be read, which the old code could not distinguish. MEASURED here: is_battery_present true. This matters past tidiness: spec inference-policy-router ADAPT-2 suspends background work on battery, so a laptop reporting false because nobody probed it is a laptop the router never throttles.
+
+        3. Unified memory. CORRECTION TO THIS PACKET'S OWN FRAMING, measured both ways: the envelope ALREADY printed accel_mem_model=unified before this change — it derives that from the platform, not from the device. What was missing was the DEVICE-level evidence (memory_model: null on the Apple GPU record), and the observable consequence was accel_mem_budget_gb=`-`. The Metal DeviceRecord now carries memory_model: Some("unified") and system_ram_gb, because on Apple silicon the GPU has no memory of its own and physical RAM IS its budget.
+
+        ENVELOPE, measured before and after on this host by stashing the diff:
+          before: accel_reason=npu-not-enumerable-on-this-platform accel_ram_gb=- accel_mem_budget_gb=- accel_mem_model=unified
+          after:  accel_reason=metal-not-reachable-from-linux-aarch64-guest accel_ram_gb=16 accel_mem_budget_gb=16 accel_mem_model=unified
+        accel_class=cpu-only and accel_gpu=present-unusable are UNCHANGED — the verdicts did not move, only the facts and the reason.
+
+        GUARD + FALSIFICATION. New `macos_host_facts_are_measured_not_defaulted` (cfg macos) runs the real enumerate_host/enumerate_cpu. It asserts is_battery_present.is_some() rather than Some(true) on purpose: a Mac mini has no battery and must be free to answer Some(false); what is refused is None. Both clauses proven to RED by reverting each arm to its pre-fix state (battery arm removed -> 'macOS must LOOK for a battery'; ram_gb = None -> 'macOS must report physical RAM'), 1 test selected each run, green again on restore.
+
+        cargo test -p tillandsias-headless: 507 passed, 0 failed, 1 ignored. clippy --all-targets: 0 warnings. cargo fmt --check: clean.
