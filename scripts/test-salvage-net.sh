@@ -304,13 +304,13 @@ if want unpushed; then
 fi
 
 # ── 8. symlink: one unstageable path is SKIPPED, never fatal (1146-8j7i) ────
-# MEASURED (yolanda, 2026-09-13, WSL/drvfs): a dangling symlink left in the
+# MEASURED (yolanda, 2026-09-13, Git for Windows): a dangling symlink left in the
 # worktree made `git add -A` fail for the WHOLE tree —
 # `fail:salvage:add:error: open("dangling"): Function not implemented` —
 # turning "preserve everything else" into "preserve nothing".
 #
 # Linux itself CAN stage a dangling symlink (see the counterfactual below);
-# the failure is a drvfs quirk this host cannot reproduce. Reaching for a
+# the failure is Git-for-Windows's (MSYS symlink emulation copies the target; a missing target leaves nothing to index), which WSL git on the same path does not share and this host cannot reproduce. Reaching for a
 # filesystem trick to fake it (an unreadable directory, a FIFO) would be
 # testing a DIFFERENT unstageable path than the one measured, on a mechanism
 # git might handle differently. Instead this fixture drives the real

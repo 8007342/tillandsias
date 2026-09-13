@@ -56,7 +56,7 @@
 #   skip:salvage:unstageable:<path> (1146-8j7i) one line, on stdout, per path
 #                                 the substrate refused to stage (the
 #                                 ENOSYS/EOPNOTSUPP family — e.g. a dangling
-#                                 symlink on drvfs). The salvage proceeds with
+#                                 symlink under Git for Windows, whose MSYS symlink emulation has nothing to copy; WSL git on the same path stages it). The salvage proceeds with
 #                                 every other path; it never fails the whole
 #                                 run for one path it cannot open.
 #   ok:salvage-not-needed         the worktree is clean AND HEAD is reachable
@@ -148,7 +148,7 @@ export GIT_INDEX_FILE="$tmp/index"
 
 # -A picks up modifications, deletions and untracked files, and honours
 # .gitignore (build caches are not work) — but 1146-8j7i MEASURED `git add -A`
-# failing FOR THE WHOLE TREE on one path the substrate could not open (drvfs:
+# failing FOR THE WHOLE TREE on one path the substrate could not open (Git for Windows, not the filesystem — WSL git on the same drvfs path stages it:
 # `error: open("dangling"): Function not implemented`, exit 128, nothing
 # staged — verified locally: a single unreadable path aborts `git add -A`
 # before it stages anything else). A single unstageable path must not turn
@@ -176,7 +176,7 @@ done < <(git status --porcelain=v1 --untracked-files=all -z 2>/dev/null)
 skipped=0
 for path in "${paths_to_stage[@]}"; do
     # TILLANDSIAS_SALVAGE_UNSTAGEABLE_GLOB: test-only seam (1146-8j7i). A
-    # dangling symlink stages FINE on ext4 — the drvfs open()-ENOSYS failure
+    # dangling symlink stages FINE on ext4 — the Git-for-Windows open()-ENOSYS failure
     # is a substrate quirk this host cannot reproduce — so the `symlink`
     # fixture in test-salvage-net.sh forces one path to be unstageable
     # through this glob instead of weakening what production actually tries.
