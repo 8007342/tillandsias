@@ -3701,3 +3701,79 @@ stories.
   stores a string — a silent type change on the fold, measured the same way.
   windows-next (1172-dyvd, 516d18cf1) relayed in this land, one pass early,
   because the closure bundle needed the full gate anyway.
+- **Fourteenth regime axis: THE HOST'S OWN INSTALLED BINARY IS A CANDIDATE
+  (1172-dyvd's fixture, first Linux run, land 18 refused rc=3).** yolanda's
+  currency fixture drives resolve_probe through TILLANDSIAS_HEADLESS_BIN=<stale
+  fake> and asserts the refusal; the resolver refuses and CONTINUES to
+  ./target/release/tillandsias and `tillandsias` on PATH, and on macuahuitl
+  the installed launcher on PATH is current, so arms 1 and 5 read "stale
+  candidate produced rc=0" and "identical-age candidates got the same
+  verdict". The header said "hermetic … no repo binary, no host state"; it was
+  hermetic on the one host with no fallback candidate — the host that wrote
+  it. Fixed forward in the relay (fixture only: a shadow `tillandsias` that
+  fails --inference-tier prefixed to PATH, the probe run from the scratch dir;
+  resolver untouched; still reds on the pre-fix resolver), yolanda told before
+  the land so 1171-ccf2 merges the fix instead of meeting it. My first
+  before-control ran the pre-fix fixture from a scratch copy and failed for
+  the wrong reason (REPO_ROOT follows the script's path) — the same
+  wrong-scope control shape as the detector's earlier today; the valid
+  control is the gate log plus a re-run from the repo path. A fixture that
+  claims "no host state" must SHADOW every path the code under test consults,
+  not merely avoid setting them.
+  yolanda REPRODUCED IT ON YOLANDA within the hour, so it was never Linux-
+  specific: their release binary is current NOW because criterion (3) of the
+  same packet made them rebuild it to republish the wrong row — the change
+  the packet required removed the fixture's isolation in the cycle that
+  created it. Their sharper statement of the defect: the fixture asserted on
+  the PROBE's exit code, a property of the WHOLE candidate list, when the
+  thing under test was the resolver's treatment of ONE candidate. "REGIME:
+  hermetic" was hermetic-given-no-other-candidates — a condition stated as a
+  property — the fourth fixture this week wrong about ITSELF rather than
+  about the code (esme's inherited TOOLBOX_PATH, yoga's chmod under root,
+  yoga's never-created symlink, this), with a twist: true when written,
+  falsified by its own author's next step. A regime claim has to survive the
+  rest of your own cycle, not just authoring time. They kept my fix as the
+  right shape (isolation as a PROPERTY of the fixture, not an accident of
+  the host) and asked for one line where the copy-the-script-into-scratch
+  idiom is documented: REPO_ROOT follows the script, so a scratch copy
+  re-roots itself — the same self-reference trap as their pin matching its
+  own source earlier today.
+- **1171-ccf2 decision (yolanda asked before implementing).** The Windows
+  release stages tillandsias-tray.exe plus three scripts and nothing else;
+  install-windows.ps1 puts it under %LOCALAPPDATA%\Programs\Tillandsias, which
+  is NOT on PATH, so resolve_probe's third candidate never fires on a Windows
+  install even with a tray present. Three closures were on the table: (a)
+  stage tillandsias.exe and have the installer copy it beside the tray —
+  necessary, insufficient alone; (b) (a) plus the installer prepends the
+  install dir to the user's PATH; (c) (a) plus resolve_probe gains the
+  install dir as a candidate. DECIDED (a)+(c), no PATH edits: an installer
+  writing the operator's PATH on every install is a promise the packet does
+  not need, and the reset principle covers state the platform owns, not the
+  user's environment. Guards asked for: the candidate only when LOCALAPPDATA
+  is set (WSL locus never consults a Windows path), MSYS path conversion,
+  and the vocabulary probe applied to it like every other candidate. Install
+  half: NOT on yolanda's machine (the line they held on the Vulkan ICD and
+  were recorded right on) — it is esme's measurement on a PUBLISHED release,
+  i.e. after the operator's next daily cut; the row flips to `implemented`
+  with the resolver arm and the staging assertion as evidence and the install
+  half named as what is LEFT; the coordinator routes the smoke to esme by
+  claim flip when a release carries it, operator's per-run word for the
+  destructive part as usual.
+- **Coordination pass 22:41Z (pass 13).** Relays: none (osx-next +0,
+  windows-next +0; trunk c6f42a113). Lands since pass 12: 990dc72f6 (1173-a5ng
+  filed, plan-only lane), c6f42a113 (windows-next relay + the fixture fix,
+  attempt 1 after one refused land). Messages since the last pass, all
+  handled: yolanda's salvage-ledger refusal (my deletion race → 1173-a5ng),
+  their 1172-dyvd landing and reproduction of the fixture regime defect on
+  their own host, yoga's 1139-xe5m/1165-g6wx bookkeeping asks (done, landed),
+  yolanda's 1171-ccf2 scoping question (decided (a)+(c), no PATH edits, install
+  half to esme after the next cut). Stale rows `ok:stale-ready-rows:89/508`:
+  the seven of pass 12 plus 1135-z8gn (6 commits cite it; macbookair released
+  it to ready on purpose after the clamp-ca-material slice — a multi-slice row
+  cited by every slice, the 1135-z8gn shape the pass documents), none handed.
+  Hand-offs: none — yoga self-drained 1139-xe5m from plan_next at their own
+  cadence, yolanda holds 1171-ccf2, macbookair and lenovinha are cycling, the
+  floor (macneo, esme, pirria) has nothing floor-shaped in the queue and no
+  report since; queue heads unchanged (776-jcf3, 804-deux, 793-zumy). Audit
+  rows=23 stems=23, every host NOT-PASTING (standing). Salvage refs: nothing
+  to delete; the one-pass grace rule applies to the next one.
