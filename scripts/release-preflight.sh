@@ -223,8 +223,28 @@ fi
 # kept firing for two days after the purge. litmus:github-actions-budget owns
 # the cross-branch check; this one owns "do not reintroduce it here".
 if [[ -d .github/workflows ]]; then
+    # ORDER 1135-z8gn (macbookair 2026-09-13). `-printf` IS GNU-ONLY AND THIS
+    # GUARD IS ON THE RELEASE PATH. BSD find rejects it, the error goes to
+    # /dev/null by the redirect below, the set comes back EMPTY, and the
+    # refusal below never fires — a workflow-inventory guard that inventoried
+    # nothing and passed. Silent-degrade, in release-preflight, on every stock
+    # macOS host.
+    #
+    # MEASURED on tlatoanis-macbook-air with a planted intruder file:
+    #   /usr/bin/find ... -printf '%f\n'          -> EMPTY, guard passes
+    #   /usr/bin/find ... -exec basename {} \;     -> catches the intruder
+    #
+    # AND THE FIRST MEASUREMENT OF THAT LIED, which is worth the comment: this
+    # host has `bfs` on PATH as `find`, a third implementation that DOES
+    # support -printf, so the unfixed line passed the test through bfs and
+    # failed it through /usr/bin/find on the same machine in the same minute.
+    # The advisory's own header calls a PATH-dependent tool identity a runtime
+    # fact it cannot see; this is that, inverting a result.
+    #
+    # `-exec basename {} \;` is POSIX and behaves the same on both. One process
+    # per file, and the set here is a handful of workflow files.
     unexpected="$(find .github/workflows -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) \
-        ! -name 'release.yml' -printf '%f\n' 2>/dev/null | sort)"
+        ! -name 'release.yml' -exec basename {} \; 2>/dev/null | sort)"
     if [[ -n "$unexpected" ]]; then
         fail "unsanctioned workflow(s) present — only release.yml may consume cloud minutes:"
         sed 's/^/    /' <<<"$unexpected" >&2
