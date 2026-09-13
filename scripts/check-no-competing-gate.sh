@@ -61,29 +61,95 @@ PROC_ROOT="${TILLANDSIAS_PROC_ROOT:-/proc}"
 # returned a silent success instead; on darwin, where /proc does not exist, that
 # reported a clean reap having killed nothing. A scan that cannot see is not a
 # scan that saw nothing.
-# INSIDE A CONTAINER THIS CHECK CANNOT ANSWER, and must say so rather than
-# guess. A toolbox shares the host PID namespace, so the host-side `toolbox run`
-# wrapper is VISIBLE — but its environ is not READABLE from inside, and that is
-# the field this classifier keys on. Measured on yoga: from inside the builder,
-# `[ -r /proc/<host-pid>/environ ]` answers TRUE and the read is then DENIED.
-# access(2) lies here, exactly as lib-dispatch-reap.sh's own comment warned it
-# can for a process that changed credentials.
+# ANSWER ONLY ON A POSITIVE HOST-SIDE ASSERTION (the inversion).
 #
-# The consequence, before this arm existed, was the worst kind: build.sh
-# re-execs into the toolbox BEFORE its fast refusals, so the detector ran inside
-# and could not see any wrapper — every gate reported ITSELF as a competing
-# gate. Advisory, that was noise. Refusing, it would have made every Linux gate
-# on every Linux host refuse itself. Observed on the first in-situ run, after a
-# hermetic fixture had passed 8/8, because a fake procfs of plain files is
-# always readable and the real one is not.
-if [ -n "${TOOLBOX_PATH:-}" ] || [ "${container:-}" = "oci" ] || [ "${container:-}" = "podman" ]; then
-    echo "could-not-run:competing-gate:inside-container (host-side wrappers are visible but their environ is unreadable here; run this on the host, before the dispatch)"
+# This used to REFUSE when it recognised a container — TOOLBOX_PATH, container=
+# oci|podman, marker files — and answer otherwise. That points the failure mode
+# at the UNKNOWN case: every dispatch boundary nobody has met yet is a false
+# accusation waiting. WSL2 proved enumeration cannot even be completed: measured
+# by yolanda inside tillandsias-build, TOOLBOX_PATH empty, container empty, no
+# /run/.toolboxenv, no /run/.containerenv, no /.dockerenv — because a WSL distro
+# is not inside a dispatch at all, it is a VM the wrapper shells into. There is
+# no property to enumerate. Their gate duly accused itself.
+#
+# Inverted, the failure mode points at the KNOWN case: a caller that does not
+# assert host-side gets SILENCE. A new dispatch shape then costs a missing
+# answer rather than a wrong one — and missing answers are visible when you go
+# looking, while wrong answers are believed (yolanda's phrasing, and the whole
+# argument in one line).
+#
+# THE ASSERTION IS NOT A BARE FLAG. --host-side carries the caller's own PID,
+# and this verifies that pid's environ is READABLE and CONTAINS the caller's
+# token. Readability alone would let a wrapper pass any pid it liked and re-open
+# the hole; containment makes it a POSITIVE CONTROL — it proves this process can
+# read the very class of process the verdict depends on. A readable-but-tokenless
+# pid is a CALLER BUG (wrong pid, wrong shell, or the export never happened —
+# the shape of a test hazard that bit me), and must be loud rather than assumed
+# benign.
+#
+# FOUR OUTCOMES, FOUR CODES, because two of them demand opposite responses:
+#   0/1  answered (no competitor / a competitor)
+#   2    refused:competing-gate:caller-contract  -> FIX THE CALL SITE
+#   3    could-not-run:competing-gate:...        -> this host cannot answer
+# A shared code would let a wiring bug read as an unsupported substrate and be
+# written off, which is the collapse 1140-i6ct exists to prevent one check over.
+#
+# NOTHING ON TRUNK READS THESE CODES YET: both call sites are `|| true`. The
+# grammar therefore binds a FUTURE consumer, and that consumer must enumerate 2
+# apart from 3 with no default that proceeds.
+HOST_SIDE_PID=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --host-side) HOST_SIDE_PID="${2:-}"; shift 2 ;;
+        --host-side=*) HOST_SIDE_PID="${1#*=}"; shift ;;
+        *) shift ;;
+    esac
+done
+
+if [ -z "$HOST_SIDE_PID" ]; then
+    echo "could-not-run:competing-gate:no-host-side-assertion (this caller did not assert --host-side <pid>; only a caller that can see the dispatch's host side may be answered)"
     exit 3
 fi
 
 if [ ! -d "$PROC_ROOT/1" ]; then
     echo "could-not-run:competing-gate:no-procfs (this host cannot enumerate processes; nothing is asserted about competing gates)"
     exit 3
+fi
+
+# THE POSITIVE CONTROL IS OUR OWN ENVIRON, NOT THE CALLER'S PID.
+#
+# The contract was first written as "the passed pid's environ must contain the
+# caller's token". It cannot: `/proc/<pid>/environ` is the environment a process
+# was EXEC'D with, and the token is minted and exported at runtime by the very
+# shell that asserts. Measured — exporting shell's own environ: 0 matches; a
+# child exec'd after the export: 1. So the asserting caller provably cannot show
+# its own token, and the first wiring of this check refused its real call site
+# with `caller-contract`, correctly, against a contract that was impossible.
+#
+# THIS process is that child. It was exec'd after the export, so our own environ
+# carries the token when the caller really did export it — and unlike a passed
+# pid we cannot substitute a convenient one. That makes it a true positive
+# control and a stronger one than the original: it proves in a single read that
+# environ is READABLE on this substrate AND that the caller's export actually
+# happened.
+#
+# `self` rather than `$$` so the fixture can construct it: real procfs provides
+# /proc/self, and a fake tree provides a `self/` directory.
+_hs="$PROC_ROOT/self/environ"
+if [ ! -e "$_hs" ] || [ ! -r "$_hs" ]; then
+    echo "could-not-run:competing-gate:blind (cannot read our own environ at $_hs — this host exposes no readable environ, so nothing can be concluded about competing gates)"
+    exit 3
+fi
+_hs_tok=""
+if ! { while IFS= read -r -d '' e; do
+           case "$e" in TILLANDSIAS_WRAPPER_TOKEN=*) _hs_tok="${e#*=}"; break ;; esac
+       done < "$_hs"; } 2>/dev/null; then
+    echo "could-not-run:competing-gate:blind (our own environ at $_hs could not be read through)"
+    exit 3
+fi
+if [ -z "$_hs_tok" ]; then
+    echo "refused:competing-gate:caller-contract (caller asserted --host-side $HOST_SIDE_PID but did not export TILLANDSIAS_WRAPPER_TOKEN into this process; FIX THE CALL SITE, this is not a substrate limit)"
+    exit 2
 fi
 
 self=$$

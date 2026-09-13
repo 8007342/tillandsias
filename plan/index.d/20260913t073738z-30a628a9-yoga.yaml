@@ -1,0 +1,65 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-dispatch-wrapper-that-execs-into-a-container-cannot-be-killed-so-a-cancelled-gate-keeps-running-in-the-same-checkout
+    event:
+      type: implemented
+      ts: "2026-09-13T07:37:38Z"
+      agent_id: linux-yoga-claude-20260913t073738z
+      host: yoga
+      summary: |
+        THE INVERSION LANDED, and implementing it refuted the contract we had all three
+        agreed to — the check's own first run against its real call site is what caught
+        it.
+
+        WHAT WAS AGREED: the caller asserts host-side and passes its own pid; the
+        detector verifies THAT PID's environ is readable and CONTAINS the caller's
+        token, so a wrapper cannot vouch with any convenient readable pid.
+
+        WHY IT IS IMPOSSIBLE, measured rather than argued. `/proc/<pid>/environ` is the
+        environment a process was EXEC'D with. TILLANDSIAS_WRAPPER_TOKEN is minted and
+        exported at RUNTIME by the very shell that asserts, so it is never in that
+        shell's own environ:
+            exporting shell's own environ   -> 0 matches
+            child exec'd after the export   -> 1 match
+        The first wiring duly refused its real call site with
+        `refused:competing-gate:caller-contract`, correctly, against a contract nothing
+        could satisfy. Three of us reviewed that contract and none of us noticed; the
+        positive control noticed on its first execution.
+
+        THE FIX IS STRONGER THAN THE ORIGINAL, which is the part worth keeping. THIS
+        process is the child exec'd after the export, so OUR OWN environ carries the
+        token exactly when the caller really exported it — and unlike a passed pid we
+        cannot substitute a convenient one. One read now proves both halves: that
+        environ is READABLE on this substrate, and that the caller's export actually
+        happened. `$PROC_ROOT/self` rather than `$$` so a fake tree can construct it.
+
+        THE INVERSION ITSELF: the check answers ONLY on `--host-side <pid>`. It used to
+        answer unless it RECOGNISED a container, which pointed its failure mode at every
+        boundary nobody had met — and WSL2 proved enumeration cannot be completed
+        (yolanda, measured inside tillandsias-build: no TOOLBOX_PATH, no container, no
+        marker files, because a WSL distro is not inside a dispatch at all). Unflagged
+        now costs a MISSING answer instead of a wrong one.
+
+        FOUR CODES, MUTATION-VERIFIED DISTINCT, diff proven non-empty before each run:
+          0/1 answered; 2 refused:competing-gate:caller-contract (FIX THE CALL SITE);
+          3 could-not-run (no assertion / blind).
+        Answering without an assertion reds 11/12; collapsing 2 into 3 reds 11/12;
+        accepting a tokenless self reds 11/12. 12/12 at uid 1000 and uid 0.
+
+        CALL SITES: the toolbox wrapper asserts `--host-side "$$"` before dispatch and
+        answers `ok:no-competing-gate` on this host. build.sh's fast-refusal call stays
+        DELIBERATELY unflagged — by the time it runs we are inside the dispatch, where
+        the host side is unreadable or has no /proc entry at all, so it now says so and
+        stops instead of accusing every gate of being its own competitor.
+
+        STILL TRUE AND UNCHANGED: nothing on trunk READS these codes (both call sites
+        are `|| true`), so the grammar binds a future consumer, which must enumerate 2
+        apart from 3 with no default that proceeds.

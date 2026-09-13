@@ -492,7 +492,13 @@ ENV_FORWARD="$(tillandsias_env_forward_prefix)"
 # start.
 _tb_self_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ -x "$_tb_self_dir/check-no-competing-gate.sh" ]; then
-    bash "$_tb_self_dir/check-no-competing-gate.sh" || true
+    # ASSERT HOST-SIDE AND HAND OVER OUR OWN PID. $$ here is the host-side shell
+    # that minted TILLANDSIAS_WRAPPER_TOKEN above and is about to dispatch, so
+    # it is exactly the process whose readability decides whether the check can
+    # see the class of process its verdict depends on. The check verifies our
+    # environ is readable AND carries that token; if it cannot read us it says
+    # `blind` rather than reporting a clean tree.
+    bash "$_tb_self_dir/check-no-competing-gate.sh" --host-side "$$" || true
 fi
 
 echo "[tillandsias-builder] Re-execing inside '$TOOLBOX_NAME' toolbox..."
