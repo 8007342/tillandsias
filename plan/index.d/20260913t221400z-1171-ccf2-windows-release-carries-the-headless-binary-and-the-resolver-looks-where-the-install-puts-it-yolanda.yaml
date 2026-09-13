@@ -1,0 +1,72 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+#
+# EVENTS ONLY. The status flip is its own fragment (20260913t221301z), written
+# by the machine writer; this one carries the evidence and the boundary of what
+# was done, because the flip's --reason is one line and this is not a one-line
+# claim.
+events:
+  - packet_id: esmeraldinhas-windows-host-locus-cannot-publish-a-capability-row-because-no-native-windows-binary-exists-there-and-the-remedy-the-guard-names-exits-2-at-that-locus
+    event:
+      type: implemented
+      host: yolanda
+      agent: windows-yolanda-claude-20260913t082232z
+      ts: "2026-09-13T22:14:00Z"
+      evidence_refs:
+        - "(a) scripts/build-windows-tray.ps1, by symbol: the stage step now builds tillandsias-headless --bin tillandsias as its own cargo invocation, copies it in as tillandsias.exe, and the staging assertion loop refuses the package with refused:release-staging:missing:<name> if either the tray or the headless binary is absent. The assertion is in the PACKAGING script's own path, so the release gate runs it and not only a fixture."
+        - "(c) scripts/host-capability-probe.sh, by symbol: _windows_install_candidate() yields $LOCALAPPDATA/Programs/Tillandsias/tillandsias.exe, converted with cygpath -u and a passthrough fallback, and resolve_probe's candidate list consults it between ./target/release/tillandsias and the bare tillandsias on PATH."
+        - "scripts/test-probe-refuses-stale-candidate.sh, three new arms: a current binary in the install dir is CONSULTED (rc 1, the fake document's own later layer, not the resolver's 2); a STALE one there is refused BY NAME rather than admitted for its location; with LOCALAPPDATA unset the candidate does not exist at all (rc 2)."
+        - "MUTATION CONTROL, run: removing \"$(_windows_install_candidate)\" from resolve_probe's list while leaving the helper defined turns the first two arms RED (fail:probe-stale-candidate-fixture) and leaves the third green, which is correct for an arm that asserts an absence. Restored, ok:probe-stale-candidate-fixture:all."
+        - "gates green on this tree: check-scorable-obligation-added skip:no-new-packets; check-long-running-view ok, 27 live packets; check-fragment-status-loss ok, 54 checked; tillandsias-plan check --strict-fragments ok, 930 packets. The strict-fragments verdict was re-run on target/release/tillandsias-plan.exe after a first run fell through to a 2026-09-02 debug binary — the same stale-candidate trap 1172-dyvd is about, caught here by its own lesson."
+      summary: >
+        THE RELEASE NOW CARRIES THE BINARY, AND THE RESOLVER LOOKS WHERE THE
+        INSTALL PUTS IT. Route (a) plus route (c) of the two the packet offered.
+        Route (b) — resolving the installed tray as a capability candidate — was
+        not taken: the tray does not expose the probe surface, so it would have
+        meant teaching a GUI binary a second vocabulary to avoid shipping a
+        binary that already speaks it.
+
+        WHY (c) IS NEEDED EVEN WITH (a). install-windows.ps1 extracts into
+        $LOCALAPPDATA\Programs\Tillandsias, and that directory is NOT on PATH —
+        measured on yolanda, `command -v tillandsias` finds nothing on a host
+        with a tray installed. So shipping the binary without (c) would have put
+        it on disk where nothing looks. The installer is deliberately NOT made
+        to edit the user's PATH: that is a permanent change to state the platform
+        does not own, made on every install, for a nicety this packet does not
+        need.
+
+        THE REGIME GUARD IS THE POINT OF THE THIRD ARM. The candidate exists only
+        when LOCALAPPDATA is set, so the in-guest Linux locus never consults a
+        Windows path and never reports a Windows binary as its own — which is the
+        same failure mode 889-ewvt names and the reason esme declined both
+        substitutes in the original context.
+
+        AND 1172-dyvd STILL APPLIES THERE. Living in the install directory is not
+        a currency claim; a stale installed tillandsias.exe is refused by name
+        exactly like any other candidate. Without that arm this order would have
+        re-opened the stale-row defect through a new door, which is why the
+        vocabulary probe was kept on the new candidate rather than exempted.
+      note: >
+        WHAT IS LEFT, and it is the closure itself. Both exit criteria are
+        measurements on esmeraldinha, and neither is met by this land:
+
+          1. esme must run scripts/host-capability-probe.sh --fragment from Git
+             Bash on a PUBLISHED release that carries tillandsias.exe — not on
+             this tree — and check-capability-row.sh must then report
+             ok:capability-row-current:esmeraldinha rc 0. That release does not
+             exist yet; it needs the operator's next daily cut.
+          2. the negative control (the probe still refuses windows-host from
+             inside the distro) is unchanged by this work and unverified by me.
+
+        So the row is IMPLEMENTED and NOT completed, deliberately. The halves
+        landed here are the two that a capable Windows host can do; the half that
+        decides whether the packet is actually closed belongs to the floor host
+        that felt the defect, on hardware I do not have. macuahuitl routes that
+        by claim flip; the destructive part of any smoke there is the operator's
+        per-run call, not mine.
+
+        NOT VERIFIED BY ME, stated rather than implied: I have not run
+        build-windows-tray.ps1 end to end on this host in this cycle, so the
+        staging assertion is verified by parse and by reading, not by a package.
+        It is written to fail loudly (throw) rather than warn, so the first
+        release cut is where it speaks — and a cut that ships without the binary
+        is precisely the state this order exists to end.

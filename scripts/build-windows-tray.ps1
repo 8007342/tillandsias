@@ -228,7 +228,7 @@ $missing = @()
 # the zero-byte placeholder so a stale copy cannot bloat the exe; a check that
 # demands both arches therefore fails by construction on every host and every
 # runner. MEASURED 2026-09-11: release run 34649585604, Windows job
-# 103439175869 — x86_64 staged (14,550,224 bytes), aarch64 reset to 0 by the
+# 103439175869 -- x86_64 staged (14,550,224 bytes), aarch64 reset to 0 by the
 # loop above, throw here; no Windows tray shipped for v56.9.11.1. The check
 # keeps its 1059-ry6t teeth for the arch that is actually embedded.
 foreach ($arch in @($hostGuestArch)) {
@@ -237,7 +237,7 @@ foreach ($arch in @($hostGuestArch)) {
 }
 if ($missing.Count -gt 0) {
     throw @"
-guest asset is a placeholder — this tray could not inject a guest binary:
+guest asset is a placeholder -- this tray could not inject a guest binary:
 $($missing -join "`n")
 
 Each is absent or 0 bytes. crates/tillandsias-windows-tray/build.rs writes an
@@ -283,6 +283,46 @@ if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
 New-Item -ItemType Directory -Force $stage | Out-Null
 
 Copy-Item $exe (Join-Path $stage 'tillandsias-tray.exe')
+
+# ORDER 1171-ccf2. SHIP THE HEADLESS BINARY BESIDE THE TRAY.
+#
+# The release carried only the tray, so a Windows host had no native
+# `tillandsias` anywhere: esmeraldinha's windows-host locus could not publish a
+# capability row at all, and scripts/host-capability-probe.sh exited 2 at the
+# very locus whose expired-row verdict told it to publish. The checkout's
+# `target/release/tillandsias` is no help there -- on a host that builds through
+# with-wsl2-builder's re-exec it is a Linux ELF, which exits 126 under Git Bash.
+#
+# Built as its own cargo invocation rather than added to $buildArgs: the tray
+# build above carries the guest-embed staging and the 1059-ry6t refusal, and
+# folding a second bin into it would put this binary behind those checks for no
+# reason. A failure here is FATAL -- a release that silently ships without it
+# recreates exactly the state this order exists to end.
+$headlessBin = Join-Path $RepoRoot "target\$profileName\tillandsias.exe"
+Write-Host "Building the headless probe binary (tillandsias.exe, 1171-ccf2)..."
+$prevEAP2 = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+try {
+    & cargo build --profile $profileName -p tillandsias-headless --bin tillandsias
+    $headlessExit = $LASTEXITCODE
+} finally {
+    $ErrorActionPreference = $prevEAP2
+}
+if ($headlessExit -ne 0) { throw "cargo build of tillandsias-headless failed (exit $headlessExit)" }
+if (-not (Test-Path $headlessBin)) { throw "expected headless binary not found: $headlessBin" }
+Copy-Item $headlessBin (Join-Path $stage 'tillandsias.exe')
+
+# THE STAGING ASSERTION LIVES HERE, in the packaging script's own path, so the
+# RELEASE gate runs it rather than only a fixture. A zip that reaches a user
+# without this binary is the defect, and the place that can see the zip being
+# built is the place to refuse.
+foreach ($required in @('tillandsias-tray.exe', 'tillandsias.exe')) {
+    $staged = Join-Path $stage $required
+    if (-not (Test-Path $staged)) {
+        throw "refused:release-staging:missing:$required -- the Windows release must carry both the tray and the headless probe binary (1171-ccf2)"
+    }
+}
+Write-Host "ok:release-staging:tray+headless (1171-ccf2)" 
 # Ship the canonical operator scripts inside the release zip so users get
 # the full diagnostic toolchain on extract -- no need to clone the repo
 # separately for tray-diagnose.ps1 / diagnose-windows.ps1. Each script
