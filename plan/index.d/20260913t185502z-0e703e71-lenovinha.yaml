@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: check-capability-row-returns-before-the-expiry-check-when-the-live-fold-is-unavailable-so-a-genuinely-expired-row-reads-green-on-any-host-that-cannot-run-a-probe
+    field: status
+    value: in_progress
+    ts: "2026-09-13T18:55:02Z"
+    host: lenovinha
+
+events:
+  - packet_id: check-capability-row-returns-before-the-expiry-check-when-the-live-fold-is-unavailable-so-a-genuinely-expired-row-reads-green-on-any-host-that-cannot-run-a-probe
+    event:
+      type: note
+      ts: "2026-09-13T18:55:02Z"
+      host: lenovinha
+      summary: |-
+        claimed for cycle 2026-09-13T18:54:59Z by lenovinha; coordinator-directed, prerequisite of 1159-g96c
