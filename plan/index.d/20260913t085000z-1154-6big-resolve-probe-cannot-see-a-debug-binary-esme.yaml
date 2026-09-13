@@ -1,0 +1,110 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: host-capability-probe-resolve-probe-omits-the-debug-path-so-a-debug-built-host-reports-no-runnable-binary-while-one-runs
+    order: 1154-6big
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [probe, fail-loud, false-negative, gate]
+    estimated_hours: 1
+    owned_files:
+      - scripts/host-capability-probe.sh
+    unscoreable: |
+      unpinnable-until-the-guard-exists. The closure is a property of a
+      CANDIDATE LIST no fixture currently reads: nothing asserts that
+      resolve_probe finds a runnable binary that exists only under
+      target/debug, so any litmus named now resolves to nothing and 885-92iu
+      refuses the row. Sanctioned exit per 1136-n8sh.
+
+      FUTURE LITMUS FILENAME:
+      scripts/test-resolve-probe-finds-a-debug-binary.sh — place a runnable
+      stub at ./target/debug/tillandsias with NO release sibling and nothing
+      named tillandsias on PATH, and assert resolve_probe returns it rather
+      than exiting 2. A negative arm should assert that a non-runnable stub at
+      the same path is still refused, so the fix cannot degrade into accepting
+      a path by existence.
+
+      WIRE IT IN THE SAME COMMIT THAT WRITES IT, by one of two routes and name
+      which: an `_run bash` line in build.sh, or BOTH an
+      openspec/litmus-tests/litmus-<name>.yaml definition AND an
+      openspec/litmus-bindings.yaml registry entry under the right spec_id.
+      Half of route 2 is 1068-cxmf's dangling pin, and scripts/test-*.sh is not
+      globbed by build.sh, so an unwired fixture is a file rather than a gate.
+    title: |
+      resolve_probe tries TILLANDSIAS_HEADLESS_BIN, ./target/release/tillandsias and bare tillandsias but never ./target/debug/tillandsias, so a debug-built host reports "no runnable tillandsias binary" while a 249 MB binary that runs sits at the path it did not look in
+    context: |
+      MEASURED on esmeraldinha. Filed at lenovinha's request as the separate
+      half of a pair — this is defect A; the fail-open in
+      check-capability-row.sh's check() is defect B and is theirs.
+
+      scripts/host-capability-probe.sh --fragment exits 2 with
+      "error: no runnable tillandsias binary (build or install one)".
+      resolve_probe's candidate list is TILLANDSIAS_HEADLESS_BIN, then
+      ./target/release/tillandsias, then bare `tillandsias` on PATH. It never
+      considers ./target/debug/tillandsias.
+
+      That file exists on this host, is 249 MB, and RUNS:
+      `./target/debug/tillandsias --inference-tier` exits 0 from inside the
+      tillandsias-build distro. So a host that has built debug but not release
+      has a working probe binary the resolver refuses to see, and reports its
+      absence rather than its location.
+
+      THE SIBLINGS ALREADY DO THIS CORRECTLY. resolve_plan_binary and
+      resolve_target_binary in scripts/plan-binary-probe.sh both carry debug
+      paths in their candidate lists. This is the one resolver in the family
+      that does not, which is what makes the omission read as an oversight
+      rather than a decision.
+
+      WHY IT MATTERED HERE, recorded so the fix is not mistaken for cosmetic:
+      check-capability-row.sh's live_matrix() calls this probe. The probe
+      failing made live_matrix() fail, which made check() return at its
+      short-circuit and skip the expiry check below it — so this host reported
+      `ok:capability-row-reported:esmeraldinha` rc=0 while both its committed
+      rows were 21 days old against a 604800s window. That fail-open is defect
+      B and lenovinha measured it independently at 7000 days on a forced-
+      unrunnable fold; it is NOT fixed by this row and must not be closed by it.
+
+      THE ORDER OF THE TWO FIXES IS LOAD-BEARING, in lenovinha's words rather
+      than mine: fixing A first would have HIDDEN B. With A fixed the live fold
+      starts working on this host, the short-circuit stops firing, the stale
+      rows correctly expire, and B becomes invisible again on every host with a
+      runnable binary — still present, still failing open, waiting for the next
+      host that cannot build one. B should land first or alongside.
+    deliverable: |
+      resolve_probe finds a runnable probe binary wherever the host actually
+      built one.
+
+        * scripts/host-capability-probe.sh — add ./target/debug/tillandsias to
+          the candidate list. Order it after the release path, matching the
+          locus-native-first convention resolve_plan_binary settled under
+          1030-i2p8: a release build should still win when both exist.
+        * DO NOT change the probe-by-RUNNING convention. resolve_probe decides
+          by executing `--inference-tier`, not by testing -x, and that is the
+          robust form — on a shared Windows/WSL checkout the SAME file reports
+          `-rw-r--r--` from Git Bash and executes from inside the distro, so
+          any -x test would disagree with itself depending on which locus ran
+          it. The run-don't-stat convention is accidentally immune to that and
+          the fix must not trade it away for a cheaper check.
+        * CONSIDER whether CARGO_TARGET_DIR should be honoured, as the plan
+          binary probe does. A host whose build is redirected (the
+          with-wsl2-builder re-exec points it at
+          /root/.cache/tillandsias-wsl2-target/<repo>) has its artefacts under
+          neither ./target/release nor ./target/debug, so the same class of
+          miss is reachable a second way. Record the decision either way.
+    next_action: >
+      Add the debug path after the release path in resolve_probe's candidate
+      list, keeping the probe-by-running convention intact — but land
+      lenovinha's fail-open fix in check-capability-row.sh first or alongside,
+      because fixing this one alone makes that one invisible again.
+    provenance: |
+      Found by esme-windows on esmeraldinha while running
+      scripts/check-capability-row.sh check at yoga's relay of lenovinha's
+      request for a two-locus measurement. The requested measurement could not
+      be taken — the guard never reaches the locus accessor on this host — and
+      this is why. lenovinha reproduced the downstream fail-open independently
+      on a forced-unrunnable fold and asked that the two defects be filed
+      separately, by their respective measurers, because the evidence for each
+      lives on a different host and in a different file.

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-linux-clean-room-reset-does-not-reach-the-host-keychain
+    field: status
+    value: ready
+    ts: "2026-09-13T15:44:10Z"
+    host: yoga
+
+events:
+  - packet_id: the-linux-clean-room-reset-does-not-reach-the-host-keychain
+    event:
+      type: note
+      ts: "2026-09-13T15:44:10Z"
+      host: yoga
+      summary: |-
+        released after the implementation slice: clearer and both-directions fixture landed and inert; the wiring step changes destructive behaviour and wants the override window's status known, so I am not holding the row across it

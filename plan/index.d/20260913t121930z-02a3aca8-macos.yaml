@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: gnu-only-shell-idioms-reach-trunk-green-and-freeze-a-whole-platform-one-host-at-a-time
+    event:
+      type: evidence
+      ts: "2026-09-13T12:19:30Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260913t115114z
+      host: macos
+      summary: |
+        FALSE POSITIVE IN THE ADVISORY, found while re-measuring 1135-z8gn's baseline on macOS at 135c4b7ae. It inflates that row's count by one and would send a claimer to "fix" correct code.
+
+        THE FLAG: scripts/check-ripgrep-available.sh:35 reported as "rg with no path operand (reads STDIN; BLOCKS FOREVER under a pipe)".
+
+        THE LINE: `version="$(rg --version 2>/dev/null | head -1 | awk '{print $2}')"`.
+
+        `--version` takes no path BY DESIGN, prints and exits, and never reads stdin. The advisory matches on `rg` lacking a path operand, so a flag-only invocation looks identical to the dangerous form.
+
+        MEASURED, rather than argued, on this host with rg present:
+            sleep 3  | rg --version    -> rc=0 immediately; did NOT wait on stdin
+            true     | rg --version    -> rc=0
+            sleep 10 | rg somepattern  -> rc=124 (timed out): the REAL defect shape
+        The contrast arm is the point — the same harness that shows `--version` returning shows a genuine no-path rg blocking, so this is not a test that cannot fail.
+
+        CONSEQUENCE FOR 1135-z8gn: its rg-no-path class has exactly ONE entry and that entry is this false positive, so the class is EMPTY of real instances. The reported baseline of 28 contains 1 false positive and 1 deliberate self-reference (test-portability-idioms.sh's own arm subject), making 26 genuinely remediable.
+
+        I ALMOST FILED THIS AS A REGRESSION. check-ripgrep-available.sh did not exist at bc2875709 — it was added by 044b9657d, a fix for 1129-xm5z — so the baseline appeared to go from 27 to 28 and the obvious reading was that a fix had introduced the very defect class the advisory tracks. That reading is wrong, and it would have been a packet filed against correct code and an order not mine. The tell was reading the flagged LINE rather than trusting the finding's own description of it.
+
+        SUGGESTED NARROWING, not implemented here because this order is not mine: exempt invocations whose first argument is a flag that takes no input (`--version`, `--help`, `-V`, `-h`). Do NOT exempt by FILENAME — this row's sibling 1135-z8gn already records that a guard exempting files has a hole, and the fixture's own deliberate patterns are kept countable on purpose.
+
+        One more thing the re-measure turned up, recorded so it is not mistaken for drift: 1135-z8gn's next_action carried "15 silent-degrade / 13 loud-fail at bc2875709, macOS". Running that tree's OWN copy of the advisory in a detached worktree on this host gives 15 silent-degrade / 12 loud-fail. The silent count reproduces exactly; the loud-fail count does not. I cannot account for the 13 and am reporting the disagreement rather than picking the number I prefer.

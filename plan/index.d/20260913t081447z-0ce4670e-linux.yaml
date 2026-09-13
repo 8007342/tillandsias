@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: no-cycle-knows-what-it-spent-in-tokens-so-a-42-agent-sweep-cost-4-5-million-and-the-fleet-ran-out-a-week-early
+    field: status
+    value: completed
+    ts: "2026-09-13T08:14:47Z"
+    host: linux
+
+events:
+  - packet_id: no-cycle-knows-what-it-spent-in-tokens-so-a-42-agent-sweep-cost-4-5-million-and-the-fleet-ran-out-a-week-early
+    event:
+      type: completed
+      ts: "2026-09-13T08:14:47Z"
+      host: linux
+      summary: |-
+        status 'completed' with evidence_refs: scripts/test-token-instrument.sh 10/10 at gate step 270-1119-6wn6, 1/10 against the reverted script; --emit-tokens + tokens:/token_recur: views live; dogfooded into lenovinha's real log; 2026-09-11 baseline (4,480,590 tokens, 42 agents, 21 min) recorded in the closure event
+  - packet_id: no-cycle-knows-what-it-spent-in-tokens-so-a-42-agent-sweep-cost-4-5-million-and-the-fleet-ran-out-a-week-early
+    event:
+      type: note
+      ts: "2026-09-13T08:14:47Z"
+      host: linux
+      summary: |-
+        counter half delivered; rules half was already landed with the filing commit

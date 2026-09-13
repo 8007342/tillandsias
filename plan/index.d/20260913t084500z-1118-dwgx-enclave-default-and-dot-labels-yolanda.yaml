@@ -1,0 +1,73 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: safe-browser-enclave-confinement-and-dot-label-allowlist
+    field: status
+    value: completed
+    host: yolanda
+    ts: "2026-09-13T08:45:00Z"
+    reason: >
+      Both exit criteria met and both pinned with verified mutation controls.
+      The launcher's network default was the only flag in its podman array that
+      was not a confinement; the allowlist rejected every project named after a
+      domain.
+
+events:
+  - packet_id: safe-browser-enclave-confinement-and-dot-label-allowlist
+    event:
+      type: completed
+      host: yolanda
+      agent: windows-yolanda-claude-20260913t082232z
+      ts: "2026-09-13T08:45:00Z"
+      evidence_refs:
+        - "cargo test -p tillandsias-browser-mcp allowlist -> ok, 26 passed 0 failed (the packet's declared verifiable_closure), including accepts_project_label_containing_dots, dotted_project_still_refuses_a_mismatched_project and two_label_host_is_still_refused"
+        - "MUTATION CONTROL on the allowlist: reverting the shape check to the pre-fix exact-three form reds BOTH dot-label tests and leaves the two-label floor green, which is the correct polarity — the floor is invariant under that mutation by design"
+        - "litmus:browser-isolation-core-shape -> PASS 1/1, steps 2 and 3 (1118-dwgx) OK"
+        - "MUTATION CONTROL on the launcher: reverting the default to --network=${TILLANDSIAS_BROWSER_NETWORK:-host}, with the rationale comment left intact, reds step 2 — so the pin has teeth AND is comment-blind"
+      summary: >
+        TWO DEFECTS, BOTH LIVE, BOTH SMALL.
+
+        THE SECURITY HALF. scripts/launch-chromium.sh built its podman argv with
+        `--network=${TILLANDSIAS_BROWSER_NETWORK:-host}`. Every other flag in
+        that same array is a confinement — cap-drop=ALL, no-new-privileges,
+        read-only, userns=keep-id, tmpfs for /tmp and the chromium caches — and
+        the network line handed Chromium the host network with no proxy
+        filtering, undoing them by default. It now falls back through
+        TILLANDSIAS_ENCLAVE_NET to tillandsias-enclave, which is the spelling
+        check-enclave-network-internal.sh already uses, so an operator who
+        renames the enclave renames it once. TILLANDSIAS_BROWSER_NETWORK still
+        wins for a deliberate override.
+
+        THE ROUTING HALF. validate() in the browser-mcp allowlist required
+        exactly three host labels, so `web.tillandsias.org.localhost` — four
+        labels — was denied as a malformed host, and browser.open failed for
+        every project directory named after a domain. The shape is still
+        <service>.<project>.localhost: first label the service, LAST label
+        `localhost`, everything between rejoined as the project.
+
+        WIDENING THE COUNT IS SAFE AND THE TEST SAYS SO RATHER THAN THE COMMENT.
+        The rejoined project is compared for exact equality against the caller's
+        project_label immediately below, so `evil.com.acme.localhost` yields
+        project `com.acme` and matches nothing unless the caller really is that
+        project. That is pinned as a negative control
+        (dotted_project_still_refuses_a_mismatched_project asserts
+        ProjectMismatch with actual="tillandsias.org"), and the three-label
+        minimum is pinned separately so the widening cannot lower the floor.
+      note: >
+        THE PIN REPRODUCED THE DEFECT IT WAS WRITTEN TO PREVENT, caught by
+        verifying the step's command instead of trusting it. The first draft of
+        the litmus arm ran
+        `grep -o -- '--network=[^"]*' scripts/launch-chromium.sh | head -1` and
+        matched the RATIONALE COMMENT directly above the flag, because that
+        comment quotes `--network=host` while explaining why it is wrong. The
+        step would have read its own author's prose as the code it was pinning.
+
+        That is 823-u5zf's closure defect exactly — a scan finding
+        `argv_survives_wt_reparse` in three comments recording its deletion —
+        reproduced one packet later, in the pin written after learning it. Both
+        steps now strip comment lines before matching, and the mutation control
+        leaves the comment in place so the comment-blindness is exercised rather
+        than assumed.
+
+        The same verification also answered a question worth recording: the
+        stray match was NOT a second unfixed `--network=host` elsewhere in the
+        launcher. There is exactly one code occurrence.

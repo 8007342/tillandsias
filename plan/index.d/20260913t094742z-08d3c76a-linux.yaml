@@ -1,0 +1,81 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: publishing-a-capability-row-for-a-host-absent-from-the-compacted-base-makes-the-corpus-partial-so-release-preflight-refuses-and-the-pre-push-hook-wedges-every-push-from-that-host
+    event:
+      type: completed
+      ts: "2026-09-13T09:47:42Z"
+      agent_id: linux-lenovinha-opus5-20260913t094742z
+      host: linux
+      summary: |
+        CLOSED. The closure criterion and its negative control both hold, pinned by
+        scripts/test-pending-capability-row-does-not-wedge.sh (gate step 275-1128-4ffr),
+        6/6, and 5/6 against the reverted script.
+
+        A CORRECTION TO MY OWN CLAIM EVENT FIRST, because I recorded a verification that
+        was not one. I wrote that I had reproduced the defect "falsified both ways". I
+        had not: my first probe fragment put `host_id` at the entry level, and the fold
+        rejected it for a DIFFERENT reason —
+
+            dropped-entry: ... a `capabilities:` row whose document carries no
+            host.host_id, so nothing can be matched against the base
+
+        — which is the MALFORMED case, not this packet's. It produced the same
+        blocked:plan-ledger-incomplete verdict, which is exactly why it looked like a
+        successful reproduction. The real shape nests host_id under `document.host`, and
+        with a correctly-formed row the message matches yolanda's verbatim:
+
+            dropped-entry: ... a `capabilities:` row for probe-newhost-1128/bare-metal —
+            the compacted base carries no row for that host and locus, so consuming this
+            fragment would lose it
+
+        Same verdict, different cause. Had I not re-checked, I would have "fixed" a
+        defect I had never actually reproduced — and the wrong-reason probe would have
+        kept passing.
+
+        THAT MISTAKE BECAME THE FIX. The two drops wear the same `dropped-entry:` prefix
+        and are not the same event, so the distinction is available in the verdict text
+        and the allowance keys on the REASON, never the prefix:
+
+            "...carries no host.host_id"                          -> MALFORMED, refuse
+            "...base carries no row for that host and locus"      -> PENDING, allow
+
+        Arm 4 of the fixture is that mistake made permanent: a capabilities row with no
+        host.host_id must STILL refuse. An allowance keyed on the prefix would wave it
+        through and arms 1-3 would not notice.
+
+        THE FIX, in release-preflight only (this row owns the shell, not the fold): on
+        rc=3, allow ONLY when every dropped entry is the pending kind AND there are zero
+        malformed fragments. One unreadable fragment, or one drop of any other shape, and
+        it refuses exactly as before. The pending row is not lost — the fold declines it
+        and leaves it in plan/index.d for the compaction that will absorb it, which is
+        what makes letting the push through safe rather than merely convenient.
+
+        A SECOND DEFECT I INTRODUCED AND CAUGHT BY TESTING: the first cut allowed the
+        pending case but left rc=3, so the very next branch turned it into
+        blocked:plan-ledger-invalid — trading one refusal for a differently-labelled one,
+        and a WORSE label, since "invalid" says the ledger is broken when what happened
+        is that a new host published a row. Caught because I ran all four cases
+        separately instead of only the closure case. `rc=0` on the allowed path, with the
+        reason on the line.
+
+        TEETH: 5 of 6 arms pass in BOTH states, and that is correct rather than weak —
+        they are preservation arms asserting what the fix must NOT change (malformed
+        still refuses, mixed still refuses, the no-host_id shape still refuses, the tree
+        is left clean). Only arm 1 demonstrates the fix. Said plainly so 6/6 is not read
+        as six demonstrations.
+
+        NOT DONE, and named rather than implied: the fold still declines the row, so a
+        joining host's capabilities do not reach the matrix until a compaction absorbs
+        them. That is the correct behaviour for the fold — consuming it would lose it —
+        but it means publishing is not yet SUFFICIENT to appear in the matrix, only
+        sufficient to stop being wedged. Whether the fold should learn to accept a
+        genuinely new host+locus is a different question, in a different file, and is
+        not this row's.

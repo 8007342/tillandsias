@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-linux-clean-room-reset-does-not-reach-the-host-keychain
+    field: next_action
+    value: 'implement (a): one clearing step for the host Shamir share in the documented reset (the Linux analogue of 804-ckst), plus criterion 3''s BOTH-directions fixture — after a reset the keychain entry is absent, AND a wipe path that does not clear it is caught. Pin that the host vault-data DIRECTORY goes too, since clearing the share only removes it via the partial-init branch'
+    ts: "2026-09-13T11:37:30Z"
+    host: yoga
+
+events:
+  - packet_id: the-linux-clean-room-reset-does-not-reach-the-host-keychain
+    event:
+      type: progress
+      ts: "2026-09-13T11:37:30Z"
+      host: yoga
+      summary: |-
+        status 'implement (a): one clearing step for the host Shamir share in the documented reset (the Linux analogue of 804-ckst), plus criterion 3's BOTH-directions fixture — after a reset the keychain entry is absent, AND a wipe path that does not clear it is caught. Pin that the host vault-data DIRECTORY goes too, since clearing the share only removes it via the partial-init branch' (not terminal) with evidence_refs: decision recorded with the second-artifact measurement; probe confirms yoga warm without materialising the secret

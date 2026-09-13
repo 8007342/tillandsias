@@ -73,9 +73,18 @@ use std::path::{Path, PathBuf};
 /// something does is the kind of quiet defect this ledger is built to refuse.
 /// Fold behaviour is otherwise unchanged: same key, same lattice, same order
 /// independence, so every fragment already on disk folds identically.
+/// The LWW channels a fragment may carry. `fields:` is the canonical
+/// spelling; `status:` is the alias `set-field` emits (642-fedr). This list
+/// is a named const rather than a literal in the loop below because the
+/// coverage assertion in `compaction_text_tests` reads it: a channel read
+/// through a loop variable never appears as a literal `.get("…")`, so a
+/// source-text scan alone cannot see it (1063-nraf; 1157-ghmi — the guard
+/// stayed green while compaction dropped fields:-spelled corrections).
+pub(crate) const LWW_CHANNELS: &[&str] = &["fields", "status"];
+
 fn lww_entries(doc: &Value) -> Vec<&Value> {
     let mut out: Vec<&Value> = Vec::new();
-    for channel in ["fields", "status"] {
+    for channel in LWW_CHANNELS {
         if let Some(seq) = doc.get(channel).and_then(Value::as_sequence) {
             out.extend(seq.iter());
         }
@@ -1228,10 +1237,15 @@ pub fn compact_text(index: &Path) -> Result<CompactionText, String> {
     // ORDER 1123-k3mq: status writes the ladder refuses, so the caller can say so.
     let mut discarded_status: Vec<(String, String, String, String)> = Vec::new();
     for frag in &fragments {
-        let Some(us) = frag.doc.get("status").and_then(Value::as_sequence) else {
-            continue;
-        };
-        for u in us {
+        // BOTH LWW channels, exactly as `lww_entries` folds them. This read
+        // used to be `doc.get("status")` alone, so a fragment written with the
+        // canonical `fields:` spelling folded for every reader and was
+        // INVISIBLE here: compaction rendered a base without the correction,
+        // then deleted the fragment that carried it. Isolated on yolanda
+        // 2026-09-13 by removing fragments one at a time — perfect correlation
+        // with the channel name — and caught by the real-ledger round-trip
+        // test, which is the whole reason that test exists.
+        for u in lww_entries(&frag.doc) {
             let (Some(pid), Some(field), Some(value)) = (
                 u.get("packet_id").and_then(Value::as_str),
                 u.get("field").and_then(Value::as_str),
@@ -3968,6 +3982,69 @@ plan_index:
         }
     }
 
+    /// A correction written under the CANONICAL `fields:` channel folds for
+    /// every reader (lww_entries lists it first) and used to be invisible to
+    /// compaction, which read `status:` alone — the candidate rendered without
+    /// it, folded to a different state, and the fragment carrying the intent
+    /// was deleted. Isolated on yolanda 2026-09-13 by removing fragments one at
+    /// a time. Pre-fix result: FAILS at assert_fold_equivalent.
+    #[test]
+    fn a_fields_spelled_correction_survives_the_compaction_round_trip() {
+        let d = scratch("fields-channel");
+        let index = d.join("plan/index.yaml");
+        std::fs::write(
+            d.join("plan/index.d/20260913t1245z-aaaa-h1.yaml"),
+            "fields:\n  - packet_id: alpha\n    field: next_action\n    value: the first two steps are done; nothing left is windows-lane\n    ts: \"2026-09-13T12:45:00Z\"\n    host: yolanda\n",
+        )
+        .expect("fields fragment");
+
+        let c = compact_text(&index).expect("compaction runs");
+        assert!(
+            c.candidate.contains("nothing left is windows-lane"),
+            "the fields:-spelled correction must reach the rendered base; pre-fix it was silently dropped"
+        );
+        assert_fold_equivalent(&index, COMMITTED);
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// The two fixes meet rather than coexist (lenovinha, 1123-k3mq): a
+    /// rung-lowering status write spelled under `fields:` was invisible twice
+    /// over — neither compacted NOR reported as discarded, since the reporting
+    /// branch sat inside the same `status:`-only read. After the channel list
+    /// is shared it is refused AND reported, like its `status:`-spelled twin.
+    #[test]
+    fn a_fields_spelled_rung_lowering_write_is_refused_and_reported() {
+        let d = scratch("fields-rung");
+        let index = d.join("plan/index.yaml");
+        std::fs::write(
+            &index,
+            "plan_index:\n  steps:\n    - packet_id: subject\n      order: 9991-bbbb\n      status: completed\n      title: t\n",
+        )
+        .expect("write base");
+        std::fs::write(
+            d.join("plan/index.d/20260913t1246z-bbbb-h2.yaml"),
+            "fields:\n  - packet_id: subject\n    field: status\n    value: ready\n    ts: \"2026-09-13T12:46:00Z\"\n    host: coordinator\n",
+        )
+        .expect("fields fragment");
+
+        let c = compact_text(&index).expect("compaction runs");
+        assert!(
+            !c.candidate.contains("status: ready"),
+            "a rung-lowering write must be refused whichever channel spelled it"
+        );
+        assert_eq!(
+            c.discarded_status.len(),
+            1,
+            "the refused fields:-spelled write must be REPORTED, not dropped in silence (the composition of 1123-k3mq with the channel fix)"
+        );
+        let (pid, discarded, retained, host) = &c.discarded_status[0];
+        assert_eq!(pid, "subject");
+        assert_eq!(discarded, "ready");
+        assert_eq!(retained, "completed");
+        assert_eq!(host, "coordinator");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
     /// The rendered text must parse to EXACTLY the same packets (and per-packet
     /// events) as the Value-domain fold — the strongest possible guarantee that
     /// compaction did not change state while preserving format.
@@ -4279,15 +4356,35 @@ plan_index:
         }
     }
 
-    /// THE ASSERTION THAT GENERALISES. Read this file's own source, find every
-    /// top-level key the folder pulls out of a fragment, and require it to be
-    /// covered above. Adding a channel to the folder without adding a probe
-    /// fails here — which is the only mechanism that makes the next channel
-    /// safe rather than merely making this one safe.
+    /// THE ASSERTION THAT GENERALISES — from TWO inputs. (1) Read this file's
+    /// own source and find every literal `frag.doc.get("…")` / `d.doc.get("…")`
+    /// site. (2) Read `LWW_CHANNELS` directly. The union must be covered by
+    /// `CHANNEL_PROBES`. The literal scan alone was blind (1157-ghmi):
+    /// `lww_entries` reads its channels through a loop variable, so "fields"
+    /// and "status" never appeared as literals, "fields" had no probe, and
+    /// this assertion stayed green while compaction silently dropped
+    /// fields:-spelled corrections (1156-eif4) — a binding assembled from a
+    /// variable is invisible to every name-based scan (1063-nraf). Adding a
+    /// channel to either input without a probe fails here, which is the only
+    /// mechanism that makes the next channel safe rather than this one.
     #[test]
     fn the_set_of_fragment_channels_under_test_is_the_set_the_folder_reads() {
-        let src = include_str!("fragments.rs");
+        // COMMENTS ARE STRIPPED BEFORE THE SCAN. The doc comment above quotes
+        // the literal shape it looks for, and the first run of this widened
+        // assertion matched its own prose and demanded a probe for "…" — the
+        // pin-reads-its-author's-comment shape (823-u5zf, 1118-dwgx). Code
+        // lines only; the mutation control that plants a literal site plants
+        // it in code.
+        let src_code: String = include_str!("fragments.rs")
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("//"))
+            .collect::<Vec<&str>>()
+            .join("\n");
+        let src = src_code.as_str();
         let mut read: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        for channel in LWW_CHANNELS {
+            read.insert((*channel).to_string());
+        }
         for (pat, _) in [("frag.doc.get(\"", 0), ("d.doc.get(\"", 0)] {
             let mut rest = src;
             while let Some(i) = rest.find(pat) {
@@ -4325,6 +4422,13 @@ plan_index:
         (
             "status",
             "status:\n  - packet_id: alpha\n    field: status\n    value: implemented\n    \
+             ts: \"2026-02-02T00:00:00Z\"\n    host: probe\n",
+        ),
+        (
+            // The canonical LWW spelling, reachable only by hand-writing a
+            // fragment — the one that had no probe (1157-ghmi).
+            "fields",
+            "fields:\n  - packet_id: alpha\n    field: next_action\n    value: probed through the canonical channel\n    \
              ts: \"2026-02-02T00:00:00Z\"\n    host: probe\n",
         ),
         (

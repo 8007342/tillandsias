@@ -1,0 +1,69 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by the macuahuitl coordinator on 2026-09-13 from lenovinha's audit
+# (yolanda's question): three consumers in main.rs hardcode one spelling of
+# the LWW channel shape; the canonical list exists and is not canonical.
+packets:
+  - packet_id: three-ledger-consumers-hardcode-the-status-spelling-of-the-lww-channel-so-a-fields-spelled-write-is-invisible-to-carry-forward-and-to-both-closure-evidence-scans
+    order: 1160-nvzs
+    status: ready
+    kind: bugfix
+    priority: p1
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [ledger, plan, guard, crdt, integrity]
+    estimated_hours: 3
+    verifiable_closure: "cargo test -p tillandsias-plan no_ledger_consumer_reads_an_lww_channel_by_literal_outside_lww_entries: a scan of crates/tillandsias-plan/src/*.rs, comment lines stripped, that assembles its needle at runtime from LWW_CHANNELS and the `.get(` shape (980-ja2m: match on the declaration, never on quoted history) and refuses any `.get(\"<channel>\").and_then(Value::as_sequence)` site outside fn lww_entries (pre-fix result: FAILS naming main.rs carry_forward_gaps and the two closure-evidence-check scans; measured lenovinha 2026-09-13 — `grep -c 'get(\"fields\")' main.rs` is 0 while three sites read status:); plus one behavioural arm per site: a fields:-spelled next_action write is SEEN by carry_forward_gaps (pre-fix: the guard fires a false 'touched with no next_action' advisory — live on 997-e4v2 today) and a fields:-spelled closure write is an offender to closure-evidence-check (pre-fix: never an offender, fails open); NEGATIVE CONTROL: a status:-spelled write behaves identically before and after."
+    owned_files:
+      - crates/tillandsias-plan/src/main.rs
+      - crates/tillandsias-plan/src/fragments.rs
+    title: |
+      Four consumers iterate lww_entries and are correct after 1156-eif4; three more read `doc.get("status").and_then(as_sequence)` directly — carry_forward_gaps, and both scans in closure-evidence-check — so a correction spelled under the canonical `fields:` channel is invisible to each. Two of the three are guards and fail OPEN (an unscanned write is never an offender); the third fails LOUD (it scans for an omission, so an invisible next_action fires a false advisory that trains readers to ignore the guard). The canonical list exists and nothing forces a consumer to use it.
+    context: |
+      MEASURED (lenovinha, 2026-09-13, from yolanda's question "do other
+      consumers hardcode one channel?"): consumers that iterate lww_entries —
+      four, all in fragments.rs, all correct after 1156-eif4. Consumers that
+      hardcode one spelling in the fragment-channel SHAPE, `doc.get("status")
+      .and_then(as_sequence)`, which only makes sense for the LWW channel:
+      carry_forward_gaps, and the two scans of "closure-evidence-check" (the
+      LWW closure scan and the verifiable_closure reassignment scan), all in
+      main.rs. The first site names the hazard on the line above the bug:
+      "The LWW channel. `field:` is ANY field, not just status — the key is
+      misnamed and plan/index.d/README.md says so." Live exposure: yolanda's
+      two fields:-spelled fragments (997-e4v2, 793-zumy) are invisible to
+      carry_forward_gaps now, so that guard fires a false "touched with no
+      next_action" advisory on 997-e4v2 — recorded in the drill as known and
+      temporary. Polarity (yolanda): an invisible input fails OPEN in a
+      consumer scanning for offenders and LOUD in one scanning for
+      omissions; the loud one is more dangerous per instance, because a
+      reader who investigates finds a good next_action in the fragment and
+      concludes the ADVISORY is broken.
+
+      WHY 1157-ghmi DID NOT CLOSE THIS: making the coverage assertion read
+      LWW_CHANNELS protects the guard in fragments.rs; it does nothing for
+      consumers elsewhere, because nothing forces a consumer to use the list
+      at all. The class closes scan-side.
+
+      WHAT TO BUILD. (1) The three sites call lww_entries (make it
+      pub(crate)). (2) A test in fragments.rs (or a small guard module)
+      scans crates/tillandsias-plan/src/*.rs with comment lines stripped,
+      assembles its needle at runtime from LWW_CHANNELS and the `.get(`
+      shape so it can never match its own quoted history (980-ja2m), and
+      refuses any literal LWW-channel read outside fn lww_entries. (3) One
+      behavioural arm per consumer with a fields:-spelled fragment.
+
+      NOT IN SCOPE: renaming the channel; changing set-field's spelling.
+    exit_criteria:
+      - 'the scan test refuses a literal `.get("status")`/`.get("fields")` sequence read outside lww_entries, with the needle assembled from LWW_CHANNELS (pre-fix result: FAILS naming the three main.rs sites)'
+      - 'carry_forward_gaps sees a fields:-spelled next_action write; the false advisory on 997-e4v2 stops (pre-fix result: FAILS — fires)'
+      - 'both closure-evidence-check scans treat a fields:-spelled write as they treat a status:-spelled one (pre-fix result: FAILS — invisible, never an offender)'
+      - 'NEGATIVE CONTROL: status:-spelled writes behave identically before and after; the four lww_entries consumers are untouched'
+    events:
+      - type: filed
+        ts: "2026-09-13T16:05:53Z"
+        agent_id: "linux-macuahuitl-fable-20260913t160553z"
+        host: macuahuitl
+        summary: |
+          Filed by the coordinator from lenovinha's audit; judged its own row
+          (a different mechanism from 1157-ghmi's blind guard). Coordinator's
+          next cycle unless lenovinha claims it.

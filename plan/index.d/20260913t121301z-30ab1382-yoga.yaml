@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-archiver-ruby-fixture-refuses-inside-the-gate-and-passes-standalone-on-the-same-tree-on-two-hosts-with-opposite-ruby-layouts
+    field: next_action
+    value: 'LEFT: C2 link the named stray-gate mechanism to this fixture''s rc=3 (named and plausible, not confirmed — my earlier ''criterion 2 answered'' was overstated); C3 catch one refusal with the print armed, which has never happened; C4 exhibit arm 5''s scratch case, only arm 4''s race is shown. C1 and C5 hold by execution on current trunk'
+    ts: "2026-09-13T12:13:01Z"
+    host: yoga
+
+events:
+  - packet_id: the-archiver-ruby-fixture-refuses-inside-the-gate-and-passes-standalone-on-the-same-tree-on-two-hosts-with-opposite-ruby-layouts
+    event:
+      type: progress
+      ts: "2026-09-13T12:13:01Z"
+      host: yoga
+      summary: |-
+        status 'LEFT: C2 link the named stray-gate mechanism to this fixture's rc=3 (named and plausible, not confirmed — my earlier 'criterion 2 answered' was overstated); C3 catch one refusal with the print armed, which has never happened; C4 exhibit arm 5's scratch case, only arm 4's race is shown. C1 and C5 hold by execution on current trunk' (not terminal) with evidence_refs: verified by execution: fixture 5/5, print present, no captured refusal in the ledger

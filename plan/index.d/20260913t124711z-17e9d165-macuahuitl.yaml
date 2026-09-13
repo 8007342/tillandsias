@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: compaction-reads-only-the-status-lww-channel-so-a-fields-spelled-correction-folds-for-every-reader-and-is-silently-dropped-when-the-fragment-is-compacted
+    event:
+      type: completed
+      ts: "2026-09-13T12:47:11Z"
+      agent_id: linux-macuahuitl-fable-20260913t124711z
+      host: macuahuitl
+      summary: |
+        Landed at linux-next@a22963fdf (macuahuitl, cleared with lenovinha who owns the
+        adjacent 1123-k3mq reporting). compact_text iterates lww_entries; both new
+        arms green, both FAIL on the status-only mutant; lenovinha's three ladder
+        tests unchanged as the control; enumeration with flags: all targets 349 ->
+        351, --lib 308 -> 310. Method on the row above the diff: yolanda's bisection
+        on real data (remove fragments one at a time) — both functions correct in
+        isolation, only the pairing wrong. Criterion 4 (real-ledger test green on
+        trunk after windows-next relays its fields: fragment) closes at the next
+        relay.

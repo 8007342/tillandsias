@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-ready-row-whose-owned-files-a-landed-fix-touched-since-filing-is-a-staleness-candidate-the-pass-must-surface
+    event:
+      type: progress
+      ts: "2026-09-13T11:43:13Z"
+      agent_id: linux-macuahuitl-fable-20260913t114313z
+      host: macuahuitl
+      summary: |
+        FIRST PASS landed at linux-next@320296380 (macuahuitl): scripts/check-stale-ready-rows.sh
+        (cites-the-order query, lenovinha's shape from 1127-apa8) with fixture
+        scripts/test-stale-ready-rows.sh 9/9, the coordination skill step, exit 0
+        advisory. MEASURED on the live tree: 93 candidates of 509 ready rows
+        (among them 1140-d6ni, 1132-r4mt, 1135-z8gn; and 1141-vf9w, which is ready
+        on purpose — the list is candidates, not verdicts). LEFT on the row: the
+        owned_files pass (criterion 1: 1085-g52w against b026372ff, which this pass
+        cannot reach since b026372ff cites 1124-7f3u), its negative control, and
+        the under-60-s measurement for that pass. Released to ready for whoever
+        takes the second pass.

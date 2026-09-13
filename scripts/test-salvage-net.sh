@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @trace order:874-w2gc
+# @trace order:874-w2gc, order:1148-3439
 # test-salvage-net.sh — pin the salvage net END TO END: push, round-trip,
 # same-day collision, deletion protection, exemption ordering, and the sweep
 # that makes rescued work visible.
@@ -143,55 +143,121 @@ if want ordering; then
     rm -rf "$D"
 fi
 
-# ── 5. sweep: unseen refs become ledger events exactly once; refusals report ─
+# ── 5. sweep: unseen refs become standing per-host ledger lines exactly once
+#       (874-w2gc's original consumer contract); 1148-3439 re-points this at
+#       plan/salvage-refs.d/<host>.md (never archived, no plan binary needed)
+#       because --apply used to file through tillandsias-plan onto packet
+#       874-s8vf, which the ledger refuses events on once archived — apply
+#       filed NOTHING from that point on while report mode kept counting
+#       fine, which is exactly the gap a pure argv-capture stub could not
+#       have caught (it never modeled "the target packet is archived").
 if want sweep; then
     D="$(mktemp -d "${TMPDIR:-/tmp}/salvage-net-test.XXXXXX")"
     mk_fixture "$D"
-    echo dirt > "$D/work/tracked.txt"
-    TILLANDSIAS_SALVAGE_ROOT="$D/work" bash "$SALVAGE" swept >/dev/null
-    # Sweep root: a minimal ledger layout plus a stub plan bin that RECORDS its
-    # argv and writes a fragment, so run 2 can prove idempotence via the same
-    # seen-detection production uses.
-    mkdir -p "$D/root/plan/index.d" "$D/root/.git"
+
+    # Two salvages from the SAME work tree, so the fixture gets both an
+    # ancestry "on:" case and a "none" case without a second script.
+    echo merged-dirt > "$D/work/tracked.txt"
+    out_merged="$(TILLANDSIAS_SALVAGE_ROOT="$D/work" bash "$SALVAGE" ledger-merged | tail -1)"
+    ref_merged="${out_merged#ok:salvaged:}"; ref_merged="${ref_merged%:*}"
+    sha_merged="${out_merged##*:}"
+    echo orphan-dirt > "$D/work/tracked.txt"
+    out_orphan="$(TILLANDSIAS_SALVAGE_ROOT="$D/work" bash "$SALVAGE" ledger-orphan | tail -1)"
+    ref_orphan="${out_orphan#ok:salvaged:}"; ref_orphan="${ref_orphan%:*}"
+    sha_orphan="${out_orphan##*:}"
+
+    # Give the fixture's OWN origin a linux-next branch that actually
+    # contains sha_merged, so the ancestry check has a real "on:linux-next"
+    # to find; sha_orphan is never referenced by any branch, so it must read
+    # "none". Neither is on main: both are salvage commits descended FROM
+    # main's tip, not ancestors of it.
+    git -C "$D/origin.git" branch linux-next "$sha_merged"
+
+    # Sweep root: its own throwaway repo whose "origin" IS the bare remote
+    # above, so ls-remote sees the salvage refs and the branch just created.
+    # No plan binary and no plan/index* ledger involved anywhere below — the
+    # whole point of 1148-3439 is that the sweep no longer needs either.
+    mkdir -p "$D/root"
     ( cd "$D/root" && git init -q -b main . >/dev/null 2>&1 )
     ( cd "$D/root" && git remote add origin "$D/origin.git" )
-    : > "$D/root/plan/index.yaml"
-    cat > "$D/stub-plan" <<STUB
-#!/usr/bin/env bash
-printf '%s\n' "\$*" >> "$D/stub-calls.log"
-printf 'events-from-stub: %s\n' "\$*" >> "$D/root/plan/index.d/stub.yaml"
-exit 0
-STUB
-    chmod +x "$D/stub-plan"
+    ( cd "$D/root" && git fetch -q origin >/dev/null 2>&1 )
     mkdir -p "$D/state"
     printf '{"r":1}\n{"r":2}\n{"r":3}\n' > "$D/state/overlap-refusals.jsonl"
     env_sweep() {
         TILLANDSIAS_SALVAGE_ROOT="$D/root" \
-        TILLANDSIAS_SWEEP_PLAN_BIN="$D/stub-plan" \
         TILLANDSIAS_CYCLE_STATE_DIR="$D/state" \
-        TILLANDSIAS_AGENT_ID=linux-fixture-sweep-20260101t000000z \
             bash "$SWEEP" "$@"
     }
+    env_checker() {
+        TILLANDSIAS_SALVAGE_ROOT="$D/root" bash "$REAL_ROOT/scripts/check-salvage-refs-ledger.sh"
+    }
+
     out="$(env_sweep | tail -1)"
     case "$out" in
-        ok:salvage-sweep:refs=1:new=1:filed=0:refusals-new=3) ok "report mode counts without writing" ;;
+        ok:salvage-sweep:refs=2:new=2:filed=0:refusals-new=3) ok "report mode counts without writing" ;;
         *) bad "report-mode verdict: $out" ;;
     esac
-    [ -f "$D/stub-calls.log" ] && bad "report mode invoked the plan writer" || ok "report mode never touched the ledger"
+    if [ -d "$D/root/plan/salvage-refs.d" ] && [ -n "$(ls -A "$D/root/plan/salvage-refs.d" 2>/dev/null)" ]; then
+        bad "report mode wrote to plan/salvage-refs.d"
+    else
+        ok "report mode never touched the salvage-refs ledger"
+    fi
+
     out="$(env_sweep --apply | tail -1)"
     case "$out" in
-        ok:salvage-sweep:refs=1:new=1:filed=1:refusals-new=3) ok "apply mode files the unseen ref (exit criterion 1)" ;;
+        ok:salvage-sweep:refs=2:new=2:filed=2:refusals-new=3) ok "apply mode files both unseen refs (exit criterion 1)" ;;
         *) bad "apply-mode verdict: $out" ;;
     esac
-    grep -q "append-event the-salvage-net-had-never-caught-anything-and-could-not progress" "$D/stub-calls.log" \
-        && grep -q "refs/heads/salvage/" "$D/stub-calls.log" \
-        && ok "the event lands on the salvage packet and names the ref" \
-        || bad "stub argv wrong: $(cat "$D/stub-calls.log")"
+
+    ledger_file=""
+    for cand in "$D/root/plan/salvage-refs.d"/*.md; do
+        [ -e "$cand" ] || continue
+        ledger_file="$cand"
+        break
+    done
+    if [ -n "$ledger_file" ]; then
+        ok "apply mode created a per-host plan/salvage-refs.d/<host>.md file"
+    else
+        bad "no plan/salvage-refs.d/<host>.md file was created"
+    fi
+
+    line_merged="$(grep -F "$ref_merged" "$ledger_file" 2>/dev/null)"
+    line_orphan="$(grep -F "$ref_orphan" "$ledger_file" 2>/dev/null)"
+    printf '%s\n' "$line_merged" | grep -qF '| on:linux-next |' \
+        && ok "the ref merged into linux-next gets ancestry verdict on:linux-next" \
+        || bad "merged ref ancestry line wrong: $line_merged"
+    printf '%s\n' "$line_orphan" | grep -qF '| none |' \
+        && ok "the ref on no branch gets ancestry verdict none" \
+        || bad "orphan ref ancestry line wrong: $line_orphan"
+    printf '%s\n' "$line_merged" | grep -qE '^\| [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z \| [^|]+ \| [0-9a-f]{40} \| on:linux-next \| [0-9-]+ \|$' \
+        && ok "the ledger line matches the five-field grammar" \
+        || bad "ledger line does not match the documented grammar: $line_merged"
+
     out="$(env_sweep --apply | tail -1)"
     case "$out" in
-        ok:salvage-sweep:refs=1:new=0:filed=0:refusals-new=0) ok "second sweep is idempotent; refusal cursor advanced" ;;
+        ok:salvage-sweep:refs=2:new=0:filed=0:refusals-new=0) ok "second sweep is idempotent; refusal cursor advanced" ;;
         *) bad "idempotence verdict: $out" ;;
     esac
+
+    good_out="$(env_checker)"; good_rc=$?
+    case "$good_out" in
+        ok:salvage-refs-ledger:*)
+            [ "$good_rc" -eq 0 ] && ok "check-salvage-refs-ledger.sh passes on the produced file" \
+                                  || bad "checker exited $good_rc on a good file: $good_out" ;;
+        *) bad "checker verdict on a good file: $good_out" ;;
+    esac
+
+    # NEGATIVE CONTROL: a line missing its ancestry field (four fields, not
+    # five) must be refused, never silently accepted.
+    printf '| 2026-01-01T00:00:00Z | refs/heads/salvage/x/y | %s | 0 |\n' "$sha_orphan" >> "$ledger_file"
+    bad_out="$(env_checker)"; bad_rc=$?
+    case "$bad_out" in
+        violation:salvage-refs-ledger:*)
+            [ "$bad_rc" -ne 0 ] && ok "check-salvage-refs-ledger.sh refuses a four-field line" \
+                                 || bad "checker did not exit non-zero on a four-field line" ;;
+        *) bad "checker did not name a violation on a four-field line: $bad_out" ;;
+    esac
+
     rm -rf "$D"
 fi
 

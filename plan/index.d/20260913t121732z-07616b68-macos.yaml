@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-thirty-seven-standing-gnu-only-idioms-the-advisory-found-on-its-first-run
+    event:
+      type: evidence
+      ts: "2026-09-13T12:17:32Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260913t115114z
+      host: macos
+      summary: |
+        BASELINE RE-MEASURED BY EXECUTION on macOS (BSD userland, tlatoanis-macbook-air, Apple M5) against osx-next 135c4b7ae, 2026-09-13. Shell-only; no build of any kind was needed.
+
+          filed baseline, e5d5ac0af   23 silent-degrade / 14 loud-fail = 37
+          now,            135c4b7ae   16 silent-degrade / 12 loud-fail = 28
+
+        THE BASELINE IS DOWN 9, which is what this packet's deliverable asks for, AND THE ROW CORRECTLY STAYS READY. It was surfaced by a stale-row pass as a candidate — four landed commits cite this order while the row folds `ready` — and that reading is wrong for this packet specifically: the closure here is a TREND, not a state, so every slice cites the order and none of them completes it. The coordinator has recorded the exclusion on 1144-jfr5 with this row as the instance: trend-closure and multi_cycle rows get tagged by that pass, not listed.
+
+        REMAINING, BY CLASS, parsed from the finding half of each line:
+
+          stat -c        14    7 of them in scripts/clamp-ca-material.sh alone
+          sed -i          9
+          readlink -f     2    both in scripts/plan-binary-probe.sh
+          rg, no path     1    scripts/check-ripgrep-available.sh
+          find -printf    1    scripts/release-preflight.sh
+          date -d         1    scripts/test-check-bash-dialect.sh
+
+        A CORRECTION TO MY OWN FIRST NUMBER, recorded because the wrong one is the easy one to reproduce: my first pass reported 39 across those classes. It grepped whole output lines, so idiom names appearing in the REMEDY text ("a stat wrapper", "e.g. rg PATTERN") were counted as findings. Parsing only the text before the em-dash gives 28, which agrees with the count of cited file:line entries. If you re-measure and get a number in the high thirties, this is why.
+
+        THE FLOOR IS 1, NOT 0. One of the 28 is the guard's own evidence: scripts/test-portability-idioms.sh carries a deliberate `sed -i` as the SUBJECT of its own arm. This packet already says such entries must not be "cleaned up" — it was 2 such entries when filed (:61 and :63) and is 1 now (:73). A claimer driving toward zero will hit that floor, and deleting the fixture's evidence to reach it would remove the only proof the guard catches anything. Target 1, and say so in the commit that reaches it.

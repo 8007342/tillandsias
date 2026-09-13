@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-capability-row-guard-judges-freshness-on-whichever-locus-sorts-first-so-a-multi-locus-host-can-never-clear-its-own-expired-verdict-by-publishing
+    field: status
+    value: in_progress
+    ts: "2026-09-13T12:21:00Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-capability-row-guard-judges-freshness-on-whichever-locus-sorts-first-so-a-multi-locus-host-can-never-clear-its-own-expired-verdict-by-publishing
+    event:
+      type: progress
+      ts: "2026-09-13T12:21:00Z"
+      host: lenovinha
+      summary: |-
+        status 'in_progress' (not terminal) with evidence_refs: lenovinha-local@9abd36fdb
+  - packet_id: the-capability-row-guard-judges-freshness-on-whichever-locus-sorts-first-so-a-multi-locus-host-can-never-clear-its-own-expired-verdict-by-publishing
+    event:
+      type: note
+      ts: "2026-09-13T12:21:00Z"
+      host: lenovinha
+      summary: |-
+        coordinator hold on lenovinha's behalf: the fix (9abd36fdb), arms 14-15 (1ad2c8693) and a filing (524bf607c) are committed on lenovinha, gated green twice, push refused on an expired credential (refused:land:auth-failed); the claim could not be pushed by the host that holds the work, so plan_next offered a nearly-done p1 row to every other host (814-iyu7's shape via auth)

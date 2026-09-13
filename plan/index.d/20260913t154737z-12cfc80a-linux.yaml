@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-capability-row-guard-judges-freshness-on-whichever-locus-sorts-first-so-a-multi-locus-host-can-never-clear-its-own-expired-verdict-by-publishing
+    field: status
+    value: completed
+    ts: "2026-09-13T15:47:37Z"
+    host: linux
+
+events:
+  - packet_id: the-capability-row-guard-judges-freshness-on-whichever-locus-sorts-first-so-a-multi-locus-host-can-never-clear-its-own-expired-verdict-by-publishing
+    event:
+      type: completed
+      ts: "2026-09-13T15:47:37Z"
+      host: linux
+      summary: |-
+        status 'completed' with evidence_refs: beff45e60
+  - packet_id: the-capability-row-guard-judges-freshness-on-whichever-locus-sorts-first-so-a-multi-locus-host-can-never-clear-its-own-expired-verdict-by-publishing
+    event:
+      type: note
+      ts: "2026-09-13T15:47:37Z"
+      host: linux
+      summary: |-
+        landed ok:land:beff45e60:attempt-2 (the land MERGED rather than rebased, so the fix commit 9abd36fdb survives verbatim and is an ancestor of origin/linux-next — both refs are checkable). 15/15 fixture arms, six failing pre-fix; arm 15 confirmed on esme's real two-locus hardware pre-fix. Known limits recorded on the row.

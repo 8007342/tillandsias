@@ -95,12 +95,49 @@ fi
 # is the whole question, so both lists count.
 _item="$(printf '%s\n' "$_search" | grep -oE '"/org/freedesktop/secrets/[^"]+"' | head -1 | tr -d '"')"
 
+# THE KEYCHAIN IS NOT THE ONLY PLACE A SHARE LIVES (900-z3kv, widened by
+# pirria's 1149-vgn2). vault reads the keychain OR a host fallback file, and on
+# pirria a `fallback_vault-shamir-share-v1` under the init cache kept every
+# reset WARM since 2026-09-01 while this probe certified the host COLD — and the
+# cold verdict's own text asserts "the resync path IS exercised", which was
+# exactly false there. That is this row's class inside the instrument the row
+# delivered: a check that RAN and reported a property it was not measuring.
+#
+# EXISTENCE ONLY, never contents. Criterion 4 forbids materialising the secret,
+# and `secret-tool search --all` put live tokens into two transcripts on
+# 2026-08-25; a file's presence answers the question completely, exactly as
+# Created/Modified answer it for the keychain item.
+_fallback_dir="${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias"
+_fallback_hit=""
+for _f in "$_fallback_dir"/fallback_"$SHARE_ATTR" "$_fallback_dir"/fallback_"$SHARE_ATTR".*; do
+    [ -e "$_f" ] || continue
+    _fallback_hit="$_f"
+    break
+done
+
+if [ -z "$_item" ] && [ -n "$_fallback_hit" ]; then
+    # No keychain item, but a fallback share is present: vault will recover from
+    # it and the room is NOT cold. Reporting cold here is the false-cold.
+    _fb_mtime="$(date -u -r "$_fallback_hit" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
+    if [ "$FORMAT" = "md" ]; then
+        printf '## Credential state
+
+- **verdict**: `credential-warm`
+- no keychain entry, but a FALLBACK share is present: `%s` (modified %s)
+- vault recovers from the fallback, so `--init` will NOT re-initialize and the resync path is **not** exercised (900-z3kv, 1149-vgn2)
+'             "$_fallback_hit" "$_fb_mtime"
+    else
+        echo "credential-state:warm (no keychain entry, but fallback share present at $_fallback_hit, modified $_fb_mtime; the resync path was NOT exercised by this run — 900-z3kv/1149-vgn2)"
+    fi
+    exit 0
+fi
+
 if [ -z "$_item" ]; then
     if [ "$FORMAT" = "md" ]; then
-        printf '## Credential state\n\n- **verdict**: `credential-cold`\n- no `%s` entry for service `%s` in the host keychain\n- the clean room genuinely starts without an unseal share; `--init` will re-initialize Vault and the keychain-volume resync path IS exercised\n' \
+        printf '## Credential state\n\n- **verdict**: `credential-cold`\n- no `%s` entry for service `%s` in the host keychain, and no fallback share on disk\n- the clean room genuinely starts without an unseal share; `--init` will re-initialize Vault and the keychain-volume resync path IS exercised\n' \
             "$SHARE_ATTR" "$KEYCHAIN_SERVICE"
     else
-        echo "credential-state:cold (no $SHARE_ATTR in the host keychain; --init will re-initialize and the resync path IS exercised)"
+        echo "credential-state:cold (no $SHARE_ATTR in the host keychain and no fallback share on disk; --init will re-initialize and the resync path IS exercised)"
     fi
     exit 0
 fi

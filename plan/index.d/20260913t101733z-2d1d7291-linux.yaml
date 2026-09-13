@@ -1,0 +1,52 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-capability-row-guard-judges-freshness-on-whichever-locus-sorts-first-so-a-multi-locus-host-can-never-clear-its-own-expired-verdict-by-publishing
+    event:
+      type: progress
+      ts: "2026-09-13T10:17:33Z"
+      agent_id: linux-lenovinha-opus5-20260913t101733z
+      host: linux
+      summary: |
+        CLAIM — lenovinha. VERIFIED LIVE FIRST, on this host rather than trusting the
+        filing:
+
+          * row_ts() (:230-235) matches `index($0, "host:<h>\t") == 1` and `exit`s on the
+            first hit — host only, locus ignored.
+          * the matrix TODAY carries two loci for both Windows hosts:
+                yolanda       locus:in-guest / locus:windows-host
+                esmeraldinha  locus:in-guest / locus:windows-host
+            so both are exposed, exactly as the row says.
+
+        A SECOND SITE THE ROW DOES NOT NAME, found while reading: `row_present` (:256)
+        keys on `^host:$host\t` with the same host-only match. Fixing only row_ts would
+        leave a NEW hole — a host whose own-locus row is absent but which has a foreign-
+        locus row would be judged "present", then row_ts would find no own-locus ts, the
+        `[ -n "$ts" ]` age check would be skipped, and it would fall through to ok:. The
+        guard would answer "current" for a host that has never published its own locus.
+        So both sites move together, and the absent-own-locus case must answer `due:`,
+        which is what tells the host to publish.
+
+        THE LOCUS MUST BE DERIVED THE SAME WAY THE PROBE DERIVES IT, or the guard grades
+        against a locus the host never writes — which is this defect with a different
+        first cause. host-capability-probe.sh (:142-149): TILLANDSIAS_HOST_KIND=forge ->
+        in-guest; host_kind windows -> windows-host; else bare-metal. The guard has the
+        live probe document, so it can read host_kind from the same source.
+
+        NEGATIVE CONTROL I WILL NOT WEAKEN: a host whose OWN-locus row is genuinely older
+        than TILLANDSIAS_CAPABILITY_ROW_MAX_AGE must STILL answer expired. This packet
+        fixes WHICH ROW is judged, never whether staleness is enforced — and the easy
+        wrong fix (stop reading ts when the locus does not match) would silently retire
+        the age check for every multi-locus host.
+
+        NOTED IN PASSING, and it is tonight's theme: the comment at :253-255 already
+        records the pipefail+SIGPIPE inversion (795-imz3) and captures before matching
+        for exactly that reason. That hazard is well known in this file; the locus bug
+        is orthogonal to it.

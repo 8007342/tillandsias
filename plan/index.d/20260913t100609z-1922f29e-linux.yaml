@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: no-cycle-knows-what-it-spent-in-tokens-so-a-42-agent-sweep-cost-4-5-million-and-the-fleet-ran-out-a-week-early
+    event:
+      type: note
+      ts: "2026-09-13T10:06:09Z"
+      agent_id: linux-lenovinha-opus5-20260913t100609z
+      host: linux
+      summary: |
+        TWO HONESTY DEFECTS IN MY OWN INSTRUMENT, found by USING it rather than by
+        testing it. I emitted this cycle's record, read the views back, and both views
+        were saying something adjacent to what they claim — which is the exact class this
+        packet exists to remove.
+
+          1. token_recur RANKED A ZERO-SPEND LABEL. Two cycles under one label, both
+             subagent_tokens=0, rendered as
+                 top3=advance-work-from-plan-drain:tokens=0:runs=2
+             The top "token-expensive repeated work" was work that spent no tokens. A
+             label now counts toward recurrence only once it has actually cost
+             something.
+
+          2. token_max RENDERED `label=- cycle=-` ON A NON-EMPTY LOG. The max only
+             updated on `st > maxv`, so a window where every record spent 0 never set a
+             label, and the line was indistinguishable from having no data at all.
+             "The largest spend was 0, and here it is" and "there is nothing here" are
+             different answers and must not share a rendering. Now the first stamped
+             record always names a cycle.
+
+        Both pinned (15/15, was 13). Neither was reachable from the fixtures I wrote,
+        because every fixture arm I built used NON-ZERO spends — the fixture corpus was
+        unrepresentative of the first real host to use the thing, which spawns no
+        sub-agents at all. Dogfooding found in one reading what the test suite could not.
+
+        WORTH GENERALISING: the negative-control arms I was careful about all asked "does
+        a zero-agent cycle report zeros" — they did — and none asked "what do the RANKING
+        views say when everything is zero". A control that checks the record and not the
+        VIEW leaves the view unexamined.

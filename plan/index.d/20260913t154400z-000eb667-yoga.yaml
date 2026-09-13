@@ -1,0 +1,79 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-linux-clean-room-reset-does-not-reach-the-host-keychain
+    event:
+      type: implemented
+      ts: "2026-09-13T15:44:00Z"
+      agent_id: linux-yoga-claude-20260913t154400z
+      host: yoga
+      summary: |
+        (a) IMPLEMENTED as a clearer plus criterion 3's both-directions fixture. NOT yet
+        wired into the documented reset — that is the remaining step and it is the one
+        that changes what a destructive procedure does.
+
+        DELIVERED scripts/clear-vault-host-credentials.sh, the Linux sibling of
+        clear-vault-host-credentials.ps1 (803-49re/804-ckst), which has had no Linux
+        counterpart — the absence this row was filed for. Same contract as the Windows
+        one, deliberately: one place, best-effort, a failure REPORTED rather than fatal
+        because a purge that aborts halfway leaves more stale state than one that
+        finishes noisily.
+
+        THE THREE LOCATIONS, and a fourth item nobody had named:
+          1. keychain  vault-shamir-share-v1
+          2. keychain  vault-root-token-v1        <- NOT in the row, and not in my own
+             probe fix from the previous cycle. The Windows script clears BOTH, and
+             vault_bootstrap.rs writes BOTH as fallbacks; I had widened the row to the
+             share's fallback only.
+          3. files     fallback_vault-shamir-share-v1, fallback_vault-root-token-v1
+          4. dir       <init-cache>/vault-data
+        Clearing any two leaves the room warm, which is why the verdict says so
+        explicitly on a partial result rather than reporting success.
+
+        THE SAFETY-CRITICAL HALF, found by reading before writing anything that deletes.
+        The keychain also holds `installation-uuid-v1` (INSTALL_ANCHOR_V1, next to
+        VAULT_SHAMIR_SHARE_V1 in vault_bootstrap.rs). It is the Linux counterpart of the
+        Windows script's `tillandsias-vm-uuid` and carries the same hazard: clearing it
+        makes the next vault UNDERIVABLE rather than merely re-initialised. It is
+        preserved, said aloud in the output, and pinned by an arm — because an arm that
+        only checks what IS removed cannot catch a clearer that removes too much.
+        `/etc/machine-id`, from which the unseal key is derived by HKDF, is likewise
+        never touched: a clean room re-initialises a vault, it does not re-identify the
+        machine.
+
+        NEVER MATERIALISES A SECRET (criterion 4): `secret-tool clear` deletes by
+        attribute and prints nothing. `secret-tool search --all` prints the secret
+        inline and put live tokens into two transcripts on 2026-08-25.
+
+        CRITERION 3, BOTH DIRECTIONS, 6/6 and mutation-verified with the diff proven
+        non-empty before each run:
+          forward   a warm room is cleared in all three locations
+          reverse   a wipe path that does NOT clear leaves the room warm, and that is
+                    detectable — the arm the row demands and the half that was missing
+                    when four legs reported a clean room that was not one
+          anchor    the installation anchor is never cleared
+          plus idempotence, the consent gate (refuses 2 and clears NOTHING), and
+          --dry-run mutating nothing.
+        Mutations: also clearing the anchor reds 5/6; skipping the data directory reds
+        5/6; ignoring the consent gate reds 5/6. Each caught by the arm written for it.
+
+        THE FIXTURE IS BOUND, THE CLEARER IS NOT. Gate step 280-900-z3kv.step binds the
+        hermetic fixture. Running the CLEARER in a gate would destroy the developer's
+        own share to prove it could — this row's own defect, performed deliberately —
+        so the fixture plants its own files under a scratch XDG_CACHE_HOME and drives
+        the keychain through a secret-tool stub.
+
+        WHAT IS LEFT, and why I stopped here: wiring the clearer into the documented
+        clean-room procedure is the step that changes what a destructive run DOES, and
+        macuahuitl recorded an operator override window on the (a) decision that closes
+        when the implementation slice lands. The mechanism and its proof exist now and
+        are inert; making the runbook call it is a small, separately-reviewable change
+        that should be made with that window's status known rather than as a side effect
+        of building the tool.

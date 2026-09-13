@@ -1,0 +1,12 @@
+# Gate step 1128-4ffr — data, not code (order 1072-b7eq).
+#
+# check-capability-row.sh tells a joining host to publish a row and says its
+# verdicts never block work; publishing it made the corpus partial, so release
+# preflight refused and the pre-push hook wedged EVERY push from that host.
+# Obeying the guard was what broke the host that obeyed it.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking a pending capability row does not wedge the host that published it (1128-4ffr)"
+STEP_SCRIPT="scripts/test-pending-capability-row-does-not-wedge.sh"
+STEP_ERROR="publishing the capability row the guard asks for wedges that host's pushes again, or the pending-row allowance widened and now launders a malformed fragment (1128-4ffr) — see the verdict line above"
+STEP_OK="Pending capability row check passed"

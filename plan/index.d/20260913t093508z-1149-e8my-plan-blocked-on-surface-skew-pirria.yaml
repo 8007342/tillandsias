@@ -1,0 +1,61 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by pirria from the v56.9.12.2 floor-host smoke, 2026-09-13.
+packets:
+  - packet_id: plan-cli-blames-a-stale-artifact-for-a-subcommand-name-that-never-existed
+    order: 1149-e8my
+    status: ready
+    pickup_role: linux
+    kind: bugfix
+    priority: p3
+    owner_host: any
+    capability_tags: [rust, plan, testing]
+    title: |
+      `blocked-on` reports a stale artifact; the CLI has `blocked-by` and never had `blocked-on`
+    owned_files:
+      - crates/tillandsias-plan/src/main.rs
+    request: |
+      `tillandsias-plan blocked-on <row>` fails with "unknown subcommand 'blocked-on' —
+      this tillandsias-plan was built from sources that do not provide it", then lists the
+      binary's real subcommands and advises "rebuild it (cargo build --release -p
+      tillandsias-plan) or relaunch the forge".
+
+      The diagnostic is well built and its attribution is WRONG. The binary provides
+      `blocked-by`; `blocked-on` has no counterpart anywhere in the sources, so nothing is
+      stale. Meanwhile the MCP layer advertises BOTH `plan_blocked_by` and
+      `plan_blocked_on` as tools, so an agent reading the MCP surface reaches for
+      `blocked-on` entirely reasonably.
+
+      The cost is the shape that makes it worth filing rather than shrugging at: the
+      message rules OUT the cheap correct action (use the other name) and prescribes the
+      expensive useless one (rebuild the binary, or relaunch a forge — minutes to tens of
+      minutes on a floor host, and it cannot possibly help). A confidently wrong cause is
+      worse than a terse "no such subcommand".
+
+      MEASURED on pirria 2026-09-13 inside the v56.9.12.2 forge lane, where an in-forge
+      agent hit it while draining work.
+
+      SECOND INSTANCE, same class, same run: `tillandsias-plan query --capability-tags`
+      answers "error: unknown query constraint: --capability-tags" while capability tags
+      are a first-class packet field and are queryable through the MCP surface.
+    exit_criteria:
+      - One surface is chosen as canonical and the other matches it — either `blocked-on` becomes an alias for `blocked-by` (and `query` accepts `--capability-tags`), or the MCP layer stops advertising `plan_blocked_on`.
+      - The stale-artifact diagnostic fires only on evidence of staleness — the name present in the checkout's sources and absent from the binary.
+      - A name that exists in neither says so, and does not send the reader to rebuild.
+      - A negative control proves the check FAILS when the property is violated.
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the deliverable IS the guard. Future litmus
+      filename: plan-cli-unknown-name-does-not-blame-staleness. Invoking the plan CLI with a subcommand name that exists nowhere in the checkout's sources must produce a message that does NOT advise rebuilding or relaunching, and `blocked-on` must either resolve as an alias or be reported as a name that does not exist. PRE-FIX RESULT: FAILS — `blocked-on` returns the stale-artifact message and the rebuild advice, measured on pirria 2026-09-13 in the v56.9.12.2 forge lane. NEGATIVE CONTROL the guard must also carry: a binary that genuinely IS stale — a name present in the sources and absent from the built artifact — still gets the rebuild advice, so the fix narrows the diagnostic rather than deleting it. Write that litmus in the same commit as the CLI change (1136-n8sh).
+    notes: |
+      Deliberately p3. Nothing is wrong with the ledger's data and no run is mis-certified;
+      the cost is agent time spent on a prescribed remedy that cannot work. Filed because
+      the class — a good diagnostic pointed at the wrong cause — is more expensive than its
+      severity suggests, and because the fix is small.
+    events:
+      - type: discovered
+        ts: "2026-09-13T09:35:08Z"
+        agent_id: pirria-cachyos
+        host: linux
+        summary: |
+          Found in the harness stream of the v56.9.12.2 floor-host curl-install smoke
+          (§4 forge lane, `opencode_exit=0`). Report:
+          plan/issues/smoke-e2e-findings-v56.9.12.2-2026-09-13-linux-pirria.md
