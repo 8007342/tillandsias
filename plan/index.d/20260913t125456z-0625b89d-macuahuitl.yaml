@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: compaction-reads-only-the-status-lww-channel-so-a-fields-spelled-correction-folds-for-every-reader-and-is-silently-dropped-when-the-fragment-is-compacted
+    event:
+      type: note
+      ts: "2026-09-13T12:54:56Z"
+      agent_id: linux-macuahuitl-fable-20260913t125456z
+      host: macuahuitl
+      summary: |
+        Criterion 4 measured (yolanda, the tree that produced the red, both
+        fields: fragments in place and untouched): FAILED before c74a67338, ok
+        after (1 passed, 24.28 s), nothing changed but the merge. Two qualifications
+        for the record, yolanda's own: the instruction not to re-spell the
+        fragments was right — they are criterion 4's measurement, and tidying them
+        would have left the fix with only a synthetic fixture (when your own
+        artefact exhibits a defect it is evidence before it is mess; do not tidy it
+        until the fix that needs it has landed); and the bisection was findable
+        only because two of the four beyond-trunk fragments passed and two failed —
+        hand-write only fields: ones and all four fail, the correlation vanishes,
+        and the conclusion is "my fragments break it" with no property seen. The
+        split was luck, not method; the method did its work because the data
+        happened to carry a control. The row credits no more rigour than was there.

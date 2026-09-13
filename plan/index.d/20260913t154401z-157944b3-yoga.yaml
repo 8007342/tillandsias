@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-linux-clean-room-reset-does-not-reach-the-host-keychain
+    field: next_action
+    value: wire scripts/clear-vault-host-credentials.sh into the documented clean-room reset (smoke skill step 2) — the clearer and its both-directions fixture are landed and inert; this is the step that changes what a destructive run does, so confirm the operator override window on the (a) decision first
+    ts: "2026-09-13T15:44:01Z"
+    host: yoga
+
+events:
+  - packet_id: the-linux-clean-room-reset-does-not-reach-the-host-keychain
+    event:
+      type: progress
+      ts: "2026-09-13T15:44:01Z"
+      host: yoga
+      summary: |-
+        status 'wire scripts/clear-vault-host-credentials.sh into the documented clean-room reset (smoke skill step 2) — the clearer and its both-directions fixture are landed and inert; this is the step that changes what a destructive run does, so confirm the operator override window on the (a) decision first' (not terminal) with evidence_refs: clearer + fixture 6/6 mutation-verified; gate step 280 binds the fixture
