@@ -555,8 +555,54 @@ fixture() {
         "ok:capability-row-current:fixturehost" 0 \
         TILLANDSIAS_CAPABILITY_LIVE_MATRIX="$_fx_live"
 
+    # ── ARMS 14-15: esmeraldinha's REAL folded rows, not triples I chose ─────
+    #
+    # Arm 13 above uses a non-empty set on BOTH loci, which passes but does not
+    # discriminate. esme supplied the sharper shape and the reason, and the
+    # reason is the part worth keeping: a UNIFORM pair cannot distinguish "read
+    # the wrong locus" from "read the right locus and it was empty" — both
+    # yield the empty set, so a green proves nothing. A MIXED pair breaks the
+    # tie in both directions. These are esme's two rows as folded on
+    # 2026-09-13, copied rather than invented:
+    #
+    #   locus:in-guest     kind:linux    schedulable: cpu/container/ollama
+    #                                    schedulable: cpu/host-native/ollama
+    #   locus:windows-host kind:windows  schedulable: none
+    #
+    # and the compounding that makes that host the best test in the fleet:
+    # in-guest is SIMULTANEOUSLY the first-sorting locus, the newer one, and
+    # the non-empty one. One wrong-locus read therefore corrupts the age and
+    # the schedulable set at the same time, from the same accessor.
+    _mk_hdr "$_fx_live"
+    _row fixturehost windows-host "$_fresh_ts" >>"$_fx_live"
+
+    # 14. Drift isolated: both loci held FRESH, so age cannot be what answers.
+    #     The foreign locus schedules two real engines this locus does not have
+    #     — a different machine behind the same node name. Pre-fix the union
+    #     made those two read as this host advertising engines it lacks.
+    _mk_hdr "$_fx_committed"
+    _row fixturehost in-guest "$_fresh_ts" cpu/container/ollama cpu/host-native/ollama >>"$_fx_committed"
+    _row fixturehost windows-host "$_fresh_ts" >>"$_fx_committed"
+    _expect "a-foreign-locus-that-schedules-two-engines-is-not-this-empty-locus-drifting" \
+        "ok:capability-row-current:fixturehost" 0 \
+        TILLANDSIAS_CAPABILITY_LIVE_MATRIX="$_fx_live"
+
+    # 15. THE COMPOUNDING, as its own arm. Same mixed pair, but now the own
+    #     locus is genuinely expired while the foreign one is fresh — esme's
+    #     actual polarity. Pre-fix this answered `drifted` (drift outranks age,
+    #     arm 7), so a single accessor bug reported the WRONG DIMENSION as well
+    #     as the wrong value: a real staleness problem surfaced as a fabricated
+    #     hardware claim. Post-fix it must name the staleness, with the OWN
+    #     row's age.
+    _mk_hdr "$_fx_committed"
+    _row fixturehost in-guest "$_fresh_ts" cpu/container/ollama cpu/host-native/ollama >>"$_fx_committed"
+    _row fixturehost windows-host "$_old_ts" >>"$_fx_committed"
+    _expect "one-wrong-locus-read-corrupts-the-age-and-the-engine-set-together" \
+        "stale:capability-row-expired:fixturehost:age=694800s" 1 \
+        TILLANDSIAS_CAPABILITY_LIVE_MATRIX="$_fx_live"
+
     rm -rf "$_fx_dir"
-    [ "$_fx_fail" = 0 ] && echo "ok:capability-row-check-fixture:13"
+    [ "$_fx_fail" = 0 ] && echo "ok:capability-row-check-fixture:15"
     return "$_fx_fail"
 }
 
