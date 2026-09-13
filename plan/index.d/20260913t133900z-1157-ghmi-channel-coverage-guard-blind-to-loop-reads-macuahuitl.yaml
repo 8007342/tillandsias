@@ -1,0 +1,68 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by the macuahuitl coordinator on 2026-09-13 from lenovinha's reading of
+# the guard that should have prevented 1156-eif4: it scans source literals,
+# the folder reads through a loop variable, so the guard is blind and green.
+packets:
+  - packet_id: the-channel-coverage-guard-scans-source-literals-so-channels-the-folder-reads-through-a-loop-variable-are-invisible-to-it-and-it-stayed-green-through-1156-eif4
+    order: 1157-ghmi
+    status: ready
+    kind: bugfix
+    priority: p1
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [ledger, compaction, plan, guard, crdt]
+    estimated_hours: 2
+    verifiable_closure: "cargo test -p tillandsias-plan the_set_of_fragment_channels_under_test_is_the_set_the_folder_reads: the assertion takes its channel set from a LWW_CHANNELS const that lww_entries iterates, unioned with the literal-scan result, and requires the union covered by CHANNEL_PROBES; a `fields` probe is added (pre-fix result: FAILS — with the fields probe absent the assertion is GREEN today, measured lenovinha 2026-09-13: channels the scanner sees = capabilities, events, packets; fields probed = no); MUTATION CONTROL: deleting the `fields` entry from CHANNEL_PROBES turns the assertion red (today that deletion is green, which is the whole bug); NEGATIVE CONTROL: the literal-scan half still catches a new `frag.doc.get(\"x\")` site with no probe."
+    owned_files:
+      - crates/tillandsias-plan/src/fragments.rs
+    title: |
+      the_set_of_fragment_channels_under_test_is_the_set_the_folder_reads scans fragments.rs for literal `frag.doc.get("…")` sites, but lww_entries reads its two LWW channels through a loop variable, so "fields" and "status" never appear as literals, "fields" has no round-trip probe, and the guard whose doc comment calls it "the only mechanism that makes the next channel safe" stayed green while compaction silently dropped fields:-spelled corrections (1156-eif4). A binding assembled from a variable is invisible to every name-based scan (1063-nraf).
+    context: |
+      READ by lenovinha 2026-09-13 after 1156-eif4 landed, verified by the
+      coordinator with one grep: the guard (846-idhn exit criterion 3)
+      exists, predates the fix, and is part of the crate's 84 fragments::
+      tests. It reads include_str!("fragments.rs") for `frag.doc.get("` and
+      `d.doc.get("` and requires each name in CHANNEL_PROBES. The literal
+      sites are capabilities, events and packets; the LWW channels are read
+      by `for channel in ["fields", "status"] { doc.get(channel) }`, so
+      neither name is visible to the scanner, and CHANNEL_PROBES carries no
+      `fields` probe. The refactor that made the folder correct (lifting the
+      channels into a loop) is what blinded the guard meant to police it;
+      the guard did not fail, it stopped being able to see the thing it
+      guards, and stayed green — the worst way for a guard to end. The
+      compactor read-only-status defect (1156-eif4) is exactly the class it
+      claims to prevent, and it never fired.
+
+      WHY THE OBVIOUS FOLLOW-UP MAKES IT WORSE: lifting the list into a
+      LWW_CHANNELS const that only the folder iterates leaves the scanner
+      exactly as blind — still no literal `.get("fields")` anywhere — and
+      lands a "class closure" under a green guard still claiming to be the
+      mechanism.
+
+      WHAT TO BUILD. (1) `pub(crate) const LWW_CHANNELS: &[&str] = &["fields",
+      "status"]`; lww_entries iterates it. (2) The coverage assertion reads
+      LWW_CHANNELS directly, unions it with the literal-scan set, and
+      requires the union covered by CHANNEL_PROBES — source scanning stays
+      for the literal sites it can still catch and stops being the only
+      input. (3) Add the `fields` probe the assertion will then demand (a
+      fields:-spelled LWW write that must survive fold -> compact -> fold).
+      (4) The mutation control on the row: delete the fields probe, the
+      assertion goes red.
+
+      NOT IN SCOPE: changing what the folder reads; 1156-eif4's compactor
+      fix stands and is the instance this guard should have caught.
+    exit_criteria:
+      - 'the coverage assertion reads LWW_CHANNELS and demands a probe for every entry; a `fields` probe exists (pre-fix result: FAILS — no fields probe, assertion green)'
+      - 'MUTATION CONTROL: deleting the fields probe from CHANNEL_PROBES reds the assertion (pre-fix result: FAILS — deletion is green today)'
+      - 'NEGATIVE CONTROL: a planted literal `frag.doc.get("nochannel")` with no probe still reds the assertion (the literal-scan half keeps its teeth)'
+      - 'the guard''s doc comment states both inputs (the const and the literal scan) and names 1063-nraf as the reason a literal scan alone is blind'
+    events:
+      - type: filed
+        ts: "2026-09-13T13:39:00Z"
+        agent_id: "linux-macuahuitl-fable-20260913t133900z"
+        host: macuahuitl
+        summary: |
+          Filed by the coordinator from lenovinha's reading (they cannot
+          file or land on a dead credential); the coordinator takes it in the
+          next cycle. Both hosts were half wrong about the arm before one grep.
