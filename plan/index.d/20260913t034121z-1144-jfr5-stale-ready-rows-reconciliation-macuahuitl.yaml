@@ -1,0 +1,73 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by the macuahuitl coordinator on 2026-09-13 from lenovinha's finding on
+# 1085-g52w: a ready row sat a week after its defect was fixed under another order.
+packets:
+  - packet_id: a-ready-row-whose-owned-files-a-landed-fix-touched-since-filing-is-a-staleness-candidate-the-pass-must-surface
+    order: 1144-jfr5
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [ledger, coordination, reconciliation, tooling, plan]
+    estimated_hours: 3
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable IS the guard. Future litmus scripts/test-stale-ready-rows.sh; the claimer writes it in the same commit as scripts/check-stale-ready-rows.sh and moves this text into verifiable_closure: the check names 1085-g52w as stale against b026372ff on a tree checked out at 2026-09-12 (pre-fix result: nothing surfaces it — the row sat ready for six days), and a NEGATIVE CONTROL: a ready row whose owned_files were touched only by a commit citing that row is not surfaced."
+    owned_files:
+      - scripts/check-stale-ready-rows.sh
+      - scripts/test-stale-ready-rows.sh
+      - skills/coordinate-multihost-work/SKILL.md
+    title: |
+      A ready row whose owned_files a landed fix touched since it was filed is a staleness candidate: 1085-g52w sat ready for a week after b026372ff (filed as 1124-7f3u) closed its behaviour without citing it, and a host spent a cycle re-implementing a fix, finding it redundant and one axis laxer, and reverting it. The coordination pass should SURFACE such rows, never auto-close them.
+    context: |
+      MEASURED (lenovinha, 2026-09-13, ab30dac7c): b026372ff of 2026-09-12 made a
+      reopen-after-falsification not count as status loss and cited 1124-7f3u;
+      1085-g52w, filed 2026-09-06 for exactly that behaviour, stayed `ready`
+      with all three exit criteria passing at HEAD. The host implemented the
+      row's prescribed fix (timestamps threaded through the fold's join), scored
+      arm 1 against the PRE-FIX guard and saw it pass there, and so discovered
+      the fix was redundant and slightly laxer than the falsified-event rule it
+      sat beside; both changes reverted, fixture landed. The reopen path is
+      walked rarely — the row's own explanation for the original defect,
+      recurring as the reason its fix went unnoticed.
+
+      THE SHAPE. A fix landing under one order does not update rows filed under
+      another, and nothing cross-checks. The cheap signal exists in git: for
+      every `ready` row, the commits since its filing timestamp that touch any
+      of its owned_files and do not cite its order or packet_id. That is a
+      CANDIDATE list, not a verdict — a touched file is not a fixed defect —
+      so the pass surfaces it for a host to check the exit criteria against
+      the tree, and never closes anything itself (closing requires evidence;
+      guessing marks unfinished work done, which is strictly worse than
+      leaving it stale — the stranded-claim sweep's own rule).
+
+      WHAT TO BUILD. scripts/check-stale-ready-rows.sh [--since <ref>]: fold the
+      ledger, for each ready row with owned_files and a filed timestamp, list
+      commits after that timestamp touching those files whose subject and
+      body name neither the order nor the packet_id; print one line per
+      candidate `stale-candidate:<order>:<n-commits>:<newest-sha>` and a
+      summary `ok:stale-ready-rows:<candidates>/<ready-rows-with-owned-files>`;
+      exit 0 always (advisory; the pass reads it). Wire it into
+      skills/coordinate-multihost-work/SKILL.md as a step of the pass that
+      reports the candidates in the handoff. Cost bound: one `git log` per
+      row over a bounded window (since the row's filing), under a minute on
+      the whole ledger.
+
+      NOT IN SCOPE: auto-closing, editing rows, or inferring that a touch is a
+      fix. NEGATIVE CONTROL required: a commit that cites the row (order or
+      packet_id in subject or body) is not a candidate — that is the normal
+      claim-and-land path.
+    exit_criteria:
+      - 'scripts/check-stale-ready-rows.sh exists, exits 0, and on a tree at b026372ff or later names 1085-g52w as a stale candidate with b026372ff as a touching commit (pre-fix result: FAILS — nothing in the tree surfaces it)'
+      - 'NEGATIVE CONTROL in scripts/test-stale-ready-rows.sh: a ready row whose owned_files were touched only by a commit citing its order is NOT a candidate; a row with no owned_files is skipped and counted, not refused'
+      - 'the coordination pass (skills/coordinate-multihost-work/SKILL.md) runs the check and reports the candidate list in the handoff; the pass never closes a candidate — a host verifies exit criteria against the tree and appends the closing event with evidence'
+      - 'the summary line grammar is pinned by the fixture and the check runs in under 60 s on the full ledger on macuahuitl (measured, stated in the closure)'
+    events:
+      - type: filed
+        ts: "2026-09-13T03:41:00Z"
+        agent_id: "linux-macuahuitl-fable-20260913t034100z"
+        host: macuahuitl
+        summary: |
+          Filed by the coordinator from lenovinha's 1085-g52w closure (fixture
+          only; the prescribed fix was redundant and reverted). Coordination
+          policy: surfaced by the pass, never auto-closed.
