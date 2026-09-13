@@ -435,11 +435,35 @@ export TILLANDSIAS_WRAPPER_TOKEN
 # caller's `set -e`, so the wait is guarded with `|| rc=$?` — a bare one would
 # exit the shell the instant the trap fired, BEFORE the reap had run, which is
 # a wrapper that forwards correctly and still orphans the gate.
+# Reap, then EXIT 143 — but never let an unsupported reap look like a clean
+# cancellation (1141-vf9w). Exit status stays 143 in both cases because that is
+# what the signal means to the caller; what changes is whether the operator is
+# told that nothing was propagated.
+_tb_reap_and_report() {
+    local _rc=0
+    tillandsias_reap_marked "$TILLANDSIAS_WRAPPER_TOKEN" || _rc=$?
+    if [ "$_rc" -ne 0 ]; then
+        echo "[tillandsias-builder] TERMINATION WAS NOT PROPAGATED (reap rc=$_rc)." >&2
+        echo "[tillandsias-builder] The container-side dispatch may still be RUNNING in this" >&2
+        echo "[tillandsias-builder] checkout. A later gate here can be starved by it, and the" >&2
+        echo "[tillandsias-builder] symptom will look like flaky infrastructure (1141-vf9w)." >&2
+    fi
+    exit 143
+}
+
 _tb_dispatch() {
     local rc=0
     toolbox run --container "$TOOLBOX_NAME" bash -l -c "$1" &
     _TB_CHILD=$!
-    trap 'tillandsias_reap_marked "$TILLANDSIAS_WRAPPER_TOKEN"; exit 143' TERM INT HUP
+    # ORDER 1141-vf9w (yoga's correction, landed by macbookair 2026-09-13).
+    # THE TRAP MUST READ THE VERDICT. A named non-zero return inside
+    # tillandsias_reap_marked fixes nothing on its own if the caller discards
+    # it: this trap would run the reap, ignore its status, and `exit 143` —
+    # reporting a clean cancellation whether or not termination actually
+    # propagated. That moves the silent success up one layer instead of
+    # removing it. On `unsupported:` the operator is told, in the same breath
+    # as the cancellation, that a container-side survivor may exist.
+    trap '_tb_reap_and_report' TERM INT HUP
     wait "$_TB_CHILD" || rc=$?
     trap - TERM INT HUP
     # An exit nobody asked for still propagates verbatim.

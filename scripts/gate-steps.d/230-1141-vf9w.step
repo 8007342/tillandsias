@@ -13,3 +13,17 @@ STEP_DESC="Checking a cancelled dispatch cannot leave its container-side tree ru
 STEP_SCRIPT="scripts/test-dispatch-reap.sh"
 STEP_ERROR="the dispatch reaper regressed (1141-vf9w) — a cancelled gate may again survive in the same checkout, or the reaper may have widened beyond its own dispatch; see the verdict line above"
 STEP_OK="Dispatch reap check passed"
+
+# ORDER 1141-vf9w, darwin (macbookair 2026-09-13). Exit 2 from the fixture means
+# THIS PLATFORM CANNOT RUN THE ARMS — no /proc, no setsid — not that the reaper
+# regressed. Without this the fixture's honest "I could not look" collapsed into
+# STEP_ERROR above, which is a content verdict about a reaper the host never
+# exercised, and it refused every macOS land on an otherwise green trunk
+# (measured on this host: origin/linux-next c6d191d39, reproduced in a pristine
+# worktree). Exit 1 remains a genuine regression and still refuses.
+#
+# A SKIP IS NOT COVERAGE. macOS has no working reaper today; the darwin design
+# is filed as a child of this order. This field stops the gate lying in the
+# other direction, it does not claim the platform is protected.
+STEP_SKIP_EXIT=2
+STEP_SKIP_DESC="no /proc and/or no setsid on this host — the dispatch reaper is unsupported here (1141-vf9w)"
