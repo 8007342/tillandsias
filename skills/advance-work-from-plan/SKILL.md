@@ -491,6 +491,27 @@ automates. Canonical: `methodology/distributed-work.yaml` → `cycle_batch_triag
     would have nothing to find; the 3-of-5 stranded rate measured on 2026-08-30
     is a symptom of hosts not releasing, not of a reaper that fails to run.
 
+### 3.1 — The positive control on the claim (2026-09-13)
+
+A claim is a PUSHED status flip. Nothing else separates hosts: not the claim
+event, not a message to the coordinator, not a division of work agreed with a
+peer. lenovinha's 1130-8zxn sat `ready` on every other host's plan_next for
+hours while the fix was finished on lenovinha, because the claim was an
+`append-event` (943-unii) and then an unpushed flip — "the cycle felt claimed"
+while the one mechanical signal a selector reads was absent. yoga and yolanda
+skipped it on direct knowledge, which does not scale.
+
+After the flip is PUSHED, run the control:
+
+```bash
+tillandsias-plan next <your-role> --limit 8 | grep -c '<order>'   # must print 0
+```
+
+If it prints 1 the claim did not take (unpushed, wrong field, refused by the
+ladder) and the row is still being offered to the fleet; fix that before
+starting the work. A host whose push is blocked reports the blocker with the
+committed SHA and the coordinator pushes the flip on its behalf.
+
 ## 4 — Host Write Scope & Unblock-with-NOOP
 
 Each host has a primary write scope. You can READ everything; you should normally only WRITE within your scope:

@@ -37,6 +37,20 @@ printf '%s\n' "$out" | grep -q '1005-eeee' && fail "NEGATIVE CONTROL: a bare men
 printf '%s\n' "$out" | grep -q '1004-dddd' && fail "NEGATIVE CONTROL: an order that is not ready was reported" || ok "NEGATIVE CONTROL: an order not in the ready list is never reported"
 printf '%s\n' "$out" | grep -qx 'ok:stale-ready-rows:3/5:pass=cites-order' && ok "summary grammar: 3 candidates of 5 ready rows" || fail "summary wrong: $(printf '%s\n' "$out" | tail -1)"
 # MUTATION: widening the prefix list to include claim( would red the negative control — asserted by construction above.
+# CLOSED-ON ARM (the closure direction): a sibling branch carries a status
+# fragment closing 1003-cccc that the "trunk" branch does not have; the
+# candidate line must say so. Negative control: 1001-aaaa has no such fragment.
+git branch -q trunk-sim
+git checkout -q -b sib-sim
+mkdir -p plan/index.d
+printf 'status:\n  - packet_id: pkt-cccc\n    field: status\n    value: completed\n    ts: "2026-09-13T13:00:00Z"\n    host: sib\n' > plan/index.d/20260913t130000z-close-sib.yaml
+git add plan/index.d; git -c commit.gpgsign=false commit -q -m "plan(1003-cccc): closed on the sibling"
+git checkout -q trunk-sim
+printf '%s\n' '1001-aaaa	pkt-aaaa' '1003-cccc	pkt-cccc' > "$tmp/orders2"
+out2="$(bash "$check" --repo "$repo" --orders-file "$tmp/orders2" --siblings sib-sim --trunk trunk-sim)"
+printf '%s\n' "$out2" | grep -q '^stale-candidate:1003-cccc:1:[0-9a-f]*:closed-on:sib-sim$' && ok "a candidate closed on a sibling branch says closed-on:<branch>" || fail "closed-on missing: $(printf '%s\n' "$out2" | grep 1003)"
+printf '%s\n' "$out2" | grep -q '^stale-candidate:1001-aaaa:2:[0-9a-f]*$' && ok "NEGATIVE CONTROL: a candidate with no sibling closure has no closed-on suffix" || fail "1001-aaaa line wrong: $(printf '%s\n' "$out2" | grep 1001)"
+
 # Real tree: grammar only.
 cd "$here/.." || exit 2
 real="$(bash "$check" 2>/dev/null | tail -1)"
