@@ -1769,3 +1769,54 @@ stories.
   enumerate 2 apart from 3 with no default that proceeds, and consumer wiring
   lands as its own change with its own evidence BEFORE promotion — the first
   reader of the codes must not also be the first thing that can stop a build.
+- **A deny-list of placeholders cannot catch the next placeholder**
+  (macbookair, 1137-rgfm, landed osx-next 2ccd051f1, attested 8326272e2;
+  relay to trunk in the 07:41Z pass): `hardware_fingerprint` refused the
+  placeholders already found ("Host CPU", "unknown", from 805-r98w), so
+  "Apple Silicon CPU" passed a check whose purpose is catching placeholders,
+  and every Apple-silicon Mac with the same core count hashed to one
+  fingerprint (hw2-d1ec0bba772d4bda) — which is what let
+  `capability-matrix --by-hardware` merge machines it never measured. Fix: a
+  `name_source` on DeviceRecord asks the probe where the name came from; the
+  deny-list survives only for `None`, because reading pre-field silence as
+  "placeholder" would make every stored document unidentifiable on landing
+  day. macOS reads `machdep.cpu.brand_string`; the GPU stays a declared
+  `placeholder` (needs a framework call, not a sysctl) so that component is
+  KNOWN to discriminate nothing. Both guards falsified (reverting the macOS
+  arm reds one; ignoring provenance reds the cross-platform one — the one
+  that proves the deny-list cannot do the job). Sits `implemented`: closure is
+  a second Mac's fingerprint differing, which no single host can produce;
+  routed to macneo as a measurement (no build). Corrected by macbookair
+  before macneo spent it: the coordinator had predicted "macneo's current
+  hash equals macbookair's old one if the core counts match", which is
+  under-specified — the hash covers fieldset, cpu vendor/name/cores, gpu,
+  npu AND a RAM power-of-two class, so 8 GiB versus 16 GiB differs on
+  identical silicon; and a binary predating 803-r8u4 omits the RAM component
+  entirely (measured on one machine, same minute: stale release
+  hw2-5ce200f625e69d05, fresh hw2-d1ec0bba772d4bda). A cross-machine hash
+  comparison is confounded until one release carries 2ccd051f1 on both. The
+  unconfounded test is the raw inputs: if macneo's brand_string differs
+  from "Apple M5" while cores match 10/10, the old code produced the
+  identical `cpu:apple/Apple Silicon CPU/10c10t` on two chips — the
+  collision shown from inputs, no hash involved. If cores differ the claim
+  narrows to "the name discriminates nothing within a core-count class",
+  said plainly rather than rounded up. Rule: a predicted equality of a
+  derived value must list every input of the derivation first.
+- **A 1-in-15 red unrelated to the diff teaches every host to disbelieve the
+  gate** (macbookair, 1146-z8ux, unclaimed): two tests mutate one
+  process-global env var in parallel threads; the pristine suite reproduced
+  it at 1/15 over 15 runs after a stash, so it is pre-existing and
+  timing-sensitive, and 1-of-3 versus 1-of-15 is not distinguishable at
+  those counts. Host-independent: macuahuitl's next meta cycle or lenovinha.
+- **"check not run" hid two arms that ran** (macbookair, self-corrected): the
+  1141-vf9w step's skip description said the check did not run while the two
+  substrate-refusal arms DO run before the darwin skip; a reader would have
+  concluded macOS pins nothing — the conclusion 1145-iigx warns its claimer
+  against. Now "2 substrate-refusal arms RAN and passed; 9 reaper arms could
+  not run". A skip description enumerates what ran, not only what did not.
+- **Two timing logs on macbookair** (operator item): `cycle-metrics.sh`
+  refused (rc 2) between `/tmp/tillandsias-timing.jsonl` (13 lines, last
+  2026-09-11T23:22:58Z) and `.cache/metrics/tillandsias-timing.jsonl` (28,471
+  lines, live); the guard says move the stray aside, never delete, and
+  concatenation is an operator decision. macbookair used the named-log escape
+  and changed nothing on disk. Ask: retire the /tmp copy on macbookair.
