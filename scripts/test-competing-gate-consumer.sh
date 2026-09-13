@@ -21,7 +21,10 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-WRAPPER="$ROOT/scripts/with-tillandsias-builder.sh"
+# TILLANDSIAS_CONSUMER_WRAPPER_UNDER_TEST is the mutation-control seam: the
+# strict arms below must red on a wrapper that captures the detector with a
+# bare assignment under set -e (the shipped form until 2026-09-13).
+WRAPPER="${TILLANDSIAS_CONSUMER_WRAPPER_UNDER_TEST:-$ROOT/scripts/with-tillandsias-builder.sh}"
 pass=0; fail=0
 ok()  { pass=$((pass+1)); printf 'ok:   %s\n' "$1"; }
 bad() { fail=$((fail+1)); printf 'FAIL: %s\n' "$1"; }
@@ -30,7 +33,7 @@ W="$(mktemp -d)"; trap 'rm -rf "$W"' EXIT
 # The wrapper's case block, lifted verbatim from the source so this fixture
 # cannot drift from what ships. Extracted by markers rather than line numbers:
 # a line-numbered copy is the 881-29me shape and rots on the next edit.
-sed -n '/^    _cg_out="\$(bash "\$_tb_self_dir\/check-no-competing-gate.sh"/,/^    esac$/p' \
+sed -n '/^    _cg_rc=0$/,/^    esac$/p' \
     "$WRAPPER" > "$W/case.sh"
 if [ ! -s "$W/case.sh" ] || ! grep -q 'esac' "$W/case.sh"; then
     bad "could not extract the consumer case block from the wrapper — this fixture would have asserted nothing"
@@ -49,6 +52,16 @@ STUB
     chmod +x "$d/check-no-competing-gate.sh"
     ( _tb_self_dir="$d"; set +e; . "$W/case.sh" ) 2>&1
 }
+drive_strict() { # like drive, but under the wrapper's OWN regime (set -e), with a sentinel after the block
+    local code="$1" text="$2" d="$W/run-strict"
+    rm -rf "$d"; mkdir -p "$d"
+    cat > "$d/check-no-competing-gate.sh" <<STUB
+printf '%s\n' "$text"
+exit $code
+STUB
+    chmod +x "$d/check-no-competing-gate.sh"
+    ( _tb_self_dir="$d"; set -e; . "$W/case.sh"; echo "consumer-block-completed" ) 2>&1
+}
 
 # 1. 0 — answered, no competitor. Quiet-ish, and must not claim anything else.
 out="$(drive 0 'ok:no-competing-gate')"
@@ -62,6 +75,27 @@ out="$(drive 1 'competing-gate: a build.sh is running in this checkout')"
 case "$out" in
     *"may be raced"*) ok "1 warns the run may be raced" ;;
     *)                bad "1 did not warn: $out" ;;
+esac
+# THE REGIME ARMS (2026-09-13). The wrapper runs under `set -euo pipefail`;
+# every arm above drives the block under `set +e` and so could not see that a
+# bare `_cg_out="$(detector)"` EXITS the wrapper when the detector returns 1 —
+# which it does whenever a gate is running in the checkout. Measured in the
+# v56.9.13.1 cut: the toolbox property fixture red inside --ci-full only,
+# after "Initialization complete." and before the dispatch, rc 1, no case
+# message. Under the wrapper's own regime the block must COMPLETE and warn.
+out="$(drive_strict 1 'competing-gate: a build.sh is running in this checkout')"
+case "$out" in
+    *"consumer-block-completed"*) ok "1 under set -e: the block completes (the capture survives errexit)" ;;
+    *) bad "1 under set -e: the wrapper EXITED at the capture — the four-code case never ran: $out" ;;
+esac
+case "$out" in
+    *"may be raced"*) ok "1 under set -e still warns the run may be raced" ;;
+    *)                bad "1 under set -e did not warn: $out" ;;
+esac
+out="$(drive_strict 0 'ok:no-competing-gate')"
+case "$out" in
+    *"consumer-block-completed"*) ok "0 under set -e: the block completes" ;;
+    *) bad "0 under set -e: the block did not complete: $out" ;;
 esac
 
 # 3. 2 — caller contract. Must name THIS CALL SITE as wrong, not the host.
