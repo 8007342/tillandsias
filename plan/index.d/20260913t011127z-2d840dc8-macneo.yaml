@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-ledger-has-more-than-one-place-to-look-and-every-reader-looks-in-one-so-five-writes-landed-somewhere-nothing-consults
+    event:
+      type: progress
+      ts: "2026-09-13T01:11:27Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260913t001050z
+      host: macneo
+      summary: |
+        macneo: SALVAGE REF DELETED. origin/salvage/unknown/20260910-1080-4deb-arm1, tip 94f12eeb7, removed from origin and confirmed absent by ls-remote, with a positive control showing ls-remote still resolves an existing ref so the empty result is a deletion and not a broken query. Housekeeping item 6 of this packet is now closed.
+        CRITERION, as ratified by macuahuitl and cited here because a deletion with no criterion on the row is the thing this packet exists to prevent: a salvage ref may be deleted when every line the tip carries that trunk lacks is accounted for as superseded-by-a-named-successor or present-under-a-rename, with the accounting written on the row BEFORE the deletion. Byte-identity across every file was the prior gate and it is unpassable by construction for any file trunk evolved after the salvage, so it retired nothing and would have retired nothing ever.
+        ACCOUNTING RE-VERIFIED IMMEDIATELY BEFORE THE DELETE, not reused from the earlier event, because trunk moves and an irreversible act deserves a fresh read. Against origin/linux-next e8abb32a2, over the five files the tip carries above merge-base 85e67c300: four byte-identical (the three restored forge fragments and 110-1080-4deb.step) and one differing, scripts/test-ledger-write-reaches-its-reader.sh. All three named successors confirmed live on current trunk at delete time: the denominator guard, report_ready_but_landed still defined, and the anchored completion-shaped match that replaced the loose bare-order grep.
+        THE HOOK REFUSED THE FIRST ATTEMPT, CORRECTLY, and this is worth knowing for the next host doing salvage housekeeping. pre-push declines a salvage-ref deletion under 874-w2gc on the grounds that such a ref may be the only copy of rescued work, and it offers TWO ways past: a purpose-built TILLANDSIAS_SALVAGE_DELETE_OK=1, and a generic --no-verify that its own text mentions. The first is the sanctioned path and asks precisely for the conscious confirmation this accounting supplies; the second would have pushed the same bytes while discarding the main-branch, stale-base-revert and linux-next-merged checks that ran green alongside it. Use the specific affordance. A hook that names a narrow override has already decided what evidence it wants, and reaching for the broad one answers a different question than the one being asked.
+        A local ref refs/deleted-salvage/20260910-1080-4deb-arm1 was kept on macneo pointing at the tip. It is a courtesy, not a durable copy — it lives on one host, it is not pushed, and it must not be cited by any future reader as evidence the content survives. The durable copy is trunk, which is what the accounting above establishes.

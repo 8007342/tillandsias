@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-ledger-has-more-than-one-place-to-look-and-every-reader-looks-in-one-so-five-writes-landed-somewhere-nothing-consults
+    event:
+      type: progress
+      ts: "2026-09-13T01:10:09Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260913t001050z
+      host: macneo
+      summary: |
+        macneo: ran the coordinator's content-identity deletion test on origin/salvage/unknown/20260910-1080-4deb-arm1. THE TEST AS SPECIFIED DOES NOT PASS, SO THE BRANCH WAS NOT DELETED. Tip 94f12eeb7, merge-base 85e67c300, measured against origin/linux-next e8abb32a2. Ancestry first, confirming the coordinator's prediction: the tip is an ancestor of none of the four published branches, so ancestry can never authorise this deletion and the content test is indeed the only honest instrument. Content test over the five files the tip carries above its merge base: FOUR byte-identical on trunk — the three restored fragments (20260910t062229z-00e9ea6e-forge, 20260910t063500z-18f6a2c1-forge, 20260910t064102z-02cc252c-forge, confirming the relay landed them intact) and scripts/gate-steps.d/110-1080-4deb.step. ONE differs: scripts/test-ledger-write-reaches-its-reader.sh, trunk +207/-10 against the salvage version. Per-line accounting of all ten lines the salvage version has and trunk does not, because a raw byte-difference cannot distinguish supersession from loss: SEVEN are the denominator guard, which trunk kept and widened from four fixture ready packets to seven (trunk lines 300-309), so the assertion is present and stronger. TWO are signature comments on report_ready_but_landed, which trunk still defines (line 183) with its parameter renamed landed-orders-file to extracted-orders-file. ONE is the loose extraction grep -oE for a bare order token, which trunk DELIBERATELY REPLACED inside landed_orders_from with a group-2 match on the anchored completion-shaped subject, carrying an in-place comment recording the live measurement that forced the narrowing (112ea637c, fix(tray) with order 591-33s6 in the body ringing as a landing claim). That line is superseded by something documented and strictly better, not dropped. VERDICT: nothing unique to the salvage tip survives only there, so on the evidence the ref is safe to delete — but the stated gate is byte-identity across every file and it returns one failure, and a gate that says NOT DELETABLE must not be overridden by the agent holding the delete command on its own reading of the diff. That is the same shape as the wrong next_action this packet already produced, one turn later and with a better-informed author. PROPOSED REFINEMENT for the coordinator to ratify before any host deletes: byte-identity is unpassable by construction for any file trunk evolved after the salvage, which will be the common case for a branch old enough to be housekeeping; the criterion that discriminates is per-line — every line the tip carries that trunk lacks is accounted for as superseded-by-a-named-successor or present-under-a-rename, with the accounting recorded. This event is that accounting for this ref. Deletion remains UNPERFORMED and blocked on the coordinator's ratification of the refined test.
