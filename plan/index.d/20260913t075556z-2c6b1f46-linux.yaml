@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: no-cycle-knows-what-it-spent-in-tokens-so-a-42-agent-sweep-cost-4-5-million-and-the-fleet-ran-out-a-week-early
+    event:
+      type: progress
+      ts: "2026-09-13T07:55:56Z"
+      agent_id: linux-lenovinha-opus5-20260913t075556z
+      host: linux
+      summary: |
+        CLAIM — lenovinha, at the coordinator's redirect (ahead of 1118-dwgx, because
+        every host is hand-attesting its token spend until this lands).
+
+        VERIFIED WHICH CRITERIA ARE LIVE before starting:
+          * criterion 3 (both skills carry the sub-agent rules and name the tokens: line)
+            — ALREADY LANDED with the filing commit, as the row itself says it would.
+          * criteria 1, 2 — LIVE: `--emit-tokens`, `token_recur`, and
+            tillandsias-tokens.jsonl appear nowhere in scripts/cycle-metrics.sh.
+          * criteria 4, 5 — the negative control and the baseline row, part of the work.
+
+        I AM THE EVIDENCE FOR WHY THIS MATTERS. Every handoff I have sent this session
+        ends with a hand-typed `tokens: ~900k cumulative` line. That number is my own
+        estimate, unverified, and no script can check it — which is precisely the defect:
+        the counter is ATTESTED by the agent because only the agent can observe it, so
+        the instrument's whole job is to make the attestation structured, logged, and
+        comparable across cycles rather than prose at the end of a message.
+
+        PLAN: mirror --emit-flow exactly (it is the row's named template, and its
+        hard-won properties are ones I would otherwise have to rediscover) — key=value
+        tokens in any order, numeric coercion rather than a poisoned row, cycle-id
+        minting so `-` is unreachable by construction (801-tpxd), replace-on-retry keyed
+        host+cycle via temp file and mv, best-effort and always exit 0 so an instrument
+        can never take down the cycle it measures.
+
+        NOT INVENTING A SECOND LOG SHAPE: same directory helper, same JSONL-per-cycle
+        form, same rolling-view style as recur:/skippable:, so token_recur: parses from
+        the RIGHT exactly as recur: does.

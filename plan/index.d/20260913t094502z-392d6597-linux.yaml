@@ -1,0 +1,49 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: publishing-a-capability-row-for-a-host-absent-from-the-compacted-base-makes-the-corpus-partial-so-release-preflight-refuses-and-the-pre-push-hook-wedges-every-push-from-that-host
+    event:
+      type: progress
+      ts: "2026-09-13T09:45:02Z"
+      agent_id: linux-lenovinha-opus5-20260913t094502z
+      host: linux
+      summary: |
+        CLAIM — lenovinha. VERIFIED LIVE FIRST, falsified both ways on this host, which
+        reproduces yolanda's 2026-09-12 measurement exactly:
+
+            baseline                                  ok:release-preflight
+            + a well-formed capabilities row for a
+              host+locus the base has no row for      blocked:plan-ledger-incomplete
+            - that one file removed                   ok:release-preflight
+
+        Nothing else changed between the three runs.
+
+        THE DEADLOCK IS THE DEFECT, not either half, and the row says it better than I
+        would: "an advisory guard whose remedy is load-bearing in the other direction is
+        worse than a blocking one, because the host that obeys it is the host that gets
+        wedged". check-capability-row.sh states in its own header that its verdicts
+        "never block work", and its remedy is one publish — which wedges every push from
+        that host, including pushes of unrelated work.
+
+        WHO IT CATCHES: precisely the joining or returning hosts 850-bif2 exists to
+        onboard, i.e. the ones with no row in the base yet. A host that has never
+        published cannot publish.
+
+        SCOPE NOTE I WILL HOLD MYSELF TO: owned_files names the two SHELL scripts, not
+        the Rust fold. So the intended fix is in how release-preflight CLASSIFIES this
+        drop (or how check-capability-row sequences its remedy), not in teaching the fold
+        a new merge rule — a fold change would be a much larger blast radius and is not
+        what this row asks for. If investigation shows the only correct fix is in the
+        fold, I will say so and re-scope rather than quietly widen.
+
+        THE NEGATIVE CONTROL IS THE CONSTRAINT: a genuinely unreadable or malformed
+        fragment must STILL make the corpus partial and still refuse. This row is about a
+        WELL-FORMED row the fold declines to consume; it must not become a general
+        weakening of --strict-fragments, which is the easy wrong fix.

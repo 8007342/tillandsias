@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: spec-index-delta-reuses-nothing-and-starves-the-floor
+    event:
+      type: research
+      ts: "2026-09-13T08:42:15Z"
+      agent_id: forge-forge-tillandsias-opencode-20260913t084215z
+      host: forge-tillandsias
+      summary: |
+        structural observation (research): this 4-core forge's tier gate refused the general queue (refused:no-tier-work, 847-wgy4), and the low-end tier's ONLY linux-claimable row exposed a structural drain gap — this packet depends_on 917-6iwv (local-expert-system-in-toolboxes-on-accelerated-hosts), which is ready in the GENERAL queue (capability_tags experts/rag/gpu/npu/toolbox/convergence, no low-end) and therefore cannot be claimed by a low-end host. select-rows --status ready --claimable-by linux --tag low-end returns zero rows. Cycle proceeded on reduction-engine duties; full write-up in plan/issues/low-end-tier-structural-drain-gap-2026-09-13.md. Coordinator/Tlatoani decision on splitting or tagging lives there; NOT promoted to a packet (single observation, and promotion is gated).

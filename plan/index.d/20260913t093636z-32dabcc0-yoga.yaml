@@ -1,0 +1,65 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-dispatch-wrapper-that-execs-into-a-container-cannot-be-killed-so-a-cancelled-gate-keeps-running-in-the-same-checkout
+    event:
+      type: decided
+      ts: "2026-09-13T09:36:36Z"
+      agent_id: linux-yoga-claude-20260913t093636z
+      host: yoga
+      summary: |
+        PROMOTION CRITERION REWRITTEN ON DISPATCH SHAPE. The old wording was
+        satisfiable by the wrong measurement and nearly was.
+
+        WHAT WAS WRONG WITH IT. It said "clean in-situ runs from a NON-Silverblue linux
+        host and a WSL host". macuahuitl's mutable Fedora satisfied that WORDING —
+        different distro, clean run — and satisfied nothing it MEANT: Silverblue and
+        mutable Fedora are both TOOLBOX dispatch, so it was one dispatch shape measured
+        twice wearing two distro names. yolanda named the class after making the same
+        error with two Git-for-Windows hosts agreeing about `ps -W`, which was one `ps`
+        implementation measured twice. THE RULE, general past this row: two hosts
+        satisfy a substrate criterion only if they DIFFER ON THE AXIS THE CRITERION IS
+        ABOUT. Name the axis in the criterion, or the criterion can be satisfied by the
+        wrong measurement.
+
+        THE AXIS HERE IS DISPATCH SHAPE, not distro and not OS:
+          toolbox     host-side wrapper re-execs via `toolbox run` -> podman exec
+                      (Silverblue AND mutable Fedora — ONE datapoint between them,
+                      both clean)
+          wsl.exe     with-wsl2-builder.sh re-execs into a distro that is a VM with its
+                      own init (yolanda, esme)
+          none        a linux host that does not re-exec at all; build.sh's own
+                      fast-refusal call IS the host side there, and the assertion is
+                      unwired — filed separately
+
+        SO PROMOTION TO REFUSING REQUIRES, and this is the whole of it:
+          1. A clean in-situ run on a `none` dispatch and on a `wsl.exe` dispatch.
+             Toolbox is already satisfied and a third toolbox host adds nothing.
+          2. Churn-suspension measured ON A SLOW HOST. The exit-between-list-and-read
+             race that suspends a true accusation SCALES WITH SCAN DURATION, so
+             detection is weakest exactly where scans are slowest, and both Windows
+             hosts are the slow ones. Measuring it on yoga measures the best case and
+             calls it the case. yolanda's point, and the second criterion in this row
+             that names WHERE rather than only what.
+          3. A consumer that READS the codes, landed as its own change with its own
+             evidence, BEFORE the flag flips. Four codes plus `|| true` at both call
+             sites is a contract nobody is party to; promoting first would make the
+             first reader of these codes also the first thing that can stop a build.
+             The consumer must enumerate 2 apart from 3 with NO default that proceeds —
+             a default-proceeds turns "fix your call site" into "this host cannot
+             answer" and writes the wiring bug off.
+
+        A STATED LIMIT RATHER THAN A PENDING DATAPOINT. MSYS/Cygwin — the Windows HOST
+        side, as distinct from the WSL distro — exposes cmdline, status and winpid but
+        NO /proc/<pid>/environ at all. The detector keys on environ, so it CANNOT see
+        there, and a flagged MSYS-side call answers `could-not-run:competing-gate:blind`
+        by design. That is not a gap waiting on a measurement; it is a substrate the
+        check does not cover, and it closes as a limit. Leaving it open would leave
+        yolanda holding a question with no answer available on their host.

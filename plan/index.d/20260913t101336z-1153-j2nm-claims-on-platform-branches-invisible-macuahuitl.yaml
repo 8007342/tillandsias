@@ -1,0 +1,64 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by the macuahuitl coordinator on 2026-09-13: one row was closed twice
+# in one hour on two branches because a claim on a platform branch is
+# invisible to plan_next on every other host until the coordinator relays.
+packets:
+  - packet_id: a-claim-or-closure-recorded-on-a-platform-branch-is-invisible-to-plan-next-on-every-other-host-until-the-next-relay-so-two-hosts-can-work-one-row
+    order: 1153-j2nm
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [coordination, methodology, ledger, multi-host, plan-only-lane]
+    estimated_hours: 4
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is a methodology rule plus the lane change that makes it executable. Future litmus scripts/test-claims-fleet-visible.sh; the claimer writes it in the same commit and moves this text into verifiable_closure: a checkout on osx-next or windows-next pushes a commit containing only new plan/index.d fragments to origin/linux-next through the plan-only lane and the push is accepted without a build stamp (pre-fix result: unmeasured whether the hook refuses a cross-branch push; measured cost 2026-09-13: 1127-apa8 closed by macneo on osx-next at 08:40Z and again by lenovinha on linux-next at 09:50Z from a plan_next that could not see the first); NEGATIVE CONTROL: a commit carrying any non-plan path is still refused to the platform branch's own gate."
+    owned_files:
+      - methodology/multi-host-development.yaml
+      - skills/coordinate-multihost-work/SKILL.md
+      - scripts/hooks/pre-push-local-gate.sh
+    title: |
+      Claims and closures written on osx-next or windows-next reach plan_next on other hosts only when the coordinator relays the branch, so the claim event cannot do its job across platforms: 1127-apa8 was verified and closed by macneo on osx-next and, an hour later, by lenovinha on linux-next, whose plan_next saw a ready row. The ledger's canonical home is linux-next; claim and closure fragments should go there from any host through the plan-only lane, with code staying on the platform branch.
+    context: |
+      MEASURED 2026-09-13: macneo closed 1127-apa8 on verification (osx-next
+      ae9d9e42d, ~08:40Z); lenovinha picked the same row from plan_next on
+      linux-next and closed it on verification (358e3f4f3, ~09:50Z). Both
+      verifications were sound and reached one verdict by different routes;
+      the cost was a fat-host cycle. lenovinha's plan_next could not know:
+      macneo's claim (set-field in_progress) and closure lived on osx-next,
+      which the coordinator relays once per pass. The claim event exists to
+      prevent exactly this and cannot, because methodology sends a platform
+      host's plan edits to its platform branch (multi-host-development.yaml:
+      "agents working on platform branches MUST commit and push all edits
+      (including plan updates) directly to their active platform branch").
+
+      WHAT TO BUILD. (1) Methodology: plan/index.d fragments that are claims,
+      progress, closures or filings may — and for claims MUST — be pushed to
+      origin/linux-next from any host, in a commit carrying only new
+      fragment files, through the plan-only lane; code and everything else
+      stays on the platform branch. (2) The lane: accept a push to
+      refs/heads/linux-next from a checkout whose HEAD is a platform branch
+      when the outgoing diff is fragments-only (a temporary index commit
+      onto origin/linux-next, the salvage script's plumbing shape, so the
+      host's branch is untouched). (3) The coordinate skill: relay the
+      platform branches' remaining plan edits as today. Until (2) lands, the
+      coordinator relays platform-branch fragments on the shortest clock it
+      can and hosts announce claims by message.
+
+      NOT IN SCOPE: moving code pushes off platform branches, or changing
+      what counts as canonical for methodology/openspec/cheatsheets.
+    exit_criteria:
+      - 'methodology/multi-host-development.yaml states that claim/progress/closure/filing fragments go to origin/linux-next from any host through the plan-only lane, and that claims must'
+      - 'a fragments-only push to origin/linux-next from an osx-next or windows-next checkout is accepted by the lane without a build stamp, verified on macbookair or yolanda (pre-fix result: unmeasured; the claimer measures and records it)'
+      - 'NEGATIVE CONTROL: a commit with any non-plan path pushed that way is refused with the reason'
+      - 'skills/coordinate-multihost-work/SKILL.md and skills/advance-work-from-plan/SKILL.md tell a platform host to push its claim to linux-next before starting the work'
+    events:
+      - type: filed
+        ts: "2026-09-13T10:13:36Z"
+        agent_id: "linux-macuahuitl-fable-20260913t101336z"
+        host: macuahuitl
+        summary: |
+          Filed by the coordinator after 1127-apa8 was closed twice in one
+          hour on two branches; both closures were sound, the cycle was
+          spent because the claim was invisible.

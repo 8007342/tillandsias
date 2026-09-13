@@ -225,6 +225,16 @@ looked"* will eventually be read as the former.
   new. **RULE: zigbuild the guest target before landing a change to a
   cfg-split file.**
 
+  **BOTH ARMS NOW EXIST, which is what makes it a rule rather than an
+  anecdote.** Same command, same host, two trees:
+
+      pre-fix  (osx-next 2ccd051f1)      rc=101, 6 x E0063, the six arms named
+      post-fix (trunk 95d98bde7 merged)  rc=0,   0 errors
+
+  The green-after arm was the one neither host had; macuahuitl landed the fix
+  and this host took the confirming run. A check with only a red arm proves it
+  can fail; a check with only a green arm proves nothing at all.
+
   **BOUNDARY, so nobody over-trusts it.** This covers the SIX LINUX arms only.
   `rustup target list --installed` on this host is aarch64-apple-darwin plus
   the two linux-musl triples — no Windows target — so the two Windows arms are

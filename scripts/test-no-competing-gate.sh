@@ -176,7 +176,10 @@ fi
 r="$(newroot opaque)"
 mkproc "$r" 101 tok-a "/usr/bin/conmon --api-version 1 -c abc"
 mkproc "$r" 102 tok-a "bash /repo/./build.sh --check"
-mkproc "$r" 103 tok-b "bash /repo/./build.sh --check"
+# WRAPPER-SHAPED on purpose: after 1141-vf9w's opaque narrowing, only a
+# process that could BE a wrapper suspends an accusation. An unreadable
+# build.sh is not ambiguous — it cannot be anyone's wrapper.
+mkproc "$r" 103 tok-b "toolbox run --container tillandsias-builder bash -l -c x"
 # UNREADABLE BY STRUCTURE, NOT BY PERMISSION. This arm used to `chmod 000` the
 # environ, which assumes chmod denies the READER — false for root, which has
 # DAC_OVERRIDE, and a WSL distro runs as root by default. Measured under
@@ -210,6 +213,31 @@ if [ -r "$r/103/environ" ]; then
 else
     out="$(run_check "$r")"; rc=$?
     check "an unreadable process suspends the accusation" 3 "could-not-run:competing-gate:unreadable-processes" "$rc" "$out"
+fi
+
+# 10. AN UNREADABLE NON-WRAPPER DOES NOT SUSPEND — the floor that made the
+#     detector unable to accuse at all. Counting every unreadable environ as
+#     opaque put a permanent floor under the suspension: /proc/<pid>/environ is
+#     owner-only (0400), so on yoga 286 of 486 processes were unreadable and
+#     only one was same-uid. pirria measured the consequence with a genuine
+#     stray alive throughout, 30 runs per arm: accused=0 suspended=30 in BOTH
+#     the control and the churn arm. The detector could never reach its own
+#     accusation on an ordinary host, so "runs clean across hosts" was
+#     satisfiable forever — a clean run asserting nothing.
+#
+#     cmdline is world-readable (0444), so the wrapper-shape test is always
+#     evaluable even when environ is not.
+r="$(newroot floor)"
+mkproc "$r" 101 tok-a "/usr/bin/conmon --api-version 1 -c abc"
+mkproc "$r" 102 tok-a "bash /repo/./build.sh --check"
+mkproc "$r" 103 tok-c "/usr/lib/systemd/systemd --user"
+rm -f "$r/103/environ"
+ln -s /nonexistent-so-there-is-nothing-to-read "$r/103/environ" 2>/dev/null || true
+if [ -r "$r/103/environ" ]; then
+    fail=$((fail+1)); echo "FAIL: could not construct an unreadable non-wrapper — this arm would have asserted nothing"
+else
+    out="$(run_check "$r")"; rc=$?
+    check "an unreadable NON-wrapper does not suspend the accusation" 0 "competing-gate:" "$rc" "$out"
 fi
 
 total=$((pass+fail))

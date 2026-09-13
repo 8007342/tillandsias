@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: publishing-a-capability-row-for-a-host-absent-from-the-compacted-base-makes-the-corpus-partial-so-release-preflight-refuses-and-the-pre-push-hook-wedges-every-push-from-that-host
+    field: status
+    value: completed
+    ts: "2026-09-13T09:47:46Z"
+    host: linux
+
+events:
+  - packet_id: publishing-a-capability-row-for-a-host-absent-from-the-compacted-base-makes-the-corpus-partial-so-release-preflight-refuses-and-the-pre-push-hook-wedges-every-push-from-that-host
+    event:
+      type: completed
+      ts: "2026-09-13T09:47:46Z"
+      host: linux
+      summary: |-
+        status 'completed' with evidence_refs: scripts/test-pending-capability-row-does-not-wedge.sh 6/6 at gate step 275-1128-4ffr, 5/6 against the reverted script (only the closure arm flips); pending row -> ok:release-preflight, malformed/mixed/no-host_id all still blocked:plan-ledger-incomplete
+  - packet_id: publishing-a-capability-row-for-a-host-absent-from-the-compacted-base-makes-the-corpus-partial-so-release-preflight-refuses-and-the-pre-push-hook-wedges-every-push-from-that-host
+    event:
+      type: note
+      ts: "2026-09-13T09:47:46Z"
+      host: linux
+      summary: |-
+        release-preflight now distinguishes a pending capability row from an unreadable corpus, keyed on the drop REASON not the dropped-entry prefix

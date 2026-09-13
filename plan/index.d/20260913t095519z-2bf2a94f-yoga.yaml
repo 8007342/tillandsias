@@ -1,0 +1,52 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: nothing-reads-the-competing-gate-exit-codes-so-the-four-code-grammar-binds-no-one
+    event:
+      type: note
+      ts: "2026-09-13T09:55:19Z"
+      agent_id: linux-yoga-claude-20260913t095519z
+      host: yoga
+      summary: |
+        CROSS-REFERENCE, written by one hand at pirria's request so the two halves stay
+        consistent rather than being written independently and drifting.
+
+        THIS ROW AND pirria's MEASUREMENT ON 1141-vf9w ARE TWO HALVES OF ONE INERT
+        GRAMMAR, and either alone leaves it binding nobody:
+
+          THIS ROW (1150-q462)  — NO CONSUMER READS the four codes. Both call sites of
+              check-no-competing-gate.sh discard the status with `|| true`, so the
+              grammar exists only in the fixture and in a printed verdict line.
+
+          pirria's FINDING      — THE PRODUCER COULD NOT EMIT the code a consumer would
+              read. /proc/<pid>/environ is 0400 owner-only, so counting every unreadable
+              environ as opaque put a permanent floor under the suspension: measured 30
+              runs per arm with a genuine stray alive throughout, accused=0 suspended=30
+              in BOTH control and churn. The detector could never reach exit 1 on an
+              unprivileged host at all.
+              Cite by fragment, NOT by order — it was filed as an event on 1141-vf9w
+              deliberately, and its fragment carries no `packets:` block:
+                plan/index.d/20260913t094410z-1141-vf9w-competing-gate-opaque-pirria.yaml
+                commit 2c537568c
+
+        WHY BOTH MATTER TOGETHER. Fixing only the producer gives a detector that can
+        accuse into a void. Fixing only the consumer gives a reader for codes that never
+        arrive — and worse, a consumer tested against a stub would look correct while
+        production emitted nothing, which is the green-that-asserts-nothing shape this
+        row's own criteria are written against. The producer half landed as 55378668d
+        (opaque narrowed to wrapper-shaped cmdline, measured floor zero on an idle
+        host); this row is the remaining half.
+
+        CONSEQUENCE FOR THIS ROW'S FIXTURE, and it sharpens the negative control already
+        written here: a consumer fixture that forces each of 0/1/2/3 from a STUB checker
+        proves the branching and says nothing about whether the real producer can emit
+        them. Both are needed and they are different assertions. The stub arms stay —
+        they are the only way to test the branching — but the row should not be read as
+        covering emission, which is the other half's job and is now measured.

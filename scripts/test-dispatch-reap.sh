@@ -128,9 +128,30 @@ alive() { kill -0 "$1" 2>/dev/null; }
 # never becomes true rather than asserting over a premise that was never
 # established — the rule this row produced, applied to the setup again.
 await_marked() { # await_marked <pid> <token>; 0 if the token appears, 1 on timeout
-    local pid="$1" token="$2" i
+    local pid="$1" token="$2" i marked
     for ((i = 0; i < 100; i++)); do
-        if tillandsias_marked_pids "$token" 2>/dev/null | grep -qxF "$pid"; then
+        # CAPTURE, THEN MATCH (1076-kft9). This read
+        # `tillandsias_marked_pids ... | grep -qxF "$pid"`, and under the
+        # `set -o pipefail` at the top of this file that pipeline reports
+        # FAILURE ON A SUCCESSFUL MATCH: `grep -q` exits at the first hit and
+        # SIGPIPEs the producer, which is still walking every /proc entry.
+        #
+        # MEASURED 2026-09-13, inside tillandsias-builder (where the GATE runs
+        # this file), same token, same process, same library, varying only the
+        # pipe:
+        #     PIPED    5/5 reported FAILURE
+        #     CAPTURED 0/5 reported FAILURE
+        # On the host it passes either way, which is why this read as a flake:
+        # it refused innocent lands and every by-hand re-run afterwards was
+        # green.
+        #
+        # The poll below is still right — a child may genuinely not have exec'd
+        # yet — but polling a pipeline that cannot report success is a loop that
+        # can only time out: every one of its 100 iterations "failed" in the
+        # toolbox, which is why the awaits below reported that pb and pc never
+        # became visible when both were running the whole time.
+        marked="$(tillandsias_marked_pids "$token" 2>/dev/null)"
+        if printf '%s\n' "$marked" | grep -qxF "$pid"; then
             return 0
         fi
         sleep 0.05
@@ -163,7 +184,10 @@ pb="$(spawn_marked "$TOKEN_B")"
 if ! await_marked "$pb" "$TOKEN_B"; then
     fail=$((fail+1)); echo "FAIL: pb never became visible under its own token — the negative control would have asserted nothing"
 fi
-if tillandsias_marked_pids "$TOKEN_A" | grep -qxF "$pb"; then false; else true; fi
+# Same hazard, opposite assertion: a SIGPIPE-induced "failure" would make this
+# arm PASS vacuously — worse than a false red, and it would survive indefinitely.
+_marked_a="$(tillandsias_marked_pids "$TOKEN_A")"
+if printf '%s\n' "$_marked_a" | grep -qxF "$pb"; then false; else true; fi
 check "a differently-marked process is NOT in this token's kill set" $?
 
 # 4. The reap kills the marked tree.

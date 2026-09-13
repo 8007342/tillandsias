@@ -302,6 +302,18 @@ _metrics_default_log() { metrics_default_log "$1" "$REPO_ROOT"; }
 USAGE_LOG="${TILLANDSIAS_EXPERT_USAGE_LOG:-$(_metrics_default_log forge-expert-usage.jsonl)}"
 FLOW_LOG="${TILLANDSIAS_CYCLE_FLOW_LOG:-$(_metrics_default_log tillandsias-cycle-flow.jsonl)}"
 TIMING_LOG="${TILLANDSIAS_TIMING_LOG:-$(_metrics_default_log tillandsias-timing.jsonl)}"
+# ORDER 1119-6wn6. Beside the flow log, by the operator's directive: the loop has
+# CPU-time instruments and no token instrument, so nothing could say WHICH
+# repeated work is token-expensive. A 42-agent read-only sweep cost 4,480,590
+# tokens on 2026-09-11 and the price was invisible until the operator asked.
+#
+# ATTESTED, NOT MEASURED, and that is structural rather than lazy: the harness
+# reports per-agent and per-workflow totals TO THE AGENT, and the agent sees its
+# own remaining-context counter. Nothing in this repo can observe either. So the
+# agent states the number and the script folds it — the check-mcp-surface shape.
+# What this buys over prose in a handoff is that the attestation becomes
+# structured, logged, and comparable across cycles.
+TOKENS_LOG="${TILLANDSIAS_TOKENS_LOG:-$(_metrics_default_log tillandsias-tokens.jsonl)}"
 
 # ── ORDER 1096-p3tn: a SECOND live timing log makes every count a partition ──
 # The refusal above closes the path that CREATES a second log. This closes the
@@ -511,6 +523,89 @@ fi
 # append is wrapped so a full disk, a read-only path, or a missing `date` cannot
 # take down the cycle being measured. Always exits 0. Accepts key=value tokens in
 # any order; absent numeric fields default to 0, absent strings to "-".
+# ── ORDER 1119-6wn6: --emit-tokens ──────────────────────────────────────────
+#
+# One JSONL record per cycle, the same contract as --emit-flow: key=value tokens
+# in any order, absent numerics default to 0, absent strings to "-", replace-on-
+# retry keyed host+cycle, best-effort, ALWAYS exits 0. An instrument that can
+# take down the cycle it measures is worse than no instrument.
+#
+#   cycle-metrics.sh --emit-tokens host=<h> cycle=<id> main_ctx=<n> \
+#       subagent_tokens=<n> agents=<n> by_model=<opus:3,haiku:39> label=<what>
+#
+# `label` is what makes token_recur: possible: it names the WORK, not the cycle,
+# so the same expensive delegation recurring across days is visible as one
+# ranked entry rather than as seven unrelated rows. Without it the log answers
+# "what did we spend" and never "what do we keep paying for", which is the half
+# the operator actually asked for.
+if [ "${1:-}" = "--emit-tokens" ]; then
+    shift
+    et_host="-"; et_cycle=""; et_by_model="-"; et_label="-"
+    et_main_ctx=0; et_subagent_tokens=0; et_agents=0; et_main_ctx_cum=0
+    for tok in "$@"; do
+        case "$tok" in
+            host=*)             et_host="${tok#host=}" ;;
+            cycle=*)            et_cycle="${tok#cycle=}" ;;
+            main_ctx=*)         et_main_ctx="${tok#main_ctx=}" ;;
+            # ORDER 1119-6wn6, added on review. `main_ctx` is PER-CYCLE by
+            # contract. A session that spans many cycles cannot always separate
+            # them — this one could not — and putting a session TOTAL in a
+            # per-cycle field is the same conflation that kept the 4.5M baseline
+            # out of a host log, committed one line later. When only the running
+            # total is observable, attest it HERE and leave main_ctx at 0, so a
+            # reader sees which question was answered instead of inferring it.
+            main_ctx_cumulative=*) et_main_ctx_cum="${tok#main_ctx_cumulative=}" ;;
+            subagent_tokens=*)  et_subagent_tokens="${tok#subagent_tokens=}" ;;
+            agents=*)           et_agents="${tok#agents=}" ;;
+            by_model=*)         et_by_model="${tok#by_model=}" ;;
+            label=*)            et_label="${tok#label=}" ;;
+        esac
+    done
+    # Coerce non-numerics to 0 rather than write a poisoned row the rolling
+    # average would then carry forever (--emit-flow's rule, same reason).
+    for v in et_main_ctx et_subagent_tokens et_agents et_main_ctx_cum; do
+        eval "case \"\$$v\" in ''|*[!0-9]*) $v=0 ;; esac"
+    done
+    # Strings reach a JSON record, so strip what would break it or shift a
+    # parsed field: quotes, backslashes, control bytes, commas in the label.
+    et_host="${et_host//[\"\\]/_}";       et_host="${et_host//[[:cntrl:]]/_}"
+    et_label="${et_label//[\"\\,]/_}";    et_label="${et_label//[[:cntrl:][:space:]]/_}"
+    et_by_model="${et_by_model//[\"\\]/_}"; et_by_model="${et_by_model//[[:cntrl:][:space:]]/_}"
+    case "$et_host" in '') et_host="-" ;; esac
+    case "$et_label" in '') et_label="-" ;; esac
+    case "$et_by_model" in '') et_by_model="-" ;; esac
+    # Mint the cycle id so `-` is unreachable (801-tpxd): a sentinel that cannot
+    # be written cannot be mistaken for a cycle id, and the replace-key cannot
+    # collapse every unlabelled cycle onto one row.
+    if [ -z "$et_cycle" ] || [ "$et_cycle" = "-" ]; then
+        et_mint_host="$et_host"
+        case "$et_mint_host" in '' | '-') et_mint_host="unknown-host" ;; esac
+        et_cycle="${et_mint_host}-$(date -u +%Y%m%dT%H%M%SZ 2>/dev/null || echo unknown)"
+        echo "note: --emit-tokens without a usable cycle=<id>; minted cycle=$et_cycle (order 801-tpxd)." >&2
+    fi
+    et_cycle="${et_cycle//[\"\\]/_}"; et_cycle="${et_cycle//[[:cntrl:][:space:]]/_}"
+    {
+        et_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
+        et_record="$(printf '{"ts":"%s","host":"%s","cycle":"%s","label":"%s","main_ctx":%s,"main_ctx_cumulative":%s,"subagent_tokens":%s,"agents":%s,"by_model":"%s"}' \
+            "$et_ts" "$et_host" "$et_cycle" "$et_label" \
+            "$et_main_ctx" "$et_main_ctx_cum" "$et_subagent_tokens" "$et_agents" "$et_by_model")"
+        mkdir -p "$(dirname "$TOKENS_LOG")" 2>/dev/null || true
+        if [ -f "$TOKENS_LOG" ] \
+           && grep -q "\"host\":\"${et_host}\",\"cycle\":\"${et_cycle}\"" "$TOKENS_LOG"; then
+            et_tmp="${TOKENS_LOG}.$$"
+            # `|| true` is load-bearing: when the log holds ONLY the record being
+            # replaced, grep -v emits nothing and exits 1, which would abandon
+            # the chain and leave the stale row while reporting success
+            # (--emit-flow learned this the hard way).
+            { grep -v "\"host\":\"${et_host}\",\"cycle\":\"${et_cycle}\"" "$TOKENS_LOG" || true; } > "$et_tmp"
+            printf '%s\n' "$et_record" >> "$et_tmp" && mv -f "$et_tmp" "$TOKENS_LOG"
+        else
+            printf '%s\n' "$et_record" >> "$TOKENS_LOG"
+        fi
+    } 2>/dev/null || true
+    exit 0
+fi
+
 if [ "${1:-}" = "--emit-flow" ]; then
     shift
     ef_host="-"; ef_epic="-"; ef_seed="-"; ef_cycle=""
@@ -1199,6 +1294,130 @@ printf 'recur: %s source=%s\n' \
 # computed value.
 printf 'skippable: window=%sd %s source=%s\n' "$RECUR_WINDOW_DAYS" \
     "${skip_line:-candidates=0 floor_ms=${SKIP_FLOOR_MS} min_runs=${SKIP_MIN_RUNS} top3=-}" "$recur_source"
+
+# ── ORDER 1119-6wn6: tokens ─────────────────────────────────────────────────
+#
+# `tokens:` is this cycle's attested spend plus a rolling per-cycle average, and
+# `token_recur:` is the same question `recur:` asks about CPU steps, asked about
+# delegation: which repeated work keeps costing tokens. The operator's directive
+# was explicit that the second one is the point — "see if we have expensive
+# repeatable works we could simplify".
+#
+# AWK, NOT jq, deliberately. The recur:/skippable: views parse logs written by
+# other tools and need jq's generality; this log is written by --emit-tokens in
+# THIS file, one flat record per line with a known shape. Parsing our own format
+# with awk removes the jq-missing branch entirely, so this line cannot render
+# `source=...:unreadable` on a host that simply lacks jq — a token instrument
+# that goes blind on the cheapest hosts would miss exactly the fleet the
+# operator is trying to protect.
+token_source="absent"
+token_line="cycle=- main_ctx=0 subagent_tokens=0 agents=0 by_model=- avg_subagent_tokens=0 cycles=0"
+token_recur_line="window=${RECUR_WINDOW_DAYS}d labels=0 top3=-"
+token_max_line="window=${RECUR_WINDOW_DAYS}d tokens=0 label=- cycle=-"
+if [ -f "$TOKENS_LOG" ]; then
+    token_source="$TOKENS_LOG"
+    _tok_cut="$(date -u -d "-${RECUR_WINDOW_DAYS} days" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null \
+                || date -u -v-"${RECUR_WINDOW_DAYS}"d '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || echo "")"
+    # No host filter: TOKENS_LOG is already a per-host file, exactly like
+    # FLOW_LOG and TIMING_LOG. Filtering inside would be a second, weaker copy
+    # of a scoping decision the log path already makes.
+    _tok_out="$(awk -v cut="$_tok_cut" '
+        function field(line, key,   v) {
+            # "key":value or "key":"value" — our own writer, so the shape is known.
+            if (match(line, "\"" key "\":\"[^\"]*\"")) {
+                v = substr(line, RSTART, RLENGTH)
+                sub("^\"" key "\":\"", "", v); sub("\"$", "", v)
+                return v
+            }
+            if (match(line, "\"" key "\":[0-9]+")) {
+                v = substr(line, RSTART, RLENGTH)
+                sub("^\"" key "\":", "", v)
+                return v
+            }
+            return ""
+        }
+        {
+            ts = field($0, "ts")
+            st = field($0, "subagent_tokens") + 0
+            # Rolling average over EVERY record for this host, windowed only for
+            # the recurrence view: an average that silently dropped old cycles
+            # would move for reasons the reader cannot see.
+            n_all++; sum_all += st
+            last_cycle = field($0, "cycle"); last_main = field($0, "main_ctx")
+            last_main_cum = field($0, "main_ctx_cumulative")
+            # ORDER 1119-6wn6, added on review: the LARGEST single record in the
+            # window, with its label and cycle. token_recur: ranks only REPEATED
+            # labels, which is the right answer to "what do we keep paying for"
+            # — but the incident that produced this packet was a ONE-OFF 4.5M
+            # sweep, and a view that hides one-offs by construction would have
+            # been silent on the very thing that prompted the directive. Two
+            # views, two questions, nothing buried.
+            if (cut == "" || ts >= cut) {
+                # `>=` on the first stamped record, so a window in which every
+                # cycle spent ZERO still names a cycle rather than rendering
+                # `label=- cycle=-`, which is indistinguishable from an empty
+                # log. "The largest spend was 0, here" and "there is nothing
+                # here" are different answers and must not share a rendering.
+                if (st > maxv || maxcyc == "") {
+                    maxv = st; maxlab = field($0, "label"); maxcyc = field($0, "cycle")
+                }
+            }
+            last_sub = st; last_agents = field($0, "agents"); last_bm = field($0, "by_model")
+            if (cut == "" || ts >= cut) {
+                lab = field($0, "label")
+                # ORDER 1119-6wn6, found by dogfooding: only labels that COST
+                # something are ranked. Two zero-spend cycles under one label
+                # were being reported as
+                #     top3=advance-work-from-plan-drain:tokens=0:runs=2
+                # i.e. the top TOKEN-EXPENSIVE repeated work was work that spent
+                # no tokens. That is an instrument reporting something adjacent
+                # to what it claims, which is the class this whole packet exists
+                # to remove. A label is counted for recurrence only once it has
+                # actually cost tokens.
+                if (lab != "" && lab != "-" && st > 0) { tot[lab] += st; runs[lab]++ }
+            }
+        }
+        END {
+            avg = (n_all > 0) ? int(sum_all / n_all) : 0
+            printf "cycle=%s main_ctx=%s main_ctx_cumulative=%s subagent_tokens=%s agents=%s by_model=%s avg_subagent_tokens=%d cycles=%d\n",
+                (last_cycle == "" ? "-" : last_cycle), (last_main == "" ? 0 : last_main),
+                (last_main_cum == "" ? 0 : last_main_cum),
+                (last_sub == "" ? 0 : last_sub), (last_agents == "" ? 0 : last_agents),
+                (last_bm == "" ? "-" : last_bm), avg, n_all
+            # REPEATED means runs > 1. A one-off 4.5M sweep is a cost, not a
+            # recurrence, and ranking it here would bury the cheap thing paid
+            # fifty times — which is the one worth simplifying.
+            nlab = 0
+            for (l in runs) if (runs[l] > 1) { nlab++ }
+            out = ""; shown = 0
+            for (i = 0; i < 3; i++) {
+                best = ""; bestv = -1
+                for (l in runs) {
+                    if (runs[l] <= 1 || (l in used)) continue
+                    if (tot[l] > bestv) { bestv = tot[l]; best = l }
+                }
+                if (best == "") break
+                used[best] = 1
+                out = out (shown ? "," : "") best ":tokens=" tot[best] ":runs=" runs[best]
+                shown++
+            }
+            printf "labels=%d top3=%s\n", nlab, (out == "" ? "-" : out)
+            printf "tokens=%d label=%s cycle=%s\n", maxv + 0,
+                (maxlab == "" ? "-" : maxlab), (maxcyc == "" ? "-" : maxcyc)
+        }
+    ' "$TOKENS_LOG" 2>/dev/null || true)"
+    if [ -n "$_tok_out" ]; then
+        { IFS= read -r _tok_cycle_line; IFS= read -r _tok_recur_rest; IFS= read -r _tok_max_rest; } <<EOF
+$_tok_out
+EOF
+        [ -n "$_tok_cycle_line" ] && token_line="$_tok_cycle_line"
+        [ -n "$_tok_recur_rest" ] && token_recur_line="window=${RECUR_WINDOW_DAYS}d $_tok_recur_rest"
+        [ -n "$_tok_max_rest" ] && token_max_line="window=${RECUR_WINDOW_DAYS}d $_tok_max_rest"
+    fi
+fi
+printf 'tokens: %s source=%s\n' "$token_line" "$token_source"
+printf 'token_recur: %s source=%s\n' "$token_recur_line" "$token_source"
+printf 'token_max: %s source=%s\n' "$token_max_line" "$token_source"
 
 # ── plan ────────────────────────────────────────────────────────────────────
 packets="-"; ready="-"; blocked="-"; pending="-"
