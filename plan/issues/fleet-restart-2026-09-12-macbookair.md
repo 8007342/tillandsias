@@ -127,3 +127,74 @@ these initially read as success:
 
 A check that cannot distinguish *"I looked and found nothing"* from *"I never
 looked"* will eventually be read as the former.
+
+## 2026-09-13 — the darwin unblock, and a collision one layer down
+
+- **Two hosts fixed the same shared script within an hour, and neither knew.**
+  macbookair and yoga. `origin/linux-next` was red on every macOS host at
+  c6d191d39 (`FAIL: dispatch reap 7/9`, 1141-vf9w), reproduced in a pristine
+  detached worktree so it was trunk and not either tree. Both hosts then wrote
+  the SAME caller fix into `scripts/with-tillandsias-builder.sh`: yoga's
+  `_tb_on_signal` landed on trunk first (936d22364), macbookair's
+  `_tb_reap_and_report` landed on `osx-next` (ba0fb4fd5). The coordinator kept
+  trunk's for both hunks and macbookair took trunk's copy wholesale on the next
+  merge (`git checkout origin/linux-next -- scripts/with-tillandsias-builder.sh`),
+  verified the trap names `_tb_on_signal` with no dangling reference, and
+  re-ran the fixture.
+
+  **THIS IS THE DUPLICATE-FILING GAP ONE LAYER DOWN.** 814-iyu7 is two hosts
+  implementing one PACKET; the claim mechanism separates that. Nothing
+  separates two hosts editing one shared FILE from two different packets — the
+  claim was on 1141-vf9w in both cases, and claiming it twice was not the
+  error. `scripts/` is cross-host shared scope and the skill says to coordinate
+  via the ledger first; both hosts were acting on the coordinator's own
+  instruction and still collided. **A heads-up on a shared file beats a
+  merge-time choice** — say which shared path you are about to write, before
+  writing it, not when git asks.
+
+  Taking trunk's was right on the merits and not only as a tie-break: yoga's
+  version names the token in the warning, prints the exact `ps` line to find
+  the survivor, and records that SIGTERM is measured inert so SIGKILL is
+  needed. Mine said less.
+
+- **An absent result and a negative result render identically — state it as a
+  rule, not as anecdotes.** Four instances in two cycles on this host, each of
+  which first read as success:
+  1. `cargo test -p X "a|b"` — the filter is a SUBSTRING, not a regex. Selected
+     zero tests, printed `test result: ok`. Two falsification mutations were
+     nearly recorded as proven having run nothing.
+  2. `scripts/host-capability-probe.sh` resolves `./target/release/tillandsias`.
+     A debug-only cycle republishes the OLD values under a FRESH timestamp.
+  3. `env PATH=/usr/bin:/bin ... timeout 120 bash script.sh` — `timeout` is
+     itself a brew coreutils binary, so under the narrowed PATH `env` could not
+     resolve it, the script never ran, and the grep came back empty.
+  4. `bash fixture.sh | tail -4; echo "exit=$?"` reports TAIL's status. It
+     printed 0 for a script that exits 2 — and the script in question was the
+     one whose whole purpose is to stop a skip being read as a pass.
+
+  **THE RULE: capture the status of the thing you are measuring, unpiped, and
+  quote the count of what actually ran.** "N selected, M filtered out" beats
+  "ok". Instance 4 is the sharpest because `scripts/land-on-platform-branch.sh`
+  documents this exact trap in its own header (`git push | tee LOG | tail -3`
+  tests tail, and a rejected push read as LANDED) and it was still repeated by
+  a host that had read that header the same night.
+
+- **A gate step that COULD NOT RUN must not report what the check would have
+  FOUND, and the reverse is equally true.** The 1141-vf9w fixture's honest
+  inability to look was collapsing into the step's content verdict — an answer
+  about a reaper the host never exercised — and refused every macOS land on an
+  otherwise green trunk. `STEP_SKIP_EXIT` (1087-h2z9) is the fix. But a skip is
+  NOT coverage: macOS still has no working reaper, `tillandsias_reap_marked`
+  now returns `unsupported:dispatch-reap:no-proc` rather than a quiet 0, and
+  the darwin design is filed as 1145-iigx. Both the fixture header and the step
+  say so in as many words, because the next reader's danger is the opposite of
+  the last one's.
+
+- **Ninth idiom class for 1135-z8gn: ABSENT-ON-DARWIN PRIMITIVES.** `/proc` and
+  `setsid` are not GNU-vs-BSD flag differences — they do not exist on macOS at
+  all, so there is no flag to normalise and a flag-shaped advisory returns
+  clean on the file. Worth noting that `lib-dispatch-reap.sh`'s own header is
+  ABOUT darwin portability: it chooses `read -r -d ''` over `mapfile` because
+  macOS ships bash 3.2, and records that check-bash-dialect refused it once and
+  "earned its keep". All true. The dialect guard checks the SHELL and had
+  nothing to say about a FILESYSTEM absent on the target.
