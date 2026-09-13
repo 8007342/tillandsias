@@ -1,0 +1,49 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by the macuahuitl coordinator on 2026-09-13 from lenovinha's measured
+# sequence: an auth failure that cleared on its own seconds later cost a full
+# cycle because the land script treats auth-failed as terminal.
+packets:
+  - packet_id: the-land-script-treats-auth-failed-as-terminal-so-a-transient-credential-blip-costs-a-whole-cycle-where-one-retry-after-a-pause-would-have-landed
+    order: 1164-cftu
+    status: ready
+    kind: enhancement
+    priority: p3
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [land, credential, tooling, coordination]
+    estimated_hours: 1
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is the retry and its fixture arm. Future arm in scripts/test-land-verdict-through-a-pipe.sh (or a sibling scripts/test-land-auth-retry.sh); the claimer writes it in the same commit and moves this text into verifiable_closure: a push stub that fails with the auth-failed signature once and succeeds on the second call lands with ok:land (pre-fix result: FAILS — refused:land:auth-failed, exit 5, on the first failure; measured lenovinha 2026-09-13: refused on one attempt, dry-run rc 0 seconds later, re-run ok on attempt 1 with no operator action between); NEGATIVE CONTROL: a stub that fails twice still refuses with exit 5 and the same text, and the retry never runs gh auth login/refresh (1025-a896)."
+    owned_files:
+      - scripts/land-on-platform-branch.sh
+      - scripts/test-land-verdict-through-a-pipe.sh
+    title: |
+      refused:land:auth-failed is terminal in scripts/land-on-platform-branch.sh (exit 5, "the operator re-provisions"), which is right for a real expiry and costs a whole gated cycle for a blip: lenovinha's credential went dead, alive, dead and alive within an hour with no operator action, and the land refused on a dead moment that cleared seconds later. One retry after a short pause, with the refusal unchanged when the second attempt also fails, and never a re-auth.
+    context: |
+      MEASURED on lenovinha 2026-09-13: push and `gh auth status` hung with
+      "token in default is invalid"; then nine commits landed over three
+      lands; then refused:land:auth-failed LAND_EXIT=5 on 1161-42pc; then a
+      dry-run rc 0 seconds later and a re-run that landed on attempt 1 —
+      same tree, same remote, nothing changed between the last two. A
+      genuinely invalid token does not start working on its own, so the
+      fault is upstream of the token (network, credential store or
+      GitHub-side; not distinguishable from one host). The land script's
+      refusal is correct for an expiry; for a blip it discards a green gate.
+
+      WHAT TO BUILD: on the auth-failed signature, sleep a bounded interval
+      (30 s) and retry the push ONCE; on the second failure refuse exactly as
+      today (exit 5, the 1025-a896 text, no re-auth); print
+      `land: auth-failed once, retrying after 30s` so a log reader sees the
+      blip. NOT IN SCOPE: retrying other refusals; any gh auth command.
+    exit_criteria:
+      - 'a push that fails with the auth signature once and succeeds on retry lands (pre-fix result: FAILS — refused on the first failure)'
+      - 'NEGATIVE CONTROL: two consecutive failures refuse with exit 5 and the unchanged 1025-a896 text; no gh auth command is invoked (asserted by a stubbed gh on PATH that records calls)'
+      - 'the retry line appears in land.log so a blip is distinguishable from a clean land'
+    events:
+      - type: filed
+        ts: "2026-09-13T17:08:06Z"
+        agent_id: "linux-macuahuitl-fable-20260913t170806z"
+        host: macuahuitl
+        summary: |
+          Filed by the coordinator from lenovinha's measured dead/alive
+          sequence; the land script is the coordinator's file.
