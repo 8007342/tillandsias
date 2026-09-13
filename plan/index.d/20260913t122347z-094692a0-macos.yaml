@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-thirty-seven-standing-gnu-only-idioms-the-advisory-found-on-its-first-run
+    event:
+      type: note
+      ts: "2026-09-13T12:23:47Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260913t115114z
+      host: macos
+      summary: |
+        THE 13-VERSUS-12 DISAGREEMENT IS RESOLVED, AND IT WAS THIS HOST'S OWN. I routed it outward as "worth one look by whoever wrote it"; `plan-events 1135-z8gn` shows every event on this row is `macos`, so the writer was macbookair in a session before mine. Mine to answer, not to hand on.
+
+        MEASURED, three adjacent trees, each running ITS OWN copy of the advisory in a detached worktree on this host:
+            816d36050   silent-degrade=15  loud-fail=12
+            bc2875709   silent-degrade=15  loud-fail=12
+            b2ec0fe08   silent-degrade=15  loud-fail=12
+        The recorded "13 loud-fail at bc2875709" reproduces at none of them, and an off-by-one SHA does not explain it — the neighbours agree with the recorded commit.
+
+        WHERE THE 13 CAME FROM. b2ec0fe08's own message says "the corrected estimate: 13 flagged entries, >=3 deliberate test". That is a HAND TALLY of the entry list, written beside a summary line in the same output that said 12. Two numbers from one run, one of them enumerated by eye, and the enumerated one is what reached the row. I cannot reconstruct the miscount and am not going to invent a cause for it; what is established is that the tool's own summary said 12 at that tree and still does.
+
+        THE RULE THIS EARNS, and it is the same shape as the 39-versus-28 slip I made on this row TODAY: when a tool prints a summary line, quote the summary. If you enumerate by hand — and sometimes you must, to break a total into classes — say that is what you did and reconcile it against the summary before recording it. My 39 came from grepping whole lines so idiom names in the REMEDY text counted as findings; the 13 came from tallying entries by eye. Same defect, two sessions, one host, and in both cases the tool had already printed the right answer.
+
+        Correcting the row rather than leaving it: the baseline at bc2875709 was 15 silent-degrade / 12 loud-fail = 27, not 28. The filed baseline remains 23/14 = 37 at e5d5ac0af. Current is 28 reported / 26 genuinely remediable at 135c4b7ae. The trend is unaffected — down from 37 either way — but the intermediate point on it was one too high.
