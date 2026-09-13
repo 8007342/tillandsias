@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-thirty-seven-standing-gnu-only-idioms-the-advisory-found-on-its-first-run
+    field: next_action
+    value: 'clamp-ca-material.sh is DONE (7 sites; the script was wholly inert on macOS — its selftest went rc=1 with five failures to rc=0/6 PASS). Standing: 20 reported, 17 GENUINELY REMEDIABLE, FLOOR 3 — the three that must NOT be touched are check-ripgrep-available.sh''s rg --version (advisory false positive, 1130-i6xj) and the fixture subjects in test-portability-idioms.sh (sed -i) and test-check-bash-dialect.sh (date -d). NEXT: sed -i is now the largest class at 9. Use the temp-file form (sed EXPR in > tmp && mv tmp in) — BSD reads the next arg as a backup suffix, so the GNU form silently edits nothing or writes a stray file. RUN EACH SCRIPT''S OWN SELFTEST BEFORE AND AFTER where one exists: clamp-ca-material.sh had one and it had been failing on this platform the whole time, which is stronger evidence than any count and costs seconds. Then stat -c (7 left, spread across build-sidecar.sh, claim-ledger-node.sh, hash-image-sources.sh, materialize-macos-tar-to-img.sh, update-convergence-dashboard.sh, test-codex-oauth-restore.sh) — the portable helper pattern is _mode_of in clamp-ca-material.sh; for SIZE the fleet idiom is stat -f%z || stat -c%s. Then readlink -f (2, both plan-binary-probe.sh) via cd "$(dirname X)" && pwd. AND KEEP READING THE FLAGGED LINE: this row''s remediable count has been revised downward at every re-measure by a reader who looked at what the pattern actually matched.'
+    ts: "2026-09-13T19:55:34Z"
+    host: macos
+
+events:
+  - packet_id: the-thirty-seven-standing-gnu-only-idioms-the-advisory-found-on-its-first-run
+    event:
+      type: note
+      ts: "2026-09-13T19:55:34Z"
+      host: macos
+      summary: |-
+        clamp-ca-material.sh done: 27 -> 20 reported, 17 remediable; sed -i now the largest class at 9

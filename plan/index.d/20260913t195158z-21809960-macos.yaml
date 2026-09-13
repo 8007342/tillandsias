@@ -1,0 +1,13 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 699-usxc).
+#
+# the-thirty-seven-standing-gnu-only-idioms-the-advisory-found-on-its-first-run.status was ALREADY 'in_progress', so no field changed — but the caller
+# supplied a note, and discarding it silently is what this packet is about.
+events:
+  - packet_id: the-thirty-seven-standing-gnu-only-idioms-the-advisory-found-on-its-first-run
+    event:
+      type: note
+      ts: "2026-09-13T19:51:58Z"
+      host: macos
+      summary: |-
+        claimed for cycle 2026-09-13T19:51:58Z: the clamp-ca-material.sh stat -c concentration, 7 of 14
