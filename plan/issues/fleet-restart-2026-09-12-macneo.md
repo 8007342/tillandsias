@@ -104,3 +104,32 @@ agents and hand invocations, not the build. The remedy it prints is
 confidently wrong (`rustup target add <target>` on a host that has it, a no-op).
 Same class as 1004-x9ua one level down: the binary probes were taught to search
 prefixes beyond PATH, the tool that ENUMERATES targets was not.
+
+## 2026-09-13 — an absent result and a negative result render identically, three times in one verification
+
+Closing 1127-xm3m needed one fact: did the tests that used to write the live
+`crashloop.state` actually RUN after the fix? The file being untouched is
+worthless without it — a test that never executes writes nothing either, so
+"fixed" and "never ran" are the same observation.
+
+Three attempts at that control, each of which looked like an answer:
+
+1. Grepped the land-gate attempt log for the test names, found none, nearly
+   concluded the tests do not run here. That gate had refused early on the
+   citation guard and never reached the test phase.
+2. Concluded from the same log that the gate does not run the macos-tray tests
+   at all. The control killed it: EVERY crate name scored zero in that log,
+   including crates certainly built. I was measuring the log's verbosity.
+3. Only the completed green gate log carries crate names, `test result:` lines,
+   and the four test names — all four ran and passed.
+
+Also corrected mid-verification: `stat -f '%Sm' -t '%Y-%m-%dT%H:%M:%SZ'` prints
+LOCAL time and the trailing `Z` is literal text, not a conversion, so the file's
+mtime read eight hours off until it was decoded from the record's own
+`written_at` epoch field. The main drill already records the UTC-with-Z rule for
+reporting timestamps to peers; this is the same trap inside a single host's own
+reasoning.
+
+The generalisable form, and it is the through-line of this host's whole week: a
+check that cannot fail, a control that has stopped discriminating, and an
+explanation offered before the measurement all read exactly like success.

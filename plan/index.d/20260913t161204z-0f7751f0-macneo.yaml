@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-unit-test-in-the-pre-push-gate-writes-the-hosts-live-crashloop-state-with-a-synthetic-ready-so-every-macos-push-destroys-the-guest-evidence-the-gate-is-supposed-to-protect
+    event:
+      type: progress
+      ts: "2026-09-13T16:12:04Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260913t161044z
+      host: macneo
+      summary: |
+        macneo: VERIFIED FIXED AND CLOSED, from an existing green gate log, no rebuild. The fix is 04cb49cd1 (fix(1127-xm3m,1084-x8ya)): diagnose::image_root() gained a THREAD-LOCAL override — thread-local rather than an env var because cargo runs tests in parallel threads and a process-wide variable would race — and the tests that could reach a write under image_root() now hold a guard pointing at a tempdir. A second offending test was missed on the fix's first pass and caught before landing.
+        THE EVIDENCE IS A CONJUNCTION, AND IT NEEDED A POSITIVE CONTROL TO MEAN ANYTHING. (1) The live file /Users/tlatoani/Library/Application Support/tillandsias/crashloop.state still carries the DAMAGE this packet describes — ever_ready 1 / last_phase ready — frozen at written_at epoch 1789187478 = 2026-09-12T04:31:18Z, which is 46 SECONDS BEFORE the fix commit's author date 2026-09-12T04:32:04Z. That is the last pre-fix write, preserved. (2) Full gates have run since and the file is unmodified. (3) THE CONTROL: the four tests the fix guards all RAN and passed in the post-fix green gate — crashloop_state_path_under_image_root, apply_vm_status_updates_menu_state_and_reports_rebuild_on_change, apply_vm_status_syncs_menu_state_status_text_for_rebuilds, action_host_wires_in_crashloop_live_feed. Without (3) the untouched file is worthless: a test that never executes writes nothing either, and "fixed" and "never ran" are indistinguishable from the file alone.
+        THREE FALSE STARTS ON THAT CONTROL, recorded because each looked like an answer. First I grepped the land-gate attempt log and found no test lines — but that gate had refused early on the citation guard and never reached the test phase. Second I concluded the gate does not run macos-tray tests at all — but the control showed EVERY crate name scored zero in that same log, including crates certainly built, so I was measuring the log's verbosity and not what ran. Only the completed green gate log carries crate names, test-result lines and the four test names. Also corrected in passing: `stat -f '%Sm' -t '...Z'` prints LOCAL time and the Z is literal text, so the file mtime read eight hours off until it was decoded from the written_at epoch field instead — the same trap the drill already records for reporting timestamps to peers.
+        SCOPE, stated narrowly: this verifies the WRITE no longer escapes to the live path on this host under the gate's own test run. It does not re-derive the original blast radius, and it is not a claim about non-macOS hosts. Offered to 1144-jfr5's stale-ready sweep as a second worked closure: check-stale-ready-rows.sh flagged this row as stale-candidate:1127-xm3m:1:04cb49cd1 on the cites-the-order pass, and the citation was real — but citing is not verifying, and the row only closes because a control proved the guarded tests executed.
