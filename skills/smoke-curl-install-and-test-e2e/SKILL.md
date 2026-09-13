@@ -65,6 +65,30 @@ share, so the keychain↔volume resync brick (see git history `738059bc`) is par
 of what this smoke exercises — if init bricks, that is a finding, not a failure
 to hide.
 
+**On Linux that paragraph is NOT true today, and a run must say which state it
+was in (order 900-z3kv).** `podman system reset --force` empties the podman
+store — containers, volumes AND images — but it does not reach the HOST
+KEYCHAIN. Vault then recovers the pre-existing Shamir share and logs `preserving
+existing data volume (Shamir share present in keychain)`, so the resync path
+above is **not exercised**. Measured independently on two Linux hosts with
+differently-aged shares (yoga, created 2026-06-15; lenovinha, created
+2026-07-08), which makes it a property of the Linux lane rather than one host's
+dirty state — and it means every Linux "clean room" pass since at least 2026-06
+silently carried this gap.
+
+Run `scripts/probe-credential-cold-state.sh --format=md` and paste its block
+into the findings file, the way the Windows leg records its hashes. It reports
+`credential-cold` or `credential-warm` from keychain **metadata only** — never
+`secret-tool search --all`, which prints the secret inline and put live tokens
+into two transcripts on 2026-08-25 — and reports `could-not-run` when the
+question cannot be asked, which must never be read as cold.
+
+Whether the reset should CLEAR that share (the Linux analogue of 804-ckst, whose
+`scripts/clear-vault-host-credentials.ps1` exists for Windows only) or whether
+preservation is correct and this document should simply say so, is an OPEN
+DECISION on 900-z3kv. Until it is made, do not write either claim as settled —
+report the measured state and move on.
+
 ---
 
 On macOS, the destructive substrate is the Tillandsias Virtualization.framework

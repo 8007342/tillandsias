@@ -393,6 +393,56 @@ attempt_plan_only_lane() {
                     fi
                     bases+=("")
                     ;;
+                plan/deslop-sweeps.d/?*.md)
+                    # ORDER 1141-f5nk (filed by pirria). THE SAME DEFECT AS THE
+                    # plan/issues ARM BELOW, one directory over, and with the
+                    # same perverse incentive. 829-dkuc makes recording a
+                    # de-slop sweep a REQUIRED step — `check-deslop-due.sh
+                    # record` refuses without its counts, and the sweep's kill
+                    # rule counts only sweeps that examined new rows — but this
+                    # lane never listed plan/deslop-sweeps.d/, so the mandatory
+                    # record took the whole push onto the full gate. pirria lost
+                    # three ~950s gates to it.
+                    #
+                    # THE INCENTIVE IS THE ARGUMENT, exactly as 889-twhe argued
+                    # for plan/issues: when the cheap path excludes a mandatory
+                    # record, the cheapest way to satisfy the loop is to skip the
+                    # record — and skipping it DISARMS 829-dkuc's kill rule,
+                    # because that rule reads this ledger. A lane that taxes the
+                    # step it depends on erodes the thing it is measuring.
+                    #
+                    # SAFE BY THE SAME REASONING AS loop_status.d: one file per
+                    # host (<host>.md), append-only, and the README states
+                    # outright that nothing in ./build.sh consults it — it is a
+                    # scheduler input, not a build gate. So a change here cannot
+                    # alter what the gate would have proven about the tree.
+                    #
+                    # A OR M, because `record` APPENDS to an existing per-host
+                    # file on every sweep after the first; A-only (the
+                    # loop_status.d shape) would have qualified the first sweep
+                    # on a host and taxed every one after it.
+                    if [[ "$status" != "A" && "$status" != "M" ]]; then
+                        echo "plan-only lane: not applicable — '$path' has status '$status' in the outgoing diff; sweep records qualify as new (A) or appended (M) only (full gate required)" >&2
+                        return 1
+                    fi
+                    if [[ "${path#plan/deslop-sweeps.d/}" == */* ]]; then
+                        echo "plan-only lane: not applicable — '$path' is nested below plan/deslop-sweeps.d/ (full gate required)" >&2
+                        return 1
+                    fi
+                    # APPEND-ONLY ON M, the work-queue check's reasoning: a
+                    # rewrite cannot be told apart from erasing sweep history,
+                    # and the kill rule counts those entries.
+                    if [[ "$status" == "M" ]]; then
+                        _ds_removed="$(git diff "$remote_sha" "$local_sha" -- "$path" 2>/dev/null \
+                            | grep '^-' | grep -v '^---' | head -3)"
+                        if [[ -n "$_ds_removed" ]]; then
+                            echo "plan-only lane: not applicable — '$path' is a sweep ledger and this edit REMOVES or REWRITES lines, which the lane cannot tell from erasing sweep history that 829-dkuc's kill rule counts (full gate required)" >&2
+                            printf '%s\n' "$_ds_removed" | sed 's/^/    /' >&2
+                            return 1
+                        fi
+                    fi
+                    bases+=("")
+                    ;;
                 plan/issues/?*.md)
                     # Order 889-twhe. The Reduction Engine makes filing a
                     # plan/issues capture a NON-NEGOTIABLE exit condition of
@@ -518,7 +568,7 @@ attempt_plan_only_lane() {
                     bases+=("")
                     ;;
                 *)
-                    echo "plan-only lane: not applicable — '$path' is outside plan/index.d/, plan/loop_status.d/, plan/issues/, and plan/mo-full-attestations.d/ (full gate required)" >&2
+                    echo "plan-only lane: not applicable — '$path' is outside plan/index.d/, plan/loop_status.d/, plan/issues/, plan/deslop-sweeps.d/, and plan/mo-full-attestations.d/ (full gate required)" >&2
                     return 1
                     ;;
             esac

@@ -1,0 +1,55 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-linux-clean-room-reset-does-not-reach-the-host-keychain
+    event:
+      type: progress
+      ts: "2026-09-13T03:03:54Z"
+      agent_id: linux-lenovinha-opus5-20260913t030354z
+      host: linux
+      summary: |
+        CLAIM — lenovinha, plan_next's top claimable after 829-dkuc was set aside (see
+        the note below). I am one of the two hosts whose measurement filed this row.
+
+        SCOPE I AM TAKING THIS CYCLE, and the fence is deliberate:
+
+          IN: exit criterion 2 — "a Linux e2e can DEMONSTRATE which state it ran in".
+          This is required under BOTH (a) and (b), needs no destructive run, and is the
+          thing that makes every future Linux leg honest instead of relying on four
+          separate agents volunteering the gap in prose. Share presence/absence recorded
+          as METADATA ONLY.
+
+          IN: the evidence for the (a)/(b) decision — what the reset actually does, and
+          whether 804-ckst's Windows path generalises — recorded as a recommendation.
+
+          FENCED, pending the operator: implementing (a) itself. Making
+          `podman system reset --force` clear the host-held vault-shamir-share-v1 means
+          DELETING A HOST CREDENTIAL. Botched, it locks Vault out of its own data. The
+          packet sanctions the change but the fleet rule is that a destructive step gets
+          per-run consent, and this one is destructive to host state that no reset
+          currently touches. I will bring the decision with evidence rather than perform
+          it and report afterwards.
+
+        CONSTRAINTS I AM HOLDING MYSELF TO, from the row:
+          * NEVER MATERIALISE THE SECRET. busctl metadata only. `secret-tool search
+            --all` prints the secret inline and put live tokens into two transcripts on
+            2026-08-25. Metadata answers the question completely.
+          * DO NOT close this by re-running the two Linux legs. Both hosts already
+            volunteered that neither run was credential-cold; a third report cannot
+            close what is unexercised by construction. That is the row's own note and it
+            rules out the cheapest-looking move.
+          * (a) XOR (b), never both, and never ship (b) while the runbook asserts (a).
+
+        SET ASIDE, NOT SKIPPED — 829-dkuc was plan_next's #1 and I am not taking it:
+        `multi_cycle: true`, 12h, and its own next_action says the remaining half "wants
+        either sweep-budget headroom or an operator-paired session". Its protocol also
+        RETRACTS and DELETES filed work under a kill rule. Starting a twelve-hour
+        protocol design unilaterally, on a row that asks for pairing, is not a drain
+        slice. Flagged to the coordinator rather than silently passed over.

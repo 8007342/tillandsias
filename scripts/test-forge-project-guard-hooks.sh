@@ -60,12 +60,46 @@ mkdir -p "$proj/scripts/hooks"
 git init -q -b linux-next "$proj"
 git -C "$proj" config user.email f@x; git -C "$proj" config user.name f
 cp "$ROOT/scripts/install-hooks.sh" "$proj/scripts/"
-for h in pre-commit-openspec.sh pre-push-local-gate.sh pre-push-linux-next-merged.sh \
-         pre-push-version-guard.sh pre-push-main-branch-affordance.sh \
-         pre-push-no-stale-base-revert.sh \
-         post-commit-dashboard-refresh.sh post-commit-expert-refresh.sh; do
-    cp "$ROOT/scripts/hooks/$h" "$proj/scripts/hooks/"
-done
+# ORDER 1083-gzqj, ARM 3. THIS LIST USED TO BE EIGHT NAMES TYPED OUT HERE — a
+# copy of a set that lives in install-hooks.sh. Nobody chose eight; it was what
+# the installer composed on the day this was written. Adding a ninth required
+# hook there did not fail HERE with "the fixture's list is stale"; it failed at
+# arm 1 below with "installer returned non-zero" or a core.hooksPath mismatch,
+# pointing the reader at hook INSTALLATION while the actual fault was this
+# transcription. A hardcoded list that must track a real set has to DECLARE that
+# coupling, or it misattributes every change to the set it copied.
+#
+# DERIVED FROM THE INSTALLER ITSELF, which is the single source of truth: every
+# hook source it composes appears as scripts/hooks/<name>.sh in its own text
+# (the *_REL / *_SOURCE assignments). A ninth hook is therefore copied here the
+# moment the installer names it, with no edit to this file.
+_hook_sources="$(grep -oE 'scripts/hooks/[a-z0-9-]+\.sh' "$ROOT/scripts/install-hooks.sh" \
+                 | LC_ALL=C sort -u)"
+_hook_count="$(printf '%s\n' "$_hook_sources" | grep -c 'scripts/hooks/')"
+# A DECLARED VACUITY FLOOR, and the number is chosen rather than observed: the
+# installer composes a pre-commit hook and at least one pre-push hook, so fewer
+# than two sources means the derivation broke (a rename, a refactor into a
+# variable this grep cannot see) and every arm below would run against a
+# checkout missing the very files it is testing.
+if [ "${_hook_count:-0}" -lt 2 ]; then
+    echo "FAIL: derived only ${_hook_count:-0} hook source(s) from install-hooks.sh — the \
+derivation has broken, and this fixture would otherwise test a checkout that is missing them" >&2
+    fail=1
+fi
+while IFS= read -r _rel; do
+    [ -n "$_rel" ] || continue
+    if [ ! -f "$ROOT/$_rel" ]; then
+        # NAME THE LIST, not the installer. This is the misattribution the arm
+        # exists to prevent, so it must not commit it itself.
+        echo "FAIL: install-hooks.sh names $_rel, which does not exist — the installer's \
+source set and the tree disagree (this is NOT a hook-installation fault)" >&2
+        fail=1
+        continue
+    fi
+    cp "$ROOT/$_rel" "$proj/scripts/hooks/"
+done <<HOOK_SOURCES
+$_hook_sources
+HOOK_SOURCES
 cp "$ROOT/scripts/dev-host-experts.sh" "$proj/scripts/" 2>/dev/null || true
 printf 'x\n' > "$proj/f.txt"; git -C "$proj" add -A; git -C "$proj" commit -qm base
 

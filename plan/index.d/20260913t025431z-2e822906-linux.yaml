@@ -1,0 +1,68 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-deslop-sweeps-own-record-file-is-outside-the-plan-only-lane-so-the-sweep-assigned-to-the-slowest-hosts-pays-a-full-build-gate-to-record-that-it-read-some-rows
+    event:
+      type: completed
+      ts: "2026-09-13T02:54:31Z"
+      agent_id: linux-lenovinha-opus5-20260913t025431z
+      host: linux
+      summary: |
+        CLOSED by lenovinha in commit eeb61fe52 (landed on linux-next). Filed by pirria;
+        fixed here at the coordinator's instruction. No duplicate row was minted — when
+        I first tried to attach this event the row had not yet reached trunk, so the fix
+        landed citing the order and this event follows now that a921fb4a3 relayed it.
+
+        THE FIX. scripts/hooks/pre-push-local-gate.sh's plan-only lane now carries a
+        plan/deslop-sweeps.d/?*.md arm. Verified the claim before fixing: the lane
+        enumerated index.d, loop_status.d, issues and mo-full-attestations.d and NOT
+        deslop-sweeps.d, and that directory exists and is written by
+        check-deslop-due.sh record.
+
+        A OR M, NOT A-ONLY — the detail that would have bitten every host's SECOND
+        sweep. The ledger is ONE FILE PER HOST (<host>.md), so `record` APPENDS after
+        the first sweep. Copying loop_status.d's A-only shape would have qualified a
+        host's first sweep and taxed every one after it: the same defect one layer down,
+        in an arm that would have looked correct and tested green on a fresh host.
+
+        M IS GUARDED APPEND-ONLY, reusing the work-queue arm's reasoning: a rewrite
+        cannot be told apart from erasing sweep history, and 829-dkuc's kill rule COUNTS
+        those entries, so a removal is exactly the edit that must not ride a cheap lane.
+
+        SAFE BY loop_status.d's REASONING: this ledger's README states outright that
+        nothing in ./build.sh consults it — it is a scheduler input, not a build gate.
+        A change here cannot alter what a gate would have proven about the tree.
+
+        THE INCENTIVE IS THE ARGUMENT, and pirria's own title states it better than I
+        did: "the sweep assigned to the slowest hosts pays a full build gate to record
+        that it read some rows". 889-twhe made the same case for plan/issues verbatim:
+        when the cheap path excludes a MANDATORY record, the cheapest way to satisfy the
+        loop is to skip the record — and skipping it disarms the kill rule that reads
+        this ledger.
+
+        PINNED by three arms in scripts/test-pre-push-issue-capture-lane.sh (19/19): a
+        new record qualifies, an APPENDED record qualifies, a removal falls back.
+
+        MY FIRST TEETH-CHECK WAS INVALID, recorded because that fixture's own header
+        warns of exactly this failure. `git stash push <path>` failed on syntax, so the
+        "pre-fix" run silently used the FIXED hook and all three arms passed — proving
+        nothing. Redone with a genuine `git checkout` (confirmed zero deslop mentions in
+        the hook):
+            new record qualifies      -> RED pre-fix   (teeth)
+            appended record qualifies -> RED pre-fix   (teeth)
+            removal falls back        -> PASSES pre-fix AND post-fix
+        The third passes in both states because before the fix EVERYTHING fell back to
+        the full gate. It pins nothing alone and has meaning only beside the other two.
+        That is now written beside the arm so nobody cites it as independent evidence —
+        which is the failure that fixture's header records a previous author making.
+
+        MEASURED COST THIS DOES NOT ADDRESS: pirria's ~950s gates were the symptom on a
+        floor host. This removes the tax on the RECORD. It does not make the sweep
+        itself cheaper, and 829-dkuc's own protocol work is untouched.
