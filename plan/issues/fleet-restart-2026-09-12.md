@@ -965,7 +965,8 @@ stories.
   fixture that died halfway. esme chased this to the bottom while primed to find
   the bug, and reported it as a negative.
 
-  A RELATED SCARE, NARROWED RATHER THAN FILED. run-litmus-test.sh:177-181 warns
+  A RELATED SCARE, NARROWED RATHER THAN FILED. run-litmus-test.sh's own header
+  comment on its yaml-reader tiering warns
   that without yq the runner falls back to grep approximations that decide WHICH
   TESTS RUN, so a host would silently select a different test set and nothing
   would report the difference. Measured on yolanda, which has NO yq: the comment
@@ -977,7 +978,11 @@ stories.
   a host with neither yq NOR a resolvable tillandsias-plan+jq falls to grep, and
   steps whose own COMMANDS call yq still fail or return empty — which is what
   `warn:litmus-degraded-no-yq` already reports. Not filed as a row on that
-  basis: the in-place comment predates its own mitigation.
+  basis: the in-place comment predates its own mitigation. (Cited by symbol:
+  the tiering comment sits above `_yaml_jq` / `get_litmus_tests_for_spec` in
+  scripts/run-litmus-test.sh — 881-29me, and a line range would have drifted
+  the moment anyone edited that header, which is precisely what this drill
+  entry asks the next reader to do.)
 - **First autonomous-drain stories** (evening, 2026-09-12): yoga 1132-r4mt
   (two hypotheses refuted, the re-exec asymmetry named, two clean in-situ
   samples with the print armed, refusal still uncaught) and 890-27mv (the
