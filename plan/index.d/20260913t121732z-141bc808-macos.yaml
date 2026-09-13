@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-thirty-seven-standing-gnu-only-idioms-the-advisory-found-on-its-first-run
+    field: next_action
+    value: 'THREE CLASSES ARE NOW SINGLETONS and each closes a WHOLE class for one line of work, which is exactly what this row''s unscoreable block defines as a scorable slice: rg-no-path (scripts/check-ripgrep-available.sh), find -printf (scripts/release-preflight.sh), date -d (scripts/test-check-bash-dialect.sh). Take one, convert it, and pin a litmus asserting the guard reports ZERO of that class. This is CHEAPER than the slices this packet named when filed — it suggested readlink -f (2) and date -d (5), and date -d is now 1. After the singletons, scripts/clamp-ca-material.sh is the concentration: 7 stat -c in one file, so converting that single file moves the largest remaining class by half. Re-measure after each slice with scripts/check-portability-idioms.sh and record the tree AND host with the number; a bare count invites the 12-to-14 misreading this row already carries once. THE TARGET IS 1, NOT 0: test-portability-idioms.sh''s own deliberate sed -i is the subject of its arm and must survive.'
+    ts: "2026-09-13T12:17:32Z"
+    host: macos
+
+events:
+  - packet_id: the-thirty-seven-standing-gnu-only-idioms-the-advisory-found-on-its-first-run
+    event:
+      type: note
+      ts: "2026-09-13T12:17:32Z"
+      host: macos
+      summary: |-
+        re-measured on macOS at 135c4b7ae: 28 found, 27 remediable, three singleton classes now the cheapest scorable slices

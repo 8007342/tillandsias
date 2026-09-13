@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-thirty-seven-standing-gnu-only-idioms-the-advisory-found-on-its-first-run
+    field: next_action
+    value: 'CORRECTED after testing the flagged lines rather than trusting the count. The advisory reports 28 at 135c4b7ae, but ONE IS A FALSE POSITIVE and one is the guard''s own evidence, so 26 are genuinely remediable and THE FLOOR IS 2, NOT 0. (a) scripts/check-ripgrep-available.sh:35 is ''rg --version'', a flag that takes no path by design and never reads stdin — measured: ''sleep 3 | rg --version'' returns rc=0 immediately while ''sleep 10 | rg somepattern'' times out at rc=124. Its rg-no-path class is EMPTY of real instances; the fix belongs in the advisory (recorded on 1130-i6xj), not in that script. (b) scripts/test-portability-idioms.sh''s deliberate sed -i is the SUBJECT of its own arm and must survive. TWO genuine singleton classes remain, each closing a whole class for one line, which is what this row''s unscoreable block calls a scorable slice: find -printf (scripts/release-preflight.sh:226) and date -d (scripts/test-check-bash-dialect.sh:77). After those, scripts/clamp-ca-material.sh is the concentration — 7 stat -c in one file, half the largest remaining class. Re-measure after each slice and record the tree AND host; and READ EACH FLAGGED LINE before converting it, because this row''s own baseline carried a false positive for at least one interval.'
+    ts: "2026-09-13T12:19:43Z"
+    host: macos
+
+events:
+  - packet_id: the-thirty-seven-standing-gnu-only-idioms-the-advisory-found-on-its-first-run
+    event:
+      type: note
+      ts: "2026-09-13T12:19:43Z"
+      host: macos
+      summary: |-
+        corrected: one of the 28 is an advisory false positive (rg --version), proven by measurement; the rg class is empty of real instances and the floor is 2

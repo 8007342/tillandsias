@@ -1,0 +1,79 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-capability-row-guard-judges-freshness-on-whichever-locus-sorts-first-so-a-multi-locus-host-can-never-clear-its-own-expired-verdict-by-publishing
+    event:
+      type: progress
+      ts: "2026-09-13T10:40:42Z"
+      agent_id: linux-lenovinha-opus5-20260913t104042z
+      host: linux
+      summary: |
+        TWO MORE ARMS, FROM ESMES REAL ROWS RATHER THAN STRINGS I CHOSE — and the
+        reason they exist is a correction to arm 13 that came from the fleet, not from
+        me.
+
+        ARM 13 PASSED WITHOUT DISCRIMINATING. Its two loci both carry a non-empty set,
+        and esme pointed out what that cannot tell you: a UNIFORM pair cannot separate
+        "read the wrong locus" from "read the right locus and it was empty", because
+        both answers are the empty set. yolanda is uniform-empty and cannot exercise
+        drift at all (both loci schedulable: none, so the comparison is - against -);
+        mine was uniform-nonempty. Neither discriminates.
+
+        ESMES PAIR IS MIXED and is now arms 14-15, copied from the fold on 2026-09-13:
+
+          locus:in-guest      kind:linux    cpu/container/ollama + cpu/host-native/ollama
+          locus:windows-host  kind:windows  none
+
+        14  both loci held FRESH so age cannot be what answers. Post-fix ok:.
+            Pre-fix: drifted, row-only=cpu/container/ollama+cpu/host-native/ollama.
+        15  THE COMPOUNDING. On esme, in-guest is SIMULTANEOUSLY the first-sorting
+            locus, the newer one, AND the non-empty one — so one wrong-locus read
+            corrupts the age and the engine set from the same accessor. Own locus
+            genuinely expired, foreign fresh. Post-fix: expired, age=694800s.
+            PRE-FIX IT ANSWERED `drifted`. That is the finding: drift outranks age
+            (arm 7), so the bug reported the WRONG DIMENSION as well as the wrong
+            value — a real staleness problem surfaced as a fabricated hardware claim
+            about engines belonging to a different machine. Nobody would have gone
+            looking for a stale row behind a drift verdict.
+
+        15/15 on lenovinha. Teeth re-measured by splicing arms onto the pre-fix body:
+        10, 11, 12, 13, 14 and 15 all FAIL pre-fix; 1-9 unchanged.
+
+        KNOWN LIMITS, recorded because 15 greens do not entitle me to say more:
+
+         (a) NO HOST CAN EXERCISE THE DRIFT ARMS AGAINST REAL FOLDED SETS TODAY. The
+             two hosts with the two-locus SHAPE are yolanda and esme. yolandas loci
+             schedule nothing so drift is structurally unavailable there — yolandas
+             finding, and it is why a green from that host would NOT have been arm 13
+             surviving contact, which is what I would have counted it as. esme CAN
+             supply the content and has a re-run standing by, blocked only on this
+             push. Until then arms 13-15 are verified in fixture only.
+             yolanda asked that the distinction carry my name, correctly: "no host in
+             the fleet" is my conclusion from the folded matrix, which I read and they
+             did not. What THEY support is narrower — the two hosts with the shape
+             cannot supply the content. THIS LIMIT HAS AN EXPIRY: it lifts by itself
+             the moment any two-locus host schedules something (793-zumy on yolanda
+             would do it). It is not a permanent limit and must not be read as one.
+
+         (b) THE LINUX-PLUS-FORGE MULTI-LOCUS SHAPE IS UNEXERCISED. A linux host
+             running a forge publishes in-guest alongside its own bare-metal row,
+             because the probe maps TILLANDSIAS_HOST_KIND=forge to in-guest regardless
+             of OS. Nothing produces that today. The arms are locus-generic (the locus
+             names are just strings) so they cover it by construction, but no hardware
+             has ever run it.
+
+        CORRECTION TO MY OWN EARLIER EVENT ON THIS ROW: I wrote that the in-guest rows
+        8-day age meant its publisher had not run in a week. Wrong. yolanda read the
+        provenance — `from:0000-base` against `from:20260912t040721z-...yaml` — and no
+        fragment has EVER published an in-guest row for that host. It is the compacted
+        bases seed; the 8 days is the age of the base, not of a probe run. I inferred a
+        lapsed publisher from a timestamp without reading the one field that says where
+        the row came from. Same shape as the inference I corrected on 1128-4ffr
+        tonight, and 1128-4ffr already owns that gap.
