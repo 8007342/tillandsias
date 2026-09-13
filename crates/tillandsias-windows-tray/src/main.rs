@@ -474,6 +474,71 @@ mod tests {
         );
     }
 
+    /// 823-u5zf: the headless forge path must INITIALISE TRACING, because it is
+    /// the only automated way to reach `launch_pty` and therefore the only way
+    /// the packet's `terminal=` observable can ever be read by a harness.
+    ///
+    /// REGIME: source-scan, compile-time `include_str!`, no host state and no
+    /// wall-clock — the same idiom as the sibling dispatch assertions above.
+    /// A behavioural test cannot pin this: the defect was an ABSENT side effect
+    /// on a path that still returned `ok:forge-launch:<project>` and exit 0, so
+    /// the only observable difference was a log file that did not grow.
+    ///
+    /// MEASURED before the fix, on yolanda: `--forge tillandsias --shell`
+    /// returned ok and exit 0 while tray.log stayed at 45534 bytes with no
+    /// `spawning in-VM PTY` record. After: 45648 bytes and
+    /// `terminal=windows-terminal`. `--forge` exits in main's early-flag block,
+    /// which runs before the tray's own `init_tracing()`, so without this call
+    /// every automated launch writes its decision to an uninitialised
+    /// subscriber — the closure's own observable, inert on the closure's own
+    /// path.
+    #[test]
+    fn headless_forge_launch_initialises_tracing_before_spawning() {
+        let main_src = include_str!("main.rs");
+        // rsplit_once, NOT split_once, AND THE REASON IS THIS TEST ITSELF.
+        // The marker below is a string literal in this very function, and this
+        // function sits EARLIER in the file than the definition it looks for —
+        // so a forward search matches the test's own source and then asserts
+        // about it. Measured: the first draft failed with the real call present
+        // three lines into the real function. A search that returns cleanly is
+        // not a search that answered the question, and a source-scanning test
+        // is inside its own haystack.
+        let (_, body) = main_src
+            .rsplit_once("fn forge_launch_once() -> i32 {")
+            .expect("forge_launch_once must exist; it is the headless launch contract");
+        // Bound the window to this function so a call anywhere else in the file
+        // cannot satisfy the assertion — the defect was precisely that the only
+        // call site sat in a block this path never reaches.
+        let fn_body = body
+            .split_once("
+fn ")
+            .map_or(body, |(before, _)| before);
+        // STRIP COMMENT LINES BEFORE SEARCHING, and this is the whole lesson of
+        // the packet this test belongs to. The first draft asserted on the raw
+        // window and PASSED AGAINST A MUTANT with the call deleted, because the
+        // doc comment above mentions `init_tracing()` twice in prose. That is
+        // 823-u5zf's own defect — its closure is "a source scan finds no
+        // argv_survives_wt_reparse", and today that symbol survives ONLY in
+        // three comments recording its deletion, so the scan cannot pass
+        // though no code remains. A scan that cannot tell code from commentary
+        // measures the commentary.
+        let code_only: String = fn_body
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("
+");
+        assert!(
+            code_only.contains("init_tracing()"),
+            "forge_launch_once must call init_tracing() before launch_pty, or the              terminal= observable that 823-u5zf's closure depends on is written to              an uninitialised subscriber and silently lost on every headless launch"
+        );
+        let notify = include_str!("notify_icon.rs");
+        assert!(
+            notify.contains("%terminal,"),
+            "launch_pty must still emit the terminal= field the closure reads"
+        );
+    }
+
     /// 803-49re + 804-ckst: EVERY path that wipes the guest must also clear
     /// the host's copy of that guest's vault identity from Credential
     /// Manager, preserving `tillandsias-vm-uuid`.
@@ -744,6 +809,32 @@ mod tests {
 fn forge_launch_once() -> i32 {
     use tillandsias_host_shell::menu_state::SelectedAgent;
     use tillandsias_host_shell::pty::PtyIntent;
+
+    // ORDER 823-u5zf. THE TRACING SUBSCRIBER MUST BE INITIALISED HERE, and the
+    // reason is that this path is the ONLY headless way to reach `launch_pty`.
+    //
+    // `launch_pty` emits `terminal=<windows-terminal|conhost>` from the same
+    // branch that selects the spawn, and its comment states the purpose: the
+    // packet's closure asks for a lane "OBSERVED opening in Windows Terminal
+    // rather than conhost", three other observables were measured incapable of
+    // answering it, and "one line makes it checkable by any host forever,
+    // including headless ones and CI".
+    //
+    // It was not. `--forge` exits at the early-flag block in `main`, which runs
+    // BEFORE `notify_icon::init_tracing()`, so on the one path a harness or a
+    // headless host can use, that line was written to an uninitialised
+    // subscriber and went nowhere. MEASURED on yolanda: a successful
+    // `--forge tillandsias --shell` returned `ok:forge-launch:tillandsias`,
+    // exit 0, and tray.log did not grow by a single byte — 45534 before and
+    // after, with no `spawning in-VM PTY` record.
+    //
+    // So the observable installed to make the closure checkable was inert on
+    // exactly the path that would check it: a GUI click wrote the line, and
+    // every automated caller silently did not. `init_tracing` ends in
+    // `try_init()` with the result discarded, so calling it here is safe and
+    // cannot conflict with the tray's own later call — this path exits before
+    // that one is reached.
+    notify_icon::init_tracing();
 
     let args: Vec<String> = std::env::args().collect();
     let project = match args.iter().position(|a| a == "--forge") {
