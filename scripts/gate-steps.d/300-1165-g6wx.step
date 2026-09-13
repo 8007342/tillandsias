@@ -1,0 +1,18 @@
+# Gate step 1165-g6wx — data, not code.
+#
+# Binds the fixture, which is hermetic: it feeds the probe stub text through
+# --status-from/--check-from/--journal-from, so it runs no rpm-ostree, opens no
+# network and reads no journal. Stubs are the only honest construction here —
+# the condition is TRANSIENT by definition and no host can be relied on to be in
+# it, while the host that was (lenovinha) is the one that cannot run this.
+#
+# One arm checks SOURCE TEXT rather than behaviour: the probe must contain no
+# deployment-mutating rpm-ostree call. That is the packet's hard constraint, and
+# the only safe way to test "never mutates" is to prove the call cannot be
+# written.
+#
+# STEP_SCRIPT is a LITERAL path (1063-nraf).
+STEP_DESC="Checking the Silverblue update-skew probe reports skew only when all three conditions hold, and never mutates a deployment (1165-g6wx)"
+STEP_SCRIPT="scripts/test-silverblue-update-skew-probe.sh"
+STEP_ERROR="the Silverblue update-skew probe regressed (1165-g6wx) — it may now report skew for any akmods host with a pending update (pending is not blocked), read an unreadable journal as no-skew, or contain a call that can mutate a deployment; see the verdict line above"
+STEP_OK="Silverblue update-skew probe check passed"

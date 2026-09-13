@@ -72,18 +72,58 @@ done
 command -v jq >/dev/null 2>&1 || { echo "error: jq is required" >&2; exit 2; }
 
 # ── resolve a probe binary by RUNNING it ─────────────────────────────────────
+# ORDER 1172-dyvd. RUNNING IS NOT CURRENT, and this resolver's admission test
+# could not tell the difference.
+#
+# It accepted any candidate whose `--inference-tier` exited 0. That proves the
+# binary RUNS. It says nothing about whether the binary knows the vocabulary the
+# ledger is written in — and this script WRITES THE LEDGER, so a candidate that
+# runs and is stale publishes a confident wrong capability row.
+#
+# MEASURED on yolanda 2026-09-13, both binaries present, same command:
+#
+#   ./target/release/tillandsias   PE32+, 2026-08-29, --inference-tier rc 0
+#     -> accel_gpu=none accel_npu=none accel_ram_gb=-   (no accel_side key at all)
+#   ./target/debug/tillandsias.exe PE32+, 2026-09-13
+#     -> accel_gpu=present-unusable accel_gpu_name=AMD_Radeon_TM_860M_Graphics
+#        accel_npu=present-unusable accel_npu_name=NPU_Compute_Accelerator_Device
+#
+# The stale one won, because it is the extensionless `./target/release/tillandsias`
+# this loop tries second. The row it published on 2026-09-12 is on the matrix
+# saying this host has no GPU and no NPU; it has both. The matrix is what
+# scheduling reads.
+#
+# THE CHECK IS A VOCABULARY PROBE, NOT A TIMESTAMP, and that ordering is
+# deliberate. `accel_side` is emitted unconditionally in the envelope by every
+# current build on every platform (accel_probe.rs's envelope format string; the
+# function answers "unknown-side" for a pre-schema-3 document rather than being
+# absent), so its ABSENCE is a property of the BINARY. An mtime comparison is a
+# property of the FILESYSTEM: a fresh clone stamps every source file with the
+# checkout time, which is newer than any pre-built binary, and would refuse
+# every candidate on a host that had done nothing wrong. So mtime is an
+# ADVISORY here and never the refusal.
+#
+# A REFUSED CANDIDATE IS NAMED AND THE LOOP CONTINUES. Silence was the defect;
+# a stale candidate that loses to a current one later in the list should say so,
+# because the operator's next question is "why is it not using the one I built".
 resolve_probe() {
     local candidate
     for candidate in "${TILLANDSIAS_HEADLESS_BIN:-}" ./target/release/tillandsias tillandsias; do
         [ -n "$candidate" ] || continue
-        if "$candidate" --inference-tier >/dev/null 2>&1; then
+        "$candidate" --inference-tier >/dev/null 2>&1 || continue
+        if "$candidate" --capabilities 2>/dev/null | grep -q 'accel_side='; then
             printf '%s\n' "$candidate"
             return 0
         fi
+        printf 'refused:probe:stale-candidate:%s\n' "$candidate" >&2
+        printf '  it RUNS but its --capabilities omits accel_side, so it predates the\n' >&2
+        printf '  current envelope contract and would publish a row in an older\n' >&2
+        printf '  vocabulary. Rebuild it, or set TILLANDSIAS_HEADLESS_BIN to a current\n' >&2
+        printf '  binary. Refusing rather than publishing what it reports (1172-dyvd).\n' >&2
     done
     return 1
 }
-PROBE="$(resolve_probe)" || { echo "error: no runnable tillandsias binary (build or install one)" >&2; exit 2; }
+PROBE="$(resolve_probe)" || { echo "error: no CURRENT tillandsias binary (build or install one; a stale candidate that was refused is named above, 1172-dyvd)" >&2; exit 2; }
 
 # --capabilities prints the one-line envelope, then the pretty JSON document.
 # --fresh (order 852-dk9z) makes the probe bypass its own cache, so a published

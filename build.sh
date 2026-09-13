@@ -2289,6 +2289,23 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Capability-row host-resolution fixture passed"
 
+    # ORDER 1172-dyvd. The guard above proves the host can NAME itself; this one
+    # proves the probe will not SPEAK for it out of a stale binary.
+    # host-capability-probe.sh's resolver admitted any candidate whose
+    # `--inference-tier` exited 0, which proves a binary runs and nothing about
+    # whether it knows the vocabulary the ledger is written in — and that script
+    # writes the ledger. Measured on yolanda: an Aug-29 PE answered rc 0 and
+    # published a row saying the host had no GPU and no NPU; it has both, and
+    # the matrix routes on that row. Wired here rather than only as a litmus
+    # because scripts/test-*.sh is not globbed and a fixture reaching the gate
+    # by neither route is a file, not a gate.
+    _step "Checking the probe refuses a stale candidate (1172-dyvd)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-probe-refuses-stale-candidate.sh" 2>&1; then
+        _error "host-capability-probe.sh would publish a capability row from a binary it cannot show is current — the matrix routes on that row"
+        exit 1
+    fi
+    _info "Probe stale-candidate refusal fixture passed"
+
     # Order 889-ewvt. The guard above proves the host can NAME itself. This one
     # proves the row it publishes is still TRUE: check-capability-row.sh printed
     # `ok:capability-row-reported:yoga` all night over a row advertising an

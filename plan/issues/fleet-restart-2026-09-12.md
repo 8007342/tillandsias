@@ -3568,3 +3568,212 @@ stories.
   and closing a multi_cycle packet must remove its plan/long-running.md row
   in the same commit. Landed ok:land:b902c1a64 attempt 2. Stale-binary row
   filed as 1172-dyvd (p1, yolanda, before 1171-ccf2).
+- **The coordinator's boundary read its own claim fragments as startup
+  dirt** (829-dkuc run): the claim set-field and claim event ran seconds
+  BEFORE the boundary snapshot in the same command, so the snapshot recorded
+  two untracked fragments as pre-existing dirt to preserve; the run then
+  committed and landed them, and the guard refused `worktree differs from
+  startup boundary` at finalisation — yoga's shape from the afternoon
+  (their own test mutation recorded as startup dirt), from the other
+  direction. Nothing lost: the files are tracked and on trunk. Rule: take
+  the boundary before the first ledger write of the cycle, never after it.
+  Cost of the 829-dkuc run, measured: 12 agents (11 sonnet, 1 opus),
+  1,024,451 sub-agent tokens, 918 s fan-out, ~44 min end to end including
+  four land launches (one skill-link rule, one self-kill, one long-running
+  view rule, one push race), ~140k coordinator main-context; emitted via
+  --emit-tokens, token_max now names it.
+- **900-z3kv COMPLETED** (yoga, code 1e8536e01, closure ok:land:9c0a5343b,
+  attested a233b6e0f): the Linux clean room is credential-cold and the
+  runbook's claim is true for the first time since at least 2026-06. The
+  operator's reasoning is on the row in their words, and it reframes the
+  packet: the clearer does not make the reset destructive enough, it makes
+  the reset ACTUALLY BE the baseline the platform already assumed; the
+  four legs that reported a clean room that was not one were measuring
+  that gap. THE GUARD CAUGHT A DESTROY PATH THE AUTHOR HAD MISSED: yoga
+  enumerated skills/ and scripts/ by hand and found one
+  (scripts/e2e-step2-linux.sh); the guard's new Linux arm found
+  run_smoke.sh at the repository ROOT, outside every directory searched —
+  written to prevent a future second copy, it found a present one on its
+  first run, 803-49re's own argument ("a second copy is where the fix does
+  not go") arriving against the person who had just quoted it. The arm
+  matches EXECUTION, not mention (of the .sh files carrying the string,
+  one executed it and four named it in comments, including
+  selective-tillandsias-reset.sh which exists to AVOID a full reset);
+  pinned both ways by measurement. Both runbooks now make one claim, and
+  both destroy paths tee probe-credential-cold-state.sh into the findings
+  so a run records which state produced it.
+- **Coordination pass 20:11Z (pass 12).** Relay: osx-next 4 commits
+  (macbookair, 1135-z8gn: `clamp-ca-material.sh` was INERT on macOS, not
+  unidiomatic — `stat -c` is GNU-only and BSD stat rejects it, so clamp_dir
+  and clamp_file returned 1 on every call and the CA-material clamp that
+  makes a key 600 and a directory 700 never worked there; the portability
+  advisory had counted seven instances and read as style; the script's own
+  selftest went rc=1 five FAIL lines → 6 cases PASS). Thirteenth regime axis
+  in the same family as the twelfth: an ADVISORY finding on one platform is a
+  FUNCTIONAL break on another, and only the platform tells them apart.
+  macbookair's second commit is a self-reported hazard worth its own line: a
+  claim taken last cycle and never RELEASED at exit read as
+  'no-op — status is already in_progress' this cycle; a stranded claim hides
+  a packet from ready and from burndown until the 24h reaper, and the same
+  host re-picking it is the only reason it cost nothing. lenovinha is BACK
+  (the operator's 'down' was the deployment, not the session): 1154-8ywc
+  (capability-row guard no longer fails open on age; confirmed on esme
+  post-fix, 'signature 2 was a prediction') and 1165-xkjh (a guard that names
+  a remedy that cannot run where the verdict fires; verified on esme across
+  two loci; arm 22 is structural, not behavioural) both completed ~19:22Z.
+  Metrics audit `rows=23 stems=23`: every host NOT-PASTING the cycle-metrics
+  block, my own newest entry included (it carries `tokens:` and no
+  `skippable:`); standing finding under 1001-q3zf/1074-96z9, no new packet.
+  Stale-row pass `ok:stale-ready-rows:88/508:pass=cites-order`, six
+  candidates: 1125-wi4d, 1126-w8rq (e357f3f87's third order), 1129-xm5z,
+  1132-r4mt, 1141-vf9w (ready on purpose after the release), 1144-jfr5 (mine,
+  the owned_files pass unbuilt); no `closed-on`; none handed this pass — the
+  hosts that can verify them by execution are mid-cycle. Hand-off: 1165-g6wx
+  → yoga by claim flip (Silverblue docs + read-only probe for the depsolve
+  skew yoga measured and the operator confirmed on yoga's own upgrade);
+  fallback named 1170-e5im. Salvage ref `salvage/yolanda/20260913-793-zumy`
+  (6f6bb4ad7): ancestor of linux-next, windows-next and osx-next by the
+  four-branch check, ledger line marked ` deleted` in this land, the remote
+  ref deleted after it. Meta cycle 19:39Z landed at attempt 1 (1164-cftu;
+  1166-99mk..1169-zw44 by one sonnet sub-agent, 222,478 tokens, 21.6 min,
+  detector dead 23 → 16 on the tree).
+- **A salvage-ref deletion refused an in-flight gate (yolanda, ~20:35Z; 1173-a5ng).**
+  The protocol I followed — mark the ledger line ` deleted`, land it, THEN delete
+  the ref — protects every gate that merges trunk after the marker, and nothing
+  else. yolanda's 1172-dyvd land had merged trunk before 6857ce7f6 (the marker
+  commit, 20:29Z); I deleted the ref at 20:31Z; check-salvage-refs-ledger.sh,
+  wired into --check and reading the LOCAL ledger against origin's refs, refused
+  their gate with `violation:salvage-refs-ledger:1` while trunk carried the
+  marker the whole time. yolanda attributed before reporting (the ref theirs,
+  the line my sweep's, the gap between the sweep and its own checker) and did
+  not salvage — correctly, since a new ref recorded against a broken marker
+  path is the last thing the ledger needed. Unblock was one message: re-run
+  the land, its fetch-and-integrate step merges the marked line. Filed
+  1173-a5ng: the checker falls back to trunk's copy of the file (a behind
+  tree reads "merge trunk", not "outstanding rescue"; the negative arm does
+  not move), and the sweep's header states the rule I now follow by hand —
+  delete a salvage ref no sooner than the pass AFTER its marker lands. A
+  timing rule reduces the race and cannot close it (a floor host's gate can
+  run an hour); the fallback closes it.
+- **1172-dyvd COMPLETED** (yolanda, ok:land:516d18cf1:attempt-1 on
+  windows-next; relay due next pass). The resolver refuses a candidate it
+  cannot show is current, by name, and continues; the exit-2 text now says
+  "no CURRENT binary" so esme's missing-binary state and yolanda's stale one
+  stop sharing a message. THE CHECK IS A VOCABULARY PROBE AND MTIME IS
+  EXPLICITLY NOT THE REFUSAL — yolanda's departure from my "mtime as
+  fallback", argued in the comment: accel_side's absence is a property of the
+  binary, mtime of the filesystem, and a fresh clone would refuse every
+  candidate on a blameless host. Arm 3 of the four-arm fixture is the proof:
+  both fakes created in the same second, so any mtime rule ranks them
+  identically and they get opposite verdicts. Mutation control reds the three
+  primary arms and leaves the positive control green. The wrong row is
+  republished: before, cpu/Host CPU and nothing else; after, cpu/AMD Ryzen AI
+  7 350, gpu/AMD Radeon 860M (host-native-only, not container-reachable),
+  npu/NPU Compute Accelerator Device (engine-missing). They verified my
+  snapshot-race diagnosis before re-running (trunk's ledger copy 1 marked
+  line, theirs 0) and the land passed first attempt. Incidental, checked not
+  assumed: two Rust files (secure_wire_mode.rs, container_profile.rs) carry
+  CRLF in their WORKING TREE and the committed blobs are LF — git normalised
+  on add, the safe direction; the cause of the local CRLF is unknown and is
+  two files, not the tree, so it is whatever wrote those two.
+- **yoga: 1139-xe5m COMPLETED (224e29a52, closed 83f2a886e) and 1165-g6wx
+  COMPLETED (cb8316c42, closed a1c2bd76b).** The capability envelope now
+  carries `envelope_source=`/`accel_source=` measured|served|unknown, appended
+  LAST on the one line the forge receives; the Silverblue skew row has its
+  cheatsheet and a read-only probe. yoga had 1165-g6wx claimed and landed
+  before my hand-off flip reached trunk — the flip was harmless (their
+  completed event is later by LWW) and the hand-off message crossed their
+  closure; no second host picked it up, which is the control that matters.
+  Two bookkeeping items yoga FLAGGED rather than hand-edited, both correct
+  calls: (1) 1139-xe5m's `unscoreable` block promised to move its closure
+  text into `verifiable_closure` once the field existed — that is a
+  multi-line LWW write, and set-field turns out to accept one (block scalar
+  `|-` in a new fragment; measured on a scratch copy of the ledger under
+  target/, never the real one), and `declared-closures-check` reads the
+  `litmus:` token out of a status-channel value; the closure now names
+  `litmus:capabilities-envelope-names-its-source`, bound in
+  openspec/litmus-bindings.yaml under accel-capability-probe with a
+  post-build spec that runs yoga's suite, and the unscoreable field is
+  cleared (an empty value unsets). (2) 1165-g6wx's `owned_files` named
+  docs/cheatsheets/runtime/… while both cheatsheet guards walk the root
+  cheatsheets/ tree; the file is at cheatsheets/runtime/silverblue-updates.md.
+  Corrected by a note event, not set-field: the field is a LIST and set-field
+  stores a string — a silent type change on the fold, measured the same way.
+  windows-next (1172-dyvd, 516d18cf1) relayed in this land, one pass early,
+  because the closure bundle needed the full gate anyway.
+- **Fourteenth regime axis: THE HOST'S OWN INSTALLED BINARY IS A CANDIDATE
+  (1172-dyvd's fixture, first Linux run, land 18 refused rc=3).** yolanda's
+  currency fixture drives resolve_probe through TILLANDSIAS_HEADLESS_BIN=<stale
+  fake> and asserts the refusal; the resolver refuses and CONTINUES to
+  ./target/release/tillandsias and `tillandsias` on PATH, and on macuahuitl
+  the installed launcher on PATH is current, so arms 1 and 5 read "stale
+  candidate produced rc=0" and "identical-age candidates got the same
+  verdict". The header said "hermetic … no repo binary, no host state"; it was
+  hermetic on the one host with no fallback candidate — the host that wrote
+  it. Fixed forward in the relay (fixture only: a shadow `tillandsias` that
+  fails --inference-tier prefixed to PATH, the probe run from the scratch dir;
+  resolver untouched; still reds on the pre-fix resolver), yolanda told before
+  the land so 1171-ccf2 merges the fix instead of meeting it. My first
+  before-control ran the pre-fix fixture from a scratch copy and failed for
+  the wrong reason (REPO_ROOT follows the script's path) — the same
+  wrong-scope control shape as the detector's earlier today; the valid
+  control is the gate log plus a re-run from the repo path. A fixture that
+  claims "no host state" must SHADOW every path the code under test consults,
+  not merely avoid setting them.
+  yolanda REPRODUCED IT ON YOLANDA within the hour, so it was never Linux-
+  specific: their release binary is current NOW because criterion (3) of the
+  same packet made them rebuild it to republish the wrong row — the change
+  the packet required removed the fixture's isolation in the cycle that
+  created it. Their sharper statement of the defect: the fixture asserted on
+  the PROBE's exit code, a property of the WHOLE candidate list, when the
+  thing under test was the resolver's treatment of ONE candidate. "REGIME:
+  hermetic" was hermetic-given-no-other-candidates — a condition stated as a
+  property — the fourth fixture this week wrong about ITSELF rather than
+  about the code (esme's inherited TOOLBOX_PATH, yoga's chmod under root,
+  yoga's never-created symlink, this), with a twist: true when written,
+  falsified by its own author's next step. A regime claim has to survive the
+  rest of your own cycle, not just authoring time. They kept my fix as the
+  right shape (isolation as a PROPERTY of the fixture, not an accident of
+  the host) and asked for one line where the copy-the-script-into-scratch
+  idiom is documented: REPO_ROOT follows the script, so a scratch copy
+  re-roots itself — the same self-reference trap as their pin matching its
+  own source earlier today.
+- **1171-ccf2 decision (yolanda asked before implementing).** The Windows
+  release stages tillandsias-tray.exe plus three scripts and nothing else;
+  install-windows.ps1 puts it under %LOCALAPPDATA%\Programs\Tillandsias, which
+  is NOT on PATH, so resolve_probe's third candidate never fires on a Windows
+  install even with a tray present. Three closures were on the table: (a)
+  stage tillandsias.exe and have the installer copy it beside the tray —
+  necessary, insufficient alone; (b) (a) plus the installer prepends the
+  install dir to the user's PATH; (c) (a) plus resolve_probe gains the
+  install dir as a candidate. DECIDED (a)+(c), no PATH edits: an installer
+  writing the operator's PATH on every install is a promise the packet does
+  not need, and the reset principle covers state the platform owns, not the
+  user's environment. Guards asked for: the candidate only when LOCALAPPDATA
+  is set (WSL locus never consults a Windows path), MSYS path conversion,
+  and the vocabulary probe applied to it like every other candidate. Install
+  half: NOT on yolanda's machine (the line they held on the Vulkan ICD and
+  were recorded right on) — it is esme's measurement on a PUBLISHED release,
+  i.e. after the operator's next daily cut; the row flips to `implemented`
+  with the resolver arm and the staging assertion as evidence and the install
+  half named as what is LEFT; the coordinator routes the smoke to esme by
+  claim flip when a release carries it, operator's per-run word for the
+  destructive part as usual.
+- **Coordination pass 22:41Z (pass 13).** Relays: none (osx-next +0,
+  windows-next +0; trunk c6f42a113). Lands since pass 12: 990dc72f6 (1173-a5ng
+  filed, plan-only lane), c6f42a113 (windows-next relay + the fixture fix,
+  attempt 1 after one refused land). Messages since the last pass, all
+  handled: yolanda's salvage-ledger refusal (my deletion race → 1173-a5ng),
+  their 1172-dyvd landing and reproduction of the fixture regime defect on
+  their own host, yoga's 1139-xe5m/1165-g6wx bookkeeping asks (done, landed),
+  yolanda's 1171-ccf2 scoping question (decided (a)+(c), no PATH edits, install
+  half to esme after the next cut). Stale rows `ok:stale-ready-rows:89/508`:
+  the seven of pass 12 plus 1135-z8gn (6 commits cite it; macbookair released
+  it to ready on purpose after the clamp-ca-material slice — a multi-slice row
+  cited by every slice, the 1135-z8gn shape the pass documents), none handed.
+  Hand-offs: none — yoga self-drained 1139-xe5m from plan_next at their own
+  cadence, yolanda holds 1171-ccf2, macbookair and lenovinha are cycling, the
+  floor (macneo, esme, pirria) has nothing floor-shaped in the queue and no
+  report since; queue heads unchanged (776-jcf3, 804-deux, 793-zumy). Audit
+  rows=23 stems=23, every host NOT-PASTING (standing). Salvage refs: nothing
+  to delete; the one-pass grace rule applies to the next one.

@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: capabilities-serves-a-cached-envelope-indistinguishably-from-a-measurement
+    event:
+      type: implemented
+      ts: "2026-09-13T21:40:05Z"
+      agent_id: linux-yoga-claude-20260913t214004z
+      host: yoga
+      summary: |
+        Implemented on yoga: the envelope now says whether it was measured or served, and the one line a forge receives says it too.
+
+        SHAPE CHOSEN: the FIELD, not a staleness bound and not a bypass flag, for the reason the row states — only the field makes an ALREADY-COLLECTED envelope interpretable, and the capability matrix folds rows produced on other machines hours earlier. A bound or a flag changes what future runs emit and leaves every stored row exactly as ambiguous as it was. Neither is foreclosed; --fresh (852-dk9z) already is the bypass and an arm keeps it honest.
+
+        THE HALF THE ROW DID NOT NAME, and it is the half that reaches the reader this packet is about: accel_envelope() renders the ONE line delivered as TILLANDSIAS_ACCEL_ENVELOPE, and an agent holding that line cannot open the producing host's cache file. A JSON-only field would have left exactly that reader unable to tell a replay from a measurement. accel_source=measured|served|unknown is APPENDED LAST, so every existing key keeps its name, position and meaning and litmus:accel-envelope-reaches-the-forge reads what it read before.
+
+        NEVER PERSISTED: write_capability_cache() clears the field before writing and every write now goes through it (including record_measurement, which loads a document that may already have been stamped served). A stored 'measured' would replay the CLAIM along with the document on every later serve — this defect again, wearing an authoritative field. The stored document says null.
+
+        UNKNOWN IS NOT MEASURED: a document written before this order has no such field and renders accel_source=unknown. Promoting silence into a measurement is the inference this order exists to stop, and every row the fleet has already folded is silent.
+
+        VERIFIED LIVE on yoga, XDG_CACHE_HOME redirected: cold run accel_source=measured (0.58s), second run accel_source=served (0.04s) with the timestamp replayed digit for digit, stored cache envelope_source null. The two envelope lines differ in accel_source and in NO OTHER KEY — which is at once the proof that the field discriminates and the proof that nothing else does.
+
+        FIXTURE: scripts/test-capabilities-envelope-names-its-source.sh, the filename the row reserved, 6/6, bound at scripts/gate-steps.d/305-1139-xe5m.step with STEP_SKIP_EXIT=3 for an unbuilt binary. Three unit tests beside load_or_probe_at pin the library half. Mutation-tested with the diff printed and non-empty first: stamping a cache hit measured (the pre-fix behaviour) reds 4/6 including the envelope-alone arm; not clearing the field on write reds the stored-document arm by name while the serve arm still passes, which is why that arm exists separately. 699 tests pass under --features tray,listen-vsock.
+
+        LEFT FOR THE ROW OWNER: the unscoreable block is discharged by the gate step above, but converting it into verifiable_closure means writing a multi-line field into a landed fragment, which is neither set-field's shape nor something to hand-edit. Flagged rather than done.
