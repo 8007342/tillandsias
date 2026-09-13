@@ -1,0 +1,64 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-ledger-has-more-than-one-place-to-look-and-every-reader-looks-in-one-so-five-writes-landed-somewhere-nothing-consults
+    event:
+      type: completed
+      ts: "2026-09-13T03:37:14Z"
+      agent_id: linux-lenovinha-opus5-20260913t033714z
+      host: linux
+      summary: |
+        ITEM 2 DISCHARGED — the live-lane sweep is promoted into the fleet queue. With
+        item 1 (salvage housekeeping) already done by macneo, this row is complete.
+
+        RE-MEASURED RATHER THAN REUSED. The row carried 46 hits; the sweep reports 52
+        over a 397-ready denominator (origin/linux-next, 10000 subjects). That number was
+        taken days ago against a different trunk, and promoting a stale list would hand
+        six hosts work that no longer exists — which is this packet's own subject, one
+        level up. Two of the three channels are now EMPTY (ready-but-claimed 0,
+        blocked-in-prose 0); recorded as "empty at this commit", not as dormant.
+
+        PROMOTED, NOT ADJUDICATED, and that is the row's own instruction: "promote the
+        list into the fleet queue so A HOST BUDGET re-statuses or completes them". One
+        host judging 52 rows in a cycle would be the wrong shape, and would also be the
+        easy way to produce 52 confident wrong closures.
+
+        THE CALIBRATION THAT MATTERS, measured rather than asserted: three of the 52 are
+        LEGITIMATELY ready, and they are the only three checkable from direct knowledge —
+        900-z3kv (criterion 2 landed, the (a)/(b) decision fenced for the operator),
+        1080-4deb (this row, mid-item-2), 829-dkuc (set aside; its own next_action asks
+        for operator pairing). Three for three. A landed commit naming an order is
+        evidence that SOME of the work landed, never that the packet is finished. If a
+        picking host takes one lesson from the rollup, that is it.
+
+        A DEAD END, RECORDED SO IT IS NOT REPEATED. The obvious triage — split by "has a
+        terminal event, so only the status move is missing" versus "no closure recorded"
+        — returns 52/0. That is not a property of the corpus: check-fragment-status-loss
+        REFUSES a packet carrying a terminal event while folding non-terminal (1085-g52w,
+        closed by me earlier this cycle), so on a green tree that bucket is empty BY
+        CONSTRUCTION. I ran it, got 52/0, recognised the shape, and wrote it down as a
+        dead end rather than reporting a uniform corpus.
+
+        So every hit is one class: a completion-shaped commit landed naming the order and
+        no closure was ever recorded. Larger and vaguer than "the status move is
+        missing", and the reason this needs judgement rather than a script.
+
+        DELIVERED:
+          * plan/issues/live-lane-sweep-rollup-2026-09-13-lenovinha.md — the 52, the
+            three verified false positives, the dead end, and a four-step per-packet
+            triage recipe that ends at the normal close path with evidence.
+          * one work-queue entry pointing at it, so the fleet sees it.
+
+        THE SWEEPER IS UNCHANGED and stays report-only. Wiring it into a gate would red a
+        push on a packet someone is mid-import on — the over-reporting failure that
+        file's own negative control exists to catch.
+
+        NOT CLAIMED: that the 49 unexamined packets are stale. Nobody has looked at them,
+        and the rollup says so where a picking host will read it.

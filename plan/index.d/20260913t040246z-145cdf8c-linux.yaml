@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-gate-every-host-lands-through-is-blind-to-nine-conditions-the-daily-release-gate-sees
+    field: verifiable_closure
+    value: scripts/test-gate-divergence-is-declared.sh passes (ok:gate-divergence-declared:17, gate step 090-1087-h2z9), and scripts/gate-divergence-declared.txt enumerates the gap including gate-steps.d/*.step
+    ts: "2026-09-13T04:02:46Z"
+    host: linux
+
+events:
+  - packet_id: the-gate-every-host-lands-through-is-blind-to-nine-conditions-the-daily-release-gate-sees
+    event:
+      type: note
+      ts: "2026-09-13T04:02:46Z"
+      host: linux
+      summary: |-
+        unscoreable discharged: the enumeration the pin waited on exists (built under 1087-h2z9)
