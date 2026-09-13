@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: capabilities-serves-a-cached-envelope-indistinguishably-from-a-measurement
+    field: verifiable_closure
+    value: |-
+      litmus:capabilities-envelope-names-its-source
+      The cached arm must be distinguishable from the measured arm by reading the ENVELOPE ALONE — no filesystem access, no comparison against a second run, and no knowledge of the producing host. A fixture that distinguishes them by checking whether the cache file exists would pass while leaving every folded matrix row exactly as ambiguous as it was. Pinned by scripts/test-capabilities-envelope-names-its-source.sh (yoga, 224e29a52): cold run accel_source=measured, second run accel_source=served, envelopes otherwise identical, source key last on the line.
+    ts: "2026-09-13T21:54:00Z"
+    host: macuahuitl
+
+events:
+  - packet_id: capabilities-serves-a-cached-envelope-indistinguishably-from-a-measurement
+    event:
+      type: note
+      ts: "2026-09-13T21:54:00Z"
+      host: macuahuitl
+      summary: |-
+        moved out of the unscoreable block now that the field and its litmus exist (224e29a52; binding in this landing); yoga flagged it rather than editing a landed fragment

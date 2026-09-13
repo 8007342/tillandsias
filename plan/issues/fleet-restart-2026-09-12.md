@@ -3637,3 +3637,67 @@ stories.
   ref deleted after it. Meta cycle 19:39Z landed at attempt 1 (1164-cftu;
   1166-99mk..1169-zw44 by one sonnet sub-agent, 222,478 tokens, 21.6 min,
   detector dead 23 → 16 on the tree).
+- **A salvage-ref deletion refused an in-flight gate (yolanda, ~20:35Z; 1173-a5ng).**
+  The protocol I followed — mark the ledger line ` deleted`, land it, THEN delete
+  the ref — protects every gate that merges trunk after the marker, and nothing
+  else. yolanda's 1172-dyvd land had merged trunk before 6857ce7f6 (the marker
+  commit, 20:29Z); I deleted the ref at 20:31Z; check-salvage-refs-ledger.sh,
+  wired into --check and reading the LOCAL ledger against origin's refs, refused
+  their gate with `violation:salvage-refs-ledger:1` while trunk carried the
+  marker the whole time. yolanda attributed before reporting (the ref theirs,
+  the line my sweep's, the gap between the sweep and its own checker) and did
+  not salvage — correctly, since a new ref recorded against a broken marker
+  path is the last thing the ledger needed. Unblock was one message: re-run
+  the land, its fetch-and-integrate step merges the marked line. Filed
+  1173-a5ng: the checker falls back to trunk's copy of the file (a behind
+  tree reads "merge trunk", not "outstanding rescue"; the negative arm does
+  not move), and the sweep's header states the rule I now follow by hand —
+  delete a salvage ref no sooner than the pass AFTER its marker lands. A
+  timing rule reduces the race and cannot close it (a floor host's gate can
+  run an hour); the fallback closes it.
+- **1172-dyvd COMPLETED** (yolanda, ok:land:516d18cf1:attempt-1 on
+  windows-next; relay due next pass). The resolver refuses a candidate it
+  cannot show is current, by name, and continues; the exit-2 text now says
+  "no CURRENT binary" so esme's missing-binary state and yolanda's stale one
+  stop sharing a message. THE CHECK IS A VOCABULARY PROBE AND MTIME IS
+  EXPLICITLY NOT THE REFUSAL — yolanda's departure from my "mtime as
+  fallback", argued in the comment: accel_side's absence is a property of the
+  binary, mtime of the filesystem, and a fresh clone would refuse every
+  candidate on a blameless host. Arm 3 of the four-arm fixture is the proof:
+  both fakes created in the same second, so any mtime rule ranks them
+  identically and they get opposite verdicts. Mutation control reds the three
+  primary arms and leaves the positive control green. The wrong row is
+  republished: before, cpu/Host CPU and nothing else; after, cpu/AMD Ryzen AI
+  7 350, gpu/AMD Radeon 860M (host-native-only, not container-reachable),
+  npu/NPU Compute Accelerator Device (engine-missing). They verified my
+  snapshot-race diagnosis before re-running (trunk's ledger copy 1 marked
+  line, theirs 0) and the land passed first attempt. Incidental, checked not
+  assumed: two Rust files (secure_wire_mode.rs, container_profile.rs) carry
+  CRLF in their WORKING TREE and the committed blobs are LF — git normalised
+  on add, the safe direction; the cause of the local CRLF is unknown and is
+  two files, not the tree, so it is whatever wrote those two.
+- **yoga: 1139-xe5m COMPLETED (224e29a52, closed 83f2a886e) and 1165-g6wx
+  COMPLETED (cb8316c42, closed a1c2bd76b).** The capability envelope now
+  carries `envelope_source=`/`accel_source=` measured|served|unknown, appended
+  LAST on the one line the forge receives; the Silverblue skew row has its
+  cheatsheet and a read-only probe. yoga had 1165-g6wx claimed and landed
+  before my hand-off flip reached trunk — the flip was harmless (their
+  completed event is later by LWW) and the hand-off message crossed their
+  closure; no second host picked it up, which is the control that matters.
+  Two bookkeeping items yoga FLAGGED rather than hand-edited, both correct
+  calls: (1) 1139-xe5m's `unscoreable` block promised to move its closure
+  text into `verifiable_closure` once the field existed — that is a
+  multi-line LWW write, and set-field turns out to accept one (block scalar
+  `|-` in a new fragment; measured on a scratch copy of the ledger under
+  target/, never the real one), and `declared-closures-check` reads the
+  `litmus:` token out of a status-channel value; the closure now names
+  `litmus:capabilities-envelope-names-its-source`, bound in
+  openspec/litmus-bindings.yaml under accel-capability-probe with a
+  post-build spec that runs yoga's suite, and the unscoreable field is
+  cleared (an empty value unsets). (2) 1165-g6wx's `owned_files` named
+  docs/cheatsheets/runtime/… while both cheatsheet guards walk the root
+  cheatsheets/ tree; the file is at cheatsheets/runtime/silverblue-updates.md.
+  Corrected by a note event, not set-field: the field is a LIST and set-field
+  stores a string — a silent type change on the fold, measured the same way.
+  windows-next (1172-dyvd, 516d18cf1) relayed in this land, one pass early,
+  because the closure bundle needed the full gate anyway.

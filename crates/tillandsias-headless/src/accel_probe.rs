@@ -108,6 +108,50 @@ pub struct CapabilityDocument {
     /// pre-existing behaviour and no worse than it was.
     #[serde(default)]
     pub render_nodes: Vec<DrmRenderNode>,
+    /// Whether THIS envelope was measured now or served from the on-disk cache.
+    ///
+    /// ORDER 1139-xe5m. `--capabilities` served `~/.cache/tillandsias/capabilities.json`
+    /// whenever one existed, and nothing in the envelope said so: `timestamp`,
+    /// `probe_identity` and `hardware_fingerprint` all describe the PRODUCING
+    /// run, so a replay is byte-identical to the measurement it replays.
+    /// Measured on esmeraldinha 2026-09-13 — the cache present replayed
+    /// `2026-09-12T03:29:40.356539631+00:00` digit for digit across runs
+    /// (`chrono::Utc::now()` does not reproduce a nanosecond field), and moving
+    /// the cache aside yielded a timestamp agreeing with the wall clock.
+    ///
+    /// THE FIELD, NOT A STALENESS BOUND OR A BYPASS FLAG. All three were on the
+    /// row; only the field makes an ALREADY-COLLECTED envelope interpretable,
+    /// and the fleet capability matrix folds rows produced on other machines
+    /// hours earlier. A bound or a flag changes what FUTURE runs emit and leaves
+    /// every stored row exactly as ambiguous as it was. The other two remain
+    /// available and are not foreclosed by this.
+    ///
+    /// NEVER PERSISTED AS A VALUE — [`write_capability_cache`] clears it before
+    /// writing, so the on-disk document says `null` and a serve stamps `served`
+    /// onto the copy it returns. Persisting `measured` would replay the claim
+    /// along with the document, which is this defect exactly.
+    ///
+    /// `None` MEANS UNKNOWN AND IS NOT "measured": documents written before this
+    /// order carry no such field, and a reader must not promote their silence
+    /// into a measurement — that is the inference this order exists to stop.
+    #[serde(default)]
+    pub envelope_source: Option<EnvelopeSource>,
+}
+
+/// How a [`CapabilityDocument`] in hand came to be (order 1139-xe5m).
+///
+/// Readable from the envelope ALONE: no filesystem access, no second run, and
+/// no knowledge of the producing host — which is the closure the row states,
+/// because a matrix row arrives as bytes from a machine you cannot ask.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+// @trace order:1139-xe5m, spec:accel-capability-probe
+pub enum EnvelopeSource {
+    /// The probe ran and produced this document in this process.
+    Measured,
+    /// A cache entry was served unchanged; `timestamp` is the ORIGINAL
+    /// measurement's, not this run's.
+    Served,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -499,23 +543,42 @@ pub fn load_or_probe_at(
     let identity = probe_identity();
     if freshness == Freshness::Cached
         && let Ok(content) = fs::read_to_string(cache_file)
-        && let Ok(doc) = serde_json::from_str::<CapabilityDocument>(&content)
+        && let Ok(mut doc) = serde_json::from_str::<CapabilityDocument>(&content)
         && doc.schema_version == SCHEMA_VERSION
         && doc.legacy_tier == effective_tier
         // The check 852-dk9z adds. Without it a rebuilt binary republishes its
         // predecessor's document as if it had probed.
         && doc.probe_identity.as_deref() == Some(identity.as_str())
     {
+        // THE STAMP GOES ON THE COPY BEING RETURNED, not on the cache. The
+        // document is otherwise returned verbatim, `timestamp` included, so
+        // this field is the only thing distinguishing it from the run that
+        // produced it (order 1139-xe5m).
+        doc.envelope_source = Some(EnvelopeSource::Served);
         return doc;
     }
     let doc = run_probe(effective_tier);
-    if let Some(parent) = cache_file.parent() {
-        let _ = fs::create_dir_all(parent);
-    }
-    if let Ok(json) = serde_json::to_string_pretty(&doc) {
-        let _ = fs::write(cache_file, json);
-    }
+    let _ = write_capability_cache(cache_file, &doc);
     doc
+}
+
+/// Persist a capability document, WITHOUT its [`CapabilityDocument::envelope_source`].
+///
+/// Order 1139-xe5m. Every write of the cache goes through here, and the reason
+/// is the whole point of the field: a document written with `measured` on it
+/// would be served back later still claiming it was measured, which reproduces
+/// the defect in a form that now looks authoritative. The stored document says
+/// `null` — unknown — and the serve path stamps `served` onto the copy it hands
+/// out.
+// @trace order:1139-xe5m, spec:accel-capability-probe
+pub fn write_capability_cache(cache_file: &Path, doc: &CapabilityDocument) -> Result<(), String> {
+    let mut stored = doc.clone();
+    stored.envelope_source = None;
+    if let Some(parent) = cache_file.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("create {}: {e}", parent.display()))?;
+    }
+    let json = serde_json::to_string_pretty(&stored).map_err(|e| format!("serialize: {e}"))?;
+    fs::write(cache_file, json).map_err(|e| format!("write {}: {e}", cache_file.display()))
 }
 
 /// Merge one measurement into the persisted capability document (order 805-wgbb).
@@ -580,12 +643,11 @@ pub fn record_measurement(m: MeasurementRecord) -> Result<(), String> {
         Some(slot) => *slot = m,
         None => doc.measurements.push(m),
     }
-    if let Some(parent) = cache_file.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("create {}: {e}", parent.display()))?;
-    }
-    let json = serde_json::to_string_pretty(&doc).map_err(|e| format!("serialize: {e}"))?;
-    fs::write(&cache_file, json).map_err(|e| format!("write {}: {e}", cache_file.display()))?;
-    Ok(())
+    // Through the helper so the stored document never carries an
+    // `envelope_source` claim (order 1139-xe5m): this path loads a document that
+    // may have been stamped `served` on the way in, and writing that back would
+    // persist a lie about a document that is, after this merge, neither.
+    write_capability_cache(&cache_file, &doc)
 }
 
 // @trace spec:accel-capability-probe
@@ -631,6 +693,9 @@ pub fn run_probe(effective_tier: &str) -> CapabilityDocument {
         // contributes an empty vec rather than a fabricated row, and the
         // gap above says which of those it was.
         render_nodes: container_lane.nodes,
+        // Stamped here because this is the only place a document is MEASURED.
+        // Serving re-stamps its copy; writing clears it (order 1139-xe5m).
+        envelope_source: Some(EnvelopeSource::Measured),
     };
     // Computed from the devices just enumerated, so the document carries its own
     // hardware identity and no consumer has to re-derive it. `checked` rather
@@ -3864,7 +3929,8 @@ pub fn accel_envelope(doc: &CapabilityDocument) -> String {
          accel_reason={} accel_cpu_cores={} accel_ram_gb={} accel_proof={} \
          accel_side={} accel_gpu_path={} accel_gpu_engine={} \
          accel_mem_model={} accel_mem_budget_gb={} \
-         accel_prefill_dev={} accel_decode_dev={} accel_decode_crossover_b={}",
+         accel_prefill_dev={} accel_decode_dev={} accel_decode_crossover_b={} \
+         accel_source={}",
         class,
         gpu_state,
         gpu.map(|d| slug(&d.name))
@@ -3892,6 +3958,24 @@ pub fn accel_envelope(doc: &CapabilityDocument) -> String {
         routing.prefill,
         routing.decode,
         routing.crossover,
+        // ORDER 1139-xe5m, APPENDED LAST for the same reason `accel_proof` was:
+        // every key above keeps its name, position and meaning, and
+        // `litmus:accel-envelope-reaches-the-forge` reads what it read before.
+        //
+        // THE LINE NEEDS IT, NOT ONLY THE JSON. This one line is what a forge
+        // receives as TILLANDSIAS_ACCEL_ENVELOPE and what the capability matrix
+        // folds; an agent holding it cannot open the producing host's cache
+        // file, so a JSON-only field would leave exactly the reader this packet
+        // is about unable to tell a replay from a measurement.
+        //
+        // `unknown` for a document written before this order — NOT `measured`.
+        // Promoting silence to a measurement is the inference the order exists
+        // to stop, and it would make every legacy row read as fresh.
+        match doc.envelope_source {
+            Some(EnvelopeSource::Measured) => "measured",
+            Some(EnvelopeSource::Served) => "served",
+            None => "unknown",
+        },
     )
 }
 
@@ -5266,6 +5350,7 @@ mod tests {
             enumeration_gaps: Vec::new(),
             hardware_fingerprint: None,
             render_nodes: Vec::new(),
+            envelope_source: Some(EnvelopeSource::Measured),
             devices,
             engines: Vec::new(),
             measurements: Vec::new(),
@@ -5794,6 +5879,70 @@ mod tests {
         );
     }
 
+    // ORDER 1139-xe5m. THE CLOSURE THESE PIN, stated so it is not weakened
+    // later: a served envelope must be distinguishable from a measured one by
+    // reading THE ENVELOPE ALONE — no filesystem access, no second run, no
+    // knowledge of the producing host. A test that told them apart by checking
+    // whether a cache file exists would pass while leaving every folded matrix
+    // row exactly as ambiguous as it is today.
+
+    #[test]
+    // @trace order:1139-xe5m, spec:accel-capability-probe
+    fn a_served_document_says_served_and_keeps_the_original_timestamp() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let cache = dir.path().join("capabilities.json");
+        let stored = doc_with(Vec::new());
+        write_capability_cache(&cache, &stored).expect("write cache");
+
+        let got = load_or_probe_at(&cache, "cpu", Freshness::Cached);
+
+        assert_eq!(
+            got.envelope_source,
+            Some(EnvelopeSource::Served),
+            "a cache hit must say so on the copy it returns"
+        );
+        // The defect, in one assertion: the timestamp is the PRODUCING run's
+        // and is served verbatim, so it can never be the discriminator.
+        assert_eq!(got.timestamp, stored.timestamp);
+        assert!(
+            accel_envelope(&got).contains("accel_source=served"),
+            "the one line a forge receives must carry it too"
+        );
+    }
+
+    #[test]
+    // @trace order:1139-xe5m, spec:accel-capability-probe
+    fn the_stored_document_claims_neither_measured_nor_served() {
+        // Persisting `measured` would replay the CLAIM along with the document
+        // on every later serve — the defect again, wearing an authoritative
+        // field. The stored form says `null`, and the serve path stamps.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let cache = dir.path().join("capabilities.json");
+        let mut measured = doc_with(Vec::new());
+        measured.envelope_source = Some(EnvelopeSource::Measured);
+        write_capability_cache(&cache, &measured).expect("write cache");
+
+        let raw = std::fs::read_to_string(&cache).expect("read back");
+        let back: CapabilityDocument = serde_json::from_str(&raw).expect("parse");
+        assert_eq!(back.envelope_source, None, "raw: {raw}");
+    }
+
+    #[test]
+    // @trace order:1139-xe5m, spec:accel-capability-probe
+    fn a_document_written_before_this_order_reads_unknown_not_measured() {
+        // Promoting silence into a measurement is the inference this order
+        // exists to stop: every row the fleet has already folded is silent.
+        let mut legacy = serde_json::to_value(doc_with(Vec::new())).expect("to value");
+        legacy
+            .as_object_mut()
+            .expect("object")
+            .remove("envelope_source");
+        let doc: CapabilityDocument = serde_json::from_value(legacy).expect("parse legacy");
+
+        assert_eq!(doc.envelope_source, None);
+        assert!(accel_envelope(&doc).contains("accel_source=unknown"));
+    }
+
     #[test]
     // @trace spec:accel-capability-probe
     fn envelope_stays_one_parsable_line_even_with_hostile_device_names() {
@@ -5841,6 +5990,8 @@ mod tests {
                 "accel_prefill_dev",
                 "accel_decode_dev",
                 "accel_decode_crossover_b",
+                // Order 1139-xe5m, appended last.
+                "accel_source",
             ],
             "every field must survive a hostile name: {env}"
         );
@@ -6588,6 +6739,7 @@ mod tests {
             enumeration_gaps: Vec::new(),
             hardware_fingerprint: None,
             render_nodes: Vec::new(),
+            envelope_source: Some(EnvelopeSource::Measured),
             devices: Vec::new(),
             engines: Vec::new(),
             measurements: vec![MeasurementRecord {

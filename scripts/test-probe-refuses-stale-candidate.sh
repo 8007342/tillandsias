@@ -24,7 +24,9 @@
 # runnable one exited 0 and published. The loud failure was already safe; the
 # silent one was not.
 #
-# REGIME: hermetic. Every arm builds its own fake candidates in a scratch dir
+# REGIME: hermetic ONCE THE HOST'S OWN CANDIDATES ARE SHADOWED (see run_probe
+# below; the first Linux run found the installed launcher on PATH answering
+# for the refused fake). Every arm builds its own fake candidates in a scratch dir
 # and drives the real resolver through TILLANDSIAS_HEADLESS_BIN. No cargo, no
 # network, no repo binary, no host state, and nothing here encodes a wall-clock
 # time — the fakes differ by what they PRINT, never by mtime, because the fix is
@@ -65,8 +67,25 @@ exit 0
 EOF
 chmod +x "$TMP/stale" "$TMP/current"
 
+# ISOLATE THE RESOLVER FROM THE HOST (macuahuitl, 2026-09-13, first Linux run
+# of this fixture). resolve_probe REFUSES a stale candidate and CONTINUES to
+# the next one — ./target/release/tillandsias, then `tillandsias` on PATH — so
+# on a host whose installed launcher is current, the stale arm read as
+# admitted (rc=0) and the identical-age arm as "same verdict": the fixture was
+# hermetic only on a host with no fallback candidate, which is the host that
+# wrote it. The shadow `tillandsias` fails --inference-tier so the resolver
+# skips it exactly as it skips an absent one, and running from $TMP takes the
+# relative release path out of the list. PATH is prefixed, never replaced:
+# a fixture whose scratch PATH came from bash and git had no dirname on a Mac.
+mkdir -p "$TMP/shadow"
+printf '#!/usr/bin/env bash\nexit 1\n' > "$TMP/shadow/tillandsias"
+chmod +x "$TMP/shadow/tillandsias"
+run_probe() {
+    ( cd "$TMP" && PATH="$TMP/shadow:$PATH" TILLANDSIAS_HEADLESS_BIN="$1" bash "$PROBE" --fragment 2>&1 >/dev/null )
+}
+
 # ── 1. THE DEFECT: a stale candidate must NOT be admitted. ───────────────────
-out="$(TILLANDSIAS_HEADLESS_BIN="$TMP/stale" bash "$PROBE" --fragment 2>&1 >/dev/null)"
+out="$(run_probe "$TMP/stale")"
 rc=$?
 if [ "$rc" -eq 2 ]; then
     ok "a stale candidate is refused (rc=2) rather than published"
@@ -86,7 +105,7 @@ esac
 
 # ── 2. THE POSITIVE CONTROL, and it is not optional. A guard that refuses
 #       everything is not a fix; the pre-fix resolver admitted BOTH of these.
-out2="$(TILLANDSIAS_HEADLESS_BIN="$TMP/current" bash "$PROBE" --fragment 2>&1 >/dev/null)"
+out2="$(run_probe "$TMP/current")"
 rc2=$?
 # ASSERT ON RESOLUTION, NOT ON THE WHOLE RUN. These fakes emit the envelope
 # line and no capability DOCUMENT, so the probe legitimately fails later at
@@ -122,7 +141,7 @@ fi
 #       states have different remedies (build one, versus rebuild yours).
 printf '#!/usr/bin/env bash\nexit 127\n' > "$TMP/broken"
 chmod +x "$TMP/broken"
-out3="$(TILLANDSIAS_HEADLESS_BIN="$TMP/broken" bash "$PROBE" --fragment 2>&1 >/dev/null)"
+out3="$(run_probe "$TMP/broken")"
 case "$out3" in
     *refused:probe:stale-candidate:*broken*)
         bad "a NON-RUNNING candidate was reported as stale; it is absent, not out of date" ;;

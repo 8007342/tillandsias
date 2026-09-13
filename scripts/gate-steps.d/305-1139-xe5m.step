@@ -1,0 +1,26 @@
+# Gate step 1139-xe5m — data, not code.
+#
+# Binds the fixture that pins `accel_source` on the capability envelope. Its
+# cache is hermetic (XDG_CACHE_HOME redirected into a temp dir, order 815-gdjk
+# made that the ONE cache-root resolution) while the probe itself really runs on
+# this host — deliberately, because the defect was in what the COMMAND an
+# operator runs emits, and a fixture that hand-built documents would pin the
+# library while `--capabilities` stayed ambiguous. Cost measured on yoga: 0.58s
+# cold, 0.04s warm.
+#
+# THE ARM THAT MATTERS IS THE ENVELOPE-ALONE ONE: measured and served must
+# differ in `accel_source` AND IN NO OTHER KEY. That is at once the proof the
+# field discriminates and the proof nothing else does — the capability matrix
+# folds rows from machines nobody can go and ask.
+#
+# STEP_SCRIPT is a LITERAL path (1063-nraf).
+STEP_DESC="Checking a capability envelope says whether it was measured or served (1139-xe5m)"
+STEP_SCRIPT="scripts/test-capabilities-envelope-names-its-source.sh"
+STEP_ERROR="the capability envelope no longer distinguishes a measurement from a replay (1139-xe5m) — a cached document may again be serving a stale provisioning state under a timestamp that is not this run's, and no reader of a folded matrix row can tell; see the verdict line above"
+STEP_OK="capability envelope source check passed"
+# Exit 3 means the product binary is not built — nothing was examined, and the
+# fixture says so by name rather than passing. Exit 1 remains a real regression
+# and still refuses the land. This is not a way past a red: no arm of this
+# fixture can produce 3, only the binary's absence can.
+STEP_SKIP_EXIT=3
+STEP_SKIP_DESC="target/debug/tillandsias is not built on this host, so the probe could not be asked"
