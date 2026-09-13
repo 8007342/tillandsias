@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-salvage-net-preserves-a-finished-unpushed-commit-on-a-clean-tree-and-skips-a-path-it-cannot-stage-instead-of-failing
+    event:
+      type: progress
+      ts: "2026-09-13T07:53:32Z"
+      agent_id: linux-macuahuitl-fable-20260913t075332z
+      host: macuahuitl
+      summary: |
+        Landed at linux-next@e49069cd1 (macuahuitl; one sonnet sub-agent implemented,
+        coordinator verified by its own run). ok:salvaged-commits:<ref>:<sha> for a
+        clean tree whose HEAD is on no origin ref; skip:salvage:unstageable:<path>
+        per unstageable path with the salvage proceeding; ok:salvage-not-needed only
+        when clean AND on origin. Fixture 8/8 (six prior + unpushed + symlink), the
+        litmus gains both steps, the skill names the unpushed case. Stated limit:
+        ext4 stages a dangling symlink, so the real drvfs ENOSYS path is pinned
+        through a test-only seam (TILLANDSIAS_SALVAGE_UNSTAGEABLE_GLOB), with the
+        counterfactual asserted in the fixture; in-situ drvfs confirmation asked of
+        yolanda after their trunk merge.
