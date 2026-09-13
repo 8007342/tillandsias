@@ -1,0 +1,85 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed on lenovinha 2026-09-13 from esme's post-fix run on 1130-8zxn. The
+# accessor fix was correct and this is the state it did not model.
+packets:
+  - packet_id: the-capability-row-guard-derives-its-own-locus-from-the-context-it-runs-in-so-a-host-with-two-published-loci-answers-due-from-a-third-context-and-the-remedy-would-mint-a-third-row
+    order: 1159-g96c
+    status: ready
+    kind: bugfix
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [tooling, capability, guard, integrity]
+    estimated_hours: 3
+    verifiable_closure: "scripts/check-capability-row.sh: on a host whose committed rows are in-guest and windows-host, a run from a context deriving locus=bare-metal does NOT answer due:no-capability-row — it names the context mismatch in its own token and does not ask for a publish that would mint a third locus (pre-fix result: FAILS — measured on esmeraldinha 2026-09-13, three invocation arms, due:no-capability-row:esmeraldinha rc=1); NEGATIVE CONTROL: a host that genuinely has NEVER published any row still answers due:no-capability-row, because absence and context-mismatch must not collapse into one token — that collapse is 889-ewvt's defect pointed the other way."
+    owned_files:
+      - scripts/check-capability-row.sh
+    title: |
+      The capability-row guard derives its own locus from the context it happens to run in rather than from the host's identity, so on a host with two published loci a run from a third context answers due:no-capability-row and the remedy it names would publish a third row for a node that already has two.
+    context: |
+      MEASURED ON ESMERALDINHA by esme, post-1130-8zxn, three invocation arms
+      (env prefix / exported / default dispatch), all identical:
+
+        from inside tillandsias-build  ->  due:no-capability-row:esmeraldinha  rc=1
+        from Git Bash                  ->  ok:capability-row-reported          rc=0
+
+      Committed rows for that host: locus:in-guest and locus:windows-host.
+      Neither run evaluates either of them.
+
+      THE CAUSE, traced to source and re-verified on lenovinha. live_matrix()
+      invokes host-capability-probe.sh with no TILLANDSIAS_HOST_KIND, so the
+      locus rule at :142-149 falls to its else-arm: forge -> in-guest, host_kind
+      windows -> windows-host, ELSE bare-metal. Inside a Linux builder distro
+      the binary reports kind linux and the env is unset, so bare-metal wins.
+      That is the GUARD'S OWN call path, not an artefact of hand-invocation.
+
+      1130-8zxn made the guard judge the host's OWN locus instead of whichever
+      sorted first, which was right and is not in question here — esme saw
+      none of that packet's failure signatures: nothing drifted, nothing named
+      their in-guest triples, no age from the wrong row. What it did not model
+      is that "own locus" is derived from THE RUNNING CONTEXT, so a host can
+      have a third locus that has never published and never should.
+
+      WHY due: IS THE WRONG TOKEN HERE AND THIS IS THE HEART OF IT. due: is
+      documented as actionable with the remedy "publish a row". On esme that
+      remedy would publish a BARE-METAL row for a node that already has
+      in-guest and windows-host — a third locus minted from a context that is
+      neither, by a host obeying the guard. That is 1128-4ffr's shape again:
+      obeying the guard is what breaks the thing. Either the behaviour is
+      desirable and only the token under-describes it, or the guard must
+      distinguish "you are running somewhere that does not publish" from "you
+      have never published". They are different states with different remedies
+      and today they share a token.
+
+      THE OTHER SIDE IS BLOCKED BY 1154-8ywc, which is why this could not be
+      measured the intended way. From Git Bash, where host_kind would be
+      windows and the locus WOULD be windows-host, there is no runnable probe
+      (no target/release/tillandsias; target/debug/tillandsias is an ELF that
+      exits 126 there), live_matrix fails, and check() returns at the
+      short-circuit before the age test. So the 21-day-stale windows-host row
+      is unevaluated from both directions, by two different causes. 1154-8ywc
+      lands first or this cannot be verified on the host that exhibits it.
+
+      NOT IN SCOPE: the accessor keying (1130-8zxn, closed and confirmed on
+      yolanda), resolve_probe's candidate list (1154-6big), and the expiry
+      short-circuit (1154-8ywc). This packet is only about WHICH LOCUS THE
+      GUARD BELIEVES IT IS.
+
+      CREDIT: esme measured it, traced it to the locus rule rather than
+      reporting a verdict, checked that live_matrix does not set the env
+      itself, and explicitly declined to resolve the ambiguity in my favour.
+    exit_criteria:
+      - 'a host with in-guest and windows-host rows, run from a bare-metal-deriving context, does not answer due:no-capability-row (pre-fix result: FAILS — measured on esmeraldinha, three arms)'
+      - 'the verdict names the context mismatch and does not ask for a publish that would mint a third locus'
+      - 'NEGATIVE CONTROL: a host with NO rows at any locus still answers due:no-capability-row — absence and context-mismatch must not collapse into one token'
+      - 'NEGATIVE CONTROL: a single-locus host (lenovinha, bare-metal) is unaffected and still answers ok:capability-row-current'
+    events:
+      - type: filed
+        ts: "2026-09-13T15:50:22Z"
+        agent_id: "linux-lenovinha-opus5-20260913t155022z"
+        host: lenovinha
+        summary: |
+          Filed from esme's post-fix run on 1130-8zxn. The accessor fix was
+          correct; this is the state it did not model, and the remedy the
+          guard names would make the host worse.

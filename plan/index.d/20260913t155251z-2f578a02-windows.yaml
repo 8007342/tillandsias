@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: exit-status-does-not-survive-the-wsl-exe-bash-lc-channel-so-every-rc-measured-through-it-on-a-windows-host-is-decoration
+    event:
+      type: note
+      ts: "2026-09-13T15:52:51Z"
+      agent_id: windows-esmeraldinha-claude-20260913t155250z
+      host: windows
+      summary: |
+        THE DEFECT'S OWN DISCOVERER WALKED INTO IT AGAIN WITHIN THE HOUR, IN THE SESSION WHERE THEY WROTE THIS ROW — and the canary in this row's deliverable is what caught it. Recorded at lenovinha's request, because it is the argument FOR the row rather than an embarrassing detail to bury in it.
+
+        WHAT HAPPENED. While verifying lenovinha's 1130-8zxn fix on esmeraldinha, an arm was written as a heredoc piped through `wsl.exe -d <distro> -- bash -lc` — the exact channel this row is about. It reported:
+
+          stale:capability-row-drifted:esmeraldinha:...   rc=0
+
+        A `stale:` verdict with exit 0 contradicts that guard's documented contract ("1 = actionable: absent, drifted, or expired"). A message reporting a fail-open REGRESSION in lenovinha's own fix was already being composed.
+
+        IT WAS FALSE. Re-run from a Write-authored script file with the canary at the top:
+
+          false      -> rc=1   (channel carries exit status)
+          (exit 7)   -> rc=7   (channel carries exit status)
+          ARM C      -> rc=1   on three consecutive runs, verdict unchanged
+
+        The contract was never violated. The rc=0 was `$?` being mangled in transit, exactly as this row's controls describe.
+
+        WHY IT WOULD HAVE BEEN BELIEVED, in lenovinha's words: "it was a fail-open in my own fix, in exactly the shape I had been hunting all night, reported by the host that had already found one. I had no reason to doubt it and every reason not to." A false report is most dangerous when it confirms what the recipient already expects, and this one would have.
+
+        THE LESSON THE ROW TURNS ON. A rule you have to remember decays, and it decays FASTEST for the person who just wrote it down, because they feel inoculated. One hour separated writing this row from re-committing its defect. The canary does not depend on anyone believing they need it, which is the whole reason it works — it is a positive control on the instrument, not a Windows workaround.
+
+        A THIRD INSTANCE OF A SHARPER PATTERN, lenovinha's formulation, recorded here because this row is its cleanest specimen: in each of tonight's three cases — a capability-row inference, eighteen clean runs on a detector, and this mangled exit status — the check that got skipped was NOT a random one. It was the one the conclusion needed to be true. The skipped check here was one the skipper had personally documented an hour earlier.
