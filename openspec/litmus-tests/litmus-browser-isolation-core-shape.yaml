@@ -44,6 +44,37 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "spec:browser-isolation-core"
 
+  # ORDER 1118-dwgx. The network default is a CONFINEMENT and belongs beside
+  # the other confinement assertions in this file, which already pin
+  # --cap-drop=ALL and --user-data-dir. It defaulted to `host`, giving Chromium
+  # direct host network access with no proxy filtering while every other flag in
+  # that same podman array was locking the container down. Nothing asserted it,
+  # so the one flag that undid the rest could be reverted silently.
+  #
+  # Asserted as "the default is NOT host" rather than "the default is
+  # tillandsias-enclave": the fallback chain honours TILLANDSIAS_ENCLAVE_NET so
+  # an operator may legitimately rename the enclave, and pinning the literal
+  # name would red-gate that rename while proving nothing extra. What must never
+  # come back is the host network.
+  # BOTH STEPS STRIP COMMENT LINES FIRST, and that is not defensive tidiness —
+  # the first draft of the second step matched the RATIONALE COMMENT directly
+  # above the flag, because that comment quotes `--network=host` while
+  # explaining why it is wrong. The step would have read its author's prose as
+  # the code it was pinning and reported the defect still present. Same defect
+  # as 823-u5zf's own closure (a scan finding `argv_survives_wt_reparse` in
+  # three comments recording its deletion), reproduced one packet later in the
+  # pin written to prevent it. A scan that cannot tell code from commentary
+  # measures the commentary.
+  - step: "launch-chromium.sh does not default to the host network (1118-dwgx)"
+    command: "grep -v '^[[:space:]]*#' scripts/launch-chromium.sh | grep -c -- '--network=${TILLANDSIAS_BROWSER_NETWORK:-host}' || true"
+    timeout_ms: 3000
+    expected_behavior: "0"
+
+  - step: "launch-chromium.sh defaults its network to the enclave chain (1118-dwgx)"
+    command: "grep -v '^[[:space:]]*#' scripts/launch-chromium.sh | grep -o -- '--network=[^\"]*' | head -1"
+    timeout_ms: 3000
+    expected_behavior: "TILLANDSIAS_ENCLAVE_NET"
+
   - step: "run-safe-browser.sh carries the 3-spec trace at file head"
     command: "grep -F '@trace spec:browser-isolation-core, spec:chromium-safe-variant, spec:browser-isolation-tray-integration' scripts/run-safe-browser.sh"
     timeout_ms: 3000
