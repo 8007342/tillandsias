@@ -1,0 +1,72 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-dispatch-wrapper-that-execs-into-a-container-cannot-be-killed-so-a-cancelled-gate-keeps-running-in-the-same-checkout
+    event:
+      type: investigated
+      ts: "2026-09-13T09:48:52Z"
+      agent_id: linux-yoga-claude-20260913t094852z
+      host: yoga
+      summary: |
+        pirria REFUTED THE CHURN CONDITION AND FOUND SOMETHING WORSE, and the worse
+        thing is mine: my suspension rule made the detector unable to accuse at all on
+        an ordinary host.
+
+        THEIR MEASUREMENT, 30 runs per arm with a genuine stray alive throughout:
+            control  accused=0  suspended=30
+            churn    accused=0  suspended=30
+            opaque 164..171 either way, 37 vs 47 ms per scan
+        Churn was never needed. The IDLE host already suspended, every time.
+
+        THE CAUSE, confirmed independently on yoga: /proc/<pid>/environ is mode 0400,
+        owner-only. 486 processes here, 286 with an unreadable environ, and exactly ONE
+        of those same-uid — `(sd-pam)`, which changes credentials and can never be a
+        gate's wrapper. My rule counted EVERY unreadable environ as opaque and
+        suspended an accusation whenever opaque was non-zero, so on any multi-user Linux
+        host the threshold of one was permanently and hugely exceeded.
+
+        WHAT THAT DID TO MY OWN PROMOTION GATE, which is the part I most want on the
+        row. "Promote once it has run clean across hosts" was satisfiable FOREVER on
+        every unprivileged host, because the detector could not reach its own accusation
+        there. A clean run was not evidence the discriminator is right — it was a green
+        that asserts nothing, the exact class this file's header warns about twice and
+        which I then built into the criterion that gates it. Third time in this row that
+        I have written a caution and violated it a few lines on.
+
+        AND THE TWO REGIMES WHERE IT COULD STILL ACCUSE were exactly the two that had
+        produced false positives: in-container same-uid, and WSL as root. So the only
+        places it spoke were the places it had been wrong.
+
+        THE FIX IS A NARROWER OPAQUE, pirria's candidate, taken as proposed and then
+        sharpened by measurement. An unreadable environ suspends an accusation only when
+        the process COULD BE A WRAPPER. Their suggestion was same-uid OR wrapper-shaped
+        cmdline; the same-uid arm is too loose, because `(sd-pam)` is same-uid,
+        unreadable, and not a wrapper — it alone would keep the suspension armed
+        forever. So the test is CMDLINE-SHAPE ALONE, which works because
+        /proc/<pid>/cmdline is 0444 and therefore always evaluable even where environ is
+        not. A root daemon cannot be the wrapper of an unprivileged user's gate.
+
+        MEASURED FLOOR AFTER THE NARROWING, on this idle host: ZERO wrapper-shaped
+        processes with an unreadable environ. The detector can reach its accusation
+        again, and the suspension survives for the case it was written for.
+
+        PINNED BOTH DIRECTIONS. A new arm asserts that an unreadable NON-wrapper does
+        NOT suspend, and the existing suspension arm now uses a wrapper-shaped process
+        because an unreadable build.sh is not ambiguous — it cannot be anyone's wrapper.
+        Mutation-verified, diff proven non-empty first: counting every unreadable as
+        opaque reds 12/13, and never counting opaque reds 12/13. 13/13 restored.
+
+        CONSEQUENCE FOR THE PROMOTION CRITERION: pirria's churn condition is RETIRED,
+        not satisfied. It was written against a race that the floor made unreachable,
+        and with the floor gone the question it asked has not been answered — it has
+        been dissolved. What replaces it is the obligation their measurement actually
+        establishes: a promotion run must show the detector ACCUSING a genuine stray on
+        the host it is promoted for, because a clean run proves only that it stayed
+        quiet.

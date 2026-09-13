@@ -162,12 +162,39 @@ tokens=""
 for d in "$PROC_ROOT"/[0-9]*; do
     pid="${d##*/}"
     [ "$pid" = "$self" ] && continue
-    # A DENIED READ IS NOT AN ABSENT TOKEN. `[ -r ]` is an access(2) claim and
-    # can be true where the read then fails; treating that as "no token here"
-    # is how a live wrapper becomes invisible and its group looks headless.
-    # Count them instead, and refuse to accuse anyone if any exist.
+    # A DENIED READ IS NOT AN ABSENT TOKEN — but only a read that could have
+    # been a WRAPPER is worth suspending an accusation over.
+    #
+    # ORDER 1141-vf9w, refuted by pirria's measurement. Counting EVERY
+    # unreadable environ as opaque put a permanent floor under the suspension
+    # and made the detector unable to ever accuse on an ordinary host.
+    # `/proc/<pid>/environ` is mode 0400, owner-only; `/proc/<pid>/cmdline` is
+    # 0444, world-readable. Measured on yoga: 486 processes, 286 with an
+    # unreadable environ, of which exactly ONE was same-uid — `(sd-pam)`, which
+    # changes credentials and can never be a gate's wrapper. pirria measured the
+    # consequence directly, 30 runs per arm with a genuine stray alive
+    # throughout: accused=0 suspended=30 in BOTH the control and the churn arm,
+    # opaque 164..171 either way. Churn was never needed; the idle host already
+    # suspended. The two regimes where the detector COULD still accuse were
+    # exactly the two that had produced false positives.
+    #
+    # That also made "promote once it has run clean across hosts" satisfiable
+    # forever on any unprivileged host, because the detector could not reach its
+    # own accusation there — a clean run that asserts nothing, which this file's
+    # header warns about twice and which I then built into its promotion gate.
+    #
+    # THE FILTER IS CMDLINE-SHAPED, and cmdline being world-readable is what
+    # makes it always evaluable: a process we cannot read is ambiguous only if
+    # it LOOKS like a dispatch wrapper. A root daemon cannot be the wrapper of
+    # an unprivileged user's gate. Measured floor after this filter on an idle
+    # host: ZERO.
     if [ ! -r "$d/environ" ]; then
-        opaque=$((opaque + 1)); continue
+        _oc="$(tr '\0' ' ' < "$d/cmdline" 2>/dev/null)"
+        case "$_oc" in
+            *"toolbox run"*|*with-tillandsias-builder*|*with-wsl2-builder*|*podman*exec*)
+                opaque=$((opaque + 1)) ;;
+        esac
+        continue
     fi
     tok=""
     if ! { while IFS= read -r -d '' e; do
