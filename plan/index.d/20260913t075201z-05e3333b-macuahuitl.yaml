@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: two-tests-mutate-one-process-global-env-var-in-parallel-so-the-suite-flakes-about-one-run-in-fifteen
+    event:
+      type: progress
+      ts: "2026-09-13T07:52:01Z"
+      agent_id: linux-macuahuitl-fable-20260913t075201z
+      host: macuahuitl
+      summary: |
+        Landed at linux-next@95d98bde7 (macuahuitl). Option 1 of the deliverable:
+        resolve_host_id takes its input (resolve_host_id_from); both tests pass a
+        value and mutate nothing. The closure's full-suite run surfaced the second
+        instance of the class (xdg_runtime_dir_tests, helper documented "serialised"
+        with no lock) — fixed the same way (ensure_xdg_runtime_dir_from). MEASURED
+        at --test-threads=16 on macuahuitl: accel_probe::tests 30/30 green (85 tests
+        per run); full tillandsias-headless suite 10/10 green (536 passed, 1 ignored;
+        the pre-fix first full run failed 1/1 on the XDG test). clippy -D warnings
+        and fmt clean. The wider class (~120 test-side env mutations across seven
+        files) is filed as child 1147-6xqs with a ratchet guard. Verified by the
+        repeated run, not a single green.

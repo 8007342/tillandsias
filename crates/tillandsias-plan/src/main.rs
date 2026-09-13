@@ -4522,6 +4522,41 @@ fn main() {
                     ),
                 }
             }
+            // ORDER 1123-k3mq — SAY WHAT WAS THROWN AWAY.
+            //
+            // 686-7qcm taught compaction the closure ladder, so a rung-lowering
+            // write no longer corrupts the base. But the losing write was then
+            // dropped AND ITS FRAGMENT DELETED, in silence: a coordinator
+            // releasing an expired claim got `ok:` from set-field, `ok:
+            // compacted N fragment(s)` from here, and a ledger still reading
+            // `completed`. Nothing in the chain said the release had not taken,
+            // which is how two maintainers read one ledger, disagree, and are
+            // both correct.
+            //
+            // THE RULE IS STATED HERE because this is where a reader meets it.
+            // `status` is a monotone join over the closure ladder and timestamps
+            // do NOT order it — the one place that surprise actually costs
+            // somebody something is the moment their write is refused.
+            for (pid, discarded, retained, host) in &c.discarded_status {
+                eprintln!(
+                    "warning: status write DISCARDED for {pid}: '{discarded}' (from {}) does not \
+                     apply over '{retained}' — `status` folds as a MONOTONE JOIN over the closure \
+                     ladder (implemented < completed < verified < done), not last-write-wins, so a \
+                     newer value that sits LOWER is refused and its timestamp is never consulted \
+                     (1123-k3mq).",
+                    if host.is_empty() {
+                        "unknown host"
+                    } else {
+                        host.as_str()
+                    }
+                );
+                eprintln!(
+                    "         The fragment carrying it has been consumed, so this warning is the \
+                     only remaining record. To move DOWN the ladder deliberately, re-run with \
+                     `set-field {pid} status {discarded} --reopen-evidence <falsifying observation>` \
+                     (650-dq6u)."
+                );
+            }
             println!(
                 "ok: compacted {} fragment(s) into {} ({} removed)",
                 c.consumed.len(),

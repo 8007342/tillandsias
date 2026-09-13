@@ -1,0 +1,68 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-dispatch-wrapper-that-execs-into-a-container-cannot-be-killed-so-a-cancelled-gate-keeps-running-in-the-same-checkout
+    event:
+      type: investigated
+      ts: "2026-09-13T03:43:02Z"
+      agent_id: linux-yoga-claude-20260913t034302z
+      host: yoga
+      summary: |
+        CRITERION 3 REBUILT ON MEASUREMENT, and the discriminator is neither the
+        immediate ppid I filed nor the conmon-session archaeology that replaced it. It
+        is the TOKEN this packet already put in every dispatch's environment.
+
+        THE SHAPE, measured on yoga against a live dispatch and seven dead ones. Every
+        process of a dispatch carries TILLANDSIAS_WRAPPER_TOKEN. Group live processes
+        by that token and each group falls into one of THREE states:
+
+          LIVE    a process in the group is the host-side `toolbox run`  -> a healthy gate
+          idle    host side gone, ONLY conmon remains                    -> normal residue
+          STRAY   host side gone, and live non-conmon workers remain     -> the defect
+
+        Measured right now on this host: one LIVE (my probe dispatch, four processes,
+        host side alive), SEVEN idle, one with live workers.
+
+        THE `idle` CLASS IS WHY THE OBVIOUS LOCK WOULD HAVE BEEN UNUSABLE. Seven
+        tokens have a dead host side and a lingering conmon with no work under it —
+        that is what a finished exec session leaves behind, and it is not a stray. A
+        lock refusing on "a token whose host side is gone" would have refused SEVEN
+        times over on an idle host. Only the live-worker test separates residue from a
+        survivor, and no amount of reading the code would have produced that count; it
+        took looking.
+
+        AND A FALSE POSITIVE THE MEASUREMENT ALSO CAUGHT, which is the third correction
+        to this criterion in two cycles. The one group with live workers is NOT a
+        surviving gate. Its workers are two `sleep 600` processes with
+        PWD=.../crates/tillandsias-podman, started four minutes ago by the land gate
+        that had just finished — a cargo test in that crate spawns background children
+        that OUTLIVE the run. A lock keyed on "live non-conmon worker" refuses on a
+        test's leaked debris, which would make every gate on this host refuse the next
+        one for ten minutes.
+
+        SO THE WORKER TEST MUST BE NARROW: a live descendant that is itself a
+        `build.sh` (the thing that would actually contend for the checkout), not any
+        surviving process in the group. Debris is not contention.
+
+        THE PROGRESSION IS WORTH KEEPING because each version looked right until
+        measured. Filed as "ppid is conmon" -> FALSE, a legitimate gate is
+        conmon-parented too (pirria). Replaced by "whose conmon belongs to a different
+        podman exec session" -> workable but needs archaeology, and the token makes it
+        unnecessary. Now "group by token, require a live host side, and count only
+        build.sh workers" -> matches every case on this host, including the seven that
+        would have been false refusals and the one that would have been a false stray.
+
+        NOT IMPLEMENTED THIS CYCLE, deliberately. This goes into build.sh, the path
+        every Linux build on every Linux host takes, and the discriminator has been
+        wrong three times in two cycles — twice in ways only a measurement caught. The
+        design is now grounded in one, but a lock that refuses wrongly stops the fleet
+        rather than one host, and I would rather land it on a cycle that starts with it
+        than at the end of one. next_action carries the rebuilt rule so whoever takes
+        it does not re-derive it.

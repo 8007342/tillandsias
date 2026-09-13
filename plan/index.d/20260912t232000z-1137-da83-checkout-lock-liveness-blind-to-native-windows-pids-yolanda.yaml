@@ -168,6 +168,110 @@ packets:
       Pre-fix demonstration is the `explicit-DEAD`-on-a-live-harness-pid
       transcript in context, above; esme's is the `harness-env-DEAD` transcript
       in their writeup, the same defect reached through the other anchor.
+
+      TWO RULES THIS ROW PAID FOR, both generalised from measurements on BOTH
+      Windows hosts rather than from one host's data points.
+
+      1. EXACTLY ONE PATH-CONVERSION GUARD, NEVER TWO (esme's formulation).
+         Under Git Bash a bare `/NH` is rewritten to a Windows path before the
+         exe sees it — the error is literally
+         `Invalid argument/option - 'C:/Program Files/Git/NH'`. Three guards
+         each fix that ALONE: MSYS_NO_PATHCONV=1, MSYS2_ARG_CONV_EXCL='*', or
+         doubling the slash. They do NOT compose, and belt-and-braces is the one
+         configuration that cannot work:
+
+           tasklist //NH ...                          -> rc=0, the CSV row
+           MSYS_NO_PATHCONV=1 tasklist //NH ...       -> rc=1, Invalid argument/option - '//NH'
+           MSYS2_ARG_CONV_EXCL='*' tasklist //NH ...  -> rc=1, same
+
+         `//NH` is not an escape — it is an input the conversion layer collapses
+         to `/NH`. Suppress that layer by ANY means and the exe receives a
+         literal `//NH`. So: suppress the conversion and pass single-slash, or
+         keep the conversion and pass double-slash. Found by arm 8c-pre's own
+         third outcome on its first run, which reported "the oracle COULD NOT
+         ASK" rather than "the pid is dead" — the entire reason that outcome
+         exists.
+
+      2. NEVER READ A LAND OR GATE VERDICT THROUGH A PIPE; `| tail` REPORTS
+         TAIL'S STATUS. That is the rule; the rest of this item is why it needed
+         to be one.
+
+         `rc=$?` after a pipeline is the last command's status, and `head`/`tail`
+         are the two commands most likely to be there. THREE FALSE CLAIMS IN ONE
+         HOUR, two hosts, three different commands, every one made while both
+         hosts were actively reasoning about a liveness probe that answers
+         confidently about the wrong process:
+
+           - esme: `tasklist ... | head -2; echo rc=$?` read head's 0. Caught
+             before reporting. Had it been reported it would have been a FALSE
+             CONFIRMATION of yolanda's identical wrong reading.
+           - yolanda: the same mistake on the same primitive, published to a peer
+             as a measured two-host difference in tasklist. There was no
+             difference; both hosts return rc=1.
+           - yolanda: `land-on-platform-branch.sh | tail -25` read the pipeline's
+             0, and two parties were told the land tool reports success over a
+             refused gate. It had exited 3 and named its gate log. That tool's
+             header exists BECAUSE someone once shipped exactly that bug, so it
+             was accused of the defect it was written to prevent, by a reading
+             that had the defect.
+
+         Capture into a variable (`out="$(cmd 2>&1)"; rc=$?`), or
+         `set -o pipefail`, or SNAPSHOT THE ARRAY AS THE VERY NEXT COMMAND:
+         `ps=("${PIPESTATUS[@]}")`, then index it.
+
+         PHRASE IT THAT WAY AND NOT AS "use ${PIPESTATUS[0]}" (esme's point,
+         and they are right). PIPESTATUS[0] is not WRONG — read as the first
+         command after the pipeline it is correct, and a reader who tests it in
+         isolation will find it works and conclude this warning was overblown.
+         It is FRAGILE: ANY intervening command resets it, and the intervening
+         command everyone writes is `a=$?`, which is exactly what you reach for
+         alongside it. So the mechanism is fine and the idiom it travels with
+         destroys it. Measured while writing this row's fixture:
+
+           bash -c 'exit 3' | tail -1 >/dev/null
+           a=$?; b="${PIPESTATUS[0]}"   ->  a=0 b=0   (both wrong, even on ONE line)
+           ps=("${PIPESTATUS[@]}")      ->  ps=(3 0)  (correct)
+
+         `;` separates two commands and the `a=$?` assignment RESETS the array
+         before the second reads it; a `$( )` or a `( )` around the pipeline
+         loses it the same way. Snapshot the whole array as the very next
+         command after the pipeline, then index it. THE REMEDY CARRIES THE TRAP,
+         which is why this row ships an executable fixture rather than advice.
+
+         AND THE FIXTURE IS WIRED TWO WAYS, because I got this wrong once
+         already and told a peer so. `scripts/test-*.sh` is NOT globbed by
+         build.sh, but a fixture reaches the gate by EITHER of two routes: an
+         explicit `_run bash` line in build.sh (~100 such lines, including
+         test-cycle-lock-attested-release.sh) or a litmus binding (which is how
+         test-cycle-checkout-lock.sh runs — it appears in build.sh not at all).
+         I first said "only because a litmus binding names it", which is false.
+
+         AND ROUTE 2 IS TWO FILES, NOT ONE — the correction esme and I each got
+         half of. `openspec/litmus-tests/litmus-<name>.yaml` DEFINES the test
+         (steps, commands, expected_behavior).
+         `openspec/litmus-bindings.yaml` REGISTERS it against a spec_id, and
+         `get_litmus_tests_for_spec` in run-litmus-test.sh reads THAT registry
+         to decide what `run-litmus-test.sh <spec>` executes. Write only the
+         definition and the file exists but no spec run picks it up; write only
+         the registry entry and it names a test nothing defines, which is
+         1068-cxmf's dangling-pin defect. The failure mode is opening one of
+         the two and believing you are done.
+
+         Either route suffices; neither is automatic; a fixture with NEITHER is
+         a file, not a gate. This one has both routes, and route 2 in both its
+         halves.
+
+         The trap is that head/tail are what you reach for to make output
+         READABLE: the habit that makes a measurement legible is the habit that
+         corrupts it.
+
+         NOTHING STRUCTURAL CAUGHT ANY OF THE THREE — not a gate, not a test. One
+         was caught by re-reading one's own command, one by a peer flagging a
+         disagreement they declined to explain away, one by checking a claim
+         before filing a row on it. The operational half: flag a disagreement you
+         cannot explain instead of smoothing it, and check a claim against the
+         tool before filing against the tool. Agreement between two sources is
+         not evidence when both share a method.
     events:
       - type: claim
         host: yolanda

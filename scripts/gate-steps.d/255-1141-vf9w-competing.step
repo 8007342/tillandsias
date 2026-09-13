@@ -1,0 +1,15 @@
+# Gate step 1141-vf9w (competing-gate detector) — data, not code.
+#
+# Binds the HERMETIC fixture, not the detector. The detector itself is wired
+# into build.sh separately and is ADVISORY there; this step pins the
+# classifier's grammar so the three states cannot silently collapse into two.
+#
+# The fixture builds procfs-shaped trees of plain files, spawns nothing and
+# signals nothing, so it costs the inner loop almost nothing and asserts
+# nothing about the host it runs on.
+#
+# STEP_SCRIPT is a LITERAL path (1063-nraf).
+STEP_DESC="Checking a surviving gate is told apart from residue and from debris (1141-vf9w)"
+STEP_SCRIPT="scripts/test-no-competing-gate.sh"
+STEP_ERROR="the competing-gate classifier regressed (1141-vf9w) — idle residue or leaked test children may now read as a surviving gate, or a missing procfs may read as a clean answer; see the verdict line above"
+STEP_OK="Competing-gate classifier check passed"

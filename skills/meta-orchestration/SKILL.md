@@ -277,6 +277,15 @@ real index, or a checkout. Verified: worktree status and `.git/index` are
 byte-identical afterwards, and `git show <sha>:<path>` returns an untracked
 file's full content.
 
+THE SAME SCRIPT ALSO COVERS A CLEAN TREE THAT IS NOT A SAFE ONE (order
+1146-8j7i): if `git status` is empty but HEAD itself is not reachable from any
+origin ref — a finished, gate-passing commit stranded when a later trunk merge
+reds the gate and every push is then refused — it pushes HEAD to the same
+salvage ref and answers `ok:salvaged-commits:<ref>:<sha>` instead of
+`ok:salvage-not-needed`. A host whose gate just went red on an otherwise-clean
+tree should run this script, not open a fresh `work/<order>` ref that the same
+red gate will refuse for the same reason the commit is stranded.
+
 WHY THIS RULE EXISTS, and it is the most expensive lesson in this file. On
 2026-08-23 a host wedged with 16 modified paths and one untracked litmus file
 belonging to two claimed packets. Three consecutive cycles refused the dirty

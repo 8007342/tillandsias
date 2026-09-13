@@ -1,0 +1,78 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by the macuahuitl coordinator on 2026-09-13 from yolanda's measurement:
+# a clean tree with an unpushed commit on a red-gate host is the state the
+# salvage net was written for, and the net answers "not needed".
+packets:
+  - packet_id: the-salvage-net-preserves-a-finished-unpushed-commit-on-a-clean-tree-and-skips-a-path-it-cannot-stage-instead-of-failing
+    order: 1146-8j7i
+    status: ready
+    kind: bugfix
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [salvage, tooling, coordination, windows, wsl]
+    estimated_hours: 3
+    verifiable_closure: "litmus:salvage-net-roundtrip — two new scenarios in scripts/test-salvage-net.sh: `unpushed` (clean tree, one commit not reachable from any origin ref, red or absent gate stamp) answers ok:salvaged-commits:<ref>:<sha> with the commit an ancestor of the salvage ref on the bare origin (pre-fix result: FAILS — ok:salvage-not-needed rc 0, nothing preserved; measured yolanda 2026-09-13 on 1d7b29bcc); `symlink` (a dirty tree containing a dangling symlink the substrate cannot stage) answers ok:salvaged with a named skip:salvage:unstageable:<path> line and every other path present on the salvage ref (pre-fix result: FAILS — fail:salvage:add:error: open(\"dangling\"): Function not implemented, rc 1, nothing preserved; measured yolanda 2026-09-13 on WSL drvfs). NEGATIVE CONTROL: a clean tree whose HEAD is reachable from an origin ref still answers ok:salvage-not-needed."
+    owned_files:
+      - scripts/salvage-dirty-worktree.sh
+      - scripts/test-salvage-net.sh
+      - skills/meta-orchestration/SKILL.md
+    title: |
+      The salvage net answers ok:salvage-not-needed on a clean tree with an unpushed commit, which on a red-gate host is exactly the "finished work sitting where nothing protects it" state 872-c9nd was written for; and it fails outright on a dangling symlink the filesystem cannot stage, on the drvfs substrate where salvage matters most.
+    context: |
+      MEASURED (yolanda, 2026-09-13): 823-u5zf finished and gated green at
+      1d7b29bcc, then a trunk merge brought the 1141-vf9w fixture's chmod-000
+      arm, which reds under the WSL gate's uid 0, so every push is refused
+      (the tree changed since the gate last passed). The coordinator's
+      instruction had two halves and neither reached the state: a first push
+      of a new work/<order> ref has no base to diff against and needs the
+      full gate (red), and `scripts/salvage-dirty-worktree.sh` tests only
+      `git status --porcelain` — on a clean tree it prints
+      ok:salvage-not-needed, exit 0, having preserved nothing. Its own header
+      says the refusal path must be a place work passes THROUGH on its way to
+      origin; a finished commit that cannot be pushed is that state with the
+      dirt already committed. yolanda read the hook and used the sanctioned
+      grammar directly: `git push origin HEAD:refs/heads/salvage/<host>/<yyyymmdd>-<order>`
+      is exempt from pre-push-local-gate.sh when every ref is a salvage ref,
+      verified by ancestry and content. That is the recipe the script should
+      execute for the caller.
+
+      SECOND PROPERTY, same session: a dangling symlink left in the worktree
+      by a probe made the script FAIL at the staging step —
+      `fail:salvage:add:error: open("dangling"): Function not implemented` —
+      rather than skip the path. On drvfs (the substrate where a salvage is
+      most needed, since a gate there costs 40+ minutes) an unstageable path
+      currently turns "preserve everything else" into "preserve nothing".
+
+      WHAT TO BUILD. (1) After the clean-tree test, check whether HEAD is
+      reachable from any origin ref (`git branch -r --contains HEAD` empty, or
+      `git rev-list --count origin/<branch>..HEAD` > 0 for the tracked
+      branch); if not, push HEAD to the salvage ref by the same plumbing path
+      and answer ok:salvaged-commits:<ref>:<sha>; ok:salvage-not-needed only
+      when clean AND reachable. (2) In the staging loop, a path the substrate
+      cannot open (the ENOSYS/EOPNOTSUPP family, dangling symlinks) is
+      skipped with skip:salvage:unstageable:<path> on stdout and the salvage
+      proceeds; the final verdict stays ok:salvaged with the skipped count
+      appended, never fail. (3) skills/meta-orchestration/SKILL.md's SALVAGE
+      BEFORE YOU REFUSE section names the unpushed-commit case and the new
+      verdict so a host with a red gate reaches for the script, not for a
+      work ref that will refuse.
+
+      NOT IN SCOPE: changing the hook's exemption, sweeping salvage refs, or
+      making the script gate anything. The salvage ref remains a copy; the
+      landing still goes through the gate when it is green again.
+    exit_criteria:
+      - 'scenario `unpushed` in scripts/test-salvage-net.sh: clean tree, one commit not on the bare origin → ok:salvaged-commits:<ref>:<sha> and `git merge-base --is-ancestor <sha> origin/<ref>` holds (pre-fix result: FAILS — ok:salvage-not-needed, nothing on origin)'
+      - 'scenario `symlink`: a dirty tree with a dangling symlink → ok:salvaged, a skip:salvage:unstageable:<path> line, and every other dirty path present on the salvage ref (pre-fix result: FAILS — fail:salvage:add, rc 1)'
+      - 'NEGATIVE CONTROL: a clean tree whose HEAD is on an origin ref still answers ok:salvage-not-needed; the existing five scenarios (roundtrip, collision, deletion, ordering, sweep) still pass'
+      - 'skills/meta-orchestration/SKILL.md names the unpushed-commit case and the ok:salvaged-commits verdict in SALVAGE BEFORE YOU REFUSE; scripts/check-cheatsheet-refs.sh still passes'
+    events:
+      - type: filed
+        ts: "2026-09-13T07:30:00Z"
+        agent_id: "linux-macuahuitl-fable-20260913t073000z"
+        host: macuahuitl
+        summary: |
+          Filed by the coordinator from yolanda's measured state on 823-u5zf
+          (1d7b29bcc, now at salvage/yolanda/20260913-823-u5zf by the direct
+          push). Both pre-fix results measured on WSL, not inferred.

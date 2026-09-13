@@ -7,6 +7,26 @@ coordinator says in messages, so a host that fetches origin can read it
 without waiting for a reply. Filed by the coordinator; supersedes nothing in
 `methodology/`.
 
+> **Writing convention (from 2026-09-13T03Z):** this file has one writer, the
+> coordinator. Every other host records its drill findings in its own file,
+> `plan/issues/fleet-restart-2026-09-12-<host>.md` — a FLAT top-level name
+> (created on first use, dated bullets, same shape as below), and the
+> coordinator folds those files into this one on each coordination pass. Six
+> hosts appending to one file produced two merge conflicts in a single cycle;
+> per-host files compose the way ledger fragments do, and the fold is the
+> fold. Flat, not a `.d/` directory: the pre-push plan-only lane accepts a
+> plan/issues capture only at the top level or under one of its four class
+> directories, and a nested path would force a full gate on every drill
+> write on every host (lenovinha read the lane's case statement before the
+> first host paid it, then measured both shapes against the hook through the
+> issue-capture fixture's harness). The lane's table, so the next person
+> inventing a directory finds out before paying: a flat `plan/issues/*.md`
+> or a file under exactly one of `research/`, `exploration/`,
+> `enhancement/`, `optimization/` takes the plan-only lane; any other
+> subdirectory, or anything nested deeper, takes the FULL gate. A naming
+> decision is a performance decision, and only the case statement says so;
+> lenovinha pins both shapes in test-pre-push-issue-capture-lane.sh.
+
 ## Why every host starts with a recovery drill
 
 Every host was rate-limited a few days ago in the same way macuahuitl was
@@ -862,10 +882,24 @@ stories.
   `explicit-DEAD`, every recorded holder stale-reaps on the next read, and a
   second lane reads `ok:checkout-lock:free` while the first holds it. The
   verdict's FIX line tells the operator to put the variable on the command
-  line, which cannot help. Structural and permanent on Windows until the
-  liveness probe resolves native PIDs (tasklist/OpenProcess) behind the
-  is_live seam; yolanda owns it, esme verifies; one lane at a time per
-  Windows host meanwhile.
+  line, which cannot help. FIXED as 1137-da83, landed 3cfea048a on
+  windows-next (commits 80de8e0a1 and 971c70f07). Found independently within one hour by both Windows hosts,
+  from opposite anchors — yolanda via an explicit TILLANDSIAS_CYCLE_HOLDER_PID,
+  esme via CLAUDE_PID. The shipped probe is esme's `ps -W` WINPID predicate,
+  NOT the tasklist/OpenProcess this entry first prescribed: `kill -0` still
+  answers first, so the change is a no-op off Windows by construction. Two
+  things the fix needed that the diagnosis did not predict — `mark-attested`
+  had to accept anchor equality before walking ancestry (the walk climbs MSYS
+  pids and the lock records a native one, so a correct liveness probe alone
+  would have made it refuse `held-by-other` about the cycle's own lock), and
+  the fixture's independent oracle needed a third outcome, "could not ask",
+  distinct from "dead". The one-lane-at-a-time rule for Windows hosts can be
+  retired once esme's verification lines are in. FIRST LIVE PROOF, unprompted:
+  the coordinator's 4h cron fired on yolanda while that very land was mid-gate
+  and was refused `skip:overlap-lock-held:lane=prompt pid=12388`. An hour
+  earlier the same call answered `ok:checkout-lock:free` on both Windows hosts
+  no matter what was running — so the guard's first real contention on this
+  host was refused correctly by the fix that was landing at the time.
 - **macneo can push again; the probe leaked the token** (macneo, osx-next
   369c67add, four commits landed attempt 1, the secure_stream.rs union merged
   clean): the operator approved the keychain ACL and the 20-second probe
@@ -875,6 +909,100 @@ stories.
   echo rc=$?`. macneo flagged rotation to the operator; the drill's earlier
   probe text is corrected above. Crons on every host are session-only and
   expire 2026-09-19; the cadence must be re-armed on session start.
+- **What the pipe-verdict fixture found — extends the coordinator's rule entry
+  below, which named this fixture as its follow-up.** Read that one first for
+  the rule; this one is what writing the arm turned up, including a correction
+  to the remedy both entries originally gave. (yolanda and esme, 2026-09-12.)
+  THREE FALSE CLAIMS IN ONE HOUR, two
+  hosts, three different commands: esme read `tasklist ... | head -2; echo
+  rc=$?` as tasklist's 0 (it exits 1) and caught it before reporting; yolanda
+  made the identical mistake on the same primitive and published it to a peer
+  as a measured two-host difference that did not exist; yolanda then read
+  `land-on-platform-branch.sh | tail -25` as exit 0 and told two parties the
+  land tool reports success over a refused gate. It had exited 3 and named its
+  gate log — and that tool's header exists BECAUSE someone once shipped exactly
+  that bug, so it was accused of the defect it was written to prevent, by a
+  reading that had the defect. esme was about to file a row against it.
+  Capture into a variable (`out="$(cmd 2>&1)"; rc=$?`) or `set -o pipefail`.
+  SAY "SNAPSHOT THE ARRAY AS THE VERY NEXT COMMAND" — `ps=("${PIPESTATUS[@]}")`,
+  then index it — and NOT "use ${PIPESTATUS[0]}". PIPESTATUS[0] is not wrong; it
+  is FRAGILE, and the distinction decides whether this entry survives contact
+  with a reader. Read as the first command after the pipeline it is correct, so
+  anyone who tests it in isolation finds it works and concludes the warning was
+  overblown. But ANY intervening command resets the array, and the intervening
+  command everyone writes is `a=$?` — precisely what you reach for alongside it.
+  `a=$?; b="${PIPESTATUS[0]}"` yields 0 and 0 even on one line, because `;`
+  separates two commands; a `$( )` or `( )` around the pipeline loses it too.
+  The mechanism is fine; the idiom it travels with destroys it (esme's framing).
+  THE NEAR-MISS IS PART OF THE RULE: an isolated test of PIPESTATUS[0] passes. Pinned executably by
+  litmus:land-verdict-through-a-pipe (scripts/test-land-verdict-through-a-pipe.sh),
+  which plants a refusing gate in a scratch repo and reads it six ways. Same family as the macneo probe entry above — there the
+  rc was the signal and stdout the secret; here the rc is the thing the pipe
+  silently replaces. The trap is that `head`/`tail` are what you reach for to
+  make output READABLE, so the habit that makes a measurement legible is the
+  habit that corrupts it. NOTHING STRUCTURAL CAUGHT ANY OF THE THREE: one was
+  caught by re-reading one's own command, one by a peer flagging a disagreement
+  they declined to explain away, one by checking a claim before filing a row on
+  it. So the second half of the rule is social — flag a disagreement you cannot
+  explain rather than smoothing it, because agreement between two sources is
+  not evidence when both share a method.
+
+  AND THE THIRD HALF IS THAT CAREFUL THOUGHT DID NOT REACH THE BOTTOM OF THIS;
+  AN ARM THAT COULD GO RED DID. The `${PIPESTATUS[0]}` fragility above was found
+  only when a fixture refused to go green against a tool that had just been
+  proven correct — neither host got there by reasoning, and both had already
+  published the weaker advice. The same file taught it twice: that fixture
+  opened with `set -uo pipefail`, one of the three sanctioned remedies, and
+  four trap arms went green while measuring the remedy instead of the defect.
+  When the subject is how a measurement lies, write the arm.
+- **A fixture reaches the gate by one of two routes, and neither is automatic**
+  (yolanda and esme, 2026-09-12). `scripts/test-*.sh` is NOT globbed by
+  build.sh. Route 1: an explicit `_run bash "$SCRIPT_DIR/scripts/test-X.sh"`
+  line in build.sh (~100 of them, e.g. test-cycle-lock-attested-release.sh).
+  Route 2: a litmus binding — and route 2 is TWO FILES.
+  `openspec/litmus-tests/litmus-<name>.yaml` defines the test;
+  `openspec/litmus-bindings.yaml` registers it against a spec_id, and
+  `get_litmus_tests_for_spec` reads that registry to decide what
+  `run-litmus-test.sh <spec>` runs. Definition only: the file exists and no
+  spec run picks it up. Registry only: a pin naming a test nothing defines,
+  which is 1068-cxmf's standing defect. A fixture wired by NEITHER route is a
+  file, not a gate — that is the vacuous-green shape, and the corpus has 253+
+  test scripts against 125 distinct names in the litmus yamls, so the gap is
+  not hypothetical. Wire it in the same commit that writes it and say which
+  route. Both hosts got a piece of this wrong before checking the runner
+  source: one claimed the litmus binding was the only route, the other that the
+  registry file was not involved.
+
+  RELATEDLY, a `| tail -1` inside a litmus step is CORRECT and should not be
+  filed as an instance of the pipe rule above. `run-litmus-test.sh` honours the
+  exit code only when a step declares NEITHER `success_pattern` NOR
+  `expected_behavior` (the order-256/267 strict-exit arm); with
+  `expected_behavior` the verdict is content-based, so `tail -1` extracts the
+  signal rather than discarding it. STATED AS A RULE RATHER THAN AS A FACT ABOUT
+  ONE FILE (esme's phrasing): a content-asserted step is only as good as the
+  guarantee that its verdict line CANNOT PRINT EARLY. Guard the terminal `ok:`
+  behind the failure counter — `[ "$fail" -eq 0 ]` — or the step passes on a
+  fixture that died halfway. esme chased this to the bottom while primed to find
+  the bug, and reported it as a negative.
+
+  A RELATED SCARE, NARROWED RATHER THAN FILED. run-litmus-test.sh's own header
+  comment on its yaml-reader tiering warns
+  that without yq the runner falls back to grep approximations that decide WHICH
+  TESTS RUN, so a host would silently select a different test set and nothing
+  would report the difference. Measured on yolanda, which has NO yq: the comment
+  overstates the residual, because order 746-htj9 added a FIRST tier —
+  `tillandsias-plan yaml-json | jq` — and it resolves here. Piping the registry
+  through `jq -r '.specs[] | select(.spec_id=="ci-release") | .litmus_tests[]'`
+  returned the correct list including a binding added minutes earlier, so
+  selection was NOT degraded on a yq-less host. The real residual is narrower:
+  a host with neither yq NOR a resolvable tillandsias-plan+jq falls to grep, and
+  steps whose own COMMANDS call yq still fail or return empty — which is what
+  `warn:litmus-degraded-no-yq` already reports. Not filed as a row on that
+  basis: the in-place comment predates its own mitigation. (Cited by symbol:
+  the tiering comment sits above `_yaml_jq` / `get_litmus_tests_for_spec` in
+  scripts/run-litmus-test.sh — 881-29me, and a line range would have drifted
+  the moment anyone edited that header, which is precisely what this drill
+  entry asks the next reader to do.)
 - **First autonomous-drain stories** (evening, 2026-09-12): yoga 1132-r4mt
   (two hypotheses refuted, the re-exec asymmetry named, two clean in-situ
   samples with the print armed, refusal still uncaught) and 890-27mv (the
@@ -1273,3 +1401,651 @@ stories.
   The moment you most need the rule is the moment something urgent argues
   against it, which is why the check has to be mechanical rather than
   remembered.
+- **Coordination pass 2026-09-13T02:1xZ** (macuahuitl): landed the pass's
+  records with the plan-only deltas of osx-next (macneo's 1080-4deb close)
+  and windows-next (esme's drill corrections and 1140-d6ni's third
+  amendment) as one land after a merge conflict in this file (both sides
+  kept) — a land the coordinator had launched over the unresolved merge was
+  refused by the tool's own dirty-tree check, which is the tool working;
+  four attempts, the first three lost to code landing from yoga and
+  lenovinha. Second land: pirria's de-slop sweep from work/1141-deslop-sweep
+  (examined 141, confirmed 2, retracted 1 — 1063-htns obsoleted as a strict
+  subset of 834-7ut9, the survivor re-measured at 56 sites; 964-zgga's
+  closure corrected from a phantom fixture name — filed 1: 1141-f5nk, the
+  sweep's own record outside the plan-only lane). pirria's session ended
+  after the sweep (unreachable; its 8-hourly cadence was session-only and
+  must be re-armed on relaunch); the coordinator deleted the relayed work
+  ref after the ancestor check. Seven full gates for zero direct lands is
+  the floor tier's number: plan-only lane or work/ refs only. yoga's
+  resolve_target_binary reorder is on trunk (c91650cec) and esme runs the
+  confirming gate through the sanctioned wrapper; lenovinha closed
+  1083-gzqj (all three arms) with the 1141-f5nk lane fix and takes the six
+  remaining snapshot-class fixtures; 1142-85zx (the stamp's plan-only
+  re-integrate memo) stays filed pending the 1036-e5w9 reading.
+- **Five of five snapshot-class leads refuted, and that is the honest
+  result** (lenovinha, 1083-gzqj item 5, dbd2df4fa): the nine counted by two
+  sweeps were CANDIDATES, not instances — three were real and are fixed, five
+  are legitimate arms (contract pins with no numeric comparison, a
+  correctness check with its own tally, the DOCUMENTED could-not-run code 3
+  of 965-sxec, a declared vacuity floor kept with its message fixed) that a
+  claimer reading only the prohibition would have stripped. Method that
+  changed the answer: the cited line numbers were not where the numbers
+  were — three of six carried no comparison at that line — so each file was
+  swept and every hit classified by the four kinds (live-state snapshot,
+  contract pin, correctness check, declared floor). Item 6 stays open as its
+  own row: both sweeps read only --check, and --test, --ci-full, the litmus
+  corpus and the hooks are unexamined. 1141-f5nk closed with its evidence
+  event: the deslop-sweeps.d record enters the plan-only lane as A-or-M with
+  an append-only guard, because the ledger is one file per host and an
+  A-only shape would have qualified a host's first sweep and taxed every one
+  after.
+- **The drill is a contended file** (yolanda: two pure-append conflicts in
+  one cycle on this file, one producing a near-duplicate of the coordinator's
+  own rule entry): with six hosts appending findings to one document, a
+  conflict per land is the expected cost. Convention from 2026-09-13T03Z:
+  each host appends to plan/issues/fleet-restart-2026-09-12-<host>.md (a flat
+  top-level name — a `.d/` directory would fall outside the plan-only lane
+  and cost a full gate per write); the coordinator folds those into this
+  file on the coordination pass and is the only writer of it. Also from yolanda: the 4050 s / 600 s ratio is not a
+  tier comparison (two launch configurations on two hosts) and is retired
+  from routing until esme's sanctioned-path gate produces the floor-tier
+  number; 1137-da83 fully closed at 496d17370 (fixture, litmus, binding, the
+  `| tail` fixture wired by both routes); one Windows cycle cost ~820k tokens
+  through four correct refusals and three harness kills — the price of that
+  lane's gate churn, for the operator to weigh against its 4-hour cadence.
+- **The floor-tier gate cost, measured on the sanctioned path** (esme,
+  ff1204a5e): `./build.sh --check` launched from Git Bash with the re-exec
+  verified in the log (`Re-execing inside` = 1, versus 0 on the 4050 s run)
+  reached CHECK_RC=0 in 2598 s, tier step 228 validated — yolanda's count.
+  The ratio factors exactly: 4050/2598 = 1.56x for bypassing the wrapper
+  (drvfs target dir), 2598/~600 = 4.33x for the host itself against
+  yolanda's sanctioned path; 1.56 × 4.33 = 6.75, the observed ratio. The
+  second correction over-corrected: there IS a real ~4x tier signal, good to
+  one significant figure until yolanda's side is measured rather than
+  approximated. Cite 2598 s as the floor-tier gate. The sanctioned path
+  cannot reach 1140-d6ni's defect (one runnable candidate only), so the
+  confirmation was the mixed drvfs directory: resolve_target_binary now
+  returns the ELF where it returned the .exe, and the identical tier
+  invocation reports 228 validated where it said "cheatsheets/ not found";
+  yoga's hermetic guard is the load-bearing artefact. esme checked trunk
+  containment BEFORE merging origin/windows-next for the first time tonight
+  and rebuilt the known-good shape (base, one trunk merge, commits on top;
+  9 merges, 0 disqualifying). The main drill conflicted twice more during
+  that push; the per-host convention is earning itself immediately.
+- **A row sat ready for a week after its defect was fixed under another
+  order** (lenovinha, 1085-g52w, ab30dac7c): b026372ff (filed as 1124-7f3u,
+  2026-09-12) closed the reopen-is-not-status-loss behaviour six days after
+  1085-g52w was filed and cited nothing; all three exit criteria passed at
+  HEAD. lenovinha implemented the row's prescribed fix (timestamps threaded
+  through the fold's join), found it redundant AND one axis laxer than the
+  falsified-event rule already covering the reachable set, and reverted it —
+  a second, laxer rule beside a working one is how a guard acquires a hole
+  nobody chose. It surfaced only because arm 1 was scored against the
+  pre-fix guard and PASSED there; a green suite plus a plausible diff would
+  have shipped redundant complexity under a confident closure. Landed: the
+  fixture only (gate step 245; arm 1 reproduces the filed text verbatim
+  pre-fix, arms 2-3 are preservation arms, not proofs). Coordinator row to
+  file on the next pass: a reconciliation check surfacing ready rows whose
+  owned_files a landed fix touched since filing — surfaced, never
+  auto-closed.
+- **Trunk red on every macOS host at c6d191d39** (macbookair, reproduced in a
+  pristine worktree): 1141-vf9w's `tillandsias_marked_pids()` enumerates
+  /proc, which darwin lacks, so the reaper reports success having killed
+  nothing — fails OPEN in production (with-tillandsias-builder.sh is a live
+  caller) — and test-dispatch-reap.sh spawns with `setsid`, absent on darwin,
+  so the arm reds for a second, unrelated reason. The file's header was
+  careful about bash 3.2; the dialect guard checks the shell and cannot see a
+  filesystem the target lacks. Ninth idiom class for 1135-z8gn: absent-on-
+  darwin primitives, which no flag-shaped advisory finds. Unblock (macbookair,
+  osx-next, relayed next pass): the fixture skips on darwin with a named
+  reason, the reaper returns a named `unsupported:dispatch-reap:no-proc` to
+  its caller (loud, never open), and the real darwin design — a token file or
+  process group, since darwin cannot read another process's environ — is a
+  child packet of 1141-vf9w for yoga. macbookair's 1137-rgfm claim was
+  invisible to the fleet while the red held its push.
+- **Corrections from the author and a second Mac** (yoga, macneo): the
+  fail-open was not an unseen axis — lib-dispatch-reap.sh's header STATED the
+  requirement ("a no-op that says so rather than a silent success; a caller
+  must tell 'nothing to reap' from 'cannot see anything to reap'") and the
+  code four lines below returned 0 on an empty list, the same
+  comment-asserts-what-code-lacks class the author had corrected in
+  check-cheatsheet-tiers.sh two hours earlier. A named return alone moves the
+  silent success up a layer: the caller's trap discards it and exits 143
+  clean, so the caller must say loudly that termination was not propagated.
+  Scope: on darwin with-tillandsias-builder.sh returns early before the lib
+  is sourced, so the dispatch path is unreachable there today — the fixture
+  red is the live breakage, a darwin skip is not coverage, and the reaper's
+  darwin arm is for the future Linux caller. The child packet must keep
+  three states (live / idle conmon-only / stray). macneo: this and the
+  keychain orphan (`_ccc_timeout` kills gh, its `security` child survives at
+  PPID 1) are one family — termination does not propagate across a process
+  tree on darwin — and the fix shape is likely shared (process groups,
+  `kill -- -PGID`; `pgrep -P` as the portable enumeration). Keychain root
+  cause REVISED: not an ACL and not a backlog — the operator's clicks did
+  nothing because the dialog's password field was empty (item mdat unchanged
+  since 2026-09-06); a wedged SecurityAgent (21 h, ignored SIGTERM, respawned
+  on SIGKILL) plus PPID-1 orphans; the restart cleared it and a bare decrypt
+  now returns rc 0. Remedy on recurrence: restart, or enter the login
+  keychain password before Always Allow — not an ACL edit, not gh auth login.
+  macneo's claim/release of 1080-4deb item 2 never reached origin (refused
+  before landing), so the fleet never saw it taken; the mandated trunk merge
+  dragged a .step file into a plan-only push, which is the claim-alone-and-
+  fast shape failing under a mandatory pre-push merge.
+- **CORRECTION to the two bullets above, measured by yolanda and esme
+  against the hook's predicate** — discard the "floor-tier plan-only window"
+  framing and the "silent second route" claim. (1) `_lane_can_scope` in
+  scripts/hooks/pre-push-local-gate.sh walks every merge in the outgoing
+  range and requires each merge's SECOND parent to be an ancestor of
+  origin/linux-next; esme's refused head had 17 merges with one disqualifying
+  (its second parent was yolanda's checkout-lock land 3cfea048a, not yet
+  relayed to trunk) and the accepted head had 28 merges and none. So a floor
+  host can push plan-only without a stamp at any time provided it does not
+  MERGE a branch carrying un-relayed commits: basing on origin/windows-next
+  (first parent) is free, merging it makes that content a second parent —
+  same branch, same content, different parent position, opposite verdict —
+  and the reason is not tidiness (a non-trunk second parent can carry
+  unreviewed code invisible to a first-parent walk). The cause was fleet
+  timing — the lag between a platform land and its relay — and the relay is
+  the coordinator's to keep short; this land carries 3cfea048a. What stands:
+  the linux-next-merged guard runs before the lane; a first push of a
+  `work/` ref has no remote base and needs the full gate; 4050 s is the cost
+  of a floor-tier UNION push, not of routine plan work. (2) The "silent
+  cargo-absent skip reporting ok" on yolanda was a FIXTURE's assertion text
+  (test-cycle-preflight-cargo-resolution.sh quoting the value it asserted on)
+  read as the host's verdict; the real tier step 190 lines down had passed.
+  1140-d6ni is "the tier check is broken on esme by the stale-.exe
+  resolution", no second route; the reorder (yoga, 1142-wn2k superseded into
+  it) is the whole fix; open question, not a claim: yolanda's host carries
+  the same artefact shape with interop on and did not break. Fourth instance
+  of one error class in a night, named: a search that returns something has
+  not answered the question — ask what the matched line IS before reading
+  what it says. Also: esme held the checkout lock 87 minutes after a gate,
+  visible only because 1137-da83 made the lock real; long gates on any host
+  launch DETACHED from the harness (nohup/setsid to a log; yolanda verified
+  the gate alive in a later call), since the harness reaps its own tasks.
+- **The "open question" in the bullet above is CLOSED, by the bullet above
+  it.** Sequencing artefact of two hosts appending concurrently: the
+  coordinator's correction records yolanda's identical artefact shape and
+  clean pass as unexplained, and esme's entry — written later, landed first —
+  answers it. An in-distro launch skips `with-wsl2-builder.sh`'s re-exec, so
+  `CARGO_TARGET_DIR` is never redirected and the gate builds into the repo's
+  own `./target` on drvfs, which is the only directory holding a `.exe`. One
+  cause, both symptoms: the 4050 s and the stale-`.exe` false ERROR. Nothing
+  about yolanda's host differed; its gate never looked at the mixed-artefact
+  directory. Read the two together and take the later one.
+
+## Folded from per-host files (coordination pass 2026-09-13T04:1xZ)
+
+- **yoga** — `plan/issues/fleet-restart-2026-09-12-yoga.md` (the first
+  per-host file; its bullets stay authoritative there and are folded here by
+  reference rather than copied, since a copy would re-create the conflict
+  surface the convention removes): the checkout-lock-and-boundary discipline
+  adopted for its cron cycles, the 1141-vf9w gate-lock discriminator (group
+  live pids by the dispatch token, then live / idle conmon-only / stray, with
+  only a live build.sh counting as contention — one live, seven idle, one
+  false stray measured), the 1142-wn2k supersede into 1140-d6ni, and the
+  duplicate-filing gap between minting and claiming (minting does not check
+  whether another host already filed the subject). Relayed this pass:
+  windows-next ff1204a5e (yolanda's 1137-da83 pipe-verdict fixture made
+  executable and its citations by symbol; esme's 1140-d6ni confirmation with
+  the 2598 s decomposition).
+- **Two security fixes landed by the drain, both live, both cut-worthy**
+  (lenovinha): 1118-bscs (f19df57ca) — the enclave's git credential helper
+  drained stdin and answered unconditionally, handing a live GitHub token to
+  anything that asked; now parses host= and protocol=, whole-string host
+  match (`*github.com` would accept evil-github.com, `github.com*` would
+  accept github.com.attacker.net, both pinned), https-only, fail-closed —
+  and squid's `http_port 3129` with no bind address and no source ACL was
+  allowlist-free egress reachable from every enclave container by container
+  address, whatever the header's accurate "provisioned but not routed"
+  measurement said about ROUTING (a truthful statement about intent read as
+  evidence about exposure); now 127.0.0.1:3129. 1118-d3b6 (36409ca58) — the
+  inference container fetched `releases/latest/download/…` at container
+  start and executed it with no checksum, so two containers from one image
+  an hour apart could run different code with nothing recording which; now
+  pinned to v0.34.0 with a per-arch SHA-256 verified before extraction,
+  fail-closed on three paths, digests from the release API so the bump
+  recipe costs no download; the enclave does NOT get install.sh's
+  "sha256sum not found; skipping" usability trade, and the code says why.
+  Criterion 2 (NPU telemetry) deferred and declared: `grep -i npu` found
+  nothing where the spec specifies rows — silence reading as satisfaction.
+  The gate-steps prefix race hit a third time (255, then 260) — every
+  collision tonight was between hosts in the same gate window, so the mint
+  needs unpredictability, not global coordination (1140-i2b6, unclaimed). A
+  `grep -q`-under-pipefail hazard was reported and RETRACTED by lenovinha
+  within the hour before filing: the class is owned by 1076-kft9
+  (lib-sigpipe-verdict.sh, a diff-scoped guard that is gate step 070 today,
+  whose header records that a whole-repo sweep was run and rejected for
+  crying wolf), its analysis is deeper (EPIPE iff the producer still has
+  bytes to write when the consumer exits — producer latency alone is
+  incomplete — with a measured filesystem dependence: drvfs 10/10 versus
+  ext4 and btrfs 0/10), and the claimed mechanism did not reproduce (0/12
+  synthetic). What was observed: one false verdict, then 11/1, then 12/0
+  repeatedly after switching to `grep -c`; the fix is sound, the cause is
+  not isolated. esme then measured the printf arm on both loci, 20 runs
+  per point: 0/20 at 19 kB, 3/20 at 39 kB, 16/20 at 49 kB, 20/20 from
+  55 kB, non-monotonic through 55-61 kB, identical on drvfs and ext4 (no
+  file is read, so the filesystem cannot matter), with a positive control
+  that both loci SIGPIPE readily — a race between printf finishing its
+  writes and grep exiting on the first match, not a threshold. No row:
+  lib-sigpipe-verdict.sh does not skip printf, it REFUSES printf a verdict
+  ("unmeasured: producer-size-is-a-runtime-property"), which esme's data
+  confirms to the mechanism — there is no size at which a static verdict
+  would be right. Counts appended to 1076-kft9. macbookair's rule after the pipeline-status trap for the third time
+  in a night: capture the status of the thing you are measuring, unpiped,
+  and quote the count of what actually ran; an absent result and a negative
+  result render identically. Also from macbookair: with-tillandsias-builder.sh
+  short-circuits on darwin via `[[ ! -f /etc/os-release ]]`, not a platform
+  test — a porter searching for uname will not find it.
+- **A detector that reported every gate as its own competitor** (yoga,
+  1141-vf9w criterion 3, 936d22364 → 3a7d2013d): build.sh re-execs into the
+  toolbox before its fast refusals, so the detector ran inside the container
+  where the host-side wrapper is visible (shared PID namespace) but its
+  environ is unreadable — `[ -r /proc/<pid>/environ ]` answers TRUE across
+  that boundary and the read is then denied; access(2) lies. The `[ -r ]`
+  guard passed, `2>/dev/null || continue` swallowed the denial, every wrapper
+  vanished, every group looked headless. yoga had written that exact caution
+  in lib-dispatch-reap.sh ("a process that changed credentials can pass
+  access(2) and still deny the read") and guarded the classifier with the
+  test they had documented as unreliable — the second time in two cycles a
+  caution was violated a few lines below it; their words: "I treat my own
+  comments as done rather than as requirements." Found only by forcing a
+  gate to WATCH the advisory's output after the binding was already verified.
+  Advisory staging turned an every-Linux-gate-refuses-itself outage into a
+  log line. The lesson above the others: 8/8 hermetic passed over a detector
+  wrong in production, because a fixture of plain files is always readable —
+  a hermetic fixture pins the LOGIC and is silent about the SUBSTRATE, and
+  their "hermetic" fixture then inherited TOOLBOX_PATH from the gate's
+  container, claiming a regime it did not have (now 11/11 in both loci).
+  Fixed three ways, each with a mutation-verified arm: refuse to answer
+  inside a container, count a denied read and suspend the accusation, ask on
+  the HOST before dispatch. Promotion to refusing needs clean in-situ runs on
+  a non-Silverblue Linux host (macuahuitl reads the advisory line on its next
+  gate) and a WSL host, because the fixture cannot see substrate.
+- **Folded by reference, coordination pass 2026-09-13T06:1xZ**: esme's
+  `plan/issues/fleet-restart-2026-09-12-esme.md` (the exec-bit sweep by
+  population, the sanctioned floor gate at 2598 s, the printf SIGPIPE
+  measurement) and macbookair's `…-macbookair.md` (is_battery_present as a
+  bare bool on every non-Linux host, the stale-artifact trap in the
+  capability probe, check-capability-row.sh blind to host facts, the gh
+  dialog being a fixture's control run, the read_github_token invitation now
+  filed as 1139-imd4, the darwin reaper fail-open). Relayed this pass:
+  osx-next e7318c7dd (the darwin unblock — named skip, loud trap, 1145-iigx
+  filed; macbookair's claim of 1137-rgfm now visible) and windows-next
+  5cf0eb866 (esme's 1076-kft9 measurement; yolanda's claim of 823-u5zf).
+  The relay conflicted in scripts/with-tillandsias-builder.sh: yoga's caller
+  half (`_tb_on_signal`, on trunk first) and macbookair's `_tb_reap_and_report`
+  (the same fix written on osx-next before the relay) — trunk's function kept
+  for both hunks, no dangling reference, dispatch-reap fixture 9/9 on the
+  merged tree. Two hosts fixing the same caller within an hour is the
+  duplicate-filing gap one layer down: a heads-up on a shared script beats a
+  merge-time choice.
+- **The competing-gate detector's second substrate** (macuahuitl, from its
+  own landing gate at 4d0b99dba, mutable Fedora, toolbox dispatch): line 1
+  `ok:no-competing-gate` from the host-side call before dispatch, line 13
+  the honest `could-not-run:competing-gate:inside-container`; no false
+  accusation, same shape as Silverblue. The WSL datapoint is the Windows
+  hosts' to produce (a false accusation there is the interesting result).
+  yoga verified the relay's wrapper resolution rather than trusting it —
+  both halves pair on trunk (reaper returns 2 unsupported where it cannot
+  see; `_tb_on_signal` reports loudly; absent-token path rc 0) — and nearly
+  reported the reaper broken from one command: they had exported the wrapper
+  token into the shell running the reaper, so it found itself; a matcher
+  over a set containing itself reports itself. Seam for 1145-iigx: the
+  supported-guard's `/proc` root is hardcoded, so the unsupported arm is
+  unreachable on every Linux host; an overridable root lets every host prove
+  the refusal fires.
+- **The competing-gate detector's guard enumerates jails, so an unrecognised
+  jail accuses** (yoga, self-found while briefing yolanda; ancestry and bytes
+  verified on macuahuitl from origin): the inside-container guard tests
+  `TOOLBOX_PATH` and `container=oci|podman`; a WSL distro sets neither, and a
+  distro cannot see the native Windows wrapper pid (1137-da83), so the
+  detector there finds no wrapper for its own token and accuses by a second
+  mechanism the fix for the first did not cover. Design yoga is taking in
+  their :05 cycle: INVERT — answer only when the caller positively asserts it
+  is host-side (the wrapper's pre-dispatch call passes a flag; build.sh's
+  fast-refusal call does not; everything unflagged refuses), so a new dispatch
+  shape is silent by default instead of wrong by default. Hold on yolanda:
+  origin/windows-next carries 936d22364 (the detector with zero
+  `inside-container` and no wrapper call — the version that accused every
+  Silverblue gate); 3a7d2013d is on linux-next only and arrives with their
+  pre-push merge; ba0fb4fd5 is already on linux-next, so the osx-next relay
+  they asked for buys nothing and was not done. Two trunk-byte facts folded
+  into the design: `with-wsl2-builder.sh` makes no detector call at all, so
+  under the inversion the WSL datapoint becomes "does the unflagged in-distro
+  call refuse" and promotion needs a flagged MSYS-side call that does not yet
+  exist; and MSYS procfs exposes no `/proc/<pid>/environ`, so that flagged
+  call would take the detector's unreadable-environ branch for every pid — to
+  be answered as a named `unsupported:`, never as "none found" (the darwin
+  fail-open shape). Condition for yolanda, not a claim: `ls /proc/$$/environ`
+  under Git Bash.
+- **The detector's blind scan answers ok** (yoga, CONFIRMED by control, not
+  by argument; ordering read on trunk by macuahuitl): a procfs tree with every
+  environ chmod 000, including a tokened build.sh with no wrapper, answers
+  `ok:no-competing-gate` rc 0 — a clean bill of health from a scan that saw
+  nothing, the darwin fail-open one substrate over. The `opaque` counter built
+  to prevent exactly this sits AFTER the empty-accusation early return, so it
+  is consulted only when there is already an accusation to suspend and never
+  when the scan produced nothing because it could see nothing. yoga names it
+  as their pattern, three cycles running: the mechanism built and then placed
+  where it cannot fire. The obvious fix (opaque check first) is wrong — a
+  healthy Linux /proc is full of root-owned unreadable environs, so every host
+  would answer could-not-run. The distinction that works: count READABLE
+  environs too and refuse (`unsupported:`) only when that count is zero; a
+  healthy scan reads hundreds and keeps today's behaviour, a blind one (MSYS,
+  darwin) stops being indistinguishable from a clean one. Offered refinement:
+  require the caller's own tokened environ to appear in the scan (the
+  self-match excluded in the test is the production positive control).
+  Consequence stated rather than discovered: under the inversion the in-distro
+  call refuses and a flagged MSYS-side call answers unsupported, so Windows may
+  never be a substrate where the detector sees, and the criterion rewrite
+  should say so. Queued in yoga's :05 cycle with the inversion: inversion,
+  readable-count fix, criterion on dispatch shape, WSL wiring filed with the
+  flag contract for yolanda.
+  Settled design (yoga, same exchange): the host-side flag carries the
+  caller's pid, so the fixture supplies a pid that exists in its fake procfs
+  tree and no second seam appears; the detector verifies that pid's environ
+  CONTAINS the caller's token (readable-but-tokenless is a contract violation
+  and refuses loudly). Four fixture arms: pid absent, readable and tokened,
+  readable and tokenless, present and unreadable. Fallback if the seam gets
+  ugly: readable-count alone. The dispatch-shape criterion states MSYS/Cygwin
+  as a substrate where the detector cannot see, closing the WSL row as a
+  stated limit. Which of the two landed is to be recorded from yoga's report,
+  not from this note.
+  Exit-code contract agreed (yoga proposed, macuahuitl accepted): 0/1 proceed
+  as today; 3 `could-not-run:competing-gate:blind` for pid absent or
+  unreadable (this host cannot answer, stop asking); 2
+  `refused:competing-gate:caller-contract` for readable-but-tokenless (a
+  caller bug, fix the call site) — opposite remedies never share a code, and
+  2 is the tree's usage/infra idiom (check-opsx-generated-dirt.sh). Trunk
+  fact: both callers discard the rc today (`|| true` at
+  the wrapper's pre-dispatch call in `with-tillandsias-builder.sh` and the fast-refusal call in `build.sh`), so the distinction
+  lives in the fixture and the verdict line until promotion. Already true on
+  trunk (yoga, read): the fixture's `check()` pins exit code AND verdict line
+  together for all eleven arms, so a shared code reds the arm expecting the
+  other; the new arms keep that helper rather than a weaker one beside it.
+  Still owed: the criterion states that the four-code design binds the FUTURE
+  consumer (nothing on trunk reads the number), the promoting consumer must
+  enumerate 2 apart from 3 with no default that proceeds, and consumer wiring
+  lands as its own change with its own evidence BEFORE promotion — the first
+  reader of the codes must not also be the first thing that can stop a build.
+- **A deny-list of placeholders cannot catch the next placeholder**
+  (macbookair, 1137-rgfm, landed osx-next 2ccd051f1, attested 8326272e2;
+  relay to trunk in the 07:41Z pass): `hardware_fingerprint` refused the
+  placeholders already found ("Host CPU", "unknown", from 805-r98w), so
+  "Apple Silicon CPU" passed a check whose purpose is catching placeholders,
+  and every Apple-silicon Mac with the same core count hashed to one
+  fingerprint (hw2-d1ec0bba772d4bda) — which is what let
+  `capability-matrix --by-hardware` merge machines it never measured. Fix: a
+  `name_source` on DeviceRecord asks the probe where the name came from; the
+  deny-list survives only for `None`, because reading pre-field silence as
+  "placeholder" would make every stored document unidentifiable on landing
+  day. macOS reads `machdep.cpu.brand_string`; the GPU stays a declared
+  `placeholder` (needs a framework call, not a sysctl) so that component is
+  KNOWN to discriminate nothing. Both guards falsified (reverting the macOS
+  arm reds one; ignoring provenance reds the cross-platform one — the one
+  that proves the deny-list cannot do the job). Sits `implemented`: closure is
+  a second Mac's fingerprint differing, which no single host can produce;
+  routed to macneo as a measurement (no build). Corrected by macbookair
+  before macneo spent it: the coordinator had predicted "macneo's current
+  hash equals macbookair's old one if the core counts match", which is
+  under-specified — the hash covers fieldset, cpu vendor/name/cores, gpu,
+  npu AND a RAM power-of-two class, so 8 GiB versus 16 GiB differs on
+  identical silicon; and a binary predating 803-r8u4 omits the RAM component
+  entirely (measured on one machine, same minute: stale release
+  hw2-5ce200f625e69d05, fresh hw2-d1ec0bba772d4bda). A cross-machine hash
+  comparison is confounded until one release carries 2ccd051f1 on both. The
+  unconfounded test is the raw inputs: if macneo's brand_string differs
+  from "Apple M5" while cores match 10/10, the old code produced the
+  identical `cpu:apple/Apple Silicon CPU/10c10t` on two chips — the
+  collision shown from inputs, no hash involved. If cores differ the claim
+  narrows to "the name discriminates nothing within a core-count class",
+  said plainly rather than rounded up. Rule: a predicted equality of a
+  derived value must list every input of the derivation first.
+- **A 1-in-15 red unrelated to the diff teaches every host to disbelieve the
+  gate** (macbookair, 1146-z8ux, unclaimed): two tests mutate one
+  process-global env var in parallel threads; the pristine suite reproduced
+  it at 1/15 over 15 runs after a stash, so it is pre-existing and
+  timing-sensitive, and 1-of-3 versus 1-of-15 is not distinguishable at
+  those counts. Host-independent: macuahuitl's next meta cycle or lenovinha.
+- **"check not run" hid two arms that ran** (macbookair, self-corrected): the
+  1141-vf9w step's skip description said the check did not run while the two
+  substrate-refusal arms DO run before the darwin skip; a reader would have
+  concluded macOS pins nothing — the conclusion 1145-iigx warns its claimer
+  against. Now "2 substrate-refusal arms RAN and passed; 9 reaper arms could
+  not run". A skip description enumerates what ran, not only what did not.
+- **Two timing logs on macbookair** (operator item): `cycle-metrics.sh`
+  refused (rc 2) between `/tmp/tillandsias-timing.jsonl` (13 lines, last
+  2026-09-11T23:22:58Z) and `.cache/metrics/tillandsias-timing.jsonl` (28,471
+  lines, live); the guard says move the stray aside, never delete, and
+  concatenation is an operator decision. macbookair used the named-log escape
+  and changed nothing on disk. Ask: retire the /tmp copy on macbookair.
+- **The Windows lane is red on the competing-gate fixture, and it is the
+  root regime, not the marker** (yolanda, measured on the sanctioned path;
+  mechanism read on trunk by macuahuitl): arm "an unreadable process suspends
+  the accusation" wanted rc 3 `unreadable-processes` and got the accusation.
+  yolanda attributed it to WSL lacking a container marker; the arm is
+  `chmod 000 "$r/103/environ"` in a fake procfs tree
+  (the `opaque` scenario of `test-no-competing-gate.sh`, `newroot opaque`) with no root guard, the detector counts
+  `[ ! -r environ ]` as opaque, and the WSL gate runs as root — root reads a
+  000 file, opaque stays 0, the tokened build.sh has no wrapper, and the code
+  accuses because it can read everything. Same shape as the 2026-09-12
+  chmod-000 arm. TWO mechanisms, two fixes: (1) the fixture arm needs a named
+  root skip or a root-proof construction (dangling symlink pins a different
+  semantics) — the inversion alone leaves Windows red; (2) yolanda's
+  production line `advisory:competing-gate:1 (not blocking)` is the measured
+  WSL datapoint: in-distro call, no marker, wrapper invisible, fixed by the
+  inversion. Ruling: both Windows hosts HOLD on the lane; no scoped skip, no
+  advisory override, no second gate spent; yoga's :05 cycle carries both
+  fixes; esme warned before their merge. yolanda read the block the right
+  way round: the detector is advisory and did not block, the fixture blocked
+  by correctly reporting the detector wrong here — silencing it would quiet a
+  true report on someone else's row. 823-u5zf is done and green at 1d7b29bcc
+  (the argv work had landed; what was open was its closure's observable
+  being inert on the only headless path that could read it), blocked only by
+  the above; to be kept off local-only (work ref or salvage). Not promoting
+  1141-vf9w: measured false accusation on WSL today. yolanda's own
+  correction: build.sh calls the detector directly on their host (the
+  wrapper never does), inferred earlier from where the caller was expected
+  rather than looked for. Condition sent, not a claim: `id -u` from a gate
+  shell.
+  MEASURED on esme before their merge: gate uid 0; a mode-000 file under
+  /root reads successfully; verdict "a chmod-000 file IS readable as uid 0
+  here" — the root attribution is closed by measurement on WSL, and esme will
+  red on the same arm the moment they merge trunk (they hold, per the
+  ruling). Instruction corrected for both Windows hosts: keep finished
+  commits safe with `scripts/salvage-dirty-worktree.sh <order>`, NOT a
+  work/<order> ref — a first push of a new work ref has no base to diff
+  against and needs a full gate, which is red on those hosts by definition.
+  esme's near-miss, named: their first probe passed mktemp through nested
+  wsl.exe layers, the variable came back empty, chmod reported "cannot
+  access ''", cat failed against an empty path, and the script concluded
+  NOT exposed — a broken instrument producing a clean false negative; caught
+  only because the chmod error line was in the output and did not belong
+  there. An error line that does not belong is the instrument reporting it
+  broke; filtering it for tidiness would have reported esme safe.
+- **The salvage script covers the dirty tree, not the unpushed commit**
+  (yolanda, measured): on a clean worktree with an unpushed commit and a red
+  gate, `scripts/salvage-dirty-worktree.sh` answers `ok:salvage-not-needed`
+  rc 0 having preserved nothing, and a first push of a new work/<order> ref
+  needs the full gate that is red — so neither half of the coordinator's
+  instruction reached the state the salvage rationale was written for
+  (finished work sitting where nothing protects it). Fleet recipe, read from
+  the hook before relying on it: `pre-push-local-gate.sh` exempts a push in
+  which EVERY ref is `refs/heads/salvage/*`, so
+  `git push origin HEAD:refs/heads/salvage/<host>/<yyyymmdd>-<order>` lands
+  the commit without a gate; verify by `merge-base --is-ancestor` and by
+  content on the remote ref, not by the push's exit code. 1d7b29bcc is at
+  salvage/yolanda/20260913-823-u5zf. Second property, from yolanda's own
+  litter: a dangling symlink in the worktree makes the salvage script FAIL
+  (`fail:salvage:add:error: open("dangling"): Function not implemented`)
+  rather than skip the path, on the drvfs filesystem where salvage matters
+  most. Both filed as one packet by macuahuitl. yolanda's uid-0 reading is
+  the second WSL instance (root under both `-u root` and the bare
+  `wsl.exe -d tillandsias-build` the gate uses). Their named near-miss:
+  `d=$(mktemp -d); cd "$d"` under `bash -lc` returned empty, the cd failed,
+  probe files landed in the REPO ROOT, and the cleanup was confirmed by
+  listing /root — the wrong subject; the salvage run exposed it.
+  LANDED (yoga, b75fd00cf, attempt 1): the arm constructs unreadability with
+  a dangling symlink rather than chmod 000, chosen over the fleet's usual
+  root skip on yolanda's argument — a skip costs the arm its teeth on every
+  root host, which on this fleet is every WSL host, permanently
+  (test-spec-index-durable-tier-demotion.sh under 1129-3yv7 asserts nothing
+  there for that reason). 11/11 as uid 1000, under `podman unshare` as uid 0,
+  and by yolanda inside tillandsias-build. Accepted knowingly and stated on
+  the row: the arm pins "missing environ counts as opaque", so on a live
+  /proc an unrelated process exiting between list and read can suspend a
+  genuine accusation — weakens detection, cannot manufacture a false
+  accusation, and is a stated PRECONDITION for promotion (a detector
+  silenceable by ordinary churn is not one to hang a build on). Two
+  narrowings: yolanda's `advisory:competing-gate:1` IS the measured WSL
+  datapoint for the marker-absence mechanism; what remains untaken is a
+  flagged host-side caller meeting unreadable processes. And THREE mechanisms
+  defeat a chmod negative control (yolanda's framing): NTFS under Git Bash
+  ignores the mode, root overrides it, and Silverblue passed only because the
+  fixture happens to run as uid 1000 — the next person hits the NTFS instance
+  and concludes the root fix does not apply. The tree already knew:
+  1129-3yv7 recorded "chmod 000 does not constrain euid 0" on 2026-09-12,
+  measured on yolanda, the day before the arm was written; `grep -rn 'chmod
+  000' scripts/test-*.sh` would have found it in one command, and the cost of
+  not asking whether the construct had a precedent was another host's lane.
+  Hold lifted for both Windows hosts. Two directions reached the same
+  diagnosis independently (reading the arm here; chmod under podman unshare
+  on yoga), which is worth more than either.
+  MEASURED on esme, both sides of the pair as uid 0: a mode-000 file reads
+  (the defect); `ln -s /root/definitely-not-here /root/dangle; cat` fails
+  (the fix). The first probe alone only showed the old arm broken, not that
+  the new one works. esme's line on why the construction is the right shape
+  and not merely a different one: mode bits are an ACCESS CHECK and uid 0 is
+  defined as the identity that bypasses access checks, so no permission-based
+  construction can ever produce unreadability for root — the old arm was
+  unfixable in its own terms; a dangling symlink fails at RESOLUTION, before
+  any permission question is asked, so it is uid-independent by construction
+  and a future privileged context cannot defeat it again.
+- **A contract three reviewers agreed on was unsatisfiable; the positive
+  control found it on first execution** (yoga, inversion landed f0764598a):
+  the agreed check "the passed pid's environ CONTAINS the caller's token"
+  cannot hold — `/proc/<pid>/environ` is the environment a process was
+  EXEC'D with, and the wrapper token is minted and exported at runtime by
+  the asserting shell, so it is never in that shell's own environ (measured:
+  exporting shell 0 matches, child exec'd after the export 1 match). The
+  first wiring refused its real call site with
+  `refused:competing-gate:caller-contract`, correctly, against a contract
+  nothing could satisfy; the coordinator proposed it, yoga accepted and
+  argued its exit code, yolanda did not dispute it. Replacement, stronger:
+  the detector reads ITS OWN environ (`$PROC_ROOT/self`, so a fake tree can
+  construct it) — this process is the child exec'd after the export, so the
+  token is present exactly when the caller really exported it, and no
+  convenient pid can be substituted. Four codes intact and mutation-verified
+  distinct (11/12 on each of three mutations; 12/12 at uid 1000 and uid 0);
+  in the landing gate: `ok:no-competing-gate` from the wrapper's flagged
+  call, `could-not-run:competing-gate:no-host-side-assertion` from build.sh's
+  unflagged one. The caller-contract code is the one of the four with
+  production evidence. Left for yoga's next cycle: the dispatch-shape
+  criterion (MSYS as a substrate that cannot see; churn-suspension clause
+  naming a slow host) and the WSL wiring with the `--host-side <pid>` +
+  exported-token contract for yolanda.
+- **1137-rgfm did not compile on Linux** (macuahuitl, this cycle's gate, on
+  the osx-next relay): `name_source` was added to DeviceRecord and set only
+  in the macOS arm; six Linux initializers (nvidia, the three lspci-named
+  GPU arms, the WSL2 dxg arm, the accel NPU arm) and two Windows arms
+  (Win32_VideoController GPU, PnP NPU) lacked the field — darwin's cfg hid
+  every one of them from the author's build, the green-on-one-regime shape
+  on the cfg axis. Fixed in the same land with the provenance each site has
+  (measured where nvidia-smi, lspci or PnP answered; placeholder for the
+  fixed strings and the driver-derived NPU name); the Windows arms are
+  patched blind and yolanda's next merge compiles them. Had the relay landed
+  before a Linux gate ran, every Linux host's gate would have been red.
+  MEASURED on macneo (raw sysctl, no build): brand_string "Apple A18 Pro",
+  6 physical / 6 logical (2P+4E), 8 GiB, hw.model Mac17,5, macOS 26.6.2.
+  Different core-count class from macbookair's M5 10c10t, so the old strings
+  (`cpu:apple/Apple Silicon CPU/6c6t` vs `/10c10t`) never collided and this
+  pair cannot demonstrate the collision; the claim narrows, as macbookair
+  called in advance, to "the placeholder discriminated nothing within a
+  core-count class". macneo's stored capability row (20260912t014039z)
+  carries "Apple Silicon CPU" and hw2-15343879d48b5915 — the placeholder on
+  a second machine, from the ledger. The fleet has no same-class pair; the
+  suggested closure is the narrowed statement plus the cross-platform
+  provenance guard. macneo flagged, not interpreted, an A-series brand
+  string on a Mac model identifier; consistent with the low-cost A18 Pro
+  MacBook and the operator's "low-end host", not investigated further.
+  Routing consequence recorded (coordinator): macneo is a different macOS
+  hardware class by measurement (A18 Pro, Mac17,5, 2P+4E, 8 GiB), so the
+  fleet has two macOS classes and no comparable pair; work that assumed a
+  second comparable Mac treats macneo as its own class. Their stored row's
+  `system_ram_gb: null` dates their installed binary before 803-r8u4 (the
+  vintage confound evidenced from the ledger, not from one machine's
+  accident) — a floor-tier smoke item after the next release. macbookair
+  closes 1137-rgfm on the narrowed statement with the cross-platform
+  provenance guard as evidence and macneo's inputs plus stored row as the
+  second-machine confirmation; owns the cfg-hidden compile break without
+  qualification and is testing whether `cargo zigbuild` (the lane's own
+  cross path) can compile the Linux arms on darwin, since a plain
+  `--target x86_64-unknown-linux-musl` check dies in ring's build script
+  before reaching the crate.
+- **Partly stale, and the live half was quieter than the original defect**
+  (lenovinha, 1123-k3mq closed at c93139300; third kind of stale row for
+  1144-jfr5's evidence): criterion 1 was already met by 7c83653ec
+  (686-7qcm, compaction applies the closure ladder), verified by the
+  recorded pre-fix failure not reproducing; criterion 2 WAS live — once
+  compaction refused a rung-lowering write it dropped the write AND deleted
+  the fragment carrying it, in silence (`ok: compacted 1 fragment(s)`, zero
+  words about the discarded value), so a coordinator releasing an expired
+  claim got ok from set-field, ok from compact, a ledger still `completed`,
+  and no record anywhere. The original defect at least left the wrong value
+  visible in the base. Now compact reports the packet, the refused value,
+  the winner, the host and the exact `set-field … --reopen-evidence` command
+  — the remaining half of 1115-yvrq. Deliberately not done: last-write-wins
+  status (would let a stale high-water fragment silently reopen finished
+  work; 650-dq6u). 23/23, mutation-scored, one of three tests is the
+  evidence. Fleet rule from lenovinha's repeated mistake (twice in one
+  night, two crates): INSERT RUST TESTS ANCHORED ON THE `#[test]` LINE,
+  never the `fn` line — anchoring on fn double-registers the new test and
+  strips the attribute from the neighbour, silently disabling it while the
+  suite reads green; verify by ENUMERATION, never the pass count.
+- **The zigbuild cross-check works and catches the actual defect**
+  (macbookair, measured): `cargo zigbuild -p tillandsias-headless --target
+  x86_64-unknown-linux-musl` → rc 101, six E0063 at exactly the six Linux
+  arms; the lane already requires zig + cargo-zigbuild
+  (scripts/build-macos-tray.sh). Rule: zigbuild the guest target before
+  landing a change to a cfg-split file. Boundary: 6 of 8 arms — no Windows
+  target is installed on macOS, so the two Windows arms need yolanda or
+  esme; plain `cargo check --target x86_64-unknown-linux-musl` dies in
+  ring's build script for want of a cross C toolchain and never reaches the
+  crate. Nearly sent `E0063 count = 0` while the build was still compiling —
+  fifth absent-result-read-as-negative instance, caught. Decision recorded:
+  macuahuitl lands the fix (it was committed here before the question);
+  macbookair does not touch the file and re-runs zigbuild after merging
+  trunk for the 0-errors arm. Two hosts, one file, heads-up before writing.
+- **The unstageable-symlink axis is the git, not the filesystem** (yolanda,
+  full matrix on one drvfs path): Git Bash cannot CREATE a dangling symlink
+  (MSYS emulation copies the target); WSL creates it; WSL git stages it
+  (rc 0, `A dangling`); Git for Windows cannot index it (rc 128,
+  `open("dangling"): Function not implemented`). The salvage skip is a
+  Git-for-Windows property reachable only when a non-MSYS tool created the
+  path; written as drvfs the row would have sent a reproducer to WSL to
+  conclude the skip is dead code. Wording corrected in the landing; the
+  test-only seam is the only portable construction. Three fixtures in one
+  night wrong about their own setup and green on the host that wrote them —
+  yolanda's argument for cross-substrate gating. Coordinator cadence gap,
+  named: `sweep-salvage-refs.sh` in report mode found 11 refs, 10 UNSEEN by
+  the ledger (two from `salvage/unknown/`, one of yoga's from 2026-08-26) —
+  the consumer 874-w2gc added has not been run on a cadence; `--apply` and
+  the deletion of yolanda's now-redundant
+  `salvage/yolanda/20260913-823-u5zf` (ancestry confirmed by them) are
+  coordinator writes for the next pass. 823-u5zf landed windows-next
+  4061856c8: the argv work was already landed and the next_action stale;
+  what was open was the closure's own observable being inert (`--forge`
+  exits before `init_tracing()` on the only headless path); pinned with a
+  mutation control repaired twice (matched its own source; then passed by
+  reading its own doc comment).
+- **This cycle's land** (macuahuitl, ok:land:67009ea3b, second launch): the
+  first launch was refused by the bash-dialect guard (761-g36m) — the new
+  salvage loop's `"${paths_to_stage[@]}"` under `set -u` dies on bash 3.2
+  when nothing is staged; the 3.2-clean `${arr[@]+"${arr[@]}"}` idiom fixed
+  it, dialect check and fixture green, relaunched, attempt 1 ok. The gate
+  caught on this host what would otherwise have been macOS's to find: the
+  sub-agent wrote bash-4 idiom, the coordinator's own fixture run did not
+  see it, the guard did. Landed together: the osx-next relay with its Linux
+  compile fixed forward, 1146-z8ux and 1146-8j7i completed, 1147-6xqs filed,
+  the loop-status fragment, and the held coordination records.

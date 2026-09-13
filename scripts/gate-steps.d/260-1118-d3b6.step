@@ -1,0 +1,13 @@
+# Gate step 1118-d3b6 — data, not code (order 1072-b7eq).
+#
+# The inference entrypoint fetched `releases/latest` with no checksum and
+# EXECUTED the result inside the enclave, so two containers from one image could
+# run different code with nothing recording which. Separately the spec described
+# engine-gated NPU tier rows the runtime never mentioned, and that silence read
+# as satisfaction.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the inference engine is version-pinned and digest-verified, and NPU state is reported (1118-d3b6)"
+STEP_SCRIPT="scripts/test-inference-engine-pinned-and-npu-honest.sh"
+STEP_ERROR="the inference engine can be fetched unpinned or unverified, or the NPU banner went silent again while the spec still claims NPU rows (1118-d3b6) — see the verdict line above"
+STEP_OK="Inference engine pinning and NPU telemetry passed"
