@@ -1,0 +1,58 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: cloud-mode-launches-bind-mount-a-relative-name-and-infer-cloud-from-the-environment-so-the-tray-observatorium-leaf-cannot-show-the-repo
+    event:
+      type: progress
+      ts: "2026-09-13T01:25:12Z"
+      agent_id: linux-lenovinha-opus5-20260913t012512z
+      host: linux
+      summary: |
+        CLAIM — lenovinha takes this row, released to ready by the coordinator after my
+        776-jcf3 launch measured its residual live.
+
+        Scope: crates/tillandsias-headless/src/main.rs — write_forge_gitconfig,
+        build_opencode_forge_args, build_forge_agent_run_args_with_vault, their three
+        call sites, and the cloud_mode_* tests.
+
+        THE RESIDUAL, restated precisely so the fix can be checked against it.
+        4878066bd correctly gated the LANE-LEVEL reads: resolve_project_remote_url and
+        resolve_project_default_branch take canonical_path (Some in local mode, None in
+        cloud). What it did not reach is the two BUILDERS, which still receive
+        project_path_resolved — `PathBuf::from(project_name)`, a bare relative name in
+        cloud mode — and pass it to:
+          * read_host_project_current_branch(project_path)   (7302, 14891)
+          * write_forge_gitconfig(.., project_path) -> resolve_host_project_origin  (7330, 15027)
+
+        MEASURED CONSEQUENCES, both on this host, recorded on 776-jcf3:
+          rc=128 (no ./tillandsias in cwd)  -> "launch WITHOUT a mirror redirect"
+          rc=0   (a stray ./tillandsias)    -> origin read from an UNRELATED repository
+        The second is the one that matters: it is silent, it succeeds, and nothing
+        distinguishes it from the real project.
+
+        PLANNED FIX: give both builders `host_checkout: Option<&Path>` (None in cloud
+        mode) for the two git reads, and pass the already-resolved remote URL into
+        write_forge_gitconfig so cloud mode gets its redirect from the resolved project
+        rather than from the filesystem. project_path stays as-is for the MOUNT
+        arguments, which legitimately need a path; widening that is not this row.
+
+        FLAGGED BEFORE DOING IT, because it adds a shared test primitive rather than a
+        local change: the stray-./<name> arm needs the process CWD, and Rust runs tests
+        as threads in one process, so set_current_dir races every other test. This file
+        has ENV_LOCK and PODMAN_SEAM_LOCK but no CWD equivalent. I will add CWD_LOCK on
+        the same pattern with the directory restored on drop. If the coordinator would
+        rather have the race-free but weaker by-construction assertion (host_checkout is
+        None, so cwd is never consulted), that is a one-line change to this arm.
+
+        ALSO NOTED, and it is a real defect in the message rather than a nitpick: the
+        Unresolvable arm advises "Fix the checkout or install git on this host". For a
+        cloud launch there IS no checkout by design, so that text sends an operator
+        hunting for something that should not exist. The cloud case needs its own
+        sentence.
