@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: bash-dialect-catch-gnu-bre-and-unguarded-source
+    field: verifiable_closure
+    value: 'scripts/test-check-bash-dialect.sh passes with arms asserting that a `\+`-in-BRE script and an unguarded-`.` script are both REFUSED, and that their portable equivalents are ACCEPTED. (Fixture name corrected by the de-slop sweep: the row was filed naming scripts/test-bash-dialect.sh, which does not exist; check-bash-dialect.sh:16 names test-check-bash-dialect.sh as its fixture.)'
+    ts: "2026-09-13T01:29:16Z"
+    host: pirria
+
+events:
+  - packet_id: bash-dialect-catch-gnu-bre-and-unguarded-source
+    event:
+      type: note
+      ts: "2026-09-13T01:29:16Z"
+      host: pirria
+      summary: |-
+        deslop:phantom-ref:owned-files-existence-scan — the closure named a fixture that does not exist and would have invited a second, ungated one beside the real fixture
