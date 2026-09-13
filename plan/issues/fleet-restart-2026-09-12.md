@@ -2049,3 +2049,30 @@ stories.
   see it, the guard did. Landed together: the osx-next relay with its Linux
   compile fixed forward, 1146-z8ux and 1146-8j7i completed, 1147-6xqs filed,
   the loop-status fragment, and the held coordination records.
+- **Coordination pass 08:11Z** (macuahuitl): relayed osx-next (1137-rgfm
+  closed on the narrowed claim; the both-arms zigbuild rule) and
+  windows-next (823-u5zf: the headless launch path never initialised
+  tracing, so the closure's own observable was inert; 793-zumy evidence),
+  no conflicts; the Windows tray crate changed, so a full gate. macbookair's
+  0-errors arm: pre-fix osx-next 2ccd051f1 rc 101 with six E0063; post-fix
+  trunk 95d98bde7 merged rc 0 — same host, same command, two trees; the
+  rule is usable, not suggestive, and its boundary stands (6 of 8 arms; no
+  Windows target on macOS; plain `cargo check --target …-musl` dies in
+  ring). The salvage sweep's `--apply` cannot write: it appends to 874-s8vf,
+  ARCHIVED, and the ledger refuses events on archived packets — filed as
+  1148-3439 (standing salvage ledger under plan/salvage-refs.d/). The ten
+  unseen refs disposed by hand (ancestry on four branches, then per-file
+  content against trunk): pirria's three 2026-09-02/03 refs merged
+  everywhere; macuahuitl/20260826-metrics-dashboard-carried identical on
+  trunk → DELETED; macuahuitl/20260911-recover-sep6-fragments carried the
+  two 2026-09-06 fragments whose content is already compacted into the base
+  (1118-pifa and the floor-timing events) → DELETED; yolanda/20260913-823-u5zf
+  on windows-next → delete after this relay lands; yoga/20260912-restart
+  one file identical on trunk → yoga's confirmation asked; yoga/20260826-
+  iteration-3 carries a scripts/local-ci.sh that DIFFERS (kept, yoga's);
+  pirria/20260904-1013-qv7c carries a smoke-skill edit that DIFFERS (kept,
+  pirria down); salvage/unknown/20260902-opsx-* two refs, 22 identical
+  .claude/commands/opsx files each (kept until the lane is named). Operator
+  item, from macbookair: every host's cadence is a session-scoped cron that
+  dies with its session and expires 2026-09-19; the durable per-host timer
+  is 890-27mv's open follow-up.

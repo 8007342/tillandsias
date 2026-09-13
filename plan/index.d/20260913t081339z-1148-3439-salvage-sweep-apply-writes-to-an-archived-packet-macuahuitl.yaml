@@ -1,0 +1,76 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by the macuahuitl coordinator on 2026-09-13 from a coordination pass:
+# the salvage sweep's apply mode has been unable to file anything since its
+# target packet was archived, and 10 of 11 salvage refs are unseen.
+packets:
+  - packet_id: the-salvage-sweep-files-its-events-to-an-archived-packet-so-apply-mode-refuses-every-ref-and-rescued-work-stays-unseen
+    order: 1148-3439
+    status: ready
+    kind: bugfix
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [salvage, ledger, coordination, tooling]
+    estimated_hours: 2
+    verifiable_closure: "litmus:salvage-net-roundtrip — a new `sweep-target` step: with the sweep's target packet archived in the fixture ledger, `sweep-salvage-refs.sh --apply` files each unseen ref exactly once to the standing salvage ledger (plan/salvage-refs.d/<host>.md, one line per ref with sha, date and the sweep's verdict) and exits 0 with ok:salvage-sweep:…:filed=<n> (pre-fix result: FAILS — fail:salvage-sweep:append-event:<ref>, filed=0, measured macuahuitl 2026-09-13 against ARCHIVED 874-s8vf); NEGATIVE CONTROL: report mode still writes nothing and a second --apply files zero."
+    owned_files:
+      - scripts/sweep-salvage-refs.sh
+      - scripts/test-salvage-net.sh
+      - scripts/check-salvage-refs-ledger.sh
+    title: |
+      sweep-salvage-refs.sh --apply appends its per-ref events to 874-s8vf, which is ARCHIVED, and the ledger refuses events on archived packets — so the consumer 874-w2gc added ("a salvaged tree nobody notices is prose-with-extra-steps") has filed nothing since that archive; 10 of 11 salvage refs are unseen, including two from a host that did not identify itself.
+    context: |
+      MEASURED on macuahuitl 2026-09-13 (coordination pass): report mode
+      ok:salvage-sweep:refs=11:new=10:filed=0:refusals-new=7; apply mode
+      lists the ten unseen refs and ends
+      `fail:salvage-sweep:append-event:refs/heads/salvage/macuahuitl/20260826-metrics-dashboard-carried`
+      on the first one. `tillandsias-plan status 874-s8vf` → completed,
+      ARCHIVED. The ledger refuses events on archived packets by design
+      (compaction rule); the sweep predates the archive and was never
+      re-pointed. yolanda ran the same report mode in their cycle and handed
+      the count to the coordinator as a cadence observation; it is a cadence
+      gap AND a broken writer — the cadence could not have helped.
+
+      WHAT THE SWEEP FOUND, disposed by hand this pass (ancestry against all
+      four branches, then per-file content against trunk): pirria's three
+      2026-09-02/03 refs are on every branch (merged); macuahuitl's
+      20260826-metrics-dashboard-carried is byte-identical on trunk
+      (redundant, deleted by the coordinator); macuahuitl's
+      20260911-recover-sep6-fragments carries two fragments whose content
+      is checked against the ledger in the same pass; yolanda's
+      20260913-823-u5zf is on windows-next (redundant after the relay);
+      yoga's 20260912-restart carries one file identical on trunk (their
+      confirmation asked); yoga's 20260826-iteration-3 carries a
+      scripts/local-ci.sh that DIFFERS from trunk; pirria's 20260904-1013-qv7c
+      carries a smoke skill that DIFFERS (pirria is down); the two
+      salvage/unknown/20260902-opsx-* refs carry 22 identical
+      .claude/commands/opsx files each (an opsx lane's dirt, host unnamed).
+      Doing this by hand every pass is the work the consumer exists to do.
+
+      WHAT TO BUILD. Re-point the sweep at a standing, never-archived
+      record: plan/salvage-refs.d/<host>.md, append-only, one line per ref
+      (ref, sha, first-seen date, ancestry verdict, content verdict when
+      computed), the mo-full-attestations.d shape. Keep the cursor semantics
+      (each ref filed once). Add the ancestry verdict the coordinator computed
+      by hand (on which branches; for refs on none, the changed-file count) so
+      the line says whether the ref is redundant without a human diff. A
+      small check (scripts/check-salvage-refs-ledger.sh) verifies the ledger
+      parses and every line names a ref that exists or is marked deleted.
+
+      NOT IN SCOPE: automatic deletion (the row's retention rule stands: a
+      coordinator or human confirms before a ref is deleted).
+    exit_criteria:
+      - 'sweep-salvage-refs.sh --apply files every unseen ref once to plan/salvage-refs.d/<host>.md and exits 0 with filed=<n> even when 874-s8vf is archived (pre-fix result: FAILS — append refused, filed=0)'
+      - 'each ledger line carries the ancestry verdict (branches containing the ref, or none plus the changed-file count) so redundancy is readable without a diff'
+      - 'NEGATIVE CONTROL: report mode writes nothing; a second --apply files zero; the existing sweep fixture scenario still passes'
+      - 'scripts/check-salvage-refs-ledger.sh passes on the committed ledger and is wired where check-mo-full-attestations.sh is'
+    events:
+      - type: filed
+        ts: "2026-09-13T08:20:00Z"
+        agent_id: "linux-macuahuitl-fable-20260913t082000z"
+        host: macuahuitl
+        summary: |
+          Filed from the pass's salvage sweep: apply mode refused on the
+          first unseen ref because its target packet is archived; the ten
+          refs were disposed by hand in the drill.
