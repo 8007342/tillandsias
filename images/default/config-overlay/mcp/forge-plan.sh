@@ -891,7 +891,6 @@ _fp_experts_advice() {
     FP_EXPERTS_PROBED=1
     FP_EXPERTS_ADVICE=""
     for _fpe_lib in \
-        "${TILLANDSIAS_EXPERTS_PROBE_LIB:-}" \
         "${BASH_SOURCE[0]%/*}/../../lib-experts-probe.sh" \
         "/usr/local/lib/tillandsias/lib-experts-probe.sh"; do
         if [ -n "$_fpe_lib" ] && [ -r "$_fpe_lib" ]; then

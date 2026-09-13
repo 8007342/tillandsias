@@ -1,0 +1,58 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by the macuahuitl coordinator on 2026-09-13 from yolanda's finding
+# while scoping 1171-ccf2: the capability probe's resolver admits any binary
+# that runs, so a stale native build published a confidently wrong row.
+packets:
+  - packet_id: host-capability-probes-resolver-admits-any-candidate-that-answers-inference-tier-so-a-stale-native-binary-publishes-a-wrong-capability-row-in-silence-and-the-matrix-routes-on-it
+    order: 1172-dyvd
+    status: in_progress
+    kind: bugfix
+    priority: p1
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: windows
+    capability_tags: [capability-row, probe, windows, integrity, routing]
+    estimated_hours: 3
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is the resolver's currency check and its fixture. Future litmus scripts/test-host-capability-probe-currency.sh; the claimer writes it in the same commit and moves this text into verifiable_closure: resolve_probe refuses, by name (refused:probe-binary-stale:<candidate>:<reason>), a candidate that runs but does not answer the current vocabulary (accel_side absent from --capabilities, or binary mtime older than crates/tillandsias-headless/src/accel_probe.rs) and never falls through silently (pre-fix result: FAILS — yolanda 2026-09-13: ./target/release/tillandsias, a native PE dated 2026-08-29, answers --inference-tier rc 0, is admitted, and host-capability-probe.sh --fragment exits 0 emitting a well-formed fragment with zero accel_side; the same command against the 2026-09-13 debug build reports accel_gpu=present-unusable AMD_Radeon_TM_860M_Graphics and accel_npu=present-unusable; the stale row is on the matrix now as yolanda windows-host, schedulable none); NEGATIVE CONTROL: a current binary is admitted and the fragment carries accel_side; CLOSURE: yolanda's windows-host row republished from a current binary shows the GPU and NPU as present-unusable."
+    owned_files:
+      - scripts/host-capability-probe.sh
+      - scripts/test-host-capability-probe-currency.sh
+    title: |
+      resolve_probe in host-capability-probe.sh admits a candidate when `--inference-tier` exits 0, which proves it RUNS and nothing about whether it knows the current vocabulary; on yolanda a native build from 2026-08-29 (extensionless, so it resolves) predates accel_side and present-unusable, the probe exits 0, and the published windows-host row shows no GPU and no NPU on a host with an AMD Radeon 860M and an NPU. esme's missing binary refuses loudly (1171-ccf2); a stale one publishes silently, and the matrix routes on the row. The resolver must refuse a candidate it cannot show is current, by name.
+    context: |
+      MEASURED on yolanda 2026-09-13, same command against two binaries:
+      release (Aug 29) accel_gpu=none accel_gpu_name=- accel_npu=none
+      accel_ram_gb=- with no accel_side at all; debug (Sep 13)
+      accel_gpu=present-unusable accel_gpu_name=AMD_Radeon_TM_860M_Graphics
+      accel_npu=present-unusable accel_npu_name=NPU_Compute_Accelerator_Device.
+      host-capability-probe.sh --fragment exits 0 on the stale one and the
+      ledger already carries the result (host:yolanda locus:windows-host
+      ts:2026-09-12T04:07:21Z, schedulable none, cpu only). This is esme's
+      793-zumy lesson — correct token, live run, wrong binary — inside the
+      probe's own resolver, in the silent polarity: the resolver has no
+      binary-versus-source freshness check, and the probe is the thing that
+      writes the ledger. Fixing only 1171-ccf2 (the loud half) would hand
+      esme a runnable path that could publish quietly wrong rows too, so
+      this lands FIRST and 1171-ccf2 after it.
+
+      WHAT TO BUILD, yolanda's proposal: resolve_probe REFUSES a candidate it
+      cannot show is current — a vocabulary probe (the candidate's
+      --capabilities output carries accel_side, or whatever the current
+      contract's discriminating key is) as the honest check, mtime against
+      accel_probe.rs as the fallback — with a named refusal rather than a
+      silent fallthrough; then yolanda's own wrong row is republished from a
+      current binary as the closure, and the matrix shows the 860M and the
+      NPU. NOT IN SCOPE: producing the native Windows binary (1171-ccf2).
+    exit_criteria:
+      - 'resolve_probe refuses a runnable-but-stale candidate by name and does not emit a fragment from it (pre-fix result: FAILS — exit 0, fragment emitted with no accel_side)'
+      - 'NEGATIVE CONTROL: a current binary is admitted; the fixture plants both and asserts the verdict for each'
+      - 'yolanda''s windows-host row republished from a current binary shows the AMD Radeon 860M and the NPU as present-unusable, and the stale row no longer routes'
+    events:
+      - type: filed
+        ts: "2026-09-13T19:33:04Z"
+        agent_id: "linux-macuahuitl-fable-20260913t193304z"
+        host: macuahuitl
+        summary: |
+          Filed by the coordinator from yolanda's measurement and handed to
+          them with the flip at filing; lands before 1171-ccf2, whose loud
+          half must not become a quietly wrong publish.

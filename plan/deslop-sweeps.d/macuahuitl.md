@@ -30,3 +30,6 @@
 
 ## 2026-08-20T00:54:44Z macuahuitl
 DESLOP-SWEEP: order=834 examined=410 confirmed=51 retracted=51
+
+## 2026-09-13T19:10:58Z macuahuitl
+DESLOP-SWEEP: order=1172 examined=29 confirmed=6 findings=29 retracted=6 filed=5 net_lines=-49

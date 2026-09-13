@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: periodic-deslopification-sweep
+    event:
+      type: claim
+      ts: "2026-09-13T18:49:04Z"
+      agent_id: linux-macuahuitl-fable-20260913t184904z
+      host: macuahuitl
+      summary: |
+        Claimed by the coordinator for the operator-paired first supervised run of the sweep protocol, under the budget the operator approved in this session (agents as needed, ~30 min each, token/time/cost measured). Corpus: criterion 1 worklist from check-dead-env-branches.sh.

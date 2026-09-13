@@ -74,8 +74,19 @@
 #
 # Exit codes: 0 = row present and current; 1 = actionable (publish a row:
 # absent, drifted, or expired — all three are fixed by
-# `scripts/host-capability-probe.sh --fragment`); 2 = could not determine
-# (report, never guess — an unavailable matrix is not an absent row).
+# `scripts/host-capability-probe.sh --fragment` WHERE THAT COMMAND CAN RUN);
+# 2 = could not determine (report, never guess — an unavailable matrix is not
+# an absent row).
+#
+# ORDER 1165-xkjh — THE REMEDY IS NOT AVAILABLE AT EVERY LOCUS. That paragraph
+# used to promise the publish unconditionally. It is not true on a locus with no
+# executable tillandsias: measured on esmeraldinha's Windows side 2026-09-13,
+# where the expired verdict is correct and `--fragment` exits 2 because neither
+# a native binary nor a runnable one exists there (the Linux debug build is an
+# ELF and exits 126). When this guard emits an expired verdict on a path where
+# its own probe just failed, it says so on STDERR — the verdict itself is
+# unchanged, because a reader who is told to do the impossible learns to ignore
+# the next verdict too.
 #
 # Advisory to the gate, like the health probe: these verdicts ask the cycle to
 # publish and commit a row, they never block work.
@@ -338,6 +349,30 @@ check() {
                 _sc_age=$(( $(now_epoch) - _sc_epoch ))
                 [ "$_sc_age" -lt 0 ] && _sc_age=0
                 if [ "$_sc_age" -gt "$MAX_AGE" ]; then
+                    # ORDER 1165-xkjh. THE REMEDY IS NAMED ONLY WHERE IT CAN
+                    # RUN. Reaching here means BOTH that the row is expired AND
+                    # that this guard's own live probe — which invokes exactly
+                    # the command the remedy names — just failed. So the
+                    # verdict is correct, actionable, and asks for something
+                    # that does not work at this locus.
+                    #
+                    # Measured on esmeraldinha 2026-09-13 after 1154-8ywc made
+                    # this path report honestly for the first time: the Windows
+                    # side answered stale:capability-row-expired rc=1 while
+                    # `host-capability-probe.sh --fragment` exited 2 on the same
+                    # host and locus, having no native binary to run at all.
+                    #
+                    # A GUARD THAT NAMES AN UNAVAILABLE REMEDY TRAINS ITS READER
+                    # TO IGNORE THE VERDICT. The evidence here is direct rather
+                    # than inferred: live_matrix already ran the probe and got
+                    # nothing back, so this is a report of what happened, not a
+                    # guess about what would.
+                    #
+                    # STDOUT IS UNTOUCHED. The token and exit code are the
+                    # grammar consumers parse (1154-8ywc kept them deliberately
+                    # unchanged), so the constraint goes to stderr beside the
+                    # verdict and never into it.
+                    echo "check-capability-row: the remedy for this verdict is a fresh probe publish, and this guard's own probe could not run at this locus — publishing here needs a tillandsias binary that executes in this context (1165-xkjh)" >&2
                     echo "stale:capability-row-expired:$host:age=${_sc_age}s"
                     return 1
                 fi
@@ -713,8 +748,54 @@ fixture() {
         "ok:capability-row-reported:fixturehost" 0 \
         TILLANDSIAS_CAPABILITY_LIVE_UNRUNNABLE=1
 
+    # ── ARMS 20-22: ORDER 1165-xkjh, THE REMEDY MUST BE AVAILABLE ───────────
+    #
+    # 1154-8ywc made the unrunnable-probe path report an expired row honestly.
+    # Honesty exposed the next problem: on esme's Windows locus that verdict is
+    # correct and the remedy it names exits 2, because no tillandsias binary
+    # executes there at all. A host told to publish, from a context where
+    # publishing is impossible.
+    #
+    # These arms check STDERR while asserting stdout is unchanged, because the
+    # whole design constraint is that the grammar consumers parse must not move.
+
+    # 20. Expired row + no live fold: the constraint is named on stderr.
+    _mk "$_fx_committed" fixturehost "$_old_ts" cpu/container/ollama
+    _err_out="$(_run TILLANDSIAS_CAPABILITY_LIVE_UNRUNNABLE=1 2>&1 >/dev/null)"
+    case "$_err_out" in
+        *"could not run at this locus"*1165-xkjh*)
+            echo "ok: an-unreachable-remedy-is-named-as-unreachable" ;;
+        *)
+            echo "FAIL: expected a stderr line naming the unavailable remedy, got '$_err_out'"
+            _fx_fail=1 ;;
+    esac
+
+    # 21. STDOUT IS BYTE-IDENTICAL. The verdict is the contract; the diagnostic
+    #     is beside it, never inside it. Asserted separately from arm 20 so a
+    #     later edit cannot satisfy one by breaking the other.
+    _expect "the-diagnostic-did-not-leak-into-the-verdict" \
+        "stale:capability-row-expired:fixturehost:age=694800s" 1 \
+        TILLANDSIAS_CAPABILITY_LIVE_UNRUNNABLE=1
+
+    # 22. NEGATIVE CONTROL, and it is the one that stops this becoming the
+    #     defect it fixes. On a host where the probe DOES run, an expired row
+    #     must NOT carry the line — the remedy is available there, and telling
+    #     a host its remedy is unreachable when it is reachable is the same
+    #     false advisory in the opposite direction (1158-y3ad's carry-forward
+    #     arm is the precedent).
+    _mk "$_fx_committed" fixturehost "$_old_ts" cpu/container/ollama
+    _mk "$_fx_live" fixturehost "$_fresh_ts" cpu/container/ollama
+    _err_ok="$(_run TILLANDSIAS_CAPABILITY_LIVE_MATRIX="$_fx_live" 2>&1 >/dev/null)"
+    case "$_err_ok" in
+        *1165-xkjh*)
+            echo "FAIL: a host with a runnable probe was told its remedy is unreachable: '$_err_ok'"
+            _fx_fail=1 ;;
+        *)
+            echo "ok: a-reachable-remedy-is-not-announced-as-unreachable" ;;
+    esac
+
     rm -rf "$_fx_dir"
-    [ "$_fx_fail" = 0 ] && echo "ok:capability-row-check-fixture:19"
+    [ "$_fx_fail" = 0 ] && echo "ok:capability-row-check-fixture:22"
     return "$_fx_fail"
 }
 

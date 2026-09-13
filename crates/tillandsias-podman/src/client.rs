@@ -2211,12 +2211,9 @@ fn summary_line(value: &str) -> &str {
 /// (windows-tray notify_icon.rs `write_failure_diagnostics_bundle`); Linux had
 /// nothing.
 pub(crate) fn launch_breadcrumb_path() -> std::path::PathBuf {
-    // The override exists so unit tests never write to the real host state
-    // directory. A test that pollutes ~/.local/state is a test that changes
-    // its own machine.
-    if let Ok(dir) = std::env::var("TILLANDSIAS_LAUNCH_BREADCRUMB_DIR") {
-        return std::path::PathBuf::from(dir).join("launch-failures.log");
-    }
+    // Tests exercise the write path via `write_launch_breadcrumb_at`, which
+    // takes an explicit path and never calls this resolver — so there is no
+    // in-repo caller that needs a host-state override here.
     tillandsias_core::config::state_dir().join("launch-failures.log")
 }
 
