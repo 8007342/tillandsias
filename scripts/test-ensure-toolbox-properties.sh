@@ -47,6 +47,25 @@ for f in "$REAL_INCLUDE" "$REAL_DELEGATE" "$REAL_PROXY"; do
 done
 
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/ensure-toolbox-props.XXXXXX")"
+# ENV DUMP (2026-09-13): this fixture reds inside --ci-full and greens from a
+# bare runner on the same tree; build.sh's own header (the 2026-08-17 podman
+# pin) records that a gate-inherited environment reaching litmus children is
+# the known class. Dump the inherited env of every run so the two regimes can
+# be diffed in one comparison: target/ensure-toolbox-env/<ppid>.env.
+# KEYS ONLY, values for an allowlist (lenovinha, same night): an env dump is a
+# credential-adjacent artifact — whatever the builder forwards lands verbatim
+# in a file that outlives the run and is pasted by design. Presence/absence is
+# what found the precedent; PATH-like values are allowlisted by NAME (a
+# denylist misses the next variable). The name cannot collide (ppid, pid,
+# seconds) and an existing file is never overwritten: "the envs are identical"
+# is a load-bearing negative, and a run diffed against itself would say it.
+_env_dump_dir="$ROOT/target/ensure-toolbox-env"
+_env_dump="$_env_dump_dir/$PPID-$$-$(date +%s).env"
+if mkdir -p "$_env_dump_dir" 2>/dev/null && [ ! -e "$_env_dump" ]; then
+    env | LC_ALL=C sort | awk -F= '
+        $1 ~ /^(PATH|HOME|TMPDIR|XDG_CACHE_HOME|XDG_RUNTIME_DIR|XDG_DATA_HOME|XDG_CONFIG_HOME|TOOLBOX_PATH|container|TILLANDSIAS_SKIP_TOOLBOX|TILLANDSIAS_BUILDER_TOOLBOX|TILLANDSIAS_PODMAN_BIN|TILLANDSIAS_SKIP_TRACE_INDEX|TILLANDSIAS_NO_SINGLETON|LITMUS_STDLIB|SHELL|USER|PWD)$/ { print; next }
+        { print $1 "=<value withheld>" }' > "$_env_dump" 2>/dev/null || true
+fi
 trap 'rm -rf "$tmp"' EXIT
 
 ORIG_PATH="$PATH"
@@ -236,6 +255,7 @@ _prop_creates_if_missing() {
     _fresh_env "$tag"
     "$include" >"$OUT" 2>"$ERR"
     local rc=$?
+    _last_rc=$rc
     [ "$rc" -eq 0 ] || return 1
     [ "$(_created_count)" -ge 1 ] || return 1
     [ "$(_installed_count)" -ge 1 ] || return 1
@@ -249,6 +269,7 @@ _prop_idempotent() {
     _fresh_env "$tag"
     "$include" >"$OUT" 2>"$ERR"
     local rc1=$?
+    _last_rc=$rc1
     [ "$rc1" -eq 0 ] || return 1
     [ "$(_created_count)" -ge 1 ] || return 1
     : >"$FT_STATE/calls.log"
@@ -323,6 +344,18 @@ _holds() {
         pass=$((pass + 1))
     else
         echo "FAIL: $label — the property does NOT hold for scripts/ensure_toolbox.sh"
+        # DIAGNOSE, do not just count (2026-09-13): this fixture was red for two
+        # release-tier runs on macuahuitl while green standalone on the host,
+        # standalone inside the builder container, and through the litmus runner
+        # inside the container — and printed nothing a reader could use. Say
+        # what the include returned and what the fake saw.
+        {
+            echo "  diag: include rc=${_last_rc:-?} PATH_head=${PATH%%:*} HOME=$HOME"
+            echo "  diag: TILLANDSIAS_SKIP_TOOLBOX=${TILLANDSIAS_SKIP_TOOLBOX:-unset} TOOLBOX_PATH=${TOOLBOX_PATH:-unset} container=${container:-unset} TILLANDSIAS_PODMAN_BIN=${TILLANDSIAS_PODMAN_BIN:-unset}"
+            echo "  diag: fake calls.log:"; sed 's/^/    /' "$FT_STATE/calls.log" 2>/dev/null | head -12
+            echo "  diag: include stderr (tail):"; tail -8 "$ERR" 2>/dev/null | sed 's/^/    /'
+            echo "  diag: include stdout (tail):"; tail -4 "$OUT" 2>/dev/null | sed 's/^/    /'
+        } >&2
         fail=$((fail + 1))
     fi
     return 0
