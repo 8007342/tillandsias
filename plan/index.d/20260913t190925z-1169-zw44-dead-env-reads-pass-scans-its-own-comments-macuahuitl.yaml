@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by the macuahuitl coordinator on 2026-09-13 from the first supervised
+# de-slop sweep (829-dkuc): the judge allowed five packets against six
+# retractions; this is packet 4.
+packets:
+  - packet_id: check-dead-env-branches-reads-pass-scans-the-detectors-own-comments-so-a-variable-it-quotes-can-never-be-cleared
+    order: 1169-zw44
+    status: ready
+    kind: bugfix
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [deslop, detector, tooling, ci]
+    estimated_hours: 2
+    parent_order: 829-dkuc
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable is the detector change and its self-test arm. Future arm in scripts/check-dead-env-branches.sh --self-test (or scripts/test-dead-env-branches.sh); the claimer writes it in the same commit and moves this text into verifiable_closure: FAILS pre-fix: shell-4 removed both real reads of TILLANDSIAS_PROJECT_ENGINE from images/default/lib-common.sh and observed `check-dead-env-branches.sh 2>&1 | grep -A1 '^  TILLANDSIAS_PROJECT_ENGINE$'` still printing the row, now with ZERO evidence lines (previously lib-common.sh:1387 and :4280) -- the surviving read is the detector's own comment at its PFX-anchoring section. This is why TILLANDSIAS_PROJECT_ENGINE is INCONCLUSIVE in this sweep."
+    owned_files:
+      - scripts/check-dead-env-branches.sh
+    title: |
+      check-dead-env-branches: the reads pass scans the detector's own comments, so a variable it names can never be cleared
+    context: |
+      A knob to design, not a line to delete: the script deliberately excludes itself from the comment/doc pass (so it cannot immunize its own findings) but its reads pass has no such exclusion, so a variable merely QUOTED in its own explanatory comments is re-extracted as a live read forever. The two exclusions must be made consistent -- self-quotes should count as neither documentation nor a read -- which is a design decision about the detector's self-reference, plus a self-test arm.
+
+      Found by the first supervised de-slop sweep (829-dkuc) on macuahuitl,
+      2026-09-13: 29 dead-env-branch findings examined by eleven pairing
+      agents in isolated worktrees, each constructing and EXECUTING a
+      (mutation, predicted-observable) pair; six confirmed deletions, six
+      refutations (all detector blind spots), fifteen downgrades, five
+      packets. The refutations that motivate this row are quoted in the
+      sweep record and the drill.
+    exit_criteria:
+      - 'the pre-fix result named in the closure no longer reproduces (pre-fix result: FAILS as measured by the sweep)'
+      - 'NEGATIVE CONTROL: the detector still reports a genuinely dead variable (a read with no assignment, no document, no default) as dead'
+      - 'scripts/check-dead-env-branches.sh --self-test carries an arm for this shape'
+    events:
+      - type: filed
+        ts: "2026-09-13T19:09:25Z"
+        agent_id: "linux-macuahuitl-fable-20260913t190925z"
+        host: macuahuitl
+        summary: |
+          Filed by the coordinator from the sweep judge's allowance
+          (5 packets against 6 retractions).

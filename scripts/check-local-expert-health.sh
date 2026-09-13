@@ -2,9 +2,9 @@
 # check-local-expert-health.sh — probe local Ollama inference endpoint
 #
 # Prints exactly one line matching:
-#   ^(ok:local-experts-healthy|degraded:local-experts[^;]*|down:local-experts[^;]*|skip:not-applicable)$
+#   ^(ok:local-experts-healthy|degraded:local-experts[^;]*|down:local-experts[^;]*)$
 #
-# Exit 0 on ok/degraded/skip, non-zero on down.
+# Exit 0 on ok/degraded, non-zero on down.
 
 set -euo pipefail
 
@@ -15,12 +15,6 @@ set -euo pipefail
 # had no other reader (grepped 2026-08-28) and are dropped, not aliased.
 ENDPOINT="${TILLANDSIAS_INFERENCE_ENDPOINT:-http://127.0.0.1:11434}"
 MODEL="${TILLANDSIAS_INFERENCE_MODEL:-qwen2.5:0.5b}"
-
-# Skip if not applicable (e.g. forge without native Ollama)
-if [[ "${TILLANDSIAS_SKIP_LOCAL_EXPERTS:-}" == "1" ]]; then
-    echo "skip:not-applicable"
-    exit 0
-fi
 
 # Check if Ollama is reachable
 if ! curl -sf --max-time 3 "${ENDPOINT}/api/tags" >/dev/null 2>&1; then
