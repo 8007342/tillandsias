@@ -1,0 +1,133 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: exit-status-does-not-survive-the-wsl-exe-bash-lc-channel-so-every-rc-measured-through-it-on-a-windows-host-is-decoration
+    order: 1155-jurn
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [windows, fail-loud, false-negative, probe, portability]
+    estimated_hours: 2
+    owned_files:
+      - scripts/lib-wsl-exec.sh
+    unscoreable: |
+      unpinnable-until-the-guard-exists. The closure is a property of a CANARY
+      THAT DOES NOT YET EXIST — nothing in the tree tests whether the channel a
+      measurement is about to be taken through can carry an exit status, so any
+      litmus named now resolves to nothing and 885-92iu refuses the row.
+      Sanctioned exit per 1136-n8sh.
+
+      FUTURE LITMUS FILENAME:
+      scripts/test-wsl-exec-channel-carries-exit-status.sh — run the two-command
+      canary through the channel under test and assert it reports 1 and 7
+      respectively; assert the fixture FAILS when pointed at the known-bad
+      `wsl.exe -- bash -lc` form. The arm must be msys-only and must SKIP
+      loudly elsewhere, since the defect cannot occur where there is no MSYS
+      argument-conversion layer.
+
+      WIRE IT IN THE SAME COMMIT THAT WRITES IT, by one of two routes and name
+      which: an `_run bash` line in build.sh, or BOTH an
+      openspec/litmus-tests/litmus-<name>.yaml definition AND an
+      openspec/litmus-bindings.yaml registry entry under the right spec_id.
+      Half of route 2 is 1068-cxmf's dangling pin, and scripts/test-*.sh is not
+      globbed by build.sh, so an unwired fixture is a file rather than a gate.
+    title: |
+      `$?` does not survive `wsl.exe -d <distro> -- bash -lc '...'` from Git Bash — `false` reports 0, `(exit 7)` reports 0, and `rc=$?` yields EMPTY — so every exit status measured through that channel on a Windows host is decoration rather than data
+    context: |
+      MEASURED on esmeraldinha. Found while chasing a suspected fail-open in
+      another guard; the suspicion was FALSE and this is what produced it.
+
+      THREE CONTROLS, each eliminating a different explanation:
+
+        wsl.exe -d <distro> -- bash -lc 'false; echo "A:$?"'          -> A:0
+        wsl.exe -d <distro> -- bash -lc '(exit 7); echo "$?"'         -> 0
+        wsl.exe -d <distro> -- bash -lc 'false; rc=$?; echo "C:$rc"'  -> C:  (EMPTY)
+        wsl.exe -d <distro> -- bash -lc 'echo "$$"'                   -> 1824454 (CORRECT inner pid)
+
+      `false` reporting 0 and `(exit 7)` reporting 0 establish that the value is
+      not the shell's. `$$` arriving as the correct INNER pid rules out blanket
+      outer-shell expansion and narrows the fault to `?` specifically. And
+      `rc=$?` yielding EMPTY rather than 0 shows the assignment never happened
+      at all — a different and more alarming failure than a wrong number,
+      because a wrong number at least proves the statement executed.
+
+      MECHANISM: the MSYS argument-conversion layer, for which `?` is a glob
+      metacharacter. Same family as two other manglings measured on this host
+      the same night — `tasklist /NH` arriving as
+      `C:/Program Files/Git/NH`, and a `/mnt/c/...` path passed as a direct
+      wsl.exe argument arriving as `C:/Program Files/Git/mnt/c/...`.
+
+      NEGATIVE RESULTS, recorded because they are the first two things anyone
+      will reach for: `MSYS_NO_PATHCONV=1` does NOT fix it, and
+      `MSYS2_ARG_CONV_EXCL='*'` does NOT fix it. Both still return empty.
+      Whoever picks this up should not spend the hour re-discovering that.
+
+      WHAT DOES WORK: putting the logic in a script FILE authored through a
+      clean channel and executing that file. The same three arms in a script
+      file report 1, 7 and the correct pid.
+
+      WHY THIS IS p1 RATHER THAN A CURIOSITY. Two Windows hosts drive their
+      in-distro work through this exact form, and an exit status is what a
+      caller gates on. A measurement taken this way cannot report failure: it
+      returns 0 whether the thing under test passed, failed, or never ran. On
+      the night this was found it produced a false fail-open report against a
+      guard whose contract was in fact being honoured, and the author of that
+      guard could not reproduce it — two hosts spent an exchange each on a
+      defect that did not exist, and the only reason it resolved is that the
+      guard's author insisted on a measurement rather than accepting the claim.
+
+      SCOPE OF THE DOUBT, audited by mechanism rather than by impression:
+      measurements computed INSIDE a script file are unaffected; constructs
+      using `if cmd; then` rather than `$?` are unaffected; anything run
+      directly in Git Bash without the wsl.exe hop is unaffected. Only exit
+      statuses read across the hop are suspect. One claim relayed to another
+      host on this basis was TRUE but obtained by a route that could not have
+      detected falsity, and was retracted on those grounds.
+    deliverable: |
+      A host can discover that its measurement channel is lying, before it
+      trusts a number taken through that channel.
+
+        * scripts/lib-wsl-exec.sh — a CANARY helper, not a workaround. Run two
+          commands with known answers through whatever channel is about to be
+          used and refuse if either disagrees:
+
+              false; echo "rc=$?"        must report 1
+              (exit 7); echo "rc=$?"     must report 7
+
+          A workaround is a discipline that decays ("remember to use a script
+          file on Windows"); a canary is a falsifiable precondition that fails
+          loudly. This is the same move as the run-don't-stat convention: do
+          not assume the instrument works, execute something whose answer is
+          known and check.
+        * DECIDE AND RECORD whether callers should be routed through a helper
+          that writes a script file automatically, or whether the canary should
+          simply refuse and leave the caller to choose. Wrapping is friendlier
+          and hides the platform difference; refusing keeps the difference
+          visible, which on the evidence of this night is usually the better
+          trade. Record the reasoning either way.
+        * The canary must run BEFORE the measurement it protects, not after —
+          a channel discovered to be lying afterwards has already produced the
+          number someone acted on.
+
+      SCOPE NOTE: do NOT fix this by banning `bash -lc` through wsl.exe. The
+      form is correct for anything that reports through STDOUT, which is most
+      of what the fleet measures — the pre-fix capture that this same night
+      confirmed another host's fixture came through that exact channel intact,
+      because a token on stdout is unaffected. It is exit status specifically
+      that does not survive.
+    next_action: >
+      Write the canary and run it on both Windows hosts before anything else —
+      it is two commands with known answers, and until it exists neither host
+      can tell a real failure from a channel that cannot report one.
+    provenance: |
+      Found by esme-windows on esmeraldinha while raising a suspected second
+      fail-open with lenovinha against check-capability-row.sh. lenovinha could
+      not reproduce it, gave the exact discriminator (run it with nothing
+      between the invocation and the read), and refused to file what they could
+      not measure. Run from a script file the contract held at rc=1 on three
+      arms, which disproved the alarm and exposed the channel instead. The
+      canary shape in the deliverable is lenovinha's suggestion, offered rather
+      than asserted, and adopted because it converts a decaying discipline into
+      a falsifiable precondition.
