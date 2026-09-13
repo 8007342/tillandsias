@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-capability-row-guard-derives-its-own-locus-from-the-context-it-runs-in-so-a-host-with-two-published-loci-answers-due-from-a-third-context-and-the-remedy-would-mint-a-third-row
+    field: status
+    value: in_progress
+    ts: "2026-09-13T22:28:56Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-capability-row-guard-derives-its-own-locus-from-the-context-it-runs-in-so-a-host-with-two-published-loci-answers-due-from-a-third-context-and-the-remedy-would-mint-a-third-row
+    event:
+      type: note
+      ts: "2026-09-13T22:28:56Z"
+      host: lenovinha
+      summary: |-
+        claimed for cycle 2026-09-13T22:28:54Z by lenovinha; coordinator cleared the claim through the plan-only lane during the v56.9.13.1 freeze, code held until the all-clear

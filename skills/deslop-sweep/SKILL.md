@@ -139,3 +139,14 @@ coordinator main-context tokens.
 - **Clean the worktrees** (`git worktree remove --force`, prune, delete the
   `worktree-wf_*` branches) after the diffs are taken; ten of them held
   applied mutations.
+
+- **A mutation control run from a scratch COPY of the script re-roots itself.**
+  Every fixture and detector here derives its root from its own location
+  (`REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"`), so the
+  pre-fix copy under `$TMP` looks for its siblings beside itself and reds for
+  the wrong reason (rc=127, "No such file"), which reads as a valid "before".
+  Run the pre-fix control from the repo path (`scripts/.pre-fix-control.sh`,
+  removed after) or hand the root in explicitly, and read the control's
+  failure LINE before counting it: a red for the wrong reason is not a
+  control (macuahuitl and yolanda, 2026-09-13, the same trap twice in a day;
+  six fixtures in scripts/test-*.sh copy a script into a temp dir).
