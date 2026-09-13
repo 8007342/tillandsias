@@ -1695,3 +1695,27 @@ stories.
   supported-guard's `/proc` root is hardcoded, so the unsupported arm is
   unreachable on every Linux host; an overridable root lets every host prove
   the refusal fires.
+- **The competing-gate detector's guard enumerates jails, so an unrecognised
+  jail accuses** (yoga, self-found while briefing yolanda; ancestry and bytes
+  verified on macuahuitl from origin): the inside-container guard tests
+  `TOOLBOX_PATH` and `container=oci|podman`; a WSL distro sets neither, and a
+  distro cannot see the native Windows wrapper pid (1137-da83), so the
+  detector there finds no wrapper for its own token and accuses by a second
+  mechanism the fix for the first did not cover. Design yoga is taking in
+  their :05 cycle: INVERT — answer only when the caller positively asserts it
+  is host-side (the wrapper's pre-dispatch call passes a flag; build.sh's
+  fast-refusal call does not; everything unflagged refuses), so a new dispatch
+  shape is silent by default instead of wrong by default. Hold on yolanda:
+  origin/windows-next carries 936d22364 (the detector with zero
+  `inside-container` and no wrapper call — the version that accused every
+  Silverblue gate); 3a7d2013d is on linux-next only and arrives with their
+  pre-push merge; ba0fb4fd5 is already on linux-next, so the osx-next relay
+  they asked for buys nothing and was not done. Two trunk-byte facts folded
+  into the design: `with-wsl2-builder.sh` makes no detector call at all, so
+  under the inversion the WSL datapoint becomes "does the unflagged in-distro
+  call refuse" and promotion needs a flagged MSYS-side call that does not yet
+  exist; and MSYS procfs exposes no `/proc/<pid>/environ`, so that flagged
+  call would take the detector's unreadable-environ branch for every pid — to
+  be answered as a named `unsupported:`, never as "none found" (the darwin
+  fail-open shape). Condition for yolanda, not a claim: `ls /proc/$$/environ`
+  under Git Bash.
