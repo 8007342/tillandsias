@@ -1,0 +1,12 @@
+# Gate step 1119-6wn6 — data, not code (order 1072-b7eq).
+#
+# The loop had CPU-time instruments and no token instrument, so a 42-agent sweep
+# cost 4,480,590 tokens and nobody could see it until the operator asked. This
+# pins the ledger and the two views; it cannot pin the honesty of an attested
+# number, which only the agent can observe.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the token instrument records a cycle and ranks repeated spend (1119-6wn6)"
+STEP_SCRIPT="scripts/test-token-instrument.sh"
+STEP_ERROR="the token instrument stopped recording, stopped ranking repeated labels, or began ranking one-offs / flagging solo cycles (1119-6wn6) — see the verdict line above"
+STEP_OK="Token instrument passed"
