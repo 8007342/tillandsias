@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: wire-local-experts-mode-through-grounded-pipeline
+    event:
+      type: progress
+      ts: "2026-09-13T11:55:22Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260913t115114z
+      host: macos
+      summary: |
+        TASK 4.5, DARWIN HALF DONE; msys half remains, so this packet goes back to `ready` rather than closing. Partial slice, not a completion.
+
+        Evidence is recorded in full on 902-5bf9, which owns the criterion, rather than duplicated here. In short, at osx-next HEAD 4fb8687ca on tlatoanis-macbook-air (Apple M5): mlua `vendored`+`lua54` builds Lua from C source under Apple clang 21.0.0 — a forced `cargo clean -p mlua-sys --release` and rebuild, rc=0, 25.82s, 32 Lua C objects into an arm64 liblua5.4.a stamped fifty seconds before inspection — and the VM executes, 7/7 lua_runtime tests (301 filtered out) including one that evaluates a script through Lua::new and one that requires a blocked os.execute to ERROR, which only a real VM can do.
+
+        I DID NOT TAKE THE FLEET DECISION THIS ROW ASKED FOR. next_action proposed deciding whether the 2026-08-28 darwin report ("[lua-expert] runtime initialized") answers the darwin half before re-running it. Re-running cost 26 seconds of build plus a test run. Adjudicating stale evidence was the more expensive option and the weaker record, so the decision is now moot for darwin: there is a measurement at current HEAD.
+
+        WHAT REMAINS ON 4.5: the msys half. This host cannot produce it. A Windows host should run the same two measurements — the forced clean rebuild of mlua-sys with its toolchain named, and `cargo test -p tillandsias-plan lua_runtime` with the count stated — and the criterion is then complete for all three lanes.
+
+        ALSO STILL OPEN on this packet, untouched by me and listed so the next claimer sees them: the OpenSpec change tree needs sync/archive at completion, and 927-2q4w's disposition question (cold-start rather than model size overrunning the tier budget on a GPU host) is a fleet matter this row records but does not own.
+
+        RELEASING to `ready` with 4.5 narrowed to msys-only.

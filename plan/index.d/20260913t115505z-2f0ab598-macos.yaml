@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-rust-hosted-lua-step-form-for-litmus-offered-beside-shell-not-replacing-it
+    event:
+      type: evidence
+      ts: "2026-09-13T11:55:05Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260913t115114z
+      host: macos
+      summary: |
+        DARWIN HALF OF THE PORTABILITY EXIT CRITERION: ANSWERED WITH CURRENT EVIDENCE, measured on tlatoanis-macbook-air (Apple M5, macOS 25.6.0) at osx-next HEAD 4fb8687ca on 2026-09-13.
+
+        The criterion asks that "mlua with the `vendored` feature builds Lua from source and needs a working C toolchain — verified GREEN on linux, darwin AND msys before it is wired into `--check`". Two halves, both taken:
+
+        BUILD (Lua compiled from C source on darwin):
+          dependency, crates/tillandsias-plan/Cargo.toml:
+            mlua = { version = "0.10", features = ["vendored", "lua54", "send", "serialize"] }
+          C toolchain: /usr/bin/cc -> Apple clang version 21.0.0 (clang-2100.3.34.2)
+          `cargo clean -p mlua-sys --release` then a full rebuild: rc=0, real 25.82s, zero error lines.
+          Produced: 32 object files from Lua's own C sources (lapi.o lauxlib.o lbaselib.o lcode.o lcorolib.o lctype.o ldblib.o ldebug.o ...) linked into liblua5.4.a, `lipo -info` -> architecture arm64.
+          The artifact was stamped 2026-09-13T11:53:00Z against a clock reading 11:53:50Z, i.e. built fifty seconds before it was inspected. THE CLEAN WAS THE POINT: artifacts for this crate already existed on the host and would have "proved" the same thing while being of unknown vintage. A stale artifact reads exactly like a fresh one.
+
+        RUNTIME (the vendored VM actually executes on darwin):
+          cargo test -p tillandsias-plan lua_runtime -> 7 passed, 0 failed, 301 filtered out, rc=0 captured unpiped.
+          Two of those arms are the load-bearing ones, and I read their bodies rather than trusting the names: `lua_runtime_loads_init_script` writes `expert.log_info('hello from lua')` to an init.lua and calls LuaRuntime::new, which runs Lua::new() and evaluates the script; `lua_runtime_blocks_os_execute` writes `os.execute('echo pwned')` and requires the construction to ERROR. The second is the stronger evidence: it can only fail the way it does if the VM genuinely parsed and evaluated Lua source and found os.execute nil. A stub that returned Ok would pass the first arm and fail the second.
+
+        WHAT THIS DOES NOT ANSWER: the msys half. This host cannot produce it — no Windows target installs on macOS — so the criterion remains open until a Windows host runs the same two measurements. Linux is presumably already green from the hosts that build there daily, but I have not measured it and am not asserting it.
+
+        ON THE STANDING QUESTION, which 920-pxg6's next_action poses as a fleet decision — "the darwin 2026-08-28 report already records '[lua-expert] runtime initialized' on Darwin, decide whether that answers the darwin half before re-running it": I did not adjudicate it. Re-running cost 26 seconds of build plus a test run, and it replaces a judgement about a three-week-old report with a measurement at current HEAD. When the re-run is that cheap, deciding whether old evidence still counts is the more expensive option and the less defensible one.

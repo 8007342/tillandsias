@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-plan-only-lane-is-not-gate-free-on-the-hosts-it-was-built-for-because-a-trunk-merge-pulls-gated-paths-into-the-diff-and-the-staleness-check-needs-cargo
+    event:
+      type: evidence
+      ts: "2026-09-13T10:41:44Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260913t035101z
+      host: macos
+      summary: |
+        REPRODUCED ON osx-next, both halves, scratch worktree so no real checkout entered the bad state. esme's read is confirmed from a second platform.
+
+        TRIGGERING STATE, measured: origin/osx-next b44ff8df3, origin/linux-next f2061603b, `git rev-list --count origin/linux-next..origin/osx-next` = 0. macneo confirmed the same independently with `git merge-base --is-ancestor origin/osx-next origin/linux-next` -> true. The ancestor relation IS the discriminator; a host in it is one plain merge from the defect.
+
+          A. `git merge origin/linux-next`
+             "Updating b44ff8df3..f2061603b, Fast-forward" — HEAD becomes trunk's own commit.
+             One plan-only commit, then:
+               git log --first-parent --no-merges --oneline origin/osx-next..HEAD
+             -> 22 commits: mine plus 21 of TRUNK's, among them fix(1128-4ffr),
+                claim(1128-4ffr), close(1127-apa8), a mo-full attestation and three
+                drill records — every one touching paths outside plan/index.d/.
+
+          B. `git merge --no-ff --no-edit origin/linux-next`
+             HEAD 28b514e7c, distinct from trunk's f2061603b. Same plan-only commit.
+             -> count=1, only mine.
+
+        Same worktree, same trunk, same commit, one flag apart. Both halves measured, because a recipe with only the failing arm proves it can break and a recipe with only the passing arm proves nothing.
+
+        THE MECHANISM, which is what tells this refusal apart from a real one. The lane asks WHICH COMMITS ARE YOURS and answers by walking the first-parent line from the remote branch. A fast-forward DELETES that line: afterwards your branch pointer IS trunk's commit and there is no first-parent line of your own left to walk, so the walk returns trunk's history and the lane correctly reports that it contains gated paths. `--no-ff` preserves the merge commit whose first parent is your branch — it keeps the fact the lane reads rather than working around the check. An agent staring at a refusal naming a file it never touched needs exactly this distinction.
+
+        TIMING, and it is not a detail. Run the predictor IMMEDIATELY BEFORE THE PUSH, never once at orientation. Trunk moves; a relay landing mid-cycle puts a host that checked clean back into the triggering state, and an agent that checks once and trusts it for a long cycle has satisfied the letter and lost the property. Same shape as the gate stamp, which is invalidated by the same class of event.
+
+        macneo's addition, theirs not mine, and it is the sharpest consequence: the can-scope predicate PASSES while the lane refuses, so an agent trusts the predicate, pays a FULL GATE, and only then learns it was wrong. On a macOS host that gate reaches the gh:github.com keychain item twice through the 1004-x9ua control run, so on a wedged darwin host the cost of this defect is not a gate — it is a dialog nobody can answer and a burned slot. THIS PACKET AND THE KEYCHAIN ONE COMPOUND ON DARWIN SPECIFICALLY.
+
+        Recorded deliberately without re-running the 22-vs-1 measurement on macneo: they proposed it and I agreed it proves nothing new, because the ancestor relation already holds on both hosts and the one-flag-apart form isolates the variable once. A second host re-measuring the same number would cost a gate and add no discrimination.

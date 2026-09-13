@@ -138,6 +138,25 @@ To guarantee convergence in finite time, the orchestrator MUST track and enforce
 
 ---
 
+## Stale Ready Rows: Surface, Never Close (order 1144-jfr5)
+
+Before shaping work, run the first-pass reconciliation and carry its
+candidates into the handoff:
+
+```bash
+scripts/check-stale-ready-rows.sh          # stale-candidate:<order>:<n>:<sha> … then ok:stale-ready-rows:<c>/<ready>:pass=cites-order
+```
+
+A candidate is a `ready` row whose order a landed commit SUBJECT cites as
+work (`fix(`, `feat(`, `close(`, `test(`, `record(`, `style(`, `docs(`,
+`refactor(`). MEASURED on the first run (2026-09-13): 93 of 509 ready rows.
+That list is evidence somebody believed they were working the row; it is
+NOT a verdict — e357f3f87 cited three orders and completed two, and a row
+can be `ready` on purpose after a release (1141-vf9w). The pass reports the
+count and up to five candidates it can hand to a host WITH the exit criteria
+to verify by execution; it never sets a status itself. The fuzzier
+owned_files pass the row also asks for is not built yet.
+
 ## Shape & Assign Actionable Work
 
 -   **Construct the Blocking Tree**: For every blocked item, trace its chain to find "root blockers" (items with the longest downstream chains or longest block durations). Prioritize root blockers above all else.
