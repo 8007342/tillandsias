@@ -1380,3 +1380,46 @@ stories.
   file on the next pass: a reconciliation check surfacing ready rows whose
   owned_files a landed fix touched since filing — surfaced, never
   auto-closed.
+- **Trunk red on every macOS host at c6d191d39** (macbookair, reproduced in a
+  pristine worktree): 1141-vf9w's `tillandsias_marked_pids()` enumerates
+  /proc, which darwin lacks, so the reaper reports success having killed
+  nothing — fails OPEN in production (with-tillandsias-builder.sh is a live
+  caller) — and test-dispatch-reap.sh spawns with `setsid`, absent on darwin,
+  so the arm reds for a second, unrelated reason. The file's header was
+  careful about bash 3.2; the dialect guard checks the shell and cannot see a
+  filesystem the target lacks. Ninth idiom class for 1135-z8gn: absent-on-
+  darwin primitives, which no flag-shaped advisory finds. Unblock (macbookair,
+  osx-next, relayed next pass): the fixture skips on darwin with a named
+  reason, the reaper returns a named `unsupported:dispatch-reap:no-proc` to
+  its caller (loud, never open), and the real darwin design — a token file or
+  process group, since darwin cannot read another process's environ — is a
+  child packet of 1141-vf9w for yoga. macbookair's 1137-rgfm claim was
+  invisible to the fleet while the red held its push.
+- **Corrections from the author and a second Mac** (yoga, macneo): the
+  fail-open was not an unseen axis — lib-dispatch-reap.sh's header STATED the
+  requirement ("a no-op that says so rather than a silent success; a caller
+  must tell 'nothing to reap' from 'cannot see anything to reap'") and the
+  code four lines below returned 0 on an empty list, the same
+  comment-asserts-what-code-lacks class the author had corrected in
+  check-cheatsheet-tiers.sh two hours earlier. A named return alone moves the
+  silent success up a layer: the caller's trap discards it and exits 143
+  clean, so the caller must say loudly that termination was not propagated.
+  Scope: on darwin with-tillandsias-builder.sh returns early before the lib
+  is sourced, so the dispatch path is unreachable there today — the fixture
+  red is the live breakage, a darwin skip is not coverage, and the reaper's
+  darwin arm is for the future Linux caller. The child packet must keep
+  three states (live / idle conmon-only / stray). macneo: this and the
+  keychain orphan (`_ccc_timeout` kills gh, its `security` child survives at
+  PPID 1) are one family — termination does not propagate across a process
+  tree on darwin — and the fix shape is likely shared (process groups,
+  `kill -- -PGID`; `pgrep -P` as the portable enumeration). Keychain root
+  cause REVISED: not an ACL and not a backlog — the operator's clicks did
+  nothing because the dialog's password field was empty (item mdat unchanged
+  since 2026-09-06); a wedged SecurityAgent (21 h, ignored SIGTERM, respawned
+  on SIGKILL) plus PPID-1 orphans; the restart cleared it and a bare decrypt
+  now returns rc 0. Remedy on recurrence: restart, or enter the login
+  keychain password before Always Allow — not an ACL edit, not gh auth login.
+  macneo's claim/release of 1080-4deb item 2 never reached origin (refused
+  before landing), so the fleet never saw it taken; the mandated trunk merge
+  dragged a .step file into a plan-only push, which is the claim-alone-and-
+  fast shape failing under a mandatory pre-push merge.
