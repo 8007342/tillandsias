@@ -2685,3 +2685,18 @@ stories.
   criterion-3 phrasing: plant EACH, assert cold only when ALL THREE are
   gone — clearing two and calling it cold is the one-direction assertion
   that produced the row. The probe fix stands under (a) or (b).
+- **Coordination pass 12:11Z** (macuahuitl): quiet two hours — no host
+  reports since the 11:39Z cycle, windows-next contained, osx-next two
+  plan-only commits (macbookair's darwin-portability half of 902-5bf9 and
+  920-pxg6, measured at HEAD) relayed here with the land tool (a relay
+  merge cannot take the plan-only lane: its second parent is not in trunk;
+  the full gate is the relay's price and macuahuitl pays it warm). Salvage
+  ledger steady: 5 refs, 0 new. FIRST USE OF THE STALE-ROW PASS as a step:
+  94 candidates of 510 ready rows; three handed to hosts WITH their criteria
+  to verify by execution, never closed here — 1140-d6ni (the cheatsheet
+  tier check protects neither Windows host; a fix citing it landed on
+  windows-next; yolanda), 1135-z8gn (the thirty-seven GNU-only idioms; four
+  citing commits; macbookair, the BSD host), 1132-r4mt (the archiver fixture
+  refuses in the gate and passes standalone; yoga's own row). 1130-8zxn and
+  1141-vf9w are on the list and are NOT stale (lenovinha's fix behind a dead
+  credential; released to ready on purpose) — the list is candidates.
