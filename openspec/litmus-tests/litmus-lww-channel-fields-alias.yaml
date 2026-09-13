@@ -63,11 +63,15 @@ critical_path:
   # afford a rebuild, not in an instant-phase litmus step.
   #
   # KNOWN BRITTLENESS, stated so a future red is read correctly: the pattern is
-  # an EXACT source spelling. A rustfmt change or a refactor to a slice constant
-  # would fail this while the behaviour is intact — that is a false red, and the
-  # response is to update the pattern, not to assume the alias was dropped.
+  # an EXACT source spelling. A rustfmt change or a refactor would fail this
+  # while the behaviour is intact — that is a false red, and the response is to
+  # update the pattern, not to assume the alias was dropped. It happened on
+  # 2026-09-13: 1157-ghmi lifted the list into the LWW_CHANNELS const (so the
+  # coverage guard can read it), and this pin went red on the release tier
+  # while step 1's behavioural cover stayed green; the pin now names the const
+  # and the loop that iterates it.
   - step: "SOURCE PIN: the reader still names both channels (fast tripwire; step 1 is the behavioural cover)"
-    command: "bash -c 'f=crates/tillandsias-plan/src/fragments.rs; grep -q \"for channel in \\[\\\"fields\\\", \\\"status\\\"\\]\" \"$f\" && echo \"ok: reader-reads-both-channels\" || { echo \"FAIL: lww_entries no longer reads both channels\"; exit 1; }'"
+    command: "bash -c 'f=crates/tillandsias-plan/src/fragments.rs; grep -q \"const LWW_CHANNELS: &\\[&str\\] = &\\[\\\"fields\\\", \\\"status\\\"\\]\" \"$f\" && grep -q \"for channel in LWW_CHANNELS\" \"$f\" && echo \"ok: reader-reads-both-channels\" || { echo \"FAIL: lww_entries no longer reads both channels\"; exit 1; }'"
     timeout_ms: 10000
     expected_behavior: "ok: reader-reads-both-channels"
 

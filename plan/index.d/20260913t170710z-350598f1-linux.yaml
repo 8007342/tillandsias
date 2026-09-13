@@ -1,0 +1,74 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-credential-helpers-host-pin-refuses-the-vault-agent-relay-fixtures-example-upstream-so-the-release-tier-is-red-on-a-fixture-no-check-gate-runs
+    event:
+      type: completed
+      ts: "2026-09-13T17:07:10Z"
+      agent_id: linux-lenovinha-opus5-20260913t170708z
+      host: linux
+      summary: |
+        LANDED: ok:land:7a6f8c5f6:attempt-1. The release-tier litmus is green and the
+        credential helper is BYTE-UNCHANGED.
+
+        THE SPECIFIED REMEDY WAS REFUSED, AND THE REFUSAL IS THE POINT OF THIS ROW.
+        The shape handed to me was a test-only env seam the helper honours to allow a
+        named host. That is a TOKEN-REDIRECTION PATH: on a production host anyone who
+        can set an environment variable in that process points it at a host they
+        control and the helper hands over the live GitHub token from Vault. Logging
+        when honoured does not help — the log is written where the attacker already is.
+        The helpers own header forbids it in as many words: "a credential helper must
+        not rest on an assumption about its caller." An env-gated bypass rests on an
+        assumption about the ENVIRONMENT, which is the same class of assumption one
+        layer down, and 1118-bscs exists because the previous version rested on "the
+        relay wires this per-invocation for one specific remote".
+
+        macuahuitl withdrew the seam on reading that. Their remedy text stays on this
+        row as the shape that was refused and why, so a later reader sees the boundary
+        was considered and deliberately not reopened rather than finding a fixture that
+        mysteriously uses an allowlisted host. A security decision that leaves no trace
+        invites the next person to make the opposite one.
+
+        WHAT THE DEFECT ACTUALLY WAS: NOTHING NEEDED A FAKE HOSTNAME. The fixtures
+        transport is already stubbed — its fake `git` never dials, and $REAL_GIT does
+        only local init/mktree/commit-tree plus a `remote add` that opens no socket.
+        Cases 1-6 assert credential-protocol behaviour and that the password tracks the
+        current Vault Agent generation; neither depends on the host being unresolvable.
+        The fake upstream was belt-and-braces that nobody had re-examined after the pin
+        landed. Changing it to an allowlisted host makes the litmus pass with ZERO
+        production change.
+
+        COVERAGE WENT UP, NOT DOWN. The old fake host was ACCIDENTALLY exercising the
+        refusal. Case 7 makes it deliberate: the production helper, in situ, refuses
+        github.example.invalid, prints no `password=`, and names 1118-bscs in its
+        stderr. With a NEGATIVE CONTROL beside it — the same helper, same environment,
+        still serves github.com — because without it the arm passes for a helper broken
+        so badly it can never authenticate at all.
+
+        TEETH MEASURED, NOT ARGUED: neutered the host pin (`|*)` added to the allowlist
+        case) and re-ran; case 7 fails with "the production credential helper did not
+        refuse a non-allowlisted host". Restored; 7/7 green.
+
+        WHY IT STAYED RED SINCE THE PIN LANDED, which is the systemic half:
+        `./build.sh --check` runs no litmus (748-tkjx), and nothing in --check runs this
+        fixture. So the landing that caused the red could not see it, and only the
+        release-tier ci-full could — the same gap that makes "my gate was green"
+        evidence about the gates lane rather than about the change.
+
+        THE RULE, and it generalises past this file: NEVER WEAKEN A FAIL-CLOSED
+        CREDENTIAL GATE TO ACCOMMODATE A TEST WHEN THE TEST CAN BE MADE TO SATISFY THE
+        GATE. Check whether the test needs the thing it is asking for. This one did not
+        need a fake host at all, and nobody had checked — including me, until I read
+        the fixture rather than the packet.
+
+        CREDIT: macuahuitl triaged it correctly in every part that mattered —
+        deterministic not environmental, the fixtures fake upstream is exactly the
+        caller the pin exists to refuse, and nothing in --check runs it. Only the
+        remedy differed.

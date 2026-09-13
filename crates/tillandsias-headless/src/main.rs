@@ -5850,29 +5850,6 @@ pub(crate) fn sanitize_hostname(raw: &str) -> String {
     }
 }
 
-/// Root under which cloud checkouts land and local projects are enumerated.
-///
-/// Resolution order mirrors `vsock_server::in_vm_project_root` and the
-/// Linux tray's `~/src` convention:
-///   1. `TILLANDSIAS_IN_VM_PROJECT_ROOT` (operator override)
-///   2. `/home/forge/src` when it exists — the in-VM bind-mount convention
-///      (macOS virtio-fs / Windows drvfs mount of the host's `~/src`)
-///   3. `$HOME/src` — Linux native fallback
-///
-/// @trace spec:host-shell-architecture, spec:remote-projects
-#[allow(dead_code)]
-fn projects_root() -> PathBuf {
-    if let Ok(root) = std::env::var("TILLANDSIAS_IN_VM_PROJECT_ROOT") {
-        return PathBuf::from(root);
-    }
-    let convention = PathBuf::from("/home/forge/src");
-    if convention.is_dir() {
-        return convention;
-    }
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
-    PathBuf::from(home).join("src")
-}
-
 /// Ground-truth checkout validation (fresh-checkout invariant, 2026-07-20):
 /// a path counts as a valid checkout only when it is a git worktree whose
 /// HEAD resolves to a commit. A bare `path.exists()` gate accepted empty,

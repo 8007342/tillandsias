@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by the macuahuitl coordinator on 2026-09-13 from the first supervised
+# de-slop sweep (829-dkuc): the judge allowed five packets against six
+# retractions; this is packet 5.
+packets:
+  - packet_id: orchestrate-enclave-step-5-forge-launch-is-nested-inside-a-never-taken-status-check-conditional-and-unnesting-it-needs-a-fixture-first
+    order: 1170-e5im
+    status: ready
+    kind: bugfix
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [deslop, detector, tooling, ci]
+    estimated_hours: 3
+    parent_order: 829-dkuc
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable IS the fixture. Future litmus scripts/test-orchestrate-enclave.sh; the claimer writes it FIRST, failing (the forge podman run is not reached with the variable unset), then lands the real de-nesting diff; FAILS pre-fix: shell-1 measured the detector at dead=29 with TILLANDSIAS_STATUS_CHECK listed (its own archetype, per the detector's comment block) and confirmed no scripts/test-orchestrate-enclave.sh exists in the tree; the only post-mutation evidence obtainable was `bash -n` + detector grep 1->0, which is silent about whether the forge launch now runs. The prior ledger finding (plan/loop_status.d/20260823t094115z-368...lenovinha) names the same unreachability."
+    owned_files:
+      - scripts/orchestrate-enclave.sh
+      - scripts/test-orchestrate-enclave.sh
+    title: |
+      orchestrate-enclave Step 5: the forge launch is nested inside a never-taken conditional, and unnesting it needs a fixture first
+    context: |
+      This is the sweep's one behavioural finding that a deletion cannot close. Removing the dead TILLANDSIAS_STATUS_CHECK guard is not a comment edit: the guard's outer 'if' wraps the real interactive 'podman run', so the fix is a 100+ line deletion plus a de-indent of live code in a script with no test at all. It needs scripts/test-orchestrate-enclave.sh (assert the forge 'podman run' is reached with the variable unset) written and failing first, then a real diff, not a prose-elided one.
+
+      Found by the first supervised de-slop sweep (829-dkuc) on macuahuitl,
+      2026-09-13: 29 dead-env-branch findings examined by eleven pairing
+      agents in isolated worktrees, each constructing and EXECUTING a
+      (mutation, predicted-observable) pair; six confirmed deletions, six
+      refutations (all detector blind spots), fifteen downgrades, five
+      packets. The refutations that motivate this row are quoted in the
+      sweep record and the drill.
+    exit_criteria:
+      - 'the pre-fix result named in the closure no longer reproduces (pre-fix result: FAILS as measured by the sweep)'
+      - 'NEGATIVE CONTROL: the detector still reports a genuinely dead variable (a read with no assignment, no document, no default) as dead'
+      - 'scripts/check-dead-env-branches.sh --self-test carries an arm for this shape'
+    events:
+      - type: filed
+        ts: "2026-09-13T19:09:26Z"
+        agent_id: "linux-macuahuitl-fable-20260913t190926z"
+        host: macuahuitl
+        summary: |
+          Filed by the coordinator from the sweep judge's allowance
+          (5 packets against 6 retractions).

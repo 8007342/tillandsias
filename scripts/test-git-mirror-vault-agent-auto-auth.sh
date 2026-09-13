@@ -141,7 +141,7 @@ case "${1:-}" in
     push)
         printf 'push %s\n' "$*" >> "$GIT_ARGV_LOG"
         credential="$(
-            printf 'protocol=https\nhost=github.example.invalid\n\n' \
+            printf 'protocol=https\nhost=github.com\n\n' \
                 | "$GIT_CONFIG_VALUE_1" get
         )"
         password="$(printf '%s\n' "$credential" | sed -n 's/^password=//p')"
@@ -171,7 +171,7 @@ export GIT_PASSWORD_LOG="$WORK/state/git-passwords"
 MIRROR="$WORK/mirror.git"
 "$REAL_GIT" init -q --bare "$MIRROR"
 "$REAL_GIT" -C "$MIRROR" remote add origin \
-    https://github.example.invalid/org/repo.git
+    https://github.com/org/repo.git
 EMPTY_TREE="$("$REAL_GIT" -C "$MIRROR" mktree </dev/null)"
 DUMMY_SHA="$(
     GIT_AUTHOR_NAME=fixture GIT_AUTHOR_EMAIL=fixture@example.invalid \
@@ -302,5 +302,47 @@ START_LINE="$(
 grep -Fq 'refusing a credentialed mirror' "$ENTRYPOINT" \
     || fail "an expected-but-missing AppRole mount must fail loud"
 echo "case 6 ok: shutdown/EXIT quiesces Agent before revoke and preserves fail-loud startup"
+
+# CASE 7 — ORDER 1161-42pc. THE HOST PIN IS EXERCISED IN SITU, AGAINST THE
+# PRODUCTION HELPER, AND IT MUST STILL REFUSE.
+#
+# This fixture used to relay to `github.example.invalid`, and when the
+# 1118-bscs host pin landed the helper correctly refused it — so every
+# release-tier cut has been red on this litmus since, on a fixture whose fake
+# upstream is exactly the caller the pin exists to refuse. Nothing in
+# `./build.sh --check` runs this file, which is why it stayed red rather than
+# being caught at the landing that caused it.
+#
+# THE FIX WAS TO THE FIXTURE, NOT THE HELPER, AND DELIBERATELY SO. The obvious
+# alternative — a test-only env seam the helper honours to allow a named host —
+# would put a token-redirection path into a script whose entire purpose is to
+# refuse one, gated on an environment variable. On a production host, setting
+# it would hand a live GitHub token to whatever host it named. The helper's own
+# header already rules this out: "a credential helper must not rest on an
+# assumption about its caller", and an env-gated bypass rests on an assumption
+# about the environment. Nothing here needed a fake HOSTNAME: the transport is
+# already stubbed, no request leaves the process, and the cases above assert
+# credential-protocol behaviour and the Vault generation, neither of which
+# depends on the host being unresolvable.
+#
+# So the fixture asks with an allowlisted host, and this case adds the arm the
+# old fake host was accidentally providing: a NON-allowlisted host is refused
+# by the production helper, with the token never printed. That is strictly more
+# coverage than before and costs the helper nothing.
+cred_out="$(printf 'protocol=https\nhost=github.example.invalid\n\n' \
+    | "$HELPER" get 2>"$WORK/state/pin-stderr")" && pin_rc=0 || pin_rc=$?
+[ "${pin_rc:-0}" -ne 0 ] \
+    || fail "the production credential helper did not refuse a non-allowlisted host"
+printf '%s' "$cred_out" | grep -q 'password=' \
+    && fail "the helper printed a password for a non-allowlisted host"
+grep -q '1118-bscs' "$WORK/state/pin-stderr" \
+    || fail "the refusal did not name 1118-bscs"
+# NEGATIVE CONTROL: the same helper, same environment, an ALLOWLISTED host,
+# still answers. Without this the arm above passes for a helper that refuses
+# everything — including one broken so badly it can never authenticate.
+printf 'protocol=https\nhost=github.com\n\n' | "$HELPER" get \
+    | grep -q '^password=' \
+    || fail "the helper refused an allowlisted host — the pin arm above would be vacuous"
+echo "case 7 ok: the host pin refuses a non-allowlisted host in situ, and still serves an allowlisted one"
 
 echo "PASS: git-mirror Vault Agent auto-auth survives max_ttl fixture (order 424)"

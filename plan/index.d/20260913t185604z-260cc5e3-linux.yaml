@@ -1,0 +1,69 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: check-capability-row-returns-before-the-expiry-check-when-the-live-fold-is-unavailable-so-a-genuinely-expired-row-reads-green-on-any-host-that-cannot-run-a-probe
+    event:
+      type: progress
+      ts: "2026-09-13T18:56:04Z"
+      agent_id: linux-lenovinha-opus5-20260913t185604z
+      host: linux
+      summary: |
+        IMPLEMENTED. The age check now runs BEFORE the live-fold short-circuit, so a
+        host whose probe cannot run still gets an honest answer about how old its row is.
+
+        THE DESIGN PROBLEM, which the filing did not anticipate: the own-locus keying
+        from 1130-8zxn reads the locus off the LIVE fold, and on this path there IS no
+        live fold. Guessing a locus would be the 1130-8zxn defect reintroduced as a
+        fallback. So the check takes the MOST FAVOURABLE READING — the newest ts across
+        every row the host holds, at any locus. If even that one is expired then every
+        row is, so the verdict holds whichever locus turns out to be this hosts. It
+        cannot false-positive on a multi-locus host, and the age it reports is the
+        smallest defensible number rather than the largest available one.
+
+        FOUR ARMS, 19/19. Arm 5 already covered "an unrunnable probe never manufactures
+        drift" and passed throughout — WITH A FRESH ROW. Nobody had asked what that
+        path does with a STALE one. Arms 16-19 hold LIVE_UNRUNNABLE fixed and vary only
+        the age, the one variable that used to make no difference at all.
+
+        TEETH MEASURED THREE WAYS, because a pre-fix run proves nothing about a
+        NEGATIVE control — arms 17-19 assert unchanged behaviour, so they pass pre-fix
+        trivially. Controls have to be mutated against, not merely run:
+
+          1  PRE-FIX BODY (age test removed)
+             arm 16 FAILS: expected stale:...:age=694800s, got
+             ok:capability-row-reported rc=0 — the defect, reproduced.
+             Arms 17-19 pass, correctly: they describe behaviour this packet preserves.
+
+          2  MUTATION newest -> oldest
+             arm 19 FAILS: an old sibling row expires a host whose own newest row is
+             fresh. That is the multi-locus false positive the "most favourable
+             reading" exists to avoid, and this proves the arm bites.
+
+          3  MUTATION threshold -> always expire
+             arms 5, 17 and 18 ALL FAIL. The overreach controls bite, and arm 5 —
+             889-ewvt, written months ago — catches it too, which is worth recording:
+             the old control still does real work rather than merely existing.
+
+        SCOPE HELD. `ok:capability-row-reported` still means "a row exists, unverified"
+        and was NOT widened into a claim that a comparison happened. This packet added
+        an AGE answer to that path, never a TRUTH one — arm 18 is there specifically
+        because the two now live on one code path and a later edit could collapse them.
+
+        A ROW WITH NO `ts:` STILL DOES NOT EXPIRE, and this is verified by accident and
+        worth keeping: the 859-b2zc identity wrapper runs every case with
+        LIVE_UNRUNNABLE=1 — the exact path I changed — against a canned matrix row
+        carrying no ts field. 9/9 unchanged. An absent ts cannot be aged, and the
+        guard treats it that way.
+
+        Live on lenovinha (probe runnable, path untouched): ok:capability-row-current.
+
+        NO NEW GATE STEP. The fixture is already wired at build.sh:2298, so arms 16-19
+        run on every host's --check for free — and no gate-step prefix to collide with,
+        which is the fifth such collision avoided rather than survived.
