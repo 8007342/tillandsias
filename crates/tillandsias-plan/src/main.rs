@@ -2502,10 +2502,16 @@ fn carry_forward_gaps(doc: &serde_yaml::Value) -> Vec<String> {
         }
     }
 
-    // The LWW channel. `field:` is ANY field, not just status — the key is
-    // misnamed and plan/index.d/README.md says so.
-    if let Some(sts) = doc.get("status").and_then(Value::as_sequence) {
-        for s in sts {
+    // The LWW channel, read through the one function that knows how many
+    // spellings it has (1158-y3ad). `field:` is ANY field, not just status —
+    // the key is misnamed and plan/index.d/README.md says so, and the comment
+    // saying so used to sit directly above a read of the misnamed spelling
+    // alone. A `fields:`-spelled next_action write was then invisible here,
+    // which does NOT silence this pass — it makes it FIRE, because this scan
+    // looks for the ABSENCE of a carry-forward. The advisory named a packet
+    // whose next_action had in fact been set. (yolanda, 2026-09-13.)
+    for s in tillandsias_plan::fragments::lww_entries(doc) {
+        {
             let Some(pid) = text(s, "packet_id") else {
                 continue;
             };
@@ -5153,9 +5159,12 @@ fn main() {
             };
             let mut offenders: Vec<String> = Vec::new();
             let mut checked = 0u32;
-            // status: LWW closures
-            if let Some(us) = doc.get("status").and_then(serde_yaml::Value::as_sequence) {
-                for u in us {
+            // The LWW closures, both spellings (1158-y3ad). This scan builds
+            // an OFFENDERS list, so a write it cannot see is never an offender
+            // and the guard stays green — it fails OPEN, the opposite symptom
+            // from carry_forward_gaps above and the same defect.
+            {
+                for u in tillandsias_plan::fragments::lww_entries(&doc) {
                     let field = u
                         .get("field")
                         .and_then(serde_yaml::Value::as_str)
@@ -5351,9 +5360,10 @@ fn main() {
                         }
                     }
                 }
-                // A set-field fragment may reassign the closure text too.
-                if let Some(us) = doc.get("status").and_then(serde_yaml::Value::as_sequence) {
-                    for u in us {
+                // A set-field fragment may reassign the closure text too —
+                // under either spelling (1158-y3ad).
+                {
+                    for u in tillandsias_plan::fragments::lww_entries(&doc) {
                         if u.get("field").and_then(serde_yaml::Value::as_str)
                             == Some("verifiable_closure")
                         {
