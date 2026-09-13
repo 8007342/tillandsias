@@ -1,0 +1,77 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: the-cheatsheet-tier-check-protects-neither-windows-host-by-two-independent-routes
+    field: status
+    value: completed
+    host: yolanda
+    ts: "2026-09-13T09:20:00Z"
+    reason: >
+      Stale row. The single remaining action in the folded next_action — the
+      locus-native reorder in resolve_target_binary — landed as 8c7d1966f and is
+      on trunk. Verified by EXECUTION on the host the packet is about, in both
+      of its loci, against current trunk. No build was needed.
+
+events:
+  - packet_id: the-cheatsheet-tier-check-protects-neither-windows-host-by-two-independent-routes
+    event:
+      type: verified
+      host: yolanda
+      agent: windows-yolanda-claude-20260913t082232z
+      ts: "2026-09-13T09:20:00Z"
+      evidence_refs:
+        - "8c7d1966f fix(1142-wn2k,1140-d6ni): locus-native artefact first in resolve_target_binary too — on origin/linux-next and in this tree; the loop now reads `for candidate in \"$dir/$name\" \"$dir/$name.exe\"`, extensionless before .exe"
+        - "resolver, Windows locus (Git Bash): resolve_target_binary tillandsias-policy debug -> target/debug/tillandsias-policy.exe"
+        - "resolver, Linux locus (tillandsias-build distro): same call -> target/debug/tillandsias-policy (the ELF)"
+        - "check-cheatsheet-tiers.sh in the distro — the regime where esme's false ERROR occurred — DISTRO_RC=0, 'OK: all tier checks passed.'"
+        - "check-cheatsheet-tiers.sh on the Windows side: WINDOWS_SIDE_RC=0, same verdict"
+      summary: >
+        VERIFIED BY EXECUTION, NOT BY READING THE COMMIT SUBJECT. macuahuitl's
+        stale-row pass flagged this as a candidate — a landed commit citing the
+        order while the row still folds ready — and asked for each criterion to
+        be checked on a host the packet is about. yolanda is one of the two.
+
+        THE REORDER IS IN AND BEHAVES AS DESIGNED ON BOTH LOCI. The run-don't-stat
+        loop returns the locus-native artefact: the ELF cannot execute under Git
+        Bash so the .exe is returned there, and inside the distro the ELF is
+        tried first and runs, so the stale .exe is never reached. That is the
+        property the packet needed — not "prefer the ELF" but "each locus gets
+        its own" — and it is now measured on a real two-locus host rather than
+        argued.
+
+        THE CHECK PASSES IN BOTH REGIMES, rc=0 each. The distro run is the one
+        that matters: it is the regime where esme's gate spent 67.5 minutes to
+        reach a false `ERROR: cheatsheets/ directory not found at
+        /mnt/c/...\\cheatsheets` — POSIX root, backslash join, a Windows binary
+        handed a Linux path. That cannot recur now because the Windows binary is
+        no longer what a distro-side caller resolves.
+      note: >
+        WHAT IS LEFT, for a distrustful stranger: nothing blocking, and one
+        demoted question.
+
+        The row's TITLE still says "protects neither Windows host by two
+        independent routes", and that title is now wrong by the packet's own
+        amendments. Route B was MINE and I retracted it: I read a FIXTURE's
+        assertion text — scripts/test-cycle-preflight-cargo-resolution.sh
+        quoting the value it had just asserted on — as my host's production
+        verdict. My real tier step, 190 lines further down the same gate log,
+        had passed with 228 cheatsheets validated. There was never a second
+        route. esme amended title, next_action and a note event accordingly
+        (7c07cbbcf); the immutable base fragment keeps the original title, which
+        is why the stale-row scan surfaced it under a description nobody holds
+        any more.
+
+        The demoted question is the cargo-absent grammar: whether
+        `skip:cheatsheet-tiers:cargo-absent` reporting under an `ok:` line is
+        the right shape. It was motivated by my retracted route and survives as
+        a design question with NO observed failure behind it. It does not block
+        this row and should not be inherited as work; if anyone wants it, it
+        wants its own row and a reason.
+
+        ALSO RECORDED, since it was the packet's other half and is settled:
+        esme's 4050s versus yolanda's ~600s was never a host-tier comparison. It
+        measured esme's in-distro launch, which skips with-wsl2-builder.sh's
+        re-exec and therefore builds into the repo's own ./target on drvfs, against
+        my sanctioned path with CARGO_TARGET_DIR on ext4. One cause, both of
+        that packet's symptoms — the drvfs slowness and the mixed-artefact
+        directory that made the stale .exe reachable at all. I carried that ratio
+        to the coordinator twice as a tier argument before it was corrected.
