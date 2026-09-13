@@ -3568,3 +3568,37 @@ stories.
   and closing a multi_cycle packet must remove its plan/long-running.md row
   in the same commit. Landed ok:land:b902c1a64 attempt 2. Stale-binary row
   filed as 1172-dyvd (p1, yolanda, before 1171-ccf2).
+- **The coordinator's boundary read its own claim fragments as startup
+  dirt** (829-dkuc run): the claim set-field and claim event ran seconds
+  BEFORE the boundary snapshot in the same command, so the snapshot recorded
+  two untracked fragments as pre-existing dirt to preserve; the run then
+  committed and landed them, and the guard refused `worktree differs from
+  startup boundary` at finalisation — yoga's shape from the afternoon
+  (their own test mutation recorded as startup dirt), from the other
+  direction. Nothing lost: the files are tracked and on trunk. Rule: take
+  the boundary before the first ledger write of the cycle, never after it.
+  Cost of the 829-dkuc run, measured: 12 agents (11 sonnet, 1 opus),
+  1,024,451 sub-agent tokens, 918 s fan-out, ~44 min end to end including
+  four land launches (one skill-link rule, one self-kill, one long-running
+  view rule, one push race), ~140k coordinator main-context; emitted via
+  --emit-tokens, token_max now names it.
+- **900-z3kv COMPLETED** (yoga, code 1e8536e01, closure ok:land:9c0a5343b,
+  attested a233b6e0f): the Linux clean room is credential-cold and the
+  runbook's claim is true for the first time since at least 2026-06. The
+  operator's reasoning is on the row in their words, and it reframes the
+  packet: the clearer does not make the reset destructive enough, it makes
+  the reset ACTUALLY BE the baseline the platform already assumed; the
+  four legs that reported a clean room that was not one were measuring
+  that gap. THE GUARD CAUGHT A DESTROY PATH THE AUTHOR HAD MISSED: yoga
+  enumerated skills/ and scripts/ by hand and found one
+  (scripts/e2e-step2-linux.sh); the guard's new Linux arm found
+  run_smoke.sh at the repository ROOT, outside every directory searched —
+  written to prevent a future second copy, it found a present one on its
+  first run, 803-49re's own argument ("a second copy is where the fix does
+  not go") arriving against the person who had just quoted it. The arm
+  matches EXECUTION, not mention (of the .sh files carrying the string,
+  one executed it and four named it in comments, including
+  selective-tillandsias-reset.sh which exists to AVOID a full reset);
+  pinned both ways by measurement. Both runbooks now make one claim, and
+  both destroy paths tee probe-credential-cold-state.sh into the findings
+  so a run records which state produced it.

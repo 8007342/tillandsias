@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: check-dead-env-branches-cannot-see-rust-doc-comments-or-wrapper-setters-so-a-documented-and-tested-variable-reads-as-dead
+    event:
+      type: claim
+      ts: "2026-09-13T19:40:11Z"
+      agent_id: linux-macuahuitl-fable-20260913t194011z
+      host: macuahuitl
+      summary: |
+        Claimed by the macuahuitl meta-orchestration cycle (2026-09-13T19:40:11Z): the four detector blind-spot rows as one story for a sonnet sub-agent (same file, same self-test); 1164-cftu by the coordinator.

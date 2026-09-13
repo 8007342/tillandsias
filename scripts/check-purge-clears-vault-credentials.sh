@@ -55,6 +55,33 @@ while IFS= read -r f; do
     grep -qF -- "$CLEARER" "$f" || violations+=("$f")
 done < <(git ls-files '*.ps1')
 
+# ── THE LINUX ARM (900-z3kv) ────────────────────────────────────────────────
+# The same defect one platform over, and filed for the same reason: the Linux
+# clearing landed in scripts/e2e-step2-linux.sh, and a SECOND path that resets
+# the store without calling it is where the fix would not go. 803-49re built a
+# guard rather than making a third careful edit; this is that guard learning the
+# other platform rather than a second guard learning it separately.
+#
+# EXECUTES, NOT MENTIONS. The destroying act must be RUN, not named: a comment
+# explaining why a script avoids `podman system reset` is not a purge path, and
+# counting it would make three files violate for discussing the thing correctly.
+# Measured while writing this: of five .sh files containing the string, exactly
+# ONE executes it — the other four name it in comments.
+LINUX_CLEARER='clear-vault-host-credentials.sh'
+LINUX_DESTROYS='podman[[:space:]]+system[[:space:]]+reset'
+
+while IFS= read -r f; do
+    [ -f "$f" ] || continue
+    grep -qE "^[^#]*${LINUX_DESTROYS}" "$f" || continue
+    scanned=$((scanned + 1))
+    case "$f" in
+        scripts/clear-vault-host-credentials.sh) continue ;;
+        # The guard and its own fixture name both strings by construction.
+        scripts/check-purge-clears-vault-credentials.sh|scripts/test-*) continue ;;
+    esac
+    grep -qF -- "$LINUX_CLEARER" "$f" || violations+=("$f")
+done < <(git ls-files '*.sh')
+
 if [ ${#violations[@]} -gt 0 ]; then
     echo "violation:purge-without-credential-clear:$(
         IFS=,
