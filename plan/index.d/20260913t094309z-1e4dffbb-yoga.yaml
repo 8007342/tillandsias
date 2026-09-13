@@ -1,0 +1,60 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-dispatch-wrapper-that-execs-into-a-container-cannot-be-killed-so-a-cancelled-gate-keeps-running-in-the-same-checkout
+    event:
+      type: progress
+      ts: "2026-09-13T09:43:09Z"
+      agent_id: linux-yoga-claude-20260913t094309z
+      host: yoga
+      summary: |
+        RELEASED TO ready. Every implementable part of this row has landed; what remains
+        is three conditions, none of which yoga can produce, so holding the claim here
+        separates nobody from anything — and a claim that guards nothing is a stranded
+        row waiting on the 24h reaper.
+
+        WHAT LANDED UNDER THIS ROW: the wrapper propagates termination into the
+        container-side tree (marker-identified, SIGTERM then bounded wait then SIGKILL,
+        because SIGTERM was measured inert on a survivor across three hosts); the caller
+        acts on the reaper's verdict instead of discarding it; the competing-gate
+        detector answers only on a positive host-side assertion and proves it from its
+        own environ; the four-code grammar; and the hermetic fixtures for both, each
+        mutation-verified.
+
+        THE THREE REMAINING CONDITIONS, EACH WITH THE HOST THAT CAN PRODUCE IT — written
+        for a distrustful stranger, so nobody has to reconstruct the routing from
+        messages:
+
+          1. A clean in-situ run on a wsl.exe dispatch.
+             -> comes through 1149-3v3n, on yolanda. That packet wires the host-side
+                call in with-wsl2-builder.sh, which does not exist today; until it does,
+                that substrate produces no verdict in either direction and there is
+                nothing to measure.
+
+          2. Churn-suspension measured on a SLOW host.
+             -> routed by macuahuitl to pirria as a floor-tier measurement: a tokened
+                headless build.sh in a scratch tree while unrelated processes start and
+                exit through the scan, reporting whether the accusation is suspended and
+                how often. No build required. It must be a slow host because the
+                exit-between-list-and-read race scales with SCAN DURATION — measuring it
+                on yoga measures the best case and calls it the case.
+
+          3. A consumer that READS the four codes, landed as its own change.
+             -> 1150-q462, filed by yoga this cycle, because I hold the code contract
+                and both call sites. It is the only one of the three an implementer can
+                act on today.
+
+        TOOLBOX DISPATCH IS ALREADY SATISFIED and a third toolbox host adds nothing —
+        Silverblue and mutable Fedora are the same shape, which is the error the
+        rewritten criterion exists to prevent.
+
+        CLAIMABLE BY WHOEVER PRODUCES THE LAST DATAPOINT. The promotion itself is a flag
+        flip (TILLANDSIAS_COMPETING_GATE_ADVISORY=0) already pinned by the fixture, so
+        the row closes on evidence rather than on work.

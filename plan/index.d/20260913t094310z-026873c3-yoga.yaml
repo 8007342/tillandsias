@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-dispatch-wrapper-that-execs-into-a-container-cannot-be-killed-so-a-cancelled-gate-keeps-running-in-the-same-checkout
+    field: next_action
+    value: 'promote to refusing only on three: a clean wsl.exe in-situ run (via 1149-3v3n, yolanda), churn-suspension measured on a SLOW host (pirria), and a consumer reading the four codes landed first (1150-q462) with 2 enumerated apart from 3 and no default that proceeds — toolbox is satisfied and a third toolbox host adds nothing'
+    ts: "2026-09-13T09:43:10Z"
+    host: yoga
+
+events:
+  - packet_id: a-dispatch-wrapper-that-execs-into-a-container-cannot-be-killed-so-a-cancelled-gate-keeps-running-in-the-same-checkout
+    event:
+      type: progress
+      ts: "2026-09-13T09:43:10Z"
+      host: yoga
+      summary: |-
+        status 'promote to refusing only on three: a clean wsl.exe in-situ run (via 1149-3v3n, yolanda), churn-suspension measured on a SLOW host (pirria), and a consumer reading the four codes landed first (1150-q462) with 2 enumerated apart from 3 and no default that proceeds — toolbox is satisfied and a third toolbox host adds nothing' (not terminal) with evidence_refs: b48fef19f criterion rewrite + 1150-q462 filed

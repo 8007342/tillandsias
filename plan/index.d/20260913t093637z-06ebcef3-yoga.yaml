@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-dispatch-wrapper-that-execs-into-a-container-cannot-be-killed-so-a-cancelled-gate-keeps-running-in-the-same-checkout
+    field: next_action
+    value: promote only after a clean in-situ run on a none-dispatch AND a wsl.exe-dispatch host (toolbox is satisfied; a third toolbox host adds nothing), churn-suspension measured on a SLOW host, and a consumer that reads the codes landed first with 2 enumerated apart from 3 and no default that proceeds
+    ts: "2026-09-13T09:36:37Z"
+    host: yoga
+
+events:
+  - packet_id: a-dispatch-wrapper-that-execs-into-a-container-cannot-be-killed-so-a-cancelled-gate-keeps-running-in-the-same-checkout
+    event:
+      type: progress
+      ts: "2026-09-13T09:36:37Z"
+      host: yoga
+      summary: |-
+        status 'promote only after a clean in-situ run on a none-dispatch AND a wsl.exe-dispatch host (toolbox is satisfied; a third toolbox host adds nothing), churn-suspension measured on a SLOW host, and a consumer that reads the codes landed first with 2 enumerated apart from 3 and no default that proceeds' (not terminal) with evidence_refs: criterion rewritten on dispatch shape; MSYS closed as a stated limit

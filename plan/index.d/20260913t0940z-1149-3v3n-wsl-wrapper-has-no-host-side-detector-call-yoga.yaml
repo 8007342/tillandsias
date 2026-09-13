@@ -1,0 +1,91 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-wsl-dispatch-wrapper-makes-no-host-side-competing-gate-call-so-that-substrate-gets-no-answer
+    order: 1149-3v3n
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: windows
+    owner_host: any
+    depends_on: []
+    capability_tags: [ci, windows, wsl, fail-loud]
+    estimated_hours: 1
+    unscoreable: unpinnable-until-the-guard-exists
+    # The deliverable is a CALL SITE, not a check: scripts/check-no-competing-gate.sh
+    # and its fixture already exist and are gate-bound on trunk (1141-vf9w). What
+    # pins this is an in-situ reading from a wsl.exe-dispatch host, which no
+    # hermetic fixture can produce — see the note under exit criteria.
+    verifiable_closure: |
+      On a wsl.exe-dispatch host, a gate log contains BOTH
+      `ok:no-competing-gate` (or a genuine competitor report) from a host-side
+      call, and the in-distro call's `could-not-run` — demonstrated by
+      `grep -n 'competing-gate' <gatelog>`.
+    owned_files:
+      - scripts/with-wsl2-builder.sh
+    title: |
+      scripts/with-wsl2-builder.sh makes no host-side check-no-competing-gate call, so on a wsl.exe dispatch the only invocation is the in-distro one, which by design refuses — that substrate gets no answer at all
+    context: |
+      SPLIT OUT OF 1141-vf9w so the Windows lane has a specification rather than
+      a favour. Measured by yolanda on trunk:
+        scripts/with-wsl2-builder.sh   grep 'check-no-competing' -> NONE
+        scripts/with-tillandsias-builder.sh                      -> present
+      So the toolbox wrapper asserts host-side before dispatch and the WSL
+      wrapper does not. build.sh's own fast-refusal call still runs on a WSL
+      host, but by then we are INSIDE the distro, where the check refuses
+      without a host-side assertion by design (the inversion). Net effect: the
+      wsl.exe dispatch shape produces no verdict in either direction.
+
+      THAT IS HONEST, NOT BROKEN, which is why this is p2 and not p1 — silence
+      is the designed outcome for an unflagged caller, and it is strictly better
+      than the false accusation that substrate produced before the inversion.
+      But it is also why 1141-vf9w cannot promote: its criterion needs a clean
+      in-situ run on a wsl.exe dispatch, and there is no call there to produce
+      one.
+
+      THE FLAG CONTRACT, stated here so the implementer does not reverse-engineer
+      it from a diff. Call the checker as
+
+          bash <repo>/scripts/check-no-competing-gate.sh --host-side "$$"
+
+      from the HOST-SIDE shell, before the dispatch, best-effort (`|| true`) —
+      it must never be the reason a build does not start. Two conditions the
+      call site must satisfy:
+        1. It runs on the host side, BEFORE re-execing into the distro. From
+           inside, a native Windows process has no /proc entry at all
+           (1137-da83: `kill -0 <winpid>` answers "No such process"), so the
+           check cannot see the wrapper and will say so.
+        2. TILLANDSIAS_WRAPPER_TOKEN must already be EXPORTED in that shell. The
+           checker verifies its OWN environ carries the token — it is a child
+           exec'd after the export, and `/proc/<pid>/environ` is the exec-time
+           environment, so a runtime export is invisible in the exporting shell
+           but present in its children. If the token is not exported the checker
+           answers `refused:competing-gate:caller-contract` (exit 2), which
+           means FIX THE CALL SITE and never "this host cannot answer".
+
+      EXIT GRAMMAR the call site may rely on: 0 no competitor, 1 a competitor
+      reported, 2 caller-contract (fix the call site), 3 could-not-run. Nothing
+      on trunk reads these yet; both existing call sites discard with
+      `|| true`.
+    exit_criteria:
+      - "with-wsl2-builder.sh calls the checker with --host-side $$ on the HOST side before the dispatch, best-effort. Pre-fix result: FAILS — grep 'check-no-competing' over that file returns nothing on trunk (measured by yolanda)."
+      - "The token is exported in that shell BEFORE the call. If it is not, the checker answers exit 2 caller-contract; an implementer who wires the call without the export will see that verdict and must fix the export rather than the checker."
+      - "IN-SITU READING, which is the point of the packet: on a wsl.exe-dispatch host, `grep -n 'competing-gate' <gatelog>` returns the host-side line AND the in-distro could-not-run. A hermetic fixture cannot produce this — the substrate is the subject — so the closure is a quoted gate log, not a test."
+      - "NEGATIVE CONTROL: the call must not make a WSL gate refuse. It is best-effort and advisory; a build that fails because the competing-gate check spoke is a regression, not a detection."
+    events:
+      - type: filed
+        ts: "2026-09-13T09:40:00Z"
+        agent_id: "linux-yoga-claude-20260913t094000z"
+        host: yoga
+        summary: |
+          Filed by yoga, owner of 1141-vf9w, for the Windows lane. yolanda
+          measured the absence and declined to wire it before the inversion
+          defined what a host-side caller asserts — correctly, since wiring it
+          earlier would have meant guessing the flag's name and semantics. The
+          inversion has landed, so the contract above is now a specification
+          rather than an intention.
+
+          Deliberately NOT done from yoga: with-wsl2-builder.sh is Windows-lane
+          scope and I have no wsl.exe dispatch to verify against, so anything I
+          wrote there would be unexercised code in someone else's file.
