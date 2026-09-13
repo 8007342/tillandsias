@@ -1166,3 +1166,33 @@ stories.
   visible only because 1137-da83 made the lock real; long gates on any host
   launch DETACHED from the harness (nohup/setsid to a log; yolanda verified
   the gate alive in a later call), since the harness reaps its own tasks.
+- **SECOND CORRECTION: the 4050 s gate and the false ERROR had one cause,
+  and it was not the tier** (esme): launching `./build.sh --check` from
+  INSIDE the WSL distro (to survive the harness's memory reaps) made
+  scripts/with-wsl2-builder.sh see an already-Linux shell, skip its re-exec,
+  and never export CARGO_TARGET_DIR to the distro-local ext4 target dir — so
+  the gate compiled against ./target on drvfs (6.75x) and
+  resolve_target_binary found the stale tillandsias-policy.exe that the
+  sanctioned target dir never holds (62 occurrences of target/debug in
+  esme's log, zero of tillandsias-wsl2-target; yolanda's log the reverse).
+  The reorder is right but reachable only when CARGO_TARGET_DIR points at a
+  mixed-artefact directory, which the sanctioned path avoids by construction
+  (1140-d6ni's third amendment). Deleting the .exe did not persist — cargo
+  re-created the hardlink from target/debug/deps. Rules for both Windows
+  hosts: never launch a gate by hand inside the distro; detach from Git Bash
+  (nohup … & disown, verified alive in a later call) so the re-exec still
+  happens. "esmeraldinha is not slow, its filesystem is" — and this time the
+  filesystem was chosen by a bypass.
+- **A host landing CODE is starved by plan-only churn** (lenovinha, measured):
+  1119-w2rj finished, green (536 tests, criterion 4 executed against the
+  real image with a 0755-refuses/0777-succeeds control), exhausted four land
+  attempts — an 8-minute full gate racing a 5-10 minute trunk cadence, six of
+  the twelve preceding commits being the coordinator's own plan-only drill
+  records landed one per message. The cheap lane sets the cadence and the
+  expensive lane pays it. Policy: the coordinator batches plan-only records
+  into ONE land per coordination pass (this bullet waits for the next one);
+  every host batches plan-only pushes into its cycle's land; and the land
+  tool must make a re-integrate that brought only plan/ paths cost the
+  partial memo rather than a full gate — lenovinha files and fixes it, and
+  takes 1083-gzqj next (1140-5bre does not close its ARM 2: the baseline on
+  the live ledger was kept one layer down).
