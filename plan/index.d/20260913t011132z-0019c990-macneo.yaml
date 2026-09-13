@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-ledger-has-more-than-one-place-to-look-and-every-reader-looks-in-one-so-five-writes-landed-somewhere-nothing-consults
+    field: next_action
+    value: 'REMAINS — ONE ITEM ONLY. Item 1 (salvage ref housekeeping) is DONE: origin/salvage/unknown/20260910-1080-4deb-arm1 deleted by macneo and confirmed absent, under the ratified per-line criterion (every tip-only line accounted for as superseded-by-a-named-successor or present-under-a-rename, accounting on the row before the delete, re-verified against origin/linux-next e8abb32a2 immediately prior). Byte-identity is retired as a salvage-deletion gate: unpassable by construction for any file trunk evolved after the salvage. Note for the next host doing salvage housekeeping: pre-push refuses these deletions under 874-w2gc and offers both TILLANDSIAS_SALVAGE_DELETE_OK=1 and a generic --no-verify — use the specific affordance; --no-verify would discard the main-branch, stale-base-revert and linux-next-merged checks that pass alongside it. 2. SWEEP/ROLLUP is the only remaining work and is claimable: promote the 46-hit live-lane list into the fleet queue so a host budget re-statuses or completes them; readers fire on ^((fix|close|feat)\(ORDER\)) and the sweep judges prominence per packet.'
+    ts: "2026-09-13T01:11:32Z"
+    host: macneo
+
+events:
+  - packet_id: the-ledger-has-more-than-one-place-to-look-and-every-reader-looks-in-one-so-five-writes-landed-somewhere-nothing-consults
+    event:
+      type: note
+      ts: "2026-09-13T01:11:32Z"
+      host: macneo
+      summary: |-
+        item 1 closed: salvage ref deleted under the ratified criterion; only the sweep rollup remains
