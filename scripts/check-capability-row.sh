@@ -217,8 +217,8 @@ live_matrix() {
 # The schedulable triple set for one host, as a stable `+`-joined string (`-`
 # when the host schedules nothing). Sorted, so set equality is string equality.
 row_schedulable() {
-    _rs_set="$(printf '%s\n' "$1" | awk -v h="host:$2" '
-        index($0, h "\t") == 1 { inrow = 1; next }
+    _rs_set="$(printf '%s\n' "$1" | awk -v h="host:$2\tlocus:$3\t" '
+        index($0, h) == 1 { inrow = 1; next }
         /^host:/ { inrow = 0 }
         inrow && /^  schedulable: / {
             sub(/^  schedulable: /, "");
@@ -228,9 +228,38 @@ row_schedulable() {
 }
 
 row_ts() {
-    printf '%s\n' "$1" | awk -v h="host:$2" '
-        index($0, h "\t") == 1 {
+    printf '%s\n' "$1" | awk -v h="host:$2\tlocus:$3\t" '
+        index($0, h) == 1 {
             for (i = 1; i <= NF; i++) if ($i ~ /^ts:/) { sub(/^ts:/, "", $i); print $i; exit }
+        }' 2>/dev/null
+}
+
+# The host's OWN locus, READ FROM THE LIVE FOLD rather than re-derived here.
+#
+# Order 1130-8zxn. A host can hold SEVERAL rows in the matrix — the Windows
+# hosts each carry `locus:in-guest` (the WSL distro) and `locus:windows-host`
+# (the native side), published by two different probes about two different
+# machines that happen to share a node name. Every accessor above used to key
+# on `host:<h>` alone and take whichever row came first, which is whichever
+# locus sorts first. On yolanda that is `in-guest`, so a freshly published
+# `windows-host` row could never clear the verdict: the guard read the OTHER
+# row's ts and answered `stale:capability-row-expired:yolanda:age=682046s`
+# — 7.9 days, the age of a row the publishing host was not even writing. The
+# one action the verdict asks for could not change the verdict.
+#
+# WHY THE LIVE FOLD AND NOT A LOCAL DERIVATION. host-capability-probe.sh
+# already decides locus (:142-149 — TILLANDSIAS_HOST_KIND=forge -> in-guest,
+# host kind windows -> windows-host, else bare-metal) and stamps it on the row
+# it publishes. A second copy of that rule in this file is exactly the 704-zcgi
+# shape this script's own header warns about, and it would fail the same way
+# this bug does: grading a host against a locus it never writes. The live fold
+# is the probe answering the question itself, through the same
+# `capability-matrix` subcommand that folded the committed row — so the two
+# sides of every comparison below are keyed by construction.
+row_locus() {
+    printf '%s\n' "$1" | awk -v h="host:$2\t" '
+        index($0, h) == 1 {
+            for (i = 1; i <= NF; i++) if ($i ~ /^locus:/) { sub(/^locus:/, "", $i); print $i; exit }
         }' 2>/dev/null
 }
 
@@ -271,8 +300,34 @@ check() {
         return 0
     fi
 
-    committed_set="$(row_schedulable "$matrix" "$host")"
-    live_set="$(row_schedulable "$live" "$host")"
+    # 1130-8zxn. WHICH ROW is judged, decided before anything is judged.
+    locus="$(row_locus "$live" "$host")"
+    if [ -z "$locus" ]; then
+        # Report, never guess. A live fold that carries no locus for this host
+        # is an instrument fault, and picking an arbitrary committed row to
+        # compare against would be this packet's own defect reintroduced as a
+        # fallback.
+        echo "unavailable:live-row-has-no-locus"
+        return 2
+    fi
+
+    # A row exists for the host; whether one exists for THIS LOCUS is a
+    # separate question, and the answer is the reason the `due:` token exists.
+    # Without this, a host that has never published its own locus would be
+    # carried past the absence check by a foreign-locus row, find no own-locus
+    # ts, skip the age check on `[ -n "$ts" ]`, and be told it was current.
+    # The token is deliberately unchanged: the remedy is the same single
+    # `--fragment` publish, and consumers parse this grammar.
+    own_present="$(printf '%s\n' "$matrix" | grep -c "^host:$host	locus:$locus	" 2>/dev/null)"
+    case "$own_present" in
+        '' | 0)
+            echo "due:no-capability-row:$host"
+            return 1
+            ;;
+    esac
+
+    committed_set="$(row_schedulable "$matrix" "$host" "$locus")"
+    live_set="$(row_schedulable "$live" "$host" "$locus")"
 
     if [ "$committed_set" != "$live_set" ]; then
         # Name BOTH directions. A row claiming an engine the host does not have
@@ -287,7 +342,7 @@ check() {
     # on: agreement today says nothing about a row nobody has re-probed in a
     # week, and the matrix surfaces `ts:` on every row precisely so a reader can
     # make that call without re-probing every host in the fleet.
-    ts="$(row_ts "$matrix" "$host")"
+    ts="$(row_ts "$matrix" "$host" "$locus")"
     if [ -n "$ts" ]; then
         row_epoch="$(iso_to_epoch "$ts")"
         case "$row_epoch" in
@@ -422,8 +477,86 @@ fixture() {
         _fx_fail=1
     fi
 
+    # ── ORDER 1130-8zxn: WHICH ROW IS JUDGED ────────────────────────────────
+    #
+    # A host can hold several rows, one per locus. `_mk` above writes a single
+    # `bare-metal` row, which is why no arm 1-9 could ever have caught this:
+    # every one of them was measured on a host shape that has exactly one row.
+    # These use the REAL two-locus shape both Windows hosts are in today —
+    # `in-guest` and `windows-host` — and the in-guest row is written FIRST
+    # because that is the order the fold emits and the order is the bug.
+    _row() { # <host> <locus> <ts> <triples...>
+        _rw_h="$1"; _rw_l="$2"; _rw_t="$3"; shift 3
+        printf 'host:%s\tlocus:%s\tkind:linux\tid_source:node-name\tderived_tier:cpu\tts:%s\twriter:windows\tfrom:x\n' \
+            "$_rw_h" "$_rw_l" "$_rw_t"
+        if [ "$#" -eq 0 ]; then
+            printf '  schedulable: none\n'
+        else
+            for _rw_tr in "$@"; do printf '  schedulable: %s\n' "$_rw_tr"; done
+        fi
+    }
+    _mk_hdr() { # <file> — header only; rows are appended by _row, in order
+        printf 'capability-matrix: rows\n' >"$1"
+    }
+
+    # The live fold speaks for THIS host at THIS locus, and only ever holds the
+    # one row — which is what makes it the right place to read the locus from.
+    _mk_hdr "$_fx_live"
+    _row fixturehost windows-host "$_fresh_ts" cpu/container/ollama >>"$_fx_live"
+
+    # 10. THE DEFECT, PINNED. The host published its own locus an hour ago; a
+    #     row for the OTHER locus is eight days old. Pre-fix this answered
+    #     `stale:capability-row-expired:fixturehost:age=694800s` — the age of a
+    #     row this host was not writing — so the publish it demanded could not
+    #     clear it. The verdict was unfalsifiable by the only action offered.
+    _mk_hdr "$_fx_committed"
+    _row fixturehost in-guest     "$_old_ts"   cpu/container/ollama >>"$_fx_committed"
+    _row fixturehost windows-host "$_fresh_ts" cpu/container/ollama >>"$_fx_committed"
+    _expect "a-fresh-own-locus-row-outranks-an-older-foreign-locus-row" \
+        "ok:capability-row-current:fixturehost" 0 \
+        TILLANDSIAS_CAPABILITY_LIVE_MATRIX="$_fx_live"
+
+    # 11. NEGATIVE CONTROL, and the load-bearing one for this packet. The
+    #     OWN-locus row is genuinely expired while the foreign one is fresh.
+    #     Staleness must still be enforced — this packet changes WHICH ROW is
+    #     judged, never WHETHER age is judged. The age is asserted EXACTLY
+    #     (694800s = the own row's eight days, not the foreign row's 3600s),
+    #     because a fix that read the wrong row would still emit the right
+    #     TOKEN here and only the number would give it away.
+    _mk_hdr "$_fx_committed"
+    _row fixturehost in-guest     "$_fresh_ts" cpu/container/ollama >>"$_fx_committed"
+    _row fixturehost windows-host "$_old_ts"   cpu/container/ollama >>"$_fx_committed"
+    _expect "a-genuinely-expired-own-locus-row-still-expires-and-reports-its-own-age" \
+        "stale:capability-row-expired:fixturehost:age=694800s" 1 \
+        TILLANDSIAS_CAPABILITY_LIVE_MATRIX="$_fx_live"
+
+    # 12. The hole the narrow fix would have opened. The host has NEVER
+    #     published its own locus; only a foreign-locus row exists. The
+    #     host-only presence check passes it, and with a locus-aware ts lookup
+    #     finding nothing the age branch is skipped entirely — so without this
+    #     arm the answer is `ok:capability-row-current` for a host that has not
+    #     published. It must be `due:`, which is the token that asks.
+    _mk_hdr "$_fx_committed"
+    _row fixturehost in-guest "$_fresh_ts" cpu/container/ollama >>"$_fx_committed"
+    _expect "a-foreign-locus-row-does-not-satisfy-a-missing-own-locus-row" \
+        "due:no-capability-row:fixturehost" 1 \
+        TILLANDSIAS_CAPABILITY_LIVE_MATRIX="$_fx_live"
+
+    # 13. Drift is judged per locus too. The foreign locus legitimately
+    #     advertises hardware this locus does not have — two probes, two
+    #     machines, one node name. Unioning them made the other machine's GPU
+    #     read as this one lying about a GPU, which would have replaced a
+    #     permanent `expired` with a permanent `drifted` had only the ts lookup
+    #     been fixed.
+    _mk_hdr "$_fx_committed"
+    _row fixturehost in-guest     "$_fresh_ts" gpu/container/ollama >>"$_fx_committed"
+    _row fixturehost windows-host "$_fresh_ts" cpu/container/ollama >>"$_fx_committed"
+    _expect "a-foreign-locus-engine-is-not-this-locus-drifting" \
+        "ok:capability-row-current:fixturehost" 0 \
+        TILLANDSIAS_CAPABILITY_LIVE_MATRIX="$_fx_live"
+
     rm -rf "$_fx_dir"
-    [ "$_fx_fail" = 0 ] && echo "ok:capability-row-check-fixture:9"
+    [ "$_fx_fail" = 0 ] && echo "ok:capability-row-check-fixture:13"
     return "$_fx_fail"
 }
 
