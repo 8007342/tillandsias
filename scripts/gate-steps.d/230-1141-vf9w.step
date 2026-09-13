@@ -26,4 +26,10 @@ STEP_OK="Dispatch reap check passed"
 # is filed as a child of this order. This field stops the gate lying in the
 # other direction, it does not claim the platform is protected.
 STEP_SKIP_EXIT=2
-STEP_SKIP_DESC="no /proc and/or no setsid on this host — the dispatch reaper is unsupported here (1141-vf9w)"
+# WORDED TO SAY WHAT DID RUN, because after the seam landed it is no longer
+# "nothing" (2026-09-13). build.sh's own skip line appends "check not run",
+# which is true of the NINE reaper arms and false of the two substrate-refusal
+# arms that execute before the skip on every host. A reader taking the generic
+# wording at face value would conclude macOS pins nothing here, which is
+# exactly the conclusion 1145-iigx's note tells the claimer not to draw.
+STEP_SKIP_DESC="the 2 substrate-refusal arms RAN and passed; the 9 reaper arms could not run — no /proc and/or no setsid on this host (1141-vf9w)"

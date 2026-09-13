@@ -1,0 +1,90 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: two-tests-mutate-one-process-global-env-var-in-parallel-so-the-suite-flakes-about-one-run-in-fifteen
+    order: 1146-z8ux
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [testing, fail-loud, flake]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-headless/src/accel_probe.rs
+    verifiable_closure: |
+      cargo test -p tillandsias-headless -- --test-threads=16 run 30 times with
+      zero failures of `the_input_overrides_the_derived_name_and_is_normalised`,
+      on a tree where the two tests below still exercise `resolve_host_id`. The
+      count matters more than the command: a single green run is what this
+      defect already produces fourteen times in fifteen, so ONE run proves
+      nothing and must not be accepted as the closure.
+    title: |
+      the_input_overrides_the_derived_name_and_is_normalised and the_probe_always_yields_a_foldable_key mutate the same process-global environment variable in parallel threads, so the headless suite fails about one run in fifteen with nothing wrong in the tree
+    context: |
+      MEASURED on tlatoanis-macbook-air (Apple M5, macOS 25.6.0) 2026-09-13, on
+      a PRISTINE tree with no local changes: 1 failure in 15 full-suite runs,
+      always the same test.
+
+        test accel_probe::tests::the_input_overrides_the_derived_name_and_is_normalised ... FAILED
+
+      THE MECHANISM. Both tests write the SAME process-global, and cargo runs
+      them as threads of ONE process:
+
+        the_input_overrides_the_derived_name_and_is_normalised
+            set_var(HOST_ID_ENV, "Esmeraldinha.LOCAL"); resolve_host_id()
+        the_probe_always_yields_a_foldable_key
+            remove_var(HOST_ID_ENV);                    resolve_host_id()
+
+      If the second removes the variable between the first's `set_var` and its
+      `resolve_host_id()`, the first resolves by node-name and gets
+      `source == "node-name"` where it asserted `"input"`. Each test restores
+      the previous value afterwards, which is careful and does not help: the
+      race is inside the window, not after it. Both are `unsafe { }` blocks
+      already, so the hazard is acknowledged at the call site and simply not
+      addressed.
+
+      HOW IT WAS FOUND, and the part worth keeping. It surfaced while landing
+      1137-rgfm, which adds a `sysctl` subprocess to `enumerate_cpu`. The
+      suite then failed once in three runs and the obvious reading was "the new
+      change is flaky". It is not: stashing the change and running the pristine
+      suite fifteen times reproduced it at 1/15. The change PERTURBS the timing
+      and appears to widen the window; it does not create it. THE SAMPLE IS TOO
+      SMALL TO CLAIM A RATE for the perturbed case — 1-of-3 and 1-of-15 are not
+      distinguishable at those counts — and the honest statement is that the
+      defect is pre-existing and timing-sensitive, not that the change made it
+      N times worse.
+
+      WHY THIS MATTERS MORE THAN ONE FLAKY TEST. Every host lands through
+      `./build.sh --check`. A 1-in-15 suite failure with no relationship to the
+      diff is indistinguishable, from the landing agent's seat, from a real
+      regression the diff caused — and the cheapest response to an unexplained
+      red is to re-run until green, which is how a genuine intermittent
+      regression would also be dismissed. The cost is not the lost run; it is
+      that it teaches every host to disbelieve the gate.
+    deliverable: |
+      Remove the shared-global race. Options, in the order I would try them:
+
+        1. Make `resolve_host_id` take its input rather than read the
+           environment — the tests then pass a value and race nothing. This is
+           the fix that deletes the hazard instead of scheduling around it, and
+           it is why it is first.
+        2. Serialise the env-mutating tests behind a shared mutex in the test
+           module. Cheap, correct, and leaves the production signature alone.
+        3. `--test-threads=1` for this crate. REJECTED unless someone shows the
+           other two are impossible: it slows every host's inner loop to fix
+           two tests, and it hides the next instance of the same class instead
+           of surfacing it.
+
+      Whichever is chosen, the closure is a REPEATED run (see verifiable_closure).
+      A single green suite is the defect's own most common output.
+    next_action: >
+      Reproduce it first and record your own rate — 15 runs on a pristine tree
+      is enough to see it once and is what I measured. Then take option 1 if
+      `resolve_host_id`'s callers allow it. Do not accept one green suite as
+      evidence; this defect passes fourteen times out of fifteen.
+    provenance: |
+      Filed by macbookair (macos) 2026-09-13, found while implementing
+      1137-rgfm and confirmed NOT to be caused by it. Rate measured on a
+      stashed-clean tree over 15 full-suite runs; the mechanism read from the
+      two test bodies, not inferred from the failure text. Cited by symbol.

@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-dispatch-reaper-has-no-darwin-implementation-because-macos-cannot-read-another-processs-environ
+    event:
+      type: note
+      ts: "2026-09-13T06:28:06Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260913t035101z
+      host: macos
+      summary: |
+        SEAM LANDED AHEAD OF THIS PACKET, so the claimer inherits a falsifiable refusal rather than an unreachable one. Yoga's observation, taken rather than noted: `tillandsias_dispatch_reap_supported()` hardcoded `[ -d /proc ]`, which is ALWAYS TRUE on Linux — so the one arm that exists because of a darwin absence was unreachable on every host that could have tested it. A guard that cannot fire reads exactly like a guard that passes, which is this order's own subject one level up.
+
+        It now reads `[ -d "${TILLANDSIAS_DISPATCH_PROC_ROOT:-/proc}" ]`. PRODUCTION NEVER SETS THE VARIABLE; it exists so a fixture can point at a non-existent path and reproduce the SHAPE of the absence. That is not a simulation of macOS and must not be read as one — darwin additionally cannot read another process's environ at all, which is precisely why this packet exists.
+
+        Two arms added to scripts/test-dispatch-reap.sh, placed BEFORE the darwin skip and AFTER the counters, so they run on every host including this one:
+          - a substrate with no proc root refuses with rc 2, never a quiet 0
+          - the refusal NAMES itself on stderr rather than failing silently
+        The skip now runs only if those arms passed; if they fail the fixture reports FAIL and exits 1 rather than skipping, because a could-not-look verdict swallowing a real regression is the same confusion in the other direction.
+
+        FALSIFIED, unpiped statuses, on tlatoanis-macbook-air:
+          unsupported path returns a quiet 0 (the pre-fix defect) -> 0/2, exit 1, NOT a skip
+          rc 2 kept but the stderr name removed                  -> 1/2, exit 1 (the arms test different things)
+          restored                                               -> exit 2, the named skip
+        So macOS now pins the refusal path even though it cannot run the reaper. The nine reaper arms remain darwin-blocked and are still this packet's closure.
