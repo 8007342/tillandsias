@@ -142,6 +142,32 @@ case "$out_recur" in
     *) ok "the same one-off is absent from token_recur (two views, two questions)" ;;
 esac
 
+# ── 5c. A ZERO-SPEND LABEL IS NOT "TOKEN-EXPENSIVE". Found by dogfooding: two
+#      zero-spend cycles under one label rendered as
+#          top3=advance-work-from-plan-drain:tokens=0:runs=2
+#      i.e. the top token-EXPENSIVE repeated work was work that spent nothing.
+#      An instrument reporting something adjacent to what it claims is the class
+#      this packet exists to remove, so it must not commit it.
+rm -f "$LOG"
+emit host=h cycle=z1 subagent_tokens=0 agents=0 label=free-work
+emit host=h cycle=z2 subagent_tokens=0 agents=0 label=free-work
+out="$(report | grep -E '^token_recur:' || true)"
+case "$out" in
+    *free-work*) bad "a label that spent ZERO tokens is ranked as token-expensive recurrence: $out" ;;
+    *"top3=-"*)  ok "a zero-spend repeated label is not ranked as token-expensive" ;;
+    *)           bad "unexpected token_recur for a zero-spend corpus: $out" ;;
+esac
+# ...and token_max must still NAME the cycle, because "the largest spend was 0,
+# here" and "there is nothing here" are different answers that must not share a
+# rendering. This one rendered `label=- cycle=-` before, indistinguishable from
+# an empty log.
+out="$(report | grep -E '^token_max:' || true)"
+case "$out" in
+    *"label=free-work"*) ok "token_max names the cycle even when every record spent 0" ;;
+    *"label=-"*)         bad "token_max renders label=- on a NON-EMPTY log — indistinguishable from having no data at all: $out" ;;
+    *)                   bad "unexpected token_max on a zero-spend corpus: $out" ;;
+esac
+
 # ── 6. NEGATIVE CONTROL (the row names it): a cycle that spawned nothing
 #      reports zeros and is not flagged.
 rm -f "$LOG"

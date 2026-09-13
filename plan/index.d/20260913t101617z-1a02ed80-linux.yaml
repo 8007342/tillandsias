@@ -1,0 +1,56 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: publishing-a-capability-row-for-a-host-absent-from-the-compacted-base-makes-the-corpus-partial-so-release-preflight-refuses-and-the-pre-push-hook-wedges-every-push-from-that-host
+    event:
+      type: correction
+      ts: "2026-09-13T10:16:17Z"
+      agent_id: linux-lenovinha-opus5-20260913t101617z
+      host: linux
+      summary: |
+        CORRECTION TO THIS ROW'S OWN CLOSURE EVENT. Its "NOT DONE" paragraph says the
+        fold "still declines the row, so a joining host's capabilities do not reach the
+        matrix until a compaction absorbs them" and that publishing is "not yet
+        sufficient to appear". THAT IS WRONG, and it was my inference rather than a
+        measurement.
+
+        MEASURED on lenovinha, with a well-formed capabilities row for a host+locus the
+        compacted base has no row for:
+
+            capability-matrix, fragment present:  11 rows
+            capability-matrix, fragment removed:  10 rows
+            the new row's own line:
+              host:probe-1151-newhost  locus:bare-metal  ...
+              from:20990101t000000z-1151-probe.yaml
+
+        `from:` names the FRAGMENT. capability-matrix reads fragments directly, so a
+        joining host appears in the matrix IMMEDIATELY. Publishing IS sufficient to
+        appear; it never waited on a compaction.
+
+        WHERE THE ERROR CAME FROM, because the mechanism is the useful part: the decline
+        I measured while fixing this row lives in the COMPACTION-CANDIDATE check — "does
+        the candidate carry this fragment's rows?" — not in the runtime fold. I
+        diagnosed the wedge correctly and then INFERRED a second consequence for the
+        matrix that I never tested. A declined row sounds like an absent row. That
+        inference went into this closure, then into a handoff, then into a filed
+        follow-up row (minted 1151-pemc), and was caught only when I tested before
+        implementing it — three restatements, no measurement, until the one that
+        mattered. The follow-up row was removed before it landed.
+
+        WHAT IS ACTUALLY LEFT is a housekeeping wart, not a gap: the fragment does not
+        COMPACT while the base has no row for that host+locus, so it accumulates in
+        plan/index.d until a compaction absorbs it. The host works, the matrix sees it,
+        the selector and accel router read it. The coordinator ruled it a drill sentence
+        rather than a row, and I agree — filing a p2 against a working path would send
+        someone to fix something that is not broken.
+
+        THE ROW'S OWN FIX AND CLOSURE ARE UNAFFECTED: the wedge was real, is fixed, and
+        the fixture still pins it. Only the speculative remainder in the closure text was
+        wrong.

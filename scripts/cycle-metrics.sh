@@ -1353,12 +1353,28 @@ if [ -f "$TOKENS_LOG" ]; then
             # been silent on the very thing that prompted the directive. Two
             # views, two questions, nothing buried.
             if (cut == "" || ts >= cut) {
-                if (st > maxv) { maxv = st; maxlab = field($0, "label"); maxcyc = field($0, "cycle") }
+                # `>=` on the first stamped record, so a window in which every
+                # cycle spent ZERO still names a cycle rather than rendering
+                # `label=- cycle=-`, which is indistinguishable from an empty
+                # log. "The largest spend was 0, here" and "there is nothing
+                # here" are different answers and must not share a rendering.
+                if (st > maxv || maxcyc == "") {
+                    maxv = st; maxlab = field($0, "label"); maxcyc = field($0, "cycle")
+                }
             }
             last_sub = st; last_agents = field($0, "agents"); last_bm = field($0, "by_model")
             if (cut == "" || ts >= cut) {
                 lab = field($0, "label")
-                if (lab != "" && lab != "-") { tot[lab] += st; runs[lab]++ }
+                # ORDER 1119-6wn6, found by dogfooding: only labels that COST
+                # something are ranked. Two zero-spend cycles under one label
+                # were being reported as
+                #     top3=advance-work-from-plan-drain:tokens=0:runs=2
+                # i.e. the top TOKEN-EXPENSIVE repeated work was work that spent
+                # no tokens. That is an instrument reporting something adjacent
+                # to what it claims, which is the class this whole packet exists
+                # to remove. A label is counted for recurrence only once it has
+                # actually cost tokens.
+                if (lab != "" && lab != "-" && st > 0) { tot[lab] += st; runs[lab]++ }
             }
         }
         END {
