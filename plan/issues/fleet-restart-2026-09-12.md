@@ -1680,3 +1680,18 @@ stories.
   merged tree. Two hosts fixing the same caller within an hour is the
   duplicate-filing gap one layer down: a heads-up on a shared script beats a
   merge-time choice.
+- **The competing-gate detector's second substrate** (macuahuitl, from its
+  own landing gate at 4d0b99dba, mutable Fedora, toolbox dispatch): line 1
+  `ok:no-competing-gate` from the host-side call before dispatch, line 13
+  the honest `could-not-run:competing-gate:inside-container`; no false
+  accusation, same shape as Silverblue. The WSL datapoint is the Windows
+  hosts' to produce (a false accusation there is the interesting result).
+  yoga verified the relay's wrapper resolution rather than trusting it —
+  both halves pair on trunk (reaper returns 2 unsupported where it cannot
+  see; `_tb_on_signal` reports loudly; absent-token path rc 0) — and nearly
+  reported the reaper broken from one command: they had exported the wrapper
+  token into the shell running the reaper, so it found itself; a matcher
+  over a set containing itself reports itself. Seam for 1145-iigx: the
+  supported-guard's `/proc` root is hardcoded, so the unsupported arm is
+  unreachable on every Linux host; an overridable root lets every host prove
+  the refusal fires.
