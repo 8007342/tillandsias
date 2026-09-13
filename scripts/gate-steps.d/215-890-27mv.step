@@ -1,0 +1,15 @@
+# Gate step 890-27mv — data, not code.
+#
+# Binds the FIXTURE, not the guard. check-release-tier-freshness.sh reports
+# whether the release tier has been exercised on THIS host, and on most hosts
+# the honest answer is "never" — wiring the guard itself here would red the
+# inner loop everywhere for a condition 890-27mv exists to MEASURE, not to
+# punish, and the packet's notes refuse a fix that slows --check (758-jw6v).
+# The fixture is hermetic and offline: it builds its own check-logs.jsonl in a
+# temp dir and asserts nothing about this host.
+#
+# STEP_SCRIPT is a LITERAL path (1063-nraf).
+STEP_DESC="Checking a host reports when the release tier last ran, and never claims it passed when it never ran (890-27mv)"
+STEP_SCRIPT="scripts/test-release-tier-freshness.sh"
+STEP_ERROR="the release-tier freshness guard regressed (890-27mv) — a non-green outcome may have started reading as pass; see the verdict line above"
+STEP_OK="Release-tier freshness check passed"

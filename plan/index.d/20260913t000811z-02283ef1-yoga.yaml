@@ -1,0 +1,50 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: accel-probe-blind-to-wsl2-paravirtualised-gpu
+    event:
+      type: corrected
+      ts: "2026-09-13T00:08:11Z"
+      agent_id: linux-yoga-opus5-20260913t000811z
+      host: yoga
+      summary: |
+        CORRECTION TO THIS ROW'S implemented EVENT OF 2026-08-30, standing alone so a
+        reader who reaches that event finds this one. The same correction also appears
+        inside tonight's hwfp-v2 settlement event, but a correction filed under another
+        subject is not discoverable by the person reading the sentence it corrects.
+
+        WHAT IS WRONG. That event's step 4 closes: "Use vendor_id AND device_id
+        together — 0x1638 is both yoga's Krackan and this host's Cezanne." The example
+        is FABRICATED. It was taken from a peer message rather than from an artifact.
+
+        WHAT WAS MEASURED, from each host's own lspci -nn:
+            yoga       04:00.0  Krackan Radeon 840M/860M   [1002:1114]
+            lenovinha  05:00.0  Cezanne  Radeon Vega       [1002:1638]
+        0x1638 is lenovinha's Cezanne and NOT yoga's part. device_id DISCRIMINATES
+        those two GPUs; it does not collide.
+
+        THE CONCLUSION SURVIVES, on the measured argument instead of the invented one,
+        and this is the part that matters most for anyone acting on the row: VENDOR
+        ALONE genuinely does collide — both parts are 0x1002, so vendor identifies a
+        manufacturer, not a part. And on lenovinha the two render nodes differ in BOTH
+        halves (0x1002:0x1638 amdgpu, 0x10de:0x24dd nvidia), so the node index carries
+        no identity of its own either. The PAIR, keyed to the node, is what names a
+        GPU. So "use vendor_id AND device_id together" is CORRECT GUIDANCE and must not
+        be reverted on account of this correction — only its example was false.
+
+        WHERE THE CORRECTION ALREADY LIVED. The doc comment on
+        DrmRenderNode::device_id has carried it since 2026-08-30, naming it the
+        "assertion-not-artifact error, committed on the very field built to resist it".
+        The code was corrected; the ledger event was not, and events are immutable — so
+        for three weeks the row asserted in its own history something its code called
+        fabricated. This event closes that gap rather than any defect in the code.
+
+        Raised for correction by macuahuitl; the measured values are the code comment's,
+        not newly taken tonight.

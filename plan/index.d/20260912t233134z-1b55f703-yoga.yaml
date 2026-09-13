@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-recurring-loops-gate-and-the-release-gate-are-different-tiers
+    field: next_action
+    value: name the cadence that exercises the ci-full delta (criterion 1) — a periodic ci-full on a nominated host or a rotating tier sample; the reporting guard and its negative control already landed
+    ts: "2026-09-12T23:31:34Z"
+    host: yoga
+
+events:
+  - packet_id: the-recurring-loops-gate-and-the-release-gate-are-different-tiers
+    event:
+      type: progress
+      ts: "2026-09-12T23:31:34Z"
+      host: yoga
+      summary: |-
+        status 'name the cadence that exercises the ci-full delta (criterion 1) — a periodic ci-full on a nominated host or a rotating tier sample; the reporting guard and its negative control already landed' (not terminal) with evidence_refs: scripts/check-release-tier-freshness.sh + test 8/8 + gate step 205-890-27mv

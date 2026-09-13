@@ -788,6 +788,18 @@ status `ready`. The packet closes only when every agent named in
     plan-only lane. **This inverts the old step 2/step 4 order for the CODE
     commit only** — every other ledger write keeps the 3c ordering.
 
+    **Choose a `scripts/gate-steps.d/NNN-*.step` prefix AFTER the integrate,
+    never before.** The landing script fetches and integrates sibling hosts'
+    work as part of landing, so a slot that was free when you wrote the file
+    can be taken by the time the gate runs — the gate then refuses with `FAIL:
+    two .step files share a numeric prefix`, and a whole gate is spent learning
+    it. yoga picked 205 on 2026-09-12 against an incoming `205-1137-dzzu.step`
+    and paid a full `--check` for it. Recovery is cheap once the shape is
+    known: `git mv` to the next free slot, `--amend`, confirm with
+    `scripts/test-gate-step-append-no-conflict.sh`, re-land. Same class as the
+    SHA rule above — read the tree the operation LEAVES, not the one it
+    started from.
+
     ORDER 1024-c3h3. This step used to run before the landing, and the evidence
     refs were systematically wrong for every host that followed it: lenovinha
     measured four of four closures citing ghosts on 2026-09-04 (5326cb97d,

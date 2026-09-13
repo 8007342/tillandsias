@@ -1,0 +1,63 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: accel-probe-blind-to-wsl2-paravirtualised-gpu
+    event:
+      type: investigated
+      ts: "2026-09-13T00:00:44Z"
+      agent_id: linux-yoga-opus5-20260913t000044z
+      host: yoga
+      summary: |
+        SETTLED FOR hwfp-v2, ahead of the schema landing: NOTHING CHANGES in the field
+        set, and the reason is now executable instead of remembered.
+
+        THE ANSWER TO THE QUESTION ASKED. hwfp-v2 records vendor_id/device_id from
+        DrmRenderNode, whose only production source is sysfs
+        (/sys/class/drm/card<N>/device/{vendor,device}). Those are PCI ids, 16 bits by
+        the PCI spec, so u16 is correct and the bump needs no change. The concern was
+        conditional on hwfp-v2 recording what vulkaninfo reports; it does not, and
+        nothing in the tree captures a Vulkan vendorID today.
+
+        WHY THE CONSTRAINT WAS STILL WORTH PINNING rather than answered and dropped. A
+        Vulkan vendorID is a different namespace — uint32_t, Khronos-assigned,
+        deliberately outside the PCI range for vendors that have no PCI id. Verified
+        against this code rather than taken on report: parse_pci_id is
+        u16::from_str_radix(...).ok(), and both call sites take it with `?`, so a value
+        that does not fit drops the WHOLE node. lavapipe/llvmpipe reports 0x10005,
+        which is 65541 and 6 past u16::MAX. A dropped row and a device that never
+        enumerated are THE SAME RECORD, so reusing this parser for Vulkan would convert
+        the explicit software-rasterizer rejection criterion 2 asks for into a silent
+        disappearance — the rejection would still happen, and would become
+        unobservable, which is worse than not rejecting.
+
+        SO IT IS A TEST NOW, NOT A NOTE:
+        accel_probe::tests::a_vulkan_vendor_id_does_not_fit_a_pci_id_and_must_not_be_
+        parsed_as_one pins 0x10005 and 0x10000 to None and 0xffff to Some, so the
+        boundary reds from both sides if anyone widens the type, and a doc comment on
+        parse_pci_id sends the next Vulkan author to a separate u32 field with its own
+        parser. Today the enumerator rejects lavapipe/llvmpipe STRUCTURALLY anyway — a
+        userspace-only ICD creates no DRM render node to find — so this is a trap laid
+        for a future change, not a live defect.
+
+        A CONTRADICTION IN THIS ROW'S OWN HISTORY, found while checking the above and
+        recorded because it is still live. The implemented event of 2026-08-30 closes
+        with "Use vendor_id AND device_id together — 0x1638 is both yoga's Krackan and
+        this host's Cezanne". That is FALSE and this codebase already says so: the
+        doc comment on DrmRenderNode::device_id records it as a FABRICATED
+        counterexample and gives the measured values — yoga is 1002:1114 (Krackan),
+        lenovinha is 1002:1638 (Cezanne). device_id discriminates those parts; it does
+        not collide. THE CONCLUSION SURVIVES on the measured argument (vendor ALONE
+        collides, since both are 0x1002), so the guidance "use the pair" is right and
+        only its example was invented. Flagged because events are immutable and a
+        reader reaching that line has no way to know it was corrected in code three
+        weeks later — and because it is the same assertion-not-artifact error twice, in
+        a row whose own comment calls it out.
+
+        Raised by esme, corrected against the code by yolanda, settled here.
