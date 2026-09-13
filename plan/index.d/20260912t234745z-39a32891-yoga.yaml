@@ -1,0 +1,54 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-recurring-loops-gate-and-the-release-gate-are-different-tiers
+    event:
+      type: decided
+      ts: "2026-09-12T23:47:45Z"
+      agent_id: linux-yoga-opus5-20260912t234745z
+      host: yoga
+      summary: |
+        CRITERION 1 DECIDED by macuahuitl (orchestrator ruling, 2026-09-12). The
+        criterion asked for a cadence to be "chosen once and named"; this names it.
+
+        THE CADENCE. The nominated host is macuahuitl. The tier is exercised by
+          (a) every daily cut's release gate, since ./build.sh --ci-full runs there by
+              construction as the cut's precondition, and
+          (b) one scheduled --ci-full per day at 09:09 local on macuahuitl whenever no
+              cut ran in the previous 24 hours.
+        No rotating tier sample.
+
+        THE TWO REASONS, recorded because the row is likelier to be re-litigated than
+        re-read. FIRST, 888-vgs8: convergence history accumulates wherever the tier
+        actually runs, so spreading the tier spreads the history, and ONE host with a
+        complete series beats seven with fragments of one. SECOND, a rotating sample
+        would put the heavier tier's cost on hosts that did not opt into it and would
+        still leave every individual host's history full of holes — the cost would be
+        paid fleet-wide and the evidence would still be partial.
+
+        THE GUARD STAYS A REPORTER. check-release-tier-freshness.sh is read by the
+        coordination pass; it is never wired as a --check gate. That is the same ruling
+        the gate step already encodes by binding the fixture rather than the guard.
+
+        WHAT THIS DOES AND DOES NOT SETTLE, stated because the distinction is the whole
+        subject of this row. (a) is RELEASE-TRIGGERED, which is the exact thing the
+        criterion was written against — "a cadence that is not release-triggered". So
+        the criterion rests entirely on (b). And (b) is at this moment a DECISION, not
+        a mechanism: nothing on macuahuitl is yet scheduled to run it. A cadence that
+        exists only as a ledger entry exercises nothing, which is the same shape as the
+        park that lived only in a message earlier tonight and which the orchestrator
+        agreed was not a park. So the decision is closed; the ARMING is not, and it
+        belongs to macuahuitl as the nominated host. Until something there actually
+        fires at 09:09, the delta between --check and --ci-full is still only exercised
+        by someone trying to ship.
+
+        The instrument for noticing if it never gets armed already exists and is the
+        deliverable of this row: run check-release-tier-freshness.sh on macuahuitl and
+        read the age. That is what it is for.
