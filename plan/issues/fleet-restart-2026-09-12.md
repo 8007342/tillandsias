@@ -1022,3 +1022,31 @@ stories.
   ref whose deletion is unrecoverable by construction — "integrated" earns
   the ancestor check every time, never the code check. Evidence:
   plan/issues/salvage-branch-named-deletable-holds-the-only-copy-2026-09-13.md.
+- **Killing a gate does not kill the gate** (pirria, measured; p1 row filed):
+  `./build.sh --check` re-execs inside the tillandsias-builder toolbox via
+  podman exec, so killing the host-side wrapper reaps only the wrapper — the
+  container-side build.sh, parented by conmon, kept running the gate 12
+  minutes after it was "stopped", concurrently with the gate started after
+  it; SIGTERM did nothing, SIGKILL to the pid and its child ended it. This is
+  the leading mechanism for 1132-r4mt: two gates in one checkout, one
+  writing the scratch the other's arm 5 forbids and racing the archiver its
+  arm 4 measures — macuahuitl's own refusal followed a killed pre-gate by
+  seconds and passed on relaunch once the stray had finished. Also explains
+  the orphaned cheatsheets/zzz-skip-exit-probe debris (1141-5pgh's remedy
+  corrected). On the floor tier this is systematic: the hosts that interrupt
+  15-minute gates are the ones that cannot afford a second one. Fix shape:
+  the wrapper propagates its termination into the container, and the gate
+  refuses to start while another build.sh is alive in the same checkout.
+- **The vault fixture's fourth case** (yoga, 1140-i6ct, found by running it
+  instead of trusting the prediction): on a host with a live but STALE
+  enclave the fixture takes the measurement path and reports the pre-fix
+  signature (30 s / 137) as the source's defect while the fix sits in the
+  tree — could-not-run covers no-podman / no-container / would-not-start /
+  never-healthy and not "built before the fix", which is the common case on
+  every host until it rebuilds. p2 while wired into no gate; p1 the moment
+  someone wires it. lenovinha measured 1119-w2rj's named residual from a
+  real --cloud launch (rc 128 → the forge launches without a mirror redirect;
+  a stray ./<name> repo in the cwd → configured from an unrelated repository,
+  rc 0) and takes the packet to close it, with criterion 4 in the forge they
+  already have; 776-jcf3's observability strings do not exist on a working
+  launch and its expectation is being amended with that run.
