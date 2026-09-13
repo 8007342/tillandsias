@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-cheatsheet-tier-check-protects-neither-windows-host-by-two-independent-routes
+    event:
+      type: note
+      ts: "2026-09-13T03:12:31Z"
+      agent_id: windows-esmeraldinha-claude-20260913t031229z
+      host: windows
+      summary: |
+        CONFIRMED FIXED. yoga's reorder of resolve_target_binary landed on trunk at c91650cec (candidate order now extensionless-then-.exe, matching resolve_plan_binary). Verified on esmeraldinha, on the same mixed-artefact directory that produced this row's false refusal, with both artefacts still present — target/debug/tillandsias-policy (ELF) and target/debug/tillandsias-policy.exe (PE32+, back at its original Sep-4 mtime because cargo re-hardlinks it from deps/):
+
+          resolve_target_binary tillandsias-policy debug <root>
+            -> .../target/debug/tillandsias-policy        (the ELF; before the fix, the .exe)
+
+          bash scripts/check-cheatsheet-tiers.sh
+            -> check-cheatsheet-tiers: 228 cheatsheets validated
+               by tier: bundled=154, distro-packaged=0, pull-on-demand=74, unset=0
+               OK: all tier checks passed.
+
+        Before the fix the identical invocation on the identical tree emitted "ERROR: cheatsheets/ directory not found at /mnt/c/...\cheatsheets". Claimed on the verdict text rather than an exit code: the PIPESTATUS capture came back empty through nested wsl.exe quoting, so the rc is not vouched for.
+
+        THE FULL SANCTIONED GATE ALSO PASSES, and is a separate fact that does NOT test the fix. ./build.sh --check launched from Git Bash so with-wsl2-builder re-execs — verified with grep -c 'Re-execing inside' = 1, against 0 on the run that produced this row — returned CHECK_RC=0 in 2598s, with the tier step reporting the same 228 validated. On that path CARGO_TARGET_DIR is the distro-local ext4 directory holding Linux artefacts only, so resolve_target_binary never sees two runnable candidates and the ordering is unreachable. A green gate there is silent about the ordering; the targeted test above is what confirms the reorder.
+
+        THE LOAD-BEARING ARTEFACT IS NOT THIS TRANSCRIPT. yoga landed a hermetic guard alongside the fix — two runnable stubs in one directory, ELF required to win, mutation-tested with the diff proven non-empty first. That pins the ordering independent of anyone's environment and can go red on a revert. This host's measurement demonstrates one accidental configuration and cannot be reproduced by anyone who does not recreate it. The guard is the thing that keeps the fix honest.
+
+        TIMING, correcting this row's provenance for the THIRD time and partly restoring what the second correction threw away. The 4050s recorded here was first offered as a floor-tier cost, then retracted as "drvfs versus ext4, not two tiers". Both readings were wrong. With the sanctioned number now measured the ratio factors exactly: 4050s unsanctioned against 2598s sanctioned is a configuration factor of 1.56x, and 2598s against yolanda's ~600s on the same sanctioned path is a host factor of 4.33x; 1.56 x 4.33 = 6.75, the originally observed ratio. So bypassing the wrapper cost 1.56x and the remaining 4.33x is a REAL host difference that my retraction discarded along with the error. The honest floor-tier gate cost is 2598s. yolanda's ~600s is their own approximation, so the host factor is good to roughly one significant figure and wants a measured number from that side before anyone routes work on it.
+
+        A DISCRIMINATOR WORTH MORE THAN EITHER TRANSCRIPT: grep -c 'Re-execing inside' <gatelog> returns 1 on the sanctioned path and 0 on a hand-launched one. The two configurations produced opposite verdicts from the same tree, so any Windows gate result should carry which one produced it.

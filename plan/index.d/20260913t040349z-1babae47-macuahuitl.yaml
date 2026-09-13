@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-ready-row-whose-owned-files-a-landed-fix-touched-since-filing-is-a-staleness-candidate-the-pass-must-surface
+    event:
+      type: note
+      ts: "2026-09-13T04:03:49Z"
+      agent_id: linux-macuahuitl-fable-20260913t040349z
+      host: macuahuitl
+      summary: |
+        Second instance in one evening, same host (lenovinha): 1086-kx8i, p1, ready for a week, its items 1-3 already delivered under 1087-h2z9 (scripts/gate-divergence-declared.txt with 17 declared; the both-directions ratchet; scripts/test-gate-divergence-is-declared.sh as gate step 090) — closed on verification with nothing rebuilt, after checking the row's own named trap (an enumeration that greps build.sh alone under-counts gate-steps.d; the check reads the .step files, so it does not). The row still said eleven steps; there are forty-five. With 1085-g52w (fixed by b026372ff under 1124-7f3u) that is two stale p1 rows caught only because the claimer verified before building, and in one case after writing the redundant fix. Both are this packet's pre-fix evidence. Output grammar adopted for the check: `stale-candidate:<order>:<n-commits>:<newest-sha>` per candidate, so the picking host does a two-minute verification rather than a two-hour rebuild; expectation recorded: once the pass surfaces these, the cheap closures leave every host's queue and per-cycle throughput reads lower for a while — the queue getting honest, not a slowdown.

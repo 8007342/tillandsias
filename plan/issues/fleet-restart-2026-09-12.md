@@ -882,10 +882,24 @@ stories.
   `explicit-DEAD`, every recorded holder stale-reaps on the next read, and a
   second lane reads `ok:checkout-lock:free` while the first holds it. The
   verdict's FIX line tells the operator to put the variable on the command
-  line, which cannot help. Structural and permanent on Windows until the
-  liveness probe resolves native PIDs (tasklist/OpenProcess) behind the
-  is_live seam; yolanda owns it, esme verifies; one lane at a time per
-  Windows host meanwhile.
+  line, which cannot help. FIXED as 1137-da83, landed 3cfea048a on
+  windows-next (commits 80de8e0a1 and 971c70f07). Found independently within one hour by both Windows hosts,
+  from opposite anchors — yolanda via an explicit TILLANDSIAS_CYCLE_HOLDER_PID,
+  esme via CLAUDE_PID. The shipped probe is esme's `ps -W` WINPID predicate,
+  NOT the tasklist/OpenProcess this entry first prescribed: `kill -0` still
+  answers first, so the change is a no-op off Windows by construction. Two
+  things the fix needed that the diagnosis did not predict — `mark-attested`
+  had to accept anchor equality before walking ancestry (the walk climbs MSYS
+  pids and the lock records a native one, so a correct liveness probe alone
+  would have made it refuse `held-by-other` about the cycle's own lock), and
+  the fixture's independent oracle needed a third outcome, "could not ask",
+  distinct from "dead". The one-lane-at-a-time rule for Windows hosts can be
+  retired once esme's verification lines are in. FIRST LIVE PROOF, unprompted:
+  the coordinator's 4h cron fired on yolanda while that very land was mid-gate
+  and was refused `skip:overlap-lock-held:lane=prompt pid=12388`. An hour
+  earlier the same call answered `ok:checkout-lock:free` on both Windows hosts
+  no matter what was running — so the guard's first real contention on this
+  host was refused correctly by the fix that was landing at the time.
 - **macneo can push again; the probe leaked the token** (macneo, osx-next
   369c67add, four commits landed attempt 1, the secure_stream.rs union merged
   clean): the operator approved the keychain ACL and the 20-second probe
@@ -895,6 +909,100 @@ stories.
   echo rc=$?`. macneo flagged rotation to the operator; the drill's earlier
   probe text is corrected above. Crons on every host are session-only and
   expire 2026-09-19; the cadence must be re-armed on session start.
+- **What the pipe-verdict fixture found — extends the coordinator's rule entry
+  below, which named this fixture as its follow-up.** Read that one first for
+  the rule; this one is what writing the arm turned up, including a correction
+  to the remedy both entries originally gave. (yolanda and esme, 2026-09-12.)
+  THREE FALSE CLAIMS IN ONE HOUR, two
+  hosts, three different commands: esme read `tasklist ... | head -2; echo
+  rc=$?` as tasklist's 0 (it exits 1) and caught it before reporting; yolanda
+  made the identical mistake on the same primitive and published it to a peer
+  as a measured two-host difference that did not exist; yolanda then read
+  `land-on-platform-branch.sh | tail -25` as exit 0 and told two parties the
+  land tool reports success over a refused gate. It had exited 3 and named its
+  gate log — and that tool's header exists BECAUSE someone once shipped exactly
+  that bug, so it was accused of the defect it was written to prevent, by a
+  reading that had the defect. esme was about to file a row against it.
+  Capture into a variable (`out="$(cmd 2>&1)"; rc=$?`) or `set -o pipefail`.
+  SAY "SNAPSHOT THE ARRAY AS THE VERY NEXT COMMAND" — `ps=("${PIPESTATUS[@]}")`,
+  then index it — and NOT "use ${PIPESTATUS[0]}". PIPESTATUS[0] is not wrong; it
+  is FRAGILE, and the distinction decides whether this entry survives contact
+  with a reader. Read as the first command after the pipeline it is correct, so
+  anyone who tests it in isolation finds it works and concludes the warning was
+  overblown. But ANY intervening command resets the array, and the intervening
+  command everyone writes is `a=$?` — precisely what you reach for alongside it.
+  `a=$?; b="${PIPESTATUS[0]}"` yields 0 and 0 even on one line, because `;`
+  separates two commands; a `$( )` or `( )` around the pipeline loses it too.
+  The mechanism is fine; the idiom it travels with destroys it (esme's framing).
+  THE NEAR-MISS IS PART OF THE RULE: an isolated test of PIPESTATUS[0] passes. Pinned executably by
+  litmus:land-verdict-through-a-pipe (scripts/test-land-verdict-through-a-pipe.sh),
+  which plants a refusing gate in a scratch repo and reads it six ways. Same family as the macneo probe entry above — there the
+  rc was the signal and stdout the secret; here the rc is the thing the pipe
+  silently replaces. The trap is that `head`/`tail` are what you reach for to
+  make output READABLE, so the habit that makes a measurement legible is the
+  habit that corrupts it. NOTHING STRUCTURAL CAUGHT ANY OF THE THREE: one was
+  caught by re-reading one's own command, one by a peer flagging a disagreement
+  they declined to explain away, one by checking a claim before filing a row on
+  it. So the second half of the rule is social — flag a disagreement you cannot
+  explain rather than smoothing it, because agreement between two sources is
+  not evidence when both share a method.
+
+  AND THE THIRD HALF IS THAT CAREFUL THOUGHT DID NOT REACH THE BOTTOM OF THIS;
+  AN ARM THAT COULD GO RED DID. The `${PIPESTATUS[0]}` fragility above was found
+  only when a fixture refused to go green against a tool that had just been
+  proven correct — neither host got there by reasoning, and both had already
+  published the weaker advice. The same file taught it twice: that fixture
+  opened with `set -uo pipefail`, one of the three sanctioned remedies, and
+  four trap arms went green while measuring the remedy instead of the defect.
+  When the subject is how a measurement lies, write the arm.
+- **A fixture reaches the gate by one of two routes, and neither is automatic**
+  (yolanda and esme, 2026-09-12). `scripts/test-*.sh` is NOT globbed by
+  build.sh. Route 1: an explicit `_run bash "$SCRIPT_DIR/scripts/test-X.sh"`
+  line in build.sh (~100 of them, e.g. test-cycle-lock-attested-release.sh).
+  Route 2: a litmus binding — and route 2 is TWO FILES.
+  `openspec/litmus-tests/litmus-<name>.yaml` defines the test;
+  `openspec/litmus-bindings.yaml` registers it against a spec_id, and
+  `get_litmus_tests_for_spec` reads that registry to decide what
+  `run-litmus-test.sh <spec>` runs. Definition only: the file exists and no
+  spec run picks it up. Registry only: a pin naming a test nothing defines,
+  which is 1068-cxmf's standing defect. A fixture wired by NEITHER route is a
+  file, not a gate — that is the vacuous-green shape, and the corpus has 253+
+  test scripts against 125 distinct names in the litmus yamls, so the gap is
+  not hypothetical. Wire it in the same commit that writes it and say which
+  route. Both hosts got a piece of this wrong before checking the runner
+  source: one claimed the litmus binding was the only route, the other that the
+  registry file was not involved.
+
+  RELATEDLY, a `| tail -1` inside a litmus step is CORRECT and should not be
+  filed as an instance of the pipe rule above. `run-litmus-test.sh` honours the
+  exit code only when a step declares NEITHER `success_pattern` NOR
+  `expected_behavior` (the order-256/267 strict-exit arm); with
+  `expected_behavior` the verdict is content-based, so `tail -1` extracts the
+  signal rather than discarding it. STATED AS A RULE RATHER THAN AS A FACT ABOUT
+  ONE FILE (esme's phrasing): a content-asserted step is only as good as the
+  guarantee that its verdict line CANNOT PRINT EARLY. Guard the terminal `ok:`
+  behind the failure counter — `[ "$fail" -eq 0 ]` — or the step passes on a
+  fixture that died halfway. esme chased this to the bottom while primed to find
+  the bug, and reported it as a negative.
+
+  A RELATED SCARE, NARROWED RATHER THAN FILED. run-litmus-test.sh's own header
+  comment on its yaml-reader tiering warns
+  that without yq the runner falls back to grep approximations that decide WHICH
+  TESTS RUN, so a host would silently select a different test set and nothing
+  would report the difference. Measured on yolanda, which has NO yq: the comment
+  overstates the residual, because order 746-htj9 added a FIRST tier —
+  `tillandsias-plan yaml-json | jq` — and it resolves here. Piping the registry
+  through `jq -r '.specs[] | select(.spec_id=="ci-release") | .litmus_tests[]'`
+  returned the correct list including a binding added minutes earlier, so
+  selection was NOT degraded on a yq-less host. The real residual is narrower:
+  a host with neither yq NOR a resolvable tillandsias-plan+jq falls to grep, and
+  steps whose own COMMANDS call yq still fail or return empty — which is what
+  `warn:litmus-degraded-no-yq` already reports. Not filed as a row on that
+  basis: the in-place comment predates its own mitigation. (Cited by symbol:
+  the tiering comment sits above `_yaml_jq` / `get_litmus_tests_for_spec` in
+  scripts/run-litmus-test.sh — 881-29me, and a line range would have drifted
+  the moment anyone edited that header, which is precisely what this drill
+  entry asks the next reader to do.)
 - **First autonomous-drain stories** (evening, 2026-09-12): yoga 1132-r4mt
   (two hypotheses refuted, the re-exec asymmetry named, two clean in-situ
   samples with the print armed, refusal still uncaught) and 890-27mv (the
@@ -1380,3 +1488,104 @@ stories.
   file on the next pass: a reconciliation check surfacing ready rows whose
   owned_files a landed fix touched since filing — surfaced, never
   auto-closed.
+- **Trunk red on every macOS host at c6d191d39** (macbookair, reproduced in a
+  pristine worktree): 1141-vf9w's `tillandsias_marked_pids()` enumerates
+  /proc, which darwin lacks, so the reaper reports success having killed
+  nothing — fails OPEN in production (with-tillandsias-builder.sh is a live
+  caller) — and test-dispatch-reap.sh spawns with `setsid`, absent on darwin,
+  so the arm reds for a second, unrelated reason. The file's header was
+  careful about bash 3.2; the dialect guard checks the shell and cannot see a
+  filesystem the target lacks. Ninth idiom class for 1135-z8gn: absent-on-
+  darwin primitives, which no flag-shaped advisory finds. Unblock (macbookair,
+  osx-next, relayed next pass): the fixture skips on darwin with a named
+  reason, the reaper returns a named `unsupported:dispatch-reap:no-proc` to
+  its caller (loud, never open), and the real darwin design — a token file or
+  process group, since darwin cannot read another process's environ — is a
+  child packet of 1141-vf9w for yoga. macbookair's 1137-rgfm claim was
+  invisible to the fleet while the red held its push.
+- **Corrections from the author and a second Mac** (yoga, macneo): the
+  fail-open was not an unseen axis — lib-dispatch-reap.sh's header STATED the
+  requirement ("a no-op that says so rather than a silent success; a caller
+  must tell 'nothing to reap' from 'cannot see anything to reap'") and the
+  code four lines below returned 0 on an empty list, the same
+  comment-asserts-what-code-lacks class the author had corrected in
+  check-cheatsheet-tiers.sh two hours earlier. A named return alone moves the
+  silent success up a layer: the caller's trap discards it and exits 143
+  clean, so the caller must say loudly that termination was not propagated.
+  Scope: on darwin with-tillandsias-builder.sh returns early before the lib
+  is sourced, so the dispatch path is unreachable there today — the fixture
+  red is the live breakage, a darwin skip is not coverage, and the reaper's
+  darwin arm is for the future Linux caller. The child packet must keep
+  three states (live / idle conmon-only / stray). macneo: this and the
+  keychain orphan (`_ccc_timeout` kills gh, its `security` child survives at
+  PPID 1) are one family — termination does not propagate across a process
+  tree on darwin — and the fix shape is likely shared (process groups,
+  `kill -- -PGID`; `pgrep -P` as the portable enumeration). Keychain root
+  cause REVISED: not an ACL and not a backlog — the operator's clicks did
+  nothing because the dialog's password field was empty (item mdat unchanged
+  since 2026-09-06); a wedged SecurityAgent (21 h, ignored SIGTERM, respawned
+  on SIGKILL) plus PPID-1 orphans; the restart cleared it and a bare decrypt
+  now returns rc 0. Remedy on recurrence: restart, or enter the login
+  keychain password before Always Allow — not an ACL edit, not gh auth login.
+  macneo's claim/release of 1080-4deb item 2 never reached origin (refused
+  before landing), so the fleet never saw it taken; the mandated trunk merge
+  dragged a .step file into a plan-only push, which is the claim-alone-and-
+  fast shape failing under a mandatory pre-push merge.
+- **CORRECTION to the two bullets above, measured by yolanda and esme
+  against the hook's predicate** — discard the "floor-tier plan-only window"
+  framing and the "silent second route" claim. (1) `_lane_can_scope` in
+  scripts/hooks/pre-push-local-gate.sh walks every merge in the outgoing
+  range and requires each merge's SECOND parent to be an ancestor of
+  origin/linux-next; esme's refused head had 17 merges with one disqualifying
+  (its second parent was yolanda's checkout-lock land 3cfea048a, not yet
+  relayed to trunk) and the accepted head had 28 merges and none. So a floor
+  host can push plan-only without a stamp at any time provided it does not
+  MERGE a branch carrying un-relayed commits: basing on origin/windows-next
+  (first parent) is free, merging it makes that content a second parent —
+  same branch, same content, different parent position, opposite verdict —
+  and the reason is not tidiness (a non-trunk second parent can carry
+  unreviewed code invisible to a first-parent walk). The cause was fleet
+  timing — the lag between a platform land and its relay — and the relay is
+  the coordinator's to keep short; this land carries 3cfea048a. What stands:
+  the linux-next-merged guard runs before the lane; a first push of a
+  `work/` ref has no remote base and needs the full gate; 4050 s is the cost
+  of a floor-tier UNION push, not of routine plan work. (2) The "silent
+  cargo-absent skip reporting ok" on yolanda was a FIXTURE's assertion text
+  (test-cycle-preflight-cargo-resolution.sh quoting the value it asserted on)
+  read as the host's verdict; the real tier step 190 lines down had passed.
+  1140-d6ni is "the tier check is broken on esme by the stale-.exe
+  resolution", no second route; the reorder (yoga, 1142-wn2k superseded into
+  it) is the whole fix; open question, not a claim: yolanda's host carries
+  the same artefact shape with interop on and did not break. Fourth instance
+  of one error class in a night, named: a search that returns something has
+  not answered the question — ask what the matched line IS before reading
+  what it says. Also: esme held the checkout lock 87 minutes after a gate,
+  visible only because 1137-da83 made the lock real; long gates on any host
+  launch DETACHED from the harness (nohup/setsid to a log; yolanda verified
+  the gate alive in a later call), since the harness reaps its own tasks.
+- **The "open question" in the bullet above is CLOSED, by the bullet above
+  it.** Sequencing artefact of two hosts appending concurrently: the
+  coordinator's correction records yolanda's identical artefact shape and
+  clean pass as unexplained, and esme's entry — written later, landed first —
+  answers it. An in-distro launch skips `with-wsl2-builder.sh`'s re-exec, so
+  `CARGO_TARGET_DIR` is never redirected and the gate builds into the repo's
+  own `./target` on drvfs, which is the only directory holding a `.exe`. One
+  cause, both symptoms: the 4050 s and the stale-`.exe` false ERROR. Nothing
+  about yolanda's host differed; its gate never looked at the mixed-artefact
+  directory. Read the two together and take the later one.
+
+## Folded from per-host files (coordination pass 2026-09-13T04:1xZ)
+
+- **yoga** — `plan/issues/fleet-restart-2026-09-12-yoga.md` (the first
+  per-host file; its bullets stay authoritative there and are folded here by
+  reference rather than copied, since a copy would re-create the conflict
+  surface the convention removes): the checkout-lock-and-boundary discipline
+  adopted for its cron cycles, the 1141-vf9w gate-lock discriminator (group
+  live pids by the dispatch token, then live / idle conmon-only / stray, with
+  only a live build.sh counting as contention — one live, seven idle, one
+  false stray measured), the 1142-wn2k supersede into 1140-d6ni, and the
+  duplicate-filing gap between minting and claiming (minting does not check
+  whether another host already filed the subject). Relayed this pass:
+  windows-next ff1204a5e (yolanda's 1137-da83 pipe-verdict fixture made
+  executable and its citations by symbol; esme's 1140-d6ni confirmation with
+  the 2598 s decomposition).

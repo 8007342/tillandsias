@@ -1747,6 +1747,24 @@ if [[ "$FLAG_CHECK" == true ]]; then
 
     _step "Fast refusals: sub-second deciders before any compile (1009-gccx)..."
 
+    # ORDER 1141-vf9w — is another gate already using this checkout?
+    #
+    # ADVISORY BY DEFAULT, and deliberately so. A cancelled gate could outlive
+    # its launcher and keep running against this tree (the wrapper now
+    # propagates termination, but a survivor from before that fix, from a kill
+    # -9, or from a host where propagation cannot run, still holds the
+    # checkout). Reporting it HERE is worth a lot -- it is the cheapest possible
+    # place to learn that the verdict you are about to spend six minutes on may
+    # be raced.
+    #
+    # It does not REFUSE yet because this discriminator has been wrong three
+    # times in two cycles and twice only a measurement caught it, and a wrong
+    # refusal on this line stops every Linux host rather than one. Promotion is
+    # a flag (TILLANDSIAS_COMPETING_GATE_ADVISORY=0), pinned by the fixture, to
+    # be flipped on fleet evidence rather than on confidence -- the same staging
+    # check-portability-idioms.sh argues for itself.
+    _run bash "$SCRIPT_DIR/scripts/check-no-competing-gate.sh" 2>&1 || true
+
     if ! _run bash "$SCRIPT_DIR/scripts/check-scorable-obligation-added.sh" 2>&1; then
         _error "this change files a packet with no scorable obligation — name a litmus:<test> in its verifiable_closure (977-448j)"
         exit 1
@@ -2103,6 +2121,22 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "checkout-lock attested-release fixture passed"
+
+    # ORDER 1137-da83. Belt for the litmus binding's braces, and deliberately
+    # the same wiring as the attested-release fixture above rather than a new
+    # pattern. A fixture reaches the gate by ONE of two routes — an explicit
+    # line here, or a litmus binding under openspec/litmus-bindings.yaml — and
+    # scripts/test-*.sh is NOT globbed, so a fixture with neither is a file
+    # rather than a gate. This one pins what a caller reads from a REFUSED
+    # land: three false claims in one hour came from reading that verdict
+    # through `| tail`, the worst of them accusing land-on-platform-branch.sh
+    # of the exact defect its header exists to prevent.
+    _step "Checking the land-verdict-through-a-pipe fixture (1137-da83)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-land-verdict-through-a-pipe.sh" 2>&1; then
+        _error "the land-verdict pipe fixture regressed — either the land tool stopped exiting 3 and naming a refused gate, or the trap it documents changed shape and the row's guidance is now wrong"
+        exit 1
+    fi
+    _info "land-verdict-through-a-pipe fixture passed"
 
     # The release runbook must not prescribe pushing the tag before the
     # back-merge (898-zhf3). That order is UNEXECUTABLE with the pre-push hook

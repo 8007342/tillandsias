@@ -435,18 +435,34 @@ export TILLANDSIAS_WRAPPER_TOKEN
 # caller's `set -e`, so the wait is guarded with `|| rc=$?` — a bare one would
 # exit the shell the instant the trap fired, BEFORE the reap had run, which is
 # a wrapper that forwards correctly and still orphans the gate.
-# Reap, then EXIT 143 — but never let an unsupported reap look like a clean
-# cancellation (1141-vf9w). Exit status stays 143 in both cases because that is
-# what the signal means to the caller; what changes is whether the operator is
-# told that nothing was propagated.
-_tb_reap_and_report() {
-    local _rc=0
-    tillandsias_reap_marked "$TILLANDSIAS_WRAPPER_TOKEN" || _rc=$?
-    if [ "$_rc" -ne 0 ]; then
-        echo "[tillandsias-builder] TERMINATION WAS NOT PROPAGATED (reap rc=$_rc)." >&2
-        echo "[tillandsias-builder] The container-side dispatch may still be RUNNING in this" >&2
-        echo "[tillandsias-builder] checkout. A later gate here can be starved by it, and the" >&2
-        echo "[tillandsias-builder] symptom will look like flaky infrastructure (1141-vf9w)." >&2
+# ACT ON THE REAPER'S VERDICT, do not merely call it.
+#
+# This trap used to be `tillandsias_reap_marked "$TOKEN"; exit 143`, which
+# DISCARDED the return value and exited 143 either way — so a reaper that
+# could not reap produced a wrapper reporting a clean cancellation over a
+# survivor still holding the checkout. Fixing the reaper to return an honest
+# verdict does nothing while its caller throws the verdict away; the silent
+# success simply moves up one layer, which is the same defect wearing the
+# caller's name.
+#
+# Caught on darwin, where /proc does not exist and the scan finds nothing: the
+# reaper answered "success, killed nothing". lib-dispatch-reap.sh's own header
+# had already stated the requirement — a no-op that SAYS SO, never a silent
+# success — and the code four lines on returned 0. Both halves are being
+# corrected; this is the caller half.
+#
+# The exit stays 143 because that is what a terminated wrapper IS. What changes
+# is that a failure to propagate is SAID, on stderr, naming the token so the
+# survivor can be found by hand.
+_tb_on_signal() {
+    local rc=0
+    tillandsias_reap_marked "$TILLANDSIAS_WRAPPER_TOKEN" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        echo "[tillandsias-builder] refused:dispatch-reap-incomplete: could not confirm the container-side tree was reaped (rc=$rc)." >&2
+        echo "  A CANCELLED GATE MAY STILL BE RUNNING in this checkout, holding the same tree." >&2
+        echo "  Find it:  ps -eo pid,ppid,etime,cmd | grep 'build.sh --check'" >&2
+        echo "  Its processes carry TILLANDSIAS_WRAPPER_TOKEN=$TILLANDSIAS_WRAPPER_TOKEN" >&2
+        echo "  SIGTERM has been measured inert on a survivor; SIGKILL the pid and its children." >&2
     fi
     exit 143
 }
@@ -455,15 +471,7 @@ _tb_dispatch() {
     local rc=0
     toolbox run --container "$TOOLBOX_NAME" bash -l -c "$1" &
     _TB_CHILD=$!
-    # ORDER 1141-vf9w (yoga's correction, landed by macbookair 2026-09-13).
-    # THE TRAP MUST READ THE VERDICT. A named non-zero return inside
-    # tillandsias_reap_marked fixes nothing on its own if the caller discards
-    # it: this trap would run the reap, ignore its status, and `exit 143` —
-    # reporting a clean cancellation whether or not termination actually
-    # propagated. That moves the silent success up one layer instead of
-    # removing it. On `unsupported:` the operator is told, in the same breath
-    # as the cancellation, that a container-side survivor may exist.
-    trap '_tb_reap_and_report' TERM INT HUP
+    trap '_tb_on_signal' TERM INT HUP
     wait "$_TB_CHILD" || rc=$?
     trap - TERM INT HUP
     # An exit nobody asked for still propagates verbatim.
@@ -471,6 +479,21 @@ _tb_dispatch() {
 }
 
 ENV_FORWARD="$(tillandsias_env_forward_prefix)"
+
+# ORDER 1141-vf9w — ASK ABOUT COMPETING GATES HERE, ON THE HOST, BEFORE THE
+# DISPATCH. This is the only place on a Silverblue host where the question can
+# be answered: build.sh re-execs into the toolbox before its own fast refusals,
+# and from inside, a host-side wrapper's environ is unreadable — `[ -r ]`
+# answers true and the read is denied. Run there, the detector saw no wrapper
+# for any token and reported every gate as a competing gate. Advisory that was
+# noise; refusing it would have made every Linux gate refuse itself.
+#
+# Best-effort by construction: this must never be the reason a build does not
+# start.
+_tb_self_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -x "$_tb_self_dir/check-no-competing-gate.sh" ]; then
+    bash "$_tb_self_dir/check-no-competing-gate.sh" || true
+fi
 
 echo "[tillandsias-builder] Re-execing inside '$TOOLBOX_NAME' toolbox..."
 
