@@ -1,0 +1,13 @@
+# Gate step 900-z3kv — data, not code.
+#
+# Binds the HERMETIC fixture, not the clearer. The clearer DESTROYS host
+# credentials; running it in a gate would clear the developer's own share to
+# prove it could, which is the defect this row is about performed deliberately.
+# The fixture plants its own files under a scratch XDG_CACHE_HOME and drives the
+# keychain through a secret-tool stub, so it touches nothing real.
+#
+# STEP_SCRIPT is a LITERAL path (1063-nraf).
+STEP_DESC="Checking the Linux clean-room clearer clears all three locations and preserves the installation anchor (900-z3kv)"
+STEP_SCRIPT="scripts/test-clear-vault-host-credentials.sh"
+STEP_ERROR="the clean-room credential clearer regressed (900-z3kv) — it may now clear too little (a room that looks cold and is not) or too much (the installation anchor, making the next vault underivable); see the verdict line above"
+STEP_OK="Clean-room credential clearer check passed"
