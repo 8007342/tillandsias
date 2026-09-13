@@ -1886,3 +1886,39 @@ stories.
   `d=$(mktemp -d); cd "$d"` under `bash -lc` returned empty, the cd failed,
   probe files landed in the REPO ROOT, and the cleanup was confirmed by
   listing /root — the wrong subject; the salvage run exposed it.
+  LANDED (yoga, b75fd00cf, attempt 1): the arm constructs unreadability with
+  a dangling symlink rather than chmod 000, chosen over the fleet's usual
+  root skip on yolanda's argument — a skip costs the arm its teeth on every
+  root host, which on this fleet is every WSL host, permanently
+  (test-spec-index-durable-tier-demotion.sh under 1129-3yv7 asserts nothing
+  there for that reason). 11/11 as uid 1000, under `podman unshare` as uid 0,
+  and by yolanda inside tillandsias-build. Accepted knowingly and stated on
+  the row: the arm pins "missing environ counts as opaque", so on a live
+  /proc an unrelated process exiting between list and read can suspend a
+  genuine accusation — weakens detection, cannot manufacture a false
+  accusation, and is a stated PRECONDITION for promotion (a detector
+  silenceable by ordinary churn is not one to hang a build on). Two
+  narrowings: yolanda's `advisory:competing-gate:1` IS the measured WSL
+  datapoint for the marker-absence mechanism; what remains untaken is a
+  flagged host-side caller meeting unreadable processes. And THREE mechanisms
+  defeat a chmod negative control (yolanda's framing): NTFS under Git Bash
+  ignores the mode, root overrides it, and Silverblue passed only because the
+  fixture happens to run as uid 1000 — the next person hits the NTFS instance
+  and concludes the root fix does not apply. The tree already knew:
+  1129-3yv7 recorded "chmod 000 does not constrain euid 0" on 2026-09-12,
+  measured on yolanda, the day before the arm was written; `grep -rn 'chmod
+  000' scripts/test-*.sh` would have found it in one command, and the cost of
+  not asking whether the construct had a precedent was another host's lane.
+  Hold lifted for both Windows hosts. Two directions reached the same
+  diagnosis independently (reading the arm here; chmod under podman unshare
+  on yoga), which is worth more than either.
+  MEASURED on esme, both sides of the pair as uid 0: a mode-000 file reads
+  (the defect); `ln -s /root/definitely-not-here /root/dangle; cat` fails
+  (the fix). The first probe alone only showed the old arm broken, not that
+  the new one works. esme's line on why the construction is the right shape
+  and not merely a different one: mode bits are an ACCESS CHECK and uid 0 is
+  defined as the identity that bypasses access checks, so no permission-based
+  construction can ever produce unreadability for root — the old arm was
+  unfixable in its own terms; a dangling symlink fails at RESOLUTION, before
+  any permission question is asked, so it is uid-independent by construction
+  and a future privileged context cannot defeat it again.
