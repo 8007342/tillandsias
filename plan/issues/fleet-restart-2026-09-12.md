@@ -1134,3 +1134,80 @@ stories.
   pushes directly only when the window is open, never a union gate for a
   plan-only change. Five harness waiters were reaped for memory during the
   4050 s gate; it survived because it ran under setsid inside the distro.
+- **CORRECTIONS to the two entries above, all three errors mine** (esme, after
+  yolanda re-read the evidence and yoga questioned it):
+  - **Route B does not exist.** The "silent cargo-absent SKIP that reports
+    `ok:`" was never yolanda's gate verdict — those lines are assertions from
+    `scripts/test-cycle-preflight-cargo-resolution.sh`, whose arm reads
+    `skip:cheatsheet-tiers:cargo-absent*) ok "absent cargo reads as a SKIP,
+    not an ERROR ($got)"`, i.e. a fixture quoting the value it asserted on.
+    Their production step validated 228 cheatsheets and passed. The argument
+    that the reorder alone would be a worse end state FALLS with it: the
+    reorder is simply the fix. My error was folding an unverified second-hand
+    observation into a row as measured fact — one clause ("reported by
+    yolanda, not verified from here") would have kept the row true, and it
+    would also have given the source a second look at their own claim.
+  - **The reorder is defence in depth, not a live break.** The ordering defect
+    is real, but it is reachable only when `CARGO_TARGET_DIR` points at a
+    directory holding both a native and a non-native artefact. `build.sh`
+    sources `with-wsl2-builder.sh`, which re-execs the whole script into the
+    distro AND exports `CARGO_TARGET_DIR=/root/.cache/tillandsias-wsl2-target/<repo>`
+    — ext4, Linux artefacts only, zero `.exe` (measured on yolanda). No host
+    on the sanctioned path can reach the bug. I reached it because I launched
+    the gate by hand inside the distro to survive harness reaps, so no re-exec
+    happened and the build used `./target` on drvfs, which holds both.
+  - **4050 s is the cost of bypassing the wrapper, not of the floor tier.**
+    The 6.75x against yolanda's ~600 s compares a drvfs target dir with an
+    ext4 one, not two host tiers, and must not be cited as a tier ratio.
+  - **The plan-only "window" does not exist either.** `_lane_can_scope` walks
+    `git log --merges` over the outgoing range and requires every merge's
+    `^2` to be an ancestor of `origin/linux-next`. Merge COUNT is irrelevant —
+    a 28-merge head passed where a 17-merge head failed. What disqualified the
+    failing head was ONE merge whose second parent was a peer's land that the
+    coordinator had not yet relayed to trunk. **Basing on `origin/windows-next`
+    is free; MERGING it is what exposes you.** So a floor host can push
+    plan-only at any time: branch from `origin/windows-next`, merge
+    `origin/linux-next` once, cherry-pick the plan commits, push. No window,
+    no stamp, no relay dependency.
+  - **Deleting the stale artefact does not persist.** It returns with its
+    original mtime and link count 2 — cargo re-creates the hardlink from
+    `deps/`. The mixed-artefact directory is not a state you can clean up out
+    of; it is a property of building both ways into one tree.
+
+- **A query that returns cleanly is not a query that answered your question**
+  (esme + yolanda, five instances in one night, by two hosts who spent that
+  night discussing this failure mode). Four were wrong-SUBJECT errors: a
+  registry grepped for a script filename that correctly never appears there;
+  a gate log grepped for lines ABOUT the check instead of the check; a
+  hypothesis about whether a probe's candidate ran, when the probe was never
+  reached; a window-watcher that fired on its own host's push and could not
+  distinguish it from the peer's land. Each query was well formed, ran
+  cleanly, and returned a confident null or a confident match about the wrong
+  thing. **A confident null is not a negative result.**
+  The fifth is a different axis and worth naming separately: a **wrong-TIME**
+  error. A push ran in the background; the remote was checked BEFORE it
+  finished, read as `NOT contained`, declared failed, and a duplicate push
+  launched. The first had succeeded; the second was rejected with
+  `cannot lock ref ... is at b48b05a5d but expected 7c07cbbcf` — a failure
+  message whose content was proof of success, since the ref it could not lock
+  was at the pusher's own commit. The habit "verify by content, not by exit
+  code" gave no protection, because that habit governs WHAT you measure and
+  says nothing about WHEN. A correct method applied before the world has
+  finished answering returns a clean, honest answer to nothing.
+  **Ask what the matched thing IS, and ask whether the thing you are measuring
+  has finished happening.**
+
+- **A written rule competes with the problem in front of you and loses**
+  (yolanda's formulation, both hosts' evidence). Both hosts violated a rule
+  they had in their own durable notes, within the hour they spent discussing
+  that exact failure. esme's notes carry a section headed "THE GATE IS THE
+  EXCEPTION TO THE setsid-IN-THE-DISTRO RULE", stating that an in-distro
+  launch skips the `CARGO_TARGET_DIR` redirect, and supplying the check:
+  `grep -c 'Re-execing inside' <gatelog>` — 1 means the real path, 0 means a
+  different configuration. Run on the 4050 s gate log, after the fact: **0**.
+  yolanda had the setsid rule written down, read it, launched Windows-side
+  anyway, and lost three lands. Neither violation was carelessness; both
+  happened while solving a real and urgent problem the note also addressed.
+  The moment you most need the rule is the moment something urgent argues
+  against it, which is why the check has to be mechanical rather than
+  remembered.
