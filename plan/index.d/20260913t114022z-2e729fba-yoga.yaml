@@ -1,0 +1,63 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-linux-clean-room-reset-does-not-reach-the-host-keychain
+    event:
+      type: investigated
+      ts: "2026-09-13T11:40:22Z"
+      agent_id: linux-yoga-claude-20260913t114022z
+      host: yoga
+      summary: |
+        THE COLD PROBE COULD CERTIFY COLD ON A WARM HOST. Fixed. Found by pirria
+        (1149-vgn2) and relayed; verified here by reading the probe rather than by
+        reproducing it, because the construction is unambiguous.
+
+        THE DEFECT. vault recovers a share from the host keychain OR a fallback file
+        under the init cache. scripts/probe-credential-cold-state.sh read ONLY the
+        keychain, so a host with no keychain item and a
+        `fallback_vault-shamir-share-v1` on disk was certified `credential-state:cold`.
+        Measured by pirria: such a file has kept every reset WARM there since
+        2026-09-01 while this probe called the host cold. The verdict's own text made it
+        worse — "--init will re-initialize and the resync path IS exercised" — which was
+        precisely the opposite of what happened.
+
+        THIS IS THE ROW'S CLASS INSIDE THE ROW'S OWN INSTRUMENT. 900-z3kv exists because
+        a TEST reported a property it was not measuring; the probe delivered for its
+        criterion 2 did the same thing one level down. The fleet would have read `cold`
+        in a findings file and concluded the resync path was exercised, which is the
+        exact inference the row was filed to stop.
+
+        FIXED: the probe now checks the fallback location too and reports
+        `credential-state:warm` with the file's path and mtime when the keychain is
+        empty but a fallback is present. EXISTENCE AND MTIME ONLY — criterion 4 forbids
+        materialising the secret, and the file's presence answers the question
+        completely, exactly as Created/Modified answer it for the keychain item. Both
+        cold verdicts now say "and no fallback share on disk", so a cold verdict states
+        what it checked.
+
+        PINNED, with the negative control that matters: arm 8 plants a fallback under a
+        scratch XDG_CACHE_HOME with a busctl stub that SUCCEEDS and returns no items —
+        an empty keychain, not an unaskable question — and asserts WARM. Arm 9 removes
+        the fallback and asserts COLD is still reachable, because without it a probe
+        that simply stopped reporting cold would pass arm 8. Mutation-verified with the
+        diff proven non-empty first: reverting to keychain-only reds arm 8 by name,
+        8/9. 9/9 restored.
+
+        yoga IS UNAFFECTED AND I SAID SO RATHER THAN ASSUMING: no fallback_* files
+        exist here, so this host's `warm` verdict was correct before and after — its
+        share is in the keychain. The fix changes no verdict on this host, which is why
+        the fixture rather than the host is the evidence.
+
+        THE SLICE'S SCOPE NOW WIDENS TO THREE LOCATIONS, per macuahuitl's relay of
+        1149-vgn2: the keychain item, the fallback_* file, and the host vault-data
+        directory (self-completing via is_partial_init). The both-directions fixture for
+        (a) must plant EACH and assert the room is cold only when all three are gone —
+        so clearing any two and calling it cold is exactly the one-direction assertion
+        that produced this row.
