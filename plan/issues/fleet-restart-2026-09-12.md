@@ -3882,3 +3882,26 @@ stories.
   Unexplained, flagged: eight idle conmon-parented `/bin/bash -l` in yoga's
   builder container, cwd crates/tillandsias-headless, 2–4.5 h old, no
   children; a clean dispatch leaks none.
+- **Coordination pass 00:12Z 2026-09-14 (pass 14; the :41 cron delivered
+  31 minutes late behind the cut's diagnosis).** Relays HELD under the cut
+  freeze, both carrying code: osx-next +5 (macbookair, 1135-z8gn's sed -i
+  slice with the mutation-arm fix, claim released, attested) and windows-next
+  +3 (yolanda, 1171-ccf2: the Windows release carries tillandsias.exe and the
+  install dir becomes a probe candidate). Both relay in one land after the
+  stage-2 back-merge, so the cut base stays the tree the release gate
+  verified plus the wrapper fix that unblocks it. Trunk moved +6 under the
+  freeze, all plan-only as agreed: yoga's 1132-r4mt claim, advance and
+  attestation, lenovinha's 1159-g96c claim. Stale rows
+  `ok:stale-ready-rows:89/509`, candidates unchanged, none handed. Audit
+  rows=23 stems=23. Hand-offs: none — every capable host is on its own cron
+  or holding a local commit for the all-clear; the floor has nothing
+  floor-shaped until the cut publishes (esme's smoke). NEW HAZARD, measured
+  while diagnosing the cut: two `scripts/local-ci.sh --phase pre-build` runs
+  in one checkout collide on SHARED /tmp paths — the probe-usage determinism
+  check tees /tmp/probe-usage-determinism-corpus.log from both, and reported
+  "more than one verdict over the full corpus" in both concurrent runs while
+  the lone release gate was green on it; the second run's pre-build litmus
+  also slowed the first by ~2×. A local-ci run is a gate for contention
+  purposes even when it holds no lock; one per checkout. The cut's red is
+  diagnosed and fixed (1175-wuwr, the wrapper's competing-gate capture under
+  set -e); the land, attestation and re-gate follow.
