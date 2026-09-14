@@ -4591,3 +4591,70 @@ stories.
   `ok:stale-ready-rows:89/503`, none handed. Audit rows=23 stems=23. Trunk
   since the cycle: yoga's 1104-w9np. Hand-offs: none — every capable host is
   on its cron; the floor has nothing floor-shaped.
+
+**Pass 22 (2026-09-14T12:11Z) — the flood's cause was a gate-bound fixture,
+not usage probes (yoga, 10:40Z).** The sixteen `salvage/<host>/20260914---help`
+refs were minted by arm 5 of `scripts/test-refusal-names-the-ungated-lane.sh`
+(1177-k4jq), which asserted the remedy is "runnable and self-describing" BY
+RUNNING `salvage-dirty-worktree.sh --help` — and that fixture is bound into
+`./build.sh --check` at 320-1177-k4jq, so every gate on every host pushed a
+ref. Yoga fixed the arm to read the property (`-x`, `bash -n`, the header)
+at fabfcfe89 (MO-FULL 6c29d1f5e) and swept scripts/ and build.sh for other
+gate-time invokers (none). Macuahuitl's usage guard (pass 21) closes the
+class; the two land in the same hour without touching each other's files.
+Lesson, yoga's words: a fixture that probes a tool by INVOKING it is not
+reading the tool, it is USING it — and a tool whose job is to write to origin
+will write to origin. The rule about hermetic fixtures was applied to the
+ledger and not to origin's refs.
+The seven 04:55Z `salvage/yoga` refs (ancestry none): yoga inspected all
+seven by content — each carries only the hook and the fixture in yoga's own
+mutation states; 7ee26fdeb is byte-identical to the landed commit. Owner's
+disposition: throwaway. Marked ` deleted` this pass; refs deleted next pass
+(grace rule: the marker lands before the ref vanishes, 1173-a5ng).
+The macuahuitl zero settled by yoga's falsifiable prediction (10:55Z): the
+script does `git update-ref` BEFORE the push and keeps the local ref on a
+failed push (1103-i7xq), so a credential-less builder must hold local
+`salvage/…---help` refs with no counterpart on origin. Measured here:
+three local `salvage/toolbx/20260914---help-{052055,061909,083616}` refs,
+none on origin — the builder on this host is also hostname toolbx and has
+no push credential, so the arm's `|| true` swallowed a failed push each
+gate. Instrument note from both hosts: `git for-each-ref 'refs/heads/salvage/*'`
+returns ZERO for these three-deep refs (one segment per star); `**` is the
+glob. A single-star zero is indistinguishable from an absence.
+Counts on record, both hosts agreeing after one withdrawn amendment: 17
+flood refs on origin = 9 toolbx (bare + 8 timestamped) + 7 yoga + 1
+tlatoanis-macbook-air; 8891fab22 is the toolbx 074445 line, patch-equivalent
+on trunk (`git cherry` −), its ` deleted` mark stands. Yoga's note for the
+smallest register of the shape: an error introduced while correcting an
+error, against numbers their own `uniq -c` had printed two messages earlier
+— reading your own output is not the same as reading it again.
+Pass 22 state: drift win=0 osx=0 main=0, nothing to relay. Trunk since pass
+21: yoga's 1177-k4jq fixture fix (fabfcfe89), yoga's 1109-t8kw part 1
+(d1a9516cc: three more fixtures that scored a correct refusal as a
+failure), macuahuitl's 1153-j2nm (claims on platform branches reach trunk
+at claim time: scripts/push-plan-fragments-to-trunk.sh, 25-arm fixture with
+the real hook, litmus, methodology MAY/MUST; the platform-regime
+measurement handed to macbookair for their 1183-j9dk claim). macbookair
+claimed 1183-j9dk on osx-next and announced the vz.rs write scope (nobody
+else on it). Stale rows 89/502, none handed. Audit rows=23 stems=23. Hosts
+not reporting this window: yolanda, esme, macneo, lenovinha, pirria — not
+directed. One new instrument fact from 1153-j2nm's review, for the drill's
+standing list: git hands pre-push the remote's CURRENT tip, so a trunk that
+moved after your fetch surfaces as the hook refusing on a base it lacks —
+never as "[rejected] (fetch first)"; detect a push race by refetch-and-
+compare, and a wording regex is a fixture that encodes the hook's absence.
+Yolanda (12:20Z) found the flood's THIRD face, the one only their regime
+shows: inside WSL (1131-iax2, no push credential) the fixture's `--help`
+salvage did not fail, it HUNG — `git push` blocked waiting on a credential
+for 3h10m with the gate's log untouched (two 41-minute gates plus three hours
+lost on that host tonight; esme would hit the same wall). Bounded inside the
+distro: `timeout 25 bash scripts/salvage-dirty-worktree.sh --help` → rc=124
+after printing ok:salvaged-local. Both landed fixes (the usage guard, the
+read-not-run arm) close the trigger; neither closes the hang face of a REAL
+salvage on a credential-less host — handed to yolanda as a row of their own
+(GIT_TERMINAL_PROMPT=0 on the salvage push, a bounded timeout), pre-fix hang
+measured the way they did tonight. Yolanda's phrasing for the class: a
+`--help` probe has to be an assertion about ZERO side effects, and this one
+produced the maximum side effect the script is capable of. Yolanda is
+unblocked by merging trunk (both fixes predate their snapshot); 1183-2s7a
+lands with their re-gate.
