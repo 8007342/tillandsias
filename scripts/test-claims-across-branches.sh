@@ -65,13 +65,31 @@ fi
 #     off its own finished work, and the tool is authoritative on exactly that
 #     question. RED ON PRE-FIX CODE, which reports claimed-elsewhere here.
 mkstub "$W/mine" in_progress
-_node="$(hostname -s 2>/dev/null || echo unknown-host)"
+#     THE ARM MUST USE A NAME THE CHECK WILL RECOGNISE AS THIS HOST, and
+#     `hostname` is ABSENT in tillandsias-build (51c0ad583) — so this line,
+#     written on the host where hostname exists, red this fixture inside the
+#     builder while the check under test was perfectly correct. That is
+#     1109-t8kw's exact shape, committed by me the same morning I read the row.
+#     Found by its own enumeration: predicate (d), 14 candidates, this the only
+#     real hit, reproduced by shadowing ONLY hostname rather than stripping PATH.
+#
+#     _is_me accepts the node name, TILLANDSIAS_WORKSTATION, TILLANDSIAS_HOST_KIND
+#     and the platform constant, so any of them serves. If none resolves, the arm
+#     SKIPS BY NAME rather than scoring the check wrong for an environment it
+#     never claimed to need.
+_node="$(hostname -s 2>/dev/null || true)"
+[ -n "$_node" ] || _node="${TILLANDSIAS_WORKSTATION:-${TILLANDSIAS_HOST_KIND:-$(uname -s | tr 'A-Z' 'a-z')}}"
+if [ -z "$_node" ]; then
+    echo "skip:own-claim-arm:no-host-label-resolvable (1109-t8kw) — not a verdict about the check"
+else
 out="$(cd "$ROOT" && TILLANDSIAS_PLAN_BIN="$W/mine/tillandsias-plan" \
         TILLANDSIAS_XBRANCH_CLAIM_HOST="$_node" bash "$CHECK" SOME-PKT --no-fetch 2>/dev/null)"; rc=$?
 if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q '^own-claim-reflected:SOME-PKT:'; then
     ok "a claim held only under THIS host's label is reported as the reader's own, exit 0"
 else
     bad "the reader's own reflected claim must not be reported as a sibling's" "rc=$rc out=[$out]"
+fi
+
 fi
 
 # 2c. NEGATIVE CONTROL for 2b, and it is the load-bearing one: a claim under
