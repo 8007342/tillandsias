@@ -4166,3 +4166,16 @@ stories.
   artifact (the script was wholly inert on macOS before it: `stat -c` is
   GNU-only); the sed -i slice is NOT in this release and they will say so
   against any fixture-portability finding.
+- **DUPLICATE FIX ON 1142-85zx, mine, by the rule I wrote.** I claimed the
+  row at 03:41Z with a set-field in this checkout and launched a sub-agent
+  without pushing the claim; yoga's plan_next still offered it, they claimed
+  on trunk (226d19f06), fixed (236329190) and closed (2c6d108f6) while my
+  agent worked; my land refused on the merge conflict. "A hand-off is a claim
+  flip ON TRUNK" — a claim that stays local is not a claim, and the positive
+  control (plan_next no longer lists it) was never run against origin. Cost:
+  one sonnet sub-agent (139,330 tokens, 10 min) and one refused land; the
+  winner is yoga's (it also fixed the fast-refusals counter that would have
+  refused mine), mine dropped by rebase before landing, per
+  on-a-duplicate-fix-hold-never-drop — the loser holds, the winner is on
+  origin. Rule for the next cycle: push claims through the plan-only lane
+  BEFORE spawning the agent, and run the control against origin's fold.
