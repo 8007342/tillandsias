@@ -107,11 +107,27 @@ if /usr/bin/grep -q '1146-8j7i' "$SALVAGE"; then
 else
     bad "the salvage script has no clean-tree path — the refusal would send a stuck host to a script that answers ok:salvage-not-needed"
 fi
-_sv_out="$(bash "$SALVAGE" --help 2>&1 || true)"
-case "$_sv_out" in
-    *salvage*|*slug*) ok "the named command is runnable and self-describing" ;;
-    *) bad "the named command did not respond to --help: $(printf '%s' "$_sv_out" | head -1)" ;;
-esac
+#     NEVER BY RUNNING IT, and this arm learned that the expensive way. It used
+#     to call `bash "$SALVAGE" --help`, and salvage-dirty-worktree.sh has no
+#     usage guard: `--help` is taken as the SLUG, and since the clean-tree
+#     extension (1146-8j7i) a clean HEAD is then PUSHED under it. So every run
+#     of this fixture minted a ref named salvage/<host>/<date>---help on origin
+#     — and because this fixture is BOUND INTO THE GATE at 320-1177-k4jq, that
+#     was once per gate, on every host. macuahuitl's salvage sweep found sixteen
+#     such refs, nine of them mine. A fixture that probes a tool by invoking it
+#     is not reading the tool, it is USING it.
+#
+#     The property wanted here is that the named remedy EXISTS, PARSES and
+#     DESCRIBES ITSELF — all three are readable without executing anything.
+if [ ! -x "$SALVAGE" ]; then
+    bad "the named command is not executable: $SALVAGE"
+elif ! bash -n "$SALVAGE" 2>/dev/null; then
+    bad "the named command does not parse — the refusal points at a broken script"
+elif /usr/bin/grep -qE '^#.*(salvage|slug)' "$SALVAGE"; then
+    ok "the named command exists, parses, and its header describes itself"
+else
+    bad "the named command carries no self-description a stuck reader could use"
+fi
 
 # ── 6. the doc and the refusal agree on which lane is which ────────────────
 #    Two sources that disagree about the same rule is how a host ends up taking

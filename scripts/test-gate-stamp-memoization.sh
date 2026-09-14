@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # test-gate-stamp-memoization.sh — fixtures for order 765-tkq2.
 # @trace spec:methodology-accountability
+# @trace order:1184-u5mg (case 11 must own the variable case 12 sets)
 #
 # Two layers, because the two halves fail differently:
 #
@@ -217,7 +218,22 @@ issue_root_pass_token() {
 # 11. The gate consults the memo and says so, out loud, with the override.
 issue_root_pass_token
 bash "$ROOT/scripts/gate-stamp.sh" write --scope full --dispatch check >/dev/null 2>&1
-TILLANDSIAS_SKIP_VERSION_BUMP=1 "$ROOT/build.sh" --check > "$TDIR/hit.log" 2>&1
+# THE ONE ARM THAT REQUIRES A MEMO HIT MUST OWN THE VARIABLE THAT DEFEATS ONE.
+# Case 12 below asserts that TILLANDSIAS_FORCE_CHECK=1 BYPASSES the memo — so an
+# ambient FORCE_CHECK makes this arm fail by case 12's own contract, and the
+# failure reads "memo hit path wrong" as though memoization were broken.
+#
+# MEASURED on yoga 2026-09-14: `TILLANDSIAS_FORCE_CHECK=1 ./build.sh --ci-full`
+# reported litmus:release-gates-run-locally RED at this step (898.5s, rc=0, the
+# fixture reporting its own failures — not a budget kill), while the same
+# fixture run standalone was 14/14. Re-run standalone WITH the variable set:
+# `FAIL: memo hit path wrong; rc=0`. The gate was not red; the invocation was.
+#
+# This is 1109-t8kw's class in a release-gate litmus: a fixture that does not
+# construct the environment it asserts about, scoring a correct behaviour as a
+# failure. The variable is cleared for this child only; case 12 still sets it
+# deliberately, which is the whole point of the pair.
+TILLANDSIAS_FORCE_CHECK= TILLANDSIAS_SKIP_VERSION_BUMP=1 "$ROOT/build.sh" --check > "$TDIR/hit.log" 2>&1
 hit_rc=$?
 if [ "$hit_rc" -eq 0 ] && took_memo "$TDIR/hit.log" && ! started_real_work "$TDIR/hit.log" &&
     grep -q 'TILLANDSIAS_FORCE_CHECK=1 to re-run' "$TDIR/hit.log"; then

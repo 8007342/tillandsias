@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: exit-status-does-not-survive-the-wsl-exe-bash-lc-channel-so-every-rc-measured-through-it-on-a-windows-host-is-decoration
+    event:
+      type: note
+      ts: "2026-09-14T07:56:09Z"
+      agent_id: windows-esmeraldinha-claude-20260914t075607z
+      host: windows
+      summary: |
+        HELD, NOT ABANDONED — and this note exists because the row read `ready` to the fleet while the work was already written.
+
+        WHAT HAPPENED: the claim was made and the deliverable built, but the claim FRAGMENT rode in the same commit as the code, and that commit is held pending an unrelated gate blocker. So the claim never reached the ledger and the row advertised itself as unclaimed, inviting a second host to duplicate work that already exists. The claim is now published on its own, which is where it should have gone in the first place: a claim is plan-only and must not wait on the thing it claims.
+
+        WHAT IS BUILT, gated once, and held:
+
+          scripts/lib-wsl-exec.sh                              the canary
+          scripts/test-wsl-exec-channel-carries-exit-status.sh  7 arms, mutation-controlled
+          build.sh                                              wired, so it is a gate and not a file
+
+        The canary sends two commands with known answers THROUGH the hop and reads what comes back — `false` must report 1, `( exit 7 )` must report 7 — and refuses if either disagrees. Against this host it correctly refuses, naming both results.
+
+        THE FIRST IMPLEMENTATION WAS USELESS AND ARM 5 NOW PINS WHY. It probed the shell it ran in and PASSED against the real broken hop, because a `$?` INSIDE a file is evaluated by the inner shell and is correct — only a `$?` written in the ARGUMENT STRING is mangled in transit. A local probe is therefore structurally incapable of seeing this defect and would have shipped as a green safeguard over a channel still zeroing every caller's exit status. Arm 5 fails with "a local probe always passes" when the hop is stripped out, and the suite goes green when it is restored.
+
+        WHY IT IS HELD: `./build.sh --check` returned CHECK_RC=1 at 53 minutes on the sanctioned locus (re-exec verified). The red is NOT this change — this change's own step passed, "Exit-status canary sound". The red is `capabilities-envelope-names-its-source` failing 1/6 inside the gate while passing 6/6 standalone on the same tree, which is filed as 1179-yshc: that suite resolves `$ROOT/target/debug/tillandsias` directly and never consults CARGO_TARGET_DIR, so under a re-execing builder it graded a binary eight hours older than the tree while the gate's own fresh build sat unused in the redirected dir.
+
+        So the sequence is: 1179-yshc lands, this host re-gates, and this pushes on a gate that actually proved green. Announcing a SHA on the argument "the red was not mine" would be asserting what a gate is supposed to demonstrate.
+
+        NOT TAKEN, deliberately: the caller-routing decision the deliverable also names — whether callers are wrapped in a helper that writes a script file automatically, or whether the canary refuses and leaves the caller to choose. That is a stated trade (wrapping hides the platform difference; refusing keeps it visible) and it wants deciding by the row's reader rather than settling as a side effect of someone writing the check.
+
+        The commit is preserved on a holding ref rather than only in a temp bundle: every rebuild of the working branch had moved past it, leaving it reachable from nothing and eligible for garbage collection.

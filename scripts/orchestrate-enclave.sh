@@ -62,6 +62,14 @@ log_error() { echo -e "${RED}[orchestrate]${NC} $*" >&2; }
 log_step() { echo -e "${CYAN}[orchestrate]${NC} $*"; }
 
 PROMPT_MODE="${TILLANDSIAS_OPENCODE_PROMPT:-}"
+# TILLANDSIAS_STATUS_CHECK: set nonempty to opt into an extra Step 5
+# health-check probe (proxy/git-service/inference connectivity from
+# inside a throwaway forge container) before the interactive forge
+# launch, and to make Step 4 skip inference runtime pulls and wait for
+# inference health. Nothing in this tree sets it today (grep the repo) --
+# an intentional, currently-unused activation seam, not dead code (see
+# order 1170-e5im and scripts/test-orchestrate-enclave.sh, whose arm 2
+# proves this seam still behaves when the variable IS set).
 STATUS_CHECK_MODE="${TILLANDSIAS_STATUS_CHECK:-}"
 # ORDER 923-rmtw. Was a pasted copy, frozen at its pre-801-kqme value for
 # eleven days: `git-service` still named after the Rust constant dropped it,
@@ -431,37 +439,48 @@ podman rm -f "$FORGE_CONTAINER" 2>/dev/null || true
             log_error "Status check container exited with error"
             exit 1
         fi
-    if ! podman run \
-        --interactive \
-        --tty \
-        --rm \
-        --name "$FORGE_CONTAINER" \
-        --hostname "forge-$PROJECT_NAME" \
-        --network "$ENCLAVE_NET" \
-        --cap-drop=ALL \
-        --security-opt=no-new-privileges \
-        --security-opt=label=disable \
-        --userns=keep-id \
-        --pids-limit=4096 \
-        --env "http_proxy=http://proxy:3128" \
-        --env "https_proxy=http://proxy:3128" \
-        --env "HTTP_PROXY=http://proxy:3128" \
-        --env "HTTPS_PROXY=http://proxy:3128" \
-        --env "no_proxy=$ENCLAVE_NO_PROXY" \
-        --env "NO_PROXY=$ENCLAVE_NO_PROXY" \
-        --env "PATH=/usr/local/bin:/usr/bin" \
-        --env "HOME=/home/forge" \
-        --env "USER=forge" \
-        --env "PROJECT=$PROJECT_NAME" \
-        --env "TILLANDSIAS_OPENCODE_PROMPT=$PROMPT_MODE" \
-        -v "$PROJECT_PATH:/home/forge/src:rw" \
-        --mount "type=bind,source=$CERTS_DIR/intermediate.crt,target=/etc/tillandsias/ca.crt,readonly=true" \
-        "tillandsias-forge:v${VERSION}" \
-        /bin/bash; then
-        log_error "Forge container exited with error"
-        exit 1
     fi
+
+# ORDER 1170-e5im: the forge launch below used to sit inside the
+# STATUS_CHECK_MODE guard above -- a variable
+# scripts/check-dead-env-branches.sh reports READ (line 65) and never
+# ASSIGNED anywhere in this tree, so the guard was never true on a real
+# invocation and this launch never ran. It must run unconditionally; see
+# scripts/test-orchestrate-enclave.sh, whose mutation-control arm rewraps
+# exactly this block (between the two markers below) to prove the fixture
+# still catches the regression if it comes back.
+# forge-launch-unconditional-begin
+if ! podman run \
+    --interactive \
+    --tty \
+    --rm \
+    --name "$FORGE_CONTAINER" \
+    --hostname "forge-$PROJECT_NAME" \
+    --network "$ENCLAVE_NET" \
+    --cap-drop=ALL \
+    --security-opt=no-new-privileges \
+    --security-opt=label=disable \
+    --userns=keep-id \
+    --pids-limit=4096 \
+    --env "http_proxy=http://proxy:3128" \
+    --env "https_proxy=http://proxy:3128" \
+    --env "HTTP_PROXY=http://proxy:3128" \
+    --env "HTTPS_PROXY=http://proxy:3128" \
+    --env "no_proxy=$ENCLAVE_NO_PROXY" \
+    --env "NO_PROXY=$ENCLAVE_NO_PROXY" \
+    --env "PATH=/usr/local/bin:/usr/bin" \
+    --env "HOME=/home/forge" \
+    --env "USER=forge" \
+    --env "PROJECT=$PROJECT_NAME" \
+    --env "TILLANDSIAS_OPENCODE_PROMPT=$PROMPT_MODE" \
+    -v "$PROJECT_PATH:/home/forge/src:rw" \
+    --mount "type=bind,source=$CERTS_DIR/intermediate.crt,target=/etc/tillandsias/ca.crt,readonly=true" \
+    "tillandsias-forge:v${VERSION}" \
+    /bin/bash; then
+    log_error "Forge container exited with error"
+    exit 1
 fi
+# forge-launch-unconditional-end
 
 # ===========================================================================
 # Cleanup
