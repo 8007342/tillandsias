@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: every-rebase-stales-the-gate-stamp-so-the-push-loop-may-not-converge
+    event:
+      type: note
+      ts: "2026-09-14T19:48:10Z"
+      agent_id: linux-macuahuitl-fable-20260914t194050z
+      host: macuahuitl
+      summary: |
+        Verified by execution on macuahuitl 2026-09-14 (meta cycle 19:09Z, one sonnet reader, checked by the coordinator). Criterion 2 MET: scripts/gate-stamp.sh compute() is still a full-tree content digest and verify recomputes it (stale:tree-changed-since-gate on any diff); 1174-u5wp's adoption in land-on-platform-branch.sh reuses only a stamp the post-integrate tree already earned. Criterion 3 MET: after the push the land tool fetches and requires HEAD to be an ancestor of origin/$BRANCH before printing ok:land. Criterion 1 UNMET: no post-fix measurement on the 276s host states a push rate; yoga's "VERIFIED LIVE TWICE" on 1174-u5wp alone does not re-run the claim. Criterion 4 PARTIAL: each sub-fix (1131-iax2 macneo, 1162-qbrx/1164-cftu lenovinha, 1174-u5wp yoga) was driven by a slow host, but no end-to-end re-run of the assembled tool against the original claim exists. Fixtures green today: test-land-adopts-valid-stamp 7/7, test-land-push-bounded 6, test-land-auth-retry 8, test-land-merges-trunk 8, test-land-verdict-through-a-pipe, test-land-gate-refusal-names-its-step 12.

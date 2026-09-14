@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: append-event-writes-outside-the-plan-only-lane
+    field: status
+    value: completed
+    ts: "2026-09-14T19:56:35Z"
+    host: macuahuitl
+
+events:
+  - packet_id: append-event-writes-outside-the-plan-only-lane
+    event:
+      type: completed
+      ts: "2026-09-14T19:56:35Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: 823e3ac0d (append-event writes fragments only) + litmus-plan-only-push-lane-shape ACCEPT (966-7umc) arm; test-pre-push-plan-lane-fails-closed-without-binary 6/6; test-pre-push-plan-lane-after-merge 8/8; residual covered by 1152-y3bv's validator-surface staleness refusal
+  - packet_id: append-event-writes-outside-the-plan-only-lane
+    event:
+      type: note
+      ts: "2026-09-14T19:56:35Z"
+      host: macuahuitl
+      summary: |-
+        all three criteria met; the attribution in the context corrected by note
