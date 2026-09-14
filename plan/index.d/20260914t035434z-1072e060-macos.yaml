@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: macos-model-cache-dies-with-the-vm-directory
+    field: next_action
+    value: 'PART 1 DONE (three virtiofs shares). THE BLOCKING SURVIVAL CRITERION IS NOW VERIFIED END TO END on macbookair 2026-09-14 against released v56.9.13.1 — seeded the host models dir with byte-provable content, rm -rf''d $VM_DIR ONLY, re-provisioned (rootfs.img nine seconds old at check), and confirmed BOTH halves: host files byte-identical by sha256, and the NEW guest re-mounting ''model-cache on /root/.cache/tillandsias/models type virtiofs'' with both files present. The row''s ''UNVERIFIED / not authorised, not done'' line is superseded; the operator granted standing consent 2026-09-13. TWO THINGS REMAIN, NEITHER BLOCKED ON CONSENT. (a) MEASUREMENT: the guest-side models-vs-images split on a POPULATED cache still needs a forge lane run that pulls an engine and a real model, then --exec-guest du -sh. I deliberately did NOT substitute my 2 MiB ballast for that figure — it proves survival, not the split. --exec-guest works on this path (rc=0, starts the VM and waits for Ready itself), so the probe is available. (b) SCOPE DECISION, not code and not mine: model_cache_dir() sits under $CACHE_DIR, so the smoke and uninstall destroyers still delete the models dir — confirmed from the other side this cycle, since the v56.9.13.1 smoke hours earlier wiped it wholesale and I had to seed it here. The literal deliverable is met and proven; whether to narrow those skills to preserve the models dir changes clean-room semantics and should be DECIDED rather than inherited.'
+    ts: "2026-09-14T03:54:34Z"
+    host: macos
+
+events:
+  - packet_id: macos-model-cache-dies-with-the-vm-directory
+    event:
+      type: note
+      ts: "2026-09-14T03:54:34Z"
+      host: macos
+      summary: |-
+        survival criterion verified end to end (host sha256 + guest virtiofs remount); (a) populated-cache split and (b) the scope decision remain
