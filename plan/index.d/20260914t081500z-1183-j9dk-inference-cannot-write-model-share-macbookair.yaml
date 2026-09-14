@@ -1,0 +1,130 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-inference-container-cannot-write-the-macos-model-cache-share-so-the-engine-self-install-fatals-on-every-launch
+    order: 1183-j9dk
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    pickup_role: macos
+    capability_tags: [macos, inference, runtime, fail-loud]
+    estimated_hours: 4
+    owned_files:
+      - crates/tillandsias-vm-layer/src/vz.rs
+      - images/inference
+    unscoreable: |
+      unpinnable-until-the-guard-exists. The check needs a macOS host with an
+      EMPTY model cache and a booted VZ guest — a precondition no Linux CI lane
+      can create, and the one precondition that matters, because a cache
+      already populated by any other path hides this defect completely. Naming
+      a litmus nothing defines yet would be refused by 885-92iu, so the name is
+      stated here instead: scripts/test-macos-model-share-writable.sh, to be
+      written in the same commit as the fix it guards (1136-n8sh).
+
+      WHAT THAT FIXTURE MUST ASSERT, so whoever writes it does not weaken it to
+      something that passes: with the cache EMPTY, the inference container
+      (uid 1000) can create ${OLLAMA_MODELS}.tools — and a MUTATION ARM must
+      show the assertion reds when the share is presented root-owned, or the
+      fixture proves only that some directory somewhere was writable. The
+      three-actor table in `context` is the shape it should reproduce:
+      guest-root writes the share, the container writes /tmp, the container
+      does NOT write the share.
+
+      A SCORABLE SLICE EXISTS WITHOUT THE FIX: the second, smaller defect named
+      in next_action — the entrypoint warns about the failed mkdir and then
+      proceeds to a fatal tar four lines later — can be closed on its own with
+      a fixture asserting the mkdir failure is fatal WHERE IT HAPPENS, naming
+      ownership. That one needs no macOS host.
+    verifiable_closure: ""
+    title: |
+      on macOS the model-cache virtiofs share reaches the guest as root-owned 0755 while the inference container runs as uid 1000, so ollama's self-install cannot create .tools/ and the engine FATALs on every launch from a clean cache
+    context: |
+      FOUND on tlatoanis-macbook-air 2026-09-14 while taking 804-deux part (a)
+      — the guest-side models-versus-images split on a POPULATED cache. The
+      cache could not be populated, and this is why.
+
+      WHAT HAPPENS. The `tillandsias-inference` container starts, tries to
+      self-install the ollama binary into `${OLLAMA_MODELS}.tools`, and dies:
+
+        [inference] Installing ollama binary (first run)...
+        mkdir: cannot create directory '/home/ollama/.ollama/models/.tools': Permission denied
+        [inference] WARN: cannot create /home/ollama/.ollama/models/.tools/ollama (volume ownership? see order 313)
+        [inference] engine payload verified: v0.34.0/arm64 sha256 ok
+        tar: /home/ollama/.ollama/models/.tools: Cannot open: No such file or directory
+        tar: Error is not recoverable: exiting now
+        [inference] ollama install FAILED (see errors above) — will retry next launch (non-fatal)
+        [inference] FATAL: no ollama binary available (self-install failed above) — exiting so the next launch retries
+
+      "will retry next launch (non-fatal)" followed immediately by "FATAL"
+      describes a retry that cannot ever succeed: the cause is a permission
+      structure, not a transient.
+
+      THE MECHANISM, discriminated by measurement rather than inferred. Three
+      actors, same directory:
+
+        host, macOS          uid 501 (tlatoani), mode 0755
+        guest, as root       mkdir in the share -> OK
+        container, uid 1000  mkdir in the share -> Permission denied
+        container, uid 1000  mkdir in /tmp (non-share) -> OK
+
+      So the container is not broadly unable to write, and the share is not
+      broadly unwritable. virtiofs presents the host directory to the guest as
+      ROOT-OWNED 0755 (confirmed in-guest: `drwxr-xr-x 2 root root`), the
+      inference container runs as uid 1000 (`id` -> uid=1000(ollama)), and
+      ordinary Unix semantics then forbid it creating an entry. Nothing is
+      misbehaving; the ownership the share arrives with and the uid the
+      container runs as were never reconciled.
+
+      WHY IT HAS BEEN INVISIBLE. On Linux the model cache is a podman VOLUME,
+      which podman can chown — order 313 is exactly that lesson, and the
+      entrypoint's own WARN text still says "volume ownership? see order 313".
+      The macOS lane replaced the volume with a virtiofs share (804-deux part
+      1) and inherited none of that. It only bites on an EMPTY cache: once
+      `.tools/` exists, the extract has a target and later launches work — so a
+      host whose cache was populated before the share existed never sees it.
+      This host's cache was emptied by the v56.9.13.1 clean-room smoke hours
+      earlier, which is why it surfaced now.
+
+      CONSEQUENCE. On a macOS host with a clean model cache the inference lane
+      cannot start at all, and by construction cannot pull a model — so the
+      model cache stays empty forever, and every downstream claim about
+      local experts on macOS rests on a lane that has not run. 804-deux's part
+      (a) is BLOCKED on this: the populated cache it wants to measure is
+      unreachable through the product's own path.
+    deliverable: |
+      The inference container can create and write `${OLLAMA_MODELS}.tools`
+      on a macOS host with an empty cache. Candidate shapes, cheapest first,
+      and the choice is a real decision rather than a detail:
+
+        1. Give the share the uid the container runs as. virtiofs device
+           configuration in vz.rs is where the share is declared; if the
+           mapping can present the directory as uid 1000, nothing else changes.
+        2. Have the guest chown/chmod the mount point after mounting it
+           (cloud-init already persists the fstab entry), so the share arrives
+           writable by the inference uid.
+        3. Run the inference container with a userns mapping that lands on the
+           share's owner, matching whatever the Linux lane effectively does
+           through the volume.
+
+      Whichever is chosen, it must hold for a FRESH cache — the failure only
+      exists before `.tools/` is created, so a fix verified on a populated
+      cache has verified nothing.
+    next_action: >
+      Reproduce first, it is two commands and needs no build: empty
+      ~/Library/Caches/tillandsias/models on a macOS host, then
+      `--exec-guest 'podman run --rm -v /root/.cache/tillandsias/models:/home/ollama/.ollama/models:rw --entrypoint sh localhost/tillandsias-inference:latest -c "id; mkdir -p /home/ollama/.ollama/models/.tools && echo OK || echo FAILED"'`
+      — expect uid=1000 and FAILED. Then pick a shape from the deliverable.
+      Read order 313 first: it is the same lesson on the volume side and its
+      remedy may transfer. Note that the entrypoint already ANTICIPATES this
+      failure in its WARN text and then proceeds to a fatal tar anyway, so a
+      second, smaller fix is available independently: make the mkdir failure
+      fatal where it happens, with the ownership named, instead of surfacing
+      four lines later as a tar error about a missing directory.
+    provenance: |
+      Filed by macbookair (macos) 2026-09-14 while taking 804-deux part (a)
+      against released v56.9.13.1. Every line above measured on this host: the
+      container log quoted verbatim, and the three-actor permission table
+      established by running mkdir as guest-root, as the container user in the
+      share, and as the container user outside it. Cited by symbol and by
+      container path.

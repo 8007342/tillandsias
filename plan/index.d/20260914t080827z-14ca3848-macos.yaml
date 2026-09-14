@@ -1,0 +1,49 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: macos-model-cache-dies-with-the-vm-directory
+    event:
+      type: evidence
+      ts: "2026-09-14T08:08:27Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260914t075529z
+      host: macos
+      summary: |
+        PART (a) ATTEMPTED AND BLOCKED — by a product defect this attempt uncovered, now filed as 1183-j9dk. The populated cache this row wants to measure is UNREACHABLE on macOS through the product's own path.
+
+        WHAT I MEASURED BEFORE HITTING IT, which is real and worth keeping:
+
+          after `tillandsias-headless --init` in the guest (the product's own bring-up, rc=0):
+            images (guest rootfs, DIES with the VM)   6.1 G      /var/lib/containers
+            models (host share, SURVIVES)             0          /root/.cache/tillandsias/models
+            rootfs used                               782M -> 4.4G
+
+          the image inventory, by repository:
+            tillandsias-forge              3.04 GB
+            tillandsias-forge-base         3.03 GB
+            tillandsias-chromium-framework 1.79 GB
+            tillandsias-chromium-core       991 MB
+            tillandsias-git                 576 MB
+            tillandsias-vault               488 MB
+            hashicorp/vault                 475 MB
+            tillandsias-inference           445 MB   <- the engine IS built
+            fedora-minimal                  145 MB
+            router 108 MB, caddy 60.8 MB, proxy 32.7 MB, web 9.3 MB, alpine 8.83 MB
+
+        A FINDING IN ITS OWN RIGHT: `--init` POPULATES THE IMAGE HALF ONLY. The engine image is built, the model cache stays at zero. The two populations fill at DIFFERENT LIFECYCLE STAGES — images at init, models at first inference run — so a split measured right after init reads 100/0 and would be mistaken for "the cache never holds anything". This row's next_action should not be read as though one command produces both numbers.
+
+        WHY THE MODEL HALF COULD NOT BE FILLED. Running the real engine image with the product's own mount (`-v {model_cache_dir}:/home/ollama/.ollama/models:rw`, read from the run-args builder) reproduces a hard failure every launch:
+            mkdir: cannot create directory '/home/ollama/.ollama/models/.tools': Permission denied
+            tar: /home/ollama/.ollama/models/.tools: Cannot open: No such file or directory
+            [inference] FATAL: no ollama binary available (self-install failed above)
+        virtiofs presents the share to the guest as root-owned 0755; the container runs as uid 1000. Discriminated three ways: guest-root writes the share OK, the container writes /tmp OK, the container writes the share FAILED. Full mechanism and remedies on 1183-j9dk.
+
+        SO (a) IS NOT "NOT DONE", IT IS BLOCKED, and on a p1 defect rather than on effort. I did NOT substitute a synthetic figure for the model half — my earlier 2 MiB ballast proved survival and says nothing about a ratio, and a made-up denominator on this row would be worse than an absent one. The images figure above stands on its own and is measured.
+
+        ONE ODDITY, recorded without interpretation: `podman ps -a` in the guest reported the exited probe container as "Exited (0) 292 years ago". A 292-year age is the shape of a zero/epoch timestamp rather than a real duration. Not chased, not filed — noted in case a guest clock question surfaces elsewhere.
