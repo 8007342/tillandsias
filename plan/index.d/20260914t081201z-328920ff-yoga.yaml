@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: next-order-already-reads-the-fold-so-it-should-report-the-rows-filed-since-the-callers-last-order-instead-of-leaving-a-duplicate-to-be-noticed-from-the-number
+    event:
+      type: implemented
+      ts: "2026-09-14T08:12:01Z"
+      agent_id: linux-yoga-claude-20260914t081201z
+      host: yoga
+      summary: |
+        IMPLEMENTED: next-order now REPORTS what it already read, on stderr, with stdout untouched.
+
+        THE MECHANISM WAS ALWAYS A READ. The next prefix is one above the highest order in the fold, so by the time the subcommand answers it has necessarily observed every row other hosts filed since the caller last looked — and it handed that back as a bare number. MEASURED 2026-09-13: lenovinha filed and claimed 1158-y3ad at 15:49Z; the coordinator filed 1160-nvzs, the same defect, at 16:05Z, and next-order minted 1160 BECAUSE 1158 and 1159 were in that fold. The tool that filed the duplicate had already read the answer.
+
+        STDOUT IS THE CONSTRAINT THAT SHAPED THIS: `order: $(tillandsias-plan next-order)` is the documented composition, so the report goes to stderr and every existing caller is unchanged. It does not refuse — the row puts that out of scope, and a filer who has read the list may be filing something genuinely different.
+
+        REPRODUCED ON THE LIVE LEDGER, which is as close to the original incident as this can get: `next-order --since 1157` lists 1158-y3ad and 1160-nvzs in the same report, four lines apart. The collision is visible in one screen from the tool that caused it.
+
+        A DEFECT I INTRODUCED AND CAUGHT, and it is the row's own shape one level down. My first cut identified the caller with resolve_writer_host(), which falls back to std::env::consts::OS — so on every Linux host it answers "linux", the agent_id segment match then matched EVERY linux host's rows, and the baseline became "the highest order any linux host filed". Measured: the default baseline came back 1182, a row macuahuitl filed, and yoga would never have been told about anything lenovinha filed after it. A baseline that silently includes other hosts' filings is exactly the duplicate this row exists to prevent, wearing the fix's clothes. The caller is now identified by WORKSTATION (TILLANDSIAS_WORKSTATION, else hostname -s), and the same measurement reads 1150 — yoga's own last — with 37 rows to read. A test pins the difference rather than the fix.
+
+        SEGMENT-EXACT, NEVER SUBSTRING: "yoga" must not match "yogabook", and a platform word must not match every host. An arm pins it.
+
+        ONLY A `filed` EVENT ATTRIBUTES A ROW. A packet whose events are claims or notes was filed by someone this fold cannot name, and guessing would move the baseline for the wrong host. An arm pins that too.
+
+        WHERE THE LOGIC LIVES: three free functions beside resolve_writer_host rather than closures inside the match arm, because the row asks for `cargo test -p tillandsias-plan next_order_reports_rows_filed_since` and a closure buried in a subcommand cannot be tested at all. The arm reads the ledger and prints; the functions decide.
+
+        FIVE TESTS, all in the named module. MUTATION-TESTED THREE WAYS, each diff printed and proven non-empty first: clearing the report reds the named test (the pre-fix bare-number behaviour); substring matching instead of segment-exact reds the segment arm; attributing a row with no `filed` event reds the attribution arm. Crate suite: 310 + 46 passed, 0 failed.
+
+        THE SKILL NOW TELLS A FILER TO READ THE LINE before writing the fragment, in the same place that says to mint rather than pick — because a rule about filing that lives anywhere else is a rule nobody reads at filing time.
