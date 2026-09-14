@@ -1803,8 +1803,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # (darwin, a stripped container) gets exit 3 and is waved past with a note:
     # refusing a gate because a probe could not read a file would be a capacity
     # claim from an instrument that never looked (965-sxec).
-    _mem_out="$(bash "$SCRIPT_DIR/scripts/check-gate-memory-floor.sh" 2>&1)"
-    case "$?" in
+    # set -e-SAFE CAPTURE (macbookair, 2026-09-14, the 1175-wuwr class one day
+    # later): this file runs under `set -euo pipefail`, and a bare
+    # `_mem_out="$(…)"` whose probe exits 3 (darwin, a stripped container: no
+    # /proc/meminfo) ABORTED THE GATE at this line — the case below, written
+    # to wave exactly that host past, never ran, and every macOS land died at
+    # "Fast refusals…" with a 606-byte log that read as a killed child.
+    # `cmd || rc=$?` is the only capture that survives errexit; the consumer
+    # fixture drives this block under set -e with a stub exiting 3 and
+    # asserts the gate PROCEEDS.
+    _mem_rc=0
+    _mem_out="$(bash "$SCRIPT_DIR/scripts/check-gate-memory-floor.sh" 2>&1)" || _mem_rc=$?
+    case "$_mem_rc" in
         0) _info "${_mem_out%%$'\n'*}" ;;
         1) _error "${_mem_out%%$'\n'*}"
            printf '%s\n' "$_mem_out" >&2

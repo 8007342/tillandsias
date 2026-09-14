@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: next-order-already-reads-the-fold-so-it-should-report-the-rows-filed-since-the-callers-last-order-instead-of-leaving-a-duplicate-to-be-noticed-from-the-number
+    event:
+      type: note
+      ts: "2026-09-14T08:12:20Z"
+      agent_id: linux-yoga-claude-20260914t081219z
+      host: yoga
+      summary: |
+        I COMMITTED 1063-363b's DEFECT WHILE CLOSING THIS ROW, and the fix I landed hours earlier is what made it visible and cheap.
+
+        Writing verifiable_closure, I passed the value INLINE with backticks around a field name. The shell command-substituted them: bash reported "filed: commande introuvable" and the stored value lost the word, reading "only a  event attributes a row". A command ran (harmlessly) and the ledger took corrupted prose.
+
+        THE RULE I BROKE IS ALREADY WRITTEN DOWN: ledger prose is data, and the shell will execute it if you let it — write every summary to a file through a quoted heredoc and pass --summary-file, never an inline value (1063-363b). I used --summary-file for the EVENT in the same breath and then hand-typed the FIELD. The habit protected the long text and not the short one.
+
+        WHAT MADE IT CHEAP: the correction needed --replace, because rewriting a line drops it — 1151-td46, which I landed on this host hours ago. The tool printed the old value beside the new, which is how I could see exactly which word had gone. A guard I wrote this morning caught a mistake I made this afternoon, in the register it was written for.
+
+        Corrected from a file, no backticks. Recorded rather than quietly re-run, because the same hands that build a guard are the ones it has to catch.

@@ -71,7 +71,31 @@ set -uo pipefail
 ROOT="${TILLANDSIAS_SALVAGE_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 cd "$ROOT" || exit 2
 
+# USAGE GUARD (2026-09-14): the slug used to be `${1:-dirty-start}` with no
+# check, so `--help` was taken AS the slug and, since the clean-tree extension
+# (1146-8j7i), every probe of this script for usage pushed the current HEAD to
+# salvage/<host>/<stamp>---help — sixteen such refs from three hosts in one
+# day, each demanding a ledger line and a marked deletion. An empty argument
+# keeps the documented default; -h, --help or any leading-dash argument prints
+# the usage and exits 2 pushing nothing; a slug is [A-Za-z0-9._-]+.
+_slug_usage() {
+    cat >&2 <<'USAGE'
+usage: scripts/salvage-dirty-worktree.sh [<slug>]
+  Pushes a COPY of this worktree's dirt (or its unpushed HEAD when the tree is
+  clean) to refs/heads/salvage/<host>/<yyyymmdd>-<slug> on origin, touching
+  nothing in the worktree. <slug> defaults to dirty-start; it must match
+  [A-Za-z0-9._-]+ and must not start with a dash. Verdicts:
+  ok:salvaged:<ref>:<sha> | ok:salvaged-commits:<ref>:<sha> |
+  ok:salvaged-local:<ref>:<sha> | ok:salvage-not-needed | skip:salvage:…
+USAGE
+}
+case "${1:-}" in
+    -h|--help|-*) _slug_usage; echo "refused:salvage:usage:${1:-} is not a slug (nothing pushed)"; exit 2 ;;
+esac
 SLUG="${1:-dirty-start}"
+case "$SLUG" in
+    *[!A-Za-z0-9._-]*) _slug_usage; echo "refused:salvage:bad-slug:$SLUG (nothing pushed)"; exit 2 ;;
+esac
 HOST="$(hostname -s 2>/dev/null | tr 'A-Z' 'a-z' | tr -cd 'a-z0-9-')"
 [ -n "$HOST" ] || HOST="unknown"
 STAMP="$(date -u +%Y%m%d)"

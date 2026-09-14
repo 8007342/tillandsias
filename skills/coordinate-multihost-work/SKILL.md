@@ -73,6 +73,15 @@ the remedy is mechanical rather than attentional: **run the cross-branch check o
 every candidate before routing it, and never report a packet as unclaimed on the
 strength of a trunk read.**
 
+Since 1153-j2nm the gap has a second, shorter remedy on the CLAIMANT's side:
+`scripts/push-plan-fragments-to-trunk.sh` pushes a platform host's new
+fragments to `origin/linux-next` at claim time through the plan-only lane
+(no stamp; the worktree and branch are untouched; the relay merges the
+identical file clean). Tell a platform host that claims by message to run
+it, and when the cross-branch check reports `claimed-elsewhere:<order>:<branch>`,
+relay the fragment or ask the host to push it — the check remains the
+coordinator's control, because a host can still claim without the helper.
+
 ## Active Coordination & Mediation Audit
 
 In every hourly pass, the orchestrator MUST actively analyze concurrent work and evidence to detect and mediate four critical multi-host alignment problems:
@@ -189,6 +198,19 @@ Three rules learned on 2026-09-13, each from a wasted cycle:
   `set-field <order> status in_progress --host <host> --evidence … --reason
   "handed by the coordinator …"` pushed through the plan-only lane, and the
   control `tillandsias-plan next <role> | grep -c <order>` → 0.
+- **Correcting a long-form field: `--append`, not a rewrite (1151-td46).**
+  `next_action`, `context`, `notes`, `deliverable`, `verifiable_closure` and
+  their siblings are SHARED PROSE on a channel that replaces wholesale, so a
+  host fixing one sentence deletes whatever other hosts wrote there. Measured on
+  esme 2026-09-13 while attaching evidence to 793-zumy: three load-bearing
+  warnings dropped in one write — a verification-debt note, "DO NOT MOVE
+  legacy_tier WITHOUT TELLING YOGA", and the hwfp-v2 field list — restored only
+  because the tool happened to echo the old value's tail. set-field now REFUSES
+  a value that drops old lines and prints each one; `--append` keeps them all
+  and adds yours under a dated attribution line, and `--replace` is for when you
+  have read the listed lines and they should go. Note the rule is LINE-EXACT:
+  editing someone else's sentence in place counts as dropping it, which is the
+  case this exists for.
 - **A closure on a platform branch is invisible until the relay.** The check
   prints `closed-on:<branch>` for a candidate whose packet carries a terminal
   status in a sibling branch's unrelayed fragments; never hand those — relay

@@ -52,7 +52,14 @@ STUB
     chmod +x "$d/check-no-competing-gate.sh"
     ( _tb_self_dir="$d"; set +e; . "$W/case.sh" ) 2>&1
 }
-drive_strict() { # like drive, but under the wrapper's OWN regime (set -e), with a sentinel after the block
+drive_strict() { # like drive, but under the wrapper's OWN regime (set -e), IN A SEPARATE PROCESS, with a sentinel after the block
+    # THE CONSTRUCTION MATTERS (2026-09-14, macbookair's build.sh death one day
+    # after 1175-wuwr): bash IGNORES errexit inside a `( set -e; … )` subshell
+    # that sits in $(…) or a pipeline, so the first version of this helper let
+    # the pre-fix capture form print the sentinel too and could not see the
+    # death it existed to pin. A driver file run by a separate bash with
+    # `set -euo pipefail` at its top dies at the assignment exactly as the
+    # wrapper does; its output is read back from a file, never through a pipe.
     local code="$1" text="$2" d="$W/run-strict"
     rm -rf "$d"; mkdir -p "$d"
     cat > "$d/check-no-competing-gate.sh" <<STUB
@@ -60,7 +67,14 @@ printf '%s\n' "$text"
 exit $code
 STUB
     chmod +x "$d/check-no-competing-gate.sh"
-    ( _tb_self_dir="$d"; set -e; . "$W/case.sh"; echo "consumer-block-completed" ) 2>&1
+    {
+        printf 'set -euo pipefail\n_tb_self_dir=%q\n' "$d"
+        printf '. %q\necho "consumer-block-completed"\n' "$W/case.sh"
+    } > "$d/driver.sh"
+    bash "$d/driver.sh" > "$d/out.txt" 2>&1
+    local rc=$?
+    cat "$d/out.txt"
+    return "$rc"
 }
 
 # 1. 0 — answered, no competitor. Quiet-ish, and must not claim anything else.

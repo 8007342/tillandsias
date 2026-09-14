@@ -112,6 +112,70 @@ if [ -z "$PLAN_BIN" ]; then
 fi
 
 SIBLINGS="linux-next windows-next osx-next"
+
+# ── ORDER 1104-w9np — SUBTRACT THE READER'S OWN AUTHORSHIP ──────────────────
+#
+# MEASURED on lenovinha 2026-09-06: their OWN in_progress claim, merged into
+# osx-next and windows-next by routine integration, came back at them as "A
+# sibling branch holds this packet in_progress ... It is NOT yours to
+# implement." 1071-adhj then sat in_progress for a day — hidden from ready and
+# from burndown — with all four criteria met and the work already relayed.
+#
+# THE ADVICE IS WRONG IN THE MOST EXPENSIVE DIRECTION: it tells a host to keep
+# its hands off its own finished work, and it is authoritative on exactly this
+# question, so the host repeats it to the coordinator as fact.
+#
+# IT INTENSIFIES AS COORDINATION IMPROVES. Every sibling merge the coordinator
+# performs adds another branch reflecting a claim back at its author, so the
+# condition is more reachable after a good relay pass than before it.
+#
+# WHO WROTE THE WINNING STATUS: the fold decides the STATUS (that is why the
+# loop below asks the binary and not a grep — 635-i6vm), and this answers the
+# separate question of ATTRIBUTION by taking the status entry for this packet
+# with the greatest ts. Both are ts-LWW so they agree; where they might not, the
+# comparison below FAILS TOWARD THE EXISTING VERDICT, never toward silence.
+# THE FIXTURE SEAM, and what it does NOT cover. TILLANDSIAS_XBRANCH_CLAIM_HOST
+# forces the attribution, because the arms drive sibling folds through a STUB
+# plan binary against the REAL origin refs — a fixture cannot plant a fragment
+# on origin/osx-next, and one that tried would be testing git rather than this
+# decision. The seam makes the DECISION testable; the PARSER below is covered
+# separately by an arm that runs it against a planted fragment file, so neither
+# half rests on the other.
+_claim_host_on_branch() { # _claim_host_on_branch <archived-tree> <packet-id-or-order>
+    if [ -n "${TILLANDSIAS_XBRANCH_CLAIM_HOST:-}" ]; then
+        printf '%s' "$TILLANDSIAS_XBRANCH_CLAIM_HOST"
+        return 0
+    fi
+    local tree="$1" who="$2" f best_ts="" best_host=""
+    for f in "$tree"/plan/index.d/*.yaml; do
+        [ -e "$f" ] || continue
+        # A status entry names the packet, the field, and its host. Read the
+        # block that mentions this packet and carries `field: status`.
+        awk -v want="$who" '
+            /^[[:space:]]*-[[:space:]]*packet_id:/ { pid=$0; sub(/^[^:]*:[[:space:]]*/,"",pid); inblk=(index(pid,want)>0 || index(want,pid)>0); f=""; t=""; h="" }
+            inblk && /^[[:space:]]*field:[[:space:]]*status[[:space:]]*$/ { f=1 }
+            inblk && /^[[:space:]]*ts:/ { t=$0; sub(/^[^:]*:[[:space:]]*/,"",t); gsub(/"/,"",t) }
+            inblk && /^[[:space:]]*host:/ { h=$0; sub(/^[^:]*:[[:space:]]*/,"",h); if (f && t != "" && h != "") print t "\t" h }
+        ' "$f" 2>/dev/null
+    done | sort -r | head -1 | cut -f2
+}
+
+# BOTH VOCABULARIES COUNT AS "ME", and 1012-hu7d is why: a claim written with
+# --host yoga and a later fragment written without it (falling back to
+# TILLANDSIAS_HOST_KIND, i.e. the platform bucket `linux`) are the SAME host
+# wearing two labels, and no query keyed on one returns the other. A reader that
+# only knew one of its names would still be told to leave its own work alone.
+_is_me() { # _is_me <host-label>
+    local h="$1"
+    [ -n "$h" ] || return 1
+    local node; node="$(hostname -s 2>/dev/null || echo)"
+    [ "$h" = "$node" ] && return 0
+    [ "$h" = "${TILLANDSIAS_WORKSTATION:-}" ] && return 0
+    [ "$h" = "${TILLANDSIAS_HOST_KIND:-}" ] && return 0
+    [ "$h" = "$(uname -s | tr 'A-Z' 'a-z')" ] && return 0
+    return 1
+}
+
 CURRENT="$(git rev-parse --abbrev-ref HEAD 2>/dev/null)" || CURRENT=""
 
 if [ "$NO_FETCH" = 0 ]; then
@@ -197,6 +261,7 @@ found=""
 # It is the defect this tool was built to catch, in the tool itself: a green
 # answering a narrower question than the sentence attached to it.
 seen_anywhere=0
+mine=""
 for b in $SIBLINGS; do
     git rev-parse --verify -q "origin/$b" >/dev/null 2>&1 || continue
     [ "$b" = "$CURRENT" ] && continue
@@ -209,11 +274,41 @@ for b in $SIBLINGS; do
         st="$("$PLAN_BIN" --index "$tmp/plan/index.yaml" status "$PACKET" 2>/dev/null | awk '{print $2}')"
         [ -n "$st" ] && seen_anywhere=1
         if [ "$st" = in_progress ]; then
-            found="${found:+$found }$b"
+            # 1104-w9np: whose claim is it? A holder that is THIS host is the
+            # reader's own claim reflected back by a sibling that merged their
+            # branch — not a sibling's claim.
+            _h="$(_claim_host_on_branch "$tmp" "$PACKET")"
+            if _is_me "$_h"; then
+                mine="${mine:+$mine }$b"
+            else
+                # Unattributable is NOT "mine". An empty or unrecognised host
+                # falls here deliberately: the only safe direction for an
+                # ambiguous answer is the existing verdict, because treating a
+                # sibling's claim as your own is the failure this whole file
+                # exists to prevent.
+                found="${found:+$found }$b"
+            fi
         fi
     fi
     rm -rf "$tmp"
 done
+
+if [ -z "$found" ] && [ -n "$mine" ]; then
+    # THE VERDICT THE ROW ASKS FOR, and it is an ok rather than a refusal: every
+    # branch carrying this claim carries it under THIS host's own label, so the
+    # work is the reader's to resume.
+    for b in $mine; do
+        echo "own-claim-reflected:$PACKET:$b"
+    done
+    echo "  Every sibling branch holding this packet in_progress records THIS HOST as the" >&2
+    echo "  claimant — your own claim, merged back by routine integration (1104-w9np)." >&2
+    echo "  It IS yours: resume it, or release it with set-field status ready if you are" >&2
+    echo "  not going to finish it. Measured cost of the old answer: a day of finished work" >&2
+    echo "  left stranded because the tool said 'NOT yours to implement' about its author's" >&2
+    echo "  own claim." >&2
+    echo "ok:cross-branch-claims:$checked sibling branch(es) checked; own claim reflected by $(printf '%s' "$mine" | wc -w | tr -d ' ')"
+    exit 0
+fi
 
 if [ -n "$found" ]; then
     for b in $found; do
